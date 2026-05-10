@@ -125,8 +125,11 @@ function DocumentsPage() {
                   ref={fileRef}
                   type="file"
                   accept="application/pdf"
+                  multiple
                   className="hidden"
-                  onChange={(e) => setPickedFile(e.target.files?.[0] ?? null)}
+                  onChange={(e) =>
+                    setPickedFiles(e.target.files ? Array.from(e.target.files) : [])
+                  }
                 />
                 <Button
                   variant="outline"
@@ -134,19 +137,33 @@ function DocumentsPage() {
                   onClick={() => fileRef.current?.click()}
                 >
                   <FileText className="h-4 w-4 text-primary" />
-                  <span className="truncate">{pickedFile?.name ?? "Choisir un PDF"}</span>
+                  <span className="truncate">
+                    {pickedFiles.length === 0
+                      ? "Choisir un ou plusieurs PDF"
+                      : pickedFiles.length === 1
+                        ? pickedFiles[0].name
+                        : `${pickedFiles.length} PDF sélectionnés`}
+                  </span>
                 </Button>
-                <p className="mt-1 text-[11px] text-muted-foreground">PDF, 15 Mo max.</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">PDF, 15 Mo max par fichier.</p>
               </div>
               <Button
                 className="gap-1.5"
                 onClick={handleSubmit}
-                disabled={upload.isPending || !pickedFile}
+                disabled={upload.isPending || pickedFiles.length === 0}
               >
                 {upload.isPending ? (
-                  <><Loader2 className="h-4 w-4 animate-spin" /> Analyse en cours…</>
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    {progress
+                      ? `Analyse ${progress.current}/${progress.total}…`
+                      : "Analyse en cours…"}
+                  </>
                 ) : (
-                  <><Sparkles className="h-4 w-4" /> Analyser avec l'IA</>
+                  <>
+                    <Sparkles className="h-4 w-4" />
+                    Analyser{pickedFiles.length > 1 ? ` ${pickedFiles.length} PDF` : " avec l'IA"}
+                  </>
                 )}
               </Button>
             </div>
