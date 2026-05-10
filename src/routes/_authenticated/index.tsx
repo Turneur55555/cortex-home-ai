@@ -1,8 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Package, Dumbbell, FileText, Sparkles, Plus, Bell, Loader2 } from "lucide-react";
+import { useMemo } from "react";
+import { Package, Dumbbell, FileText, Sparkles, Plus, Bell, Loader2, Quote } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
+import { getSessionQuote } from "@/lib/quotes";
 
 export const Route = createFileRoute("/_authenticated/")({
   head: () => ({
