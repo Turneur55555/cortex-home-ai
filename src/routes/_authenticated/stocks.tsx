@@ -90,6 +90,25 @@ function StockTab({ module }: { module: StockModule }) {
   const { data, isLoading } = useStockItems(module);
   const del = useDeleteStockItem();
   const update = useUpdateStockItem();
+  const bulkDel = useBulkDeleteStockItems();
+  const bulkAdj = useBulkAdjustStockItems();
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  const toggleOne = (id: string) =>
+    setSelected((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const exitSelect = () => {
+    setSelecting(false);
+    setSelected(new Set());
+  };
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
 
