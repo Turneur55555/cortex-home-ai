@@ -47,6 +47,7 @@ import {
   useNutritionGoals,
   useUpsertNutritionGoals,
   useWorkouts,
+  useExerciseImageUrls,
   type NutritionGoals,
 } from "@/hooks/use-fitness";
 
@@ -289,7 +290,7 @@ function BodyMeasurementSheet({ onClose }: { onClose: () => void }) {
 
 type WorkoutTemplate = {
   name: string;
-  exercises: Array<{ name: string; sets: string; reps: string; weight: string }>;
+  exercises: Array<{ name: string; sets: string; reps: string; weight: string; image_path: string | null }>;
 };
 
 
@@ -348,6 +349,12 @@ function SeancesTab() {
 
   const { prByName, histByName, topExercises } = useMemo(() => computePRs(data), [data]);
 
+  const allImagePaths = useMemo(
+    () => (data ?? []).flatMap((w) => (w.exercises ?? []).map((ex) => ex.image_path)),
+    [data],
+  );
+  const { data: listImageUrls } = useExerciseImageUrls(allImagePaths);
+
   const openNew = () => {
     setTemplate(null);
     setOpen(true);
@@ -361,6 +368,7 @@ function SeancesTab() {
         sets: ex.sets != null ? String(ex.sets) : "",
         reps: ex.reps != null ? String(ex.reps) : "",
         weight: ex.weight != null ? String(ex.weight) : "",
+        image_path: ex.image_path ?? null,
       })),
     });
     setOpen(true);
@@ -495,13 +503,30 @@ function SeancesTab() {
                 </div>
               </div>
               {w.exercises && w.exercises.length > 0 && (
-                <ul className="mt-3 space-y-1.5 border-t border-border pt-3">
+                <ul className="mt-3 space-y-2 border-t border-border pt-3">
                   {w.exercises.map((ex) => {
                     const key = ex.name.trim().toLowerCase();
                     const isPR = ex.weight != null && prByName.get(key) === ex.weight;
+                    const imgUrl = ex.image_path ? listImageUrls?.get(ex.image_path) : null;
                     return (
-                      <li key={ex.id} className="flex items-center justify-between text-xs">
-                        <span className="inline-flex items-center gap-1 font-medium">
+                      <li key={ex.id} className="flex items-center gap-2.5 text-xs">
+                        {ex.image_path ? (
+                          imgUrl ? (
+                            <img
+                              src={imgUrl}
+                              alt={ex.name}
+                              className="h-9 w-9 shrink-0 rounded-lg object-cover"
+                              loading="lazy"
+                            />
+                          ) : (
+                            <div className="h-9 w-9 shrink-0 animate-pulse rounded-lg bg-muted" />
+                          )
+                        ) : (
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-dashed border-border text-muted-foreground/50">
+                            <Dumbbell className="h-3.5 w-3.5" />
+                          </div>
+                        )}
+                        <span className="inline-flex flex-1 items-center gap-1 font-medium">
                           {ex.name}
                           {isPR && (
                             <Trophy className="h-3 w-3 text-warning" aria-label="Record personnel" />
@@ -559,15 +584,39 @@ function WorkoutSheet({
     duration_minutes: "",
     notes: "",
   });
-  const [exercises, setExercises] = useState<Array<{ name: string; sets: string; reps: string; weight: string }>>(
+  const [exercises, setExercises] = useState<Array<{ name: string; sets: string; reps: string; weight: string; image_path: string | null }>>(
     template?.exercises && template.exercises.length > 0
       ? template.exercises
-      : [{ name: "", sets: "", reps: "", weight: "" }],
+      : [{ name: "", sets: "", reps: "", weight: "", image_path: null }],
   );
+  const [uploading, setUploading] = useState<number | null>(null);
 
-  const updateEx = (i: number, k: keyof typeof exercises[number], v: string) => {
+  const updateEx = (i: number, k: keyof typeof exercises[number], v: string | null) => {
     setExercises((arr) => arr.map((e, idx) => (idx === i ? { ...e, [k]: v } : e)));
   };
+
+  const uploadImage = async (i: number, file: File) => {
+    try {
+      setUploading(i);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Non authentifié");
+      const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+      const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
+      const { error } = await supabase.storage
+        .from("exercise-images")
+        .upload(path, file, { contentType: file.type, upsert: false });
+      if (error) throw error;
+      updateEx(i, "image_path", path);
+      toast.success("Photo ajoutée");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Échec upload");
+    } finally {
+      setUploading(null);
+    }
+  };
+
+  const exImagePaths = exercises.map((e) => e.image_path);
+  const { data: exImageUrls } = useExerciseImageUrls(exImagePaths);
 
   const num = (v: string) => (v.trim() === "" ? null : Number(v));
 
@@ -581,6 +630,7 @@ function WorkoutSheet({
         sets: num(ex.sets),
         reps: num(ex.reps),
         weight: num(ex.weight),
+        image_path: ex.image_path,
       }));
 
     await add.mutateAsync({
@@ -629,16 +679,44 @@ function WorkoutSheet({
             </label>
             <button
               type="button"
-              onClick={() => setExercises((a) => [...a, { name: "", sets: "", reps: "", weight: "" }])}
+              onClick={() => setExercises((a) => [...a, { name: "", sets: "", reps: "", weight: "", image_path: null }])}
               className="text-xs font-semibold text-primary"
             >
               + Ajouter
             </button>
           </div>
           <div className="space-y-2">
-            {exercises.map((ex, i) => (
+            {exercises.map((ex, i) => {
+              const imgUrl = ex.image_path ? exImageUrls?.get(ex.image_path) : null;
+              return (
               <div key={i} className="rounded-xl border border-border bg-surface p-3">
                 <div className="flex gap-2">
+                  {/* Image thumbnail / picker */}
+                  <label
+                    className="relative flex h-12 w-12 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-lg border border-border bg-card text-muted-foreground hover:border-primary hover:text-primary"
+                    aria-label="Photo exercice"
+                  >
+                    {imgUrl ? (
+                      <img src={imgUrl} alt={ex.name || "Exercice"} className="h-full w-full object-cover" />
+                    ) : ex.image_path ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : uploading === i ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Camera className="h-4 w-4" />
+                    )}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      disabled={uploading !== null}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) uploadImage(i, f);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
                   <input
                     type="text"
                     value={ex.name}
@@ -657,6 +735,15 @@ function WorkoutSheet({
                     </button>
                   )}
                 </div>
+                {ex.image_path && (
+                  <button
+                    type="button"
+                    onClick={() => updateEx(i, "image_path", null)}
+                    className="mt-1 text-[10px] font-medium text-muted-foreground hover:text-destructive"
+                  >
+                    Retirer la photo
+                  </button>
+                )}
                 <div className="mt-2 grid grid-cols-3 gap-2">
                   <input
                     type="number"
@@ -682,7 +769,8 @@ function WorkoutSheet({
                   />
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -749,6 +837,7 @@ function CoachSheet({
           sets: String(ex.sets ?? ""),
           reps: String(ex.reps ?? ""),
           weight: ex.weight != null && ex.weight > 0 ? String(ex.weight) : "",
+          image_path: null,
         })),
       };
       toast.success("Séance générée — ajuste-la avant d'enregistrer");
