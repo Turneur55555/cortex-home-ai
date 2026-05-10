@@ -278,16 +278,136 @@ function BodyMeasurementSheet({ onClose }: { onClose: () => void }) {
 
 /* ============================ SÉANCES ============================ */
 
+type WorkoutTemplate = {
+  name: string;
+  exercises: Array<{ name: string; sets: string; reps: string; weight: string }>;
+};
+
+type ExerciseRow = { name: string; weight: number | null; date: string; workoutId: string; exId: string };
+
+function computePRs(workouts: ReturnType<typeof useWorkouts>["data"]) {
+  // PR = max weight per exercise name (case-insensitive trim)
+  const prByName = new Map<string, number>();
+  // History per exercise = list of {date, maxWeightThatSession}
+  const histByName = new Map<string, Array<{ date: string; weight: number }>>();
+  // Frequency per exercise
+  const freq = new Map<string, number>();
+
+  if (!workouts) return { prByName, histByName, topExercises: [] as string[] };
+
+  for (const w of workouts) {
+    const sessionMax = new Map<string, number>();
+    for (const ex of w.exercises ?? []) {
+      const key = ex.name.trim().toLowerCase();
+      if (!key) continue;
+      freq.set(key, (freq.get(key) ?? 0) + 1);
+      if (ex.weight != null) {
+        if (!sessionMax.has(key) || ex.weight > sessionMax.get(key)!) {
+          sessionMax.set(key, ex.weight);
+        }
+        if (!prByName.has(key) || ex.weight > prByName.get(key)!) {
+          prByName.set(key, ex.weight);
+        }
+      }
+    }
+    for (const [k, v] of sessionMax) {
+      if (!histByName.has(k)) histByName.set(k, []);
+      histByName.get(k)!.push({ date: w.date, weight: v });
+    }
+  }
+
+  // Sort histories chronologically
+  for (const arr of histByName.values()) {
+    arr.sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  const topExercises = Array.from(freq.entries())
+    .filter(([, n]) => n >= 2 && histByName.has(_)![0] !== undefined) // dummy ref-safe; cleanup below
+    .map(([k]) => k);
+
+  // Re-pick top 3 (cleanly): exercises with at least 2 weighted sessions
+  const cleanTop = Array.from(freq.entries())
+    .filter(([k, n]) => n >= 2 && (histByName.get(k)?.length ?? 0) >= 2)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([k]) => k);
+
+  return { prByName, histByName, topExercises: cleanTop };
+}
+
 function SeancesTab() {
   const { data, isLoading } = useWorkouts();
   const del = useDeleteWorkout();
   const [open, setOpen] = useState(false);
+  const [template, setTemplate] = useState<WorkoutTemplate | null>(null);
+
+  const { prByName, histByName, topExercises } = useMemo(() => computePRs(data), [data]);
+
+  const openNew = () => {
+    setTemplate(null);
+    setOpen(true);
+  };
+
+  const openFromTemplate = (w: NonNullable<typeof data>[number]) => {
+    setTemplate({
+      name: w.name,
+      exercises: (w.exercises ?? []).map((ex) => ({
+        name: ex.name,
+        sets: ex.sets != null ? String(ex.sets) : "",
+        reps: ex.reps != null ? String(ex.reps) : "",
+        weight: ex.weight != null ? String(ex.weight) : "",
+      })),
+    });
+    setOpen(true);
+  };
 
   return (
     <section className="flex flex-col gap-4">
       {isLoading && (
         <div className="flex h-32 items-center justify-center">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      )}
+
+      {/* Progression top exercices */}
+      {topExercises.length > 0 && (
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-card">
+          <div className="mb-3 flex items-center gap-2">
+            <BarChart3 className="h-4 w-4 text-primary" />
+            <h3 className="text-sm font-semibold">Progression — top exercices</h3>
+          </div>
+          <div className="space-y-4">
+            {topExercises.map((key) => {
+              const hist = histByName.get(key) ?? [];
+              const chart = hist.map((p) => ({
+                date: format(parseISO(p.date), "d MMM", { locale: fr }),
+                weight: p.weight,
+              }));
+              const pr = prByName.get(key);
+              return (
+                <div key={key}>
+                  <div className="mb-1 flex items-center justify-between">
+                    <p className="text-xs font-semibold capitalize">{key}</p>
+                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-warning">
+                      <Trophy className="h-3 w-3" />
+                      PR {pr} kg
+                    </span>
+                  </div>
+                  <ResponsiveContainer width="100%" height={80}>
+                    <LineChart data={chart} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
+                      <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="date" tick={{ fontSize: 9, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 9, fill: "var(--color-muted-foreground)" }} axisLine={false} tickLine={false} domain={["dataMin - 2", "dataMax + 2"]} width={32} />
+                      <Tooltip
+                        contentStyle={{ background: "var(--color-popover)", border: "1px solid var(--color-border)", borderRadius: 8, fontSize: 11 }}
+                      />
+                      <Line type="monotone" dataKey="weight" stroke="var(--color-primary)" strokeWidth={2} dot={{ r: 2.5 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -324,30 +444,50 @@ function SeancesTab() {
                     )}
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => del.mutate(w.id)}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                  aria-label="Supprimer"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => openFromTemplate(w)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                    aria-label="Refaire cette séance"
+                    title="Refaire"
+                  >
+                    <Repeat className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => del.mutate(w.id)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                    aria-label="Supprimer"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
               {w.exercises && w.exercises.length > 0 && (
                 <ul className="mt-3 space-y-1.5 border-t border-border pt-3">
-                  {w.exercises.map((ex) => (
-                    <li key={ex.id} className="flex items-center justify-between text-xs">
-                      <span className="font-medium">{ex.name}</span>
-                      <span className="text-muted-foreground">
-                        {[
-                          ex.sets != null && `${ex.sets}×${ex.reps ?? "?"}`,
-                          ex.weight != null && `${ex.weight} kg`,
-                        ]
-                          .filter(Boolean)
-                          .join(" · ")}
-                      </span>
-                    </li>
-                  ))}
+                  {w.exercises.map((ex) => {
+                    const key = ex.name.trim().toLowerCase();
+                    const isPR = ex.weight != null && prByName.get(key) === ex.weight;
+                    return (
+                      <li key={ex.id} className="flex items-center justify-between text-xs">
+                        <span className="inline-flex items-center gap-1 font-medium">
+                          {ex.name}
+                          {isPR && (
+                            <Trophy className="h-3 w-3 text-warning" aria-label="Record personnel" />
+                          )}
+                        </span>
+                        <span className="text-muted-foreground">
+                          {[
+                            ex.sets != null && `${ex.sets}×${ex.reps ?? "?"}`,
+                            ex.weight != null && `${ex.weight} kg`,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </span>
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
               {w.notes && (
@@ -360,23 +500,39 @@ function SeancesTab() {
         </ul>
       )}
 
-      <FabAdd onClick={() => setOpen(true)} label="Nouvelle séance" />
-      {open && <WorkoutSheet onClose={() => setOpen(false)} />}
+      <FabAdd onClick={openNew} label="Nouvelle séance" />
+      {open && (
+        <WorkoutSheet
+          template={template}
+          priorPRs={prByName}
+          onClose={() => setOpen(false)}
+        />
+      )}
     </section>
   );
 }
 
-function WorkoutSheet({ onClose }: { onClose: () => void }) {
+function WorkoutSheet({
+  onClose,
+  template,
+  priorPRs,
+}: {
+  onClose: () => void;
+  template?: WorkoutTemplate | null;
+  priorPRs?: Map<string, number>;
+}) {
   const add = useAddWorkout();
   const [form, setForm] = useState({
-    name: "",
+    name: template?.name ?? "",
     date: format(new Date(), "yyyy-MM-dd"),
     duration_minutes: "",
     notes: "",
   });
-  const [exercises, setExercises] = useState<Array<{ name: string; sets: string; reps: string; weight: string }>>([
-    { name: "", sets: "", reps: "", weight: "" },
-  ]);
+  const [exercises, setExercises] = useState<Array<{ name: string; sets: string; reps: string; weight: string }>>(
+    template?.exercises && template.exercises.length > 0
+      ? template.exercises
+      : [{ name: "", sets: "", reps: "", weight: "" }],
+  );
 
   const updateEx = (i: number, k: keyof typeof exercises[number], v: string) => {
     setExercises((arr) => arr.map((e, idx) => (idx === i ? { ...e, [k]: v } : e)));
@@ -387,25 +543,47 @@ function WorkoutSheet({ onClose }: { onClose: () => void }) {
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim()) return;
+    const payloadExercises = exercises
+      .filter((ex) => ex.name.trim())
+      .map((ex) => ({
+        name: ex.name.trim(),
+        sets: num(ex.sets),
+        reps: num(ex.reps),
+        weight: num(ex.weight),
+      }));
+
     await add.mutateAsync({
       name: form.name.trim(),
       date: form.date,
       duration_minutes: num(form.duration_minutes),
       notes: form.notes.trim() || null,
-      exercises: exercises
-        .filter((ex) => ex.name.trim())
-        .map((ex) => ({
-          name: ex.name.trim(),
-          sets: num(ex.sets),
-          reps: num(ex.reps),
-          weight: num(ex.weight),
-        })),
+      exercises: payloadExercises,
     });
+
+    // Détection nouveaux PR
+    if (priorPRs) {
+      const newPRs: Array<{ name: string; weight: number; prev: number | null }> = [];
+      for (const ex of payloadExercises) {
+        if (ex.weight == null) continue;
+        const key = ex.name.toLowerCase();
+        const prev = priorPRs.get(key) ?? null;
+        if (prev == null || ex.weight > prev) {
+          newPRs.push({ name: ex.name, weight: ex.weight, prev });
+        }
+      }
+      for (const pr of newPRs) {
+        toast.success(
+          `🏆 Nouveau PR — ${pr.name} : ${pr.weight} kg${pr.prev != null ? ` (avant ${pr.prev} kg)` : ""}`,
+          { duration: 5000 },
+        );
+      }
+    }
+
     onClose();
   };
 
   return (
-    <Sheet title="Nouvelle séance" onClose={onClose}>
+    <Sheet title={template ? "Refaire la séance" : "Nouvelle séance"} onClose={onClose}>
       <form onSubmit={submit} className="space-y-4">
         <Field label="Nom" placeholder="Push, Jambes, Cardio…" value={form.name} onChange={(v) => setForm({ ...form, name: v })} required />
         <div className="grid grid-cols-2 gap-3">
