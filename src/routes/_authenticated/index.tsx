@@ -15,9 +15,27 @@ export const Route = createFileRoute("/_authenticated/")({
 });
 
 const modules = [
-  { to: "/stocks", label: "Stocks", icon: Package, accent: "from-violet-500 to-fuchsia-500", desc: "Frigo, habits, pharmacie" },
-  { to: "/fitness", label: "Fitness", icon: Dumbbell, accent: "from-cyan-400 to-blue-500", desc: "Corps, séances, nutrition" },
-  { to: "/documents", label: "Documents", icon: FileText, accent: "from-amber-400 to-orange-500", desc: "PDF analysés par IA" },
+  {
+    to: "/stocks",
+    label: "Stocks",
+    icon: Package,
+    accent: "from-violet-500 to-fuchsia-500",
+    desc: "Frigo, habits, pharmacie",
+  },
+  {
+    to: "/fitness",
+    label: "Fitness",
+    icon: Dumbbell,
+    accent: "from-cyan-400 to-blue-500",
+    desc: "Corps, séances, nutrition",
+  },
+  {
+    to: "/documents",
+    label: "Documents",
+    icon: FileText,
+    accent: "from-amber-400 to-orange-500",
+    desc: "PDF analysés par IA",
+  },
 ] as const;
 
 function HomePage() {
@@ -57,7 +75,8 @@ function HomePage() {
           Scannez un objet, l'IA s'occupe du reste.
         </h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          Photo de votre frigo, garde-robe ou armoire à pharmacie — inventaire instantané et alertes automatiques.
+          Photo de votre frigo, garde-robe ou armoire à pharmacie — inventaire instantané et alertes
+          automatiques.
         </p>
         <Link
           to="/stocks"
@@ -89,7 +108,9 @@ function HomePage() {
                   <p className="font-semibold leading-tight">{label}</p>
                   <p className="text-xs text-muted-foreground">{desc}</p>
                 </div>
-                <span className="text-muted-foreground transition-transform group-hover:translate-x-1">→</span>
+                <span className="text-muted-foreground transition-transform group-hover:translate-x-1">
+                  →
+                </span>
               </Link>
             </li>
           ))}
@@ -97,17 +118,33 @@ function HomePage() {
       </section>
 
       <section className="grid grid-cols-2 gap-3">
-        <StatCard label="Items suivis" value={stats.isLoading ? "…" : String(stats.data?.tracked ?? 0)} tone="primary" loading={stats.isLoading} />
-        <StatCard label="PDF analysés" value={stats.isLoading ? "…" : String(stats.data?.documents ?? 0)} tone="warning" loading={stats.isLoading} />
+        <StatCard
+          label="Items suivis"
+          value={stats.isLoading ? "…" : String(stats.data?.tracked ?? 0)}
+          tone="primary"
+          loading={stats.isLoading}
+        />
+        <StatCard
+          label="PDF analysés"
+          value={stats.isLoading ? "…" : String(stats.data?.documents ?? 0)}
+          tone="warning"
+          loading={stats.isLoading}
+        />
       </section>
 
       {stats.data?.latestBody && (
         <section className="mt-3 rounded-2xl border border-border bg-card p-4 shadow-card">
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Dernière mesure</p>
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            Dernière mesure
+          </p>
           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
             {stats.data.latestBody.weight != null && <span>{stats.data.latestBody.weight} kg</span>}
-            {stats.data.latestBody.muscle_mass != null && <span>MM {stats.data.latestBody.muscle_mass} kg</span>}
-            {stats.data.latestBody.body_fat != null && <span>MG {stats.data.latestBody.body_fat}%</span>}
+            {stats.data.latestBody.muscle_mass != null && (
+              <span>MM {stats.data.latestBody.muscle_mass} kg</span>
+            )}
+            {stats.data.latestBody.body_fat != null && (
+              <span>MG {stats.data.latestBody.body_fat}%</span>
+            )}
           </div>
         </section>
       )}
@@ -134,11 +171,18 @@ function useDashboardStats() {
           .maybeSingle(),
       ]);
 
-      const error = items.error ?? body.error ?? nutrition.error ?? workouts.error ?? documents.error ?? latestBody.error;
+      const error =
+        items.error ??
+        body.error ??
+        nutrition.error ??
+        workouts.error ??
+        documents.error ??
+        latestBody.error;
       if (error) throw error;
 
       return {
-        tracked: (items.count ?? 0) + (body.count ?? 0) + (nutrition.count ?? 0) + (workouts.count ?? 0),
+        tracked:
+          (items.count ?? 0) + (body.count ?? 0) + (nutrition.count ?? 0) + (workouts.count ?? 0),
         documents: documents.count ?? 0,
         latestBody: latestBody.data,
       };
@@ -146,11 +190,27 @@ function useDashboardStats() {
   });
 }
 
-function StatCard({ label, value, tone, loading }: { label: string; value: string; tone: "primary" | "warning"; loading?: boolean }) {
+function StatCard({
+  label,
+  value,
+  tone,
+  loading,
+}: {
+  label: string;
+  value: string;
+  tone: "primary" | "warning";
+  loading?: boolean;
+}) {
   return (
     <div className="rounded-2xl border border-border bg-card p-4 shadow-card">
       <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
-      <div className={tone === "primary" ? "mt-2 flex items-center gap-2 text-3xl font-bold text-primary" : "mt-2 flex items-center gap-2 text-3xl font-bold text-warning"}>
+      <div
+        className={
+          tone === "primary"
+            ? "mt-2 flex items-center gap-2 text-3xl font-bold text-primary"
+            : "mt-2 flex items-center gap-2 text-3xl font-bold text-warning"
+        }
+      >
         {loading && <Loader2 className="h-5 w-5 animate-spin" />}
         <span>{value}</span>
       </div>

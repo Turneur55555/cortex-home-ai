@@ -11,7 +11,9 @@ export function useBodyMeasurements() {
       const { data, error } = await supabase
         .from("body_tracking")
         .select("*")
-        .or("weight.not.is.null,body_fat.not.is.null,muscle_mass.not.is.null,chest.not.is.null,waist.not.is.null,hips.not.is.null,left_arm.not.is.null,right_arm.not.is.null,left_thigh.not.is.null,right_thigh.not.is.null,notes.not.is.null")
+        .or(
+          "weight.not.is.null,body_fat.not.is.null,muscle_mass.not.is.null,chest.not.is.null,waist.not.is.null,hips.not.is.null,left_arm.not.is.null,right_arm.not.is.null,left_thigh.not.is.null,right_thigh.not.is.null,notes.not.is.null",
+        )
         .order("date", { ascending: false })
         .limit(180);
       if (error) throw error;
@@ -24,11 +26,11 @@ export function useAddBodyMeasurement() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: Omit<TablesInsert<"body_tracking">, "user_id">) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      const { error } = await supabase
-        .from("body_tracking")
-        .insert({ ...input, user_id: user.id });
+      const { error } = await supabase.from("body_tracking").insert({ ...input, user_id: user.id });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -43,9 +45,15 @@ export function useDeleteBodyMeasurement() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      const { error } = await supabase.from("body_tracking").delete().eq("id", id).eq("user_id", user.id);
+      const { error } = await supabase
+        .from("body_tracking")
+        .delete()
+        .eq("id", id)
+        .eq("user_id", user.id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -80,9 +88,16 @@ export function useAddWorkout() {
       date: string;
       duration_minutes?: number | null;
       notes?: string | null;
-      exercises: Array<{ name: string; sets?: number | null; reps?: number | null; weight?: number | null }>;
+      exercises: Array<{
+        name: string;
+        sets?: number | null;
+        reps?: number | null;
+        weight?: number | null;
+      }>;
     }) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
       const { data: workout, error } = await supabase
         .from("workouts")
@@ -122,10 +137,16 @@ export function useDeleteWorkout() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
       await supabase.from("exercises").delete().eq("workout_id", id).eq("user_id", user.id);
-      const { error } = await supabase.from("workouts").delete().eq("id", id).eq("user_id", user.id);
+      const { error } = await supabase
+        .from("workouts")
+        .delete()
+        .eq("id", id)
+        .eq("user_id", user.id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -156,11 +177,11 @@ export function useAddNutrition() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: Omit<TablesInsert<"nutrition">, "user_id">) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      const { error } = await supabase
-        .from("nutrition")
-        .insert({ ...input, user_id: user.id });
+      const { error } = await supabase.from("nutrition").insert({ ...input, user_id: user.id });
       if (error) throw error;
     },
     onSuccess: (_d, vars) => {
@@ -175,9 +196,15 @@ export function useDeleteNutrition() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      const { error } = await supabase.from("nutrition").delete().eq("id", id).eq("user_id", user.id);
+      const { error } = await supabase
+        .from("nutrition")
+        .delete()
+        .eq("id", id)
+        .eq("user_id", user.id);
       if (error) throw error;
     },
     onSuccess: () => {
