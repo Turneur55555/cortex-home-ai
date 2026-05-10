@@ -503,13 +503,30 @@ function SeancesTab() {
                 </div>
               </div>
               {w.exercises && w.exercises.length > 0 && (
-                <ul className="mt-3 space-y-1.5 border-t border-border pt-3">
+                <ul className="mt-3 space-y-2 border-t border-border pt-3">
                   {w.exercises.map((ex) => {
                     const key = ex.name.trim().toLowerCase();
                     const isPR = ex.weight != null && prByName.get(key) === ex.weight;
+                    const imgUrl = ex.image_path ? listImageUrls?.get(ex.image_path) : null;
                     return (
-                      <li key={ex.id} className="flex items-center justify-between text-xs">
-                        <span className="inline-flex items-center gap-1 font-medium">
+                      <li key={ex.id} className="flex items-center gap-2.5 text-xs">
+                        {ex.image_path ? (
+                          imgUrl ? (
+                            <img
+                              src={imgUrl}
+                              alt={ex.name}
+                              className="h-9 w-9 shrink-0 rounded-lg object-cover"
+                              loading="lazy"
+                            />
+                          ) : (
+                            <div className="h-9 w-9 shrink-0 animate-pulse rounded-lg bg-muted" />
+                          )
+                        ) : (
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-dashed border-border text-muted-foreground/50">
+                            <Dumbbell className="h-3.5 w-3.5" />
+                          </div>
+                        )}
+                        <span className="inline-flex flex-1 items-center gap-1 font-medium">
                           {ex.name}
                           {isPR && (
                             <Trophy className="h-3 w-3 text-warning" aria-label="Record personnel" />
