@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
+import { toast } from "sonner";
 import {
   Activity,
   Dumbbell,
@@ -11,11 +12,16 @@ import {
   Calendar,
   X,
   Loader2,
+  Trophy,
+  Repeat,
+  BarChart3,
 } from "lucide-react";
 import {
   Area,
   AreaChart,
   CartesianGrid,
+  Line,
+  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
