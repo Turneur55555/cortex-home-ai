@@ -1,5 +1,6 @@
 // Analyse une photo de repas et estime calories + macros via Lovable AI Gateway.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { checkRateLimit, recordRateLimit } from "../_shared/rate-limit.ts";
 
 const ALLOWED_ORIGINS = [
   "https://id-preview--2c9444e5-f2d2-4c68-9566-e9e8569dc37a.lovable.app",
@@ -45,6 +46,9 @@ Deno.serve(async (req) => {
     });
     const { data: userData, error: userErr } = await supa.auth.getUser();
     if (userErr || !userData.user) return fail("Non authentifié", 401, userErr);
+
+    const rl = await checkRateLimit(supa, userData.user.id, "scan_meal", 20);
+    if (!rl.ok) return fail("Limite atteinte (20 scans/h). Réessaie plus tard.", 429);
 
     const { image_base64, mime_type } = await req.json();
     if (!image_base64 || typeof image_base64 !== "string") return fail("Image manquante", 400);
@@ -126,6 +130,8 @@ Retourne STRICTEMENT du JSON via tool calling.`;
     const call = aiJson.choices?.[0]?.message?.tool_calls?.[0];
     if (!call) return fail("Réponse IA invalide", 502);
     const parsed = JSON.parse(call.function.arguments);
+
+    await recordRateLimit(supa, userData.user.id, "scan_meal");
 
     return new Response(JSON.stringify(parsed), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
