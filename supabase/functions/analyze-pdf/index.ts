@@ -40,11 +40,21 @@ const MODULE_HINTS: Record<string, string> = {
 };
 
 Deno.serve(async (req) => {
+  const corsHeaders = buildCors(req);
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  // Public-facing error helper. Logs full detail server-side, returns generic message to client.
+  const fail = (publicMsg: string, status = 400, internal?: unknown) => {
+    if (internal) console.error("[analyze-pdf]", publicMsg, internal);
+    return new Response(JSON.stringify({ error: publicMsg }), {
+      status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  };
 
   try {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY manquant");
+    if (!LOVABLE_API_KEY) return fail("Service indisponible", 500, "LOVABLE_API_KEY manquant");
 
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_ANON = Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -54,16 +64,15 @@ Deno.serve(async (req) => {
     });
 
     const { data: userData, error: userErr } = await supa.auth.getUser();
-    if (userErr || !userData.user) throw new Error("Non authentifié");
+    if (userErr || !userData.user) return fail("Non authentifié", 401, userErr);
 
     const { storage_path, module, name } = await req.json();
-    if (!storage_path || !module) throw new Error("storage_path & module requis");
+    if (!storage_path || !module) return fail("Paramètres invalides", 400);
 
-    // Download PDF from private bucket
     const { data: file, error: dlErr } = await supa.storage
       .from("pdf-documents")
       .download(storage_path);
-    if (dlErr || !file) throw new Error(`Téléchargement PDF échoué: ${dlErr?.message}`);
+    if (dlErr || !file) return fail("Document introuvable", 404, dlErr);
 
     const buf = new Uint8Array(await file.arrayBuffer());
     let bin = "";
@@ -128,14 +137,14 @@ Tout le texte (summary, insights, alerts) doit être en FRANÇAIS.`;
 
     if (!aiRes.ok) {
       const txt = await aiRes.text();
-      if (aiRes.status === 429) throw new Error("Limite de requêtes atteinte. Réessayez dans un instant.");
-      if (aiRes.status === 402) throw new Error("Crédits IA épuisés.");
-      throw new Error(`Gateway IA: ${aiRes.status} ${txt.slice(0, 200)}`);
+      if (aiRes.status === 429) return fail("Limite de requêtes atteinte. Réessayez dans un instant.", 429);
+      if (aiRes.status === 402) return fail("Crédits IA épuisés.", 402);
+      return fail("Erreur d'analyse IA", 502, `${aiRes.status} ${txt.slice(0, 500)}`);
     }
 
     const aiJson = await aiRes.json();
     const call = aiJson.choices?.[0]?.message?.tool_calls?.[0];
-    if (!call) throw new Error("Pas de réponse structurée IA");
+    if (!call) return fail("Réponse IA invalide", 502);
     const parsed = JSON.parse(call.function.arguments);
 
     return new Response(
@@ -148,9 +157,6 @@ Tout le texte (summary, insights, alerts) doit être en FRANÇAIS.`;
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (e) {
-    return new Response(
-      JSON.stringify({ error: e instanceof Error ? e.message : "Erreur inconnue" }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    return fail("Erreur lors de l'analyse", 500, e);
   }
 });
