@@ -107,6 +107,57 @@ export type Database = {
         }
         Relationships: []
       }
+      error_logs: {
+        Row: {
+          col: number | null
+          context: Json | null
+          created_at: string
+          id: string
+          level: string
+          line: number | null
+          message: string
+          route: string | null
+          source: string | null
+          stack: string | null
+          support_id: string
+          url: string | null
+          user_agent: string | null
+          user_id: string | null
+        }
+        Insert: {
+          col?: number | null
+          context?: Json | null
+          created_at?: string
+          id?: string
+          level?: string
+          line?: number | null
+          message: string
+          route?: string | null
+          source?: string | null
+          stack?: string | null
+          support_id: string
+          url?: string | null
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          col?: number | null
+          context?: Json | null
+          created_at?: string
+          id?: string
+          level?: string
+          line?: number | null
+          message?: string
+          route?: string | null
+          source?: string | null
+          stack?: string | null
+          support_id?: string
+          url?: string | null
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       exercises: {
         Row: {
           id: string
