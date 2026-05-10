@@ -83,10 +83,118 @@ Deno.serve(async (req) => {
     const b64 = btoa(bin);
 
     const hint = MODULE_HINTS[module] ?? MODULE_HINTS.documents;
+
+    // Schéma d'item explicite par module — sans ça le modèle renvoie {} et le déversement crée des lignes vides.
+    const ITEM_SCHEMAS: Record<string, Record<string, unknown>> = {
+      alimentation: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          category: { type: "string" },
+          quantity: { type: "number" },
+          unit: { type: "string" },
+          location: { type: "string" },
+          expiration_date: { type: "string", description: "YYYY-MM-DD" },
+          notes: { type: "string" },
+        },
+        required: ["name"],
+      },
+      pharmacie: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          category: { type: "string" },
+          quantity: { type: "number" },
+          unit: { type: "string" },
+          expiration_date: { type: "string" },
+          notes: { type: "string" },
+        },
+        required: ["name"],
+      },
+      habits: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          category: { type: "string" },
+          quantity: { type: "number" },
+          unit: { type: "string" },
+          location: { type: "string" },
+        },
+        required: ["name"],
+      },
+      menager: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          category: { type: "string" },
+          quantity: { type: "number" },
+          unit: { type: "string" },
+        },
+        required: ["name"],
+      },
+      nutrition: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          meal: { type: "string" },
+          date: { type: "string" },
+          calories: { type: "number" },
+          proteins: { type: "number" },
+          carbs: { type: "number" },
+          fats: { type: "number" },
+        },
+        required: ["name"],
+      },
+      body: {
+        type: "object",
+        properties: {
+          date: { type: "string", description: "YYYY-MM-DD" },
+          weight: { type: "number" },
+          body_fat: { type: "number" },
+          muscle_mass: { type: "number" },
+          chest: { type: "number" },
+          waist: { type: "number" },
+          hips: { type: "number" },
+          left_arm: { type: "number" },
+          right_arm: { type: "number" },
+          left_thigh: { type: "number" },
+          right_thigh: { type: "number" },
+          notes: { type: "string" },
+        },
+        required: ["date"],
+      },
+      fitness: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          date: { type: "string" },
+          duration_minutes: { type: "number" },
+          notes: { type: "string" },
+          exercises: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                name: { type: "string" },
+                sets: { type: "number" },
+                reps: { type: "number" },
+                weight: { type: "number" },
+              },
+              required: ["name"],
+            },
+          },
+        },
+        required: ["name"],
+      },
+      documents: { type: "object", additionalProperties: true },
+    };
+    const itemSchema = ITEM_SCHEMAS[module] ?? ITEM_SCHEMAS.documents;
+
     const systemPrompt = `Tu es un analyste expert. Tu reçois un PDF. Module cible: "${module}".
 ${hint}
 Retourne STRICTEMENT du JSON conforme au schéma fourni via tool calling.
-Si le PDF ne contient pas d'éléments pertinents pour le module, retourne extracted_items: [].
+IMPORTANT: chaque objet de extracted_items DOIT contenir les vraies valeurs extraites du PDF (jamais d'objet vide). Renseigne tous les champs disponibles. Si une valeur n'est pas dans le PDF, omets le champ — ne renvoie pas null, ne renvoie pas {}.
+Si le PDF ne contient AUCUN élément pertinent pour le module, retourne extracted_items: [].
 Tout le texte (summary, insights, alerts) doit être en FRANÇAIS.`;
 
     const tool = {
@@ -102,8 +210,8 @@ Tout le texte (summary, insights, alerts) doit être en FRANÇAIS.`;
             alerts: { type: "array", items: { type: "string" }, description: "Alertes / points d'attention" },
             extracted_items: {
               type: "array",
-              description: "Données structurées extraites pour le module cible",
-              items: { type: "object", additionalProperties: true },
+              description: "Données structurées extraites pour le module cible. Chaque objet doit contenir des vraies valeurs (jamais vide).",
+              items: itemSchema,
             },
           },
           required: ["summary", "key_insights", "alerts", "extracted_items"],
