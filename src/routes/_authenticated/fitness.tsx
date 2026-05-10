@@ -362,6 +362,7 @@ function SeancesTab() {
         sets: ex.sets != null ? String(ex.sets) : "",
         reps: ex.reps != null ? String(ex.reps) : "",
         weight: ex.weight != null ? String(ex.weight) : "",
+        image_path: ex.image_path ?? null,
       })),
     });
     setOpen(true);
