@@ -8,8 +8,10 @@ import {
   Scripts,
 } from "@tanstack/react-router";
 import { Toaster } from "@/components/ui/sonner";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { installErrorLogger, logError } from "@/lib/error-logger";
+import { GlobalErrorBoundary } from "@/components/global-error-boundary";
+import { LoadingScreen } from "@/components/loading-screen";
 
 import appCss from "../styles.css?url";
 
@@ -149,9 +151,13 @@ function RootComponent() {
   }, []);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <Outlet />
-      <Toaster theme="dark" position="top-center" richColors closeButton />
-    </QueryClientProvider>
+    <GlobalErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <Suspense fallback={<LoadingScreen />}>
+          <Outlet />
+        </Suspense>
+        <Toaster theme="dark" position="top-center" richColors closeButton />
+      </QueryClientProvider>
+    </GlobalErrorBoundary>
   );
 }
