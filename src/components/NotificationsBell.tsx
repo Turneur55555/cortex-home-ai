@@ -27,10 +27,27 @@ function setDismissedKey(id: string, expISO: string | null) {
 export function NotificationsBell() {
   const [open, setOpen] = useState(false);
   const [dismissed, setDismissed] = useState<Record<string, string>>({});
+  const qc = useQueryClient();
 
   useEffect(() => {
     setDismissed(getDismissed());
   }, [open]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("items_alerts_realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "items" },
+        () => {
+          qc.invalidateQueries({ queryKey: ["alerts_items"] });
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [qc]);
 
   const { data: items = [] } = useQuery({
     queryKey: ["alerts_items"],
