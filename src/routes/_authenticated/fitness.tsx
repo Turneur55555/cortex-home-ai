@@ -607,6 +607,7 @@ function WorkoutSheet({
         sets: num(ex.sets),
         reps: num(ex.reps),
         weight: num(ex.weight),
+        image_path: ex.image_path,
       }));
 
     await add.mutateAsync({
