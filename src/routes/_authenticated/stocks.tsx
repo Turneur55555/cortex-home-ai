@@ -212,6 +212,18 @@ function StockTab({ module }: { module: StockModule }) {
           <Sparkles className="h-4 w-4" />
           Scan
         </button>
+        {module === "alimentation" && (
+          <button
+            type="button"
+            onClick={() => setRecipeOpen(true)}
+            className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-primary/40 bg-primary/10 px-3 text-xs font-semibold text-primary"
+            aria-label="Que cuisiner ?"
+            title="Que cuisiner ?"
+          >
+            <ChefHat className="h-4 w-4" />
+            Recettes
+          </button>
+        )}
         <button
           type="button"
           onClick={() => (selecting ? exitSelect() : setSelecting(true))}
