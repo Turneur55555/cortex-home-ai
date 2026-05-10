@@ -202,6 +202,8 @@ Si tu hésites entre deux catégories, prends la plus COURTE durée (sécurité 
     if (!call) return fail("Réponse IA invalide", 502);
     const parsed = JSON.parse(call.function.arguments);
 
+    await recordRateLimit(supa, userData.user.id, "scan_fridge");
+
     return new Response(
       JSON.stringify({
         summary: parsed.summary ?? "",
