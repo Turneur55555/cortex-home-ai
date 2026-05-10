@@ -290,7 +290,7 @@ function BodyMeasurementSheet({ onClose }: { onClose: () => void }) {
 
 type WorkoutTemplate = {
   name: string;
-  exercises: Array<{ name: string; sets: string; reps: string; weight: string }>;
+  exercises: Array<{ name: string; sets: string; reps: string; weight: string; image_path: string | null }>;
 };
 
 
