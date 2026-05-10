@@ -45,6 +45,7 @@ function HomePage() {
   const stats = useDashboardStats();
   const greeting = getGreeting();
   const name = user?.email?.split("@")[0] ?? "vous";
+  const quote = useMemo(() => getSessionQuote(), []);
 
   return (
     <main className="flex flex-1 flex-col px-5 pb-6 pt-12">
