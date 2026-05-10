@@ -8,7 +8,7 @@ export const QUOTES: Quote[] = [
   { text: "Ce qui ne te tue pas te rend plus fort.", author: "Friedrich Nietzsche" },
   { text: "Le seul échec, c'est celui de ne pas essayer.", author: "George Clooney" },
   { text: "La motivation te lance, l'habitude te fait avancer.", author: "Jim Ryun" },
-  { text: "Les rêves ne fonctionnent que si tu te mets au travail.", author: "John C. Maxwell" разу" },
+  { text: "Les rêves ne fonctionnent que si tu te mets au travail.", author: "John C. Maxwell" },
   { text: "Sois toi-même, les autres sont déjà pris.", author: "Oscar Wilde" },
   { text: "Le succès n'est pas final, l'échec n'est pas fatal : c'est le courage de continuer qui compte.", author: "Winston Churchill" },
   { text: "Fais aujourd'hui ce que les autres ne veulent pas, fais demain ce que les autres ne peuvent pas.", author: "Jerry Rice" },
