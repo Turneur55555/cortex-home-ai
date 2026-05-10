@@ -204,6 +204,50 @@ function StockTab({ module }: { module: StockModule }) {
         </button>
       </div>
 
+      <div className="flex flex-wrap gap-1.5">
+        {(
+          [
+            { key: "all", label: "Tous", count: data?.length ?? 0, tone: "default" },
+            { key: "valid", label: "Valides", count: validCount, tone: "success" },
+            { key: "soon", label: "Bientôt", count: expiringSoon.length, tone: "warning" },
+            { key: "expired", label: "Expirés", count: expired.length, tone: "danger" },
+          ] as const
+        ).map((c) => {
+          const active = expFilter === c.key;
+          const toneCls =
+            c.tone === "danger"
+              ? active
+                ? "border-destructive bg-destructive text-destructive-foreground"
+                : "border-border text-destructive"
+              : c.tone === "warning"
+                ? active
+                  ? "border-warning bg-warning text-warning-foreground"
+                  : "border-border text-warning"
+                : active
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border text-muted-foreground";
+          return (
+            <button
+              key={c.key}
+              type="button"
+              onClick={() => setExpFilter(c.key)}
+              aria-pressed={active}
+              className={`inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-colors ${toneCls}`}
+            >
+              {c.label}
+              <span
+                className={
+                  "rounded-full px-1.5 py-0 text-[10px] font-bold tabular-nums " +
+                  (active ? "bg-background/25" : "bg-surface")
+                }
+              >
+                {c.count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       {selecting && filtered.length > 0 && (
         <div className="flex items-center justify-between rounded-xl border border-border bg-surface px-3 py-2 text-xs">
           <span className="font-medium text-muted-foreground">
