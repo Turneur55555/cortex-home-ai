@@ -360,6 +360,8 @@ Tout le texte (summary, insights, alerts) doit être en FRANÇAIS.`;
     if (!call) return fail("Réponse IA invalide", 502);
     const parsed = JSON.parse(call.function.arguments);
 
+    await recordRateLimit(supa, userData.user.id, "analyze_pdf");
+
     return new Response(
       JSON.stringify({
         summary: parsed.summary ?? "",
