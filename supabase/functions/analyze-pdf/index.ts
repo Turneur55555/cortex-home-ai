@@ -2,6 +2,7 @@
 // Returns structured JSON: summary, key_insights[], alerts[], extracted_items[]
 // Items are typed for the target module so the client can "pour" them in.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { checkRateLimit, recordRateLimit } from "../_shared/rate-limit.ts";
 
 const ALLOWED_ORIGINS = [
   "https://id-preview--2c9444e5-f2d2-4c68-9566-e9e8569dc37a.lovable.app",
