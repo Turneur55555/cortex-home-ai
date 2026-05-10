@@ -56,7 +56,7 @@ function DocumentsPage() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [open, setOpen] = useState(false);
-  const [module, setModule] = useState<DocModule>("alimentation");
+  const [module, setModule] = useState<DocModuleSelection>("auto");
   const [pickedFile, setPickedFile] = useState<File | null>(null);
   const [lastResult, setLastResult] = useState<{
     doc: Tables<"documents">;
