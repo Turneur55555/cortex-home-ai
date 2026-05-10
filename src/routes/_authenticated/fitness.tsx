@@ -375,6 +375,7 @@ function SeancesTab() {
   };
 
   const [coachOpen, setCoachOpen] = useState(false);
+  const [coachInitialMuscles, setCoachInitialMuscles] = useState<string[] | null>(null);
 
   const handleCoachResult = (tpl: WorkoutTemplate) => {
     setCoachOpen(false);
@@ -382,12 +383,41 @@ function SeancesTab() {
     setOpen(true);
   };
 
+  const openCoach = (initial?: string[]) => {
+    setCoachInitialMuscles(initial && initial.length > 0 ? initial : null);
+    setCoachOpen(true);
+  };
+
+  const readiness = useQuery({
+    queryKey: ["muscle-readiness"],
+    enabled: !!data && data.length > 0,
+    staleTime: 1000 * 60 * 30,
+    queryFn: async () => {
+      const { data: r, error } = await supabase.functions.invoke("muscle-readiness", { body: {} });
+      if (error) throw new Error(error.message);
+      if (r?.error) throw new Error(r.error);
+      return r as {
+        fatigued: Array<{ muscle: string; last_trained?: string; reason: string }>;
+        recommended: Array<{ muscle: string; reason: string }>;
+        advice: string;
+      };
+    },
+  });
+
   return (
     <section className="flex flex-col gap-4">
+      {/* Diagnostic récup IA */}
+      {data && data.length > 0 && (
+        <ReadinessCard
+          query={readiness}
+          onStart={(muscles) => openCoach(muscles)}
+        />
+      )}
+
       {/* Coach IA CTA */}
       <button
         type="button"
-        onClick={() => setCoachOpen(true)}
+        onClick={() => openCoach()}
         className="group flex items-center gap-3 rounded-2xl border border-primary/30 bg-gradient-to-r from-primary/15 via-primary/5 to-transparent p-4 text-left shadow-card transition-all active:scale-[0.99]"
       >
         <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-primary text-primary-foreground shadow-glow">
