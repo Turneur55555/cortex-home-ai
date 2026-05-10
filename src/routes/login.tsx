@@ -66,8 +66,13 @@ function LoginPage() {
         navigate({ to: "/" });
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Erreur inconnue";
-      toast.error(msg.includes("Invalid login") ? "Identifiants incorrects" : msg);
+      // Message générique uniforme pour éviter l'énumération de comptes / fuite d'erreurs internes.
+      console.error("[auth]", err);
+      toast.error(
+        mode === "signup"
+          ? "Impossible de créer le compte. Vérifiez vos informations ou réessayez plus tard."
+          : "Identifiants incorrects ou erreur de connexion.",
+      );
     } finally {
       setLoading(false);
     }
