@@ -95,6 +95,7 @@ function StockTab({ module }: { module: StockModule }) {
   const bulkDel = useBulkDeleteStockItems();
   const bulkAdj = useBulkAdjustStockItems();
   const [open, setOpen] = useState(false);
+  const [scanOpen, setScanOpen] = useState(false);
   const [q, setQ] = useState("");
   const [expFilter, setExpFilter] = useState<"all" | "valid" | "soon" | "expired">("all");
   const [selecting, setSelecting] = useState(false);
