@@ -47,6 +47,9 @@ Deno.serve(async (req) => {
     const { data: userData, error: userErr } = await supa.auth.getUser();
     if (userErr || !userData.user) return fail("Non authentifié", 401, userErr);
 
+    const rl = await checkRateLimit(supa, userData.user.id, "scan_meal", 20);
+    if (!rl.ok) return fail("Limite atteinte (20 scans/h). Réessaie plus tard.", 429);
+
     const { image_base64, mime_type } = await req.json();
     if (!image_base64 || typeof image_base64 !== "string") return fail("Image manquante", 400);
     if (image_base64.length > 12_000_000) return fail("Image trop volumineuse", 413);
