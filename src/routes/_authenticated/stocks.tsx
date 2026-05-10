@@ -561,6 +561,7 @@ function AddItemSheet({ module, onClose }: { module: StockModule; onClose: () =>
     unit: defaultUnit(module),
     location: "",
     expiration_date: "",
+    alert_days_before: "7",
     notes: "",
   });
 
@@ -575,6 +576,7 @@ function AddItemSheet({ module, onClose }: { module: StockModule; onClose: () =>
       unit: form.unit.trim() || null,
       location: form.location.trim() || null,
       expiration_date: form.expiration_date || null,
+      alert_days_before: Math.max(0, Number(form.alert_days_before) || 7),
       notes: form.notes.trim() || null,
     });
     onClose();
@@ -635,6 +637,13 @@ function AddItemSheet({ module, onClose }: { module: StockModule; onClose: () =>
               onChange={(v) => setForm({ ...form, expiration_date: v })}
             />
           </div>
+          <Field
+            label="Alerter X jours avant expiration"
+            type="number"
+            value={form.alert_days_before}
+            onChange={(v) => setForm({ ...form, alert_days_before: v })}
+            placeholder="7"
+          />
           <Field
             label="Notes"
             textarea
