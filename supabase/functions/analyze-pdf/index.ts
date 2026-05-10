@@ -82,7 +82,19 @@ Deno.serve(async (req) => {
     for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
     const b64 = btoa(bin);
 
-    const hint = MODULE_HINTS[module] ?? MODULE_HINTS.documents;
+    const isAuto = module === "auto";
+    const hint = isAuto
+      ? `Mode AUTO: tu dois D'ABORD classer ce PDF dans l'un des modules suivants en te basant sur son contenu :
+- alimentation: ${MODULE_HINTS.alimentation}
+- pharmacie: ${MODULE_HINTS.pharmacie}
+- habits: ${MODULE_HINTS.habits}
+- menager: ${MODULE_HINTS.menager}
+- nutrition: ${MODULE_HINTS.nutrition}
+- fitness: ${MODULE_HINTS.fitness}
+- body: ${MODULE_HINTS.body}
+- documents: si aucun module ne convient (document générique, facture, contrat, etc.).
+Renseigne le champ "detected_module" avec ta décision, puis extrais les items au format de ce module.`
+      : MODULE_HINTS[module] ?? MODULE_HINTS.documents;
 
     // Schéma d'item explicite par module — sans ça le modèle renvoie {} et le déversement crée des lignes vides.
     const ITEM_SCHEMAS: Record<string, Record<string, unknown>> = {
@@ -188,7 +200,9 @@ Deno.serve(async (req) => {
       },
       documents: { type: "object", additionalProperties: true },
     };
-    const itemSchema = ITEM_SCHEMAS[module] ?? ITEM_SCHEMAS.documents;
+    const itemSchema = isAuto
+      ? { type: "object", additionalProperties: true }
+      : ITEM_SCHEMAS[module] ?? ITEM_SCHEMAS.documents;
 
     const systemPrompt = `Tu es un analyste expert. Tu reçois un PDF. Module cible: "${module}".
 ${hint}
@@ -197,6 +211,26 @@ IMPORTANT: chaque objet de extracted_items DOIT contenir les vraies valeurs extr
 Si le PDF ne contient AUCUN élément pertinent pour le module, retourne extracted_items: [].
 Tout le texte (summary, insights, alerts) doit être en FRANÇAIS.`;
 
+    const toolProps: Record<string, unknown> = {
+      summary: { type: "string", description: "Résumé en 2-3 phrases" },
+      key_insights: { type: "array", items: { type: "string" }, description: "3 à 6 points clés" },
+      alerts: { type: "array", items: { type: "string" }, description: "Alertes / points d'attention" },
+      extracted_items: {
+        type: "array",
+        description: "Données structurées extraites pour le module cible. Chaque objet doit contenir des vraies valeurs (jamais vide).",
+        items: itemSchema,
+      },
+    };
+    const required = ["summary", "key_insights", "alerts", "extracted_items"];
+    if (isAuto) {
+      toolProps.detected_module = {
+        type: "string",
+        enum: ["alimentation", "pharmacie", "habits", "menager", "nutrition", "fitness", "body", "documents"],
+        description: "Module détecté automatiquement à partir du contenu du PDF.",
+      };
+      required.push("detected_module");
+    }
+
     const tool = {
       type: "function",
       function: {
@@ -204,17 +238,8 @@ Tout le texte (summary, insights, alerts) doit être en FRANÇAIS.`;
         description: "Enregistrer l'analyse structurée du PDF",
         parameters: {
           type: "object",
-          properties: {
-            summary: { type: "string", description: "Résumé en 2-3 phrases" },
-            key_insights: { type: "array", items: { type: "string" }, description: "3 à 6 points clés" },
-            alerts: { type: "array", items: { type: "string" }, description: "Alertes / points d'attention" },
-            extracted_items: {
-              type: "array",
-              description: "Données structurées extraites pour le module cible. Chaque objet doit contenir des vraies valeurs (jamais vide).",
-              items: itemSchema,
-            },
-          },
-          required: ["summary", "key_insights", "alerts", "extracted_items"],
+          properties: toolProps,
+          required,
           additionalProperties: false,
         },
       },
@@ -264,6 +289,7 @@ Tout le texte (summary, insights, alerts) doit être en FRANÇAIS.`;
         key_insights: parsed.key_insights ?? [],
         alerts: parsed.alerts ?? [],
         extracted_items: parsed.extracted_items ?? [],
+        detected_module: parsed.detected_module ?? null,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );

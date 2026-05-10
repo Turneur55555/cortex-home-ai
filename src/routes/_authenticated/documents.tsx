@@ -32,7 +32,9 @@ import {
   useDeleteDocument,
   usePourIntoModule,
   MODULE_LABELS,
+  MODULE_SELECTION_LABELS,
   type DocModule,
+  type DocModuleSelection,
   type AnalysisResult,
 } from "@/hooks/use-documents";
 import type { Tables } from "@/integrations/supabase/types";
@@ -54,7 +56,7 @@ function DocumentsPage() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [open, setOpen] = useState(false);
-  const [module, setModule] = useState<DocModule>("alimentation");
+  const [module, setModule] = useState<DocModuleSelection>("auto");
   const [pickedFile, setPickedFile] = useState<File | null>(null);
   const [lastResult, setLastResult] = useState<{
     doc: Tables<"documents">;
@@ -75,7 +77,7 @@ function DocumentsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Documents</h1>
           <p className="mt-1 text-xs text-muted-foreground">
-            Importe un PDF, l'IA l'analyse puis le déverse dans le bon module.
+            Importe un PDF — l'IA détecte le bon module et l'analyse pour toi.
           </p>
         </div>
         <Sheet open={open} onOpenChange={setOpen}>
@@ -93,14 +95,17 @@ function DocumentsPage() {
                 <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
                   Module cible
                 </label>
-                <Select value={module} onValueChange={(v) => setModule(v as DocModule)}>
+                <Select value={module} onValueChange={(v) => setModule(v as DocModuleSelection)}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {(Object.keys(MODULE_LABELS) as DocModule[]).map((m) => (
-                      <SelectItem key={m} value={m}>{MODULE_LABELS[m]}</SelectItem>
+                    {(Object.keys(MODULE_SELECTION_LABELS) as DocModuleSelection[]).map((m) => (
+                      <SelectItem key={m} value={m}>{MODULE_SELECTION_LABELS[m]}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Laisse sur « Détection automatique » pour que l'IA choisisse.
+                </p>
               </div>
               <div>
                 <input
