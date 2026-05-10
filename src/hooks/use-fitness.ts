@@ -169,6 +169,7 @@ export function useAddWorkout() {
             sets: e.sets ?? null,
             reps: e.reps ?? null,
             weight: e.weight ?? null,
+            image_path: e.image_path ?? null,
           })),
         );
         if (exErr) throw exErr;
