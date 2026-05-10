@@ -47,6 +47,7 @@ import {
   useNutritionGoals,
   useUpsertNutritionGoals,
   useWorkouts,
+  useExerciseImageUrls,
   type NutritionGoals,
 } from "@/hooks/use-fitness";
 
