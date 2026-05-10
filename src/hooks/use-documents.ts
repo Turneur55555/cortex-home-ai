@@ -98,8 +98,10 @@ export function useDeleteDocument() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (doc: Tables<"documents">) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Non authentifié");
       await supabase.storage.from("pdf-documents").remove([doc.storage_path]);
-      const { error } = await supabase.from("documents").delete().eq("id", doc.id);
+      const { error } = await supabase.from("documents").delete().eq("id", doc.id).eq("user_id", user.id);
       if (error) throw error;
     },
     onSuccess: () => {

@@ -68,6 +68,9 @@ Deno.serve(async (req) => {
 
     const { storage_path, module, name } = await req.json();
     if (!storage_path || !module) return fail("Paramètres invalides", 400);
+    if (typeof storage_path !== "string" || storage_path.includes("..") || !storage_path.startsWith(`${userData.user.id}/`)) {
+      return fail("Accès non autorisé", 403, `path=${storage_path} user=${userData.user.id}`);
+    }
 
     const { data: file, error: dlErr } = await supa.storage
       .from("pdf-documents")
