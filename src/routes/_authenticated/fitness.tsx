@@ -349,6 +349,12 @@ function SeancesTab() {
 
   const { prByName, histByName, topExercises } = useMemo(() => computePRs(data), [data]);
 
+  const allImagePaths = useMemo(
+    () => (data ?? []).flatMap((w) => (w.exercises ?? []).map((ex) => ex.image_path)),
+    [data],
+  );
+  const { data: listImageUrls } = useExerciseImageUrls(allImagePaths);
+
   const openNew = () => {
     setTemplate(null);
     setOpen(true);
