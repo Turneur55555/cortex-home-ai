@@ -159,7 +159,14 @@ function StockTab({ module }: { module: StockModule }) {
     [data],
   );
 
-  const grouped = useMemo(() => {
+  const validCount = useMemo(
+    () => (data ?? []).filter((it) => {
+      const s = expStateOf(it);
+      return s === "valid" || s === "none";
+    }).length,
+    [data],
+  );
+
     const map = new Map<string, Tables<"items">[]>();
     for (const it of filtered) {
       const k = it.category ?? "autre";
