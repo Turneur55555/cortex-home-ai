@@ -404,36 +404,44 @@ function ItemRow({
         </div>
       </div>
 
-      <div className="flex items-center gap-1 rounded-xl border border-border bg-surface p-0.5">
-        <button
-          type="button"
-          onClick={() => onQty(Math.max(0, item.quantity - 1))}
-          className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground"
-          aria-label="Diminuer"
-        >
-          <Minus className="h-3.5 w-3.5" />
-        </button>
-        <span className="min-w-[1.5rem] text-center text-sm font-semibold tabular-nums">
-          {item.quantity}
+      {selecting ? (
+        <span className="text-sm font-semibold tabular-nums text-muted-foreground">
+          ×{item.quantity}
         </span>
-        <button
-          type="button"
-          onClick={() => onQty(item.quantity + 1)}
-          className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground"
-          aria-label="Augmenter"
-        >
-          <Plus className="h-3.5 w-3.5" />
-        </button>
-      </div>
+      ) : (
+        <>
+          <div className="flex items-center gap-1 rounded-xl border border-border bg-surface p-0.5">
+            <button
+              type="button"
+              onClick={() => onQty(Math.max(0, item.quantity - 1))}
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground"
+              aria-label="Diminuer"
+            >
+              <Minus className="h-3.5 w-3.5" />
+            </button>
+            <span className="min-w-[1.5rem] text-center text-sm font-semibold tabular-nums">
+              {item.quantity}
+            </span>
+            <button
+              type="button"
+              onClick={() => onQty(item.quantity + 1)}
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground"
+              aria-label="Augmenter"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
+          </div>
 
-      <button
-        type="button"
-        onClick={onDelete}
-        className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-        aria-label="Supprimer"
-      >
-        <Trash2 className="h-4 w-4" />
-      </button>
+          <button
+            type="button"
+            onClick={onDelete}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+            aria-label="Supprimer"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </>
+      )}
     </li>
   );
 }
