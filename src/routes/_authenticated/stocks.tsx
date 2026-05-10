@@ -167,6 +167,7 @@ function StockTab({ module }: { module: StockModule }) {
     [data],
   );
 
+  const grouped = useMemo(() => {
     const map = new Map<string, Tables<"items">[]>();
     for (const it of filtered) {
       const k = it.category ?? "autre";
