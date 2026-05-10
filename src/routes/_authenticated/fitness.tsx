@@ -751,6 +751,7 @@ function CoachSheet({
           sets: String(ex.sets ?? ""),
           reps: String(ex.reps ?? ""),
           weight: ex.weight != null && ex.weight > 0 ? String(ex.weight) : "",
+          image_path: null,
         })),
       };
       toast.success("Séance générée — ajuste-la avant d'enregistrer");
