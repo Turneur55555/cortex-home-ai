@@ -164,7 +164,8 @@ Si tu hésites entre deux catégories, prends la plus COURTE durée (sécurité 
     const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Lovable-API-Key": LOVABLE_API_KEY,
+        "X-Lovable-AIG-SDK": "vercel-ai-sdk",
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -174,7 +175,7 @@ Si tu hésites entre deux catégories, prends la plus COURTE durée (sécurité 
           {
             role: "user",
             content: [
-              { type: "text", text: `Identifie tous les items visibles sur cette photo pour le module "${module}".` },
+              { type: "text", text: `Identifie tous les items visibles sur cette photo pour le module "${module}". Pour CHAQUE item, renseigne expiration_date (lue OU estimée selon les règles).` },
               { type: "image_url", image_url: { url: `data:${mt};base64,${image_base64}` } },
             ],
           },
