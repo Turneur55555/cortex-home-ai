@@ -110,6 +110,7 @@ export type Database = {
       exercises: {
         Row: {
           id: string
+          image_path: string | null
           name: string
           notes: string | null
           reps: number | null
@@ -120,6 +121,7 @@ export type Database = {
         }
         Insert: {
           id?: string
+          image_path?: string | null
           name: string
           notes?: string | null
           reps?: number | null
@@ -130,6 +132,7 @@ export type Database = {
         }
         Update: {
           id?: string
+          image_path?: string | null
           name?: string
           notes?: string | null
           reps?: number | null
