@@ -91,9 +91,12 @@ Deno.serve(async (req) => {
                 properties: {
                   muscle: { type: "string", enum: MUSCLES },
                   last_trained: { type: "string", description: "Date YYYY-MM-DD de dernière sollicitation" },
-                  reason: { type: "string", description: "Court (1 phrase) en français" },
+                  hours_since_last: { type: "number", description: "Heures écoulées depuis la dernière sollicitation" },
+                  recovery_window_hours: { type: "number", enum: [48, 72], description: "Fenêtre de récupération appliquée (48h petits muscles, 72h gros muscles)" },
+                  hours_remaining: { type: "number", description: "Heures restantes avant récupération complète (>=0)" },
+                  reason: { type: "string", description: "Explication détaillée (1-2 phrases) en français mentionnant la fenêtre 48h/72h appliquée" },
                 },
-                required: ["muscle", "reason"],
+                required: ["muscle", "reason", "recovery_window_hours", "hours_since_last", "hours_remaining"],
               },
             },
             recommended: {
@@ -103,9 +106,12 @@ Deno.serve(async (req) => {
                 type: "object",
                 properties: {
                   muscle: { type: "string", enum: MUSCLES },
-                  reason: { type: "string", description: "Court (1 phrase) en français" },
+                  last_trained: { type: "string", description: "Date YYYY-MM-DD de dernière sollicitation, ou null si jamais" },
+                  hours_since_last: { type: "number", description: "Heures écoulées depuis la dernière sollicitation (0 si jamais sur la fenêtre)" },
+                  recovery_window_hours: { type: "number", enum: [48, 72], description: "Fenêtre de récupération du muscle (48h petits, 72h gros)" },
+                  reason: { type: "string", description: "Explication détaillée (1-2 phrases) en français : pourquoi ce muscle est prêt, en référant à la fenêtre 48h/72h" },
                 },
-                required: ["muscle", "reason"],
+                required: ["muscle", "reason", "recovery_window_hours"],
               },
             },
             advice: { type: "string", description: "Conseil global court (1-2 phrases) en français" },
@@ -117,11 +123,13 @@ Deno.serve(async (req) => {
     };
 
     const systemPrompt = `Tu es un coach sportif. Analyse les séances récentes d'un utilisateur et détermine :
-1) Quels groupes musculaires sont encore en récupération (fatigués) — règle générale : 48h pour petits muscles (biceps, triceps, abdos, mollets), 72h pour gros (pectoraux, dos, jambes, fessiers, épaules).
+1) Quels groupes musculaires sont encore en récupération (fatigués). Règle : 48h pour PETITS muscles (biceps, triceps, abdos, mollets) et 72h pour GROS muscles (pectoraux, dos, jambes, fessiers, épaules, cardio intense).
 2) Quels groupes musculaires l'utilisateur devrait travailler aujourd'hui (${today}) pour équilibrer son volume hebdomadaire et respecter la récupération.
 
-Reste FACTUEL et CONCIS. Réponds en FRANÇAIS via tool calling uniquement.
-Si aucune séance récente : recommended = priorités équilibrées, fatigued = vide.`;
+Pour CHAQUE muscle, calcule précisément hours_since_last (à partir des dates des séances), indique recovery_window_hours (48 ou 72), et pour les fatigués calcule hours_remaining = max(0, recovery_window_hours - hours_since_last). Dans "reason", explique en français en citant explicitement la fenêtre (ex : "Pectoraux travaillés il y a 36h — fenêtre de 72h pour les gros muscles, encore 36h de récup").
+
+Reste FACTUEL. Réponds en FRANÇAIS via tool calling uniquement.
+Si aucune séance récente : recommended = priorités équilibrées (avec reason expliquant l'absence de fatigue), fatigued = vide.`;
 
     const userPrompt = `Aujourd'hui : ${today}
 Séances des 10 derniers jours :

@@ -621,13 +621,33 @@ function ReadinessCard({
   onStart,
 }: {
   query: ReturnType<typeof useQuery<{
-    fatigued: Array<{ muscle: string; last_trained?: string; reason: string }>;
-    recommended: Array<{ muscle: string; reason: string }>;
+    fatigued: Array<{
+      muscle: string;
+      last_trained?: string;
+      hours_since_last?: number;
+      recovery_window_hours?: number;
+      hours_remaining?: number;
+      reason: string;
+    }>;
+    recommended: Array<{
+      muscle: string;
+      last_trained?: string;
+      hours_since_last?: number;
+      recovery_window_hours?: number;
+      reason: string;
+    }>;
     advice: string;
   }, Error>>;
   onStart: (muscles: string[]) => void;
 }) {
   const { data, isLoading, isError, refetch, isFetching } = query;
+
+  const fmtHours = (h?: number) => {
+    if (h === undefined || h === null || Number.isNaN(h)) return null;
+    if (h < 1) return "<1h";
+    if (h < 48) return `${Math.round(h)}h`;
+    return `${Math.round(h / 24)}j`;
+  };
 
   return (
     <div className="rounded-2xl border border-border bg-card p-4 shadow-card">
@@ -646,6 +666,10 @@ function ReadinessCard({
         </button>
       </div>
 
+      <p className="mb-3 text-[10px] text-muted-foreground">
+        Basé sur tes 10 derniers jours · fenêtres de récupération : 48h (petits muscles) / 72h (gros muscles)
+      </p>
+
       {isLoading && (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <Loader2 className="h-3.5 w-3.5 animate-spin" /> Analyse de tes dernières séances…
@@ -663,18 +687,39 @@ function ReadinessCard({
               <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-warning">
                 ⚠️ Encore fatigués
               </p>
-              <ul className="space-y-1.5">
-                {data.fatigued.map((f, i) => (
-                  <li key={i} className="text-xs">
-                    <span className="font-semibold capitalize">{f.muscle}</span>
-                    {f.last_trained && (
-                      <span className="ml-1 text-muted-foreground">
-                        · dernière fois {f.last_trained}
-                      </span>
-                    )}
-                    <span className="text-muted-foreground"> — {f.reason}</span>
-                  </li>
-                ))}
+              <ul className="space-y-2">
+                {data.fatigued.map((f, i) => {
+                  const since = fmtHours(f.hours_since_last);
+                  const remaining = fmtHours(f.hours_remaining);
+                  return (
+                    <li key={i} className="rounded-lg border border-warning/20 bg-warning/5 p-2 text-xs">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="font-semibold capitalize">{f.muscle}</span>
+                        {f.recovery_window_hours && (
+                          <span className="rounded-full bg-warning/15 px-1.5 py-0.5 text-[9px] font-semibold text-warning">
+                            fenêtre {f.recovery_window_hours}h
+                          </span>
+                        )}
+                        {since && (
+                          <span className="text-[10px] text-muted-foreground">
+                            il y a {since}
+                          </span>
+                        )}
+                        {remaining && (
+                          <span className="text-[10px] font-medium text-warning">
+                            · encore {remaining} de récup
+                          </span>
+                        )}
+                      </div>
+                      {f.last_trained && (
+                        <p className="mt-0.5 text-[10px] text-muted-foreground">
+                          Dernière séance : {f.last_trained}
+                        </p>
+                      )}
+                      <p className="mt-1 text-[11px] text-foreground/80">{f.reason}</p>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           )}
@@ -684,13 +729,33 @@ function ReadinessCard({
               <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-primary">
                 ✅ À travailler aujourd'hui
               </p>
-              <ul className="space-y-1.5">
-                {data.recommended.map((r, i) => (
-                  <li key={i} className="text-xs">
-                    <span className="font-semibold capitalize">{r.muscle}</span>
-                    <span className="text-muted-foreground"> — {r.reason}</span>
-                  </li>
-                ))}
+              <ul className="space-y-2">
+                {data.recommended.map((r, i) => {
+                  const since = fmtHours(r.hours_since_last);
+                  return (
+                    <li key={i} className="rounded-lg border border-primary/20 bg-primary/5 p-2 text-xs">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="font-semibold capitalize">{r.muscle}</span>
+                        {r.recovery_window_hours && (
+                          <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[9px] font-semibold text-primary">
+                            fenêtre {r.recovery_window_hours}h
+                          </span>
+                        )}
+                        {since && (
+                          <span className="text-[10px] text-muted-foreground">
+                            il y a {since}
+                          </span>
+                        )}
+                      </div>
+                      {r.last_trained && (
+                        <p className="mt-0.5 text-[10px] text-muted-foreground">
+                          Dernière séance : {r.last_trained}
+                        </p>
+                      )}
+                      <p className="mt-1 text-[11px] text-foreground/80">{r.reason}</p>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           )}
