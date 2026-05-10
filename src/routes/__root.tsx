@@ -36,8 +36,21 @@ function NotFoundComponent() {
 }
 
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
-  console.error(error);
   const router = useRouter();
+  const [supportId, setSupportId] = useState<string | null>(null);
+
+  useEffect(() => {
+    console.error(error);
+    logError(
+      {
+        level: "error",
+        message: error.message || "Route error",
+        stack: error.stack ?? null,
+        context: { boundary: "route" },
+      },
+      { silent: true },
+    ).then((id) => setSupportId(id));
+  }, [error]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -48,6 +61,19 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
         <p className="mt-2 text-sm text-muted-foreground">
           Something went wrong on our end. You can try refreshing or head back home.
         </p>
+        {supportId && (
+          <p className="mt-3 text-xs text-muted-foreground">
+            ID de support :{" "}
+            <button
+              type="button"
+              onClick={() => navigator.clipboard?.writeText(supportId)}
+              className="font-mono text-foreground underline-offset-2 hover:underline"
+              title="Cliquer pour copier"
+            >
+              {supportId}
+            </button>
+          </p>
+        )}
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
             onClick={() => {
