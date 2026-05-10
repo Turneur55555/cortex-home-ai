@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   Activity,
   Dumbbell,
@@ -375,6 +375,7 @@ function SeancesTab() {
   };
 
   const [coachOpen, setCoachOpen] = useState(false);
+  const [coachInitialMuscles, setCoachInitialMuscles] = useState<string[] | null>(null);
 
   const handleCoachResult = (tpl: WorkoutTemplate) => {
     setCoachOpen(false);
@@ -382,12 +383,41 @@ function SeancesTab() {
     setOpen(true);
   };
 
+  const openCoach = (initial?: string[]) => {
+    setCoachInitialMuscles(initial && initial.length > 0 ? initial : null);
+    setCoachOpen(true);
+  };
+
+  const readiness = useQuery({
+    queryKey: ["muscle-readiness"],
+    enabled: !!data && data.length > 0,
+    staleTime: 1000 * 60 * 30,
+    queryFn: async () => {
+      const { data: r, error } = await supabase.functions.invoke("muscle-readiness", { body: {} });
+      if (error) throw new Error(error.message);
+      if (r?.error) throw new Error(r.error);
+      return r as {
+        fatigued: Array<{ muscle: string; last_trained?: string; reason: string }>;
+        recommended: Array<{ muscle: string; reason: string }>;
+        advice: string;
+      };
+    },
+  });
+
   return (
     <section className="flex flex-col gap-4">
+      {/* Diagnostic récup IA */}
+      {data && data.length > 0 && (
+        <ReadinessCard
+          query={readiness}
+          onStart={(muscles) => openCoach(muscles)}
+        />
+      )}
+
       {/* Coach IA CTA */}
       <button
         type="button"
-        onClick={() => setCoachOpen(true)}
+        onClick={() => openCoach()}
         className="group flex items-center gap-3 rounded-2xl border border-primary/30 bg-gradient-to-r from-primary/15 via-primary/5 to-transparent p-4 text-left shadow-card transition-all active:scale-[0.99]"
       >
         <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-primary text-primary-foreground shadow-glow">
@@ -563,8 +593,132 @@ function SeancesTab() {
           onClose={() => setOpen(false)}
         />
       )}
-      {coachOpen && <CoachSheet onClose={() => setCoachOpen(false)} onResult={handleCoachResult} />}
+      {coachOpen && (
+        <CoachSheet
+          onClose={() => setCoachOpen(false)}
+          onResult={handleCoachResult}
+          initialMuscles={coachInitialMuscles ?? undefined}
+        />
+      )}
     </section>
+  );
+}
+
+/* ============================ READINESS CARD ============================ */
+
+function normalizeMuscleId(label: string): string | null {
+  const norm = label
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .trim();
+  const match = MUSCLE_OPTIONS.find((m) => m.id === norm);
+  return match ? match.id : null;
+}
+
+function ReadinessCard({
+  query,
+  onStart,
+}: {
+  query: ReturnType<typeof useQuery<{
+    fatigued: Array<{ muscle: string; last_trained?: string; reason: string }>;
+    recommended: Array<{ muscle: string; reason: string }>;
+    advice: string;
+  }, Error>>;
+  onStart: (muscles: string[]) => void;
+}) {
+  const { data, isLoading, isError, refetch, isFetching } = query;
+
+  return (
+    <div className="rounded-2xl border border-border bg-card p-4 shadow-card">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Activity className="h-4 w-4 text-primary" />
+          <h3 className="text-sm font-semibold">Récupération musculaire</h3>
+        </div>
+        <button
+          type="button"
+          onClick={() => refetch()}
+          disabled={isFetching}
+          className="text-[11px] font-medium text-muted-foreground hover:text-foreground disabled:opacity-50"
+        >
+          {isFetching ? "…" : "Actualiser"}
+        </button>
+      </div>
+
+      {isLoading && (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Analyse de tes dernières séances…
+        </div>
+      )}
+
+      {isError && (
+        <p className="text-xs text-destructive">Analyse indisponible. Réessaie plus tard.</p>
+      )}
+
+      {data && (
+        <div className="space-y-3">
+          {data.fatigued.length > 0 && (
+            <div>
+              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-warning">
+                ⚠️ Encore fatigués
+              </p>
+              <ul className="space-y-1.5">
+                {data.fatigued.map((f, i) => (
+                  <li key={i} className="text-xs">
+                    <span className="font-semibold capitalize">{f.muscle}</span>
+                    {f.last_trained && (
+                      <span className="ml-1 text-muted-foreground">
+                        · dernière fois {f.last_trained}
+                      </span>
+                    )}
+                    <span className="text-muted-foreground"> — {f.reason}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {data.recommended.length > 0 && (
+            <div>
+              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-primary">
+                ✅ À travailler aujourd'hui
+              </p>
+              <ul className="space-y-1.5">
+                {data.recommended.map((r, i) => (
+                  <li key={i} className="text-xs">
+                    <span className="font-semibold capitalize">{r.muscle}</span>
+                    <span className="text-muted-foreground"> — {r.reason}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {data.advice && (
+            <p className="rounded-lg bg-muted/50 p-2 text-[11px] italic text-muted-foreground">
+              {data.advice}
+            </p>
+          )}
+
+          {data.recommended.length > 0 && (
+            <button
+              type="button"
+              onClick={() => {
+                const ids = data.recommended
+                  .map((r) => normalizeMuscleId(r.muscle))
+                  .filter((m): m is string => !!m);
+                onStart(ids);
+              }}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-primary px-3 py-2 text-xs font-semibold text-primary-foreground shadow-glow"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              Générer une séance adaptée
+            </button>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -798,11 +952,15 @@ const MUSCLE_OPTIONS = [
 function CoachSheet({
   onClose,
   onResult,
+  initialMuscles,
 }: {
   onClose: () => void;
   onResult: (tpl: WorkoutTemplate) => void;
+  initialMuscles?: string[];
 }) {
-  const [muscles, setMuscles] = useState<string[]>(["pectoraux"]);
+  const [muscles, setMuscles] = useState<string[]>(
+    initialMuscles && initialMuscles.length > 0 ? initialMuscles : ["pectoraux"],
+  );
   const [duration, setDuration] = useState("45");
   const [equipment, setEquipment] = useState("salle complète");
   const [level, setLevel] = useState("intermédiaire");
