@@ -321,11 +321,7 @@ function computePRs(workouts: ReturnType<typeof useWorkouts>["data"]) {
     arr.sort((a, b) => a.date.localeCompare(b.date));
   }
 
-  const topExercises = Array.from(freq.entries())
-    .filter(([, n]) => n >= 2 && histByName.has(_)![0] !== undefined) // dummy ref-safe; cleanup below
-    .map(([k]) => k);
-
-  // Re-pick top 3 (cleanly): exercises with at least 2 weighted sessions
+  // Top 3 exercises: at least 2 weighted sessions, sorted by frequency
   const cleanTop = Array.from(freq.entries())
     .filter(([k, n]) => n >= 2 && (histByName.get(k)?.length ?? 0) >= 2)
     .sort((a, b) => b[1] - a[1])
