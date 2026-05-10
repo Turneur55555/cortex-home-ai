@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell, X, AlertTriangle, Clock } from "lucide-react";
 import { differenceInDays, parseISO, format } from "date-fns";
 import { fr } from "date-fns/locale";
