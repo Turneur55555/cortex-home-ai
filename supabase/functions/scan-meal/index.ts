@@ -131,6 +131,8 @@ Retourne STRICTEMENT du JSON via tool calling.`;
     if (!call) return fail("Réponse IA invalide", 502);
     const parsed = JSON.parse(call.function.arguments);
 
+    await recordRateLimit(supa, userData.user.id, "scan_meal");
+
     return new Response(JSON.stringify(parsed), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
