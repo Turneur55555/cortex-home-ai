@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useMutation } from "@tanstack/react-query";
 import {
   Activity,
   Dumbbell,
@@ -15,6 +16,10 @@ import {
   Trophy,
   Repeat,
   BarChart3,
+  Sparkles,
+  Camera,
+  ImageIcon,
+  Target,
 } from "lucide-react";
 import {
   Area,
@@ -29,6 +34,7 @@ import {
 } from "recharts";
 import { format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
+import { supabase } from "@/integrations/supabase/client";
 import {
   useAddBodyMeasurement,
   useAddNutrition,
@@ -38,7 +44,10 @@ import {
   useDeleteNutrition,
   useDeleteWorkout,
   useNutrition,
+  useNutritionGoals,
+  useUpsertNutritionGoals,
   useWorkouts,
+  type NutritionGoals,
 } from "@/hooks/use-fitness";
 
 export const Route = createFileRoute("/_authenticated/fitness")({
