@@ -952,11 +952,15 @@ const MUSCLE_OPTIONS = [
 function CoachSheet({
   onClose,
   onResult,
+  initialMuscles,
 }: {
   onClose: () => void;
   onResult: (tpl: WorkoutTemplate) => void;
+  initialMuscles?: string[];
 }) {
-  const [muscles, setMuscles] = useState<string[]>(["pectoraux"]);
+  const [muscles, setMuscles] = useState<string[]>(
+    initialMuscles && initialMuscles.length > 0 ? initialMuscles : ["pectoraux"],
+  );
   const [duration, setDuration] = useState("45");
   const [equipment, setEquipment] = useState("salle complète");
   const [level, setLevel] = useState("intermédiaire");
