@@ -77,7 +77,7 @@ function DocumentsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Documents</h1>
           <p className="mt-1 text-xs text-muted-foreground">
-            Importe un PDF, l'IA l'analyse puis le déverse dans le bon module.
+            Importe un PDF — l'IA détecte le bon module et l'analyse pour toi.
           </p>
         </div>
         <Sheet open={open} onOpenChange={setOpen}>
