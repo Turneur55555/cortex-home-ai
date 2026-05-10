@@ -42,7 +42,9 @@ export function useDeleteBodyMeasurement() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("body_tracking").delete().eq("id", id);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Non authentifié");
+      const { error } = await supabase.from("body_tracking").delete().eq("id", id).eq("user_id", user.id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -119,8 +121,10 @@ export function useDeleteWorkout() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      await supabase.from("exercises").delete().eq("workout_id", id);
-      const { error } = await supabase.from("workouts").delete().eq("id", id);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Non authentifié");
+      await supabase.from("exercises").delete().eq("workout_id", id).eq("user_id", user.id);
+      const { error } = await supabase.from("workouts").delete().eq("id", id).eq("user_id", user.id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -170,7 +174,9 @@ export function useDeleteNutrition() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("nutrition").delete().eq("id", id);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Non authentifié");
+      const { error } = await supabase.from("nutrition").delete().eq("id", id).eq("user_id", user.id);
       if (error) throw error;
     },
     onSuccess: () => {
