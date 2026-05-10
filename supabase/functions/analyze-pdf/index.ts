@@ -289,6 +289,7 @@ Tout le texte (summary, insights, alerts) doit être en FRANÇAIS.`;
         key_insights: parsed.key_insights ?? [],
         alerts: parsed.alerts ?? [],
         extracted_items: parsed.extracted_items ?? [],
+        detected_module: parsed.detected_module ?? null,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
