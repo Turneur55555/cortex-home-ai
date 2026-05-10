@@ -14,7 +14,9 @@ import {
   MapPin,
   Minus,
   CheckSquare,
+  Sparkles,
 } from "lucide-react";
+import { ScanSheet } from "@/components/ScanSheet";
 import { format, parseISO, differenceInDays } from "date-fns";
 import { fr } from "date-fns/locale";
 import {
