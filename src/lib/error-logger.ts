@@ -44,7 +44,7 @@ export async function logError(payload: LogPayload, opts?: { silent?: boolean })
       url: typeof window !== "undefined" ? window.location.href : null,
       route: typeof window !== "undefined" ? window.location.pathname : null,
       user_agent: typeof navigator !== "undefined" ? navigator.userAgent : null,
-      context: payload.context ?? null,
+      context: (payload.context ?? null) as never,
     };
 
     const { error } = await supabase.from("error_logs").insert(row);
