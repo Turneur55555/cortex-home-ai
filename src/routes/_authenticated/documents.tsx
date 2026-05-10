@@ -95,14 +95,17 @@ function DocumentsPage() {
                 <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
                   Module cible
                 </label>
-                <Select value={module} onValueChange={(v) => setModule(v as DocModule)}>
+                <Select value={module} onValueChange={(v) => setModule(v as DocModuleSelection)}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {(Object.keys(MODULE_LABELS) as DocModule[]).map((m) => (
-                      <SelectItem key={m} value={m}>{MODULE_LABELS[m]}</SelectItem>
+                    {(Object.keys(MODULE_SELECTION_LABELS) as DocModuleSelection[]).map((m) => (
+                      <SelectItem key={m} value={m}>{MODULE_SELECTION_LABELS[m]}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Laisse sur « Détection automatique » pour que l'IA choisisse.
+                </p>
               </div>
               <div>
                 <input
