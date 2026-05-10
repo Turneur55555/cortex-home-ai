@@ -283,7 +283,7 @@ type WorkoutTemplate = {
   exercises: Array<{ name: string; sets: string; reps: string; weight: string }>;
 };
 
-type ExerciseRow = { name: string; weight: number | null; date: string; workoutId: string; exId: string };
+
 
 function computePRs(workouts: ReturnType<typeof useWorkouts>["data"]) {
   // PR = max weight per exercise name (case-insensitive trim)
