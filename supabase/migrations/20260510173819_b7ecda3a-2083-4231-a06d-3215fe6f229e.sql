@@ -1,0 +1,2 @@
+ALTER TABLE public.documents DROP CONSTRAINT documents_module_check;
+ALTER TABLE public.documents ADD CONSTRAINT documents_module_check CHECK (module = ANY (ARRAY['alimentation','pharmacie','habits','menager','nutrition','fitness','body','documents']));
