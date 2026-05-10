@@ -110,6 +110,8 @@ Privilégie les ingrédients qui expirent bientôt. Réponds en JSON valide uniq
     const raw = data.choices?.[0]?.message?.content ?? "{}";
     const parsed = JSON.parse(raw);
 
+    await recordRateLimit(supa, userData.user.id, "recipe_assistant");
+
     return new Response(JSON.stringify(parsed), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
