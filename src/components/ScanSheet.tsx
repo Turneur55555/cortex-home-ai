@@ -12,6 +12,8 @@ type DetectedItem = {
   unit?: string;
   location?: string;
   expiration_date?: string;
+  expiration_source?: "label" | "estimated";
+  expiration_raw?: string;
   confidence?: number;
 };
 
@@ -227,16 +229,39 @@ export function ScanSheet({ module, onClose }: { module: StockModule; onClose: (
                       <input
                         type="date"
                         value={it.expiration_date ?? ""}
-                        onChange={(e) => updateItem(idx, { expiration_date: e.target.value })}
+                        onChange={(e) =>
+                          updateItem(idx, {
+                            expiration_date: e.target.value,
+                            expiration_source: "label",
+                          })
+                        }
                         disabled={skip}
-                        className="rounded-lg border border-border bg-surface px-2 py-1.5 text-xs outline-none focus:border-primary"
+                        className={
+                          "rounded-lg border bg-surface px-2 py-1.5 text-xs outline-none focus:border-primary " +
+                          (it.expiration_source === "estimated"
+                            ? "border-warning/60 text-warning"
+                            : "border-border")
+                        }
+                        title={
+                          it.expiration_source === "estimated"
+                            ? "Date estimée d'après la catégorie — vérifie-la"
+                            : it.expiration_raw
+                              ? `Lu sur l'étiquette : ${it.expiration_raw}`
+                              : "Date de péremption"
+                        }
                       />
                     </div>
-                    {it.confidence != null && (
-                      <p className="mt-1.5 text-[10px] text-muted-foreground">
-                        Confiance : {Math.round((it.confidence ?? 0) * 100)}%
-                      </p>
-                    )}
+                    <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[10px] text-muted-foreground">
+                      {it.confidence != null && (
+                        <span>Confiance : {Math.round((it.confidence ?? 0) * 100)}%</span>
+                      )}
+                      {it.expiration_source === "estimated" && (
+                        <span className="text-warning">Date estimée — à vérifier</span>
+                      )}
+                      {it.expiration_source === "label" && it.expiration_raw && (
+                        <span>Lu : « {it.expiration_raw} »</span>
+                      )}
+                    </div>
                   </div>
                 );
               })}
