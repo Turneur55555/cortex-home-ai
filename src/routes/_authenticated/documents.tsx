@@ -32,7 +32,9 @@ import {
   useDeleteDocument,
   usePourIntoModule,
   MODULE_LABELS,
+  MODULE_SELECTION_LABELS,
   type DocModule,
+  type DocModuleSelection,
   type AnalysisResult,
 } from "@/hooks/use-documents";
 import type { Tables } from "@/integrations/supabase/types";
