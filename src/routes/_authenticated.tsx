@@ -7,8 +7,9 @@ import { Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated")({
   beforeLoad: async () => {
-    const { data } = await supabase.auth.getSession();
-    if (!data.session) throw redirect({ to: "/login" });
+    // getUser() valide le JWT côté serveur Supabase (vs getSession() qui lit localStorage sans vérification).
+    const { data, error } = await supabase.auth.getUser();
+    if (error || !data.user) throw redirect({ to: "/login" });
   },
   component: AuthenticatedLayout,
 });
