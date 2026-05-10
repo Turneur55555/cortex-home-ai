@@ -200,7 +200,9 @@ Renseigne le champ "detected_module" avec ta décision, puis extrais les items a
       },
       documents: { type: "object", additionalProperties: true },
     };
-    const itemSchema = ITEM_SCHEMAS[module] ?? ITEM_SCHEMAS.documents;
+    const itemSchema = isAuto
+      ? { type: "object", additionalProperties: true }
+      : ITEM_SCHEMAS[module] ?? ITEM_SCHEMAS.documents;
 
     const systemPrompt = `Tu es un analyste expert. Tu reçois un PDF. Module cible: "${module}".
 ${hint}
@@ -209,6 +211,26 @@ IMPORTANT: chaque objet de extracted_items DOIT contenir les vraies valeurs extr
 Si le PDF ne contient AUCUN élément pertinent pour le module, retourne extracted_items: [].
 Tout le texte (summary, insights, alerts) doit être en FRANÇAIS.`;
 
+    const toolProps: Record<string, unknown> = {
+      summary: { type: "string", description: "Résumé en 2-3 phrases" },
+      key_insights: { type: "array", items: { type: "string" }, description: "3 à 6 points clés" },
+      alerts: { type: "array", items: { type: "string" }, description: "Alertes / points d'attention" },
+      extracted_items: {
+        type: "array",
+        description: "Données structurées extraites pour le module cible. Chaque objet doit contenir des vraies valeurs (jamais vide).",
+        items: itemSchema,
+      },
+    };
+    const required = ["summary", "key_insights", "alerts", "extracted_items"];
+    if (isAuto) {
+      toolProps.detected_module = {
+        type: "string",
+        enum: ["alimentation", "pharmacie", "habits", "menager", "nutrition", "fitness", "body", "documents"],
+        description: "Module détecté automatiquement à partir du contenu du PDF.",
+      };
+      required.push("detected_module");
+    }
+
     const tool = {
       type: "function",
       function: {
@@ -216,17 +238,8 @@ Tout le texte (summary, insights, alerts) doit être en FRANÇAIS.`;
         description: "Enregistrer l'analyse structurée du PDF",
         parameters: {
           type: "object",
-          properties: {
-            summary: { type: "string", description: "Résumé en 2-3 phrases" },
-            key_insights: { type: "array", items: { type: "string" }, description: "3 à 6 points clés" },
-            alerts: { type: "array", items: { type: "string" }, description: "Alertes / points d'attention" },
-            extracted_items: {
-              type: "array",
-              description: "Données structurées extraites pour le module cible. Chaque objet doit contenir des vraies valeurs (jamais vide).",
-              items: itemSchema,
-            },
-          },
-          required: ["summary", "key_insights", "alerts", "extracted_items"],
+          properties: toolProps,
+          required,
           additionalProperties: false,
         },
       },
