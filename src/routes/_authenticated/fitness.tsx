@@ -662,9 +662,37 @@ function WorkoutSheet({
             </button>
           </div>
           <div className="space-y-2">
-            {exercises.map((ex, i) => (
+            {exercises.map((ex, i) => {
+              const imgUrl = ex.image_path ? exImageUrls?.get(ex.image_path) : null;
+              return (
               <div key={i} className="rounded-xl border border-border bg-surface p-3">
                 <div className="flex gap-2">
+                  {/* Image thumbnail / picker */}
+                  <label
+                    className="relative flex h-12 w-12 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-lg border border-border bg-card text-muted-foreground hover:border-primary hover:text-primary"
+                    aria-label="Photo exercice"
+                  >
+                    {imgUrl ? (
+                      <img src={imgUrl} alt={ex.name || "Exercice"} className="h-full w-full object-cover" />
+                    ) : ex.image_path ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : uploading === i ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Camera className="h-4 w-4" />
+                    )}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      disabled={uploading !== null}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) uploadImage(i, f);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
                   <input
                     type="text"
                     value={ex.name}
@@ -683,6 +711,15 @@ function WorkoutSheet({
                     </button>
                   )}
                 </div>
+                {ex.image_path && (
+                  <button
+                    type="button"
+                    onClick={() => updateEx(i, "image_path", null)}
+                    className="mt-1 text-[10px] font-medium text-muted-foreground hover:text-destructive"
+                  >
+                    Retirer la photo
+                  </button>
+                )}
                 <div className="mt-2 grid grid-cols-3 gap-2">
                   <input
                     type="number"
@@ -708,7 +745,8 @@ function WorkoutSheet({
                   />
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
