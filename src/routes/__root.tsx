@@ -151,9 +151,13 @@ function RootComponent() {
   }, []);
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <Outlet />
-      <Toaster theme="dark" position="top-center" richColors closeButton />
-    </QueryClientProvider>
+    <GlobalErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <Suspense fallback={<LoadingScreen />}>
+          <Outlet />
+        </Suspense>
+        <Toaster theme="dark" position="top-center" richColors closeButton />
+      </QueryClientProvider>
+    </GlobalErrorBoundary>
   );
 }
