@@ -82,7 +82,19 @@ Deno.serve(async (req) => {
     for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
     const b64 = btoa(bin);
 
-    const hint = MODULE_HINTS[module] ?? MODULE_HINTS.documents;
+    const isAuto = module === "auto";
+    const hint = isAuto
+      ? `Mode AUTO: tu dois D'ABORD classer ce PDF dans l'un des modules suivants en te basant sur son contenu :
+- alimentation: ${MODULE_HINTS.alimentation}
+- pharmacie: ${MODULE_HINTS.pharmacie}
+- habits: ${MODULE_HINTS.habits}
+- menager: ${MODULE_HINTS.menager}
+- nutrition: ${MODULE_HINTS.nutrition}
+- fitness: ${MODULE_HINTS.fitness}
+- body: ${MODULE_HINTS.body}
+- documents: si aucun module ne convient (document générique, facture, contrat, etc.).
+Renseigne le champ "detected_module" avec ta décision, puis extrais les items au format de ce module.`
+      : MODULE_HINTS[module] ?? MODULE_HINTS.documents;
 
     // Schéma d'item explicite par module — sans ça le modèle renvoie {} et le déversement crée des lignes vides.
     const ITEM_SCHEMAS: Record<string, Record<string, unknown>> = {
