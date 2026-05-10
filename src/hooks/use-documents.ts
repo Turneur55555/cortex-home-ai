@@ -110,6 +110,40 @@ export function useDeleteDocument() {
   });
 }
 
+const MODULE_QUERY_KEYS: Record<DocModule, string[][]> = {
+  alimentation: [["items", "alimentation"], ["items"]],
+  pharmacie: [["items", "pharmacie"], ["items"]],
+  habits: [["items", "habits"], ["items"]],
+  menager: [["items", "menager"], ["items"]],
+  nutrition: [["nutrition"]],
+  fitness: [["workouts"], ["exercises"]],
+  body: [["body_tracking"]],
+  documents: [],
+};
+
+export function usePourIntoModule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      module,
+      items,
+    }: {
+      module: DocModule;
+      items: Array<Record<string, unknown>>;
+    }) => {
+      const n = await pourIntoModule(module, items);
+      return { n, module };
+    },
+    onSuccess: ({ n, module }) => {
+      toast.success(`${n} entrée(s) ajoutée(s) à ${MODULE_LABELS[module]}`);
+      for (const key of MODULE_QUERY_KEYS[module] ?? []) {
+        qc.invalidateQueries({ queryKey: key });
+      }
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+}
+
 // Pour into target modules. Returns inserted count.
 export async function pourIntoModule(
   module: DocModule,
