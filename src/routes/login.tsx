@@ -18,8 +18,9 @@ export const Route = createFileRoute("/login")({
     ],
   }),
   beforeLoad: async () => {
-    const { data } = await supabase.auth.getSession();
-    if (data.session) throw redirect({ to: "/" });
+    // Vérification JWT côté serveur (pas seulement le cache localStorage).
+    const { data, error } = await supabase.auth.getUser();
+    if (!error && data.user) throw redirect({ to: "/" });
   },
   component: LoginPage,
 });
@@ -65,8 +66,13 @@ function LoginPage() {
         navigate({ to: "/" });
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Erreur inconnue";
-      toast.error(msg.includes("Invalid login") ? "Identifiants incorrects" : msg);
+      // Message générique uniforme pour éviter l'énumération de comptes / fuite d'erreurs internes.
+      console.error("[auth]", err);
+      toast.error(
+        mode === "signup"
+          ? "Impossible de créer le compte. Vérifiez vos informations ou réessayez plus tard."
+          : "Identifiants incorrects ou erreur de connexion.",
+      );
     } finally {
       setLoading(false);
     }
