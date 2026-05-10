@@ -175,23 +175,20 @@ function ResultCard({
   result: AnalysisResult;
   onDismiss: () => void;
 }) {
-  const [pouring, setPouring] = useState(false);
+  const pourMut = usePourIntoModule();
   const items = result.extracted_items ?? [];
   const targetModule = doc.module as DocModule;
 
   const pour = async () => {
     if (targetModule === "documents") return toast.info("Aucun déversement pour ce module.");
-    setPouring(true);
     try {
-      const n = await pourIntoModule(targetModule, items);
-      toast.success(`${n} entrée(s) ajoutée(s) à ${MODULE_LABELS[targetModule]}`);
+      await pourMut.mutateAsync({ module: targetModule, items });
       onDismiss();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Erreur de déversement");
-    } finally {
-      setPouring(false);
+    } catch {
+      // toast handled in hook
     }
   };
+  const pouring = pourMut.isPending;
 
   return (
     <div className="rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/10 to-transparent p-4 shadow-glow">
