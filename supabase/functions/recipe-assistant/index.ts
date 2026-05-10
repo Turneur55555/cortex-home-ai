@@ -56,11 +56,18 @@ Deno.serve(async (req) => {
     const { data: userData, error: userErr } = await supa.auth.getUser();
     if (userErr || !userData.user) return fail("Non authentifié", 401, userErr);
 
+    const rl = await checkRateLimit(supa, userData.user.id, "recipe_assistant", 20);
+    if (!rl.ok) return fail("Limite atteinte (20 demandes/h). Réessaie plus tard.", 429);
+
     const { items, preferences, prompt } = (await req.json()) as {
       items: Item[];
       preferences: Prefs;
       prompt?: string;
     };
+
+    if (typeof prompt === "string" && prompt.length > 500) {
+      return fail("Demande trop longue (max 500 caractères).", 400);
+    }
 
     const sys = `Tu es un chef-assistant. Tu proposes 3 recettes RÉALISABLES principalement avec les ingrédients en stock fournis.
 Tu DOIS respecter STRICTEMENT les règles alimentaires de l'utilisateur :
