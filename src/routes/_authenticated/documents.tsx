@@ -307,7 +307,22 @@ function DocCard({ doc, onDelete }: { doc: Tables<"documents">; onDelete: () => 
               ))}
             </ul>
           )}
-          <div className="flex justify-end">
+          <div className="flex items-center justify-between gap-2">
+            {canPour ? (
+              <Button
+                size="sm"
+                className="gap-1.5"
+                onClick={() => pourMut.mutate({ module: targetModule, items: extracted })}
+                disabled={pourMut.isPending}
+              >
+                {pourMut.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ChevronDown className="h-4 w-4" />
+                )}
+                Déverser ({extracted.length}) vers {MODULE_LABELS[targetModule]}
+              </Button>
+            ) : <span />}
             <Button size="sm" variant="ghost" className="text-destructive" onClick={onDelete}>
               <Trash2 className="h-4 w-4" /> Supprimer
             </Button>
