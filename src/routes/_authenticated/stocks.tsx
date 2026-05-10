@@ -14,7 +14,9 @@ import {
   MapPin,
   Minus,
   CheckSquare,
+  Sparkles,
 } from "lucide-react";
+import { ScanSheet } from "@/components/ScanSheet";
 import { format, parseISO, differenceInDays } from "date-fns";
 import { fr } from "date-fns/locale";
 import {
@@ -93,6 +95,7 @@ function StockTab({ module }: { module: StockModule }) {
   const bulkDel = useBulkDeleteStockItems();
   const bulkAdj = useBulkAdjustStockItems();
   const [open, setOpen] = useState(false);
+  const [scanOpen, setScanOpen] = useState(false);
   const [q, setQ] = useState("");
   const [expFilter, setExpFilter] = useState<"all" | "valid" | "soon" | "expired">("all");
   const [selecting, setSelecting] = useState(false);
@@ -196,6 +199,15 @@ function StockTab({ module }: { module: StockModule }) {
             className="w-full rounded-xl border border-border bg-surface py-2.5 pl-10 pr-3 text-sm outline-none focus:border-primary"
           />
         </div>
+        <button
+          type="button"
+          onClick={() => setScanOpen(true)}
+          className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-gradient-primary px-3 text-xs font-semibold text-primary-foreground shadow-glow"
+          aria-label="Scanner une photo"
+        >
+          <Sparkles className="h-4 w-4" />
+          Scan
+        </button>
         <button
           type="button"
           onClick={() => (selecting ? exitSelect() : setSelecting(true))}
@@ -315,6 +327,7 @@ function StockTab({ module }: { module: StockModule }) {
 
       {!selecting && <FabAdd onClick={() => setOpen(true)} />}
       {open && <AddItemSheet module={module} onClose={() => setOpen(false)} />}
+      {scanOpen && <ScanSheet module={module} onClose={() => setScanOpen(false)} />}
 
       {selecting && selected.size > 0 && (
         <BulkActionBar
