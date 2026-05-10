@@ -3,10 +3,23 @@
 // Items are typed for the target module so the client can "pour" them in.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+const ALLOWED_ORIGINS = [
+  "https://id-preview--2c9444e5-f2d2-4c68-9566-e9e8569dc37a.lovable.app",
+  "https://2c9444e5-f2d2-4c68-9566-e9e8569dc37a.lovableproject.com",
+  "https://project--2c9444e5-f2d2-4c68-9566-e9e8569dc37a.lovable.app",
+  "http://localhost:8080",
+  "http://localhost:5173",
+];
+
+function buildCors(req: Request) {
+  const origin = req.headers.get("origin") ?? "";
+  const allow = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return {
+    "Access-Control-Allow-Origin": allow,
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    "Vary": "Origin",
+  };
+}
 
 const MODULE_HINTS: Record<string, string> = {
   alimentation:
