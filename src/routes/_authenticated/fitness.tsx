@@ -366,8 +366,33 @@ function SeancesTab() {
     setOpen(true);
   };
 
+  const [coachOpen, setCoachOpen] = useState(false);
+
+  const handleCoachResult = (tpl: WorkoutTemplate) => {
+    setCoachOpen(false);
+    setTemplate(tpl);
+    setOpen(true);
+  };
+
   return (
     <section className="flex flex-col gap-4">
+      {/* Coach IA CTA */}
+      <button
+        type="button"
+        onClick={() => setCoachOpen(true)}
+        className="group flex items-center gap-3 rounded-2xl border border-primary/30 bg-gradient-to-r from-primary/15 via-primary/5 to-transparent p-4 text-left shadow-card transition-all active:scale-[0.99]"
+      >
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-primary text-primary-foreground shadow-glow">
+          <Sparkles className="h-5 w-5" />
+        </span>
+        <span className="flex-1">
+          <span className="block text-sm font-semibold">Coach IA — Génère ma séance</span>
+          <span className="block text-[11px] text-muted-foreground">
+            Choisis muscles, durée, niveau. L'IA crée ta séance.
+          </span>
+        </span>
+      </button>
+
       {isLoading && (
         <div className="flex h-32 items-center justify-center">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
