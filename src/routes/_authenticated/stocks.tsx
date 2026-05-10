@@ -330,10 +330,16 @@ function ItemRow({
   item,
   onDelete,
   onQty,
+  selecting = false,
+  selected = false,
+  onToggle,
 }: {
   item: Tables<"items">;
   onDelete: () => void;
   onQty: (q: number) => void;
+  selecting?: boolean;
+  selected?: boolean;
+  onToggle?: () => void;
 }) {
   const exp = item.expiration_date
     ? parseISO(item.expiration_date as unknown as string)
@@ -343,7 +349,30 @@ function ItemRow({
     daysLeft == null ? null : daysLeft < 0 ? "expired" : daysLeft <= 7 ? "soon" : "ok";
 
   return (
-    <li className="flex items-center gap-3 rounded-2xl border border-border bg-card p-3 shadow-card">
+    <li
+      onClick={selecting ? onToggle : undefined}
+      className={
+        "flex items-center gap-3 rounded-2xl border bg-card p-3 shadow-card transition-colors " +
+        (selecting
+          ? selected
+            ? "border-primary bg-primary/5 cursor-pointer"
+            : "border-border cursor-pointer"
+          : "border-border")
+      }
+    >
+      {selecting && (
+        <span
+          className={
+            "flex h-5 w-5 shrink-0 items-center justify-center rounded-md border " +
+            (selected
+              ? "border-primary bg-primary text-primary-foreground"
+              : "border-border bg-surface")
+          }
+          aria-hidden
+        >
+          {selected && <CheckSquare className="h-3 w-3" />}
+        </span>
+      )}
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold leading-tight">{item.name}</p>
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
