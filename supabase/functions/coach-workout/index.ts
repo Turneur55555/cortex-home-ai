@@ -47,6 +47,9 @@ Deno.serve(async (req) => {
     const { data: userData, error: userErr } = await supa.auth.getUser();
     if (userErr || !userData.user) return fail("Non authentifié", 401, userErr);
 
+    const rl = await checkRateLimit(supa, userData.user.id, "coach_workout", 20);
+    if (!rl.ok) return fail("Limite atteinte (20 séances/h). Réessaie plus tard.", 429);
+
     const body = await req.json();
     const muscles: string[] = Array.isArray(body.muscles) ? body.muscles : [];
     const duration: number = Number(body.duration_minutes) || 45;
