@@ -12,6 +12,8 @@ type DetectedItem = {
   unit?: string;
   location?: string;
   expiration_date?: string;
+  expiration_source?: "label" | "estimated";
+  expiration_raw?: string;
   confidence?: number;
 };
 
