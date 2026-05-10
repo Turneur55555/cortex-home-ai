@@ -150,6 +150,7 @@ export type Database = {
       }
       items: {
         Row: {
+          alert_days_before: number
           category: string
           confidence_score: number | null
           created_at: string
@@ -166,6 +167,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          alert_days_before?: number
           category: string
           confidence_score?: number | null
           created_at?: string
@@ -182,6 +184,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          alert_days_before?: number
           category?: string
           confidence_score?: number | null
           created_at?: string

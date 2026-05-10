@@ -1,0 +1,1 @@
+ALTER TABLE public.items ADD COLUMN IF NOT EXISTS alert_days_before integer NOT NULL DEFAULT 7;
