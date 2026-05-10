@@ -655,7 +655,7 @@ function WorkoutSheet({
             </label>
             <button
               type="button"
-              onClick={() => setExercises((a) => [...a, { name: "", sets: "", reps: "", weight: "" }])}
+              onClick={() => setExercises((a) => [...a, { name: "", sets: "", reps: "", weight: "", image_path: null }])}
               className="text-xs font-semibold text-primary"
             >
               + Ajouter
