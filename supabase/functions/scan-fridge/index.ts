@@ -1,6 +1,7 @@
 // Scanne une photo (frigo, placard, armoire, etc.) via Lovable AI Gateway
 // Renvoie une liste d'items détectés au format du module cible.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { checkRateLimit, recordRateLimit } from "../_shared/rate-limit.ts";
 
 const ALLOWED_ORIGINS = [
   "https://id-preview--2c9444e5-f2d2-4c68-9566-e9e8569dc37a.lovable.app",
