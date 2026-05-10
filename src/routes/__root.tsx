@@ -4,7 +4,6 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
-  useNavigate,
   useLocation,
   HeadContent,
   Scripts,
@@ -15,14 +14,13 @@ import { Toaster } from "@/components/ui/sonner";
 import appCss from "../styles.css?url";
 
 function NotFoundComponent() {
-  const navigate = useNavigate();
   const location = useLocation();
 
   useEffect(() => {
     if (location.pathname === "/index") {
-      navigate({ to: "/", replace: true });
+      window.location.replace("/");
     }
-  }, [location.pathname, navigate]);
+  }, [location.pathname]);
 
   if (location.pathname === "/index") {
     return (
