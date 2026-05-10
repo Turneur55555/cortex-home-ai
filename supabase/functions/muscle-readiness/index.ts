@@ -50,6 +50,9 @@ Deno.serve(async (req) => {
     const { data: userData, error: userErr } = await supa.auth.getUser();
     if (userErr || !userData.user) return fail("Non authentifié", 401, userErr);
 
+    const rl = await checkRateLimit(supa, userData.user.id, "muscle_readiness", 30);
+    if (!rl.ok) return fail("Limite atteinte (30 analyses/h). Réessaie plus tard.", 429);
+
     // Fetch last 10 days of workouts with exercises
     const sinceDate = new Date();
     sinceDate.setDate(sinceDate.getDate() - 10);
