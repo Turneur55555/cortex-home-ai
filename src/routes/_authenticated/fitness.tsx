@@ -561,15 +561,39 @@ function WorkoutSheet({
     duration_minutes: "",
     notes: "",
   });
-  const [exercises, setExercises] = useState<Array<{ name: string; sets: string; reps: string; weight: string }>>(
+  const [exercises, setExercises] = useState<Array<{ name: string; sets: string; reps: string; weight: string; image_path: string | null }>>(
     template?.exercises && template.exercises.length > 0
       ? template.exercises
-      : [{ name: "", sets: "", reps: "", weight: "" }],
+      : [{ name: "", sets: "", reps: "", weight: "", image_path: null }],
   );
+  const [uploading, setUploading] = useState<number | null>(null);
 
-  const updateEx = (i: number, k: keyof typeof exercises[number], v: string) => {
+  const updateEx = (i: number, k: keyof typeof exercises[number], v: string | null) => {
     setExercises((arr) => arr.map((e, idx) => (idx === i ? { ...e, [k]: v } : e)));
   };
+
+  const uploadImage = async (i: number, file: File) => {
+    try {
+      setUploading(i);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Non authentifié");
+      const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+      const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
+      const { error } = await supabase.storage
+        .from("exercise-images")
+        .upload(path, file, { contentType: file.type, upsert: false });
+      if (error) throw error;
+      updateEx(i, "image_path", path);
+      toast.success("Photo ajoutée");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Échec upload");
+    } finally {
+      setUploading(null);
+    }
+  };
+
+  const exImagePaths = exercises.map((e) => e.image_path);
+  const { data: exImageUrls } = useExerciseImageUrls(exImagePaths);
 
   const num = (v: string) => (v.trim() === "" ? null : Number(v));
 
