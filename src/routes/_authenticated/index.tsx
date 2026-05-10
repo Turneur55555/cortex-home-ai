@@ -1,8 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Package, Dumbbell, FileText, Sparkles, Plus, Bell, Loader2 } from "lucide-react";
+import { useMemo } from "react";
+import { Package, Dumbbell, FileText, Sparkles, Plus, Bell, Loader2, Quote } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
+import { getSessionQuote } from "@/lib/quotes";
 
 export const Route = createFileRoute("/_authenticated/")({
   head: () => ({
@@ -43,6 +45,7 @@ function HomePage() {
   const stats = useDashboardStats();
   const greeting = getGreeting();
   const name = user?.email?.split("@")[0] ?? "vous";
+  const quote = useMemo(() => getSessionQuote(), []);
 
   return (
     <main className="flex flex-1 flex-col px-5 pb-6 pt-12">
@@ -64,6 +67,21 @@ function HomePage() {
           <Bell className="h-5 w-5" />
         </button>
       </header>
+
+      {/* Citation motivante du jour */}
+      <section className="mb-6 rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-4 shadow-card">
+        <div className="flex gap-3">
+          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
+            <Quote className="h-4 w-4" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium leading-snug text-balance">"{quote.text}"</p>
+            <p className="mt-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              — {quote.author}
+            </p>
+          </div>
+        </div>
+      </section>
 
       {/* Hero card */}
       <section className="mb-8 overflow-hidden rounded-3xl border border-border bg-gradient-surface p-6 shadow-elevated">

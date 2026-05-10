@@ -41,6 +41,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = async () => {
+    try {
+      sessionStorage.removeItem("icortex.daily_quote.v1");
+    } catch {
+      // ignore
+    }
     await supabase.auth.signOut();
   };
 
