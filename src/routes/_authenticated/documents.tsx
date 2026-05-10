@@ -57,18 +57,31 @@ function DocumentsPage() {
 
   const [open, setOpen] = useState(false);
   const [module, setModule] = useState<DocModuleSelection>("auto");
-  const [pickedFile, setPickedFile] = useState<File | null>(null);
+  const [pickedFiles, setPickedFiles] = useState<File[]>([]);
+  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
   const [lastResult, setLastResult] = useState<{
     doc: Tables<"documents">;
     result: AnalysisResult;
   } | null>(null);
 
   const handleSubmit = async () => {
-    if (!pickedFile) return toast.error("Sélectionne un PDF");
-    const r = await upload.mutateAsync({ file: pickedFile, module });
-    setLastResult(r);
-    setPickedFile(null);
+    if (pickedFiles.length === 0) return toast.error("Sélectionne au moins un PDF");
+    let last: { doc: Tables<"documents">; result: AnalysisResult } | null = null;
+    let ok = 0;
+    for (let i = 0; i < pickedFiles.length; i++) {
+      setProgress({ current: i + 1, total: pickedFiles.length });
+      try {
+        last = await upload.mutateAsync({ file: pickedFiles[i], module });
+        ok++;
+      } catch {
+        // toast handled in hook
+      }
+    }
+    setProgress(null);
+    setLastResult(last);
+    setPickedFiles([]);
     setOpen(false);
+    if (pickedFiles.length > 1) toast.success(`${ok}/${pickedFiles.length} PDF analysés`);
   };
 
   return (
