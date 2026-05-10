@@ -153,6 +153,8 @@ ${JSON.stringify(summary, null, 2)}`;
     if (!call) return fail("Réponse IA invalide", 502);
     const parsed = JSON.parse(call.function.arguments);
 
+    await recordRateLimit(supa, userData.user.id, "muscle_readiness");
+
     return new Response(JSON.stringify(parsed), {
       headers: { ...cors, "Content-Type": "application/json" },
     });
