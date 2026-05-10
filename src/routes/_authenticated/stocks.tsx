@@ -94,6 +94,7 @@ function StockTab({ module }: { module: StockModule }) {
   const bulkAdj = useBulkAdjustStockItems();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
+  const [expFilter, setExpFilter] = useState<"all" | "valid" | "soon" | "expired">("all");
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -110,17 +111,32 @@ function StockTab({ module }: { module: StockModule }) {
     setSelected(new Set());
   };
 
+  const expStateOf = (it: Tables<"items">): "none" | "valid" | "soon" | "expired" => {
+    if (!it.expiration_date) return "none";
+    const d = differenceInDays(parseISO(it.expiration_date as unknown as string), new Date());
+    if (d < 0) return "expired";
+    if (d <= 7) return "soon";
+    return "valid";
+  };
+
   const filtered = useMemo(() => {
     if (!data) return [];
     const needle = q.trim().toLowerCase();
-    if (!needle) return data;
-    return data.filter(
-      (it) =>
+    return data.filter((it) => {
+      if (expFilter !== "all") {
+        const s = expStateOf(it);
+        if (expFilter === "valid" && s !== "valid" && s !== "none") return false;
+        if (expFilter === "soon" && s !== "soon") return false;
+        if (expFilter === "expired" && s !== "expired") return false;
+      }
+      if (!needle) return true;
+      return (
         it.name.toLowerCase().includes(needle) ||
         (it.category ?? "").toLowerCase().includes(needle) ||
-        (it.location ?? "").toLowerCase().includes(needle),
-    );
-  }, [data, q]);
+        (it.location ?? "").toLowerCase().includes(needle)
+      );
+    });
+  }, [data, q, expFilter]);
 
   const expiringSoon = useMemo(
     () =>
@@ -140,6 +156,14 @@ function StockTab({ module }: { module: StockModule }) {
           differenceInDays(parseISO(it.expiration_date as unknown as string), new Date()) < 0
         );
       }),
+    [data],
+  );
+
+  const validCount = useMemo(
+    () => (data ?? []).filter((it) => {
+      const s = expStateOf(it);
+      return s === "valid" || s === "none";
+    }).length,
     [data],
   );
 
@@ -186,6 +210,50 @@ function StockTab({ module }: { module: StockModule }) {
           <CheckSquare className="h-4 w-4" />
           {selecting ? "Annuler" : "Sélection"}
         </button>
+      </div>
+
+      <div className="flex flex-wrap gap-1.5">
+        {(
+          [
+            { key: "all", label: "Tous", count: data?.length ?? 0, tone: "default" },
+            { key: "valid", label: "Valides", count: validCount, tone: "success" },
+            { key: "soon", label: "Bientôt", count: expiringSoon.length, tone: "warning" },
+            { key: "expired", label: "Expirés", count: expired.length, tone: "danger" },
+          ] as const
+        ).map((c) => {
+          const active = expFilter === c.key;
+          const toneCls =
+            c.tone === "danger"
+              ? active
+                ? "border-destructive bg-destructive text-destructive-foreground"
+                : "border-border text-destructive"
+              : c.tone === "warning"
+                ? active
+                  ? "border-warning bg-warning text-warning-foreground"
+                  : "border-border text-warning"
+                : active
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border text-muted-foreground";
+          return (
+            <button
+              key={c.key}
+              type="button"
+              onClick={() => setExpFilter(c.key)}
+              aria-pressed={active}
+              className={`inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-colors ${toneCls}`}
+            >
+              {c.label}
+              <span
+                className={
+                  "rounded-full px-1.5 py-0 text-[10px] font-bold tabular-nums " +
+                  (active ? "bg-background/25" : "bg-surface")
+                }
+              >
+                {c.count}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
       {selecting && filtered.length > 0 && (
