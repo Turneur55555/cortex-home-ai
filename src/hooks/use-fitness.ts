@@ -11,6 +11,7 @@ export function useBodyMeasurements() {
       const { data, error } = await supabase
         .from("body_tracking")
         .select("*")
+        .or("weight.not.is.null,body_fat.not.is.null,muscle_mass.not.is.null,chest.not.is.null,waist.not.is.null,hips.not.is.null,left_arm.not.is.null,right_arm.not.is.null,left_thigh.not.is.null,right_thigh.not.is.null,notes.not.is.null")
         .order("date", { ascending: false })
         .limit(180);
       if (error) throw error;
