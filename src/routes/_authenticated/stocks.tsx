@@ -94,6 +94,7 @@ function StockTab({ module }: { module: StockModule }) {
   const bulkAdj = useBulkAdjustStockItems();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
+  const [expFilter, setExpFilter] = useState<"all" | "valid" | "soon" | "expired">("all");
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -110,17 +111,32 @@ function StockTab({ module }: { module: StockModule }) {
     setSelected(new Set());
   };
 
+  const expStateOf = (it: Tables<"items">): "none" | "valid" | "soon" | "expired" => {
+    if (!it.expiration_date) return "none";
+    const d = differenceInDays(parseISO(it.expiration_date as unknown as string), new Date());
+    if (d < 0) return "expired";
+    if (d <= 7) return "soon";
+    return "valid";
+  };
+
   const filtered = useMemo(() => {
     if (!data) return [];
     const needle = q.trim().toLowerCase();
-    if (!needle) return data;
-    return data.filter(
-      (it) =>
+    return data.filter((it) => {
+      if (expFilter !== "all") {
+        const s = expStateOf(it);
+        if (expFilter === "valid" && s !== "valid" && s !== "none") return false;
+        if (expFilter === "soon" && s !== "soon") return false;
+        if (expFilter === "expired" && s !== "expired") return false;
+      }
+      if (!needle) return true;
+      return (
         it.name.toLowerCase().includes(needle) ||
         (it.category ?? "").toLowerCase().includes(needle) ||
-        (it.location ?? "").toLowerCase().includes(needle),
-    );
-  }, [data, q]);
+        (it.location ?? "").toLowerCase().includes(needle)
+      );
+    });
+  }, [data, q, expFilter]);
 
   const expiringSoon = useMemo(
     () =>
