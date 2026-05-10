@@ -141,6 +141,7 @@ export function useAddWorkout() {
         sets?: number | null;
         reps?: number | null;
         weight?: number | null;
+        image_path?: string | null;
       }>;
     }) => {
       const {
