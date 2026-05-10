@@ -12,10 +12,13 @@ const ALLOWED_ORIGINS = [
 ];
 
 function buildCors(req: Request) {
-  const origin = req.headers.get("origin") ?? "";
-  const allow = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  const origin = req.headers.get("origin") ?? ALLOWED_ORIGINS[0];
+  const allow = ALLOWED_ORIGINS.includes(origin) || origin.endsWith(".lovable.app")
+    ? origin
+    : ALLOWED_ORIGINS[0];
   return {
     "Access-Control-Allow-Origin": allow,
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
     Vary: "Origin",
   };
@@ -310,7 +313,8 @@ Tout le texte (summary, insights, alerts) doit être en FRANÇAIS.`;
     const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        "Lovable-API-Key": LOVABLE_API_KEY,
+        "X-Lovable-AIG-SDK": "vercel-ai-sdk",
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
