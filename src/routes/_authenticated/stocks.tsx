@@ -162,15 +162,50 @@ function StockTab({ module }: { module: StockModule }) {
         <Stat label="Expirés" value={expired.length} tone="danger" />
       </div>
 
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Rechercher…"
-          className="w-full rounded-xl border border-border bg-surface py-2.5 pl-10 pr-3 text-sm outline-none focus:border-primary"
-        />
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Rechercher…"
+            className="w-full rounded-xl border border-border bg-surface py-2.5 pl-10 pr-3 text-sm outline-none focus:border-primary"
+          />
+        </div>
+        <button
+          type="button"
+          onClick={() => (selecting ? exitSelect() : setSelecting(true))}
+          className={
+            "inline-flex h-10 items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold transition-colors " +
+            (selecting
+              ? "border-primary bg-primary/10 text-primary"
+              : "border-border bg-surface text-muted-foreground hover:text-foreground")
+          }
+          aria-pressed={selecting}
+        >
+          <CheckSquare className="h-4 w-4" />
+          {selecting ? "Annuler" : "Sélection"}
+        </button>
       </div>
+
+      {selecting && filtered.length > 0 && (
+        <div className="flex items-center justify-between rounded-xl border border-border bg-surface px-3 py-2 text-xs">
+          <span className="font-medium text-muted-foreground">
+            {selected.size} / {filtered.length} sélectionné(s)
+          </span>
+          <button
+            type="button"
+            onClick={() =>
+              setSelected((s) =>
+                s.size === filtered.length ? new Set() : new Set(filtered.map((it) => it.id)),
+              )
+            }
+            className="font-semibold text-primary"
+          >
+            {selected.size === filtered.length ? "Tout désélectionner" : "Tout sélectionner"}
+          </button>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="flex h-32 items-center justify-center">
@@ -184,7 +219,7 @@ function StockTab({ module }: { module: StockModule }) {
           </p>
         </div>
       ) : (
-        <div className="flex flex-col gap-4">
+        <div className={`flex flex-col gap-4 ${selecting && selected.size > 0 ? "pb-28" : ""}`}>
           {grouped.map(([cat, items]) => (
             <div key={cat}>
               <h3 className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -195,6 +230,9 @@ function StockTab({ module }: { module: StockModule }) {
                   <ItemRow
                     key={it.id}
                     item={it}
+                    selecting={selecting}
+                    selected={selected.has(it.id)}
+                    onToggle={() => toggleOne(it.id)}
                     onDelete={() => del.mutate({ id: it.id, module })}
                     onQty={(q) =>
                       update.mutate({ id: it.id, module, patch: { quantity: q } })
@@ -207,9 +245,84 @@ function StockTab({ module }: { module: StockModule }) {
         </div>
       )}
 
-      <FabAdd onClick={() => setOpen(true)} />
+      {!selecting && <FabAdd onClick={() => setOpen(true)} />}
       {open && <AddItemSheet module={module} onClose={() => setOpen(false)} />}
+
+      {selecting && selected.size > 0 && (
+        <BulkActionBar
+          count={selected.size}
+          busy={bulkDel.isPending || bulkAdj.isPending}
+          onAdjust={(delta) => {
+            const targets = (data ?? [])
+              .filter((it) => selected.has(it.id))
+              .map((it) => ({ id: it.id, quantity: Math.max(0, it.quantity + delta) }));
+            bulkAdj.mutate(
+              { items: targets, module },
+              { onSuccess: () => exitSelect() },
+            );
+          }}
+          onDelete={() => {
+            if (!confirm(`Supprimer ${selected.size} item(s) ?`)) return;
+            bulkDel.mutate(
+              { ids: [...selected], module },
+              { onSuccess: () => exitSelect() },
+            );
+          }}
+        />
+      )}
     </section>
+  );
+}
+
+function BulkActionBar({
+  count,
+  busy,
+  onAdjust,
+  onDelete,
+}: {
+  count: number;
+  busy: boolean;
+  onAdjust: (delta: number) => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div className="fixed bottom-20 left-1/2 z-40 w-[min(420px,calc(100vw-1.5rem))] -translate-x-1/2 rounded-2xl border border-border bg-card/95 p-2.5 shadow-elevated backdrop-blur">
+      <div className="flex items-center gap-2">
+        <span className="px-2 text-xs font-semibold text-muted-foreground">{count}</span>
+        <div className="flex flex-1 items-center gap-1 rounded-xl border border-border bg-surface p-0.5">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => onAdjust(-1)}
+            className="flex h-9 flex-1 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground disabled:opacity-50"
+            aria-label="Diminuer"
+          >
+            <Minus className="h-4 w-4" />
+          </button>
+          <span className="px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Qté
+          </span>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => onAdjust(1)}
+            className="flex h-9 flex-1 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground disabled:opacity-50"
+            aria-label="Augmenter"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+        </div>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onDelete}
+          className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-destructive px-3 text-xs font-semibold text-destructive-foreground disabled:opacity-50"
+        >
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+          Supprimer
+        </button>
+      </div>
+    </div>
   );
 }
 
