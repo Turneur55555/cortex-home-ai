@@ -1,8 +1,24 @@
 // Suggests recipes from user's food stocks while respecting their food preferences.
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+
+const ALLOWED_ORIGINS = [
+  "https://id-preview--2c9444e5-f2d2-4c68-9566-e9e8569dc37a.lovable.app",
+  "https://2c9444e5-f2d2-4c68-9566-e9e8569dc37a.lovableproject.com",
+  "https://project--2c9444e5-f2d2-4c68-9566-e9e8569dc37a.lovable.app",
+  "https://cortex-home-ai.lovable.app",
+  "http://localhost:8080",
+  "http://localhost:5173",
+];
+
+function buildCors(req: Request) {
+  const origin = req.headers.get("origin") ?? "";
+  const allow = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return {
+    "Access-Control-Allow-Origin": allow,
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+    Vary: "Origin",
+  };
+}
 
 type Item = { name: string; quantity?: number | null; unit?: string | null; expiration_date?: string | null };
 type Prefs = {
@@ -14,16 +30,36 @@ type Prefs = {
 };
 
 Deno.serve(async (req) => {
+  const corsHeaders = buildCors(req);
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  const fail = (msg: string, status = 400, internal?: unknown) => {
+    if (internal) console.error("[recipe-assistant]", msg, internal);
+    return new Response(JSON.stringify({ error: msg }), {
+      status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  };
+
   try {
+    const apiKey = Deno.env.get("LOVABLE_API_KEY");
+    if (!apiKey) return fail("Service indisponible", 500, "LOVABLE_API_KEY missing");
+
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+    const SUPABASE_ANON =
+      Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY")!;
+    const auth = req.headers.get("Authorization") ?? "";
+    const supa = createClient(SUPABASE_URL, SUPABASE_ANON, {
+      global: { headers: { Authorization: auth } },
+    });
+    const { data: userData, error: userErr } = await supa.auth.getUser();
+    if (userErr || !userData.user) return fail("Non authentifié", 401, userErr);
+
     const { items, preferences, prompt } = (await req.json()) as {
       items: Item[];
       preferences: Prefs;
       prompt?: string;
     };
-
-    const apiKey = Deno.env.get("LOVABLE_API_KEY");
-    if (!apiKey) throw new Error("LOVABLE_API_KEY missing");
 
     const sys = `Tu es un chef-assistant. Tu proposes 3 recettes RÉALISABLES principalement avec les ingrédients en stock fournis.
 Tu DOIS respecter STRICTEMENT les règles alimentaires de l'utilisateur :
@@ -55,19 +91,12 @@ Privilégie les ingrédients qui expirent bientôt. Réponds en JSON valide uniq
       }),
     });
 
-    if (resp.status === 429) {
-      return new Response(JSON.stringify({ error: "Trop de requêtes. Réessaie dans un instant." }), {
-        status: 429,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    if (resp.status === 429) return fail("Trop de requêtes. Réessaie dans un instant.", 429);
+    if (resp.status === 402) return fail("Crédits IA épuisés.", 402);
+    if (!resp.ok) {
+      const txt = await resp.text();
+      return fail("Erreur d'analyse IA", 502, `${resp.status} ${txt.slice(0, 300)}`);
     }
-    if (resp.status === 402) {
-      return new Response(JSON.stringify({ error: "Crédits IA épuisés. Recharge ton workspace Lovable." }), {
-        status: 402,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    if (!resp.ok) throw new Error(`AI gateway: ${resp.status}`);
 
     const data = await resp.json();
     const raw = data.choices?.[0]?.message?.content ?? "{}";
@@ -77,9 +106,6 @@ Privilégie les ingrédients qui expirent bientôt. Réponds en JSON valide uniq
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Erreur inconnue" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return fail("Erreur lors de la génération", 500, e);
   }
 });
