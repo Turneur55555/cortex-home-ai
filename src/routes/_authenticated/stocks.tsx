@@ -561,6 +561,7 @@ function AddItemSheet({ module, onClose }: { module: StockModule; onClose: () =>
     unit: defaultUnit(module),
     location: "",
     expiration_date: "",
+    alert_days_before: "7",
     notes: "",
   });
 
