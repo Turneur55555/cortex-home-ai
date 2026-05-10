@@ -36,6 +36,7 @@ export type AnalysisResult = {
   key_insights: string[];
   alerts: string[];
   extracted_items: Array<Record<string, unknown>>;
+  detected_module?: DocModule | null;
 };
 
 export function useDocuments() {
