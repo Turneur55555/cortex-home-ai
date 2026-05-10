@@ -18,8 +18,9 @@ export const Route = createFileRoute("/login")({
     ],
   }),
   beforeLoad: async () => {
-    const { data } = await supabase.auth.getSession();
-    if (data.session) throw redirect({ to: "/" });
+    // Vérification JWT côté serveur (pas seulement le cache localStorage).
+    const { data, error } = await supabase.auth.getUser();
+    if (!error && data.user) throw redirect({ to: "/" });
   },
   component: LoginPage,
 });
