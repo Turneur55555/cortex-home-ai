@@ -638,6 +638,13 @@ function AddItemSheet({ module, onClose }: { module: StockModule; onClose: () =>
             />
           </div>
           <Field
+            label="Alerter X jours avant expiration"
+            type="number"
+            value={form.alert_days_before}
+            onChange={(v) => setForm({ ...form, alert_days_before: v })}
+            placeholder="7"
+          />
+          <Field
             label="Notes"
             textarea
             value={form.notes}
