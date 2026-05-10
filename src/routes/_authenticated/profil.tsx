@@ -1,5 +1,5 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { LogOut, Mail, Shield } from "lucide-react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { ChevronRight, LogOut, Mail, Shield, Utensils } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
@@ -47,6 +47,27 @@ function ProfilPage() {
           <Mail className="h-4 w-4 text-muted-foreground" />
           <span className="truncate text-sm">{user?.email}</span>
         </div>
+      </section>
+
+      <section className="mb-6 rounded-2xl border border-border bg-card shadow-card">
+        <h2 className="px-4 pt-4 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Préférences
+        </h2>
+        <Link
+          to="/preferences-alimentaires"
+          className="mt-2 flex items-center gap-3 rounded-xl px-4 py-3 transition-colors hover:bg-surface"
+        >
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/15 text-primary">
+            <Utensils className="h-4 w-4" />
+          </span>
+          <span className="flex-1">
+            <span className="block text-sm font-semibold">Préférences alimentaires</span>
+            <span className="block text-xs text-muted-foreground">
+              Allergies, aliments à éviter, objectifs
+            </span>
+          </span>
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+        </Link>
       </section>
 
       <Button

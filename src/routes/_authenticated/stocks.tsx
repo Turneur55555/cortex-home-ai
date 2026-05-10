@@ -15,8 +15,10 @@ import {
   Minus,
   CheckSquare,
   Sparkles,
+  ChefHat,
 } from "lucide-react";
 import { ScanSheet } from "@/components/ScanSheet";
+import { RecipeAssistantSheet } from "@/components/RecipeAssistantSheet";
 import { toast } from "sonner";
 import { format, parseISO, differenceInDays } from "date-fns";
 import { fr } from "date-fns/locale";
@@ -98,6 +100,7 @@ function StockTab({ module }: { module: StockModule }) {
   const [open, setOpen] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
   const [q, setQ] = useState("");
+  const [recipeOpen, setRecipeOpen] = useState(false);
   const [expFilter, setExpFilter] = useState<"all" | "valid" | "soon" | "expired">("all");
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -209,6 +212,18 @@ function StockTab({ module }: { module: StockModule }) {
           <Sparkles className="h-4 w-4" />
           Scan
         </button>
+        {module === "alimentation" && (
+          <button
+            type="button"
+            onClick={() => setRecipeOpen(true)}
+            className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-primary/40 bg-primary/10 px-3 text-xs font-semibold text-primary"
+            aria-label="Que cuisiner ?"
+            title="Que cuisiner ?"
+          >
+            <ChefHat className="h-4 w-4" />
+            Recettes
+          </button>
+        )}
         <button
           type="button"
           onClick={() => (selecting ? exitSelect() : setSelecting(true))}
@@ -329,6 +344,7 @@ function StockTab({ module }: { module: StockModule }) {
       {!selecting && <FabAdd onClick={() => setOpen(true)} />}
       {open && <AddItemSheet module={module} onClose={() => setOpen(false)} />}
       {scanOpen && <ScanSheet module={module} onClose={() => setScanOpen(false)} />}
+      {recipeOpen && <RecipeAssistantSheet onClose={() => setRecipeOpen(false)} />}
 
       {selecting && selected.size > 0 && (
         <BulkActionBar
