@@ -250,7 +250,19 @@ function DocCard({ doc, onDelete }: { doc: Tables<"documents">; onDelete: () => 
     () => (Array.isArray(doc.alerts) ? (doc.alerts as string[]) : []),
     [doc.alerts],
   );
+  const extracted = useMemo<Array<Record<string, unknown>>>(() => {
+    if (!doc.analysis) return [];
+    try {
+      const p = JSON.parse(doc.analysis);
+      return Array.isArray(p) ? p : [];
+    } catch {
+      return [];
+    }
+  }, [doc.analysis]);
   const [open, setOpen] = useState(false);
+  const pourMut = usePourIntoModule();
+  const targetModule = doc.module as DocModule;
+  const canPour = targetModule !== "documents" && extracted.length > 0;
 
   return (
     <div className="rounded-2xl border border-border bg-surface p-3.5">
