@@ -109,8 +109,6 @@ function StockTab({ module }: { module: StockModule }) {
     setSelecting(false);
     setSelected(new Set());
   };
-  const [open, setOpen] = useState(false);
-  const [q, setQ] = useState("");
 
   const filtered = useMemo(() => {
     if (!data) return [];
