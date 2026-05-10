@@ -57,18 +57,31 @@ function DocumentsPage() {
 
   const [open, setOpen] = useState(false);
   const [module, setModule] = useState<DocModuleSelection>("auto");
-  const [pickedFile, setPickedFile] = useState<File | null>(null);
+  const [pickedFiles, setPickedFiles] = useState<File[]>([]);
+  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
   const [lastResult, setLastResult] = useState<{
     doc: Tables<"documents">;
     result: AnalysisResult;
   } | null>(null);
 
   const handleSubmit = async () => {
-    if (!pickedFile) return toast.error("Sélectionne un PDF");
-    const r = await upload.mutateAsync({ file: pickedFile, module });
-    setLastResult(r);
-    setPickedFile(null);
+    if (pickedFiles.length === 0) return toast.error("Sélectionne au moins un PDF");
+    let last: { doc: Tables<"documents">; result: AnalysisResult } | null = null;
+    let ok = 0;
+    for (let i = 0; i < pickedFiles.length; i++) {
+      setProgress({ current: i + 1, total: pickedFiles.length });
+      try {
+        last = await upload.mutateAsync({ file: pickedFiles[i], module });
+        ok++;
+      } catch {
+        // toast handled in hook
+      }
+    }
+    setProgress(null);
+    setLastResult(last);
+    setPickedFiles([]);
     setOpen(false);
+    if (pickedFiles.length > 1) toast.success(`${ok}/${pickedFiles.length} PDF analysés`);
   };
 
   return (
@@ -112,8 +125,11 @@ function DocumentsPage() {
                   ref={fileRef}
                   type="file"
                   accept="application/pdf"
+                  multiple
                   className="hidden"
-                  onChange={(e) => setPickedFile(e.target.files?.[0] ?? null)}
+                  onChange={(e) =>
+                    setPickedFiles(e.target.files ? Array.from(e.target.files) : [])
+                  }
                 />
                 <Button
                   variant="outline"
@@ -121,19 +137,33 @@ function DocumentsPage() {
                   onClick={() => fileRef.current?.click()}
                 >
                   <FileText className="h-4 w-4 text-primary" />
-                  <span className="truncate">{pickedFile?.name ?? "Choisir un PDF"}</span>
+                  <span className="truncate">
+                    {pickedFiles.length === 0
+                      ? "Choisir un ou plusieurs PDF"
+                      : pickedFiles.length === 1
+                        ? pickedFiles[0].name
+                        : `${pickedFiles.length} PDF sélectionnés`}
+                  </span>
                 </Button>
-                <p className="mt-1 text-[11px] text-muted-foreground">PDF, 15 Mo max.</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">PDF, 15 Mo max par fichier.</p>
               </div>
               <Button
                 className="gap-1.5"
                 onClick={handleSubmit}
-                disabled={upload.isPending || !pickedFile}
+                disabled={upload.isPending || pickedFiles.length === 0}
               >
                 {upload.isPending ? (
-                  <><Loader2 className="h-4 w-4 animate-spin" /> Analyse en cours…</>
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    {progress
+                      ? `Analyse ${progress.current}/${progress.total}…`
+                      : "Analyse en cours…"}
+                  </>
                 ) : (
-                  <><Sparkles className="h-4 w-4" /> Analyser avec l'IA</>
+                  <>
+                    <Sparkles className="h-4 w-4" />
+                    Analyser{pickedFiles.length > 1 ? ` ${pickedFiles.length} PDF` : " avec l'IA"}
+                  </>
                 )}
               </Button>
             </div>
