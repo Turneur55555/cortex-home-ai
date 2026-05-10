@@ -344,6 +344,7 @@ function StockTab({ module }: { module: StockModule }) {
       {!selecting && <FabAdd onClick={() => setOpen(true)} />}
       {open && <AddItemSheet module={module} onClose={() => setOpen(false)} />}
       {scanOpen && <ScanSheet module={module} onClose={() => setScanOpen(false)} />}
+      {recipeOpen && <RecipeAssistantSheet onClose={() => setRecipeOpen(false)} />}
 
       {selecting && selected.size > 0 && (
         <BulkActionBar
