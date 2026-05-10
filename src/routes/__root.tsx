@@ -8,6 +8,8 @@ import {
   Scripts,
 } from "@tanstack/react-router";
 import { Toaster } from "@/components/ui/sonner";
+import { useEffect, useState } from "react";
+import { installErrorLogger, logError } from "@/lib/error-logger";
 
 import appCss from "../styles.css?url";
 
