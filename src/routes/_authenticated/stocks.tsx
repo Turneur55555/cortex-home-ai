@@ -15,8 +15,10 @@ import {
   Minus,
   CheckSquare,
   Sparkles,
+  ChefHat,
 } from "lucide-react";
 import { ScanSheet } from "@/components/ScanSheet";
+import { RecipeAssistantSheet } from "@/components/RecipeAssistantSheet";
 import { toast } from "sonner";
 import { format, parseISO, differenceInDays } from "date-fns";
 import { fr } from "date-fns/locale";
