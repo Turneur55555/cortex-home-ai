@@ -14,6 +14,7 @@ import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedStocksRouteImport } from './routes/_authenticated/stocks'
 import { Route as AuthenticatedProfilRouteImport } from './routes/_authenticated/profil'
+import { Route as AuthenticatedPreferencesAlimentairesRouteImport } from './routes/_authenticated/preferences-alimentaires'
 import { Route as AuthenticatedFitnessRouteImport } from './routes/_authenticated/fitness'
 import { Route as AuthenticatedDocumentsRouteImport } from './routes/_authenticated/documents'
 
@@ -41,6 +42,12 @@ const AuthenticatedProfilRoute = AuthenticatedProfilRouteImport.update({
   path: '/profil',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedPreferencesAlimentairesRoute =
+  AuthenticatedPreferencesAlimentairesRouteImport.update({
+    id: '/preferences-alimentaires',
+    path: '/preferences-alimentaires',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedFitnessRoute = AuthenticatedFitnessRouteImport.update({
   id: '/fitness',
   path: '/fitness',
@@ -57,6 +64,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/documents': typeof AuthenticatedDocumentsRoute
   '/fitness': typeof AuthenticatedFitnessRoute
+  '/preferences-alimentaires': typeof AuthenticatedPreferencesAlimentairesRoute
   '/profil': typeof AuthenticatedProfilRoute
   '/stocks': typeof AuthenticatedStocksRoute
 }
@@ -64,6 +72,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/documents': typeof AuthenticatedDocumentsRoute
   '/fitness': typeof AuthenticatedFitnessRoute
+  '/preferences-alimentaires': typeof AuthenticatedPreferencesAlimentairesRoute
   '/profil': typeof AuthenticatedProfilRoute
   '/stocks': typeof AuthenticatedStocksRoute
   '/': typeof AuthenticatedIndexRoute
@@ -74,21 +83,37 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/_authenticated/documents': typeof AuthenticatedDocumentsRoute
   '/_authenticated/fitness': typeof AuthenticatedFitnessRoute
+  '/_authenticated/preferences-alimentaires': typeof AuthenticatedPreferencesAlimentairesRoute
   '/_authenticated/profil': typeof AuthenticatedProfilRoute
   '/_authenticated/stocks': typeof AuthenticatedStocksRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/documents' | '/fitness' | '/profil' | '/stocks'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/documents'
+    | '/fitness'
+    | '/preferences-alimentaires'
+    | '/profil'
+    | '/stocks'
   fileRoutesByTo: FileRoutesByTo
-  to: '/login' | '/documents' | '/fitness' | '/profil' | '/stocks' | '/'
+  to:
+    | '/login'
+    | '/documents'
+    | '/fitness'
+    | '/preferences-alimentaires'
+    | '/profil'
+    | '/stocks'
+    | '/'
   id:
     | '__root__'
     | '/_authenticated'
     | '/login'
     | '/_authenticated/documents'
     | '/_authenticated/fitness'
+    | '/_authenticated/preferences-alimentaires'
     | '/_authenticated/profil'
     | '/_authenticated/stocks'
     | '/_authenticated/'
@@ -136,6 +161,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedProfilRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/preferences-alimentaires': {
+      id: '/_authenticated/preferences-alimentaires'
+      path: '/preferences-alimentaires'
+      fullPath: '/preferences-alimentaires'
+      preLoaderRoute: typeof AuthenticatedPreferencesAlimentairesRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/fitness': {
       id: '/_authenticated/fitness'
       path: '/fitness'
@@ -156,6 +188,7 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteChildren {
   AuthenticatedDocumentsRoute: typeof AuthenticatedDocumentsRoute
   AuthenticatedFitnessRoute: typeof AuthenticatedFitnessRoute
+  AuthenticatedPreferencesAlimentairesRoute: typeof AuthenticatedPreferencesAlimentairesRoute
   AuthenticatedProfilRoute: typeof AuthenticatedProfilRoute
   AuthenticatedStocksRoute: typeof AuthenticatedStocksRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
@@ -164,6 +197,8 @@ interface AuthenticatedRouteChildren {
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedDocumentsRoute: AuthenticatedDocumentsRoute,
   AuthenticatedFitnessRoute: AuthenticatedFitnessRoute,
+  AuthenticatedPreferencesAlimentairesRoute:
+    AuthenticatedPreferencesAlimentairesRoute,
   AuthenticatedProfilRoute: AuthenticatedProfilRoute,
   AuthenticatedStocksRoute: AuthenticatedStocksRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
@@ -180,3 +215,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
