@@ -499,6 +499,7 @@ function NutritionTab() {
   }, [data]);
 
   const grouped = useMemo(() => {
+    type Meal = NonNullable<typeof data>[number];
     const order = ["petit-dej", "dejeuner", "diner", "collation"] as const;
     const labels: Record<string, string> = {
       "petit-dej": "Petit-déjeuner",
@@ -506,15 +507,22 @@ function NutritionTab() {
       diner: "Dîner",
       collation: "Collation",
     };
-    const map = new Map<string, typeof data>();
+    const map = new Map<string, Meal[]>();
     (data ?? []).forEach((m) => {
       const k = m.meal ?? "autre";
       if (!map.has(k)) map.set(k, []);
       map.get(k)!.push(m);
     });
-    const result: Array<{ key: string; label: string; items: NonNullable<typeof data> }> = [];
-    for (const k of order) if (map.has(k)) result.push({ key: k, label: labels[k], items: map.get(k)! });
-    for (const [k, v] of map) if (!order.includes(k as typeof order[number])) result.push({ key: k, label: labels[k] ?? "Autre", items: v });
+    const result: Array<{ key: string; label: string; items: Meal[] }> = [];
+    for (const k of order) {
+      const items = map.get(k);
+      if (items) result.push({ key: k, label: labels[k], items });
+    }
+    for (const [k, v] of map) {
+      if (!order.includes(k as typeof order[number])) {
+        result.push({ key: k, label: labels[k] ?? "Autre", items: v });
+      }
+    }
     return result;
   }, [data]);
 
