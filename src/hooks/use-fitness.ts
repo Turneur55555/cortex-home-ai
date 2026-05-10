@@ -264,3 +264,25 @@ export function useDeleteNutrition() {
     onError: (e: Error) => toast.error(e.message),
   });
 }
+
+// ---------- Exercise images ----------
+export function useExerciseImageUrls(paths: Array<string | null | undefined>) {
+  const key = paths.filter(Boolean).sort().join("|");
+  return useQuery({
+    queryKey: ["exercise-image-urls", key],
+    enabled: key.length > 0,
+    staleTime: 1000 * 60 * 30,
+    queryFn: async () => {
+      const unique = Array.from(new Set(paths.filter((p): p is string => !!p)));
+      const map = new Map<string, string>();
+      const { data, error } = await supabase.storage
+        .from("exercise-images")
+        .createSignedUrls(unique, 60 * 60);
+      if (error) throw error;
+      for (const item of data ?? []) {
+        if (item.path && item.signedUrl) map.set(item.path, item.signedUrl);
+      }
+      return map;
+    },
+  });
+}
