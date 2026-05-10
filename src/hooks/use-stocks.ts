@@ -91,3 +91,47 @@ export function useDeleteStockItem() {
     onError: (e: Error) => toast.error(e.message),
   });
 }
+
+export function useBulkDeleteStockItems() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ ids, module }: { ids: string[]; module: StockModule }) => {
+      if (ids.length === 0) return module;
+      const { error } = await supabase.from("items").delete().in("id", ids);
+      if (error) throw error;
+      return module;
+    },
+    onSuccess: (module, vars) => {
+      toast.success(`${vars.ids.length} supprimé(s)`);
+      qc.invalidateQueries({ queryKey: ["items", module] });
+      qc.invalidateQueries({ queryKey: ["dashboard_stats"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+}
+
+export function useBulkAdjustStockItems() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      items,
+      module,
+    }: {
+      items: { id: string; quantity: number }[];
+      module: StockModule;
+    }) => {
+      if (items.length === 0) return module;
+      await Promise.all(
+        items.map((it) =>
+          supabase.from("items").update({ quantity: it.quantity }).eq("id", it.id),
+        ),
+      );
+      return module;
+    },
+    onSuccess: (module, vars) => {
+      toast.success(`${vars.items.length} ajusté(s)`);
+      qc.invalidateQueries({ queryKey: ["items", module] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+}
