@@ -201,6 +201,15 @@ function StockTab({ module }: { module: StockModule }) {
         </div>
         <button
           type="button"
+          onClick={() => setScanOpen(true)}
+          className="inline-flex h-10 items-center gap-1.5 rounded-xl bg-gradient-primary px-3 text-xs font-semibold text-primary-foreground shadow-glow"
+          aria-label="Scanner une photo"
+        >
+          <Sparkles className="h-4 w-4" />
+          Scan
+        </button>
+        <button
+          type="button"
           onClick={() => (selecting ? exitSelect() : setSelecting(true))}
           className={
             "inline-flex h-10 items-center gap-1.5 rounded-xl border px-3 text-xs font-semibold transition-colors " +
