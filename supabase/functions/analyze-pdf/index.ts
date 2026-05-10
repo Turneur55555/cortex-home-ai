@@ -98,6 +98,50 @@ Renseigne le champ "detected_module" avec ta décision, puis extrais les items a
 
     // Schéma d'item explicite par module — sans ça le modèle renvoie {} et le déversement crée des lignes vides.
     const ITEM_SCHEMAS: Record<string, Record<string, unknown>> = {
+      auto: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          category: { type: "string" },
+          quantity: { type: "number" },
+          unit: { type: "string" },
+          location: { type: "string" },
+          expiration_date: { type: "string", description: "YYYY-MM-DD" },
+          meal: { type: "string" },
+          date: { type: "string", description: "YYYY-MM-DD" },
+          calories: { type: "number" },
+          proteins: { type: "number" },
+          carbs: { type: "number" },
+          fats: { type: "number" },
+          weight: { type: "number" },
+          body_fat: { type: "number" },
+          muscle_mass: { type: "number" },
+          chest: { type: "number" },
+          waist: { type: "number" },
+          hips: { type: "number" },
+          left_arm: { type: "number" },
+          right_arm: { type: "number" },
+          left_thigh: { type: "number" },
+          right_thigh: { type: "number" },
+          duration_minutes: { type: "number" },
+          exercises: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                name: { type: "string" },
+                sets: { type: "number" },
+                reps: { type: "number" },
+                weight: { type: "number" },
+                notes: { type: "string" },
+              },
+              required: ["name"],
+            },
+          },
+          notes: { type: "string" },
+        },
+        additionalProperties: false,
+      },
       alimentation: {
         type: "object",
         properties: {
@@ -200,9 +244,7 @@ Renseigne le champ "detected_module" avec ta décision, puis extrais les items a
       },
       documents: { type: "object", additionalProperties: true },
     };
-    const itemSchema = isAuto
-      ? { type: "object", additionalProperties: true }
-      : ITEM_SCHEMAS[module] ?? ITEM_SCHEMAS.documents;
+    const itemSchema = isAuto ? ITEM_SCHEMAS.auto : ITEM_SCHEMAS[module] ?? ITEM_SCHEMAS.documents;
 
     const systemPrompt = `Tu es un analyste expert. Tu reçois un PDF. Module cible: "${module}".
 ${hint}
