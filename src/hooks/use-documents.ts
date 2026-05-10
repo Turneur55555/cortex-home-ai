@@ -13,6 +13,8 @@ export type DocModule =
   | "body"
   | "documents";
 
+export type DocModuleSelection = DocModule | "auto";
+
 export const MODULE_LABELS: Record<DocModule, string> = {
   alimentation: "Alimentation",
   pharmacie: "Pharmacie",
@@ -22,6 +24,11 @@ export const MODULE_LABELS: Record<DocModule, string> = {
   fitness: "Séances",
   body: "Mesures corporelles",
   documents: "Document seul",
+};
+
+export const MODULE_SELECTION_LABELS: Record<DocModuleSelection, string> = {
+  auto: "Détection automatique",
+  ...MODULE_LABELS,
 };
 
 export type AnalysisResult = {
