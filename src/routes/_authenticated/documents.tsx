@@ -30,7 +30,7 @@ import {
   useDocuments,
   useUploadAndAnalyze,
   useDeleteDocument,
-  pourIntoModule,
+  usePourIntoModule,
   MODULE_LABELS,
   type DocModule,
   type AnalysisResult,
