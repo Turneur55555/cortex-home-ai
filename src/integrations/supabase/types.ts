@@ -14,7 +14,302 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      body_tracking: {
+        Row: {
+          body_fat: number | null
+          chest: number | null
+          created_at: string
+          date: string
+          hips: number | null
+          id: string
+          left_arm: number | null
+          left_thigh: number | null
+          muscle_mass: number | null
+          notes: string | null
+          right_arm: number | null
+          right_thigh: number | null
+          user_id: string
+          waist: number | null
+          weight: number | null
+        }
+        Insert: {
+          body_fat?: number | null
+          chest?: number | null
+          created_at?: string
+          date: string
+          hips?: number | null
+          id?: string
+          left_arm?: number | null
+          left_thigh?: number | null
+          muscle_mass?: number | null
+          notes?: string | null
+          right_arm?: number | null
+          right_thigh?: number | null
+          user_id: string
+          waist?: number | null
+          weight?: number | null
+        }
+        Update: {
+          body_fat?: number | null
+          chest?: number | null
+          created_at?: string
+          date?: string
+          hips?: number | null
+          id?: string
+          left_arm?: number | null
+          left_thigh?: number | null
+          muscle_mass?: number | null
+          notes?: string | null
+          right_arm?: number | null
+          right_thigh?: number | null
+          user_id?: string
+          waist?: number | null
+          weight?: number | null
+        }
+        Relationships: []
+      }
+      documents: {
+        Row: {
+          alerts: Json | null
+          analysis: string | null
+          created_at: string
+          id: string
+          key_insights: Json | null
+          module: string
+          name: string
+          storage_path: string
+          summary: string | null
+          user_id: string
+        }
+        Insert: {
+          alerts?: Json | null
+          analysis?: string | null
+          created_at?: string
+          id?: string
+          key_insights?: Json | null
+          module: string
+          name: string
+          storage_path: string
+          summary?: string | null
+          user_id: string
+        }
+        Update: {
+          alerts?: Json | null
+          analysis?: string | null
+          created_at?: string
+          id?: string
+          key_insights?: Json | null
+          module?: string
+          name?: string
+          storage_path?: string
+          summary?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      exercises: {
+        Row: {
+          id: string
+          name: string
+          notes: string | null
+          reps: number | null
+          sets: number | null
+          user_id: string
+          weight: number | null
+          workout_id: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          notes?: string | null
+          reps?: number | null
+          sets?: number | null
+          user_id: string
+          weight?: number | null
+          workout_id: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          notes?: string | null
+          reps?: number | null
+          sets?: number | null
+          user_id?: string
+          weight?: number | null
+          workout_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exercises_workout_id_fkey"
+            columns: ["workout_id"]
+            isOneToOne: false
+            referencedRelation: "workouts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      items: {
+        Row: {
+          category: string
+          confidence_score: number | null
+          created_at: string
+          expiration_date: string | null
+          flagged: boolean
+          id: string
+          location: string | null
+          module: string
+          name: string
+          notes: string | null
+          quantity: number
+          storage_path: string | null
+          unit: string | null
+          user_id: string
+        }
+        Insert: {
+          category: string
+          confidence_score?: number | null
+          created_at?: string
+          expiration_date?: string | null
+          flagged?: boolean
+          id?: string
+          location?: string | null
+          module: string
+          name: string
+          notes?: string | null
+          quantity?: number
+          storage_path?: string | null
+          unit?: string | null
+          user_id: string
+        }
+        Update: {
+          category?: string
+          confidence_score?: number | null
+          created_at?: string
+          expiration_date?: string | null
+          flagged?: boolean
+          id?: string
+          location?: string | null
+          module?: string
+          name?: string
+          notes?: string | null
+          quantity?: number
+          storage_path?: string | null
+          unit?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      nutrition: {
+        Row: {
+          calories: number | null
+          carbs: number | null
+          created_at: string
+          date: string
+          fats: number | null
+          id: string
+          meal: string | null
+          name: string
+          proteins: number | null
+          user_id: string
+        }
+        Insert: {
+          calories?: number | null
+          carbs?: number | null
+          created_at?: string
+          date: string
+          fats?: number | null
+          id?: string
+          meal?: string | null
+          name: string
+          proteins?: number | null
+          user_id: string
+        }
+        Update: {
+          calories?: number | null
+          carbs?: number | null
+          created_at?: string
+          date?: string
+          fats?: number | null
+          id?: string
+          meal?: string | null
+          name?: string
+          proteins?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      rate_limits: {
+        Row: {
+          action: string
+          created_at: string
+          id: string
+          user_id: string
+          window_start: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          id?: string
+          user_id: string
+          window_start?: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          id?: string
+          user_id?: string
+          window_start?: string
+        }
+        Relationships: []
+      }
+      users_profiles: {
+        Row: {
+          created_at: string
+          id: string
+          premium: boolean
+        }
+        Insert: {
+          created_at?: string
+          id: string
+          premium?: boolean
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          premium?: boolean
+        }
+        Relationships: []
+      }
+      workouts: {
+        Row: {
+          created_at: string
+          date: string
+          duration_minutes: number | null
+          id: string
+          name: string
+          notes: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          duration_minutes?: number | null
+          id?: string
+          name: string
+          notes?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          duration_minutes?: number | null
+          id?: string
+          name?: string
+          notes?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
