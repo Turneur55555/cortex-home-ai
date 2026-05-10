@@ -17,6 +17,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { ScanSheet } from "@/components/ScanSheet";
+import { toast } from "sonner";
 import { format, parseISO, differenceInDays } from "date-fns";
 import { fr } from "date-fns/locale";
 import {
@@ -581,6 +582,10 @@ function AddItemSheet({ module, onClose }: { module: StockModule; onClose: () =>
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim()) return;
+    if (!form.expiration_date) {
+      toast.error("La date de péremption est obligatoire");
+      return;
+    }
     await add.mutateAsync({
       module,
       name: form.name.trim(),
@@ -588,7 +593,7 @@ function AddItemSheet({ module, onClose }: { module: StockModule; onClose: () =>
       quantity: Number(form.quantity) || 1,
       unit: form.unit.trim() || null,
       location: form.location.trim() || null,
-      expiration_date: form.expiration_date || null,
+      expiration_date: form.expiration_date,
       alert_days_before: Math.max(0, Number(form.alert_days_before) || 7),
       notes: form.notes.trim() || null,
     });
@@ -644,10 +649,11 @@ function AddItemSheet({ module, onClose }: { module: StockModule; onClose: () =>
               onChange={(v) => setForm({ ...form, unit: v })}
             />
             <Field
-              label="Expire le"
+              label="Expire le *"
               type="date"
               value={form.expiration_date}
               onChange={(v) => setForm({ ...form, expiration_date: v })}
+              required
             />
           </div>
           <Field
