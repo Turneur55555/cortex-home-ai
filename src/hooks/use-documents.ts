@@ -245,20 +245,26 @@ export async function pourIntoModule(
   }
 
   if (module === "body") {
+    // Bornes alignées sur les CHECK constraints en base — toute valeur hors plage est ignorée
+    // pour éviter qu'un PDF mal interprété fasse échouer toute l'insertion.
+    const inRange = (v: unknown, min: number, max: number) => {
+      const n = num(v);
+      return n != null && n >= min && n <= max ? n : null;
+    };
     const rows = items
       .map((it) => ({
         user_id: user.id,
         date: str(it.date) ?? today,
-        weight: num(it.weight),
-        body_fat: num(it.body_fat),
-        muscle_mass: num(it.muscle_mass),
-        chest: num(it.chest),
-        waist: num(it.waist),
-        hips: num(it.hips),
-        left_arm: num(it.left_arm),
-        right_arm: num(it.right_arm),
-        left_thigh: num(it.left_thigh),
-        right_thigh: num(it.right_thigh),
+        weight: inRange(it.weight, 20, 500),
+        body_fat: inRange(it.body_fat, 1, 70),
+        muscle_mass: inRange(it.muscle_mass, 1, 100),
+        chest: inRange(it.chest, 30, 250),
+        waist: inRange(it.waist, 30, 250),
+        hips: inRange(it.hips, 30, 250),
+        left_arm: inRange(it.left_arm, 10, 100),
+        right_arm: inRange(it.right_arm, 10, 100),
+        left_thigh: inRange(it.left_thigh, 20, 150),
+        right_thigh: inRange(it.right_thigh, 20, 150),
         notes: str(it.notes),
       }))
       .filter(
