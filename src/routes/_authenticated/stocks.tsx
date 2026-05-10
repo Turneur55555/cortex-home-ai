@@ -576,6 +576,7 @@ function AddItemSheet({ module, onClose }: { module: StockModule; onClose: () =>
       unit: form.unit.trim() || null,
       location: form.location.trim() || null,
       expiration_date: form.expiration_date || null,
+      alert_days_before: Math.max(0, Number(form.alert_days_before) || 7),
       notes: form.notes.trim() || null,
     });
     onClose();
