@@ -56,7 +56,7 @@ export function useDocuments() {
 export function useUploadAndAnalyze() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ file, module }: { file: File; module: DocModule }) => {
+    mutationFn: async ({ file, module }: { file: File; module: DocModuleSelection }) => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
       if (file.type !== "application/pdf") throw new Error("Format non supporté (PDF uniquement)");
@@ -75,13 +75,15 @@ export function useUploadAndAnalyze() {
       if (ai?.error) throw new Error(ai.error);
 
       const result = ai as AnalysisResult;
+      const finalModule: DocModule =
+        module === "auto" ? (result.detected_module ?? "documents") : module;
 
       const { data: doc, error: insErr } = await supabase
         .from("documents")
         .insert({
           user_id: user.id,
           name: file.name,
-          module,
+          module: finalModule,
           storage_path: path,
           summary: result.summary,
           key_insights: result.key_insights,
@@ -92,10 +94,12 @@ export function useUploadAndAnalyze() {
         .single();
       if (insErr) throw insErr;
 
-      return { doc, result };
+      return { doc, result, detectedModule: finalModule, wasAuto: module === "auto" };
     },
-    onSuccess: () => {
-      toast.success("PDF analysé");
+    onSuccess: ({ wasAuto, detectedModule }) => {
+      toast.success(
+        wasAuto ? `PDF analysé — détecté: ${MODULE_LABELS[detectedModule]}` : "PDF analysé",
+      );
       qc.invalidateQueries({ queryKey: ["documents"] });
     },
     onError: (e: Error) => toast.error(e.message),
