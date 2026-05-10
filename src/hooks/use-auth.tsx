@@ -16,15 +16,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Listener FIRST (avoid missing events)
+    // Listener FIRST (avoid missing events). Supabase fires INITIAL_SESSION
+    // with a server-validated session shortly after subscribing, so we don't
+    // need a separate getSession() call (which only reads localStorage).
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession);
       setLoading(false);
     });
 
-    // Then hydrate existing session
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
+    // Server-verified hydration: getUser() makes a network call and validates
+    // the JWT. If validation fails (tampered/expired/revoked), clear session.
+    supabase.auth.getUser().then(async ({ data, error }) => {
+      if (error || !data.user) {
+        setSession(null);
+        setLoading(false);
+        return;
+      }
+      const { data: sess } = await supabase.auth.getSession();
+      setSession(sess.session);
       setLoading(false);
     });
 
