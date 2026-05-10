@@ -151,6 +151,39 @@ export type Database = {
           },
         ]
       }
+      food_preferences: {
+        Row: {
+          allergies: string[]
+          created_at: string
+          foods_to_avoid: string[]
+          goal: string | null
+          no_meat_dairy_mix: boolean
+          other_rules: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          allergies?: string[]
+          created_at?: string
+          foods_to_avoid?: string[]
+          goal?: string | null
+          no_meat_dairy_mix?: boolean
+          other_rules?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          allergies?: string[]
+          created_at?: string
+          foods_to_avoid?: string[]
+          goal?: string | null
+          no_meat_dairy_mix?: boolean
+          other_rules?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       items: {
         Row: {
           alert_days_before: number
