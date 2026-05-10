@@ -648,10 +648,11 @@ function AddItemSheet({ module, onClose }: { module: StockModule; onClose: () =>
               onChange={(v) => setForm({ ...form, unit: v })}
             />
             <Field
-              label="Expire le"
+              label="Expire le *"
               type="date"
               value={form.expiration_date}
               onChange={(v) => setForm({ ...form, expiration_date: v })}
+              required
             />
           </div>
           <Field
