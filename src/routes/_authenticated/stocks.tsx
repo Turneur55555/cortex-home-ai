@@ -100,6 +100,7 @@ function StockTab({ module }: { module: StockModule }) {
   const [open, setOpen] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
   const [q, setQ] = useState("");
+  const [recipeOpen, setRecipeOpen] = useState(false);
   const [expFilter, setExpFilter] = useState<"all" | "valid" | "soon" | "expired">("all");
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
