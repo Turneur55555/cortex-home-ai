@@ -17,7 +17,7 @@ function buildCors(req: Request) {
   return {
     "Access-Control-Allow-Origin": allow,
     "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-    "Vary": "Origin",
+    Vary: "Origin",
   };
 }
 
@@ -34,8 +34,7 @@ const MODULE_HINTS: Record<string, string> = {
     "Données nutritionnelles. Pour chaque aliment / repas: name, meal (petit-dejeuner|dejeuner|diner|collation), calories, proteins, carbs, fats. date au format YYYY-MM-DD si présente.",
   fitness:
     "Programme de séances. Pour chaque séance: name (séance), date YYYY-MM-DD si trouvée, duration_minutes, exercises[] avec {name, sets, reps, weight}.",
-  body:
-    "Mesures corporelles. Pour chaque relevé: date YYYY-MM-DD, weight, body_fat, muscle_mass, chest, waist, hips, left_arm, right_arm, left_thigh, right_thigh.",
+  body: "Mesures corporelles. Pour chaque relevé: date YYYY-MM-DD, weight, body_fat, muscle_mass, chest, waist, hips, left_arm, right_arm, left_thigh, right_thigh.",
   documents: "Document générique : extraire le maximum de données structurées.",
 };
 
@@ -57,7 +56,8 @@ Deno.serve(async (req) => {
     if (!LOVABLE_API_KEY) return fail("Service indisponible", 500, "LOVABLE_API_KEY manquant");
 
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-    const SUPABASE_ANON = Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY")!;
+    const SUPABASE_ANON =
+      Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY")!;
     const auth = req.headers.get("Authorization") ?? "";
     const supa = createClient(SUPABASE_URL, SUPABASE_ANON, {
       global: { headers: { Authorization: auth } },
@@ -68,7 +68,11 @@ Deno.serve(async (req) => {
 
     const { storage_path, module, name } = await req.json();
     if (!storage_path || !module) return fail("Paramètres invalides", 400);
-    if (typeof storage_path !== "string" || storage_path.includes("..") || !storage_path.startsWith(`${userData.user.id}/`)) {
+    if (
+      typeof storage_path !== "string" ||
+      storage_path.includes("..") ||
+      !storage_path.startsWith(`${userData.user.id}/`)
+    ) {
       return fail("Accès non autorisé", 403, `path=${storage_path} user=${userData.user.id}`);
     }
 
@@ -94,7 +98,7 @@ Deno.serve(async (req) => {
 - body: ${MODULE_HINTS.body}
 - documents: si aucun module ne convient (document générique, facture, contrat, etc.).
 Renseigne le champ "detected_module" avec ta décision, puis extrais les items au format de ce module.`
-      : MODULE_HINTS[module] ?? MODULE_HINTS.documents;
+      : (MODULE_HINTS[module] ?? MODULE_HINTS.documents);
 
     // Schéma d'item explicite par module — sans ça le modèle renvoie {} et le déversement crée des lignes vides.
     const ITEM_SCHEMAS: Record<string, Record<string, unknown>> = {
@@ -244,7 +248,9 @@ Renseigne le champ "detected_module" avec ta décision, puis extrais les items a
       },
       documents: { type: "object", additionalProperties: true },
     };
-    const itemSchema = isAuto ? ITEM_SCHEMAS.auto : ITEM_SCHEMAS[module] ?? ITEM_SCHEMAS.documents;
+    const itemSchema = isAuto
+      ? ITEM_SCHEMAS.auto
+      : (ITEM_SCHEMAS[module] ?? ITEM_SCHEMAS.documents);
 
     const systemPrompt = `Tu es un analyste expert. Tu reçois un PDF. Module cible: "${module}".
 ${hint}
@@ -256,10 +262,15 @@ Tout le texte (summary, insights, alerts) doit être en FRANÇAIS.`;
     const toolProps: Record<string, unknown> = {
       summary: { type: "string", description: "Résumé en 2-3 phrases" },
       key_insights: { type: "array", items: { type: "string" }, description: "3 à 6 points clés" },
-      alerts: { type: "array", items: { type: "string" }, description: "Alertes / points d'attention" },
+      alerts: {
+        type: "array",
+        items: { type: "string" },
+        description: "Alertes / points d'attention",
+      },
       extracted_items: {
         type: "array",
-        description: "Données structurées extraites pour le module cible. Chaque objet doit contenir des vraies valeurs (jamais vide).",
+        description:
+          "Données structurées extraites pour le module cible. Chaque objet doit contenir des vraies valeurs (jamais vide).",
         items: itemSchema,
       },
     };
@@ -267,7 +278,16 @@ Tout le texte (summary, insights, alerts) doit être en FRANÇAIS.`;
     if (isAuto) {
       toolProps.detected_module = {
         type: "string",
-        enum: ["alimentation", "pharmacie", "habits", "menager", "nutrition", "fitness", "body", "documents"],
+        enum: [
+          "alimentation",
+          "pharmacie",
+          "habits",
+          "menager",
+          "nutrition",
+          "fitness",
+          "body",
+          "documents",
+        ],
         description: "Module détecté automatiquement à partir du contenu du PDF.",
       };
       required.push("detected_module");
@@ -300,10 +320,16 @@ Tout le texte (summary, insights, alerts) doit être en FRANÇAIS.`;
           {
             role: "user",
             content: [
-              { type: "text", text: `Analyse ce PDF intitulé "${name ?? "document"}" pour le module "${module}".` },
+              {
+                type: "text",
+                text: `Analyse ce PDF intitulé "${name ?? "document"}" pour le module "${module}".`,
+              },
               {
                 type: "file",
-                file: { filename: name ?? "document.pdf", file_data: `data:application/pdf;base64,${b64}` },
+                file: {
+                  filename: name ?? "document.pdf",
+                  file_data: `data:application/pdf;base64,${b64}`,
+                },
               },
             ],
           },
@@ -315,7 +341,8 @@ Tout le texte (summary, insights, alerts) doit être en FRANÇAIS.`;
 
     if (!aiRes.ok) {
       const txt = await aiRes.text();
-      if (aiRes.status === 429) return fail("Limite de requêtes atteinte. Réessayez dans un instant.", 429);
+      if (aiRes.status === 429)
+        return fail("Limite de requêtes atteinte. Réessayez dans un instant.", 429);
       if (aiRes.status === 402) return fail("Crédits IA épuisés.", 402);
       return fail("Erreur d'analyse IA", 502, `${aiRes.status} ${txt.slice(0, 500)}`);
     }
