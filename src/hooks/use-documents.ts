@@ -57,7 +57,9 @@ export function useUploadAndAnalyze() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ file, module }: { file: File; module: DocModuleSelection }) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
       if (file.type !== "application/pdf") throw new Error("Format non supporté (PDF uniquement)");
       if (file.size > 15 * 1024 * 1024) throw new Error("Fichier trop volumineux (max 15 Mo)");
@@ -110,10 +112,16 @@ export function useDeleteDocument() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (doc: Tables<"documents">) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
       await supabase.storage.from("pdf-documents").remove([doc.storage_path]);
-      const { error } = await supabase.from("documents").delete().eq("id", doc.id).eq("user_id", user.id);
+      const { error } = await supabase
+        .from("documents")
+        .delete()
+        .eq("id", doc.id)
+        .eq("user_id", user.id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -149,10 +157,15 @@ export function usePourIntoModule() {
       return { n, module };
     },
     onSuccess: ({ n, module }) => {
-      toast.success(`${n} entrée(s) ajoutée(s) à ${MODULE_LABELS[module]}`);
+      if (n === 0) {
+        toast.info("Aucune donnée exploitable à ajouter");
+      } else {
+        toast.success(`${n} entrée(s) ajoutée(s) à ${MODULE_LABELS[module]}`);
+      }
       for (const key of MODULE_QUERY_KEYS[module] ?? []) {
         qc.invalidateQueries({ queryKey: key });
       }
+      qc.invalidateQueries({ queryKey: ["dashboard_stats"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -163,7 +176,9 @@ export async function pourIntoModule(
   module: DocModule,
   items: Array<Record<string, unknown>>,
 ): Promise<number> {
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) throw new Error("Non authentifié");
   if (!items.length) return 0;
 
@@ -178,7 +193,12 @@ export async function pourIntoModule(
     return n == null ? null : Math.round(n);
   };
 
-  if (module === "alimentation" || module === "pharmacie" || module === "habits" || module === "menager") {
+  if (
+    module === "alimentation" ||
+    module === "pharmacie" ||
+    module === "habits" ||
+    module === "menager"
+  ) {
     const rows = items
       .map((it) => ({
         user_id: user.id,
@@ -198,37 +218,64 @@ export async function pourIntoModule(
   }
 
   if (module === "nutrition") {
-    const rows = items.map((it) => ({
-      user_id: user.id,
-      date: str(it.date) ?? today,
-      name: str(it.name) ?? "Repas",
-      meal: str(it.meal),
-      calories: int(it.calories),
-      proteins: num(it.proteins),
-      carbs: num(it.carbs),
-      fats: num(it.fats),
-    }));
+    const rows = items
+      .map((it) => ({
+        user_id: user.id,
+        date: str(it.date) ?? today,
+        name: str(it.name) ?? "Repas",
+        meal: str(it.meal),
+        calories: int(it.calories),
+        proteins: num(it.proteins),
+        carbs: num(it.carbs),
+        fats: num(it.fats),
+      }))
+      .filter(
+        (r) =>
+          r.name !== "Repas" ||
+          r.meal ||
+          r.calories != null ||
+          r.proteins != null ||
+          r.carbs != null ||
+          r.fats != null,
+      );
+    if (!rows.length) return 0;
     const { error, count } = await supabase.from("nutrition").insert(rows, { count: "exact" });
     if (error) throw error;
     return count ?? rows.length;
   }
 
   if (module === "body") {
-    const rows = items.map((it) => ({
-      user_id: user.id,
-      date: str(it.date) ?? today,
-      weight: num(it.weight),
-      body_fat: num(it.body_fat),
-      muscle_mass: num(it.muscle_mass),
-      chest: num(it.chest),
-      waist: num(it.waist),
-      hips: num(it.hips),
-      left_arm: num(it.left_arm),
-      right_arm: num(it.right_arm),
-      left_thigh: num(it.left_thigh),
-      right_thigh: num(it.right_thigh),
-      notes: str(it.notes),
-    }));
+    const rows = items
+      .map((it) => ({
+        user_id: user.id,
+        date: str(it.date) ?? today,
+        weight: num(it.weight),
+        body_fat: num(it.body_fat),
+        muscle_mass: num(it.muscle_mass),
+        chest: num(it.chest),
+        waist: num(it.waist),
+        hips: num(it.hips),
+        left_arm: num(it.left_arm),
+        right_arm: num(it.right_arm),
+        left_thigh: num(it.left_thigh),
+        right_thigh: num(it.right_thigh),
+        notes: str(it.notes),
+      }))
+      .filter(
+        (r) =>
+          r.weight != null ||
+          r.body_fat != null ||
+          r.muscle_mass != null ||
+          r.chest != null ||
+          r.waist != null ||
+          r.hips != null ||
+          r.left_arm != null ||
+          r.right_arm != null ||
+          r.left_thigh != null ||
+          r.right_thigh != null ||
+          Boolean(r.notes),
+      );
+    if (!rows.length) return 0;
     const { error, count } = await supabase.from("body_tracking").insert(rows, { count: "exact" });
     if (error) throw error;
     return count ?? rows.length;
@@ -249,7 +296,9 @@ export async function pourIntoModule(
         .select()
         .single();
       if (wErr) throw wErr;
-      const exs = Array.isArray(it.exercises) ? (it.exercises as Array<Record<string, unknown>>) : [];
+      const exs = Array.isArray(it.exercises)
+        ? (it.exercises as Array<Record<string, unknown>>)
+        : [];
       if (exs.length) {
         const { error: eErr } = await supabase.from("exercises").insert(
           exs.map((ex) => ({

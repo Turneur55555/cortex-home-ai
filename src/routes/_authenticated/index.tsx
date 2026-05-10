@@ -1,6 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Package, Dumbbell, FileText, Sparkles, Plus, Bell } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Package, Dumbbell, FileText, Sparkles, Plus, Bell, Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_authenticated/")({
   head: () => ({
@@ -13,13 +15,32 @@ export const Route = createFileRoute("/_authenticated/")({
 });
 
 const modules = [
-  { to: "/stocks", label: "Stocks", icon: Package, accent: "from-violet-500 to-fuchsia-500", desc: "Frigo, habits, pharmacie" },
-  { to: "/fitness", label: "Fitness", icon: Dumbbell, accent: "from-cyan-400 to-blue-500", desc: "Corps, séances, nutrition" },
-  { to: "/documents", label: "Documents", icon: FileText, accent: "from-amber-400 to-orange-500", desc: "PDF analysés par IA" },
+  {
+    to: "/stocks",
+    label: "Stocks",
+    icon: Package,
+    accent: "from-violet-500 to-fuchsia-500",
+    desc: "Frigo, habits, pharmacie",
+  },
+  {
+    to: "/fitness",
+    label: "Fitness",
+    icon: Dumbbell,
+    accent: "from-cyan-400 to-blue-500",
+    desc: "Corps, séances, nutrition",
+  },
+  {
+    to: "/documents",
+    label: "Documents",
+    icon: FileText,
+    accent: "from-amber-400 to-orange-500",
+    desc: "PDF analysés par IA",
+  },
 ] as const;
 
 function HomePage() {
   const { user } = useAuth();
+  const stats = useDashboardStats();
   const greeting = getGreeting();
   const name = user?.email?.split("@")[0] ?? "vous";
 
@@ -54,7 +75,8 @@ function HomePage() {
           Scannez un objet, l'IA s'occupe du reste.
         </h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          Photo de votre frigo, garde-robe ou armoire à pharmacie — inventaire instantané et alertes automatiques.
+          Photo de votre frigo, garde-robe ou armoire à pharmacie — inventaire instantané et alertes
+          automatiques.
         </p>
         <Link
           to="/stocks"
@@ -86,35 +108,112 @@ function HomePage() {
                   <p className="font-semibold leading-tight">{label}</p>
                   <p className="text-xs text-muted-foreground">{desc}</p>
                 </div>
-                <span className="text-muted-foreground transition-transform group-hover:translate-x-1">→</span>
+                <span className="text-muted-foreground transition-transform group-hover:translate-x-1">
+                  →
+                </span>
               </Link>
             </li>
           ))}
         </ul>
       </section>
 
-      {/* Stats placeholder */}
       <section className="grid grid-cols-2 gap-3">
-        <StatCard label="Items suivis" value="0" tone="primary" />
-        <StatCard label="Alertes actives" value="0" tone="warning" />
+        <StatCard
+          label="Items suivis"
+          value={stats.isLoading ? "…" : String(stats.data?.tracked ?? 0)}
+          tone="primary"
+          loading={stats.isLoading}
+        />
+        <StatCard
+          label="PDF analysés"
+          value={stats.isLoading ? "…" : String(stats.data?.documents ?? 0)}
+          tone="warning"
+          loading={stats.isLoading}
+        />
       </section>
+
+      {stats.data?.latestBody && (
+        <section className="mt-3 rounded-2xl border border-border bg-card p-4 shadow-card">
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            Dernière mesure
+          </p>
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+            {stats.data.latestBody.weight != null && <span>{stats.data.latestBody.weight} kg</span>}
+            {stats.data.latestBody.muscle_mass != null && (
+              <span>MM {stats.data.latestBody.muscle_mass} kg</span>
+            )}
+            {stats.data.latestBody.body_fat != null && (
+              <span>MG {stats.data.latestBody.body_fat}%</span>
+            )}
+          </div>
+        </section>
+      )}
     </main>
   );
 }
 
-function StatCard({ label, value, tone }: { label: string; value: string; tone: "primary" | "warning" }) {
+function useDashboardStats() {
+  return useQuery({
+    queryKey: ["dashboard_stats"],
+    queryFn: async () => {
+      const [items, body, nutrition, workouts, documents, latestBody] = await Promise.all([
+        supabase.from("items").select("id", { count: "exact", head: true }),
+        supabase.from("body_tracking").select("id", { count: "exact", head: true }),
+        supabase.from("nutrition").select("id", { count: "exact", head: true }),
+        supabase.from("workouts").select("id", { count: "exact", head: true }),
+        supabase.from("documents").select("id", { count: "exact", head: true }),
+        supabase
+          .from("body_tracking")
+          .select("date, weight, body_fat, muscle_mass")
+          .or("weight.not.is.null,body_fat.not.is.null,muscle_mass.not.is.null")
+          .order("date", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
+
+      const error =
+        items.error ??
+        body.error ??
+        nutrition.error ??
+        workouts.error ??
+        documents.error ??
+        latestBody.error;
+      if (error) throw error;
+
+      return {
+        tracked:
+          (items.count ?? 0) + (body.count ?? 0) + (nutrition.count ?? 0) + (workouts.count ?? 0),
+        documents: documents.count ?? 0,
+        latestBody: latestBody.data,
+      };
+    },
+  });
+}
+
+function StatCard({
+  label,
+  value,
+  tone,
+  loading,
+}: {
+  label: string;
+  value: string;
+  tone: "primary" | "warning";
+  loading?: boolean;
+}) {
   return (
     <div className="rounded-2xl border border-border bg-card p-4 shadow-card">
       <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
-      <p
+      <div
         className={
           tone === "primary"
-            ? "mt-2 text-3xl font-bold text-primary"
-            : "mt-2 text-3xl font-bold text-warning"
+            ? "mt-2 flex items-center gap-2 text-3xl font-bold text-primary"
+            : "mt-2 flex items-center gap-2 text-3xl font-bold text-warning"
         }
       >
-        {value}
-      </p>
+        {loading && <Loader2 className="h-5 w-5 animate-spin" />}
+        <span>{value}</span>
+      </div>
     </div>
   );
 }
