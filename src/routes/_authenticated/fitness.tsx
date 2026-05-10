@@ -538,6 +538,7 @@ function SeancesTab() {
           onClose={() => setOpen(false)}
         />
       )}
+      {coachOpen && <CoachSheet onClose={() => setCoachOpen(false)} onResult={handleCoachResult} />}
     </section>
   );
 }
