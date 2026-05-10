@@ -17,6 +17,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { ScanSheet } from "@/components/ScanSheet";
+import { toast } from "sonner";
 import { format, parseISO, differenceInDays } from "date-fns";
 import { fr } from "date-fns/locale";
 import {
