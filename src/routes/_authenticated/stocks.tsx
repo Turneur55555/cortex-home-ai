@@ -13,12 +13,15 @@ import {
   Search,
   MapPin,
   Minus,
+  CheckSquare,
 } from "lucide-react";
 import { format, parseISO, differenceInDays } from "date-fns";
 import { fr } from "date-fns/locale";
 import {
   STOCK_MODULE_LABELS,
   useAddStockItem,
+  useBulkAdjustStockItems,
+  useBulkDeleteStockItems,
   useDeleteStockItem,
   useStockItems,
   useUpdateStockItem,
