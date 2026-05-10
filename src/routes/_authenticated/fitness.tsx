@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useMutation } from "@tanstack/react-query";
 import {
   Activity,
   Dumbbell,
@@ -15,6 +16,10 @@ import {
   Trophy,
   Repeat,
   BarChart3,
+  Sparkles,
+  Camera,
+  ImageIcon,
+  Target,
 } from "lucide-react";
 import {
   Area,
@@ -29,6 +34,7 @@ import {
 } from "recharts";
 import { format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
+import { supabase } from "@/integrations/supabase/client";
 import {
   useAddBodyMeasurement,
   useAddNutrition,
@@ -38,7 +44,10 @@ import {
   useDeleteNutrition,
   useDeleteWorkout,
   useNutrition,
+  useNutritionGoals,
+  useUpsertNutritionGoals,
   useWorkouts,
+  type NutritionGoals,
 } from "@/hooks/use-fitness";
 
 export const Route = createFileRoute("/_authenticated/fitness")({
@@ -357,8 +366,33 @@ function SeancesTab() {
     setOpen(true);
   };
 
+  const [coachOpen, setCoachOpen] = useState(false);
+
+  const handleCoachResult = (tpl: WorkoutTemplate) => {
+    setCoachOpen(false);
+    setTemplate(tpl);
+    setOpen(true);
+  };
+
   return (
     <section className="flex flex-col gap-4">
+      {/* Coach IA CTA */}
+      <button
+        type="button"
+        onClick={() => setCoachOpen(true)}
+        className="group flex items-center gap-3 rounded-2xl border border-primary/30 bg-gradient-to-r from-primary/15 via-primary/5 to-transparent p-4 text-left shadow-card transition-all active:scale-[0.99]"
+      >
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-primary text-primary-foreground shadow-glow">
+          <Sparkles className="h-5 w-5" />
+        </span>
+        <span className="flex-1">
+          <span className="block text-sm font-semibold">Coach IA — Génère ma séance</span>
+          <span className="block text-[11px] text-muted-foreground">
+            Choisis muscles, durée, niveau. L'IA crée ta séance.
+          </span>
+        </span>
+      </button>
+
       {isLoading && (
         <div className="flex h-32 items-center justify-center">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -504,6 +538,7 @@ function SeancesTab() {
           onClose={() => setOpen(false)}
         />
       )}
+      {coachOpen && <CoachSheet onClose={() => setCoachOpen(false)} onResult={handleCoachResult} />}
     </section>
   );
 }
@@ -658,13 +693,179 @@ function WorkoutSheet({
   );
 }
 
+/* ============================ COACH IA SHEET ============================ */
+
+const MUSCLE_OPTIONS = [
+  { id: "pectoraux", label: "Pectoraux" },
+  { id: "dos", label: "Dos" },
+  { id: "epaules", label: "Épaules" },
+  { id: "biceps", label: "Biceps" },
+  { id: "triceps", label: "Triceps" },
+  { id: "jambes", label: "Jambes" },
+  { id: "fessiers", label: "Fessiers" },
+  { id: "abdos", label: "Abdos" },
+  { id: "cardio", label: "Cardio" },
+];
+
+function CoachSheet({
+  onClose,
+  onResult,
+}: {
+  onClose: () => void;
+  onResult: (tpl: WorkoutTemplate) => void;
+}) {
+  const [muscles, setMuscles] = useState<string[]>(["pectoraux"]);
+  const [duration, setDuration] = useState("45");
+  const [equipment, setEquipment] = useState("salle complète");
+  const [level, setLevel] = useState("intermédiaire");
+  const [goal, setGoal] = useState("hypertrophie");
+
+  const toggleMuscle = (id: string) =>
+    setMuscles((arr) => (arr.includes(id) ? arr.filter((m) => m !== id) : [...arr, id]));
+
+  const generate = useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke("coach-workout", {
+        body: {
+          muscles: muscles.map((m) => MUSCLE_OPTIONS.find((o) => o.id === m)?.label ?? m),
+          duration_minutes: Number(duration) || 45,
+          equipment,
+          level,
+          goal,
+        },
+      });
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+      return data as {
+        name: string;
+        exercises: Array<{ name: string; sets: number; reps: number; weight?: number }>;
+      };
+    },
+    onSuccess: (data) => {
+      const tpl: WorkoutTemplate = {
+        name: data.name,
+        exercises: data.exercises.map((ex) => ({
+          name: ex.name,
+          sets: String(ex.sets ?? ""),
+          reps: String(ex.reps ?? ""),
+          weight: ex.weight != null && ex.weight > 0 ? String(ex.weight) : "",
+        })),
+      };
+      toast.success("Séance générée — ajuste-la avant d'enregistrer");
+      onResult(tpl);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (muscles.length === 0) {
+      toast.error("Sélectionne au moins un groupe musculaire");
+      return;
+    }
+    generate.mutate();
+  };
+
+  return (
+    <Sheet title="Coach IA — Génère ma séance" onClose={onClose}>
+      <form onSubmit={submit} className="space-y-4">
+        <div>
+          <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Groupes musculaires
+          </label>
+          <div className="flex flex-wrap gap-2">
+            {MUSCLE_OPTIONS.map((m) => {
+              const active = muscles.includes(m.id);
+              return (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => toggleMuscle(m.id)}
+                  className={
+                    "rounded-full border px-3 py-1.5 text-xs font-semibold transition-all " +
+                    (active
+                      ? "border-primary bg-primary/15 text-primary"
+                      : "border-border bg-surface text-muted-foreground hover:text-foreground")
+                  }
+                >
+                  {m.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Durée (min)" type="number" value={duration} onChange={setDuration} />
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Niveau
+            </label>
+            <select
+              value={level}
+              onChange={(e) => setLevel(e.target.value)}
+              className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary"
+            >
+              <option value="débutant">Débutant</option>
+              <option value="intermédiaire">Intermédiaire</option>
+              <option value="avancé">Avancé</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Matériel
+            </label>
+            <select
+              value={equipment}
+              onChange={(e) => setEquipment(e.target.value)}
+              className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary"
+            >
+              <option value="salle complète">Salle complète</option>
+              <option value="haltères + banc">Haltères + banc</option>
+              <option value="élastiques">Élastiques</option>
+              <option value="poids du corps">Poids du corps</option>
+              <option value="kettlebell">Kettlebell</option>
+            </select>
+          </div>
+          <div>
+            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Objectif
+            </label>
+            <select
+              value={goal}
+              onChange={(e) => setGoal(e.target.value)}
+              className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary"
+            >
+              <option value="hypertrophie">Hypertrophie</option>
+              <option value="force">Force</option>
+              <option value="endurance">Endurance</option>
+              <option value="perte de gras">Perte de gras</option>
+            </select>
+          </div>
+        </div>
+
+        <SubmitButton pending={generate.isPending}>
+          {generate.isPending ? "Génération…" : "Générer la séance"}
+        </SubmitButton>
+      </form>
+    </Sheet>
+  );
+}
+
 /* ============================ NUTRITION ============================ */
 
 function NutritionTab() {
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const { data, isLoading } = useNutrition(date);
+  const { data: goals } = useNutritionGoals();
   const del = useDeleteNutrition();
   const [open, setOpen] = useState(false);
+  const [goalsOpen, setGoalsOpen] = useState(false);
+  const [scanOpen, setScanOpen] = useState(false);
+  const [prefill, setPrefill] = useState<MealPrefill | null>(null);
 
   const totals = useMemo(() => {
     return (data ?? []).reduce(
@@ -706,6 +907,17 @@ function NutritionTab() {
     return result;
   }, [data]);
 
+  const openManual = () => {
+    setPrefill(null);
+    setOpen(true);
+  };
+
+  const handleScanResult = (p: MealPrefill) => {
+    setScanOpen(false);
+    setPrefill(p);
+    setOpen(true);
+  };
+
   return (
     <section className="flex flex-col gap-4">
       <div className="flex items-center gap-2">
@@ -716,24 +928,59 @@ function NutritionTab() {
           onChange={(e) => setDate(e.target.value)}
           className="flex-1 rounded-xl border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary"
         />
+        <button
+          type="button"
+          onClick={() => setGoalsOpen(true)}
+          className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-border bg-surface px-3 text-xs font-semibold text-muted-foreground hover:text-foreground"
+        >
+          <Target className="h-3.5 w-3.5" />
+          Objectifs
+        </button>
       </div>
 
+      {/* Totaux + progression vs objectifs */}
       <div className="rounded-2xl border border-border bg-gradient-surface p-4 shadow-elevated">
         <div className="flex items-baseline justify-between">
           <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Total du jour
+            Aujourd'hui
           </p>
           <p className="text-2xl font-bold text-primary">
             {totals.calories}
-            <span className="ml-1 text-xs font-normal text-muted-foreground">kcal</span>
+            {goals?.calories ? (
+              <span className="ml-1 text-xs font-normal text-muted-foreground">
+                / {goals.calories} kcal
+              </span>
+            ) : (
+              <span className="ml-1 text-xs font-normal text-muted-foreground">kcal</span>
+            )}
           </p>
         </div>
-        <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-          <Macro label="Protéines" value={totals.proteins} color="text-accent" />
-          <Macro label="Glucides" value={totals.carbs} color="text-warning" />
-          <Macro label="Lipides" value={totals.fats} color="text-destructive" />
+        {goals?.calories ? (
+          <ProgressBar value={totals.calories} target={goals.calories} className="mt-2" />
+        ) : null}
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          <MacroProgress label="Protéines" value={totals.proteins} target={goals?.proteins} color="text-accent" barColor="bg-accent" />
+          <MacroProgress label="Glucides" value={totals.carbs} target={goals?.carbs} color="text-warning" barColor="bg-warning" />
+          <MacroProgress label="Lipides" value={totals.fats} target={goals?.fats} color="text-destructive" barColor="bg-destructive" />
         </div>
       </div>
+
+      {/* Bouton scan IA */}
+      <button
+        type="button"
+        onClick={() => setScanOpen(true)}
+        className="flex items-center gap-3 rounded-2xl border border-primary/30 bg-gradient-to-r from-primary/15 via-primary/5 to-transparent p-4 text-left shadow-card transition-all active:scale-[0.99]"
+      >
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-primary text-primary-foreground shadow-glow">
+          <Sparkles className="h-5 w-5" />
+        </span>
+        <span className="flex-1">
+          <span className="block text-sm font-semibold">Scanner mon repas</span>
+          <span className="block text-[11px] text-muted-foreground">
+            Une photo → kcal + macros estimés par l'IA.
+          </span>
+        </span>
+      </button>
 
       {isLoading && (
         <div className="flex h-20 items-center justify-center">
@@ -765,8 +1012,7 @@ function NutritionTab() {
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium">{m.name}</p>
                   <p className="text-xs text-muted-foreground">
-                    {m.calories ?? 0} kcal ·{" "}
-                    P{m.proteins ?? 0} G{m.carbs ?? 0} L{m.fats ?? 0}
+                    {m.calories ?? 0} kcal · P{m.proteins ?? 0} G{m.carbs ?? 0} L{m.fats ?? 0}
                   </p>
                 </div>
                 <button
@@ -783,30 +1029,312 @@ function NutritionTab() {
         </div>
       ))}
 
-      <FabAdd onClick={() => setOpen(true)} label="Ajouter un repas" />
-      {open && <NutritionSheet date={date} onClose={() => setOpen(false)} />}
+      <FabAdd onClick={openManual} label="Ajouter un repas" />
+      {open && (
+        <NutritionSheet date={date} prefill={prefill} onClose={() => setOpen(false)} />
+      )}
+      {goalsOpen && <GoalsSheet current={goals ?? null} onClose={() => setGoalsOpen(false)} />}
+      {scanOpen && <MealScanSheet onClose={() => setScanOpen(false)} onResult={handleScanResult} />}
     </section>
   );
 }
 
-function Macro({ label, value, color }: { label: string; value: number; color: string }) {
+function MacroProgress({
+  label,
+  value,
+  target,
+  color,
+  barColor,
+}: {
+  label: string;
+  value: number;
+  target: number | null | undefined;
+  color: string;
+  barColor: string;
+}) {
+  const pct = target && target > 0 ? Math.min(100, (value / target) * 100) : 0;
   return (
     <div className="rounded-xl bg-surface p-2">
-      <p className={`text-base font-bold ${color}`}>{Math.round(value)}<span className="text-[10px] font-normal text-muted-foreground">g</span></p>
+      <p className={`text-base font-bold ${color}`}>
+        {Math.round(value)}
+        <span className="text-[10px] font-normal text-muted-foreground">
+          {target ? ` / ${Math.round(target)}g` : "g"}
+        </span>
+      </p>
       <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
+      {target ? (
+        <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-border">
+          <div className={`h-full ${barColor} transition-all`} style={{ width: `${pct}%` }} />
+        </div>
+      ) : null}
     </div>
   );
 }
 
-function NutritionSheet({ date, onClose }: { date: string; onClose: () => void }) {
+function ProgressBar({
+  value,
+  target,
+  className = "",
+}: {
+  value: number;
+  target: number;
+  className?: string;
+}) {
+  const pct = target > 0 ? Math.min(100, (value / target) * 100) : 0;
+  const over = value > target;
+  return (
+    <div className={`h-1.5 w-full overflow-hidden rounded-full bg-border ${className}`}>
+      <div
+        className={`h-full transition-all ${over ? "bg-destructive" : "bg-gradient-primary"}`}
+        style={{ width: `${pct}%` }}
+      />
+    </div>
+  );
+}
+
+/* ---- Goals editor ---- */
+
+function GoalsSheet({
+  current,
+  onClose,
+}: {
+  current: NutritionGoals | null;
+  onClose: () => void;
+}) {
+  const upsert = useUpsertNutritionGoals();
+  const [form, setForm] = useState({
+    calories: current?.calories != null ? String(current.calories) : "",
+    proteins: current?.proteins != null ? String(current.proteins) : "",
+    carbs: current?.carbs != null ? String(current.carbs) : "",
+    fats: current?.fats != null ? String(current.fats) : "",
+  });
+
+  const num = (v: string) => (v.trim() === "" ? null : Number(v));
+  const numInt = (v: string) => (v.trim() === "" ? null : Math.round(Number(v)));
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await upsert.mutateAsync({
+      calories: numInt(form.calories),
+      proteins: num(form.proteins),
+      carbs: num(form.carbs),
+      fats: num(form.fats),
+    });
+    onClose();
+  };
+
+  return (
+    <Sheet title="Mes objectifs quotidiens" onClose={onClose}>
+      <form onSubmit={submit} className="space-y-4">
+        <p className="text-xs text-muted-foreground">
+          Définis tes cibles. Laisse vide pour ne pas afficher de barre de progression.
+        </p>
+        <Field
+          label="Calories (kcal)"
+          type="number"
+          value={form.calories}
+          onChange={(v) => setForm({ ...form, calories: v })}
+        />
+        <div className="grid grid-cols-3 gap-3">
+          <Field
+            label="Prot. (g)"
+            type="number"
+            step="0.1"
+            value={form.proteins}
+            onChange={(v) => setForm({ ...form, proteins: v })}
+          />
+          <Field
+            label="Gluc. (g)"
+            type="number"
+            step="0.1"
+            value={form.carbs}
+            onChange={(v) => setForm({ ...form, carbs: v })}
+          />
+          <Field
+            label="Lip. (g)"
+            type="number"
+            step="0.1"
+            value={form.fats}
+            onChange={(v) => setForm({ ...form, fats: v })}
+          />
+        </div>
+        <SubmitButton pending={upsert.isPending}>Enregistrer</SubmitButton>
+      </form>
+    </Sheet>
+  );
+}
+
+/* ---- Meal scanner ---- */
+
+type MealPrefill = {
+  name: string;
+  meal: string;
+  calories: string;
+  proteins: string;
+  carbs: string;
+  fats: string;
+};
+
+async function fileToBase64Compressed(file: File): Promise<{ b64: string; mime: string }> {
+  const dataUrl = await new Promise<string>((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result as string);
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+  const img = await new Promise<HTMLImageElement>((res, rej) => {
+    const i = new Image();
+    i.onload = () => res(i);
+    i.onerror = rej;
+    i.src = dataUrl;
+  });
+  const max = 1600;
+  const ratio = Math.min(1, max / Math.max(img.width, img.height));
+  const w = Math.round(img.width * ratio);
+  const h = Math.round(img.height * ratio);
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d")!;
+  ctx.drawImage(img, 0, 0, w, h);
+  const out = canvas.toDataURL("image/jpeg", 0.85);
+  return { b64: out.split(",")[1] ?? "", mime: "image/jpeg" };
+}
+
+function MealScanSheet({
+  onClose,
+  onResult,
+}: {
+  onClose: () => void;
+  onResult: (p: MealPrefill) => void;
+}) {
+  const camRef = useRef<HTMLInputElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+
+  const scan = useMutation({
+    mutationFn: async (file: File) => {
+      const { b64, mime } = await fileToBase64Compressed(file);
+      setPreview(`data:${mime};base64,${b64}`);
+      const { data, error } = await supabase.functions.invoke("scan-meal", {
+        body: { image_base64: b64, mime_type: mime },
+      });
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+      return data as {
+        name: string;
+        meal?: string;
+        calories: number;
+        proteins: number;
+        carbs: number;
+        fats: number;
+        confidence?: number;
+        details?: string;
+      };
+    },
+    onSuccess: (d) => {
+      onResult({
+        name: d.name,
+        meal: d.meal ?? "dejeuner",
+        calories: String(Math.round(d.calories ?? 0)),
+        proteins: String(Math.round((d.proteins ?? 0) * 10) / 10),
+        carbs: String(Math.round((d.carbs ?? 0) * 10) / 10),
+        fats: String(Math.round((d.fats ?? 0) * 10) / 10),
+      });
+      const conf = d.confidence != null ? ` (${Math.round(d.confidence * 100)}%)` : "";
+      toast.success(`Repas analysé${conf} — ajuste si besoin`);
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const onPick = (f: File | null | undefined) => {
+    if (!f) return;
+    scan.mutate(f);
+  };
+
+  return (
+    <Sheet title="Scanner mon repas" onClose={onClose}>
+      <div className="space-y-4">
+        {!preview && (
+          <div className="flex flex-col items-center gap-3 py-4 text-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-primary text-primary-foreground shadow-glow">
+              <Sparkles className="h-7 w-7" />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              L'IA estime calories et macros depuis ta photo.
+            </p>
+          </div>
+        )}
+        {preview && (
+          <div className="overflow-hidden rounded-2xl border border-border">
+            <img src={preview} alt="Aperçu" className="max-h-64 w-full object-cover" />
+          </div>
+        )}
+        {scan.isPending && (
+          <div className="flex flex-col items-center gap-2 py-3 text-sm text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            Analyse en cours…
+          </div>
+        )}
+
+        <input
+          ref={camRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={(e) => onPick(e.target.files?.[0])}
+        />
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => onPick(e.target.files?.[0])}
+        />
+
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={scan.isPending}
+            onClick={() => camRef.current?.click()}
+            className="inline-flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-primary text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-60"
+          >
+            <Camera className="h-4 w-4" />
+            Photo
+          </button>
+          <button
+            type="button"
+            disabled={scan.isPending}
+            onClick={() => fileRef.current?.click()}
+            className="inline-flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-border bg-surface text-xs font-semibold disabled:opacity-60"
+          >
+            <ImageIcon className="h-4 w-4" />
+            Galerie
+          </button>
+        </div>
+      </div>
+    </Sheet>
+  );
+}
+
+function NutritionSheet({
+  date,
+  onClose,
+  prefill,
+}: {
+  date: string;
+  onClose: () => void;
+  prefill?: MealPrefill | null;
+}) {
   const add = useAddNutrition();
   const [form, setForm] = useState({
-    name: "",
-    meal: "petit-dej",
-    calories: "",
-    proteins: "",
-    carbs: "",
-    fats: "",
+    name: prefill?.name ?? "",
+    meal: prefill?.meal ?? "petit-dej",
+    calories: prefill?.calories ?? "",
+    proteins: prefill?.proteins ?? "",
+    carbs: prefill?.carbs ?? "",
+    fats: prefill?.fats ?? "",
   });
 
   const num = (v: string) => (v.trim() === "" ? null : Number(v));
@@ -827,7 +1355,7 @@ function NutritionSheet({ date, onClose }: { date: string; onClose: () => void }
   };
 
   return (
-    <Sheet title="Nouveau repas" onClose={onClose}>
+    <Sheet title={prefill ? "Confirmer le repas" : "Nouveau repas"} onClose={onClose}>
       <form onSubmit={submit} className="space-y-4">
         <Field label="Nom" placeholder="Poulet riz, Salade…" value={form.name} onChange={(v) => setForm({ ...form, name: v })} required />
         <div>

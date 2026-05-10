@@ -241,6 +241,36 @@ export type Database = {
         }
         Relationships: []
       }
+      nutrition_goals: {
+        Row: {
+          calories: number | null
+          carbs: number | null
+          created_at: string
+          fats: number | null
+          proteins: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          calories?: number | null
+          carbs?: number | null
+          created_at?: string
+          fats?: number | null
+          proteins?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          calories?: number | null
+          carbs?: number | null
+          created_at?: string
+          fats?: number | null
+          proteins?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       rate_limits: {
         Row: {
           action: string
