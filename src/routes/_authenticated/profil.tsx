@@ -72,6 +72,7 @@ function ProfilPage() {
 
       <Button
         type="button"
+        data-testid="signout-btn"
         variant="outline"
         onClick={handleSignOut}
         className="mt-auto h-12 w-full rounded-full border-destructive/40 bg-destructive/10 text-destructive hover:bg-destructive/15 hover:text-destructive"
