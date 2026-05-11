@@ -128,6 +128,7 @@ function CorpsTab() {
   }, [data]);
 
   const latest = data?.[0];
+  const previous = data?.[1];
 
   return (
     <section className="flex flex-col gap-5">
@@ -137,6 +138,9 @@ function CorpsTab() {
         <Stat label="Masse gr." value={latest?.muscle_mass} unit="kg" />
         <Stat label="MG" value={latest?.body_fat} unit="%" />
       </div>
+
+      {/* Mensurations détaillées */}
+      <MeasurementsCard latest={latest} previous={previous} />
 
       {/* Chart */}
       <div className="rounded-2xl border border-border bg-card p-4 shadow-card">
