@@ -632,9 +632,10 @@ function AddItemSheet({ module, onClose }: { module: StockModule; onClose: () =>
           </button>
         </div>
 
-        <form onSubmit={submit} className="space-y-3">
+        <form onSubmit={submit} className="space-y-3" data-testid="stocks-add-form">
           <Field
             label="Nom"
+            testId="stocks-field-name"
             value={form.name}
             onChange={(v) => setForm({ ...form, name: v })}
             placeholder="Ex: Yaourt nature"
@@ -668,6 +669,7 @@ function AddItemSheet({ module, onClose }: { module: StockModule; onClose: () =>
             <Field
               label="Expire le *"
               type="date"
+              testId="stocks-field-expiration"
               value={form.expiration_date}
               onChange={(v) => setForm({ ...form, expiration_date: v })}
               required
@@ -689,6 +691,7 @@ function AddItemSheet({ module, onClose }: { module: StockModule; onClose: () =>
 
           <button
             type="submit"
+            data-testid="stocks-submit-add"
             disabled={add.isPending}
             className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-gradient-primary text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-60"
           >
