@@ -448,6 +448,8 @@ function ItemRow({
 
   return (
     <li
+      data-testid="stocks-item"
+      data-item-name={item.name}
       onClick={selecting ? onToggle : undefined}
       className={
         "flex items-center gap-3 rounded-2xl border bg-card p-3 shadow-card transition-colors " +
