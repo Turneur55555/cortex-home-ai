@@ -712,6 +712,7 @@ function Field({
   required,
   placeholder,
   textarea,
+  testId,
 }: {
   label: string;
   value: string;
@@ -720,6 +721,7 @@ function Field({
   required?: boolean;
   placeholder?: string;
   textarea?: boolean;
+  testId?: string;
 }) {
   return (
     <label className="block">
@@ -731,6 +733,7 @@ function Field({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
+          data-testid={testId}
           rows={2}
           className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary"
         />
@@ -741,6 +744,7 @@ function Field({
           onChange={(e) => onChange(e.target.value)}
           required={required}
           placeholder={placeholder}
+          data-testid={testId}
           className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary"
         />
       )}
