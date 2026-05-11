@@ -534,6 +534,7 @@ function ItemRow({
 
           <button
             type="button"
+            data-testid="stocks-item-delete"
             onClick={onDelete}
             className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
             aria-label="Supprimer"
