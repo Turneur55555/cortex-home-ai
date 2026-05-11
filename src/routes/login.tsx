@@ -111,6 +111,7 @@ function LoginPage() {
         <div className="mb-6 grid grid-cols-2 gap-1 rounded-full border border-border bg-surface p-1">
           <button
             type="button"
+            data-testid="auth-tab-login"
             onClick={() => setMode("login")}
             className={
               mode === "login"
@@ -122,6 +123,7 @@ function LoginPage() {
           </button>
           <button
             type="button"
+            data-testid="auth-tab-signup"
             onClick={() => setMode("signup")}
             className={
               mode === "signup"
@@ -138,6 +140,7 @@ function LoginPage() {
             <Label htmlFor="email">Email</Label>
             <Input
               id="email"
+              data-testid="auth-email"
               type="email"
               autoComplete="email"
               required
@@ -151,6 +154,7 @@ function LoginPage() {
             <Label htmlFor="password">Mot de passe</Label>
             <Input
               id="password"
+              data-testid="auth-password"
               type="password"
               autoComplete={mode === "signup" ? "new-password" : "current-password"}
               required
@@ -162,6 +166,7 @@ function LoginPage() {
           </div>
           <Button
             type="submit"
+            data-testid="auth-submit"
             disabled={loading}
             className="h-12 w-full rounded-full bg-gradient-primary text-base font-semibold shadow-glow hover:opacity-95"
           >

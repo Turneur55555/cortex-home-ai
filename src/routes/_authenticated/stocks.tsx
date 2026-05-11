@@ -448,6 +448,8 @@ function ItemRow({
 
   return (
     <li
+      data-testid="stocks-item"
+      data-item-name={item.name}
       onClick={selecting ? onToggle : undefined}
       className={
         "flex items-center gap-3 rounded-2xl border bg-card p-3 shadow-card transition-colors " +
@@ -532,6 +534,7 @@ function ItemRow({
 
           <button
             type="button"
+            data-testid="stocks-item-delete"
             onClick={onDelete}
             className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
             aria-label="Supprimer"
@@ -573,6 +576,7 @@ function FabAdd({ onClick }: { onClick: () => void }) {
   return (
     <button
       type="button"
+      data-testid="stocks-add-fab"
       onClick={onClick}
       className="fixed bottom-24 right-1/2 z-30 inline-flex h-14 translate-x-[200px] items-center gap-2 rounded-full bg-gradient-primary px-5 text-sm font-semibold text-primary-foreground shadow-glow transition-transform active:scale-95"
     >
@@ -631,9 +635,10 @@ function AddItemSheet({ module, onClose }: { module: StockModule; onClose: () =>
           </button>
         </div>
 
-        <form onSubmit={submit} className="space-y-3">
+        <form onSubmit={submit} className="space-y-3" data-testid="stocks-add-form">
           <Field
             label="Nom"
+            testId="stocks-field-name"
             value={form.name}
             onChange={(v) => setForm({ ...form, name: v })}
             placeholder="Ex: Yaourt nature"
@@ -667,6 +672,7 @@ function AddItemSheet({ module, onClose }: { module: StockModule; onClose: () =>
             <Field
               label="Expire le *"
               type="date"
+              testId="stocks-field-expiration"
               value={form.expiration_date}
               onChange={(v) => setForm({ ...form, expiration_date: v })}
               required
@@ -688,6 +694,7 @@ function AddItemSheet({ module, onClose }: { module: StockModule; onClose: () =>
 
           <button
             type="submit"
+            data-testid="stocks-submit-add"
             disabled={add.isPending}
             className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-gradient-primary text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-60"
           >
@@ -708,6 +715,7 @@ function Field({
   required,
   placeholder,
   textarea,
+  testId,
 }: {
   label: string;
   value: string;
@@ -716,6 +724,7 @@ function Field({
   required?: boolean;
   placeholder?: string;
   textarea?: boolean;
+  testId?: string;
 }) {
   return (
     <label className="block">
@@ -727,6 +736,7 @@ function Field({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
+          data-testid={testId}
           rows={2}
           className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary"
         />
@@ -737,6 +747,7 @@ function Field({
           onChange={(e) => onChange(e.target.value)}
           required={required}
           placeholder={placeholder}
+          data-testid={testId}
           className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary"
         />
       )}
