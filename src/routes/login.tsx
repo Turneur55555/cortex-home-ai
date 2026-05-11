@@ -111,6 +111,7 @@ function LoginPage() {
         <div className="mb-6 grid grid-cols-2 gap-1 rounded-full border border-border bg-surface p-1">
           <button
             type="button"
+            data-testid="auth-tab-login"
             onClick={() => setMode("login")}
             className={
               mode === "login"
@@ -122,6 +123,7 @@ function LoginPage() {
           </button>
           <button
             type="button"
+            data-testid="auth-tab-signup"
             onClick={() => setMode("signup")}
             className={
               mode === "signup"
