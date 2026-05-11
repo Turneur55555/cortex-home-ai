@@ -9,6 +9,7 @@ import {
   Plus,
   Trash2,
   TrendingUp,
+  TrendingDown,
   Clock,
   Calendar,
   X,
@@ -20,6 +21,8 @@ import {
   Camera,
   ImageIcon,
   Target,
+  Ruler,
+  Minus,
 } from "lucide-react";
 import {
   Area,
