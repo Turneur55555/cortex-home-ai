@@ -131,11 +131,31 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="fr">
       <head>
         <HeadContent />
       </head>
       <body>
+        <noscript>
+          <div
+            style={{
+              minHeight: "100vh",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: "2rem",
+              backgroundColor: "#0d0d14",
+              color: "#f5f4f7",
+              fontFamily: "system-ui, sans-serif",
+              textAlign: "center",
+            }}
+          >
+            <p>
+              ICORTEX nécessite JavaScript pour fonctionner. Veuillez l'activer dans votre
+              navigateur.
+            </p>
+          </div>
+        </noscript>
         {children}
         <Scripts />
       </body>

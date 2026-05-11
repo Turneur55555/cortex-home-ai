@@ -140,21 +140,42 @@
 
 @layer base {
   * {
-    border-color: var(--color-border);
+    border-color: var(--color-border, rgba(255, 255, 255, 0.06));
   }
 
+  /* Filet de sécurité : couleurs littérales appliquées d'abord, variables ensuite.
+     Si les tokens ne se calculent pas (chargement partiel, FOUC), l'UI reste
+     lisible — fond sombre + texte clair garantis. */
   html {
-    font-family: var(--font-sans);
-    background-color: var(--color-background);
+    background-color: #0d0d14;
+    background-color: var(--color-background, #0d0d14);
+    color: #f5f4f7;
+    color: var(--color-foreground, #f5f4f7);
+    font-family: var(--font-sans, system-ui, sans-serif);
     color-scheme: dark;
+    min-height: 100%;
   }
 
   body {
-    background-color: var(--color-background);
-    color: var(--color-foreground);
-    font-family: var(--font-sans);
+    background-color: #0d0d14;
+    background-color: var(--color-background, #0d0d14);
+    color: #f5f4f7;
+    color: var(--color-foreground, #f5f4f7);
+    font-family: var(--font-sans, system-ui, sans-serif);
     -webkit-font-smoothing: antialiased;
     min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  /* La racine React doit toujours occuper la hauteur visible et rester en flex.
+     Empêche un écran totalement vide si un composant enfant ne définit pas sa
+     propre hauteur. */
+  #root {
+    min-height: 100vh;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    isolation: isolate;
   }
 
   ::selection {
