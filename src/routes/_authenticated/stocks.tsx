@@ -573,6 +573,7 @@ function FabAdd({ onClick }: { onClick: () => void }) {
   return (
     <button
       type="button"
+      data-testid="stocks-add-fab"
       onClick={onClick}
       className="fixed bottom-24 right-1/2 z-30 inline-flex h-14 translate-x-[200px] items-center gap-2 rounded-full bg-gradient-primary px-5 text-sm font-semibold text-primary-foreground shadow-glow transition-transform active:scale-95"
     >
