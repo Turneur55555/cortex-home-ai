@@ -21,6 +21,7 @@ export function BottomNav() {
             <li key={to} className="flex-1">
               <Link
                 to={to}
+                data-testid={`nav-${to === "/" ? "home" : to.replace("/", "")}`}
                 className="group flex flex-col items-center gap-1 rounded-xl px-2 py-2 transition-colors"
               >
                 <span
