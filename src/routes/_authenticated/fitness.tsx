@@ -264,7 +264,13 @@ function Stat({ label, value, unit }: { label: string; value: number | null | un
   );
 }
 
-function BodyMeasurementSheet({ onClose }: { onClose: () => void }) {
+function BodyMeasurementSheet({
+  onClose,
+  focusField,
+}: {
+  onClose: () => void;
+  focusField?: MeasurementField | null;
+}) {
   const add = useAddBodyMeasurement();
   const [form, setForm] = useState({
     date: format(new Date(), "yyyy-MM-dd"),
@@ -280,6 +286,18 @@ function BodyMeasurementSheet({ onClose }: { onClose: () => void }) {
     right_thigh: "",
     notes: "",
   });
+
+  useEffect(() => {
+    if (!focusField) return;
+    const t = setTimeout(() => {
+      const el = document.getElementById(`field-${focusField}`) as HTMLInputElement | null;
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.focus({ preventScroll: true });
+      }
+    }, 250);
+    return () => clearTimeout(t);
+  }, [focusField]);
 
   const num = (v: string) => (v.trim() === "" ? null : Number(v));
 
@@ -315,31 +333,31 @@ function BodyMeasurementSheet({ onClose }: { onClose: () => void }) {
 
         <FormGroup title="Composition corporelle" subtitle="Données globales">
           <div className="grid grid-cols-3 gap-3">
-            <Field label="Poids (kg)" type="number" step="0.1" value={form.weight} onChange={(v) => setForm({ ...form, weight: v })} />
-            <Field label="MM (kg)" type="number" step="0.1" value={form.muscle_mass} onChange={(v) => setForm({ ...form, muscle_mass: v })} />
-            <Field label="MG (%)" type="number" step="0.1" value={form.body_fat} onChange={(v) => setForm({ ...form, body_fat: v })} />
+            <Field id="field-weight" label="Poids (kg)" type="number" step="0.1" value={form.weight} onChange={(v) => setForm({ ...form, weight: v })} />
+            <Field id="field-muscle_mass" label="MM (kg)" type="number" step="0.1" value={form.muscle_mass} onChange={(v) => setForm({ ...form, muscle_mass: v })} />
+            <Field id="field-body_fat" label="MG (%)" type="number" step="0.1" value={form.body_fat} onChange={(v) => setForm({ ...form, body_fat: v })} />
           </div>
         </FormGroup>
 
         <FormGroup title="Tronc" subtitle="Tour en cm">
           <div className="grid grid-cols-3 gap-3">
-            <Field label="Poitrine" type="number" step="0.1" value={form.chest} onChange={(v) => setForm({ ...form, chest: v })} />
-            <Field label="Taille" type="number" step="0.1" value={form.waist} onChange={(v) => setForm({ ...form, waist: v })} />
-            <Field label="Hanches" type="number" step="0.1" value={form.hips} onChange={(v) => setForm({ ...form, hips: v })} />
+            <Field id="field-chest" label="Poitrine" type="number" step="0.1" value={form.chest} onChange={(v) => setForm({ ...form, chest: v })} />
+            <Field id="field-waist" label="Taille" type="number" step="0.1" value={form.waist} onChange={(v) => setForm({ ...form, waist: v })} />
+            <Field id="field-hips" label="Hanches" type="number" step="0.1" value={form.hips} onChange={(v) => setForm({ ...form, hips: v })} />
           </div>
         </FormGroup>
 
         <FormGroup title="Bras" subtitle="Tour contracté en cm">
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Bras gauche" type="number" step="0.1" value={form.left_arm} onChange={(v) => setForm({ ...form, left_arm: v })} />
-            <Field label="Bras droit" type="number" step="0.1" value={form.right_arm} onChange={(v) => setForm({ ...form, right_arm: v })} />
+            <Field id="field-left_arm" label="Bras gauche" type="number" step="0.1" value={form.left_arm} onChange={(v) => setForm({ ...form, left_arm: v })} />
+            <Field id="field-right_arm" label="Bras droit" type="number" step="0.1" value={form.right_arm} onChange={(v) => setForm({ ...form, right_arm: v })} />
           </div>
         </FormGroup>
 
         <FormGroup title="Jambes" subtitle="Tour de cuisse en cm">
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Cuisse gauche" type="number" step="0.1" value={form.left_thigh} onChange={(v) => setForm({ ...form, left_thigh: v })} />
-            <Field label="Cuisse droite" type="number" step="0.1" value={form.right_thigh} onChange={(v) => setForm({ ...form, right_thigh: v })} />
+            <Field id="field-left_thigh" label="Cuisse gauche" type="number" step="0.1" value={form.left_thigh} onChange={(v) => setForm({ ...form, left_thigh: v })} />
+            <Field id="field-right_thigh" label="Cuisse droite" type="number" step="0.1" value={form.right_thigh} onChange={(v) => setForm({ ...form, right_thigh: v })} />
           </div>
         </FormGroup>
 
