@@ -111,10 +111,21 @@ function TabButton({ active, onClick, icon, label }: { active: boolean; onClick:
 
 /* ============================ CORPS ============================ */
 
+type MeasurementField =
+  | "weight" | "muscle_mass" | "body_fat"
+  | "chest" | "waist" | "hips"
+  | "left_arm" | "right_arm" | "left_thigh" | "right_thigh";
+
 function CorpsTab() {
   const { data, isLoading } = useBodyMeasurements();
   const [open, setOpen] = useState(false);
+  const [focusField, setFocusField] = useState<MeasurementField | null>(null);
   const del = useDeleteBodyMeasurement();
+
+  const openWithFocus = (f: MeasurementField | null) => {
+    setFocusField(f);
+    setOpen(true);
+  };
 
   const chartData = useMemo(() => {
     if (!data) return [];
