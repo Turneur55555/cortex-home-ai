@@ -150,6 +150,9 @@ function CorpsTab() {
         <Stat label="MG" value={latest?.body_fat} unit="%" />
       </div>
 
+      {/* Silhouette interactive */}
+      <BodySilhouette latest={latest} onZone={openWithFocus} />
+
       {/* Mensurations détaillées */}
       <MeasurementsCard latest={latest} previous={previous} />
 
