@@ -59,7 +59,7 @@ Deno.serve(async (req) => {
     const rl = await checkRateLimit(supa, userData.user.id, "recipe_assistant", 20);
     if (!rl.ok) return fail("Limite atteinte (20 demandes/h). Réessaie plus tard.", 429);
 
-    const { items, preferences, prompt } = (await req.json()) as {
+    const { items: rawItems, preferences: rawPrefs, prompt } = (await req.json()) as {
       items: Item[];
       preferences: Prefs;
       prompt?: string;
@@ -68,6 +68,39 @@ Deno.serve(async (req) => {
     if (typeof prompt === "string" && prompt.length > 500) {
       return fail("Demande trop longue (max 500 caractères).", 400);
     }
+
+    // Validate items
+    if (!Array.isArray(rawItems)) return fail("Stocks invalides", 400);
+    if (rawItems.length > 200) return fail("Trop d'éléments en stock (max 200).", 400);
+    const items: Item[] = [];
+    for (const it of rawItems) {
+      if (!it || typeof it !== "object") continue;
+      const name = typeof it.name === "string" ? it.name.slice(0, 100) : "";
+      if (!name) continue;
+      items.push({
+        name,
+        quantity: typeof it.quantity === "number" ? it.quantity : null,
+        unit: typeof it.unit === "string" ? it.unit.slice(0, 30) : null,
+        expiration_date: typeof it.expiration_date === "string" ? it.expiration_date.slice(0, 30) : null,
+      });
+    }
+
+    // Validate preferences
+    const safeArr = (arr: unknown, max = 20, len = 100): string[] => {
+      if (!Array.isArray(arr)) return [];
+      return arr
+        .filter((v): v is string => typeof v === "string")
+        .slice(0, max)
+        .map((v) => v.slice(0, len));
+    };
+    const preferences: Prefs = {
+      allergies: safeArr(rawPrefs?.allergies),
+      foods_to_avoid: safeArr(rawPrefs?.foods_to_avoid),
+      goal: typeof rawPrefs?.goal === "string" ? rawPrefs.goal.slice(0, 100) : null,
+      no_meat_dairy_mix: !!rawPrefs?.no_meat_dairy_mix,
+      other_rules:
+        typeof rawPrefs?.other_rules === "string" ? rawPrefs.other_rules.slice(0, 500) : null,
+    };
 
     const sys = `Tu es un chef-assistant. Tu proposes 3 recettes RÉALISABLES principalement avec les ingrédients en stock fournis.
 Tu DOIS respecter STRICTEMENT les règles alimentaires de l'utilisateur :
