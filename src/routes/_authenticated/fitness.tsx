@@ -2005,6 +2005,7 @@ function Sheet({ title, children, onClose }: { title: string; children: React.Re
 }
 
 function Field({
+  id,
   label,
   value,
   onChange,
@@ -2014,6 +2015,7 @@ function Field({
   required,
   textarea,
 }: {
+  id?: string;
   label: string;
   value: string;
   onChange: (v: string) => void;
@@ -2027,11 +2029,12 @@ function Field({
     "w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary";
   return (
     <div>
-      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+      <label htmlFor={id} className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
         {label}
       </label>
       {textarea ? (
         <textarea
+          id={id}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
@@ -2040,6 +2043,7 @@ function Field({
         />
       ) : (
         <input
+          id={id}
           type={type}
           step={step}
           value={value}
