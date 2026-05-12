@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { Package, Dumbbell, FileText, Sparkles, Plus, Bell, Loader2, Quote } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { ChatBot } from "@/components/ChatBot";
 import { supabase } from "@/integrations/supabase/client";
 import { getSessionQuote } from "@/lib/quotes";
 
@@ -166,6 +167,8 @@ function HomePage() {
           </div>
         </section>
       )}
+
+      <ChatBot />
     </main>
   );
 }
