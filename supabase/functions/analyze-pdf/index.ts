@@ -73,7 +73,7 @@ Deno.serve(async (req) => {
     const rl = await checkRateLimit(supa, userData.user.id, "analyze_pdf", 10);
     if (!rl.ok) return fail("Limite atteinte (10 analyses/h). Réessaie plus tard.", 429);
 
-    const { storage_path, module, name } = await req.json();
+    const { storage_path, module, name: rawName } = await req.json();
     if (!storage_path || !module) return fail("Paramètres invalides", 400);
     if (
       typeof storage_path !== "string" ||
@@ -82,6 +82,11 @@ Deno.serve(async (req) => {
     ) {
       return fail("Accès non autorisé", 403, `path=${storage_path} user=${userData.user.id}`);
     }
+    if (typeof module !== "string" || module.length > 50) {
+      return fail("Module invalide", 400);
+    }
+    const name: string = typeof rawName === "string" ? rawName.slice(0, 200) : "document";
+
 
     const { data: file, error: dlErr } = await supa.storage
       .from("pdf-documents")
