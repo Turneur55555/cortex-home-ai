@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
@@ -111,10 +111,21 @@ function TabButton({ active, onClick, icon, label }: { active: boolean; onClick:
 
 /* ============================ CORPS ============================ */
 
+type MeasurementField =
+  | "weight" | "muscle_mass" | "body_fat"
+  | "chest" | "waist" | "hips"
+  | "left_arm" | "right_arm" | "left_thigh" | "right_thigh";
+
 function CorpsTab() {
   const { data, isLoading } = useBodyMeasurements();
   const [open, setOpen] = useState(false);
+  const [focusField, setFocusField] = useState<MeasurementField | null>(null);
   const del = useDeleteBodyMeasurement();
+
+  const openWithFocus = (f: MeasurementField | null) => {
+    setFocusField(f);
+    setOpen(true);
+  };
 
   const chartData = useMemo(() => {
     if (!data) return [];
@@ -138,6 +149,9 @@ function CorpsTab() {
         <Stat label="Masse gr." value={latest?.muscle_mass} unit="kg" />
         <Stat label="MG" value={latest?.body_fat} unit="%" />
       </div>
+
+      {/* Silhouette interactive */}
+      <BodySilhouette latest={latest} onZone={openWithFocus} />
 
       {/* Mensurations détaillées */}
       <MeasurementsCard latest={latest} previous={previous} />
@@ -224,8 +238,16 @@ function CorpsTab() {
         )}
       </div>
 
-      <FabAdd onClick={() => setOpen(true)} label="Ajouter mesure" />
-      {open && <BodyMeasurementSheet onClose={() => setOpen(false)} />}
+      <FabAdd onClick={() => openWithFocus(null)} label="Ajouter mesure" />
+      {open && (
+        <BodyMeasurementSheet
+          focusField={focusField}
+          onClose={() => {
+            setOpen(false);
+            setFocusField(null);
+          }}
+        />
+      )}
     </section>
   );
 }
@@ -242,7 +264,184 @@ function Stat({ label, value, unit }: { label: string; value: number | null | un
   );
 }
 
-function BodyMeasurementSheet({ onClose }: { onClose: () => void }) {
+/* ----- Silhouette interactive ----- */
+
+const ZONE_LABELS: Record<MeasurementField, string> = {
+  weight: "Poids",
+  muscle_mass: "Masse musculaire",
+  body_fat: "Masse grasse",
+  chest: "Poitrine",
+  waist: "Taille",
+  hips: "Hanches",
+  left_arm: "Bras gauche",
+  right_arm: "Bras droit",
+  left_thigh: "Cuisse gauche",
+  right_thigh: "Cuisse droite",
+};
+
+function BodySilhouette({
+  latest,
+  onZone,
+}: {
+  latest: BodyRow | undefined;
+  onZone: (f: MeasurementField) => void;
+}) {
+  const [hover, setHover] = useState<MeasurementField | null>(null);
+
+  const zoneFill = (f: MeasurementField) =>
+    hover === f
+      ? "color-mix(in oklab, var(--color-primary) 55%, transparent)"
+      : "color-mix(in oklab, var(--color-primary) 18%, transparent)";
+
+  const Zone = (props: {
+    field: MeasurementField;
+    children: React.ReactNode;
+  }) => (
+    <g
+      role="button"
+      tabIndex={0}
+      aria-label={`Mesurer ${ZONE_LABELS[props.field]}`}
+      onClick={() => onZone(props.field)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onZone(props.field);
+        }
+      }}
+      onMouseEnter={() => setHover(props.field)}
+      onMouseLeave={() => setHover(null)}
+      style={{ cursor: "pointer", outline: "none" }}
+      className="transition-opacity"
+    >
+      {props.children}
+    </g>
+  );
+
+  const fmt = (v: number | null | undefined, unit = "cm") =>
+    v != null ? `${v} ${unit}` : "—";
+
+  const activeLabel = hover
+    ? `${ZONE_LABELS[hover]} · ${fmt(latest?.[hover as keyof BodyRow] as number | null | undefined)}`
+    : "Touchez une zone pour mesurer";
+
+  return (
+    <div className="rounded-2xl border border-border bg-card p-4 shadow-card">
+      <div className="mb-2 flex items-center justify-between">
+        <h3 className="text-sm font-semibold">Silhouette interactive</h3>
+        <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+          Tap pour ajouter
+        </span>
+      </div>
+
+      <div className="relative flex justify-center">
+        <svg
+          viewBox="0 0 200 360"
+          width="200"
+          height="320"
+          aria-label="Silhouette corporelle interactive"
+          className="select-none"
+        >
+          <defs>
+            <linearGradient id="bodyBase" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="color-mix(in oklab, var(--color-primary) 14%, transparent)" />
+              <stop offset="100%" stopColor="color-mix(in oklab, var(--color-primary) 6%, transparent)" />
+            </linearGradient>
+          </defs>
+
+          {/* Base silhouette (non interactive) */}
+          <g fill="url(#bodyBase)" stroke="color-mix(in oklab, var(--color-primary) 35%, transparent)" strokeWidth="1.2">
+            {/* tête */}
+            <circle cx="100" cy="30" r="18" />
+            {/* cou */}
+            <rect x="92" y="46" width="16" height="10" rx="3" />
+          </g>
+
+          {/* Zones interactives */}
+          <Zone field="chest">
+            <path
+              d="M60 60 Q100 52 140 60 L142 110 Q100 122 58 110 Z"
+              fill={zoneFill("chest")}
+              stroke="color-mix(in oklab, var(--color-primary) 60%, transparent)"
+              strokeWidth="1.2"
+            />
+          </Zone>
+
+          <Zone field="waist">
+            <path
+              d="M62 110 Q100 122 138 110 L132 158 Q100 166 68 158 Z"
+              fill={zoneFill("waist")}
+              stroke="color-mix(in oklab, var(--color-primary) 60%, transparent)"
+              strokeWidth="1.2"
+            />
+          </Zone>
+
+          <Zone field="hips">
+            <path
+              d="M68 158 Q100 166 132 158 L138 200 Q100 210 62 200 Z"
+              fill={zoneFill("hips")}
+              stroke="color-mix(in oklab, var(--color-primary) 60%, transparent)"
+              strokeWidth="1.2"
+            />
+          </Zone>
+
+          {/* Bras (gauche = côté droit de l'écran en vue de face) */}
+          <Zone field="right_arm">
+            <path
+              d="M58 64 Q44 70 38 110 Q34 140 42 165 L52 162 Q50 130 54 105 Q58 80 60 70 Z"
+              fill={zoneFill("right_arm")}
+              stroke="color-mix(in oklab, var(--color-primary) 60%, transparent)"
+              strokeWidth="1.2"
+            />
+          </Zone>
+          <Zone field="left_arm">
+            <path
+              d="M142 64 Q156 70 162 110 Q166 140 158 165 L148 162 Q150 130 146 105 Q142 80 140 70 Z"
+              fill={zoneFill("left_arm")}
+              stroke="color-mix(in oklab, var(--color-primary) 60%, transparent)"
+              strokeWidth="1.2"
+            />
+          </Zone>
+
+          {/* Cuisses */}
+          <Zone field="right_thigh">
+            <path
+              d="M68 200 Q78 205 96 205 L92 290 Q86 305 74 305 Q66 290 64 260 Q62 225 68 200 Z"
+              fill={zoneFill("right_thigh")}
+              stroke="color-mix(in oklab, var(--color-primary) 60%, transparent)"
+              strokeWidth="1.2"
+            />
+          </Zone>
+          <Zone field="left_thigh">
+            <path
+              d="M132 200 Q122 205 104 205 L108 290 Q114 305 126 305 Q134 290 136 260 Q138 225 132 200 Z"
+              fill={zoneFill("left_thigh")}
+              stroke="color-mix(in oklab, var(--color-primary) 60%, transparent)"
+              strokeWidth="1.2"
+            />
+          </Zone>
+
+          {/* Mollets décoratifs */}
+          <g fill="url(#bodyBase)" stroke="color-mix(in oklab, var(--color-primary) 30%, transparent)" strokeWidth="1">
+            <path d="M74 305 Q72 335 78 350 L92 350 Q92 330 92 310 Z" />
+            <path d="M126 305 Q128 335 122 350 L108 350 Q108 330 108 310 Z" />
+          </g>
+        </svg>
+      </div>
+
+      <p className="mt-2 text-center text-xs font-medium text-muted-foreground">
+        {activeLabel}
+      </p>
+    </div>
+  );
+}
+
+function BodyMeasurementSheet({
+  onClose,
+  focusField,
+}: {
+  onClose: () => void;
+  focusField?: MeasurementField | null;
+}) {
   const add = useAddBodyMeasurement();
   const [form, setForm] = useState({
     date: format(new Date(), "yyyy-MM-dd"),
@@ -258,6 +457,18 @@ function BodyMeasurementSheet({ onClose }: { onClose: () => void }) {
     right_thigh: "",
     notes: "",
   });
+
+  useEffect(() => {
+    if (!focusField) return;
+    const t = setTimeout(() => {
+      const el = document.getElementById(`field-${focusField}`) as HTMLInputElement | null;
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.focus({ preventScroll: true });
+      }
+    }, 250);
+    return () => clearTimeout(t);
+  }, [focusField]);
 
   const num = (v: string) => (v.trim() === "" ? null : Number(v));
 
@@ -293,31 +504,31 @@ function BodyMeasurementSheet({ onClose }: { onClose: () => void }) {
 
         <FormGroup title="Composition corporelle" subtitle="Données globales">
           <div className="grid grid-cols-3 gap-3">
-            <Field label="Poids (kg)" type="number" step="0.1" value={form.weight} onChange={(v) => setForm({ ...form, weight: v })} />
-            <Field label="MM (kg)" type="number" step="0.1" value={form.muscle_mass} onChange={(v) => setForm({ ...form, muscle_mass: v })} />
-            <Field label="MG (%)" type="number" step="0.1" value={form.body_fat} onChange={(v) => setForm({ ...form, body_fat: v })} />
+            <Field id="field-weight" label="Poids (kg)" type="number" step="0.1" value={form.weight} onChange={(v) => setForm({ ...form, weight: v })} />
+            <Field id="field-muscle_mass" label="MM (kg)" type="number" step="0.1" value={form.muscle_mass} onChange={(v) => setForm({ ...form, muscle_mass: v })} />
+            <Field id="field-body_fat" label="MG (%)" type="number" step="0.1" value={form.body_fat} onChange={(v) => setForm({ ...form, body_fat: v })} />
           </div>
         </FormGroup>
 
         <FormGroup title="Tronc" subtitle="Tour en cm">
           <div className="grid grid-cols-3 gap-3">
-            <Field label="Poitrine" type="number" step="0.1" value={form.chest} onChange={(v) => setForm({ ...form, chest: v })} />
-            <Field label="Taille" type="number" step="0.1" value={form.waist} onChange={(v) => setForm({ ...form, waist: v })} />
-            <Field label="Hanches" type="number" step="0.1" value={form.hips} onChange={(v) => setForm({ ...form, hips: v })} />
+            <Field id="field-chest" label="Poitrine" type="number" step="0.1" value={form.chest} onChange={(v) => setForm({ ...form, chest: v })} />
+            <Field id="field-waist" label="Taille" type="number" step="0.1" value={form.waist} onChange={(v) => setForm({ ...form, waist: v })} />
+            <Field id="field-hips" label="Hanches" type="number" step="0.1" value={form.hips} onChange={(v) => setForm({ ...form, hips: v })} />
           </div>
         </FormGroup>
 
         <FormGroup title="Bras" subtitle="Tour contracté en cm">
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Bras gauche" type="number" step="0.1" value={form.left_arm} onChange={(v) => setForm({ ...form, left_arm: v })} />
-            <Field label="Bras droit" type="number" step="0.1" value={form.right_arm} onChange={(v) => setForm({ ...form, right_arm: v })} />
+            <Field id="field-left_arm" label="Bras gauche" type="number" step="0.1" value={form.left_arm} onChange={(v) => setForm({ ...form, left_arm: v })} />
+            <Field id="field-right_arm" label="Bras droit" type="number" step="0.1" value={form.right_arm} onChange={(v) => setForm({ ...form, right_arm: v })} />
           </div>
         </FormGroup>
 
         <FormGroup title="Jambes" subtitle="Tour de cuisse en cm">
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Cuisse gauche" type="number" step="0.1" value={form.left_thigh} onChange={(v) => setForm({ ...form, left_thigh: v })} />
-            <Field label="Cuisse droite" type="number" step="0.1" value={form.right_thigh} onChange={(v) => setForm({ ...form, right_thigh: v })} />
+            <Field id="field-left_thigh" label="Cuisse gauche" type="number" step="0.1" value={form.left_thigh} onChange={(v) => setForm({ ...form, left_thigh: v })} />
+            <Field id="field-right_thigh" label="Cuisse droite" type="number" step="0.1" value={form.right_thigh} onChange={(v) => setForm({ ...form, right_thigh: v })} />
           </div>
         </FormGroup>
 
@@ -1965,6 +2176,7 @@ function Sheet({ title, children, onClose }: { title: string; children: React.Re
 }
 
 function Field({
+  id,
   label,
   value,
   onChange,
@@ -1974,6 +2186,7 @@ function Field({
   required,
   textarea,
 }: {
+  id?: string;
   label: string;
   value: string;
   onChange: (v: string) => void;
@@ -1987,11 +2200,12 @@ function Field({
     "w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary";
   return (
     <div>
-      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+      <label htmlFor={id} className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
         {label}
       </label>
       {textarea ? (
         <textarea
+          id={id}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
@@ -2000,6 +2214,7 @@ function Field({
         />
       ) : (
         <input
+          id={id}
           type={type}
           step={step}
           value={value}
