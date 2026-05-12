@@ -264,6 +264,177 @@ function Stat({ label, value, unit }: { label: string; value: number | null | un
   );
 }
 
+/* ----- Silhouette interactive ----- */
+
+const ZONE_LABELS: Record<MeasurementField, string> = {
+  weight: "Poids",
+  muscle_mass: "Masse musculaire",
+  body_fat: "Masse grasse",
+  chest: "Poitrine",
+  waist: "Taille",
+  hips: "Hanches",
+  left_arm: "Bras gauche",
+  right_arm: "Bras droit",
+  left_thigh: "Cuisse gauche",
+  right_thigh: "Cuisse droite",
+};
+
+function BodySilhouette({
+  latest,
+  onZone,
+}: {
+  latest: BodyRow | undefined;
+  onZone: (f: MeasurementField) => void;
+}) {
+  const [hover, setHover] = useState<MeasurementField | null>(null);
+
+  const zoneFill = (f: MeasurementField) =>
+    hover === f
+      ? "color-mix(in oklab, var(--color-primary) 55%, transparent)"
+      : "color-mix(in oklab, var(--color-primary) 18%, transparent)";
+
+  const Zone = (props: {
+    field: MeasurementField;
+    children: React.ReactNode;
+  }) => (
+    <g
+      role="button"
+      tabIndex={0}
+      aria-label={`Mesurer ${ZONE_LABELS[props.field]}`}
+      onClick={() => onZone(props.field)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onZone(props.field);
+        }
+      }}
+      onMouseEnter={() => setHover(props.field)}
+      onMouseLeave={() => setHover(null)}
+      style={{ cursor: "pointer", outline: "none" }}
+      className="transition-opacity"
+    >
+      {props.children}
+    </g>
+  );
+
+  const fmt = (v: number | null | undefined, unit = "cm") =>
+    v != null ? `${v} ${unit}` : "—";
+
+  const activeLabel = hover
+    ? `${ZONE_LABELS[hover]} · ${fmt(latest?.[hover as keyof BodyRow] as number | null | undefined)}`
+    : "Touchez une zone pour mesurer";
+
+  return (
+    <div className="rounded-2xl border border-border bg-card p-4 shadow-card">
+      <div className="mb-2 flex items-center justify-between">
+        <h3 className="text-sm font-semibold">Silhouette interactive</h3>
+        <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+          Tap pour ajouter
+        </span>
+      </div>
+
+      <div className="relative flex justify-center">
+        <svg
+          viewBox="0 0 200 360"
+          width="200"
+          height="320"
+          aria-label="Silhouette corporelle interactive"
+          className="select-none"
+        >
+          <defs>
+            <linearGradient id="bodyBase" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="color-mix(in oklab, var(--color-primary) 14%, transparent)" />
+              <stop offset="100%" stopColor="color-mix(in oklab, var(--color-primary) 6%, transparent)" />
+            </linearGradient>
+          </defs>
+
+          {/* Base silhouette (non interactive) */}
+          <g fill="url(#bodyBase)" stroke="color-mix(in oklab, var(--color-primary) 35%, transparent)" strokeWidth="1.2">
+            {/* tête */}
+            <circle cx="100" cy="30" r="18" />
+            {/* cou */}
+            <rect x="92" y="46" width="16" height="10" rx="3" />
+          </g>
+
+          {/* Zones interactives */}
+          <Zone field="chest">
+            <path
+              d="M60 60 Q100 52 140 60 L142 110 Q100 122 58 110 Z"
+              fill={zoneFill("chest")}
+              stroke="color-mix(in oklab, var(--color-primary) 60%, transparent)"
+              strokeWidth="1.2"
+            />
+          </Zone>
+
+          <Zone field="waist">
+            <path
+              d="M62 110 Q100 122 138 110 L132 158 Q100 166 68 158 Z"
+              fill={zoneFill("waist")}
+              stroke="color-mix(in oklab, var(--color-primary) 60%, transparent)"
+              strokeWidth="1.2"
+            />
+          </Zone>
+
+          <Zone field="hips">
+            <path
+              d="M68 158 Q100 166 132 158 L138 200 Q100 210 62 200 Z"
+              fill={zoneFill("hips")}
+              stroke="color-mix(in oklab, var(--color-primary) 60%, transparent)"
+              strokeWidth="1.2"
+            />
+          </Zone>
+
+          {/* Bras (gauche = côté droit de l'écran en vue de face) */}
+          <Zone field="right_arm">
+            <path
+              d="M58 64 Q44 70 38 110 Q34 140 42 165 L52 162 Q50 130 54 105 Q58 80 60 70 Z"
+              fill={zoneFill("right_arm")}
+              stroke="color-mix(in oklab, var(--color-primary) 60%, transparent)"
+              strokeWidth="1.2"
+            />
+          </Zone>
+          <Zone field="left_arm">
+            <path
+              d="M142 64 Q156 70 162 110 Q166 140 158 165 L148 162 Q150 130 146 105 Q142 80 140 70 Z"
+              fill={zoneFill("left_arm")}
+              stroke="color-mix(in oklab, var(--color-primary) 60%, transparent)"
+              strokeWidth="1.2"
+            />
+          </Zone>
+
+          {/* Cuisses */}
+          <Zone field="right_thigh">
+            <path
+              d="M68 200 Q78 205 96 205 L92 290 Q86 305 74 305 Q66 290 64 260 Q62 225 68 200 Z"
+              fill={zoneFill("right_thigh")}
+              stroke="color-mix(in oklab, var(--color-primary) 60%, transparent)"
+              strokeWidth="1.2"
+            />
+          </Zone>
+          <Zone field="left_thigh">
+            <path
+              d="M132 200 Q122 205 104 205 L108 290 Q114 305 126 305 Q134 290 136 260 Q138 225 132 200 Z"
+              fill={zoneFill("left_thigh")}
+              stroke="color-mix(in oklab, var(--color-primary) 60%, transparent)"
+              strokeWidth="1.2"
+            />
+          </Zone>
+
+          {/* Mollets décoratifs */}
+          <g fill="url(#bodyBase)" stroke="color-mix(in oklab, var(--color-primary) 30%, transparent)" strokeWidth="1">
+            <path d="M74 305 Q72 335 78 350 L92 350 Q92 330 92 310 Z" />
+            <path d="M126 305 Q128 335 122 350 L108 350 Q108 330 108 310 Z" />
+          </g>
+        </svg>
+      </div>
+
+      <p className="mt-2 text-center text-xs font-medium text-muted-foreground">
+        {activeLabel}
+      </p>
+    </div>
+  );
+}
+
 function BodyMeasurementSheet({
   onClose,
   focusField,
