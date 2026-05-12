@@ -238,8 +238,16 @@ function CorpsTab() {
         )}
       </div>
 
-      <FabAdd onClick={() => setOpen(true)} label="Ajouter mesure" />
-      {open && <BodyMeasurementSheet onClose={() => setOpen(false)} />}
+      <FabAdd onClick={() => openWithFocus(null)} label="Ajouter mesure" />
+      {open && (
+        <BodyMeasurementSheet
+          focusField={focusField}
+          onClose={() => {
+            setOpen(false);
+            setFocusField(null);
+          }}
+        />
+      )}
     </section>
   );
 }
