@@ -51,13 +51,33 @@ Deno.serve(async (req) => {
     if (!rl.ok) return fail("Limite atteinte (20 séances/h). Réessaie plus tard.", 429);
 
     const body = await req.json();
-    const muscles: string[] = Array.isArray(body.muscles) ? body.muscles : [];
-    const duration: number = Number(body.duration_minutes) || 45;
-    const equipment: string = typeof body.equipment === "string" ? body.equipment : "salle complète";
-    const level: string = typeof body.level === "string" ? body.level : "intermédiaire";
-    const goal: string = typeof body.goal === "string" ? body.goal : "hypertrophie";
+    const ALLOWED_LEVELS = ["débutant", "intermédiaire", "avancé"];
+    const ALLOWED_GOALS = ["force", "hypertrophie", "endurance", "perte de poids", "remise en forme"];
+    const ALLOWED_EQUIPMENT = ["salle complète", "haltères", "barre", "élastiques", "poids du corps", "machines", "kettlebell"];
 
-    if (muscles.length === 0) return fail("Sélectionne au moins un groupe musculaire", 400);
+    const rawMuscles: unknown = body.muscles;
+    if (!Array.isArray(rawMuscles) || rawMuscles.length === 0 || rawMuscles.length > 10) {
+      return fail("Sélectionne 1 à 10 groupes musculaires", 400);
+    }
+    const muscles: string[] = [];
+    for (const m of rawMuscles) {
+      if (typeof m !== "string" || m.length === 0 || m.length > 50) {
+        return fail("Groupe musculaire invalide", 400);
+      }
+      muscles.push(m);
+    }
+
+    const duration: number = Math.max(5, Math.min(240, Number(body.duration_minutes) || 45));
+
+    const eqRaw = typeof body.equipment === "string" ? body.equipment.slice(0, 100) : "salle complète";
+    const equipment = ALLOWED_EQUIPMENT.includes(eqRaw) ? eqRaw : "salle complète";
+
+    const lvlRaw = typeof body.level === "string" ? body.level.slice(0, 100) : "intermédiaire";
+    const level = ALLOWED_LEVELS.includes(lvlRaw) ? lvlRaw : "intermédiaire";
+
+    const goalRaw = typeof body.goal === "string" ? body.goal.slice(0, 100) : "hypertrophie";
+    const goal = ALLOWED_GOALS.includes(goalRaw) ? goalRaw : "hypertrophie";
+
 
     const tool = {
       type: "function",
