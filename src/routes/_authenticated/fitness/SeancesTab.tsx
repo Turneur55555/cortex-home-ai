@@ -14,7 +14,7 @@ import {
   Trophy,
   X,
 } from "lucide-react";
-import { MuscleMap } from "@/components/fitness/MuscleMap";
+import { MuscleBodyMap } from "@/components/fitness/MuscleBodyMap";
 import {
   CartesianGrid,
   Line,
@@ -127,7 +127,7 @@ export function SeancesTab() {
   return (
     <section className="flex flex-col gap-4">
       {/* Carte récupération musculaire — calcul local, pas d'appel Edge Function */}
-      <MuscleMap />
+      <MuscleBodyMap />
 
       <button
         type="button"
