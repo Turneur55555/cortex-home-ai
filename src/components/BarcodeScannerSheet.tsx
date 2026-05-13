@@ -11,7 +11,8 @@ import {
   Package,
   Apple,
 } from "lucide-react";
-import { BrowserMultiFormatReader, Result } from "@zxing/library";
+import { BrowserMultiFormatReader } from "@zxing/browser";
+import type { Result } from "@zxing/library";
 import { toast } from "sonner";
 import { useAddStockItem } from "@/hooks/use-stocks";
 import { useAddNutrition } from "@/hooks/use-fitness";
@@ -46,6 +47,7 @@ interface Product {
 export function BarcodeScannerSheet({ onClose }: { onClose: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const readerRef = useRef<BrowserMultiFormatReader | null>(null);
+  const controlsRef = useRef<{ stop: () => void } | null>(null);
 
   const [scanning, setScanning] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -58,16 +60,17 @@ export function BarcodeScannerSheet({ onClose }: { onClose: () => void }) {
   const addStock = useAddStockItem();
   const addNutrition = useAddNutrition();
 
-  useEffect(() => {
-    readerRef.current = new BrowserMultiFormatReader();
-    return () => {
-      stopCamera();
-    };
-  }, [stopCamera]);
-
   const stopCamera = useCallback(() => {
-    if (readerRef.current) {
-      readerRef.current.reset();
+    try {
+      controlsRef.current?.stop();
+    } catch {
+      // ignore
+    }
+    controlsRef.current = null;
+    const stream = videoRef.current?.srcObject as MediaStream | null;
+    stream?.getTracks()?.forEach((t) => t.stop());
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
     }
     setScanning(false);
     setCamStatus("idle");
@@ -118,19 +121,34 @@ export function BarcodeScannerSheet({ onClose }: { onClose: () => void }) {
       setCamStatus("active");
       setScanning(true);
 
-      if (readerRef.current && videoRef.current) {
-        await readerRef.current.decodeFromVideoDevice(
-          null,
-          videoRef.current,
-          (result: Result | null, _err: unknown) => {
-            if (result) {
-              const code = result.getText();
-              stopCamera();
-              fetchProduct(code);
-            }
-          },
-        );
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+      });
+
+      if (!videoRef.current) return;
+      videoRef.current.srcObject = stream;
+      videoRef.current.setAttribute("playsinline", "true");
+      await videoRef.current.play();
+
+      if (!readerRef.current) {
+        readerRef.current = new BrowserMultiFormatReader();
       }
+
+      controlsRef.current = await readerRef.current.decodeFromStream(
+        stream,
+        videoRef.current,
+        (result: Result | undefined) => {
+          if (result) {
+            const code = result.getText();
+            stopCamera();
+            fetchProduct(code);
+          }
+        },
+      );
     } catch (e) {
       console.error(e);
       setCamStatus("denied");
@@ -139,6 +157,13 @@ export function BarcodeScannerSheet({ onClose }: { onClose: () => void }) {
       toast.error("Accès caméra refusé");
     }
   }, [fetchProduct, stopCamera]);
+
+  useEffect(() => {
+    readerRef.current = new BrowserMultiFormatReader();
+    return () => {
+      stopCamera();
+    };
+  }, [stopCamera]);
 
   const handleAddToStock = async () => {
     if (!product) return;
