@@ -45,7 +45,7 @@ export class GlobalErrorBoundary extends Component<Props, State> {
           <p className="mt-2 text-sm text-muted-foreground">
             L'application a rencontré un problème. Vous pouvez réessayer ou recharger la page.
           </p>
-          {error?.message && (
+          {import.meta.env.DEV && error?.message && (
             <p className="mt-3 break-words rounded-md bg-muted px-3 py-2 text-left font-mono text-xs text-muted-foreground">
               {error.message}
             </p>
