@@ -6,6 +6,7 @@ import {
   Shirt,
   SprayCan,
   Plus,
+  Barcode,
   Trash2,
   AlertTriangle,
   Loader2,
@@ -18,6 +19,7 @@ import {
   ChefHat,
 } from "lucide-react";
 import { ScanSheet } from "@/components/ScanSheet";
+import { BarcodeScannerSheet } from "@/components/BarcodeScannerSheet";
 import { RecipeAssistantSheet } from "@/components/RecipeAssistantSheet";
 import { toast } from "sonner";
 import { format, parseISO, differenceInDays } from "date-fns";
@@ -99,6 +101,7 @@ function StockTab({ module }: { module: StockModule }) {
   const bulkAdj = useBulkAdjustStockItems();
   const [open, setOpen] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
+  const [barcodeOpen, setBarcodeOpen] = useState(false);
   const [q, setQ] = useState("");
   const [recipeOpen, setRecipeOpen] = useState(false);
   const [expFilter, setExpFilter] = useState<"all" | "valid" | "soon" | "expired">("all");
@@ -159,18 +162,17 @@ function StockTab({ module }: { module: StockModule }) {
     () =>
       (data ?? []).filter((it) => {
         if (!it.expiration_date) return false;
-        return (
-          differenceInDays(parseISO(it.expiration_date as unknown as string), new Date()) < 0
-        );
+        return differenceInDays(parseISO(it.expiration_date as unknown as string), new Date()) < 0;
       }),
     [data],
   );
 
   const validCount = useMemo(
-    () => (data ?? []).filter((it) => {
-      const s = expStateOf(it);
-      return s === "valid" || s === "none";
-    }).length,
+    () =>
+      (data ?? []).filter((it) => {
+        const s = expStateOf(it);
+        return s === "valid" || s === "none";
+      }).length,
     [data],
   );
 
@@ -212,6 +214,17 @@ function StockTab({ module }: { module: StockModule }) {
           <Sparkles className="h-4 w-4" />
           Scan
         </button>
+        {module === "alimentation" && (
+          <button
+            type="button"
+            onClick={() => setBarcodeOpen(true)}
+            className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-border bg-surface px-3 text-xs font-semibold text-muted-foreground hover:text-foreground"
+            aria-label="Scanner un code-barres"
+          >
+            <Barcode className="h-4 w-4" />
+            Code
+          </button>
+        )}
         {module === "alimentation" && (
           <button
             type="button"
@@ -330,9 +343,7 @@ function StockTab({ module }: { module: StockModule }) {
                     selected={selected.has(it.id)}
                     onToggle={() => toggleOne(it.id)}
                     onDelete={() => del.mutate({ id: it.id, module })}
-                    onQty={(q) =>
-                      update.mutate({ id: it.id, module, patch: { quantity: q } })
-                    }
+                    onQty={(q) => update.mutate({ id: it.id, module, patch: { quantity: q } })}
                   />
                 ))}
               </ul>
@@ -344,6 +355,7 @@ function StockTab({ module }: { module: StockModule }) {
       {!selecting && <FabAdd onClick={() => setOpen(true)} />}
       {open && <AddItemSheet module={module} onClose={() => setOpen(false)} />}
       {scanOpen && <ScanSheet module={module} onClose={() => setScanOpen(false)} />}
+      {barcodeOpen && <BarcodeScannerSheet onClose={() => setBarcodeOpen(false)} />}
       {recipeOpen && <RecipeAssistantSheet onClose={() => setRecipeOpen(false)} />}
 
       {selecting && selected.size > 0 && (
@@ -354,17 +366,11 @@ function StockTab({ module }: { module: StockModule }) {
             const targets = (data ?? [])
               .filter((it) => selected.has(it.id))
               .map((it) => ({ id: it.id, quantity: Math.max(0, it.quantity + delta) }));
-            bulkAdj.mutate(
-              { items: targets, module },
-              { onSuccess: () => exitSelect() },
-            );
+            bulkAdj.mutate({ items: targets, module }, { onSuccess: () => exitSelect() });
           }}
           onDelete={() => {
             if (!confirm(`Supprimer ${selected.size} item(s) ?`)) return;
-            bulkDel.mutate(
-              { ids: [...selected], module },
-              { onSuccess: () => exitSelect() },
-            );
+            bulkDel.mutate({ ids: [...selected], module }, { onSuccess: () => exitSelect() });
           }}
         />
       )}
@@ -439,9 +445,7 @@ function ItemRow({
   selected?: boolean;
   onToggle?: () => void;
 }) {
-  const exp = item.expiration_date
-    ? parseISO(item.expiration_date as unknown as string)
-    : null;
+  const exp = item.expiration_date ? parseISO(item.expiration_date as unknown as string) : null;
   const daysLeft = exp ? differenceInDays(exp, new Date()) : null;
   const expState =
     daysLeft == null ? null : daysLeft < 0 ? "expired" : daysLeft <= 7 ? "soon" : "ok";
@@ -698,7 +702,11 @@ function AddItemSheet({ module, onClose }: { module: StockModule; onClose: () =>
             disabled={add.isPending}
             className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-gradient-primary text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-60"
           >
-            {add.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+            {add.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Plus className="h-4 w-4" />
+            )}
             Enregistrer
           </button>
         </form>
