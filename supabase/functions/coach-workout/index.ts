@@ -54,63 +54,33 @@ Deno.serve(async (req) => {
     const ALLOWED_LEVELS = ["débutant", "intermédiaire", "avancé"];
     const ALLOWED_GOALS = ["force", "hypertrophie", "endurance", "perte de poids", "remise en forme"];
     const ALLOWED_EQUIPMENT = ["salle complète", "haltères", "barre", "élastiques", "poids du corps", "machines", "kettlebell"];
+    const ALLOWED_INTENSITY = ["légère", "modérée", "intense"];
 
-    const rawMuscles: unknown = body.muscles;
-    if (!Array.isArray(rawMuscles) || rawMuscles.length === 0 || rawMuscles.length > 10) {
-      return fail("Sélectionne 1 à 10 groupes musculaires", 400);
-    }
-    const muscles: string[] = [];
-    for (const m of rawMuscles) {
-      if (typeof m !== "string" || m.length === 0 || m.length > 50) {
-        return fail("Groupe musculaire invalide", 400);
-      }
-      muscles.push(m);
-    }
-
+    const mode: "muscu" | "autre" = body.mode === "autre" ? "autre" : "muscu";
     const duration: number = Math.max(5, Math.min(240, Number(body.duration_minutes) || 45));
-
-    const eqRaw = typeof body.equipment === "string" ? body.equipment.slice(0, 100) : "salle complète";
-    const equipment = ALLOWED_EQUIPMENT.includes(eqRaw) ? eqRaw : "salle complète";
-
     const lvlRaw = typeof body.level === "string" ? body.level.slice(0, 100) : "intermédiaire";
     const level = ALLOWED_LEVELS.includes(lvlRaw) ? lvlRaw : "intermédiaire";
 
-    const goalRaw = typeof body.goal === "string" ? body.goal.slice(0, 100) : "hypertrophie";
-    const goal = ALLOWED_GOALS.includes(goalRaw) ? goalRaw : "hypertrophie";
+    let systemPrompt = "";
 
+    if (mode === "muscu") {
+      const rawMuscles: unknown = body.muscles;
+      if (!Array.isArray(rawMuscles) || rawMuscles.length === 0 || rawMuscles.length > 10) {
+        return fail("Sélectionne 1 à 10 groupes musculaires", 400);
+      }
+      const muscles: string[] = [];
+      for (const m of rawMuscles) {
+        if (typeof m !== "string" || m.length === 0 || m.length > 50) {
+          return fail("Groupe musculaire invalide", 400);
+        }
+        muscles.push(m);
+      }
+      const eqRaw = typeof body.equipment === "string" ? body.equipment.slice(0, 100) : "salle complète";
+      const equipment = ALLOWED_EQUIPMENT.includes(eqRaw) ? eqRaw : "salle complète";
+      const goalRaw = typeof body.goal === "string" ? body.goal.slice(0, 100) : "hypertrophie";
+      const goal = ALLOWED_GOALS.includes(goalRaw) ? goalRaw : "hypertrophie";
 
-    const tool = {
-      type: "function",
-      function: {
-        name: "save_workout",
-        description: "Enregistrer la séance générée",
-        parameters: {
-          type: "object",
-          properties: {
-            name: { type: "string", description: "Nom court et accrocheur de la séance, en français" },
-            duration_minutes: { type: "number" },
-            notes: { type: "string", description: "Conseils brefs (1-2 phrases) : échauffement, tempo, repos" },
-            exercises: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  name: { type: "string", description: "Nom de l'exercice en français" },
-                  sets: { type: "number" },
-                  reps: { type: "number" },
-                  weight: { type: "number", description: "Charge suggérée en kg, ou 0 pour poids du corps" },
-                },
-                required: ["name", "sets", "reps"],
-              },
-            },
-          },
-          required: ["name", "duration_minutes", "exercises"],
-          additionalProperties: false,
-        },
-      },
-    };
-
-    const systemPrompt = `Tu es un coach sportif expert. Génère une séance de musculation personnalisée en FRANÇAIS.
+      systemPrompt = `Tu es un coach sportif expert. Génère une séance de musculation personnalisée en FRANÇAIS.
 
 Contraintes :
 - Groupes musculaires ciblés : ${muscles.join(", ")}
@@ -123,9 +93,68 @@ Règles :
 - 4 à 7 exercices, du plus polyarticulaire au plus isolé
 - Sets : 3-5, Reps : adaptées à l'objectif (force 4-6, hypertrophie 8-12, endurance 12-20)
 - Charge en kg réaliste pour le niveau (0 si poids du corps)
+- muscles_worked = liste les groupes muscu sollicités (parmi: pectoraux, dos, épaules, biceps, triceps, jambes, fessiers, abdos, cardio)
 - Nom de séance court et motivant (ex: "Push intense", "Jambes power")
 - Notes : 1-2 phrases avec échauffement et conseil clé
 - Retourne STRICTEMENT du JSON via tool calling.`;
+    } else {
+      const activityRaw = typeof body.activity === "string" ? body.activity.trim().slice(0, 120) : "";
+      if (activityRaw.length < 2) return fail("Décris l'activité", 400);
+      const intRaw = typeof body.intensity === "string" ? body.intensity.slice(0, 50) : "modérée";
+      const intensity = ALLOWED_INTENSITY.includes(intRaw) ? intRaw : "modérée";
+
+      systemPrompt = `Tu es un coach sportif expert et pluridisciplinaire (pilates, natation, yoga, course, vélo, boxe, danse, etc.). Génère une séance structurée en FRANÇAIS pour l'activité demandée.
+
+Activité : ${activityRaw}
+Durée totale : ~${duration} minutes
+Niveau : ${level}
+Intensité : ${intensity}
+
+Règles :
+- Découpe la séance en 3 à 8 "blocs" (échauffement, blocs principaux, retour au calme) listés dans "exercises".
+- Pour chaque bloc : name = nom du bloc/mouvement, sets = nb de tours/séries (1 si en continu), reps = durée du bloc en MINUTES (entier), weight = 0.
+- La somme des reps (minutes) × sets doit approcher la durée totale.
+- muscles_worked : liste OBLIGATOIRE des groupes musculaires principalement sollicités par cette activité, parmi : pectoraux, dos, épaules, biceps, triceps, jambes, fessiers, abdos, cardio. Sois précis et réaliste pour l'activité.
+- Nom de séance court (ex: "Pilates Lagree express", "Crawl endurance").
+- Notes : 1-2 phrases (échauffement, conseil clé, respiration).
+- Retourne STRICTEMENT du JSON via tool calling.`;
+    }
+
+    const tool = {
+      type: "function",
+      function: {
+        name: "save_workout",
+        description: "Enregistrer la séance générée",
+        parameters: {
+          type: "object",
+          properties: {
+            name: { type: "string", description: "Nom court et accrocheur de la séance, en français" },
+            duration_minutes: { type: "number" },
+            notes: { type: "string", description: "Conseils brefs (1-2 phrases)" },
+            muscles_worked: {
+              type: "array",
+              items: { type: "string" },
+              description: "Groupes musculaires principalement sollicités",
+            },
+            exercises: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  name: { type: "string", description: "Nom de l'exercice ou du bloc" },
+                  sets: { type: "number" },
+                  reps: { type: "number", description: "Reps OU durée en minutes pour les activités non-muscu" },
+                  weight: { type: "number", description: "Charge en kg, ou 0" },
+                },
+                required: ["name", "sets", "reps"],
+              },
+            },
+          },
+          required: ["name", "duration_minutes", "exercises", "muscles_worked"],
+          additionalProperties: false,
+        },
+      },
+    };
 
     const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
