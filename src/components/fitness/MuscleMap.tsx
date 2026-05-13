@@ -12,10 +12,10 @@ import { BackView } from "./muscles/back";
 import { Loader2 } from "lucide-react";
 
 const FILL_COLORS: Record<RecoveryStatus, string> = {
-  fatigued: "#EF444455",
-  recovering: "#F9731655",
-  ready: "#22C55E55",
-  unknown: "#2D374855",
+  fatigued: "#EF444433",
+  recovering: "#F9731633",
+  ready: "#22C55E33",
+  unknown: "#1F293700",
 };
 
 const STROKE_COLORS: Record<RecoveryStatus, string> = {
@@ -95,7 +95,7 @@ export function MuscleMap() {
       </div>
 
       {/* Silhouettes côte à côte */}
-      <div className="mx-auto flex max-w-[320px] justify-center gap-1">
+      <div className="mx-auto flex max-w-[400px] justify-center gap-1">
         <div className="flex flex-1 flex-col items-center">
           <span className="mb-1 text-[9px] font-semibold uppercase tracking-wider text-white/30">
             Face
