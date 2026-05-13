@@ -3,8 +3,8 @@ import { Home, Package, Dumbbell, FileText, User } from "lucide-react";
 
 const tabs = [
   { to: "/", label: "Accueil", icon: Home },
-  { to: "/stocks", label: "Stocks", icon: Package },
   { to: "/fitness", label: "Fitness", icon: Dumbbell },
+  { to: "/stocks", label: "Stocks", icon: Package },
   { to: "/documents", label: "Documents", icon: FileText },
   { to: "/profil", label: "Profil", icon: User },
 ] as const;
