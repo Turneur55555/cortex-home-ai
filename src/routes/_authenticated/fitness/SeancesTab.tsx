@@ -551,7 +551,7 @@ function WorkoutSheet({
     name: template?.name ?? "",
     date: format(new Date(), "yyyy-MM-dd"),
     duration_minutes: "",
-    notes: "",
+    notes: template?.notes ?? "",
   });
   const [exercises, setExercises] = useState<
     Array<{ name: string; sets: string; reps: string; weight: string; image_path: string | null }>
