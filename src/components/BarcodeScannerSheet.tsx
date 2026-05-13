@@ -11,7 +11,8 @@ import {
   Package,
   Apple,
 } from "lucide-react";
-import { BrowserMultiFormatReader, Result } from "@zxing/library";
+import { BrowserMultiFormatReader } from "@zxing/browser";
+import type { Result } from "@zxing/library";
 import { toast } from "sonner";
 import { useAddStockItem } from "@/hooks/use-stocks";
 import { useAddNutrition } from "@/hooks/use-fitness";
