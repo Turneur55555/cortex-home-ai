@@ -47,6 +47,7 @@ interface Product {
 export function BarcodeScannerSheet({ onClose }: { onClose: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const readerRef = useRef<BrowserMultiFormatReader | null>(null);
+  const controlsRef = useRef<{ stop: () => void } | null>(null);
 
   const [scanning, setScanning] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -61,10 +62,11 @@ export function BarcodeScannerSheet({ onClose }: { onClose: () => void }) {
 
   const stopCamera = useCallback(() => {
     try {
-      readerRef.current?.reset?.();
+      controlsRef.current?.stop();
     } catch {
       // ignore
     }
+    controlsRef.current = null;
     const stream = videoRef.current?.srcObject as MediaStream | null;
     stream?.getTracks()?.forEach((t) => t.stop());
     if (videoRef.current) {
