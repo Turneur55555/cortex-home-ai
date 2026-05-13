@@ -138,7 +138,7 @@ export function BarcodeScannerSheet({ onClose }: { onClose: () => void }) {
         readerRef.current = new BrowserMultiFormatReader();
       }
 
-      readerRef.current.decodeFromStream(
+      controlsRef.current = await readerRef.current.decodeFromStream(
         stream,
         videoRef.current,
         (result: Result | undefined) => {
