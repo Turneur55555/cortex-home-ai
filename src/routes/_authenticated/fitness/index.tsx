@@ -5,7 +5,7 @@ import { CorpsTab } from "./CorpsTab";
 import { SeancesTab } from "./SeancesTab";
 import { NutritionTab } from "./NutritionTab";
 
-export const Route = createFileRoute("/_authenticated/fitness")({
+export const Route = createFileRoute("/_authenticated/fitness/")({
   head: () => ({
     meta: [
       { title: "Fitness — ICORTEX" },
