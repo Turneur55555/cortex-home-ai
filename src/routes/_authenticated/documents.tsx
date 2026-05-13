@@ -12,13 +12,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import {
   Select,
   SelectContent,
@@ -109,10 +103,14 @@ function DocumentsPage() {
                   Module cible
                 </label>
                 <Select value={module} onValueChange={(v) => setModule(v as DocModuleSelection)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     {(Object.keys(MODULE_SELECTION_LABELS) as DocModuleSelection[]).map((m) => (
-                      <SelectItem key={m} value={m}>{MODULE_SELECTION_LABELS[m]}</SelectItem>
+                      <SelectItem key={m} value={m}>
+                        {MODULE_SELECTION_LABELS[m]}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -127,9 +125,7 @@ function DocumentsPage() {
                   accept="application/pdf"
                   multiple
                   className="hidden"
-                  onChange={(e) =>
-                    setPickedFiles(e.target.files ? Array.from(e.target.files) : [])
-                  }
+                  onChange={(e) => setPickedFiles(e.target.files ? Array.from(e.target.files) : [])}
                 />
                 <Button
                   variant="outline"
@@ -145,7 +141,9 @@ function DocumentsPage() {
                         : `${pickedFiles.length} PDF sélectionnés`}
                   </span>
                 </Button>
-                <p className="mt-1 text-[11px] text-muted-foreground">PDF, 15 Mo max par fichier.</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  PDF, 15 Mo max par fichier.
+                </p>
               </div>
               <Button
                 className="gap-1.5"
@@ -192,9 +190,7 @@ function DocumentsPage() {
             Aucun PDF analysé pour l'instant.
           </div>
         ) : (
-          docs.data.map((d) => (
-            <DocCard key={d.id} doc={d} onDelete={() => remove.mutate(d)} />
-          ))
+          docs.data.map((d) => <DocCard key={d.id} doc={d} onDelete={() => remove.mutate(d)} />)
         )}
       </section>
     </main>
@@ -257,7 +253,8 @@ function ResultCard({
 
       <div className="mt-3 rounded-xl bg-surface px-3 py-2 text-xs text-muted-foreground">
         <span className="font-semibold text-foreground">{items.length}</span> élément(s) extrait(s)
-        prêt(s) à déverser dans <span className="font-semibold text-foreground">{MODULE_LABELS[targetModule]}</span>.
+        prêt(s) à déverser dans{" "}
+        <span className="font-semibold text-foreground">{MODULE_LABELS[targetModule]}</span>.
       </div>
 
       <div className="mt-3 flex gap-2">
@@ -267,10 +264,16 @@ function ResultCard({
           onClick={pour}
           disabled={pouring || items.length === 0 || targetModule === "documents"}
         >
-          {pouring ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChevronDown className="h-4 w-4" />}
+          {pouring ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <ChevronDown className="h-4 w-4" />
+          )}
           Déverser
         </Button>
-        <Button size="sm" variant="ghost" onClick={onDismiss}>Fermer</Button>
+        <Button size="sm" variant="ghost" onClick={onDismiss}>
+          Fermer
+        </Button>
       </div>
     </div>
   );
@@ -357,7 +360,9 @@ function DocCard({ doc, onDelete }: { doc: Tables<"documents">; onDelete: () => 
                 )}
                 Déverser ({extracted.length}) vers {MODULE_LABELS[targetModule]}
               </Button>
-            ) : <span />}
+            ) : (
+              <span />
+            )}
             <Button size="sm" variant="ghost" className="text-destructive" onClick={onDelete}>
               <Trash2 className="h-4 w-4" /> Supprimer
             </Button>

@@ -121,18 +121,31 @@ Génère EXACTEMENT ce JSON (et rien d'autre) :
 async function main() {
   console.log("Generating FRONT and BACK in parallel...");
   const [frontData, backData] = await Promise.all([
-    callClaude(SYSTEM, PROMPT_FRONT).then((d) => { console.log("✓ FRONT done"); return d; }),
-    callClaude(SYSTEM, PROMPT_BACK).then((d) => { console.log("✓ BACK done"); return d; }),
+    callClaude(SYSTEM, PROMPT_FRONT).then((d) => {
+      console.log("✓ FRONT done");
+      return d;
+    }),
+    callClaude(SYSTEM, PROMPT_BACK).then((d) => {
+      console.log("✓ BACK done");
+      return d;
+    }),
   ]);
 
   fs.mkdirSync("src/data", { recursive: true });
   fs.writeFileSync(
     "src/data/bodymap-paths.json",
-    JSON.stringify({ front: frontData, back: backData, generatedAt: new Date().toISOString() }, null, 2)
+    JSON.stringify(
+      { front: frontData, back: backData, generatedAt: new Date().toISOString() },
+      null,
+      2,
+    ),
   );
   console.log("✓ src/data/bodymap-paths.json generated");
   console.log(`  Front muscles: ${frontData.muscles.length}`);
   console.log(`  Back muscles: ${backData.muscles.length}`);
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

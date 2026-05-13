@@ -364,11 +364,7 @@ function WorkoutSheet({
   );
   const [uploading, setUploading] = useState<number | null>(null);
 
-  const updateEx = (
-    i: number,
-    k: keyof (typeof exercises)[number],
-    v: string | null,
-  ) => {
+  const updateEx = (i: number, k: keyof (typeof exercises)[number], v: string | null) => {
     setExercises((arr) => arr.map((e, idx) => (idx === i ? { ...e, [k]: v } : e)));
   };
 

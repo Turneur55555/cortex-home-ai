@@ -9,26 +9,48 @@ import {
 import { Loader2 } from "lucide-react";
 
 const MUSCLE_ID_MAP: Record<string, string> = {
-  pec_l: "pectoraux", pec_r: "pectoraux",
-  delt_fl: "epaules", delt_fr: "epaules",
-  rdel_l: "epaules", rdel_r: "epaules",
-  bic_l: "biceps", bic_r: "biceps",
-  tri_l: "triceps", tri_r: "triceps",
-  fore_l: "avant-bras", fore_r: "avant-bras",
-  fare_l: "avant-bras", fare_r: "avant-bras",
-  abs_1l: "abdos", abs_1r: "abdos",
-  abs_2l: "abdos", abs_2r: "abdos",
-  abs_3l: "abdos", abs_3r: "abdos",
-  obl_l: "obliques", obl_r: "obliques",
-  quad_l: "quadriceps", quad_r: "quadriceps",
-  tib_l: "mollets", tib_r: "mollets",
-  calf_fl: "mollets", calf_fr: "mollets",
-  trap: "trapeze", trap_l: "trapeze", trap_r: "trapeze",
-  lat_l: "dos", lat_r: "dos",
+  pec_l: "pectoraux",
+  pec_r: "pectoraux",
+  delt_fl: "epaules",
+  delt_fr: "epaules",
+  rdel_l: "epaules",
+  rdel_r: "epaules",
+  bic_l: "biceps",
+  bic_r: "biceps",
+  tri_l: "triceps",
+  tri_r: "triceps",
+  fore_l: "avant-bras",
+  fore_r: "avant-bras",
+  fare_l: "avant-bras",
+  fare_r: "avant-bras",
+  abs_1l: "abdos",
+  abs_1r: "abdos",
+  abs_2l: "abdos",
+  abs_2r: "abdos",
+  abs_3l: "abdos",
+  abs_3r: "abdos",
+  obl_l: "obliques",
+  obl_r: "obliques",
+  quad_l: "quadriceps",
+  quad_r: "quadriceps",
+  tib_l: "mollets",
+  tib_r: "mollets",
+  calf_fl: "mollets",
+  calf_fr: "mollets",
+  trap: "trapeze",
+  trap_l: "trapeze",
+  trap_r: "trapeze",
+  lat_l: "dos",
+  lat_r: "dos",
   lb: "lombaires",
-  glu_l: "fessiers", glu_r: "fessiers",
-  ham_l: "ischio", ham_r: "ischio",
-  calf_bl: "mollets", calf_br: "mollets",
+  glu_l: "fessiers",
+  glu_r: "fessiers",
+  ham_l: "ischio",
+  ham_r: "ischio",
+  calf_bl: "mollets",
+  calf_br: "mollets",
+  calf_bl_2: "mollets",
+  calf_br_2: "mollets",
 };
 
 const STATE_COLORS: Record<RecoveryStatus, { fill: string; stroke: string }> = {
@@ -124,7 +146,7 @@ export function MuscleBodyMap() {
       workouts.map((w) => ({
         date: w.date,
         exercises: w.exercises?.map((ex) => ({ name: ex.name })) ?? null,
-      }))
+      })),
     );
   }, [workouts]);
 
@@ -135,7 +157,7 @@ export function MuscleBodyMap() {
       const r = recoveryMap.get(muscleId as never);
       return STATE_COLORS[r?.status ?? "unknown"];
     },
-    [recoveryMap]
+    [recoveryMap],
   );
 
   const handleMuscle = useCallback(
@@ -150,7 +172,7 @@ export function MuscleBodyMap() {
       if (!rect) return;
       setTooltip({ x: e.clientX - rect.left, y: e.clientY - rect.top - 48, recovery: r });
     },
-    [recoveryMap]
+    [recoveryMap],
   );
 
   const hideTooltip = useCallback(() => setTooltip(null), []);

@@ -36,13 +36,9 @@ export function NotificationsBell() {
   useEffect(() => {
     const channel = supabase
       .channel("items_alerts_realtime")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "items" },
-        () => {
-          qc.invalidateQueries({ queryKey: ["alerts_items"] });
-        },
-      )
+      .on("postgres_changes", { event: "*", schema: "public", table: "items" }, () => {
+        qc.invalidateQueries({ queryKey: ["alerts_items"] });
+      })
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
@@ -89,9 +85,7 @@ export function NotificationsBell() {
   };
 
   const dismissAll = () => {
-    alerts.forEach((a) =>
-      setDismissedKey(a.id, (a.expiration_date as unknown as string) ?? null),
-    );
+    alerts.forEach((a) => setDismissedKey(a.id, (a.expiration_date as unknown as string) ?? null));
     setDismissed(getDismissed());
   };
 
@@ -190,8 +184,8 @@ export function NotificationsBell() {
                             {expired
                               ? `Expiré depuis ${Math.abs(a.days)} j`
                               : a.days === 0
-                              ? "Expire aujourd'hui"
-                              : `Expire dans ${a.days} j`}
+                                ? "Expire aujourd'hui"
+                                : `Expire dans ${a.days} j`}
                             {" • "}
                             {format(parseISO(exp), "d MMM yyyy", { locale: fr })}
                           </p>

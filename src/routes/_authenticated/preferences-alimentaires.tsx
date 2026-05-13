@@ -35,7 +35,9 @@ function useFoodPreferences() {
   return useQuery({
     queryKey: ["food_preferences"],
     queryFn: async (): Promise<Prefs | null> => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) return null;
       const { data, error } = await supabase
         .from("food_preferences")
@@ -52,7 +54,9 @@ function useUpsertFoodPreferences() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: Prefs) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
       const { error } = await supabase
         .from("food_preferences")
@@ -169,7 +173,9 @@ function PreferencesPage() {
               className="mt-0.5 h-4 w-4 accent-primary"
             />
             <div className="flex-1">
-              <p className="text-sm font-semibold">Ne jamais mélanger viande et produits laitiers</p>
+              <p className="text-sm font-semibold">
+                Ne jamais mélanger viande et produits laitiers
+              </p>
               <p className="mt-0.5 text-xs text-muted-foreground">
                 Règle casher : l'assistant ne proposera aucune recette combinant les deux.
               </p>
@@ -195,7 +201,11 @@ function PreferencesPage() {
             disabled={upsert.isPending}
             className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-gradient-primary text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-60"
           >
-            {upsert.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            {upsert.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4" />
+            )}
             Enregistrer
           </button>
         </form>

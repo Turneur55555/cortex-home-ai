@@ -14,9 +14,10 @@ const ALLOWED_ORIGINS = [
 
 function buildCors(req: Request) {
   const origin = req.headers.get("origin") ?? ALLOWED_ORIGINS[0];
-  const allow = ALLOWED_ORIGINS.includes(origin) || origin.endsWith(".lovable.app")
-    ? origin
-    : ALLOWED_ORIGINS[0];
+  const allow =
+    ALLOWED_ORIGINS.includes(origin) || origin.endsWith(".lovable.app")
+      ? origin
+      : ALLOWED_ORIGINS[0];
   return {
     "Access-Control-Allow-Origin": allow,
     "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -87,10 +88,10 @@ Deno.serve(async (req) => {
       return fail("Module invalide", 400);
     }
     // Strip control chars / delimiters to mitigate prompt injection via the document title.
-    const name: string = typeof rawName === "string"
-      ? rawName.replace(/[\u0000-\u001F\u007F<>]/g, " ").slice(0, 200)
-      : "document";
-
+    const name: string =
+      typeof rawName === "string"
+        ? rawName.replace(/[\u0000-\u001F\u007F<>]/g, " ").slice(0, 200)
+        : "document";
 
     const { data: file, error: dlErr } = await supa.storage
       .from("pdf-documents")

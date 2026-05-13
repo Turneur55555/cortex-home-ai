@@ -19,7 +19,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Listener FIRST (avoid missing events). Supabase fires INITIAL_SESSION
     // with a server-validated session shortly after subscribing, so we don't
     // need a separate getSession() call (which only reads localStorage).
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession);
       setLoading(false);
     });

@@ -112,11 +112,7 @@ export function CorpsTab() {
                   <stop offset="100%" stopColor="var(--color-primary)" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid
-                stroke="var(--color-border)"
-                strokeDasharray="3 3"
-                vertical={false}
-              />
+              <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" vertical={false} />
               <XAxis
                 dataKey="date"
                 tick={{ fontSize: 10, fill: "var(--color-muted-foreground)" }}
@@ -268,8 +264,7 @@ function BodySilhouette({
     </g>
   );
 
-  const fmt = (v: number | null | undefined, unit = "cm") =>
-    v != null ? `${v} ${unit}` : "—";
+  const fmt = (v: number | null | undefined, unit = "cm") => (v != null ? `${v} ${unit}` : "—");
 
   const activeLabel = hover
     ? `${ZONE_LABELS[hover]} · ${fmt(latest?.[hover as keyof BodyRow] as number | null | undefined)}`
@@ -636,9 +631,7 @@ function MeasurementsCard({
               <p className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                 {g.title}
               </p>
-              <div
-                className={`grid gap-2 ${g.items.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}
-              >
+              <div className={`grid gap-2 ${g.items.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}>
                 {g.items.map((it) => (
                   <MeasurementChip
                     key={it.key}
@@ -668,10 +661,8 @@ function MeasurementChip({
   previous: number | null;
   accent: string;
 }) {
-  const delta =
-    value != null && previous != null ? Math.round((value - previous) * 10) / 10 : null;
-  const trend =
-    delta == null || delta === 0 ? "flat" : delta > 0 ? "up" : "down";
+  const delta = value != null && previous != null ? Math.round((value - previous) * 10) / 10 : null;
+  const trend = delta == null || delta === 0 ? "flat" : delta > 0 ? "up" : "down";
 
   return (
     <div
@@ -684,9 +675,7 @@ function MeasurementChip({
         <span className="text-lg font-bold tabular-nums text-foreground">
           {value != null ? value : "—"}
         </span>
-        {value != null && (
-          <span className="text-[10px] font-medium text-muted-foreground">cm</span>
-        )}
+        {value != null && <span className="text-[10px] font-medium text-muted-foreground">cm</span>}
       </div>
       {delta != null && (
         <div

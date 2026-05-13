@@ -14,7 +14,8 @@ export function ChatBot() {
     {
       id: "welcome",
       role: "assistant",
-      content: "Salut ! Je suis l'assistant ICORTEX. Pose-moi une question sur tes stocks, ton fitness ou tes documents.",
+      content:
+        "Salut ! Je suis l'assistant ICORTEX. Pose-moi une question sur tes stocks, ton fitness ou tes documents.",
     },
   ]);
   const [input, setInput] = useState("");

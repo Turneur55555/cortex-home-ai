@@ -54,7 +54,8 @@ Deno.serve(async (req) => {
     if (!image_base64 || typeof image_base64 !== "string") return fail("Image manquante", 400);
     if (image_base64.length > 12_000_000) return fail("Image trop volumineuse", 413);
 
-    const mt = typeof mime_type === "string" && mime_type.startsWith("image/") ? mime_type : "image/jpeg";
+    const mt =
+      typeof mime_type === "string" && mime_type.startsWith("image/") ? mime_type : "image/jpeg";
 
     const tool = {
       type: "function",
@@ -64,7 +65,10 @@ Deno.serve(async (req) => {
         parameters: {
           type: "object",
           properties: {
-            name: { type: "string", description: "Nom court du repas en français (ex: 'Poulet riz brocolis')" },
+            name: {
+              type: "string",
+              description: "Nom court du repas en français (ex: 'Poulet riz brocolis')",
+            },
             meal: {
               type: "string",
               enum: ["petit-dej", "dejeuner", "diner", "collation"],
@@ -75,7 +79,10 @@ Deno.serve(async (req) => {
             carbs: { type: "number", description: "Glucides estimés totaux (g)" },
             fats: { type: "number", description: "Lipides estimés totaux (g)" },
             confidence: { type: "number", description: "0..1 confiance dans l'estimation" },
-            details: { type: "string", description: "1-2 phrases : composants identifiés et hypothèses de portion" },
+            details: {
+              type: "string",
+              description: "1-2 phrases : composants identifiés et hypothèses de portion",
+            },
           },
           required: ["name", "calories", "proteins", "carbs", "fats"],
           additionalProperties: false,
@@ -121,7 +128,8 @@ Retourne STRICTEMENT du JSON via tool calling.`;
 
     if (!aiRes.ok) {
       const txt = await aiRes.text();
-      if (aiRes.status === 429) return fail("Limite de requêtes atteinte. Réessayez dans un instant.", 429);
+      if (aiRes.status === 429)
+        return fail("Limite de requêtes atteinte. Réessayez dans un instant.", 429);
       if (aiRes.status === 402) return fail("Crédits IA épuisés.", 402);
       return fail("Erreur d'analyse IA", 502, `${aiRes.status} ${txt.slice(0, 500)}`);
     }

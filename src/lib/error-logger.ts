@@ -21,7 +21,10 @@ type LogPayload = {
 const recent = new Map<string, number>();
 const DEDUPE_MS = 5000;
 
-export async function logError(payload: LogPayload, opts?: { silent?: boolean }): Promise<string | null> {
+export async function logError(
+  payload: LogPayload,
+  opts?: { silent?: boolean },
+): Promise<string | null> {
   try {
     const key = `${payload.level ?? "error"}|${payload.message}|${payload.source ?? ""}|${payload.line ?? ""}`;
     const now = Date.now();
@@ -30,7 +33,9 @@ export async function logError(payload: LogPayload, opts?: { silent?: boolean })
     recent.set(key, now);
 
     const support_id = generateSupportId();
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
     const row = {
       support_id,
@@ -89,7 +94,10 @@ export function installErrorLogger() {
 
   window.addEventListener("unhandledrejection", (event) => {
     const reason = event.reason;
-    const err = reason instanceof Error ? reason : new Error(typeof reason === "string" ? reason : JSON.stringify(reason));
+    const err =
+      reason instanceof Error
+        ? reason
+        : new Error(typeof reason === "string" ? reason : JSON.stringify(reason));
     void logError({
       level: "error",
       message: `Unhandled rejection: ${err.message}`,
@@ -104,16 +112,28 @@ export function installErrorLogger() {
     try {
       const first = args[0];
       const err = args.find((a) => a instanceof Error) as Error | undefined;
-      const message = err?.message
-        ?? (typeof first === "string" ? first : args.map((a) => {
-          try { return typeof a === "string" ? a : JSON.stringify(a); } catch { return String(a); }
-        }).join(" "));
-      void logError({
-        level: "error",
-        message: message || "console.error",
-        stack: err?.stack ?? null,
-        context: { args_count: args.length },
-      }, { silent: true });
+      const message =
+        err?.message ??
+        (typeof first === "string"
+          ? first
+          : args
+              .map((a) => {
+                try {
+                  return typeof a === "string" ? a : JSON.stringify(a);
+                } catch {
+                  return String(a);
+                }
+              })
+              .join(" "));
+      void logError(
+        {
+          level: "error",
+          message: message || "console.error",
+          stack: err?.stack ?? null,
+          context: { args_count: args.length },
+        },
+        { silent: true },
+      );
     } catch {
       /* noop */
     }

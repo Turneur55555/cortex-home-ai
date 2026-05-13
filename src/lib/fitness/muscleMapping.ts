@@ -36,16 +36,25 @@ export const MUSCLE_META: Record<
 
 const EXERCISE_TO_MUSCLES: Array<{ pattern: RegExp; muscles: MuscleId[] }> = [
   // Pectoraux
-  { pattern: /bench press|développé.?couché|pompes?|push.?up|dips?.*pec|écarté|butterfly|chest/i, muscles: ["pectoraux", "triceps", "epaules"] },
+  {
+    pattern: /bench press|développé.?couché|pompes?|push.?up|dips?.*pec|écarté|butterfly|chest/i,
+    muscles: ["pectoraux", "triceps", "epaules"],
+  },
   { pattern: /développé.?incliné|incline/i, muscles: ["pectoraux", "epaules", "triceps"] },
   { pattern: /développé.?décliné|decline/i, muscles: ["pectoraux", "triceps"] },
 
   // Dos
-  { pattern: /tirage|rowing|row|pull.?down|lat.?pull|traction|chin.?up|pull.?up/i, muscles: ["dos", "biceps"] },
+  {
+    pattern: /tirage|rowing|row|pull.?down|lat.?pull|traction|chin.?up|pull.?up/i,
+    muscles: ["dos", "biceps"],
+  },
   { pattern: /deadlift|soulevé.?de.?terre/i, muscles: ["dos", "lombaires", "fessiers", "ischio"] },
 
   // Épaules
-  { pattern: /développé.?militaire|overhead.?press|shoulder.?press|press.?épaule/i, muscles: ["epaules", "triceps"] },
+  {
+    pattern: /développé.?militaire|overhead.?press|shoulder.?press|press.?épaule/i,
+    muscles: ["epaules", "triceps"],
+  },
   { pattern: /élévation.?latérale|lateral.?raise/i, muscles: ["epaules"] },
   { pattern: /élévation.?frontale|front.?raise/i, muscles: ["epaules"] },
   { pattern: /oiseau|face.?pull|rear.?delt|reverse.?fly/i, muscles: ["epaules", "trapeze"] },
@@ -57,7 +66,10 @@ const EXERCISE_TO_MUSCLES: Array<{ pattern: RegExp; muscles: MuscleId[] }> = [
   { pattern: /wrist.?curl|avant.?bras|forearm/i, muscles: ["avant-bras"] },
 
   // Jambes
-  { pattern: /squat|presse.?cuisse|leg.?press|fente|lunge|hack/i, muscles: ["quadriceps", "fessiers"] },
+  {
+    pattern: /squat|presse.?cuisse|leg.?press|fente|lunge|hack/i,
+    muscles: ["quadriceps", "fessiers"],
+  },
   { pattern: /leg.?extension|extension.?jambe/i, muscles: ["quadriceps"] },
   { pattern: /leg.?curl|ischio|hamstring/i, muscles: ["ischio"] },
   { pattern: /hip.?thrust|pont.?fessier|glute/i, muscles: ["fessiers"] },
@@ -68,7 +80,10 @@ const EXERCISE_TO_MUSCLES: Array<{ pattern: RegExp; muscles: MuscleId[] }> = [
   { pattern: /oblique|rotation|russian.?twist|wood.?chop/i, muscles: ["obliques", "abdos"] },
 
   // Lombaires
-  { pattern: /extension.?lombaire|back.?extension|hyperextension|good.?morning/i, muscles: ["lombaires"] },
+  {
+    pattern: /extension.?lombaire|back.?extension|hyperextension|good.?morning/i,
+    muscles: ["lombaires"],
+  },
 
   // Cardio — on ne mappe pas, pas de muscle spécifique
 ];

@@ -22,8 +22,15 @@ function buildCors(req: Request) {
 }
 
 const MUSCLES = [
-  "pectoraux", "dos", "épaules", "biceps", "triceps",
-  "jambes", "fessiers", "abdos", "cardio",
+  "pectoraux",
+  "dos",
+  "épaules",
+  "biceps",
+  "triceps",
+  "jambes",
+  "fessiers",
+  "abdos",
+  "cardio",
 ];
 
 Deno.serve(async (req) => {
@@ -33,7 +40,8 @@ Deno.serve(async (req) => {
   const fail = (msg: string, status = 400, internal?: unknown) => {
     if (internal) console.error("[muscle-readiness]", msg, internal);
     return new Response(JSON.stringify({ error: msg }), {
-      status, headers: { ...cors, "Content-Type": "application/json" },
+      status,
+      headers: { ...cors, "Content-Type": "application/json" },
     });
   };
 
@@ -42,7 +50,8 @@ Deno.serve(async (req) => {
     if (!LOVABLE_API_KEY) return fail("Service indisponible", 500);
 
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-    const SUPABASE_ANON = Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY")!;
+    const SUPABASE_ANON =
+      Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY")!;
     const auth = req.headers.get("Authorization") ?? "";
     const supa = createClient(SUPABASE_URL, SUPABASE_ANON, {
       global: { headers: { Authorization: auth } },
@@ -68,9 +77,19 @@ Deno.serve(async (req) => {
     const summary = (workouts ?? []).map((w) => ({
       date: w.date,
       name: w.name,
-      exercises: (w.exercises ?? []).map((ex: { name: string; sets: number | null; reps: number | null; weight: number | null }) => ({
-        name: ex.name, sets: ex.sets, reps: ex.reps, weight: ex.weight,
-      })),
+      exercises: (w.exercises ?? []).map(
+        (ex: {
+          name: string;
+          sets: number | null;
+          reps: number | null;
+          weight: number | null;
+        }) => ({
+          name: ex.name,
+          sets: ex.sets,
+          reps: ex.reps,
+          weight: ex.weight,
+        }),
+      ),
     }));
 
     const today = new Date().toISOString().slice(0, 10);
@@ -90,13 +109,37 @@ Deno.serve(async (req) => {
                 type: "object",
                 properties: {
                   muscle: { type: "string", enum: MUSCLES },
-                  last_trained: { type: "string", description: "Date YYYY-MM-DD de dernière sollicitation" },
-                  hours_since_last: { type: "number", description: "Heures écoulées depuis la dernière sollicitation" },
-                  recovery_window_hours: { type: "number", enum: [48, 72], description: "Fenêtre de récupération appliquée (48h petits muscles, 72h gros muscles)" },
-                  hours_remaining: { type: "number", description: "Heures restantes avant récupération complète (>=0)" },
-                  reason: { type: "string", description: "Explication détaillée (1-2 phrases) en français mentionnant la fenêtre 48h/72h appliquée" },
+                  last_trained: {
+                    type: "string",
+                    description: "Date YYYY-MM-DD de dernière sollicitation",
+                  },
+                  hours_since_last: {
+                    type: "number",
+                    description: "Heures écoulées depuis la dernière sollicitation",
+                  },
+                  recovery_window_hours: {
+                    type: "number",
+                    enum: [48, 72],
+                    description:
+                      "Fenêtre de récupération appliquée (48h petits muscles, 72h gros muscles)",
+                  },
+                  hours_remaining: {
+                    type: "number",
+                    description: "Heures restantes avant récupération complète (>=0)",
+                  },
+                  reason: {
+                    type: "string",
+                    description:
+                      "Explication détaillée (1-2 phrases) en français mentionnant la fenêtre 48h/72h appliquée",
+                  },
                 },
-                required: ["muscle", "reason", "recovery_window_hours", "hours_since_last", "hours_remaining"],
+                required: [
+                  "muscle",
+                  "reason",
+                  "recovery_window_hours",
+                  "hours_since_last",
+                  "hours_remaining",
+                ],
               },
             },
             recommended: {
@@ -106,15 +149,33 @@ Deno.serve(async (req) => {
                 type: "object",
                 properties: {
                   muscle: { type: "string", enum: MUSCLES },
-                  last_trained: { type: "string", description: "Date YYYY-MM-DD de dernière sollicitation, ou null si jamais" },
-                  hours_since_last: { type: "number", description: "Heures écoulées depuis la dernière sollicitation (0 si jamais sur la fenêtre)" },
-                  recovery_window_hours: { type: "number", enum: [48, 72], description: "Fenêtre de récupération du muscle (48h petits, 72h gros)" },
-                  reason: { type: "string", description: "Explication détaillée (1-2 phrases) en français : pourquoi ce muscle est prêt, en référant à la fenêtre 48h/72h" },
+                  last_trained: {
+                    type: "string",
+                    description: "Date YYYY-MM-DD de dernière sollicitation, ou null si jamais",
+                  },
+                  hours_since_last: {
+                    type: "number",
+                    description:
+                      "Heures écoulées depuis la dernière sollicitation (0 si jamais sur la fenêtre)",
+                  },
+                  recovery_window_hours: {
+                    type: "number",
+                    enum: [48, 72],
+                    description: "Fenêtre de récupération du muscle (48h petits, 72h gros)",
+                  },
+                  reason: {
+                    type: "string",
+                    description:
+                      "Explication détaillée (1-2 phrases) en français : pourquoi ce muscle est prêt, en référant à la fenêtre 48h/72h",
+                  },
                 },
                 required: ["muscle", "reason", "recovery_window_hours"],
               },
             },
-            advice: { type: "string", description: "Conseil global court (1-2 phrases) en français" },
+            advice: {
+              type: "string",
+              description: "Conseil global court (1-2 phrases) en français",
+            },
           },
           required: ["fatigued", "recommended", "advice"],
           additionalProperties: false,

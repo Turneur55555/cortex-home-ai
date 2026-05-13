@@ -21,7 +21,12 @@ function buildCors(req: Request) {
   };
 }
 
-type Item = { name: string; quantity?: number | null; unit?: string | null; expiration_date?: string | null };
+type Item = {
+  name: string;
+  quantity?: number | null;
+  unit?: string | null;
+  expiration_date?: string | null;
+};
 type Prefs = {
   allergies: string[];
   foods_to_avoid: string[];
@@ -59,7 +64,11 @@ Deno.serve(async (req) => {
     const rl = await checkRateLimit(supa, userData.user.id, "recipe_assistant", 20);
     if (!rl.ok) return fail("Limite atteinte (20 demandes/h). Réessaie plus tard.", 429);
 
-    const { items: rawItems, preferences: rawPrefs, prompt } = (await req.json()) as {
+    const {
+      items: rawItems,
+      preferences: rawPrefs,
+      prompt,
+    } = (await req.json()) as {
       items: Item[];
       preferences: Prefs;
       prompt?: string;
@@ -81,7 +90,8 @@ Deno.serve(async (req) => {
         name,
         quantity: typeof it.quantity === "number" ? it.quantity : null,
         unit: typeof it.unit === "string" ? it.unit.slice(0, 30) : null,
-        expiration_date: typeof it.expiration_date === "string" ? it.expiration_date.slice(0, 30) : null,
+        expiration_date:
+          typeof it.expiration_date === "string" ? it.expiration_date.slice(0, 30) : null,
       });
     }
 
@@ -114,7 +124,12 @@ Privilégie les ingrédients qui expirent bientôt. Réponds en JSON valide uniq
 {"recipes":[{"title":"...","time_minutes":number,"difficulty":"facile|moyen|difficile","ingredients_used":["..."],"missing_ingredients":["..."],"steps":["..."],"why_fits":"..."}]}`;
 
     const stockList = items.length
-      ? items.map((i) => `- ${i.name}${i.quantity ? ` (${i.quantity}${i.unit ? " " + i.unit : ""})` : ""}${i.expiration_date ? ` [exp: ${i.expiration_date.slice(0, 10)}]` : ""}`).join("\n")
+      ? items
+          .map(
+            (i) =>
+              `- ${i.name}${i.quantity ? ` (${i.quantity}${i.unit ? " " + i.unit : ""})` : ""}${i.expiration_date ? ` [exp: ${i.expiration_date.slice(0, 10)}]` : ""}`,
+          )
+          .join("\n")
       : "(aucun ingrédient en stock)";
 
     const safePrompt = (prompt || "Propose-moi 3 recettes.").replace(/[\u0000-\u001F\u007F]/g, " ");

@@ -38,7 +38,9 @@ export function computeRecovery(
 
   const result = new Map<MuscleId, MuscleRecovery>();
 
-  for (const [id, meta] of Object.entries(MUSCLE_META) as Array<[MuscleId, typeof MUSCLE_META[MuscleId]]>) {
+  for (const [id, meta] of Object.entries(MUSCLE_META) as Array<
+    [MuscleId, (typeof MUSCLE_META)[MuscleId]]
+  >) {
     const lastTrained = lastTrainedMap.get(id) ?? null;
 
     if (!lastTrained) {

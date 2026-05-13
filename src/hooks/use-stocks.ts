@@ -32,9 +32,7 @@ export function useStockItems(module: StockModule) {
 export function useAddStockItem() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (
-      input: Omit<TablesInsert<"items">, "user_id"> & { module: StockModule },
-    ) => {
+    mutationFn: async (input: Omit<TablesInsert<"items">, "user_id"> & { module: StockModule }) => {
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -122,9 +120,7 @@ export function useBulkAdjustStockItems() {
     }) => {
       if (items.length === 0) return module;
       await Promise.all(
-        items.map((it) =>
-          supabase.from("items").update({ quantity: it.quantity }).eq("id", it.id),
-        ),
+        items.map((it) => supabase.from("items").update({ quantity: it.quantity }).eq("id", it.id)),
       );
       return module;
     },

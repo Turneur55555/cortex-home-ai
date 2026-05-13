@@ -52,8 +52,22 @@ Deno.serve(async (req) => {
 
     const body = await req.json();
     const ALLOWED_LEVELS = ["débutant", "intermédiaire", "avancé"];
-    const ALLOWED_GOALS = ["force", "hypertrophie", "endurance", "perte de poids", "remise en forme"];
-    const ALLOWED_EQUIPMENT = ["salle complète", "haltères", "barre", "élastiques", "poids du corps", "machines", "kettlebell"];
+    const ALLOWED_GOALS = [
+      "force",
+      "hypertrophie",
+      "endurance",
+      "perte de poids",
+      "remise en forme",
+    ];
+    const ALLOWED_EQUIPMENT = [
+      "salle complète",
+      "haltères",
+      "barre",
+      "élastiques",
+      "poids du corps",
+      "machines",
+      "kettlebell",
+    ];
     const ALLOWED_INTENSITY = ["légère", "modérée", "intense"];
 
     const mode: "muscu" | "autre" = body.mode === "autre" ? "autre" : "muscu";
@@ -63,7 +77,21 @@ Deno.serve(async (req) => {
 
     let systemPrompt = "";
 
-    const ALLOWED_MUSCLES = ["pectoraux", "dos", "épaules", "biceps", "triceps", "jambes", "fessiers", "abdos", "cardio", "avant-bras", "mollets", "trapèzes", "lombaires"];
+    const ALLOWED_MUSCLES = [
+      "pectoraux",
+      "dos",
+      "épaules",
+      "biceps",
+      "triceps",
+      "jambes",
+      "fessiers",
+      "abdos",
+      "cardio",
+      "avant-bras",
+      "mollets",
+      "trapèzes",
+      "lombaires",
+    ];
 
     if (mode === "muscu") {
       const rawMuscles: unknown = body.muscles;
@@ -77,7 +105,8 @@ Deno.serve(async (req) => {
         }
         muscles.push(m);
       }
-      const eqRaw = typeof body.equipment === "string" ? body.equipment.slice(0, 100) : "salle complète";
+      const eqRaw =
+        typeof body.equipment === "string" ? body.equipment.slice(0, 100) : "salle complète";
       const equipment = ALLOWED_EQUIPMENT.includes(eqRaw) ? eqRaw : "salle complète";
       const goalRaw = typeof body.goal === "string" ? body.goal.slice(0, 100) : "hypertrophie";
       const goal = ALLOWED_GOALS.includes(goalRaw) ? goalRaw : "hypertrophie";
@@ -100,9 +129,13 @@ Règles :
 - Notes : 1-2 phrases avec échauffement et conseil clé
 - Retourne STRICTEMENT du JSON via tool calling.`;
     } else {
-      const activityRaw = typeof body.activity === "string"
-        ? body.activity.replace(/[\u0000-\u001F\u007F<>]/g, " ").trim().slice(0, 120)
-        : "";
+      const activityRaw =
+        typeof body.activity === "string"
+          ? body.activity
+              .replace(/[\u0000-\u001F\u007F<>]/g, " ")
+              .trim()
+              .slice(0, 120)
+          : "";
       if (activityRaw.length < 2) return fail("Décris l'activité", 400);
       const intRaw = typeof body.intensity === "string" ? body.intensity.slice(0, 50) : "modérée";
       const intensity = ALLOWED_INTENSITY.includes(intRaw) ? intRaw : "modérée";
@@ -134,7 +167,10 @@ Règles :
         parameters: {
           type: "object",
           properties: {
-            name: { type: "string", description: "Nom court et accrocheur de la séance, en français" },
+            name: {
+              type: "string",
+              description: "Nom court et accrocheur de la séance, en français",
+            },
             duration_minutes: { type: "number" },
             notes: { type: "string", description: "Conseils brefs (1-2 phrases)" },
             muscles_worked: {
@@ -149,7 +185,10 @@ Règles :
                 properties: {
                   name: { type: "string", description: "Nom de l'exercice ou du bloc" },
                   sets: { type: "number" },
-                  reps: { type: "number", description: "Reps OU durée en minutes pour les activités non-muscu" },
+                  reps: {
+                    type: "number",
+                    description: "Reps OU durée en minutes pour les activités non-muscu",
+                  },
                   weight: { type: "number", description: "Charge en kg, ou 0" },
                 },
                 required: ["name", "sets", "reps"],
@@ -181,7 +220,8 @@ Règles :
 
     if (!aiRes.ok) {
       const txt = await aiRes.text();
-      if (aiRes.status === 429) return fail("Limite de requêtes atteinte. Réessayez dans un instant.", 429);
+      if (aiRes.status === 429)
+        return fail("Limite de requêtes atteinte. Réessayez dans un instant.", 429);
       if (aiRes.status === 402) return fail("Crédits IA épuisés.", 402);
       return fail("Erreur d'analyse IA", 502, `${aiRes.status} ${txt.slice(0, 500)}`);
     }

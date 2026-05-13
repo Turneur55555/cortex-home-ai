@@ -68,7 +68,8 @@ Deno.serve(async (req) => {
     if (!module || !MODULE_HINTS[module]) return fail("Module invalide", 400);
     if (image_base64.length > 12_000_000) return fail("Image trop volumineuse", 413);
 
-    const mt = typeof mime_type === "string" && mime_type.startsWith("image/") ? mime_type : "image/jpeg";
+    const mt =
+      typeof mime_type === "string" && mime_type.startsWith("image/") ? mime_type : "image/jpeg";
 
     const itemSchema = {
       type: "object",
@@ -86,13 +87,18 @@ Deno.serve(async (req) => {
         expiration_source: {
           type: "string",
           enum: ["label", "estimated"],
-          description: "'label' si la date a été lue sur l'emballage, 'estimated' si déduite de la catégorie.",
+          description:
+            "'label' si la date a été lue sur l'emballage, 'estimated' si déduite de la catégorie.",
         },
         expiration_raw: {
           type: "string",
-          description: "Texte exact lu sur l'étiquette (ex: 'DLC 12/06/2026', 'EXP 06.2026', 'BB 2026-06-12'). Vide si estimée.",
+          description:
+            "Texte exact lu sur l'étiquette (ex: 'DLC 12/06/2026', 'EXP 06.2026', 'BB 2026-06-12'). Vide si estimée.",
         },
-        confidence: { type: "number", description: "0..1 confiance dans l'identification du produit" },
+        confidence: {
+          type: "number",
+          description: "0..1 confiance dans l'identification du produit",
+        },
       },
       required: ["name", "expiration_date", "expiration_source"],
     };
@@ -179,7 +185,10 @@ Si tu hésites entre deux catégories, prends la plus COURTE durée (sécurité 
           {
             role: "user",
             content: [
-              { type: "text", text: `Identifie tous les items visibles sur cette photo pour le module "${module}". Pour CHAQUE item, renseigne expiration_date (lue OU estimée selon les règles).` },
+              {
+                type: "text",
+                text: `Identifie tous les items visibles sur cette photo pour le module "${module}". Pour CHAQUE item, renseigne expiration_date (lue OU estimée selon les règles).`,
+              },
               { type: "image_url", image_url: { url: `data:${mt};base64,${image_base64}` } },
             ],
           },
