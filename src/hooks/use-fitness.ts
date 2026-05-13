@@ -265,6 +265,120 @@ export function useDeleteNutrition() {
   });
 }
 
+// ---------- Workout / exercise mutations ----------
+export function useUpdateWorkoutName() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, name }: { id: string; name: string }) => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Non authentifié");
+      const { error } = await supabase
+        .from("workouts")
+        .update({ name })
+        .eq("id", id)
+        .eq("user_id", user.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Nom modifié");
+      qc.invalidateQueries({ queryKey: ["workouts"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+}
+
+export function useUpdateExercise() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      ...fields
+    }: {
+      id: string;
+      name?: string;
+      image_path?: string | null;
+    }) => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Non authentifié");
+      const { error } = await supabase
+        .from("exercises")
+        .update(fields)
+        .eq("id", id)
+        .eq("user_id", user.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["workouts"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+}
+
+export function useDeleteExercise() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Non authentifié");
+      const { error } = await supabase
+        .from("exercises")
+        .delete()
+        .eq("id", id)
+        .eq("user_id", user.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Exercice supprimé");
+      qc.invalidateQueries({ queryKey: ["workouts"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+}
+
+export function useAddExerciseToWorkout() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      workoutId,
+      exercise,
+    }: {
+      workoutId: string;
+      exercise: {
+        name: string;
+        sets?: number | null;
+        reps?: number | null;
+        weight?: number | null;
+      };
+    }) => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Non authentifié");
+      const { error } = await supabase.from("exercises").insert({
+        user_id: user.id,
+        workout_id: workoutId,
+        name: exercise.name,
+        sets: exercise.sets ?? null,
+        reps: exercise.reps ?? null,
+        weight: exercise.weight ?? null,
+        image_path: null,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Exercice ajouté");
+      qc.invalidateQueries({ queryKey: ["workouts"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+}
+
 // ---------- Exercise images ----------
 export function useExerciseImageUrls(paths: Array<string | null | undefined>) {
   const key = paths.filter(Boolean).sort().join("|");
