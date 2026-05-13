@@ -1,14 +1,46 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useWorkouts } from "@/hooks/use-fitness";
-import { computeRecovery, STATUS_COLORS, STATUS_LABELS, type MuscleRecovery, type RecoveryStatus } from "@/lib/fitness/recovery";
+import {
+  computeRecovery,
+  STATUS_LABELS,
+  type MuscleRecovery,
+  type RecoveryStatus,
+} from "@/lib/fitness/recovery";
 import type { MuscleId } from "@/lib/fitness/muscleMapping";
 import { FrontView } from "./muscles/front";
 import { BackView } from "./muscles/back";
 import { Loader2 } from "lucide-react";
 
+const FILL_COLORS: Record<RecoveryStatus, string> = {
+  fatigued: "#EF444455",
+  recovering: "#F9731655",
+  ready: "#22C55E55",
+  unknown: "#2D374855",
+};
+
+const STROKE_COLORS: Record<RecoveryStatus, string> = {
+  fatigued: "#EF4444",
+  recovering: "#F97316",
+  ready: "#22C55E",
+  unknown: "#374151",
+};
+
+const LEGEND: Array<{ status: RecoveryStatus; label: string; color: string }> = [
+  { status: "fatigued", label: "Fatigué", color: "#EF4444" },
+  { status: "recovering", label: "En récup.", color: "#F97316" },
+  { status: "ready", label: "Prêt", color: "#22C55E" },
+  { status: "unknown", label: "Inconnu", color: "#374151" },
+];
+
+type Tooltip = {
+  x: number;
+  y: number;
+  muscle: MuscleRecovery;
+};
+
 export function MuscleMap() {
   const { data: workouts, isLoading } = useWorkouts();
-  const [active, setActive] = useState<MuscleId | null>(null);
+  const [tooltip, setTooltip] = useState<Tooltip | null>(null);
 
   const recoveryMap = useMemo(() => {
     if (!workouts) return new Map<MuscleId, MuscleRecovery>();
@@ -19,92 +51,100 @@ export function MuscleMap() {
     return computeRecovery(mapped);
   }, [workouts]);
 
-  const getColor = (id: MuscleId): string => {
-    const r = recoveryMap.get(id);
-    if (!r) return STATUS_COLORS.unknown;
-    return STATUS_COLORS[r.status];
-  };
+  const getColor = useCallback(
+    (id: MuscleId) => {
+      const r = recoveryMap.get(id);
+      const status: RecoveryStatus = r?.status ?? "unknown";
+      return { fill: FILL_COLORS[status], stroke: STROKE_COLORS[status] };
+    },
+    [recoveryMap],
+  );
 
-  const activeInfo = active ? recoveryMap.get(active) : null;
+  const handleMuscle = useCallback(
+    (id: MuscleId, e: React.MouseEvent) => {
+      const r = recoveryMap.get(id);
+      if (!r) return;
+      const rect = (e.currentTarget as SVGElement).closest(".muscle-map")?.getBoundingClientRect();
+      if (!rect) return;
+      setTooltip({
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top - 48,
+        muscle: r,
+      });
+    },
+    [recoveryMap],
+  );
+
+  const hideTooltip = useCallback(() => setTooltip(null), []);
 
   if (isLoading) {
     return (
-      <div className="flex h-64 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03] backdrop-blur-sm">
+      <div className="flex h-64 items-center justify-center rounded-2xl border border-white/10 bg-[#1A202C]">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur-sm shadow-card">
+    <div className="muscle-map relative rounded-2xl border border-white/10 bg-[#1A202C] p-4 shadow-card">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold">Récupération musculaire</h3>
-        <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+        <h3 className="text-sm font-semibold text-white/90">Récupération musculaire</h3>
+        <span className="text-[10px] font-medium uppercase tracking-wider text-white/40">
           basé sur vos séances
         </span>
       </div>
 
-      {/* Silhouettes */}
-      <div
-        className="relative mx-auto flex max-h-[320px] justify-center gap-2"
-        onMouseLeave={() => setActive(null)}
-      >
-        <div className="flex flex-col items-center">
-          <span className="mb-1 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+      {/* Silhouettes côte à côte */}
+      <div className="mx-auto flex max-w-[320px] justify-center gap-1">
+        <div className="flex flex-1 flex-col items-center">
+          <span className="mb-1 text-[9px] font-semibold uppercase tracking-wider text-white/30">
             Face
           </span>
-          <div className="h-[280px] w-[120px]">
-            <FrontView getColor={getColor} onMuscle={setActive} activeMuscle={active} />
-          </div>
+          <FrontView getColor={getColor} onMuscle={handleMuscle} onLeave={hideTooltip} />
         </div>
-        <div className="flex flex-col items-center">
-          <span className="mb-1 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+        <div className="flex flex-1 flex-col items-center">
+          <span className="mb-1 text-[9px] font-semibold uppercase tracking-wider text-white/30">
             Dos
           </span>
-          <div className="h-[280px] w-[120px]">
-            <BackView getColor={getColor} onMuscle={setActive} activeMuscle={active} />
-          </div>
+          <BackView getColor={getColor} onMuscle={handleMuscle} onLeave={hideTooltip} />
         </div>
       </div>
 
-      {/* Tooltip */}
-      <div className="mt-3 min-h-[44px]">
-        {activeInfo ? (
-          <div className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.05] px-3 py-2">
-            <span
-              className="h-3 w-3 shrink-0 rounded-full"
-              style={{ backgroundColor: STATUS_COLORS[activeInfo.status] }}
-            />
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-semibold">{activeInfo.label}</p>
-              <p className="text-[10px] text-muted-foreground">
-                {activeInfo.status === "unknown"
-                  ? "Aucune donnée récente"
-                  : activeInfo.hoursSinceLast != null
-                    ? `${STATUS_LABELS[activeInfo.status]} · dernière séance il y a ${formatHours(activeInfo.hoursSinceLast)}`
-                    : STATUS_LABELS[activeInfo.status]}
-                {activeInfo.hoursRemaining != null && activeInfo.hoursRemaining > 0 && (
-                  <> · encore {formatHours(activeInfo.hoursRemaining)} de récup</>
-                )}
-              </p>
-            </div>
-          </div>
-        ) : (
-          <p className="py-2 text-center text-[10px] text-muted-foreground">
-            Touchez un muscle pour voir son état
-          </p>
-        )}
-      </div>
-
-      {/* Légende */}
-      <div className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1">
-        {(["fatigued", "recovering", "ready", "unknown"] as RecoveryStatus[]).map((s) => (
-          <div key={s} className="flex items-center gap-1.5">
+      {/* Tooltip flottant */}
+      {tooltip && (
+        <div
+          className="pointer-events-none absolute z-10 rounded-lg border border-white/10 bg-[#0f1419] px-3 py-2 shadow-lg"
+          style={{
+            left: Math.min(tooltip.x, 200),
+            top: Math.max(tooltip.y, 0),
+          }}
+        >
+          <div className="flex items-center gap-2">
             <span
               className="h-2.5 w-2.5 rounded-full"
-              style={{ backgroundColor: STATUS_COLORS[s] }}
+              style={{ backgroundColor: STROKE_COLORS[tooltip.muscle.status] }}
             />
-            <span className="text-[10px] text-muted-foreground">{STATUS_LABELS[s]}</span>
+            <span className="text-xs font-semibold text-white/90">{tooltip.muscle.label}</span>
+          </div>
+          <p className="mt-0.5 text-[10px] text-white/50">
+            {tooltip.muscle.status === "unknown"
+              ? "Aucune donnée récente"
+              : tooltip.muscle.hoursSinceLast != null
+                ? `${STATUS_LABELS[tooltip.muscle.status]} · il y a ${fmtHours(tooltip.muscle.hoursSinceLast)}`
+                : STATUS_LABELS[tooltip.muscle.status]}
+            {tooltip.muscle.hoursRemaining != null &&
+              tooltip.muscle.hoursRemaining > 0 &&
+              ` · encore ${fmtHours(tooltip.muscle.hoursRemaining)}`}
+          </p>
+        </div>
+      )}
+
+      {/* Légende */}
+      <div className="mt-4 flex flex-wrap justify-center gap-x-5 gap-y-1.5">
+        {LEGEND.map((l) => (
+          <div key={l.status} className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: l.color }} />
+            <span className="text-[10px] font-medium text-white/50">{l.label}</span>
           </div>
         ))}
       </div>
@@ -112,7 +152,7 @@ export function MuscleMap() {
   );
 }
 
-function formatHours(h: number): string {
+function fmtHours(h: number): string {
   if (h < 1) return "<1h";
   if (h < 48) return `${h}h`;
   return `${Math.round(h / 24)}j`;
