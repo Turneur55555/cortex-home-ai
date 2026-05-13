@@ -59,16 +59,16 @@ export function BarcodeScannerSheet({ onClose }: { onClose: () => void }) {
   const addStock = useAddStockItem();
   const addNutrition = useAddNutrition();
 
-  useEffect(() => {
-    readerRef.current = new BrowserMultiFormatReader();
-    return () => {
-      stopCamera();
-    };
-  }, [stopCamera]);
-
   const stopCamera = useCallback(() => {
-    if (readerRef.current) {
-      readerRef.current.reset();
+    try {
+      readerRef.current?.reset?.();
+    } catch {
+      // ignore
+    }
+    const stream = videoRef.current?.srcObject as MediaStream | null;
+    stream?.getTracks()?.forEach((t) => t.stop());
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
     }
     setScanning(false);
     setCamStatus("idle");
@@ -119,25 +119,50 @@ export function BarcodeScannerSheet({ onClose }: { onClose: () => void }) {
       setCamStatus("active");
       setScanning(true);
 
-      if (readerRef.current && videoRef.current) {
-        await readerRef.current.decodeFromVideoDevice(
-          null,
-          videoRef.current,
-          (result: Result | null, _err: unknown) => {
-            if (result) {
-              const code = result.getText();
-              stopCamera();
-              fetchProduct(code);
-            }
-          },
-        );
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+      });
+
+      if (!videoRef.current) return;
+      videoRef.current.srcObject = stream;
+      videoRef.current.setAttribute("playsinline", "true");
+      await videoRef.current.play();
+
+      if (!readerRef.current) {
+        readerRef.current = new BrowserMultiFormatReader();
       }
+
+      readerRef.current.decodeFromStream(
+        stream,
+        videoRef.current,
+        (result: Result | undefined) => {
+          if (result) {
+            const code = result.getText();
+            stopCamera();
+            fetchProduct(code);
+          }
+        },
+      );
     } catch (e) {
       console.error(e);
       setCamStatus("denied");
       setScanning(false);
       setError("Accès caméra refusé");
       toast.error("Accès caméra refusé");
+    }
+  }, [fetchProduct, stopCamera]);
+
+  useEffect(() => {
+    readerRef.current = new BrowserMultiFormatReader();
+    return () => {
+      stopCamera();
+    };
+  }, [stopCamera]);
+
     }
   }, [fetchProduct, stopCamera]);
 
