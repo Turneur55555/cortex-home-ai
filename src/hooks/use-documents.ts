@@ -136,7 +136,16 @@ export function useUploadAndAnalyze() {
       const { data: ai, error: fnErr } = await supabase.functions.invoke("analyze-pdf", {
         body: { storage_path: path, module, name: displayName, content_type: contentType },
       });
-      if (fnErr) throw new Error(fnErr.message);
+      if (fnErr) {
+        // Supabase wraps edge function errors with a generic "non-2xx" message — unwrap it
+        const raw = fnErr.message ?? "";
+        const friendlyMsg = raw.includes("non-2xx")
+          ? isImage
+            ? "Impossible d'analyser cette image. Essayez un format JPG ou PNG clair."
+            : "Impossible d'analyser ce PDF. Vérifiez que le fichier n'est pas corrompu."
+          : raw;
+        throw new Error(friendlyMsg);
+      }
       if (ai?.error) throw new Error(ai.error);
 
       const result = ai as AnalysisResult;
