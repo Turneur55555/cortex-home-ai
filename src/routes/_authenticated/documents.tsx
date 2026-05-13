@@ -39,6 +39,7 @@ import {
   type DocModuleSelection,
   type AnalysisResult,
 } from "@/hooks/use-documents";
+import { useImageUpload, isImageFile, type UploadStage } from "@/hooks/useImageUpload";
 import type { Tables } from "@/integrations/supabase/types";
 
 export const Route = createFileRoute("/_authenticated/documents")({
@@ -51,39 +52,90 @@ export const Route = createFileRoute("/_authenticated/documents")({
   component: DocumentsPage,
 });
 
+const STAGE_LABELS: Record<UploadStage, string> = {
+  idle: "",
+  validating: "Vérification…",
+  compressing: "Compression…",
+  uploading: "Envoi…",
+  ocr: "Lecture IA…",
+  parsing: "Extraction…",
+  done: "Terminé",
+  error: "Erreur",
+};
+
 function DocumentsPage() {
   const docs = useDocuments();
   const upload = useUploadAndAnalyze();
+  const imageUpload = useImageUpload();
   const remove = useDeleteDocument();
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [open, setOpen] = useState(false);
   const [module, setModule] = useState<DocModuleSelection>("auto");
   const [pickedFiles, setPickedFiles] = useState<File[]>([]);
-  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null);
   const [lastResult, setLastResult] = useState<{
     doc: Tables<"documents">;
     result: AnalysisResult;
   } | null>(null);
 
+  const isWorking = upload.isPending || imageUpload.isUploading;
+
   const handleSubmit = async () => {
     if (pickedFiles.length === 0) return toast.error("Sélectionne au moins un fichier");
     let last: { doc: Tables<"documents">; result: AnalysisResult } | null = null;
     let ok = 0;
+
     for (let i = 0; i < pickedFiles.length; i++) {
-      setProgress({ current: i + 1, total: pickedFiles.length });
+      setBatchProgress({ current: i + 1, total: pickedFiles.length });
+      const file = pickedFiles[i];
       try {
-        last = await upload.mutateAsync({ file: pickedFiles[i], module });
-        ok++;
+        if (isImageFile(file)) {
+          // Route images through GPT-4o Vision pipeline
+          const res = await imageUpload.upload(file, module);
+          if (res) {
+            last = { doc: res.doc, result: res.result };
+            if (res.wasAuto) {
+              toast.success(`Image analysée — détecté: ${MODULE_LABELS[res.detectedModule as DocModule] ?? res.detectedModule}`);
+            } else {
+              toast.success("Image analysée");
+            }
+            ok++;
+          }
+        } else {
+          // Route PDFs through Gemini pipeline
+          const res = await upload.mutateAsync({ file, module });
+          if (res) {
+            last = { doc: res.doc, result: res.result };
+            ok++;
+          }
+        }
       } catch {
-        // toast handled in hook
+        // toast handled in individual hooks
       }
     }
-    setProgress(null);
+
+    setBatchProgress(null);
     setLastResult(last);
     setPickedFiles([]);
     setOpen(false);
     if (pickedFiles.length > 1) toast.success(`${ok}/${pickedFiles.length} fichiers analysés`);
+  };
+
+  // Button label based on active pipeline stage
+  const submitLabel = () => {
+    if (imageUpload.isUploading && imageUpload.stage !== "idle") {
+      const stageLabel = STAGE_LABELS[imageUpload.stage] || "Analyse…";
+      if (batchProgress) return `${stageLabel} (${batchProgress.current}/${batchProgress.total})`;
+      return stageLabel;
+    }
+    if (upload.isPending) {
+      if (batchProgress) return `Analyse ${batchProgress.current}/${batchProgress.total}…`;
+      return "Analyse en cours…";
+    }
+    return pickedFiles.length > 1
+      ? `Analyser ${pickedFiles.length} fichiers`
+      : "Analyser avec l'IA";
   };
 
   return (
@@ -159,25 +211,32 @@ function DocumentsPage() {
                   </span>
                 </Button>
                 <p className="mt-1 text-[11px] text-muted-foreground">
-                  PDF, JPG, PNG, WEBP, HEIC — 15 Mo max par fichier.
+                  PDF, JPG, PNG, WEBP, HEIC — 15 Mo max. Les photos iPhone sont acceptées.
                 </p>
               </div>
+              {/* Progress bar for image pipeline */}
+              {imageUpload.isUploading && imageUpload.stage !== "idle" && (
+                <div className="h-1 w-full overflow-hidden rounded-full bg-border">
+                  <div
+                    className="h-full rounded-full bg-primary transition-all duration-700"
+                    style={{ width: `${imageUpload.progress}%` }}
+                  />
+                </div>
+              )}
               <Button
                 className="gap-1.5"
                 onClick={handleSubmit}
-                disabled={upload.isPending || pickedFiles.length === 0}
+                disabled={isWorking || pickedFiles.length === 0}
               >
-                {upload.isPending ? (
+                {isWorking ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    {progress
-                      ? `Analyse ${progress.current}/${progress.total}…`
-                      : "Analyse en cours…"}
+                    {submitLabel()}
                   </>
                 ) : (
                   <>
                     <Sparkles className="h-4 w-4" />
-                    Analyser{pickedFiles.length > 1 ? ` ${pickedFiles.length} fichiers` : " avec l'IA"}
+                    {submitLabel()}
                   </>
                 )}
               </Button>
