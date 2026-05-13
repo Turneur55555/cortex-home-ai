@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { useMutation } from "@tanstack/react-query";
 import {
   Apple,
+  Barcode,
   Calendar,
   Camera,
   ImageIcon,
@@ -22,6 +23,7 @@ import {
   type NutritionGoals,
 } from "@/hooks/use-fitness";
 import { FabAdd, Field, Sheet, SubmitButton } from "@/components/shared/FormComponents";
+import { BarcodeScannerSheet } from "@/components/BarcodeScannerSheet";
 
 type MealPrefill = {
   name: string;
@@ -66,6 +68,7 @@ export function NutritionTab() {
   const [open, setOpen] = useState(false);
   const [goalsOpen, setGoalsOpen] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
+  const [barcodeOpen, setBarcodeOpen] = useState(false);
   const [prefill, setPrefill] = useState<MealPrefill | null>(null);
 
   const totals = useMemo(() => {
@@ -183,21 +186,37 @@ export function NutritionTab() {
         </div>
       </div>
 
-      <button
-        type="button"
-        onClick={() => setScanOpen(true)}
-        className="flex items-center gap-3 rounded-2xl border border-primary/30 bg-gradient-to-r from-primary/15 via-primary/5 to-transparent p-4 text-left shadow-card transition-all active:scale-[0.99]"
-      >
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-primary text-primary-foreground shadow-glow">
-          <Sparkles className="h-5 w-5" />
-        </span>
-        <span className="flex-1">
-          <span className="block text-sm font-semibold">Scanner mon repas</span>
-          <span className="block text-[11px] text-muted-foreground">
-            Une photo → kcal + macros estimés par l'IA.
+      <div className="grid grid-cols-2 gap-3">
+        <button
+          type="button"
+          onClick={() => setScanOpen(true)}
+          className="flex items-center gap-3 rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/15 to-transparent p-3 text-left shadow-card transition-all active:scale-[0.98]"
+        >
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-primary text-primary-foreground shadow-glow">
+            <Sparkles className="h-5 w-5" />
           </span>
-        </span>
-      </button>
+          <span className="min-w-0 flex-1">
+            <span className="block text-xs font-semibold">Scan Repas</span>
+            <span className="block truncate text-[10px] text-muted-foreground">Photo → IA</span>
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setBarcodeOpen(true)}
+          className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-3 text-left shadow-card transition-all active:scale-[0.98]"
+        >
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary text-secondary-foreground">
+            <Barcode className="h-5 w-5" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-xs font-semibold">Code-barres</span>
+            <span className="block truncate text-[10px] text-muted-foreground">
+              Open Food Facts
+            </span>
+          </span>
+        </button>
+      </div>
 
       {isLoading && (
         <div className="flex h-20 items-center justify-center">
@@ -247,13 +266,10 @@ export function NutritionTab() {
       ))}
 
       <FabAdd onClick={openManual} label="Ajouter un repas" />
-      {open && (
-        <NutritionSheet date={date} prefill={prefill} onClose={() => setOpen(false)} />
-      )}
+      {open && <NutritionSheet date={date} prefill={prefill} onClose={() => setOpen(false)} />}
       {goalsOpen && <GoalsSheet current={goals ?? null} onClose={() => setGoalsOpen(false)} />}
-      {scanOpen && (
-        <MealScanSheet onClose={() => setScanOpen(false)} onResult={handleScanResult} />
-      )}
+      {scanOpen && <MealScanSheet onClose={() => setScanOpen(false)} onResult={handleScanResult} />}
+      {barcodeOpen && <BarcodeScannerSheet onClose={() => setBarcodeOpen(false)} />}
     </section>
   );
 }
@@ -311,13 +327,7 @@ function ProgressBar({
   );
 }
 
-function GoalsSheet({
-  current,
-  onClose,
-}: {
-  current: NutritionGoals | null;
-  onClose: () => void;
-}) {
+function GoalsSheet({ current, onClose }: { current: NutritionGoals | null; onClose: () => void }) {
   const upsert = useUpsertNutritionGoals();
   const [form, setForm] = useState({
     calories: current?.calories != null ? String(current.calories) : "",
