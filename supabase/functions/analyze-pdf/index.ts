@@ -82,10 +82,14 @@ Deno.serve(async (req) => {
     ) {
       return fail("Accès non autorisé", 403, `path=${storage_path} user=${userData.user.id}`);
     }
-    if (typeof module !== "string" || module.length > 50) {
+    const ALLOWED_MODULES = new Set([...Object.keys(MODULE_HINTS), "auto"]);
+    if (typeof module !== "string" || !ALLOWED_MODULES.has(module)) {
       return fail("Module invalide", 400);
     }
-    const name: string = typeof rawName === "string" ? rawName.slice(0, 200) : "document";
+    // Strip control chars / delimiters to mitigate prompt injection via the document title.
+    const name: string = typeof rawName === "string"
+      ? rawName.replace(/[\u0000-\u001F\u007F<>]/g, " ").slice(0, 200)
+      : "document";
 
 
     const { data: file, error: dlErr } = await supa.storage
