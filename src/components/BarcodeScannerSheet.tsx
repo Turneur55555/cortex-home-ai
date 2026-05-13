@@ -163,9 +163,6 @@ export function BarcodeScannerSheet({ onClose }: { onClose: () => void }) {
     };
   }, [stopCamera]);
 
-    }
-  }, [fetchProduct, stopCamera]);
-
   const handleAddToStock = async () => {
     if (!product) return;
     try {
