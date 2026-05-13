@@ -86,10 +86,6 @@ export function CorpsTab() {
         <Stat label="MG" value={latest?.body_fat} unit="%" />
       </div>
 
-      <BodySilhouette latest={latest} onZone={openWithFocus} />
-
-      <MeasurementsCard latest={latest} previous={previous} />
-
       <div className="rounded-2xl border border-border bg-card p-4 shadow-card">
         <div className="mb-3 flex items-center gap-2">
           <TrendingUp className="h-4 w-4 text-primary" />
@@ -149,6 +145,10 @@ export function CorpsTab() {
           </ResponsiveContainer>
         )}
       </div>
+
+      <MeasurementsCard latest={latest} previous={previous} />
+
+      <BodySilhouette latest={latest} onZone={openWithFocus} />
 
       <div>
         <h3 className="mb-2 px-1 text-sm font-semibold uppercase tracking-wider text-muted-foreground">

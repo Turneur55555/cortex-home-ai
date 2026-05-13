@@ -53,6 +53,54 @@ export function useDocuments() {
   });
 }
 
+const ACCEPTED_IMAGE_TYPES = new Set([
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+]);
+
+function isImageFile(file: File): boolean {
+  if (ACCEPTED_IMAGE_TYPES.has(file.type)) return true;
+  // iOS Safari may report HEIC as "" — fallback to extension
+  return /\.(jpe?g|png|webp|heic|heif)$/i.test(file.name);
+}
+
+async function compressImage(file: File): Promise<Blob> {
+  const dataUrl = await new Promise<string>((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result as string);
+    r.onerror = () => rej(new Error("Lecture de l'image échouée"));
+    r.readAsDataURL(file);
+  });
+  const img = await new Promise<HTMLImageElement>((res, rej) => {
+    const i = new Image();
+    i.onload = () => res(i);
+    i.onerror = () => rej(new Error("Image invalide ou format non supporté"));
+    i.src = dataUrl;
+  });
+  const MAX = 1600;
+  const ratio = Math.min(1, MAX / Math.max(img.width, img.height));
+  const w = Math.round(img.width * ratio);
+  const h = Math.round(img.height * ratio);
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
+  return new Promise<Blob>((res, rej) => {
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) rej(new Error("Compression échouée"));
+        else res(blob);
+      },
+      "image/jpeg",
+      0.85,
+    );
+  });
+}
+
 export function useUploadAndAnalyze() {
   const qc = useQueryClient();
   return useMutation({
@@ -61,17 +109,32 @@ export function useUploadAndAnalyze() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      if (file.type !== "application/pdf") throw new Error("Format non supporté (PDF uniquement)");
+
+      const isImage = isImageFile(file);
+      const isPdf = file.type === "application/pdf";
+      if (!isImage && !isPdf) {
+        throw new Error("Format non supporté (PDF, JPG, PNG, WEBP, HEIC)");
+      }
       if (file.size > 15 * 1024 * 1024) throw new Error("Fichier trop volumineux (max 15 Mo)");
 
-      const path = `${user.id}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+      let uploadBlob: Blob = file;
+      let contentType = file.type || "application/pdf";
+      // Normalize filename: replace HEIC/HEIF with .jpg since we compress to JPEG
+      let displayName = file.name.replace(/\.(heic|heif)$/i, ".jpg");
+
+      if (isImage) {
+        uploadBlob = await compressImage(file);
+        contentType = "image/jpeg";
+      }
+
+      const path = `${user.id}/${Date.now()}-${displayName.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
       const { error: upErr } = await supabase.storage
         .from("pdf-documents")
-        .upload(path, file, { contentType: "application/pdf", upsert: false });
+        .upload(path, uploadBlob, { contentType, upsert: false });
       if (upErr) throw upErr;
 
       const { data: ai, error: fnErr } = await supabase.functions.invoke("analyze-pdf", {
-        body: { storage_path: path, module, name: file.name },
+        body: { storage_path: path, module, name: displayName, content_type: contentType },
       });
       if (fnErr) throw new Error(fnErr.message);
       if (ai?.error) throw new Error(ai.error);
@@ -84,7 +147,7 @@ export function useUploadAndAnalyze() {
         .from("documents")
         .insert({
           user_id: user.id,
-          name: file.name,
+          name: displayName,
           module: finalModule,
           storage_path: path,
           summary: result.summary,
@@ -96,11 +159,13 @@ export function useUploadAndAnalyze() {
         .single();
       if (insErr) throw insErr;
 
-      return { doc, result, detectedModule: finalModule, wasAuto: module === "auto" };
+      return { doc, result, detectedModule: finalModule, wasAuto: module === "auto", isImage };
     },
     onSuccess: ({ wasAuto, detectedModule }) => {
       toast.success(
-        wasAuto ? `PDF analysé — détecté: ${MODULE_LABELS[detectedModule]}` : "PDF analysé",
+        wasAuto
+          ? `Document analysé — détecté: ${MODULE_LABELS[detectedModule]}`
+          : "Document analysé",
       );
       qc.invalidateQueries({ queryKey: ["documents"] });
     },
