@@ -80,14 +80,17 @@ export function computeRecovery(
   return result;
 }
 
-export const STATUS_COLORS: Record<RecoveryStatus, string> = {
-  fatigued: "#ef4444",
-  recovering: "#f97316",
-  ready: "#22c55e",
-  unknown: "#374151",
+export const RECOVERY_COLORS: Record<RecoveryStatus, {
+  fill: string;    // with alpha — SVG muscle fill
+  stroke: string;  // solid — SVG muscle outline + legend dot
+}> = {
+  fatigued:  { fill: "#EF444433", stroke: "#EF4444" },
+  recovering:{ fill: "#F9731633", stroke: "#F97316" },
+  ready:     { fill: "#22C55E33", stroke: "#22C55E" },
+  unknown:   { fill: "#1F293700", stroke: "#374151" },
 };
 
-export const STATUS_LABELS: Record<RecoveryStatus, string> = {
+export const RECOVERY_LABELS: Record<RecoveryStatus, string> = {
   fatigued: "Fatigué",
   recovering: "En récup",
   ready: "Prêt",
