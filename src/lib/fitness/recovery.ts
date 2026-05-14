@@ -96,3 +96,10 @@ export const RECOVERY_LABELS: Record<RecoveryStatus, string> = {
   ready: "Prêt",
   unknown: "Inconnu",
 };
+
+export const RECOVERY_LEGEND: Array<{ status: RecoveryStatus; label: string; color: string }> =
+  (["fatigued", "recovering", "ready", "unknown"] as const).map((status) => ({
+    status,
+    label: RECOVERY_LABELS[status],
+    color: RECOVERY_COLORS[status].stroke,
+  }));

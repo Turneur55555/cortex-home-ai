@@ -4,6 +4,7 @@ import {
   computeRecovery,
   RECOVERY_COLORS,
   RECOVERY_LABELS,
+  RECOVERY_LEGEND,
   type MuscleRecovery,
   type RecoveryStatus,
 } from "@/lib/fitness/recovery";
@@ -12,13 +13,6 @@ import { FrontView } from "./muscles/front";
 import { BackView } from "./muscles/back";
 import { fmtHours } from "@/utils/fitness/formatting";
 import { Loader2 } from "lucide-react";
-
-const LEGEND: Array<{ status: RecoveryStatus; label: string }> = [
-  { status: "fatigued",   label: "Fatigué"    },
-  { status: "recovering", label: "En récup."  },
-  { status: "ready",      label: "Prêt"       },
-  { status: "unknown",    label: "Inconnu"    },
-];
 
 type Tooltip = {
   x: number;
@@ -128,12 +122,9 @@ export function MuscleMap() {
 
       {/* Légende */}
       <div className="mt-4 flex flex-wrap justify-center gap-x-5 gap-y-1.5">
-        {LEGEND.map((l) => (
+        {RECOVERY_LEGEND.map((l) => (
           <div key={l.status} className="flex items-center gap-1.5">
-            <span
-              className="h-2.5 w-2.5 rounded-full"
-              style={{ backgroundColor: RECOVERY_COLORS[l.status].stroke }}
-            />
+            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: l.color }} />
             <span className="text-[10px] font-medium text-white/50">{l.label}</span>
           </div>
         ))}
