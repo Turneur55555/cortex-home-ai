@@ -26,11 +26,10 @@ export function useProfile(fallback: string) {
     },
   });
 
-  // Priority: saved display_name → OAuth full_name → email prefix fallback
-  const pseudo =
-    row?.display_name?.trim() ||
-    (user?.user_metadata?.full_name as string | undefined)?.trim() ||
-    fallback;
+  // Single source of truth: users_profiles.display_name.
+  // Fallback to email prefix only when the column is null/empty.
+  // Never read user_metadata.full_name — it can diverge from the DB.
+  const pseudo = row?.display_name?.trim() || fallback;
 
   const mutation = useMutation({
     mutationFn: async (next: string) => {
@@ -38,9 +37,8 @@ export function useProfile(fallback: string) {
       if (trimmed.length < 3 || trimmed.length > 20) {
         throw new Error("Le pseudo doit faire entre 3 et 20 caractères.");
       }
-      // Use UPDATE (not upsert) — handle_new_user trigger guarantees the row
-      // exists for every authenticated user. Avoids the INSERT-policy premium
-      // check and is unambiguous about intent.
+
+      // 1. Update DB profile (authoritative source of truth)
       const { data, error } = await supabase
         .from("users_profiles")
         .update({ display_name: trimmed })
@@ -48,13 +46,19 @@ export function useProfile(fallback: string) {
         .select("display_name")
         .maybeSingle();
       if (error) throw error;
-      // Row didn't exist (pre-trigger user) — create it now
+
+      // 2. Row missing (pre-trigger legacy user) — create it
       if (!data) {
         const { error: insertError } = await supabase
           .from("users_profiles")
           .insert({ id: user!.id, display_name: trimmed });
         if (insertError) throw insertError;
       }
+
+      // 3. Mirror to auth metadata so JWT stays consistent with DB.
+      //    Fire-and-forget — a metadata sync failure must not block the save.
+      void supabase.auth.updateUser({ data: { display_name: trimmed } }).catch(() => undefined);
+
       return trimmed;
     },
     onMutate: async (next) => {
