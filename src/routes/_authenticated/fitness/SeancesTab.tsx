@@ -1,20 +1,16 @@
 import { useMemo, useState } from "react";
 import { Dumbbell, Loader2, Sparkles } from "lucide-react";
 import { MuscleMap } from "@/components/fitness/MuscleMap";
-import { BodyHighlighterRenderer } from "@/components/fitness/renderers/BodyHighlighterRenderer";
 import { WorkoutCard, type WorkoutRow } from "@/components/fitness/WorkoutCard";
 import { WorkoutSheet } from "@/components/fitness/WorkoutSheet";
 import { WorkoutProgressCharts } from "@/components/fitness/WorkoutProgressCharts";
 import { useExerciseImageUrls, useWorkouts } from "@/hooks/use-fitness";
-import { useRecoveryMap } from "@/hooks/useRecoveryMap";
 import { FabAdd } from "@/components/shared/FormComponents";
 import { CoachSheet, type WorkoutTemplate } from "./CoachSheet";
 import { computePRs } from "@/utils/fitness/exercise-stats";
 
 export function SeancesTab() {
   const { data, isLoading } = useWorkouts();
-  const recoveryMap = useRecoveryMap(data);
-  const [useNewRenderer, setUseNewRenderer] = useState(false);
   const [open, setOpen] = useState(false);
   const [template, setTemplate] = useState<WorkoutTemplate | null>(null);
   const [coachOpen, setCoachOpen] = useState(false);
@@ -62,21 +58,7 @@ export function SeancesTab() {
 
   return (
     <section className="flex flex-col gap-4">
-      {/* A/B toggle — remove once BodyHighlighterRenderer is validated */}
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={() => setUseNewRenderer((v) => !v)}
-          className="rounded-full border border-border bg-surface px-3 py-1 text-[10px] font-semibold text-muted-foreground transition hover:text-foreground"
-        >
-          {useNewRenderer ? "→ Ancien rendu" : "→ Nouveau rendu"}
-        </button>
-      </div>
-      {useNewRenderer ? (
-        <BodyHighlighterRenderer recoveryMap={recoveryMap} />
-      ) : (
-        <MuscleMap />
-      )}
+      <MuscleMap />
 
       <button
         type="button"

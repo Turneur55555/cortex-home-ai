@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { Package, Dumbbell, FileText, Sparkles, Plus, Bell, Loader2, Quote } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { useProfile } from "@/hooks/useProfile";
 import { ChatBot } from "@/components/ChatBot";
 import { supabase } from "@/integrations/supabase/client";
 import { getSessionQuote } from "@/lib/quotes";
@@ -43,9 +44,10 @@ const modules = [
 
 function HomePage() {
   const { user } = useAuth();
+  const fallback = user?.email?.split("@")[0] ?? "vous";
+  const { pseudo: name } = useProfile(fallback);
   const stats = useDashboardStats();
   const greeting = getGreeting();
-  const name = user?.email?.split("@")[0] ?? "vous";
   const quote = useMemo(() => getSessionQuote(), []);
 
   return (

@@ -3,7 +3,6 @@
 // Magic bytes MIME detection — no Sharp, never rejects on MIME alone
 // Always returns JSON { success, ... } even on error
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
-import { checkRateLimit, recordRateLimit } from "../_shared/rate-limit.ts";
 
 const ALLOWED_ORIGINS = [
   "https://id-preview--2c9444e5-f2d2-4c68-9566-e9e8569dc37a.lovable.app",
@@ -269,12 +268,6 @@ Deno.serve(async (req) => {
     const userId = userData.user.id;
     console.log("[analyze-image] STEP 1: auth ok, user:", userId);
 
-    // Rate limit
-    const rl = await checkRateLimit(userSupa, userId, "analyze_pdf", 10);
-    if (!rl.ok) {
-      return jsonResp({ success: false, error: "rate_limit", user_message: "Limite atteinte (10 analyses/h). Réessaie plus tard." }, 429);
-    }
-
     // STEP 2: Parse FormData
     let formData: FormData;
     try {
@@ -496,7 +489,6 @@ Tout le texte (summary, insights, alerts) doit être en FRANÇAIS.`;
       return jsonResp({ success: false, error: "db", user_message: "Erreur d'enregistrement du document", details: docErr.message }, 500);
     }
 
-    await recordRateLimit(userSupa, userId, "analyze_pdf");
     console.log("[analyze-image] done");
 
     return jsonResp({
