@@ -3,16 +3,20 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 
-export const PROFILE_QK = ["profile"] as const;
+// Clé incluant l'uid pour que chaque utilisateur ait son propre cache.
+// L'export de base sert à vider toutes les entrées profile au logout.
+export const PROFILE_BASE_QK = ["profile"] as const;
+const profileQK = (uid: string) => [...PROFILE_BASE_QK, uid] as const;
 
 type ProfileRow = { display_name: string | null } | null | undefined;
 
 export function useProfile(fallback: string) {
   const { user } = useAuth();
   const qc = useQueryClient();
+  const qk = user ? profileQK(user.id) : PROFILE_BASE_QK;
 
   const { data: row } = useQuery({
-    queryKey: PROFILE_QK,
+    queryKey: qk,
     enabled: !!user,
     staleTime: 5 * 60 * 1000,
     queryFn: async () => {
@@ -26,9 +30,8 @@ export function useProfile(fallback: string) {
     },
   });
 
-  // Single source of truth: users_profiles.display_name.
-  // Fallback to email prefix only when the column is null/empty.
-  // Never read user_metadata.full_name — it can diverge from the DB.
+  // Source unique : users_profiles.display_name
+  // Fallback contrôlé : email-prefix uniquement si null
   const pseudo = row?.display_name?.trim() || fallback;
 
   const mutation = useMutation({
@@ -38,25 +41,31 @@ export function useProfile(fallback: string) {
         throw new Error("Le pseudo doit faire entre 3 et 20 caractères.");
       }
 
-      // 1. Upsert — couvre à la fois les nouvelles lignes (utilisateurs legacy
-      //    antérieurs au trigger handle_new_user) et les mises à jour normales.
-      //    Le trigger prevent_premium_self_update ayant été supprimé, l'upsert
-      //    ne touche que display_name et laisse premium intact.
-      const { error } = await supabase
+      // Upsert avec .select() pour détecter un échec silencieux :
+      // Supabase/PostgREST renvoie { data: null, error: null } quand
+      // une RLS ou un trigger empêche l'écriture sans lever d'exception.
+      const { data, error } = await supabase
         .from("users_profiles")
-        .upsert({ id: user!.id, display_name: trimmed }, { onConflict: "id" });
+        .upsert({ id: user!.id, display_name: trimmed }, { onConflict: "id" })
+        .select("display_name")
+        .maybeSingle();
+
       if (error) throw error;
 
-      // 2. Mirror to auth metadata so JWT stays consistent with DB.
-      //    Fire-and-forget — a metadata sync failure must not block the save.
+      // Aucune ligne retournée = écriture bloquée silencieusement
+      if (!data) {
+        throw new Error("La sauvegarde a échoué. Vérifiez votre connexion et réessayez.");
+      }
+
+      // Synchronisation auth metadata (fire-and-forget)
       void supabase.auth.updateUser({ data: { display_name: trimmed } }).catch(() => undefined);
 
       return trimmed;
     },
     onMutate: async (next) => {
-      await qc.cancelQueries({ queryKey: PROFILE_QK });
-      const prev = qc.getQueryData<ProfileRow>(PROFILE_QK);
-      qc.setQueryData<ProfileRow>(PROFILE_QK, (old) => ({
+      await qc.cancelQueries({ queryKey: qk });
+      const prev = qc.getQueryData<ProfileRow>(qk);
+      qc.setQueryData<ProfileRow>(qk, (old) => ({
         ...old,
         display_name: next.trim(),
       }));
@@ -64,11 +73,11 @@ export function useProfile(fallback: string) {
     },
     onError: (_err, _next, ctx) => {
       if (ctx !== undefined) {
-        qc.setQueryData<ProfileRow>(PROFILE_QK, ctx.prev);
+        qc.setQueryData<ProfileRow>(qk, ctx.prev);
       }
     },
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey: PROFILE_QK });
+      void qc.invalidateQueries({ queryKey: qk });
     },
   });
 

@@ -13,6 +13,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useProfile } from "@/hooks/useProfile";
 import { useGoals } from "@/hooks/useGoals";
@@ -48,6 +49,7 @@ const fadeUp = {
 function ProfilPage() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
+  const qc = useQueryClient();
 
   const fallbackPseudo = useMemo(
     () => user?.email?.split("@")[0] ?? "Utilisateur",
@@ -63,6 +65,9 @@ function ProfilPage() {
   const [progressOpen, setProgressOpen] = useState(false);
 
   const handleSignOut = async () => {
+    // Vider tout le cache React Query avant déconnexion pour éviter que
+    // les données de la session précédente soient servies au prochain login.
+    qc.clear();
     await signOut();
     toast.success("Déconnecté");
     navigate({ to: "/login" });
