@@ -10,6 +10,7 @@ import {
 import type { MuscleId } from "@/lib/fitness/muscleMapping";
 import { FrontView } from "./muscles/front";
 import { BackView } from "./muscles/back";
+import { fmtHours } from "@/utils/fitness/formatting";
 import { Loader2 } from "lucide-react";
 
 const LEGEND: Array<{ status: RecoveryStatus; label: string }> = [
@@ -141,8 +142,3 @@ export function MuscleMap() {
   );
 }
 
-function fmtHours(h: number): string {
-  if (h < 1) return "<1h";
-  if (h < 48) return `${h}h`;
-  return `${Math.round(h / 24)}j`;
-}
