@@ -4,6 +4,7 @@ import { useMutation } from "@tanstack/react-query";
 import { Dumbbell, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Field, Sheet, SubmitButton } from "@/components/shared/FormComponents";
+import { MUSCLE_META, type MuscleId } from "@/lib/fitness/muscleMapping";
 
 export type WorkoutTemplate = {
   name: string;
@@ -17,27 +18,46 @@ export type WorkoutTemplate = {
   notes?: string;
 };
 
-export const MUSCLE_OPTIONS = [
-  { id: "pectoraux", label: "Pectoraux" },
-  { id: "dos", label: "Dos" },
-  { id: "epaules", label: "Épaules" },
-  { id: "biceps", label: "Biceps" },
-  { id: "triceps", label: "Triceps" },
-  { id: "jambes", label: "Jambes" },
-  { id: "fessiers", label: "Fessiers" },
-  { id: "abdos", label: "Abdos" },
-  { id: "cardio", label: "Cardio" },
+// ─── Muscle option types ──────────────────────────────────────────────────────
+
+type MuscleDomainOption = { id: MuscleId; label: string };
+type MuscleAliasOption  = { id: "jambes"; label: string; isAlias: true;  resolves: MuscleId[] };
+type MuscleCardioOption = { id: "cardio"; label: string; isCardio: true };
+type MuscleOption = MuscleDomainOption | MuscleAliasOption | MuscleCardioOption;
+
+// Only the major groups shown in the coach UI — not all 14 MUSCLE_META entries.
+// Labels are sourced from MUSCLE_META so they stay in sync with the domain.
+export const MUSCLE_OPTIONS: MuscleOption[] = [
+  { id: "pectoraux", label: MUSCLE_META.pectoraux.label },
+  { id: "dos",       label: MUSCLE_META.dos.label },
+  { id: "epaules",   label: MUSCLE_META.epaules.label },
+  { id: "biceps",    label: MUSCLE_META.biceps.label },
+  { id: "triceps",   label: MUSCLE_META.triceps.label },
+  { id: "fessiers",  label: MUSCLE_META.fessiers.label },
+  { id: "abdos",     label: MUSCLE_META.abdos.label },
+  { id: "jambes",  label: "Jambes",  isAlias: true, resolves: ["quadriceps", "ischio", "fessiers"] },
+  { id: "cardio",  label: "Cardio",  isCardio: true },
 ];
 
-export function normalizeMuscleId(label: string): string | null {
-  const norm = label
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "")
-    .trim();
-  const match = MUSCLE_OPTIONS.find((m) => m.id === norm);
-  return match ? match.id : null;
+// Resolves UI selections → domain MuscleId[] (cardio bypassed, aliases expanded)
+function resolveMuscleSlugs(selected: string[]): MuscleId[] {
+  return selected.flatMap((id) => {
+    const opt = MUSCLE_OPTIONS.find((o) => o.id === id);
+    if (!opt) return [];
+    if ("isCardio" in opt) return [];
+    if ("isAlias"  in opt) return opt.resolves;
+    return [opt.id];
+  });
 }
+
+function hasCardio(selected: string[]): boolean {
+  return selected.some((id) => {
+    const opt = MUSCLE_OPTIONS.find((o) => o.id === id);
+    return opt != null && "isCardio" in opt;
+  });
+}
+
+// ─── Component ───────────────────────────────────────────────────────────────
 
 type Mode = "muscu" | "autre";
 
@@ -84,7 +104,8 @@ export function CoachSheet({
         mode === "muscu"
           ? {
               mode: "muscu",
-              muscles: muscles.map((m) => MUSCLE_OPTIONS.find((o) => o.id === m)?.label ?? m),
+              muscles: resolveMuscleSlugs(muscles).map((id) => MUSCLE_META[id].label),
+              has_cardio: hasCardio(muscles),
               duration_minutes: Number(duration) || 45,
               equipment,
               level,
