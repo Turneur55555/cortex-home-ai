@@ -410,7 +410,7 @@ function WorkoutCard({
                   {/* Séries/reps/poids */}
                   <span className="shrink-0 text-muted-foreground">
                     {[
-                      ex.sets != null && `${ex.sets}×${ex.reps ?? "?"}`
+                      ex.sets != null && `${ex.sets}×${ex.reps ?? "?"}`,
                       ex.weight != null && `${ex.weight} kg`,
                     ]
                       .filter(Boolean)
