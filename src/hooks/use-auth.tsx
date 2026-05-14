@@ -16,24 +16,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Listener FIRST (avoid missing events). Supabase fires INITIAL_SESSION
-    // with a server-validated session shortly after subscribing, so we don't
-    // need a separate getSession() call (which only reads localStorage).
+    // onAuthStateChange fires INITIAL_SESSION (from localStorage) immediately,
+    // then TOKEN_REFRESHED / SIGNED_OUT as the token lifecycle proceeds.
+    // autoRefreshToken:true in the client handles expiry automatically.
+    // The beforeLoad guard in _authenticated.tsx validates the JWT server-side
+    // on every navigation, so a separate getUser() here is redundant and races
+    // against INITIAL_SESSION (overwriting a valid session on transient errors).
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession);
-      setLoading(false);
-    });
-
-    // Server-verified hydration: getUser() makes a network call and validates
-    // the JWT. If validation fails (tampered/expired/revoked), clear session.
-    supabase.auth.getUser().then(async ({ data, error }) => {
-      if (error || !data.user) {
-        setSession(null);
-        setLoading(false);
-        return;
-      }
-      const { data: sess } = await supabase.auth.getSession();
-      setSession(sess.session);
       setLoading(false);
     });
 

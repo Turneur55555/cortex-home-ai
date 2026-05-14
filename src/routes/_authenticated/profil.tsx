@@ -211,13 +211,9 @@ function ProfilPage() {
         open={editOpen}
         onOpenChange={setEditOpen}
         current={pseudo}
-        onSave={(v) => {
-          try {
-            updatePseudo(v);
-            toast.success("Pseudo mis à jour");
-          } catch (e) {
-            toast.error(e instanceof Error ? e.message : "Erreur");
-          }
+        onSave={async (v) => {
+          await updatePseudo(v);
+          toast.success("Pseudo mis à jour");
         }}
       />
       <StreakSheet open={streakOpen} onOpenChange={setStreakOpen} />

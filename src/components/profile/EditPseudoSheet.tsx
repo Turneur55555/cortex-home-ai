@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Check } from "lucide-react";
+import { Check, Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { PremiumSheet } from "./PremiumSheet";
 
@@ -7,12 +7,13 @@ interface EditPseudoSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   current: string;
-  onSave: (next: string) => void;
+  onSave: (next: string) => Promise<void>;
 }
 
 export function EditPseudoSheet({ open, onOpenChange, current, onSave }: EditPseudoSheetProps) {
   const [value, setValue] = useState(current);
   const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -20,6 +21,7 @@ export function EditPseudoSheet({ open, onOpenChange, current, onSave }: EditPse
     if (open) {
       setValue(current);
       setError(null);
+      setSaving(false);
       setSuccess(false);
       setTimeout(() => inputRef.current?.focus(), 250);
     }
@@ -32,16 +34,24 @@ export function EditPseudoSheet({ open, onOpenChange, current, onSave }: EditPse
     return null;
   };
 
-  const handleSubmit = (e?: React.FormEvent) => {
+  const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
     const err = validate(value);
     if (err) {
       setError(err);
       return;
     }
-    onSave(value.trim());
-    setSuccess(true);
-    setTimeout(() => onOpenChange(false), 700);
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave(value.trim());
+      setSuccess(true);
+      setTimeout(() => onOpenChange(false), 700);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Erreur lors de la sauvegarde.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -63,7 +73,8 @@ export function EditPseudoSheet({ open, onOpenChange, current, onSave }: EditPse
             }}
             maxLength={20}
             placeholder="Votre pseudo"
-            className="h-14 w-full rounded-2xl border border-white/10 bg-white/[0.04] px-5 text-base font-medium tracking-tight text-foreground placeholder:text-muted-foreground/60 backdrop-blur-xl outline-none transition-all focus:border-primary/50 focus:bg-white/[0.06] focus:shadow-[0_0_0_4px_rgba(108,99,255,0.15)]"
+            disabled={saving || success}
+            className="h-14 w-full rounded-2xl border border-white/10 bg-white/[0.04] px-5 text-base font-medium tracking-tight text-foreground placeholder:text-muted-foreground/60 backdrop-blur-xl outline-none transition-all focus:border-primary/50 focus:bg-white/[0.06] focus:shadow-[0_0_0_4px_rgba(108,99,255,0.15)] disabled:opacity-60"
           />
           <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[11px] tabular-nums text-muted-foreground">
             {value.length}/20
@@ -83,7 +94,7 @@ export function EditPseudoSheet({ open, onOpenChange, current, onSave }: EditPse
         <motion.button
           type="submit"
           whileTap={{ scale: 0.97 }}
-          disabled={success}
+          disabled={saving || success}
           className="mt-5 flex h-13 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-primary to-accent px-4 py-3.5 text-sm font-semibold text-white shadow-glow transition-opacity disabled:opacity-90"
         >
           {success ? (
@@ -96,6 +107,11 @@ export function EditPseudoSheet({ open, onOpenChange, current, onSave }: EditPse
               <Check className="h-4 w-4" />
               Enregistré
             </motion.span>
+          ) : saving ? (
+            <span className="flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Sauvegarde…
+            </span>
           ) : (
             "Enregistrer"
           )}
