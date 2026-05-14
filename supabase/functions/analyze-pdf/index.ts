@@ -351,20 +351,13 @@ Deno.serve(async (req) => {
       },
     };
 
-    // Build the file/image content block for Gemini
-    // Images use image_url; PDFs use the file block with base64 data URI
-    const fileContent = isImage
-      ? {
-          type: "image_url",
-          image_url: { url: `data:${contentType};base64,${b64}` },
-        }
-      : {
-          type: "file",
-          file: {
-            filename: name || "document.pdf",
-            file_data: `data:application/pdf;base64,${b64}`,
-          },
-        };
+    // Both images and PDFs use image_url — Lovable gateway translates the MIME type
+    // to Gemini's native inlineData format. The type:"file" block is non-standard
+    // and rejected by the gateway even though Gemini supports PDFs natively.
+    const fileContent = {
+      type: "image_url",
+      image_url: { url: `data:${contentType};base64,${b64}` },
+    };
 
     console.log("[analyze-pdf] step: calling Gemini, isImage:", isImage);
     const t0 = Date.now();
