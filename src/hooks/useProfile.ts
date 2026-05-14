@@ -41,21 +41,12 @@ export function useProfile(fallback: string) {
         throw new Error("Le pseudo doit faire entre 3 et 20 caractères.");
       }
 
-      // Upsert avec .select() pour détecter un échec silencieux :
-      // Supabase/PostgREST renvoie { data: null, error: null } quand
-      // une RLS ou un trigger empêche l'écriture sans lever d'exception.
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from("users_profiles")
-        .upsert({ id: user!.id, display_name: trimmed }, { onConflict: "id" })
-        .select("display_name")
-        .maybeSingle();
+        .upsert({ id: user!.id, display_name: trimmed }, { onConflict: "id" });
 
       if (error) throw error;
 
-      // Aucune ligne retournée = écriture bloquée silencieusement
-      if (!data) {
-        throw new Error("La sauvegarde a échoué. Vérifiez votre connexion et réessayez.");
-      }
 
       // Synchronisation auth metadata (fire-and-forget)
       void supabase.auth.updateUser({ data: { display_name: trimmed } }).catch(() => undefined);

@@ -137,13 +137,14 @@ export function useUploadAndAnalyze() {
         body: { storage_path: path, module, name: displayName, content_type: contentType },
       });
       if (fnErr) {
-        // Supabase wraps edge function errors with a generic "non-2xx" message — unwrap it
-        const raw = fnErr.message ?? "";
-        const friendlyMsg = raw.includes("non-2xx")
-          ? isImage
-            ? "Impossible d'analyser cette image. Essayez un format JPG ou PNG clair."
-            : "Impossible d'analyser ce PDF. Vérifiez que le fichier n'est pas corrompu."
-          : raw;
+        // FunctionsHttpError wraps non-2xx responses — try to extract the real message
+        let friendlyMsg = isImage
+          ? "Impossible d'analyser cette image. Essayez un format JPG ou PNG clair."
+          : "Impossible d'analyser ce PDF. Vérifiez que le fichier n'est pas corrompu.";
+        try {
+          const body = await (fnErr as { context?: { json?: () => Promise<Record<string, unknown>> } }).context?.json?.();
+          if (body?.error && typeof body.error === "string") friendlyMsg = body.error;
+        } catch { /* keep default */ }
         throw new Error(friendlyMsg);
       }
       if (ai?.error) throw new Error(ai.error);
