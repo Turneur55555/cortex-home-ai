@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Dumbbell, Loader2, Sparkles } from "lucide-react";
-import { MuscleBodyMap } from "@/components/fitness/MuscleBodyMap";
+import { MuscleMap } from "@/components/fitness/MuscleMap";
 import { WorkoutCard, type WorkoutRow } from "@/components/fitness/WorkoutCard";
 import { WorkoutSheet } from "@/components/fitness/WorkoutSheet";
 import { WorkoutProgressCharts } from "@/components/fitness/WorkoutProgressCharts";
@@ -58,7 +58,7 @@ export function SeancesTab() {
 
   return (
     <section className="flex flex-col gap-4">
-      <MuscleBodyMap />
+      <MuscleMap />
 
       <button
         type="button"
