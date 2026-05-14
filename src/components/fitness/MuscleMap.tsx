@@ -1,7 +1,7 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { useWorkouts } from "@/hooks/use-fitness";
+import { useRecoveryMap } from "@/hooks/useRecoveryMap";
 import {
-  computeRecovery,
   RECOVERY_COLORS,
   RECOVERY_LABELS,
   RECOVERY_LEGEND,
@@ -23,15 +23,7 @@ type Tooltip = {
 export function MuscleMap() {
   const { data: workouts, isLoading } = useWorkouts();
   const [tooltip, setTooltip] = useState<Tooltip | null>(null);
-
-  const recoveryMap = useMemo(() => {
-    if (!workouts) return new Map<MuscleId, MuscleRecovery>();
-    const mapped = workouts.map((w) => ({
-      date: w.date,
-      exercises: w.exercises?.map((ex) => ({ name: ex.name })) ?? null,
-    }));
-    return computeRecovery(mapped);
-  }, [workouts]);
+  const recoveryMap = useRecoveryMap(workouts);
 
   const getColor = useCallback(
     (id: MuscleId) => {
