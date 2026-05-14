@@ -11,32 +11,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-
-// Déterministe à partir du nom : évite les valeurs aléatoires à chaque rendu
-function simpleHash(s: string): number {
-  let h = 0;
-  for (const c of s) h = ((h * 31) + c.charCodeAt(0)) >>> 0;
-  return h;
-}
-
-function mockWeightHistory(
-  exerciseName: string,
-  pr?: number,
-): Array<{ date: string; weight: number }> {
-  const seed = simpleHash(exerciseName);
-  const base = pr ?? (30 + (seed % 60));
-  const today = new Date();
-  return Array.from({ length: 8 }, (_, i) => {
-    const d = new Date(today);
-    d.setDate(d.getDate() - (7 - i) * 7);
-    const ratio = 0.82 + (i / 7) * 0.18;
-    const noise = (((seed >> i) & 7) / 50) - 0.07;
-    return {
-      date: format(d, "yyyy-MM-dd"),
-      weight: Math.max(5, Math.round((base * (ratio + noise)) * 2) / 2),
-    };
-  });
-}
+import { mockWeightHistory } from "@/utils/fitness/exercise-stats";
 
 export function ExerciseStatsSheet({
   exerciseName,

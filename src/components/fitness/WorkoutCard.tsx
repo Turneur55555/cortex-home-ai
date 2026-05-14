@@ -1,0 +1,304 @@
+import { useRef, useState } from "react";
+import { toast } from "sonner";
+import {
+  BarChart3,
+  Calendar,
+  Clock,
+  Dumbbell,
+  Loader2,
+  Plus,
+  Repeat,
+  Trash2,
+  Trophy,
+  X,
+} from "lucide-react";
+import { format, parseISO } from "date-fns";
+import { fr } from "date-fns/locale";
+import { supabase } from "@/integrations/supabase/client";
+import {
+  useDeleteExercise,
+  useDeleteWorkout,
+  useAddExerciseToWorkout,
+  useUpdateExercise,
+  useUpdateWorkoutName,
+  useWorkouts,
+} from "@/hooks/use-fitness";
+import { EditableText } from "./EditableText";
+import { SwipeableExerciseRow } from "./SwipeableExerciseRow";
+import { PhotoModal } from "./PhotoModal";
+import { WorkoutDeleteDialog } from "./WorkoutDeleteDialog";
+import { ExerciseStatsSheet } from "./ExerciseStatsSheet";
+
+export type WorkoutRow = NonNullable<ReturnType<typeof useWorkouts>["data"]>[number];
+
+export function WorkoutCard({
+  w,
+  prByName,
+  histByName,
+  volByName,
+  imageUrls,
+  latestDate,
+  onOpenFromTemplate,
+}: {
+  w: WorkoutRow;
+  prByName: Map<string, number>;
+  histByName: Map<string, Array<{ date: string; weight: number }>>;
+  volByName: Map<string, Array<{ date: string; volume: number }>>;
+  imageUrls: Map<string, string> | undefined;
+  latestDate: string;
+  onOpenFromTemplate: (w: WorkoutRow) => void;
+}) {
+  const updateName = useUpdateWorkoutName();
+  const updateEx = useUpdateExercise();
+  const deleteEx = useDeleteExercise();
+  const deleteWorkout = useDeleteWorkout();
+  const addEx = useAddExerciseToWorkout();
+
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [statsKey, setStatsKey] = useState<string | null>(null);
+  const [photoModal, setPhotoModal] = useState<{ url: string; exId: string } | null>(null);
+  const [addingEx, setAddingEx] = useState(false);
+  const [newExName, setNewExName] = useState("");
+  const [uploadingExId, setUploadingExId] = useState<string | null>(null);
+  const photoFileRef = useRef<HTMLInputElement>(null);
+  const modifyExIdRef = useRef<string>("");
+
+  const handlePhotoUpload = async (exId: string, file: File) => {
+    setUploadingExId(exId);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Non authentifié");
+      const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+      const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
+      const { error } = await supabase.storage
+        .from("exercise-images")
+        .upload(path, file, { contentType: file.type, upsert: false });
+      if (error) throw error;
+      updateEx.mutate({ id: exId, image_path: path });
+      toast.success("Photo modifiée");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erreur upload");
+    } finally {
+      setUploadingExId(null);
+      setPhotoModal(null);
+    }
+  };
+
+  const handleAddExercise = () => {
+    if (!newExName.trim()) { setAddingEx(false); return; }
+    addEx.mutate({ workoutId: w.id, exercise: { name: newExName.trim() } });
+    setNewExName("");
+    setAddingEx(false);
+  };
+
+  return (
+    <li className="rounded-2xl border border-border bg-card p-4 shadow-card">
+      {/* En-tête séance */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <EditableText
+            value={w.name}
+            onSave={(name) => updateName.mutate({ id: w.id, name })}
+            className="font-semibold leading-tight"
+          />
+          <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-1">
+              <Calendar className="h-3 w-3" />
+              {format(parseISO(w.date), "d MMM yyyy", { locale: fr })}
+            </span>
+            {w.duration_minutes != null && (
+              <span className="inline-flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                {w.duration_minutes} min
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => onOpenFromTemplate(w)}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary"
+            title="Refaire"
+          >
+            <Repeat className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfirmDelete(true)}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Liste exercices */}
+      {w.exercises && w.exercises.length > 0 && (
+        <ul className="mt-3 space-y-0.5 border-t border-border pt-3">
+          {w.exercises.map((ex) => {
+            const key = ex.name.trim().toLowerCase();
+            const isPR = ex.weight != null && prByName.get(key) === ex.weight;
+            const isLatestPR = isPR && w.date === latestDate;
+            const imgUrl = ex.image_path ? (imageUrls?.get(ex.image_path) ?? null) : null;
+            return (
+              <SwipeableExerciseRow
+                key={ex.id}
+                onDelete={() => deleteEx.mutate(ex.id)}
+              >
+                <div className="flex items-center gap-2.5 py-1.5 text-xs">
+                  {/* Thumbnail photo */}
+                  {imgUrl ? (
+                    uploadingExId === ex.id ? (
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setPhotoModal({ url: imgUrl, exId: ex.id })}
+                        className="h-9 w-9 shrink-0 overflow-hidden rounded-lg"
+                      >
+                        <img src={imgUrl} alt={ex.name} className="h-full w-full object-cover" loading="lazy" />
+                      </button>
+                    )
+                  ) : ex.image_path ? (
+                    <div className="h-9 w-9 shrink-0 animate-pulse rounded-lg bg-muted" />
+                  ) : (
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-dashed border-border text-muted-foreground/40">
+                      <Dumbbell className="h-3.5 w-3.5" />
+                    </div>
+                  )}
+
+                  {/* Nom (éditable) */}
+                  <EditableText
+                    value={ex.name}
+                    onSave={(name) => updateEx.mutate({ id: ex.id, name })}
+                    className="flex-1 font-medium"
+                  />
+
+                  {/* Badge PR */}
+                  {isPR && (
+                    <Trophy
+                      className={`h-3 w-3 shrink-0 text-warning ${isLatestPR ? "animate-pulse" : ""}`}
+                      aria-label={isLatestPR ? "Nouveau record !" : "Record personnel"}
+                    />
+                  )}
+
+                  {/* Bouton stats */}
+                  <button
+                    type="button"
+                    onClick={() => setStatsKey(key)}
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground/60 hover:text-primary"
+                    title="Statistiques"
+                  >
+                    <BarChart3 className="h-3.5 w-3.5" />
+                  </button>
+
+                  {/* Séries/reps/poids */}
+                  <span className="shrink-0 text-muted-foreground">
+                    {[
+                      ex.sets != null && `${ex.sets}×${ex.reps ?? "?"}`,
+                      ex.weight != null && `${ex.weight} kg`,
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
+                </div>
+              </SwipeableExerciseRow>
+            );
+          })}
+        </ul>
+      )}
+
+      {/* Ajouter un exercice */}
+      <div className="mt-2 border-t border-border pt-2">
+        {addingEx ? (
+          <div className="flex items-center gap-2">
+            <input
+              autoFocus
+              value={newExName}
+              onChange={(e) => setNewExName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleAddExercise();
+                if (e.key === "Escape") setAddingEx(false);
+              }}
+              onBlur={handleAddExercise}
+              placeholder="Nom de l'exercice…"
+              className="flex-1 rounded-lg border border-primary bg-transparent px-2 py-1 text-xs outline-none placeholder:text-muted-foreground/50"
+            />
+            <button
+              type="button"
+              onClick={() => setAddingEx(false)}
+              className="text-muted-foreground"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setAddingEx(true)}
+            className="flex items-center gap-1 text-xs font-medium text-primary/60 hover:text-primary"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Exercice
+          </button>
+        )}
+      </div>
+
+      {w.notes && (
+        <p className="mt-2 border-t border-border pt-2 text-xs italic text-muted-foreground">
+          {w.notes}
+        </p>
+      )}
+
+      {/* Input caché pour modifier une photo */}
+      <input
+        ref={photoFileRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f && modifyExIdRef.current) handlePhotoUpload(modifyExIdRef.current, f);
+          e.target.value = "";
+        }}
+      />
+
+      {photoModal && (
+        <PhotoModal
+          url={photoModal.url}
+          onClose={() => setPhotoModal(null)}
+          onDelete={() => {
+            updateEx.mutate({ id: photoModal.exId, image_path: null });
+            setPhotoModal(null);
+            toast.success("Photo supprimée");
+          }}
+          onModify={() => {
+            modifyExIdRef.current = photoModal.exId;
+            photoFileRef.current?.click();
+          }}
+        />
+      )}
+
+      {statsKey && (
+        <ExerciseStatsSheet
+          exerciseName={statsKey}
+          weightHistory={histByName.get(statsKey) ?? []}
+          volumeHistory={volByName.get(statsKey) ?? []}
+          pr={prByName.get(statsKey)}
+          onClose={() => setStatsKey(null)}
+        />
+      )}
+
+      {confirmDelete && (
+        <WorkoutDeleteDialog
+          workoutName={w.name}
+          onConfirm={() => { deleteWorkout.mutate(w.id); setConfirmDelete(false); }}
+          onCancel={() => setConfirmDelete(false)}
+        />
+      )}
+    </li>
+  );
+}
