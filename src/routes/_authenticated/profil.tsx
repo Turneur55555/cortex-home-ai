@@ -6,8 +6,6 @@ import {
   LogOut,
   Mail,
   Pencil,
-  Shield,
-  Sparkles,
   Target,
   TrendingUp,
   Utensils,
@@ -136,9 +134,6 @@ function ProfilPage() {
           Bienvenue dans votre espace, prenez le contrôle de vos habitudes.
         </motion.p>
 
-        <motion.div variants={fadeUp} custom={3} className="mt-3">
-          <PlanBadge plan="free" />
-        </motion.div>
       </motion.header>
 
       {/* Stats — interactive */}
@@ -266,22 +261,6 @@ function AmbientBackdrop() {
   );
 }
 
-function PlanBadge({ plan }: { plan: "free" | "premium" }) {
-  const isPremium = plan === "premium";
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-semibold tracking-wide backdrop-blur-md",
-        isPremium
-          ? "border-amber-300/40 bg-amber-300/10 text-amber-200"
-          : "border-white/10 bg-white/5 text-muted-foreground",
-      )}
-    >
-      {isPremium ? <Sparkles className="h-3 w-3" /> : <Shield className="h-3 w-3" />}
-      {isPremium ? "Plan Premium" : "Plan gratuit"}
-    </span>
-  );
-}
 
 function StatCard({
   icon: Icon,
