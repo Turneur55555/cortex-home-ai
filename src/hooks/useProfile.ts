@@ -38,24 +38,16 @@ export function useProfile(fallback: string) {
         throw new Error("Le pseudo doit faire entre 3 et 20 caractères.");
       }
 
-      // 1. Update DB profile (authoritative source of truth)
-      const { data, error } = await supabase
+      // 1. Upsert — couvre à la fois les nouvelles lignes (utilisateurs legacy
+      //    antérieurs au trigger handle_new_user) et les mises à jour normales.
+      //    Le trigger prevent_premium_self_update ayant été supprimé, l'upsert
+      //    ne touche que display_name et laisse premium intact.
+      const { error } = await supabase
         .from("users_profiles")
-        .update({ display_name: trimmed })
-        .eq("id", user!.id)
-        .select("display_name")
-        .maybeSingle();
+        .upsert({ id: user!.id, display_name: trimmed }, { onConflict: "id" });
       if (error) throw error;
 
-      // 2. Row missing (pre-trigger legacy user) — create it
-      if (!data) {
-        const { error: insertError } = await supabase
-          .from("users_profiles")
-          .insert({ id: user!.id, display_name: trimmed });
-        if (insertError) throw insertError;
-      }
-
-      // 3. Mirror to auth metadata so JWT stays consistent with DB.
+      // 2. Mirror to auth metadata so JWT stays consistent with DB.
       //    Fire-and-forget — a metadata sync failure must not block the save.
       void supabase.auth.updateUser({ data: { display_name: trimmed } }).catch(() => undefined);
 
