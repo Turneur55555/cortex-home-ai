@@ -5,6 +5,7 @@ import {
   Flame,
   LogOut,
   Mail,
+  Pencil,
   Shield,
   Sparkles,
   Target,
@@ -13,9 +14,17 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
+import { useMemo, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
+import { useProfile } from "@/hooks/useProfile";
+import { useGoals } from "@/hooks/useGoals";
+import { useStreak } from "@/hooks/useStreak";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { EditPseudoSheet } from "@/components/profile/EditPseudoSheet";
+import { GoalsSheet } from "@/components/profile/GoalsSheet";
+import { ProgressSheet } from "@/components/profile/ProgressSheet";
+import { StreakSheet } from "@/components/profile/StreakSheet";
 
 export const Route = createFileRoute("/_authenticated/profil")({
   head: () => ({
@@ -42,21 +51,31 @@ function ProfilPage() {
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
 
+  const fallbackPseudo = useMemo(
+    () => user?.email?.split("@")[0] ?? "Utilisateur",
+    [user?.email],
+  );
+  const { pseudo, updatePseudo } = useProfile(fallbackPseudo);
+  const { stats: goalStats } = useGoals();
+  const { current: streakDays } = useStreak();
+
+  const [editOpen, setEditOpen] = useState(false);
+  const [streakOpen, setStreakOpen] = useState(false);
+  const [goalsOpen, setGoalsOpen] = useState(false);
+  const [progressOpen, setProgressOpen] = useState(false);
+
   const handleSignOut = async () => {
     await signOut();
     toast.success("Déconnecté");
     navigate({ to: "/login" });
   };
 
-  const pseudo = user?.email?.split("@")[0] ?? "Utilisateur";
-  const initial = user?.email?.[0]?.toUpperCase() ?? "?";
+  const initial = pseudo[0]?.toUpperCase() ?? "?";
 
   return (
     <main className="relative flex flex-1 flex-col overflow-hidden px-5 pb-32 pt-[max(3rem,env(safe-area-inset-top))]">
-      {/* Animated ambient background */}
       <AmbientBackdrop />
 
-      {/* Hero */}
       <motion.header
         variants={fadeUp}
         custom={0}
@@ -65,7 +84,6 @@ function ProfilPage() {
         className="relative mb-8 flex flex-col items-center text-center"
       >
         <div className="relative mb-5">
-          {/* glow */}
           <motion.div
             aria-hidden
             initial={{ opacity: 0, scale: 0.7 }}
@@ -93,22 +111,27 @@ function ProfilPage() {
             <span className="relative text-4xl font-bold tracking-tight text-white drop-shadow-[0_2px_8px_rgba(108,99,255,0.6)]">
               {initial}
             </span>
-            {/* online dot */}
             <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full border-[3px] border-background bg-success shadow-[0_0_12px_rgba(34,197,94,0.7)]" />
           </motion.div>
         </div>
 
-        <motion.h1
+        {/* Editable pseudo */}
+        <motion.button
           variants={fadeUp}
           custom={1}
-          className="text-2xl font-bold tracking-tight"
+          type="button"
+          onClick={() => setEditOpen(true)}
+          whileTap={{ scale: 0.97 }}
+          className="group inline-flex items-center gap-1.5 rounded-full px-2 py-1 transition-colors hover:bg-white/[0.04]"
         >
-          {pseudo}
-        </motion.h1>
+          <h1 className="text-2xl font-bold tracking-tight">{pseudo}</h1>
+          <Pencil className="h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+        </motion.button>
+
         <motion.p
           variants={fadeUp}
           custom={2}
-          className="mt-1.5 max-w-[260px] text-[13px] leading-snug text-muted-foreground"
+          className="mt-1 max-w-[260px] text-[13px] leading-snug text-muted-foreground"
         >
           Bienvenue dans votre espace, prenez le contrôle de vos habitudes.
         </motion.p>
@@ -118,7 +141,7 @@ function ProfilPage() {
         </motion.div>
       </motion.header>
 
-      {/* Stats */}
+      {/* Stats — interactive */}
       <motion.section
         variants={fadeUp}
         custom={4}
@@ -126,12 +149,29 @@ function ProfilPage() {
         animate="show"
         className="mb-7 grid grid-cols-3 gap-2.5"
       >
-        <StatCard icon={Flame} label="Streak" value="7j" tint="from-orange-500/30 to-pink-500/10" />
-        <StatCard icon={Target} label="Objectifs" value="3/5" tint="from-violet-500/30 to-indigo-500/10" />
-        <StatCard icon={TrendingUp} label="Progrès" value="+12%" tint="from-cyan-400/30 to-blue-500/10" />
+        <StatCard
+          icon={Flame}
+          label="Streak"
+          value={`${streakDays}j`}
+          tint="from-orange-500/30 to-pink-500/10"
+          onClick={() => setStreakOpen(true)}
+        />
+        <StatCard
+          icon={Target}
+          label="Objectifs"
+          value={`${goalStats.done}/${goalStats.total}`}
+          tint="from-violet-500/30 to-indigo-500/10"
+          onClick={() => setGoalsOpen(true)}
+        />
+        <StatCard
+          icon={TrendingUp}
+          label="Progrès"
+          value="+12%"
+          tint="from-cyan-400/30 to-blue-500/10"
+          onClick={() => setProgressOpen(true)}
+        />
       </motion.section>
 
-      {/* Account */}
       <motion.section variants={fadeUp} custom={5} initial="hidden" animate="show" className="mb-5">
         <SectionTitle>Compte</SectionTitle>
         <GlassCard>
@@ -139,7 +179,6 @@ function ProfilPage() {
         </GlassCard>
       </motion.section>
 
-      {/* Preferences */}
       <motion.section variants={fadeUp} custom={6} initial="hidden" animate="show" className="mb-8">
         <SectionTitle>Préférences</SectionTitle>
         <GlassCard interactive>
@@ -152,7 +191,6 @@ function ProfilPage() {
         </GlassCard>
       </motion.section>
 
-      {/* Sign out */}
       <motion.div variants={fadeUp} custom={7} initial="hidden" animate="show" className="mt-auto">
         <motion.button
           type="button"
@@ -167,6 +205,24 @@ function ProfilPage() {
           Se déconnecter
         </motion.button>
       </motion.div>
+
+      {/* Modals */}
+      <EditPseudoSheet
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        current={pseudo}
+        onSave={(v) => {
+          try {
+            updatePseudo(v);
+            toast.success("Pseudo mis à jour");
+          } catch (e) {
+            toast.error(e instanceof Error ? e.message : "Erreur");
+          }
+        }}
+      />
+      <StreakSheet open={streakOpen} onOpenChange={setStreakOpen} />
+      <GoalsSheet open={goalsOpen} onOpenChange={setGoalsOpen} />
+      <ProgressSheet open={progressOpen} onOpenChange={setProgressOpen} />
     </main>
   );
 }
@@ -198,7 +254,6 @@ function AmbientBackdrop() {
         className="absolute -left-20 top-72 h-[260px] w-[260px] rounded-full blur-[100px]"
         style={{ background: "radial-gradient(circle, rgba(77,175,255,0.22), transparent 70%)" }}
       />
-      {/* subtle particles */}
       {Array.from({ length: 8 }).map((_, i) => (
         <motion.span
           key={i}
@@ -237,18 +292,22 @@ function StatCard({
   label,
   value,
   tint,
+  onClick,
 }: {
   icon: LucideIcon;
   label: string;
   value: string;
   tint: string;
+  onClick: () => void;
 }) {
   return (
-    <motion.div
-      whileTap={{ scale: 0.96 }}
+    <motion.button
+      type="button"
+      onClick={onClick}
+      whileTap={{ scale: 0.94 }}
       whileHover={{ y: -2 }}
       transition={{ type: "spring", stiffness: 320, damping: 18 }}
-      className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] p-3 backdrop-blur-xl shadow-card"
+      className="relative overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-left backdrop-blur-xl shadow-card focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
     >
       <div className={cn("absolute inset-0 -z-10 bg-gradient-to-br opacity-70", tint)} />
       <Icon className="h-4 w-4 text-white/80" />
@@ -256,7 +315,7 @@ function StatCard({
       <div className="mt-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
         {label}
       </div>
-    </motion.div>
+    </motion.button>
   );
 }
 
