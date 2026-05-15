@@ -1,249 +1,270 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { Package, Dumbbell, FileText, Sparkles, Plus, Bell, Loader2, Quote } from "lucide-react";
+import {
+  Dumbbell,
+  House,
+  Flame,
+  ChevronRight,
+  Bell,
+  Plus,
+  Loader2,
+  MapPin,
+} from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useProfile } from "@/hooks/useProfile";
 import { ChatBot } from "@/components/ChatBot";
-import { supabase } from "@/integrations/supabase/client";
-import { getSessionQuote } from "@/lib/quotes";
+import { getContextualQuote } from "@/lib/quotes";
+import { useWorkouts } from "@/hooks/use-fitness";
+import { useRecoveryMap } from "@/hooks/useRecoveryMap";
+import { useStreak } from "@/hooks/useStreak";
 
 export const Route = createFileRoute("/_authenticated/")({
   head: () => ({
     meta: [
       { title: "ICORTEX — Accueil" },
-      { name: "description", content: "Votre tableau de bord intelligent ICORTEX." },
+      { name: "description", content: "Votre Personal Performance OS." },
     ],
   }),
   component: HomePage,
 });
 
-const modules = [
-  {
-    to: "/stocks",
-    label: "Stocks",
-    icon: Package,
-    accent: "from-violet-500 to-fuchsia-500",
-    desc: "Frigo, habits, pharmacie",
-  },
-  {
-    to: "/fitness",
-    label: "Fitness",
-    icon: Dumbbell,
-    accent: "from-cyan-400 to-blue-500",
-    desc: "Corps, séances, nutrition",
-  },
-  {
-    to: "/documents",
-    label: "Documents",
-    icon: FileText,
-    accent: "from-amber-400 to-orange-500",
-    desc: "PDF analysés par IA",
-  },
-] as const;
-
 function HomePage() {
   const { user } = useAuth();
   const fallback = user?.email?.split("@")[0] ?? "vous";
   const { pseudo: name } = useProfile(fallback);
-  const stats = useDashboardStats();
+  const { data: workouts, isLoading: fitnessLoading } = useWorkouts();
+  const recoveryMap = useRecoveryMap(workouts);
+  const streak = useStreak();
+  const quote = useMemo(() => getContextualQuote(), []);
   const greeting = getGreeting();
-  const quote = useMemo(() => getSessionQuote(), []);
+
+  const weeklyCount = useMemo(() => {
+    if (!workouts) return 0;
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 6);
+    cutoff.setHours(0, 0, 0, 0);
+    return workouts.filter((w) => new Date(w.date + "T00:00:00") >= cutoff).length;
+  }, [workouts]);
+
+  const recoveryScore = useMemo(() => {
+    const values = [...recoveryMap.values()];
+    const trained = values.filter((m) => m.status !== "unknown");
+    if (!trained.length) return null;
+    const sum = trained.reduce((acc, m) => {
+      if (m.status === "ready") return acc + 1;
+      if (m.status === "recovering") return acc + 0.6;
+      return acc + 0.1;
+    }, 0);
+    return Math.round((sum / trained.length) * 100);
+  }, [recoveryMap]);
+
+  const fatiguedMuscles = useMemo(
+    () =>
+      [...recoveryMap.values()]
+        .filter((m) => m.status === "fatigued")
+        .map((m) => m.label)
+        .slice(0, 3),
+    [recoveryMap],
+  );
 
   return (
-    <main className="flex flex-1 flex-col px-5 pb-6 pt-12">
-      {/* Header */}
-      <header className="mb-8 flex items-start justify-between">
+    <main className="flex flex-1 flex-col px-5 pb-6 pt-10">
+      {/* ── Header ── */}
+      <header className="mb-5 flex items-center justify-between">
         <div>
-          <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+          <p className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
             {greeting}
           </p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight">
+          <h1 className="mt-0.5 text-xl font-bold tracking-tight">
             Bonjour, <span className="text-primary">{name}</span>
           </h1>
         </div>
         <button
           type="button"
-          className="flex h-10 w-10 items-center justify-center rounded-full border border-border bg-surface text-muted-foreground transition-colors hover:text-foreground"
+          className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-surface text-muted-foreground transition-colors hover:text-foreground"
           aria-label="Notifications"
         >
-          <Bell className="h-5 w-5" />
+          <Bell className="h-4 w-4" />
         </button>
       </header>
 
-      {/* Citation motivante du jour */}
-      <section className="mb-6 rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-4 shadow-card">
-        <div className="flex gap-3">
-          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
-            <Quote className="h-4 w-4" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium leading-snug text-balance">"{quote.text}"</p>
-            <p className="mt-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              — {quote.author}
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* Hero card */}
-      <section className="mb-8 overflow-hidden rounded-3xl border border-border bg-gradient-surface p-6 shadow-elevated">
-        <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-primary/15 px-3 py-1 text-xs font-medium text-primary">
-          <Sparkles className="h-3.5 w-3.5" />
-          Assistant IA
-        </div>
-        <h2 className="text-xl font-semibold leading-snug text-balance">
-          Scannez un objet, l'IA s'occupe du reste.
-        </h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Photo de votre frigo, garde-robe ou armoire à pharmacie — inventaire instantané et alertes
-          automatiques.
+      {/* ── Quote ── */}
+      <blockquote className="mb-6 border-l-2 border-primary/40 pl-3">
+        <p className="text-[12px] italic leading-relaxed text-muted-foreground">
+          "{quote.text}"
         </p>
-        <Link
-          to="/stocks"
-          className="mt-5 inline-flex h-11 items-center gap-2 rounded-full bg-gradient-primary px-5 text-sm font-semibold text-primary-foreground shadow-glow transition-opacity hover:opacity-95"
-        >
-          <Plus className="h-4 w-4" />
-          Ajouter un item
-        </Link>
-      </section>
+        <footer className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50">
+          — {quote.author}
+        </footer>
+      </blockquote>
 
-      {/* Modules grid */}
-      <section className="mb-6">
-        <h3 className="mb-3 px-1 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-          Vos modules
-        </h3>
-        <ul className="space-y-3">
-          {modules.map(({ to, label, icon: Icon, accent, desc }) => (
-            <li key={to}>
-              <Link
-                to={to}
-                className="group flex items-center gap-4 rounded-2xl border border-border bg-card p-4 shadow-card transition-all hover:border-primary/40 hover:shadow-elevated"
-              >
-                <span
-                  className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${accent} shadow-glow`}
-                >
-                  <Icon className="h-6 w-6 text-white" />
-                </span>
-                <div className="flex-1">
-                  <p className="font-semibold leading-tight">{label}</p>
-                  <p className="text-xs text-muted-foreground">{desc}</p>
-                </div>
-                <span className="text-muted-foreground transition-transform group-hover:translate-x-1">
-                  →
-                </span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </section>
+      {/* ── Fitness Hero ── */}
+      <FitnessHero
+        loading={fitnessLoading}
+        recoveryScore={recoveryScore}
+        weeklyCount={weeklyCount}
+        streak={streak.current}
+        fatiguedMuscles={fatiguedMuscles}
+      />
 
-      <section className="grid grid-cols-2 gap-3">
-        <StatCard
-          label="Items suivis"
-          value={stats.isLoading ? "…" : String(stats.data?.tracked ?? 0)}
-          tone="primary"
-          loading={stats.isLoading}
-        />
-        <StatCard
-          label="PDF analysés"
-          value={stats.isLoading ? "…" : String(stats.data?.documents ?? 0)}
-          tone="warning"
-          loading={stats.isLoading}
-        />
-      </section>
-
-      {stats.data?.latestBody && (
-        <section className="mt-3 rounded-2xl border border-border bg-card p-4 shadow-card">
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Dernière mesure
-          </p>
-          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
-            {stats.data.latestBody.weight != null && <span>{stats.data.latestBody.weight} kg</span>}
-            {stats.data.latestBody.muscle_mass != null && (
-              <span>MM {stats.data.latestBody.muscle_mass} kg</span>
-            )}
-            {stats.data.latestBody.body_fat != null && (
-              <span>MG {stats.data.latestBody.body_fat}%</span>
-            )}
-          </div>
-        </section>
-      )}
+      {/* ── Maison ── */}
+      <Link
+        to="/stocks"
+        className="mt-4 flex items-center gap-3 rounded-2xl border border-border bg-card p-4 shadow-card transition-all hover:border-primary/30 hover:shadow-elevated"
+      >
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 shadow-glow">
+          <House className="h-5 w-5 text-white" />
+        </span>
+        <div className="flex-1">
+          <p className="text-sm font-semibold">Maison</p>
+          <p className="text-xs text-muted-foreground">Frigo, pharmacie, habits</p>
+        </div>
+        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+      </Link>
 
       <ChatBot />
     </main>
   );
 }
 
-function useDashboardStats() {
-  return useQuery({
-    queryKey: ["dashboard_stats"],
-    queryFn: async () => {
-      const [items, body, nutrition, workouts, documents, latestBody] = await Promise.all([
-        supabase.from("items").select("id", { count: "exact", head: true }),
-        supabase.from("body_tracking").select("id", { count: "exact", head: true }),
-        supabase.from("nutrition").select("id", { count: "exact", head: true }),
-        supabase.from("workouts").select("id", { count: "exact", head: true }),
-        supabase.from("documents").select("id", { count: "exact", head: true }),
-        supabase
-          .from("body_tracking")
-          .select("date, weight, body_fat, muscle_mass")
-          .or("weight.not.is.null,body_fat.not.is.null,muscle_mass.not.is.null")
-          .order("date", { ascending: false })
-          .limit(1)
-          .maybeSingle(),
-      ]);
+function FitnessHero({
+  loading,
+  recoveryScore,
+  weeklyCount,
+  streak,
+  fatiguedMuscles,
+}: {
+  loading: boolean;
+  recoveryScore: number | null;
+  weeklyCount: number;
+  streak: number;
+  fatiguedMuscles: string[];
+}) {
+  const scoreColor =
+    recoveryScore == null
+      ? "text-muted-foreground"
+      : recoveryScore >= 70
+        ? "text-emerald-400"
+        : recoveryScore >= 40
+          ? "text-amber-400"
+          : "text-red-400";
 
-      const error =
-        items.error ??
-        body.error ??
-        nutrition.error ??
-        workouts.error ??
-        documents.error ??
-        latestBody.error;
-      if (error) throw error;
+  return (
+    <section className="overflow-hidden rounded-3xl border border-border bg-gradient-surface p-5 shadow-elevated">
+      {/* Section header */}
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Flame className="h-4 w-4 text-orange-400" />
+          <span className="text-sm font-semibold">Performance</span>
+        </div>
+        <Link to="/fitness" className="text-[11px] font-medium text-primary transition-opacity hover:opacity-80">
+          Voir tout →
+        </Link>
+      </div>
 
-      return {
-        tracked:
-          (items.count ?? 0) + (body.count ?? 0) + (nutrition.count ?? 0) + (workouts.count ?? 0),
-        documents: documents.count ?? 0,
-        latestBody: latestBody.data,
-      };
-    },
-  });
+      {loading ? (
+        <div className="flex h-24 items-center justify-center">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      ) : (
+        <>
+          {/* KPI row */}
+          <div className="mb-4 grid grid-cols-3 gap-2">
+            <KpiCard
+              label="Récup."
+              value={recoveryScore != null ? `${recoveryScore}%` : "—"}
+              valueClass={scoreColor}
+            />
+            <KpiCard label="Séances / sem." value={String(weeklyCount)} />
+            <KpiCard
+              label="Streak"
+              value={`${streak}j`}
+              icon={<Flame className="h-3 w-3 text-orange-400" />}
+            />
+          </div>
+
+          {/* Recovery progress bar */}
+          {recoveryScore != null && (
+            <div className="mb-4">
+              <div className="h-1.5 overflow-hidden rounded-full bg-white/8">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-400 transition-all duration-500"
+                  style={{ width: `${recoveryScore}%` }}
+                />
+              </div>
+              <p className="mt-1.5 text-[10px] text-muted-foreground">
+                {recoveryScore >= 70
+                  ? "Muscles majoritairement prêts"
+                  : recoveryScore >= 40
+                    ? "Récupération en cours"
+                    : "Repos recommandé"}
+              </p>
+            </div>
+          )}
+
+          {/* Fatigued muscles */}
+          {fatiguedMuscles.length > 0 && (
+            <div className="mb-4 flex flex-wrap gap-1.5">
+              {fatiguedMuscles.map((m) => (
+                <span
+                  key={m}
+                  className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2.5 py-0.5 text-[10px] font-medium text-red-400"
+                >
+                  <MapPin className="h-2.5 w-2.5" />
+                  {m}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* CTAs */}
+          <div className="flex gap-2">
+            <Link
+              to="/fitness"
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-border bg-surface py-2.5 text-xs font-semibold transition-colors hover:border-primary/40"
+            >
+              <Dumbbell className="h-3.5 w-3.5" />
+              Mes séances
+            </Link>
+            <Link
+              to="/fitness"
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-primary py-2.5 text-xs font-semibold text-primary-foreground shadow-glow"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Nouvelle séance
+            </Link>
+          </div>
+        </>
+      )}
+    </section>
+  );
 }
 
-function StatCard({
+function KpiCard({
   label,
   value,
-  tone,
-  loading,
+  valueClass = "text-foreground",
+  icon,
 }: {
   label: string;
   value: string;
-  tone: "primary" | "warning";
-  loading?: boolean;
+  valueClass?: string;
+  icon?: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-border bg-card p-4 shadow-card">
-      <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
-      <div
-        className={
-          tone === "primary"
-            ? "mt-2 flex items-center gap-2 text-3xl font-bold text-primary"
-            : "mt-2 flex items-center gap-2 text-3xl font-bold text-warning"
-        }
-      >
-        {loading && <Loader2 className="h-5 w-5 animate-spin" />}
-        <span>{value}</span>
+    <div className="rounded-xl border border-border bg-card/50 px-2 py-3 text-center">
+      <div className={`flex items-center justify-center gap-1 text-xl font-bold ${valueClass}`}>
+        {icon}
+        {value}
       </div>
+      <p className="mt-0.5 text-[10px] leading-tight text-muted-foreground">{label}</p>
     </div>
   );
 }
 
 function getGreeting() {
   const h = new Date().getHours();
-  if (h < 6) return "Bonne nuit";
+  if (h < 5) return "Bonne nuit";
   if (h < 12) return "Bonjour";
   if (h < 18) return "Bon après-midi";
   return "Bonsoir";
