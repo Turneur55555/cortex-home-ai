@@ -357,22 +357,26 @@ export function WorkoutSheet({
                           { key: "reps", placeholder: "Reps", label: "reps" },
                           { key: "weight", placeholder: "Kg", label: "kg", step: "0.5" },
                         ] as const
-                      ).map(({ key, placeholder, label, step }) => (
-                        <div key={key} className="flex flex-col gap-1">
-                          <input
-                            type="number"
-                            inputMode="decimal"
-                            step={step}
-                            value={ex[key]}
-                            onChange={(e) => updateEx(i, key, e.target.value)}
-                            placeholder={placeholder}
-                            className="rounded-xl border border-border bg-card px-2 py-2.5 text-center text-sm outline-none focus:border-primary"
-                          />
-                          <span className="text-center text-[9px] uppercase tracking-wider text-muted-foreground/60">
-                            {label}
-                          </span>
-                        </div>
-                      ))}
+                      ).map((item) => {
+                        const { key, placeholder, label } = item;
+                        const step = "step" in item ? item.step : undefined;
+                        return (
+                          <div key={key} className="flex flex-col gap-1">
+                            <input
+                              type="number"
+                              inputMode="decimal"
+                              step={step}
+                              value={ex[key]}
+                              onChange={(e) => updateEx(i, key, e.target.value)}
+                              placeholder={placeholder}
+                              className="rounded-xl border border-border bg-card px-2 py-2.5 text-center text-sm outline-none focus:border-primary"
+                            />
+                            <span className="text-center text-[9px] uppercase tracking-wider text-muted-foreground/60">
+                              {label}
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 );
