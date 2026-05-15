@@ -37,6 +37,7 @@ export function CorpsTab() {
   const { data, isLoading } = useBodyMeasurements();
   const [open, setOpen] = useState(false);
   const [focusField, setFocusField] = useState<MeasurementField | null>(null);
+  const [quickField, setQuickField] = useState<{ key: keyof BodyRow; label: string } | null>(null);
   const del = useDeleteBodyMeasurement();
 
   const openWithFocus = (f: MeasurementField | null) => {
@@ -126,7 +127,11 @@ export function CorpsTab() {
         )}
       </div>
 
-      <MeasurementsCard latest={latest} previous={previous} />
+      <MeasurementsCard
+        latest={latest}
+        previous={previous}
+        onChipClick={(key, label) => setQuickField({ key, label })}
+      />
 
       <div>
         <h3 className="mb-2 px-1 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
@@ -181,6 +186,13 @@ export function CorpsTab() {
             setOpen(false);
             setFocusField(null);
           }}
+        />
+      )}
+      {quickField && (
+        <QuickMeasurementSheet
+          field={quickField.key}
+          label={quickField.label}
+          onClose={() => setQuickField(null)}
         />
       )}
     </section>
@@ -394,9 +406,11 @@ function BodyMeasurementSheet({
 function MeasurementsCard({
   latest,
   previous,
+  onChipClick,
 }: {
   latest: BodyRow | undefined;
   previous: BodyRow | undefined;
+  onChipClick?: (key: keyof BodyRow, label: string) => void;
 }) {
   const groups: Array<{
     title: string;
@@ -467,6 +481,7 @@ function MeasurementsCard({
                     value={latest?.[it.key] ?? null}
                     previous={previous?.[it.key] ?? null}
                     accent={g.accent}
+                    onClick={() => onChipClick?.(it.key, it.label)}
                   />
                 ))}
               </div>
@@ -483,11 +498,13 @@ function MeasurementChip({
   value,
   previous,
   accent,
+  onClick,
 }: {
   label: string;
   value: number | null;
   previous: number | null;
   accent: string;
+  onClick?: () => void;
 }) {
   const delta =
     value != null && previous != null ? Math.round((value - previous) * 10) / 10 : null;
@@ -495,8 +512,10 @@ function MeasurementChip({
     delta == null || delta === 0 ? "flat" : delta > 0 ? "up" : "down";
 
   return (
-    <div
-      className={`relative overflow-hidden rounded-xl border border-border bg-gradient-to-br ${accent} p-2.5`}
+    <button
+      type="button"
+      onClick={onClick}
+      className={`relative w-full overflow-hidden rounded-xl border border-border bg-gradient-to-br ${accent} p-2.5 text-left active:opacity-70`}
     >
       <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
         {label}
@@ -531,6 +550,49 @@ function MeasurementChip({
           {delta}
         </div>
       )}
-    </div>
+    </button>
+  );
+}
+
+function QuickMeasurementSheet({
+  field,
+  label,
+  onClose,
+}: {
+  field: keyof BodyRow;
+  label: string;
+  onClose: () => void;
+}) {
+  const add = useAddBodyMeasurement();
+  const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [value, setValue] = useState("");
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const num = (v: string) => (v.trim() === "" ? null : Number(v));
+    await add.mutateAsync({ date, [field]: num(value) });
+    onClose();
+  };
+
+  return (
+    <Sheet title={label} onClose={onClose}>
+      <form onSubmit={submit} className="space-y-4">
+        <Field
+          label="Date"
+          type="date"
+          value={date}
+          onChange={setDate}
+          required
+        />
+        <Field
+          label={`${label} (cm)`}
+          type="number"
+          step="0.1"
+          value={value}
+          onChange={setValue}
+        />
+        <SubmitButton pending={add.isPending}>Enregistrer</SubmitButton>
+      </form>
+    </Sheet>
   );
 }
