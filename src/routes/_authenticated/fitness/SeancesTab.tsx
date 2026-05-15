@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Dumbbell, Loader2, Sparkles } from "lucide-react";
-import { BodyHighlighterRenderer } from "@/components/fitness/renderers/BodyHighlighterRenderer";
+import { BodyMap } from "@/components/fitness/BodyMap";
 import { WorkoutCard, type WorkoutRow } from "@/components/fitness/WorkoutCard";
 import { WorkoutSheet } from "@/components/fitness/WorkoutSheet";
 import { WorkoutProgressCharts } from "@/components/fitness/WorkoutProgressCharts";
@@ -60,7 +60,7 @@ export function SeancesTab() {
 
   return (
     <section className="flex flex-col gap-4">
-      <BodyHighlighterRenderer recoveryMap={recoveryMap} />
+      <BodyMap mode="recovery" recoveryMap={recoveryMap} />
 
       <button
         type="button"
