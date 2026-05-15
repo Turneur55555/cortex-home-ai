@@ -391,7 +391,10 @@ function AddExerciseModal({
               { key: "reps", label: "Reps" },
               { key: "weight", label: "Poids (kg)", step: "0.5" },
             ] as const
-          ).map(({ key, label, step }) => (
+          ).map((item) => {
+            const { key, label } = item;
+            const step = "step" in item ? item.step : undefined;
+            return (
             <div key={key} className="flex flex-col gap-1.5">
               <label className="text-center text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                 {label}
