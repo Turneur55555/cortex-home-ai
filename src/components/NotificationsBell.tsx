@@ -5,7 +5,7 @@ import { differenceInDays, parseISO, format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { Link } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
-import { STOCK_MODULE_LABELS, type StockModule } from "@/hooks/use-stocks";
+import { getRoomById } from "@/lib/maison/rooms";
 
 const DISMISSED_KEY = "cortex_dismissed_alerts_v1";
 
@@ -179,7 +179,7 @@ export function NotificationsBell() {
                             </button>
                           </div>
                           <p className="text-[11px] text-muted-foreground">
-                            {STOCK_MODULE_LABELS[a.module as StockModule] ?? a.module}
+                            {getRoomById(a.module)?.name ?? a.module}
                             {a.location ? ` • ${a.location}` : ""}
                           </p>
                           <p

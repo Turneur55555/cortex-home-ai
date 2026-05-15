@@ -3,23 +3,17 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 
-export type StockModule = "alimentation" | "pharmacie" | "habits" | "menager";
+// Legacy alias kept for backward compat with ScanSheet / BarcodeScannerSheet
+export type StockModule = string;
 
-export const STOCK_MODULE_LABELS: Record<StockModule, string> = {
-  alimentation: "Alimentation",
-  pharmacie: "Pharmacie",
-  habits: "Garde-robe",
-  menager: "Ménager",
-};
-
-export function useStockItems(module: StockModule) {
+export function useStockItems(roomId: string) {
   return useQuery({
-    queryKey: ["items", module],
+    queryKey: ["items", roomId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("items")
         .select("*")
-        .eq("module", module)
+        .eq("module", roomId)
         .order("expiration_date", { ascending: true, nullsFirst: false })
         .order("created_at", { ascending: false })
         .limit(500);
@@ -29,11 +23,27 @@ export function useStockItems(module: StockModule) {
   });
 }
 
+/** Lightweight hook for computing per-room and per-compartment counts on the overview. */
+export function useAllStockStats() {
+  return useQuery({
+    queryKey: ["items_stats"],
+    staleTime: 30_000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("items")
+        .select("id, module, location, expiration_date")
+        .limit(2000);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+}
+
 export function useAddStockItem() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (
-      input: Omit<TablesInsert<"items">, "user_id"> & { module: StockModule },
+      input: Omit<TablesInsert<"items">, "user_id"> & { module: string },
     ) => {
       const {
         data: { user },
@@ -46,6 +56,7 @@ export function useAddStockItem() {
     onSuccess: (module) => {
       toast.success("Item ajouté");
       qc.invalidateQueries({ queryKey: ["items", module] });
+      qc.invalidateQueries({ queryKey: ["items_stats"] });
       qc.invalidateQueries({ queryKey: ["dashboard_stats"] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -61,7 +72,7 @@ export function useUpdateStockItem() {
       patch,
     }: {
       id: string;
-      module: StockModule;
+      module: string;
       patch: TablesUpdate<"items">;
     }) => {
       const { error } = await supabase.from("items").update(patch).eq("id", id);
@@ -70,6 +81,7 @@ export function useUpdateStockItem() {
     },
     onSuccess: (module) => {
       qc.invalidateQueries({ queryKey: ["items", module] });
+      qc.invalidateQueries({ queryKey: ["items_stats"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -78,7 +90,7 @@ export function useUpdateStockItem() {
 export function useDeleteStockItem() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, module }: { id: string; module: StockModule }) => {
+    mutationFn: async ({ id, module }: { id: string; module: string }) => {
       const { error } = await supabase.from("items").delete().eq("id", id);
       if (error) throw error;
       return module;
@@ -86,6 +98,7 @@ export function useDeleteStockItem() {
     onSuccess: (module) => {
       toast.success("Supprimé");
       qc.invalidateQueries({ queryKey: ["items", module] });
+      qc.invalidateQueries({ queryKey: ["items_stats"] });
       qc.invalidateQueries({ queryKey: ["dashboard_stats"] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -95,7 +108,7 @@ export function useDeleteStockItem() {
 export function useBulkDeleteStockItems() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ ids, module }: { ids: string[]; module: StockModule }) => {
+    mutationFn: async ({ ids, module }: { ids: string[]; module: string }) => {
       if (ids.length === 0) return module;
       const { error } = await supabase.from("items").delete().in("id", ids);
       if (error) throw error;
@@ -104,6 +117,7 @@ export function useBulkDeleteStockItems() {
     onSuccess: (module, vars) => {
       toast.success(`${vars.ids.length} supprimé(s)`);
       qc.invalidateQueries({ queryKey: ["items", module] });
+      qc.invalidateQueries({ queryKey: ["items_stats"] });
       qc.invalidateQueries({ queryKey: ["dashboard_stats"] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -118,7 +132,7 @@ export function useBulkAdjustStockItems() {
       module,
     }: {
       items: { id: string; quantity: number }[];
-      module: StockModule;
+      module: string;
     }) => {
       if (items.length === 0) return module;
       await Promise.all(

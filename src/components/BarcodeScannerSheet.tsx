@@ -44,7 +44,7 @@ interface Product {
   nova_group?: number;
 }
 
-export function BarcodeScannerSheet({ onClose }: { onClose: () => void }) {
+export function BarcodeScannerSheet({ roomId = "cuisine", onClose }: { roomId?: string; onClose: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const readerRef = useRef<BrowserMultiFormatReader | null>(null);
   const controlsRef = useRef<{ stop: () => void } | null>(null);
@@ -169,7 +169,7 @@ export function BarcodeScannerSheet({ onClose }: { onClose: () => void }) {
     if (!product) return;
     try {
       await addStock.mutateAsync({
-        module: "alimentation",
+        module: roomId,
         name: product.product_name || "Produit inconnu",
         category: "alimentation",
         quantity: 1,

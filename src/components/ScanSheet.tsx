@@ -3,7 +3,7 @@ import { Camera, ImageIcon, Loader2, Sparkles, Trash2, X, Plus, Check } from "lu
 import { toast } from "sonner";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { STOCK_MODULE_LABELS, type StockModule } from "@/hooks/use-stocks";
+import { getRoomById } from "@/lib/maison/rooms";
 
 type DetectedItem = {
   name: string;
@@ -45,7 +45,7 @@ async function fileToBase64(file: File): Promise<{ b64: string; mime: string }> 
   return { b64, mime: "image/jpeg" };
 }
 
-export function ScanSheet({ module, onClose }: { module: StockModule; onClose: () => void }) {
+export function ScanSheet({ module, defaultLocation, onClose }: { module: string; defaultLocation?: string; onClose: () => void; }) {
   const qc = useQueryClient();
   const camRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -89,7 +89,7 @@ export function ScanSheet({ module, onClose }: { module: StockModule; onClose: (
           category: (it.category ?? "autre").toString(),
           quantity: Math.max(1, Math.round(it.quantity ?? 1)),
           unit: it.unit ?? null,
-          location: it.location ?? null,
+          location: it.location ?? defaultLocation ?? null,
           expiration_date: it.expiration_date ?? null,
         }));
       if (rows.length === 0) return 0;
@@ -136,7 +136,7 @@ export function ScanSheet({ module, onClose }: { module: StockModule; onClose: (
             <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
               Scanner IA
             </p>
-            <h2 className="text-lg font-bold">{STOCK_MODULE_LABELS[module]}</h2>
+            <h2 className="text-lg font-bold">{getRoomById(module)?.name ?? module}</h2>
           </div>
           <button
             type="button"
