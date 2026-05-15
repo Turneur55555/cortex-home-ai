@@ -385,19 +385,16 @@ export type Database = {
       users_profiles: {
         Row: {
           created_at: string
-          display_name: string | null
           id: string
           premium: boolean
         }
         Insert: {
           created_at?: string
-          display_name?: string | null
           id: string
           premium?: boolean
         }
         Update: {
           created_at?: string
-          display_name?: string | null
           id?: string
           premium?: boolean
         }
