@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import {
   ChevronRight,
+  FileText,
   Flame,
   LogOut,
   Mail,
@@ -179,7 +180,7 @@ function ProfilPage() {
         </GlassCard>
       </motion.section>
 
-      <motion.section variants={fadeUp} custom={6} initial="hidden" animate="show" className="mb-8">
+      <motion.section variants={fadeUp} custom={6} initial="hidden" animate="show" className="mb-5">
         <SectionTitle>Préférences</SectionTitle>
         <GlassCard interactive>
           <NavRow
@@ -191,7 +192,19 @@ function ProfilPage() {
         </GlassCard>
       </motion.section>
 
-      <motion.div variants={fadeUp} custom={7} initial="hidden" animate="show" className="mt-auto">
+      <motion.section variants={fadeUp} custom={7} initial="hidden" animate="show" className="mb-8">
+        <SectionTitle>Documents IA</SectionTitle>
+        <GlassCard interactive>
+          <NavRow
+            to="/documents"
+            icon={<FileText className="h-4 w-4" />}
+            title="Analyser un document"
+            subtitle="PDF, images, analyse et historique IA"
+          />
+        </GlassCard>
+      </motion.section>
+
+      <motion.div variants={fadeUp} custom={8} initial="hidden" animate="show" className="mt-auto">
         <motion.button
           type="button"
           data-testid="signout-btn"
