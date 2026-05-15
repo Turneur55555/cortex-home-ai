@@ -548,11 +548,19 @@ function NutritionSheet({
   return (
     <Sheet title={prefill ? "Confirmer le repas" : "Nouveau repas"} onClose={onClose}>
       <form onSubmit={submit} className="space-y-4">
-        <Field
-          label="Nom"
-          placeholder="Poulet riz, Salade…"
+        <FoodAutocomplete
           value={form.name}
           onChange={(v) => setForm({ ...form, name: v })}
+          onSelect={(f) =>
+            setForm({
+              ...form,
+              name: f.name,
+              calories: f.calories != null ? String(f.calories) : form.calories,
+              proteins: f.proteins != null ? String(f.proteins) : form.proteins,
+              carbs: f.carbs != null ? String(f.carbs) : form.carbs,
+              fats: f.fats != null ? String(f.fats) : form.fats,
+            })
+          }
           required
         />
         <div>
