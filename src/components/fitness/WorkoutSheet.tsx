@@ -162,7 +162,9 @@ export function WorkoutSheet({
         if (!user) return;
         for (const ex of payloadExercises) {
           if (!ex.name) continue;
-          await supabase.from("exercise_history").upsert(
+          await (supabase.from as (t: string) => { upsert: (v: unknown, o: unknown) => Promise<unknown> })(
+            "exercise_history",
+          ).upsert(
             {
               user_id: user.id,
               exercise_name: ex.name,
