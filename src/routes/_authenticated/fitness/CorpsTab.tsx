@@ -17,7 +17,6 @@ import {
   useDeleteBodyMeasurement,
 } from "@/hooks/use-fitness";
 import { FabAdd, Field, FormGroup, Sheet, SubmitButton } from "@/components/shared/FormComponents";
-import { BodyMap } from "@/components/fitness/BodyMap";
 import type { MeasurementField } from "@/components/fitness/BodyMap";
 
 // Re-export so existing code referencing this path still compiles
@@ -128,8 +127,6 @@ export function CorpsTab() {
       </div>
 
       <MeasurementsCard latest={latest} previous={previous} />
-
-      <BodyMap mode="measurement" latest={latest} onZoneClick={openWithFocus} />
 
       <div>
         <h3 className="mb-2 px-1 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
