@@ -162,19 +162,25 @@ export function WorkoutSheet({
         if (!user) return;
         for (const ex of payloadExercises) {
           if (!ex.name) continue;
-          await (supabase.from as (t: string) => { upsert: (v: unknown, o: unknown) => Promise<unknown> })(
-            "exercise_history",
-          ).upsert(
-            {
-              user_id: user.id,
-              exercise_name: ex.name,
-              last_weight: ex.weight,
-              last_reps: ex.reps,
-              last_sets: ex.sets,
-              last_used_at: new Date().toISOString(),
-            },
-            { onConflict: "user_id,exercise_name" },
-          );
+          await (
+            supabase as unknown as {
+              from: (t: string) => {
+                upsert: (v: unknown, o: unknown) => Promise<unknown>;
+              };
+            }
+          )
+            .from("exercise_history")
+            .upsert(
+              {
+                user_id: user.id,
+                exercise_name: ex.name,
+                last_weight: ex.weight,
+                last_reps: ex.reps,
+                last_sets: ex.sets,
+                last_used_at: new Date().toISOString(),
+              },
+              { onConflict: "user_id,exercise_name" },
+            );
         }
       } catch {
         // ignore — table may not exist yet
