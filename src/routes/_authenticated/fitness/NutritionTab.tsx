@@ -24,6 +24,7 @@ import {
 } from "@/hooks/use-fitness";
 import { FabAdd, Field, Sheet, SubmitButton } from "@/components/shared/FormComponents";
 import { BarcodeScannerSheet } from "@/components/BarcodeScannerSheet";
+import { FoodAutocomplete } from "@/components/FoodAutocomplete";
 
 type MealPrefill = {
   name: string;
