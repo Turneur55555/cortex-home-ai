@@ -409,7 +409,8 @@ function AddExerciseModal({
                 className={inputCls}
               />
             </div>
-          ))}
+            );
+          })}
         </div>
 
         <button
