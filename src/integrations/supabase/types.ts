@@ -238,88 +238,52 @@ export type Database = {
       items: {
         Row: {
           alert_days_before: number
-          barcode: string | null
-          brand: string | null
-          calories_per_100g: number | null
-          carbs_per_100g: number | null
-          category: string | null
+          category: string
           confidence_score: number | null
           created_at: string
           expiration_date: string | null
-          fat_per_100g: number | null
-          fiber_per_100g: number | null
           flagged: boolean
           id: string
-          image_url: string | null
           location: string | null
-          low_stock_threshold: number | null
           module: string
           name: string
           notes: string | null
-          protein_per_100g: number | null
           quantity: number
-          room: string | null
-          sodium_per_100g: number | null
           storage_path: string | null
-          sugar_per_100g: number | null
           unit: string | null
           user_id: string
         }
         Insert: {
           alert_days_before?: number
-          barcode?: string | null
-          brand?: string | null
-          calories_per_100g?: number | null
-          carbs_per_100g?: number | null
-          category?: string | null
+          category: string
           confidence_score?: number | null
           created_at?: string
           expiration_date?: string | null
-          fat_per_100g?: number | null
-          fiber_per_100g?: number | null
           flagged?: boolean
           id?: string
-          image_url?: string | null
           location?: string | null
-          low_stock_threshold?: number | null
-          module?: string
+          module: string
           name: string
           notes?: string | null
-          protein_per_100g?: number | null
           quantity?: number
-          room?: string | null
-          sodium_per_100g?: number | null
           storage_path?: string | null
-          sugar_per_100g?: number | null
           unit?: string | null
           user_id: string
         }
         Update: {
           alert_days_before?: number
-          barcode?: string | null
-          brand?: string | null
-          calories_per_100g?: number | null
-          carbs_per_100g?: number | null
-          category?: string | null
+          category?: string
           confidence_score?: number | null
           created_at?: string
           expiration_date?: string | null
-          fat_per_100g?: number | null
-          fiber_per_100g?: number | null
           flagged?: boolean
           id?: string
-          image_url?: string | null
           location?: string | null
-          low_stock_threshold?: number | null
           module?: string
           name?: string
           notes?: string | null
-          protein_per_100g?: number | null
           quantity?: number
-          room?: string | null
-          sodium_per_100g?: number | null
           storage_path?: string | null
-          sugar_per_100g?: number | null
           unit?: string | null
           user_id?: string
         }
@@ -423,19 +387,16 @@ export type Database = {
           created_at: string
           display_name: string | null
           id: string
-          premium: boolean
         }
         Insert: {
           created_at?: string
           display_name?: string | null
           id: string
-          premium?: boolean
         }
         Update: {
           created_at?: string
           display_name?: string | null
           id?: string
-          premium?: boolean
         }
         Relationships: []
       }

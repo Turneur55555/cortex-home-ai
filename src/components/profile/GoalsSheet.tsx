@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { CheckCircle2, Clock, Plus, Target, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { PremiumSheet } from "./PremiumSheet";
+import { AppSheet } from "./AppSheet";
 import { statusOf, useGoals, type Goal, type GoalStatus } from "@/hooks/useGoals";
 import { cn } from "@/lib/utils";
 
@@ -44,7 +44,7 @@ export function GoalsSheet({ open, onOpenChange }: GoalsSheetProps) {
   };
 
   return (
-    <PremiumSheet
+    <AppSheet
       open={open}
       onOpenChange={onOpenChange}
       title="Objectifs"
@@ -116,7 +116,7 @@ export function GoalsSheet({ open, onOpenChange }: GoalsSheetProps) {
           )}
         </AnimatePresence>
       </div>
-    </PremiumSheet>
+    </AppSheet>
   );
 }
 
