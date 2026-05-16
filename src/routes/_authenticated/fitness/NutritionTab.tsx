@@ -72,29 +72,54 @@ function getPortionBadge(pct: number | null, count: number | null): string | nul
 }
 
 async function fileToBase64Compressed(file: File): Promise<{ b64: string; mime: string }> {
+  // Étape 1 : lecture du fichier en DataURL (toujours disponible, même HEIC)
   const dataUrl = await new Promise<string>((res, rej) => {
     const r = new FileReader();
     r.onload = () => res(r.result as string);
-    r.onerror = rej;
+    r.onerror = () => rej(new Error("Impossible de lire le fichier image"));
     r.readAsDataURL(file);
   });
-  const img = await new Promise<HTMLImageElement>((res, rej) => {
-    const i = new Image();
-    i.onload = () => res(i);
-    i.onerror = rej;
-    i.src = dataUrl;
-  });
-  const max = 1600;
-  const ratio = Math.min(1, max / Math.max(img.width, img.height));
-  const w = Math.round(img.width * ratio);
-  const h = Math.round(img.height * ratio);
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext("2d")!;
-  ctx.drawImage(img, 0, 0, w, h);
-  const out = canvas.toDataURL("image/jpeg", 0.85);
-  return { b64: out.split(",")[1] ?? "", mime: "image/jpeg" };
+
+  // Étape 2 : compression canvas (JPEG 1280px max, qualité 0.82)
+  // Peut échouer sur certains navigateurs pour HEIC → fallback raw
+  try {
+    const img = await new Promise<HTMLImageElement>((res, rej) => {
+      const i = new Image();
+      // Timeout 15s pour iOS qui décode HEIC lentement
+      const t = setTimeout(() => rej(new Error("Timeout chargement image")), 15_000);
+      i.onload = () => { clearTimeout(t); res(i); };
+      i.onerror = () => { clearTimeout(t); rej(new Error("Format image non supporté par le navigateur")); };
+      i.src = dataUrl;
+    });
+
+    const max = 1280;
+    const ratio = Math.min(1, max / Math.max(img.width, img.height, 1));
+    const w = Math.round(img.width * ratio);
+    const h = Math.round(img.height * ratio);
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas 2D non disponible");
+    ctx.drawImage(img, 0, 0, w, h);
+    const out = canvas.toDataURL("image/jpeg", 0.82);
+
+    // Si le canvas produit une image vide (bug HEIC sur certains Safari), fallback
+    if (out.length < 1000) throw new Error("Canvas a produit une image vide");
+
+    return { b64: out.split(",")[1] ?? "", mime: "image/jpeg" };
+
+  } catch (canvasErr) {
+    // Fallback : envoyer le fichier raw sans compression
+    // Le modèle IA (Gemini / GPT-4o) supporte HEIC, WebP, PNG, JPEG nativement
+    console.warn("[scan-meal] canvas compression failed, fallback raw:", canvasErr);
+    const parts = dataUrl.split(",");
+    const mimeMatch = parts[0]?.match(/data:(image\/[^;]+)/);
+    return {
+      b64: parts[1] ?? "",
+      mime: mimeMatch?.[1] ?? "image/jpeg",
+    };
+  }
 }
 
 export function NutritionTab() {
@@ -469,11 +494,32 @@ function MealScanSheet({
     mutationFn: async (file: File) => {
       const { b64, mime } = await fileToBase64Compressed(file);
       setPreview(`data:${mime};base64,${b64}`);
+
+      console.log("[MealScan] envoi image, b64 length:", b64.length, "mime:", mime);
+      if (!b64 || b64.length < 100) throw new Error("Image vide ou illisible. Réessaie.");
+
       const { data, error } = await supabase.functions.invoke("scan-meal", {
         body: { image_base64: b64, mime_type: mime },
       });
-      if (error) throw new Error(error.message);
-      if (data?.error) throw new Error(data.error);
+
+      // Erreur réseau / infrastructure (non-2xx non géré par la fonction)
+      if (error) {
+        // Tente d'extraire le corps de la réponse pour un message précis
+        let detail = "";
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const ctx = (error as any).context;
+          if (ctx && typeof ctx.json === "function") {
+            const body = await ctx.json();
+            detail = body?.error ?? "";
+          }
+        } catch {/* ignore */}
+        throw new Error(detail || "Erreur de connexion au service IA. Vérifie ta connexion et réessaie.");
+      }
+
+      // La fonction retourne toujours 200 — l'erreur est dans data.error
+      if (data?.error) throw new Error(data.error as string);
+
       return data as {
         name: string;
         meal?: string;
