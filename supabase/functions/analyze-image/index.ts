@@ -274,7 +274,7 @@ Deno.serve(async (req) => {
       formData = await req.formData();
     } catch (e) {
       console.error("[analyze-image] FormData parse error:", e);
-      return jsonResp({ success: false, error: "parse", user_message: "Requête invalide", details: String(e) }, 400);
+      return jsonResp({ success: false, error: "parse", user_message: "Requête invalide" }, 400);
     }
 
     const imageEntry = formData.get("image");
@@ -316,7 +316,7 @@ Deno.serve(async (req) => {
       .upload(storagePath, rawBuf, { contentType: detectedMime, upsert: false });
     if (upErr) {
       console.error("[analyze-image] storage upload error:", upErr);
-      return jsonResp({ success: false, error: "upload", user_message: "Erreur de téléversement", details: upErr.message }, 500);
+      return jsonResp({ success: false, error: "upload", user_message: "Erreur de téléversement" }, 500);
     }
     console.log("[analyze-image] STEP 3: uploaded to health-images:", storagePath);
 
@@ -420,14 +420,14 @@ Tout le texte (summary, insights, alerts) doit être en FRANÇAIS.`;
       if (aiRes.status === 402) {
         return jsonResp({ success: false, error: "credits", user_message: "Crédits IA épuisés." }, 402);
       }
-      return jsonResp({ success: false, error: "ai_error", user_message: "L'analyse IA a échoué. Réessaie avec une image plus nette.", details: `HTTP ${aiRes.status}` }, 502);
+      return jsonResp({ success: false, error: "ai_error", user_message: "L'analyse IA a échoué. Réessaie avec une image plus nette." }, 502);
     }
 
     let aiJson: unknown;
     try {
       aiJson = await aiRes.json();
     } catch (e) {
-      return jsonResp({ success: false, error: "ai_parse", user_message: "Réponse IA illisible", details: String(e) }, 502);
+      return jsonResp({ success: false, error: "ai_parse", user_message: "Réponse IA illisible" }, 502);
     }
 
     type ToolCallResponse = {
@@ -447,7 +447,7 @@ Tout le texte (summary, insights, alerts) doit être en FRANÇAIS.`;
     try {
       parsed = JSON.parse(call.function.arguments);
     } catch (e) {
-      return jsonResp({ success: false, error: "ai_json", user_message: "Résultat IA invalide", details: String(e) }, 502);
+      return jsonResp({ success: false, error: "ai_json", user_message: "Résultat IA invalide" }, 502);
     }
 
     // STEP 5: Insert into health_data_imports + documents
@@ -486,7 +486,7 @@ Tout le texte (summary, insights, alerts) doit être en FRANÇAIS.`;
       .single();
     if (docErr) {
       console.error("[analyze-image] documents insert error:", docErr);
-      return jsonResp({ success: false, error: "db", user_message: "Erreur d'enregistrement du document", details: docErr.message }, 500);
+      return jsonResp({ success: false, error: "db", user_message: "Erreur d'enregistrement du document" }, 500);
     }
 
     console.log("[analyze-image] done");
@@ -506,6 +506,6 @@ Tout le texte (summary, insights, alerts) doit être en FRANÇAIS.`;
     });
   } catch (e) {
     console.error("[analyze-image] unhandled exception:", e);
-    return jsonResp({ success: false, error: "unexpected", user_message: "Erreur inattendue. Réessaie.", details: String(e) }, 500);
+    return jsonResp({ success: false, error: "unexpected", user_message: "Erreur inattendue. Réessaie." }, 500);
   }
 });
