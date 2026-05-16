@@ -6,6 +6,7 @@ import { fr } from "date-fns/locale";
 import { Link } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { getRoomById } from "@/lib/maison/rooms";
+import { useHomeCategories } from "@/hooks/useHomeCategories";
 
 const DISMISSED_KEY = "cortex_dismissed_alerts_v1";
 
@@ -28,6 +29,7 @@ export function NotificationsBell() {
   const [open, setOpen] = useState(false);
   const [dismissed, setDismissed] = useState<Record<string, string>>({});
   const qc = useQueryClient();
+  const { data: dynCategories = [] } = useHomeCategories();
 
   useEffect(() => {
     setDismissed(getDismissed());
@@ -179,7 +181,14 @@ export function NotificationsBell() {
                             </button>
                           </div>
                           <p className="text-[11px] text-muted-foreground">
-                            {getRoomById((a as { room?: string | null }).room ?? "")?.name ?? (a as { room?: string | null }).room ?? "Maison"}
+                            {(() => {
+                              const roomSlug = (a as { room?: string | null }).room ?? "";
+                              const name =
+                                dynCategories.find((c) => c.slug === roomSlug)?.name ??
+                                getRoomById(roomSlug)?.name ??
+                                roomSlug;
+                              return name || "Maison";
+                            })()}
                             {a.location ? ` • ${a.location}` : ""}
                           </p>
                           <p
