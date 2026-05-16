@@ -399,6 +399,7 @@ export type Database = {
           calories: number | null
           carbs: number | null
           consumed_quantity: number | null
+          consumed_unit: string | null
           created_at: string
           date: string
           fats: number | null
@@ -418,6 +419,7 @@ export type Database = {
           calories?: number | null
           carbs?: number | null
           consumed_quantity?: number | null
+          consumed_unit?: string | null
           created_at?: string
           date: string
           fats?: number | null
@@ -437,6 +439,7 @@ export type Database = {
           calories?: number | null
           carbs?: number | null
           consumed_quantity?: number | null
+          consumed_unit?: string | null
           created_at?: string
           date?: string
           fats?: number | null
