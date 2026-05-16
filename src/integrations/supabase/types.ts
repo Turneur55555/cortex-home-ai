@@ -398,6 +398,7 @@ export type Database = {
           base_proteins: number | null
           calories: number | null
           carbs: number | null
+          consumed_quantity: number | null
           created_at: string
           date: string
           fats: number | null
@@ -416,6 +417,7 @@ export type Database = {
           base_proteins?: number | null
           calories?: number | null
           carbs?: number | null
+          consumed_quantity?: number | null
           created_at?: string
           date: string
           fats?: number | null
@@ -434,6 +436,7 @@ export type Database = {
           base_proteins?: number | null
           calories?: number | null
           carbs?: number | null
+          consumed_quantity?: number | null
           created_at?: string
           date?: string
           fats?: number | null
