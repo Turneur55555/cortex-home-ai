@@ -13,11 +13,8 @@ const ALLOWED_ORIGINS = [
 ];
 
 function buildCors(req: Request) {
-  const origin = req.headers.get("origin") ?? ALLOWED_ORIGINS[0];
-  const allow =
-    ALLOWED_ORIGINS.includes(origin) || origin.endsWith(".lovable.app")
-      ? origin
-      : ALLOWED_ORIGINS[0];
+  const origin = req.headers.get("origin") ?? "";
+  const allow = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
   return {
     "Access-Control-Allow-Origin": allow,
     "Access-Control-Allow-Methods": "POST, OPTIONS",
