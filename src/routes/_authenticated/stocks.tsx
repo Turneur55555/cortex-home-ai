@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   AlertTriangle,
   Barcode,
@@ -22,6 +22,11 @@ import { ScanSheet } from "@/components/ScanSheet";
 import { BarcodeScannerSheet } from "@/components/BarcodeScannerSheet";
 import { RecipeAssistantSheet } from "@/components/RecipeAssistantSheet";
 import { FoodAutocomplete } from "@/components/FoodAutocomplete";
+import { SortableCategoryList } from "@/components/home/SortableCategoryList";
+import { AddCategoryButton } from "@/components/home/AddCategoryButton";
+import { CategoryModal } from "@/components/home/CategoryModal";
+import { DeleteCategoryDialog } from "@/components/home/DeleteCategoryDialog";
+import { SubcategoryList } from "@/components/home/SubcategoryList";
 import { toast } from "sonner";
 import { differenceInDays, format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
@@ -35,8 +40,18 @@ import {
   useUpdateStockItem,
 } from "@/hooks/use-stocks";
 import { useItemsRealtime, useUpdateItemFull } from "@/hooks/use-pantry";
-import { ROOMS, getRoomById, getCompartmentById } from "@/lib/maison/rooms";
+import {
+  useHomeCategories,
+  useCreateCategory,
+  useUpdateCategory,
+  useDeleteCategory,
+  useReorderCategories,
+} from "@/hooks/useHomeCategories";
+import { useHomeSubcategories } from "@/hooks/useHomeSubcategories";
+import { getRoomById, getCompartmentById } from "@/lib/maison/rooms";
+import { getIcon } from "@/lib/maison/icons";
 import type { Tables } from "@/integrations/supabase/types";
+import type { HomeCategory, CreateCategoryInput, UpdateCategoryInput } from "@/types/home";
 
 export const Route = createFileRoute("/_authenticated/stocks")({
   head: () => ({
@@ -97,7 +112,7 @@ function MaisonPage() {
   );
 }
 
-// ─── View 1: Rooms ────────────────────────────────────────────────────────────
+// ─── View 1: Rooms (catégories dynamiques) ───────────────────────────────────
 
 function RoomsView({
   globalSearch,
@@ -109,20 +124,29 @@ function RoomsView({
   onRoomClick: (roomId: string) => void;
 }) {
   const { data: allStats } = useAllStockStats();
+  const { data: categories = [], isLoading: catsLoading } = useHomeCategories();
+  const createCat = useCreateCategory();
+  const updateCat = useUpdateCategory();
+  const deleteCat = useDeleteCategory();
+  const reorderCats = useReorderCategories();
+
+  // Modals state
+  const [catModal, setCatModal] = useState<HomeCategory | "new" | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<HomeCategory | null>(null);
+  const [subcatTarget, setSubcatTarget] = useState<HomeCategory | null>(null);
 
   const statsMap = useMemo(() => {
     const map = new Map<string, { count: number; expiring: number; lowStock: number }>();
     for (const item of allStats ?? []) {
-      const roomId = item.room ?? "__none__";
-      const cur = map.get(roomId) ?? { count: 0, expiring: 0, lowStock: 0 };
+      const key = item.room ?? "__none__";
+      const cur = map.get(key) ?? { count: 0, expiring: 0, lowStock: 0 };
       cur.count++;
       if (item.expiration_date) {
         const d = differenceInDays(parseISO(item.expiration_date as unknown as string), new Date());
         if (d >= 0 && d <= 7) cur.expiring++;
       }
-      const threshold = item.low_stock_threshold;
-      if (threshold != null && item.quantity <= threshold) cur.lowStock++;
-      map.set(roomId, cur);
+      if (item.low_stock_threshold != null && item.quantity <= item.low_stock_threshold) cur.lowStock++;
+      map.set(key, cur);
     }
     return map;
   }, [allStats]);
@@ -138,11 +162,33 @@ function RoomsView({
     [allStats],
   );
 
-  const filteredRooms = useMemo(() => {
+  const filteredCategories = useMemo(() => {
     const needle = globalSearch.trim().toLowerCase();
-    if (!needle) return ROOMS;
-    return ROOMS.filter((r) => r.name.toLowerCase().includes(needle));
-  }, [globalSearch]);
+    if (!needle) return categories;
+    return categories.filter((c) => c.name.toLowerCase().includes(needle));
+  }, [globalSearch, categories]);
+
+  const handleReorder = useCallback(
+    (newOrder: HomeCategory[]) => {
+      const ordered = newOrder.map((c, i) => ({ id: c.id, position: i }));
+      reorderCats.mutate(ordered);
+    },
+    [reorderCats],
+  );
+
+  const handleSaveCategory = async (data: CreateCategoryInput | UpdateCategoryInput) => {
+    if (catModal === "new") {
+      await createCat.mutateAsync(data as CreateCategoryInput);
+    } else if (catModal) {
+      await updateCat.mutateAsync({ id: catModal.id, patch: data as UpdateCategoryInput });
+    }
+  };
+
+  const handleDeleteConfirm = () => {
+    if (!deleteTarget) return;
+    deleteCat.mutate(deleteTarget.id);
+    setDeleteTarget(null);
+  };
 
   return (
     <>
@@ -153,6 +199,7 @@ function RoomsView({
         <h1 className="mt-1 text-2xl font-bold tracking-tight">Maison</h1>
       </header>
 
+      {/* Stats globales */}
       <div className="mb-4 grid grid-cols-2 gap-3">
         <div className="rounded-2xl border border-border bg-card p-3 shadow-card">
           <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
@@ -170,63 +217,69 @@ function RoomsView({
         </div>
       </div>
 
+      {/* Recherche */}
       <div className="relative mb-5">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <input
           value={globalSearch}
           onChange={(e) => onSearchChange(e.target.value)}
-          placeholder="Rechercher une pièce…"
+          placeholder="Rechercher une catégorie…"
           className="w-full rounded-2xl border border-border bg-surface py-2.5 pl-10 pr-3 text-sm outline-none focus:border-primary"
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        {filteredRooms.map((room) => {
-          const stats = statsMap.get(room.id) ?? { count: 0, expiring: 0, lowStock: 0 };
-          return (
-            <button
-              key={room.id}
-              type="button"
-              onClick={() => onRoomClick(room.id)}
-              className="relative overflow-hidden rounded-2xl border border-white/5 bg-card p-4 text-left shadow-card transition-all active:scale-95"
-            >
-              <div
-                className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${room.gradient}`}
-              />
-              <div className="relative">
-                <div
-                  className={`mb-3 inline-flex h-10 w-10 items-center justify-center rounded-xl ${room.iconBg}`}
-                >
-                  <room.Icon className="h-5 w-5" />
-                </div>
-                <p className="truncate text-sm font-semibold leading-tight">{room.name}</p>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">
-                  {stats.count} objet{stats.count !== 1 ? "s" : ""}
-                </p>
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {stats.expiring > 0 && (
-                    <div className="inline-flex items-center gap-1 rounded-full bg-destructive/15 px-2 py-0.5 text-[10px] font-semibold text-destructive">
-                      <AlertTriangle className="h-2.5 w-2.5" />
-                      {stats.expiring} exp.
-                    </div>
-                  )}
-                  {stats.lowStock > 0 && (
-                    <div className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-semibold text-warning">
-                      <AlertTriangle className="h-2.5 w-2.5" />
-                      {stats.lowStock} stock bas
-                    </div>
-                  )}
-                </div>
-              </div>
-            </button>
-          );
-        })}
-      </div>
+      {/* Liste triable */}
+      {catsLoading ? (
+        <div className="flex justify-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : (
+        <SortableCategoryList
+          categories={filteredCategories}
+          statsMap={statsMap}
+          onPress={(cat) => onRoomClick(cat.slug)}
+          onEdit={(cat) => setCatModal(cat)}
+          onDelete={(cat) => setDeleteTarget(cat)}
+          onManageCompartments={(cat) => setSubcatTarget(cat)}
+          onReorder={handleReorder}
+        />
+      )}
+
+      {/* FAB */}
+      <AddCategoryButton onClick={() => setCatModal("new")} />
+
+      {/* Modal création / édition */}
+      {catModal !== null && (
+        <CategoryModal
+          category={catModal === "new" ? undefined : catModal}
+          onSave={handleSaveCategory}
+          onClose={() => setCatModal(null)}
+        />
+      )}
+
+      {/* Dialog suppression */}
+      {deleteTarget && (
+        <DeleteCategoryDialog
+          category={deleteTarget}
+          otherCategories={categories.filter((c) => c.id !== deleteTarget.id)}
+          onConfirm={handleDeleteConfirm}
+          onClose={() => setDeleteTarget(null)}
+        />
+      )}
+
+      {/* Gestionnaire de sous-catégories */}
+      {subcatTarget && (
+        <SubcategoryList
+          categoryId={subcatTarget.id}
+          categoryName={subcatTarget.name}
+          onClose={() => setSubcatTarget(null)}
+        />
+      )}
     </>
   );
 }
 
-// ─── View 2: Compartments ─────────────────────────────────────────────────────
+// ─── View 2: Compartments (sous-catégories dynamiques) ────────────────────────
 
 function CompartmentsView({
   roomId,
@@ -237,7 +290,13 @@ function CompartmentsView({
   onBack: () => void;
   onCompartmentClick: (compartmentId: string) => void;
 }) {
-  const room = getRoomById(roomId);
+  const { data: categories = [] } = useHomeCategories();
+  const dynCategory = categories.find((c) => c.slug === roomId);
+  const staticRoom = getRoomById(roomId);
+
+  // Sous-catégories dynamiques, fallback statiques
+  const { data: dynSubs = [], isLoading: subsLoading } = useHomeSubcategories(dynCategory?.id);
+
   const { data: items, isLoading } = useStockItems(roomId);
   const [scanOpen, setScanOpen] = useState(false);
   const [recipeOpen, setRecipeOpen] = useState(false);
@@ -257,8 +316,6 @@ function CompartmentsView({
     return map;
   }, [items]);
 
-  if (!room) return null;
-
   const totalItems = items?.length ?? 0;
   const totalExpiring = useMemo(
     () =>
@@ -269,6 +326,25 @@ function CompartmentsView({
       }).length,
     [items],
   );
+
+  // Compartiments : DB d'abord, sinon statiques
+  const compartments = useMemo(() => {
+    if (dynSubs.length > 0) {
+      return dynSubs.map((s) => ({
+        id: s.slug,
+        name: s.name,
+        Icon: getIcon(s.icon),
+      }));
+    }
+    return staticRoom?.compartments ?? [];
+  }, [dynSubs, staticRoom]);
+
+  // Affichage icône/couleur
+  const catColor = dynCategory?.color ?? "#6366f1";
+  const CatIcon = dynCategory ? getIcon(dynCategory.icon) : staticRoom?.Icon ?? getIcon("Box");
+  const catName = dynCategory?.name ?? staticRoom?.name ?? roomId;
+
+  if (!dynCategory && !staticRoom) return null;
 
   return (
     <>
@@ -282,11 +358,14 @@ function CompartmentsView({
           Maison
         </button>
         <div className="flex items-center gap-3">
-          <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${room.iconBg}`}>
-            <room.Icon className="h-5 w-5" />
+          <div
+            className="flex h-10 w-10 items-center justify-center rounded-xl text-white"
+            style={{ backgroundColor: catColor + "30", color: catColor }}
+          >
+            <CatIcon className="h-5 w-5" />
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight">{room.name}</h1>
+            <h1 className="text-xl font-bold tracking-tight">{catName}</h1>
             <p className="text-xs text-muted-foreground">
               {isLoading ? "…" : `${totalItems} objet${totalItems !== 1 ? "s" : ""}`}
               {totalExpiring > 0 && (
@@ -318,37 +397,50 @@ function CompartmentsView({
         )}
       </div>
 
-      <div className="space-y-2">
-        {room.compartments.map((comp) => {
-          const stats = compCounts.get(comp.id) ?? { count: 0, expiring: 0 };
-          return (
-            <button
-              key={comp.id}
-              type="button"
-              onClick={() => onCompartmentClick(comp.id)}
-              className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3.5 text-left shadow-card transition-all active:scale-[0.98]"
-            >
-              <div
-                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${room.iconBg}`}
+      {subsLoading ? (
+        <div className="flex justify-center py-8">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {compartments.map((comp) => {
+            const stats = compCounts.get(comp.id) ?? { count: 0, expiring: 0 };
+            return (
+              <button
+                key={comp.id}
+                type="button"
+                onClick={() => onCompartmentClick(comp.id)}
+                className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3.5 text-left shadow-card transition-all active:scale-[0.98]"
               >
-                <comp.Icon className="h-4 w-4" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold">{comp.name}</p>
-                {stats.expiring > 0 && (
-                  <p className="text-[10px] text-warning">{stats.expiring} expirent bientôt</p>
+                <div
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+                  style={{ backgroundColor: catColor + "20", color: catColor }}
+                >
+                  <comp.Icon className="h-4 w-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold">{comp.name}</p>
+                  {stats.expiring > 0 && (
+                    <p className="text-[10px] text-warning">{stats.expiring} expirent bientôt</p>
+                  )}
+                </div>
+                {stats.count > 0 && (
+                  <span className="shrink-0 rounded-full bg-surface px-2.5 py-1 text-xs font-bold tabular-nums text-muted-foreground">
+                    {stats.count}
+                  </span>
                 )}
-              </div>
-              {stats.count > 0 && (
-                <span className="shrink-0 rounded-full bg-surface px-2.5 py-1 text-xs font-bold tabular-nums text-muted-foreground">
-                  {stats.count}
-                </span>
-              )}
-              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/30" />
-            </button>
-          );
-        })}
-      </div>
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground/30" />
+              </button>
+            );
+          })}
+
+          {compartments.length === 0 && (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              Aucun compartiment. Gérez-les depuis la page Maison.
+            </p>
+          )}
+        </div>
+      )}
 
       {scanOpen && <ScanSheet room={roomId} onClose={() => setScanOpen(false)} />}
       {recipeOpen && <RecipeAssistantSheet onClose={() => setRecipeOpen(false)} />}
@@ -1125,6 +1217,7 @@ function ItemEditSheet({
   const updateFull = useUpdateItemFull();
   const del = useDeleteStockItem();
   const isCuisine = item.room === "cuisine";
+  const { data: allCategories = [] } = useHomeCategories();
 
   const [form, setForm] = useState({
     name: item.name,
@@ -1255,8 +1348,8 @@ function ItemEditSheet({
                 onChange={(e) => setMovingTo({ roomId: e.target.value, compartmentId: "" })}
                 className="rounded-xl border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary"
               >
-                {ROOMS.map((r) => (
-                  <option key={r.id} value={r.id}>{r.name}</option>
+                {allCategories.map((c) => (
+                  <option key={c.slug} value={c.slug}>{c.name}</option>
                 ))}
               </select>
               <select

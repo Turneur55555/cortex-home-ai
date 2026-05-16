@@ -14,6 +14,72 @@ export type Database = {
   }
   public: {
     Tables: {
+      home_categories: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          slug: string
+          icon: string
+          color: string
+          position: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          slug: string
+          icon?: string
+          color?: string
+          position?: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          name?: string
+          slug?: string
+          icon?: string
+          color?: string
+          position?: number
+          created_at?: string
+        }
+        Relationships: []
+      }
+      home_subcategories: {
+        Row: {
+          id: string
+          category_id: string
+          user_id: string
+          name: string
+          slug: string
+          icon: string
+          position: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          category_id: string
+          user_id: string
+          name: string
+          slug: string
+          icon?: string
+          position?: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          category_id?: string
+          user_id?: string
+          name?: string
+          slug?: string
+          icon?: string
+          position?: number
+          created_at?: string
+        }
+        Relationships: []
+      }
       body_tracking: {
         Row: {
           body_fat: number | null
