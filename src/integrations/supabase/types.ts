@@ -392,39 +392,63 @@ export type Database = {
       }
       nutrition: {
         Row: {
+          base_calories: number | null
+          base_carbs: number | null
+          base_fats: number | null
+          base_proteins: number | null
           calories: number | null
           carbs: number | null
+          consumed_quantity: number | null
+          consumed_unit: string | null
           created_at: string
           date: string
           fats: number | null
           id: string
           meal: string | null
           name: string
+          percentage_consumed: number | null
           proteins: number | null
+          serving_count: number | null
           user_id: string
         }
         Insert: {
+          base_calories?: number | null
+          base_carbs?: number | null
+          base_fats?: number | null
+          base_proteins?: number | null
           calories?: number | null
           carbs?: number | null
+          consumed_quantity?: number | null
+          consumed_unit?: string | null
           created_at?: string
           date: string
           fats?: number | null
           id?: string
           meal?: string | null
           name: string
+          percentage_consumed?: number | null
           proteins?: number | null
+          serving_count?: number | null
           user_id: string
         }
         Update: {
+          base_calories?: number | null
+          base_carbs?: number | null
+          base_fats?: number | null
+          base_proteins?: number | null
           calories?: number | null
           carbs?: number | null
+          consumed_quantity?: number | null
+          consumed_unit?: string | null
           created_at?: string
           date?: string
           fats?: number | null
           id?: string
           meal?: string | null
           name?: string
+          percentage_consumed?: number | null
           proteins?: number | null
+          serving_count?: number | null
           user_id?: string
         }
         Relationships: []
@@ -536,7 +560,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      ensure_home_categories_for_me: { Args: never; Returns: undefined }
     }
     Enums: {
       [_ in never]: never
