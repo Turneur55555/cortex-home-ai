@@ -14,72 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      home_categories: {
-        Row: {
-          id: string
-          user_id: string
-          name: string
-          slug: string
-          icon: string
-          color: string
-          position: number
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          name: string
-          slug: string
-          icon?: string
-          color?: string
-          position?: number
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          name?: string
-          slug?: string
-          icon?: string
-          color?: string
-          position?: number
-          created_at?: string
-        }
-        Relationships: []
-      }
-      home_subcategories: {
-        Row: {
-          id: string
-          category_id: string
-          user_id: string
-          name: string
-          slug: string
-          icon: string
-          position: number
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          category_id: string
-          user_id: string
-          name: string
-          slug: string
-          icon?: string
-          position?: number
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          category_id?: string
-          user_id?: string
-          name?: string
-          slug?: string
-          icon?: string
-          position?: number
-          created_at?: string
-        }
-        Relationships: []
-      }
       body_tracking: {
         Row: {
           body_fat: number | null
@@ -301,6 +235,80 @@ export type Database = {
         }
         Relationships: []
       }
+      home_categories: {
+        Row: {
+          color: string
+          created_at: string
+          icon: string
+          id: string
+          name: string
+          position: number
+          slug: string
+          user_id: string
+        }
+        Insert: {
+          color: string
+          created_at?: string
+          icon: string
+          id?: string
+          name: string
+          position?: number
+          slug: string
+          user_id: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          icon?: string
+          id?: string
+          name?: string
+          position?: number
+          slug?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      home_subcategories: {
+        Row: {
+          category_id: string
+          created_at: string
+          icon: string
+          id: string
+          name: string
+          position: number
+          slug: string
+          user_id: string
+        }
+        Insert: {
+          category_id: string
+          created_at?: string
+          icon: string
+          id?: string
+          name: string
+          position?: number
+          slug: string
+          user_id: string
+        }
+        Update: {
+          category_id?: string
+          created_at?: string
+          icon?: string
+          id?: string
+          name?: string
+          position?: number
+          slug?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "home_subcategories_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "home_categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       items: {
         Row: {
           alert_days_before: number
@@ -384,63 +392,39 @@ export type Database = {
       }
       nutrition: {
         Row: {
-          base_calories: number | null
-          base_carbs: number | null
-          base_fats: number | null
-          base_proteins: number | null
           calories: number | null
           carbs: number | null
-          consumed_quantity: number | null
-          consumed_unit: string | null
           created_at: string
           date: string
           fats: number | null
           id: string
           meal: string | null
           name: string
-          percentage_consumed: number | null
           proteins: number | null
-          serving_count: number | null
           user_id: string
         }
         Insert: {
-          base_calories?: number | null
-          base_carbs?: number | null
-          base_fats?: number | null
-          base_proteins?: number | null
           calories?: number | null
           carbs?: number | null
-          consumed_quantity?: number | null
-          consumed_unit?: string | null
           created_at?: string
           date: string
           fats?: number | null
           id?: string
           meal?: string | null
           name: string
-          percentage_consumed?: number | null
           proteins?: number | null
-          serving_count?: number | null
           user_id: string
         }
         Update: {
-          base_calories?: number | null
-          base_carbs?: number | null
-          base_fats?: number | null
-          base_proteins?: number | null
           calories?: number | null
           carbs?: number | null
-          consumed_quantity?: number | null
-          consumed_unit?: string | null
           created_at?: string
           date?: string
           fats?: number | null
           id?: string
           meal?: string | null
           name?: string
-          percentage_consumed?: number | null
           proteins?: number | null
-          serving_count?: number | null
           user_id?: string
         }
         Relationships: []
