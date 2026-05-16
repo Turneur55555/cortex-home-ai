@@ -15,7 +15,7 @@ interface AppSheetProps {
 }
 
 /**
- * iOS-style premium bottom sheet with glass blur, drag handle and spring animation.
+ * iOS-style bottom sheet with glass blur, drag handle and spring animation.
  */
 export function AppSheet({
   open,
