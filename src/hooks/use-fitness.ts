@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import type { TablesInsert } from "@/integrations/supabase/types";
+import type { TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 
 // ---------- Nutrition goals ----------
 export type NutritionGoals = {
@@ -260,6 +260,36 @@ export function useDeleteNutrition() {
     onSuccess: () => {
       toast.success("Supprimé");
       qc.invalidateQueries({ queryKey: ["nutrition"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+}
+
+export function useUpdateNutrition() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      patch,
+      date,
+    }: {
+      id: string;
+      patch: TablesUpdate<"nutrition">;
+      date: string;
+    }) => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Non authentifié");
+      const { error } = await supabase
+        .from("nutrition")
+        .update(patch)
+        .eq("id", id)
+        .eq("user_id", user.id);
+      if (error) throw error;
+    },
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["nutrition", vars.date] });
     },
     onError: (e: Error) => toast.error(e.message),
   });

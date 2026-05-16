@@ -21,6 +21,7 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   useAddNutrition,
   useDeleteNutrition,
+  useUpdateNutrition,
   useNutrition,
   useNutritionGoals,
   useUpsertNutritionGoals,
@@ -41,6 +42,34 @@ type MealPrefill = {
   carbs: string;
   fats: string;
 };
+
+interface NutritionEntry {
+  id: string;
+  name: string | null;
+  percentage_consumed: number | null;
+  serving_count: number | null;
+  base_calories: number | null;
+  base_proteins: number | null;
+  base_carbs: number | null;
+  base_fats: number | null;
+  calories: number | null;
+  proteins: number | null;
+  carbs: number | null;
+  fats: number | null;
+}
+
+function getPortionBadge(pct: number | null, count: number | null): string | null {
+  const p = pct ?? 100;
+  const c = count ?? 1;
+  if (p === 100 && c === 1) return null;
+  if (p === 50 && c === 1) return "½";
+  if (p === 25 && c === 1) return "¼";
+  if (p === 75 && c === 1) return "¾";
+  if (p === 150 && c === 1) return "1½";
+  if (p === 200 && c === 1) return "×2";
+  if (p === 100 && c !== 1) return `×${c}`;
+  return `${p}%`;
+}
 
 async function fileToBase64Compressed(file: File): Promise<{ b64: string; mime: string }> {
   const dataUrl = await new Promise<string>((res, rej) => {
@@ -78,6 +107,7 @@ export function NutritionTab() {
   const [scanOpen, setScanOpen] = useState(false);
   const [barcodeOpen, setBarcodeOpen] = useState(false);
   const [prefill, setPrefill] = useState<MealPrefill | null>(null);
+  const [portionItem, setPortionItem] = useState<NutritionEntry | null>(null);
 
   const totals = useMemo(() => {
     return (data ?? []).reduce(
@@ -248,27 +278,45 @@ export function NutritionTab() {
             {g.label}
           </h3>
           <ul className="space-y-2">
-            {g.items.map((m) => (
-              <li
-                key={m.id}
-                className="flex items-center justify-between rounded-xl border border-border bg-card p-3 shadow-card"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium">{m.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {m.calories ?? 0} kcal · P{m.proteins ?? 0} G{m.carbs ?? 0} L{m.fats ?? 0}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => del.mutate(m.id)}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                  aria-label="Supprimer"
+            {g.items.map((m) => {
+              const badge = getPortionBadge(m.percentage_consumed, m.serving_count);
+              return (
+                <li
+                  key={m.id}
+                  className="flex items-center gap-2 rounded-xl border border-border bg-card p-3 shadow-card"
                 >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </li>
-            ))}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-sm font-medium">{m.name}</p>
+                      {badge && (
+                        <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-bold text-primary">
+                          {badge}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {m.calories ?? 0} kcal · P{m.proteins ?? 0} G{m.carbs ?? 0} L{m.fats ?? 0}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPortionItem(m)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                    aria-label="Modifier la portion"
+                  >
+                    <Scale className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => del.mutate(m.id)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                    aria-label="Supprimer"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </div>
       ))}
@@ -278,6 +326,13 @@ export function NutritionTab() {
       {goalsOpen && <GoalsSheet current={goals ?? null} onClose={() => setGoalsOpen(false)} />}
       {scanOpen && <MealScanSheet onClose={() => setScanOpen(false)} onResult={handleScanResult} />}
       {barcodeOpen && <BarcodeScannerSheet onClose={() => setBarcodeOpen(false)} />}
+      {portionItem && (
+        <PortionEditModal
+          item={portionItem}
+          date={date}
+          onClose={() => setPortionItem(null)}
+        />
+      )}
     </section>
   );
 }
@@ -609,14 +664,31 @@ function NutritionSheet({
       }
     }
 
+    const calories = num(form.calories) as number | null;
+    const proteins = num(form.proteins);
+    const carbs = num(form.carbs);
+    const fats = num(form.fats);
+
     await add.mutateAsync({
       date,
       name: form.name.trim(),
       meal: form.meal,
-      calories: num(form.calories) as number | null,
-      proteins: num(form.proteins),
-      carbs: num(form.carbs),
-      fats: num(form.fats),
+      calories,
+      proteins,
+      carbs,
+      fats,
+      base_calories: calories,
+      base_proteins: proteins,
+      base_carbs: carbs,
+      base_fats: fats,
+      serving_count: 1,
+      percentage_consumed: 100,
+      ...(baseFood
+        ? {
+            consumed_quantity: Number(gramQty) || null,
+            consumed_unit: "g",
+          }
+        : {}),
     });
     onClose();
   };
@@ -754,7 +826,154 @@ function NutritionSheet({
   );
 }
 
-// ─── PantryPicker ─────────────────────────────────────────────────────────────
+// ─── PortionEditModal ─────────────────────────────────────────────────────────
+
+function PortionEditModal({
+  item,
+  date,
+  onClose,
+}: {
+  item: NutritionEntry;
+  date: string;
+  onClose: () => void;
+}) {
+  const update = useUpdateNutrition();
+
+  const baseCal = item.base_calories ?? item.calories ?? 0;
+  const basePro = item.base_proteins ?? item.proteins ?? 0;
+  const baseCar = item.base_carbs ?? item.carbs ?? 0;
+  const baseFat = item.base_fats ?? item.fats ?? 0;
+
+  const [pct, setPct] = useState(item.percentage_consumed ?? 100);
+  const [count, setCount] = useState(item.serving_count ?? 1);
+
+  const PRESETS = [25, 50, 75, 100, 150, 200];
+
+  const preview = useMemo(
+    () => ({
+      calories: Math.round((baseCal * pct * count) / 100),
+      proteins: Math.round(((basePro * pct * count) / 100) * 10) / 10,
+      carbs: Math.round(((baseCar * pct * count) / 100) * 10) / 10,
+      fats: Math.round(((baseFat * pct * count) / 100) * 10) / 10,
+    }),
+    [baseCal, basePro, baseCar, baseFat, pct, count],
+  );
+
+  const submit = async () => {
+    await update.mutateAsync({
+      id: item.id,
+      date,
+      patch: {
+        percentage_consumed: pct,
+        serving_count: count,
+        calories: preview.calories,
+        proteins: preview.proteins,
+        carbs: preview.carbs,
+        fats: preview.fats,
+        base_calories: baseCal,
+        base_proteins: basePro,
+        base_carbs: baseCar,
+        base_fats: baseFat,
+      },
+    });
+    onClose();
+  };
+
+  return (
+    <Sheet title="Modifier la portion" onClose={onClose}>
+      <div className="space-y-5">
+        <p className="truncate text-sm font-semibold">{item.name}</p>
+
+        {/* Presets pourcentage */}
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Portion consommée
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {PRESETS.map((p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => setPct(p)}
+                className={`rounded-xl px-3 py-2 text-xs font-bold transition-all ${
+                  pct === p
+                    ? "bg-primary text-primary-foreground shadow-glow"
+                    : "border border-border bg-surface text-foreground hover:border-primary/50"
+                }`}
+              >
+                {p}%
+              </button>
+            ))}
+          </div>
+          <input
+            type="range"
+            min="10"
+            max="200"
+            step="5"
+            value={pct}
+            onChange={(e) => setPct(Number(e.target.value))}
+            className="mt-3 w-full accent-primary"
+          />
+          <p className="mt-1 text-center text-lg font-bold text-primary">{pct}%</p>
+        </div>
+
+        {/* Stepper nombre de portions */}
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Nombre de portions
+          </p>
+          <div className="flex items-center justify-center gap-4">
+            <button
+              type="button"
+              onClick={() => setCount((c) => Math.max(0.5, Math.round((c - 0.5) * 10) / 10))}
+              className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-surface text-xl font-bold hover:bg-muted"
+            >
+              −
+            </button>
+            <span className="w-16 text-center text-xl font-bold tabular-nums">{count}</span>
+            <button
+              type="button"
+              onClick={() => setCount((c) => Math.round((c + 0.5) * 10) / 10)}
+              className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-surface text-xl font-bold hover:bg-muted"
+            >
+              +
+            </button>
+          </div>
+        </div>
+
+        {/* Aperçu macros */}
+        <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-primary">
+            Aperçu
+          </p>
+          <div className="grid grid-cols-4 gap-2 text-center">
+            {[
+              { label: "kcal", val: preview.calories, color: "text-primary" },
+              { label: "Prot.", val: preview.proteins, color: "text-accent" },
+              { label: "Gluc.", val: preview.carbs, color: "text-warning" },
+              { label: "Lip.", val: preview.fats, color: "text-destructive" },
+            ].map((m) => (
+              <div key={m.label}>
+                <p className={`text-lg font-bold tabular-nums ${m.color}`}>{m.val}</p>
+                <p className="text-[10px] text-muted-foreground">{m.label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={submit}
+          disabled={update.isPending}
+          className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-gradient-primary text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-60"
+        >
+          {update.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+          Enregistrer
+        </button>
+      </div>
+    </Sheet>
+  );
+}
 
 function PantryPicker({
   selected,
