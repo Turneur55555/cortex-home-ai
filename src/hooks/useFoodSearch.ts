@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { searchFoods, type FoodSuggestion } from "@/services/openFoodFacts";
+import { searchLocalFoods } from "@/lib/nutrition/localFoods";
 
-const cache = new Map<string, FoodSuggestion[]>();
+// Session-level in-memory cache for OFE results
+const offCache = new Map<string, FoodSuggestion[]>();
 
 export function useFoodSearch(query: string, enabled = true) {
   const [results, setResults] = useState<FoodSuggestion[]>([]);
@@ -17,32 +19,43 @@ export function useFoodSearch(query: string, enabled = true) {
       setLoading(false);
       return;
     }
-    if (cache.has(q)) {
-      setResults(cache.get(q)!);
-      setError(null);
+
+    // Local foods always shown immediately
+    const local = searchLocalFoods(q);
+    setResults(local);
+
+    // OFE results — debounced 300 ms, merged after local
+    if (offCache.has(q)) {
+      const off = offCache.get(q)!;
+      setResults(mergeResults(local, off));
       setLoading(false);
       return;
     }
+
+    setLoading(true);
+    setError(null);
+
     const t = setTimeout(() => {
       ctrlRef.current?.abort();
       const ctrl = new AbortController();
       ctrlRef.current = ctrl;
-      setLoading(true);
-      setError(null);
+
       searchFoods(q, ctrl.signal)
-        .then((r) => {
-          cache.set(q, r);
-          setResults(r);
+        .then((off) => {
+          const tagged = off.map((f) => ({ ...f, source: "off" as const }));
+          offCache.set(q, tagged);
+          setResults(mergeResults(local, tagged));
         })
         .catch((e: unknown) => {
           if ((e as { name?: string })?.name === "AbortError") return;
           setError("Erreur de récupération");
-          setResults([]);
+          // Keep local results visible even on OFE error
         })
         .finally(() => {
           if (!ctrl.signal.aborted) setLoading(false);
         });
     }, 300);
+
     return () => {
       clearTimeout(t);
       ctrlRef.current?.abort();
@@ -51,6 +64,15 @@ export function useFoodSearch(query: string, enabled = true) {
 
   return { results, loading, error };
 }
+
+/** Local foods first; OFE results that duplicate a local name are filtered out. */
+function mergeResults(local: FoodSuggestion[], off: FoodSuggestion[]): FoodSuggestion[] {
+  const localNames = new Set(local.map((f) => f.name.toLowerCase()));
+  const unique = off.filter((f) => !localNames.has(f.name.toLowerCase()));
+  return [...local, ...unique].slice(0, 12);
+}
+
+// ─── Recent foods ─────────────────────────────────────────────────────────────
 
 const RECENT_KEY = "food_recent_v1";
 const MAX_RECENT = 8;

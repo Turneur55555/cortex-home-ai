@@ -8,12 +8,13 @@ import {
   ChevronRight,
   Loader2,
   Minus,
+  Move,
+  Pencil,
   Plus,
   Search,
   Sparkles,
   Trash2,
   X,
-  MapPin,
   ArrowLeft,
 } from "lucide-react";
 import { ScanSheet } from "@/components/ScanSheet";
@@ -31,6 +32,7 @@ import {
   useStockItems,
   useUpdateStockItem,
 } from "@/hooks/use-stocks";
+import { useItemsRealtime, useUpdateItemFull } from "@/hooks/use-pantry";
 import { ROOMS, getRoomById, getCompartmentById } from "@/lib/maison/rooms";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -56,6 +58,7 @@ type View =
 function MaisonPage() {
   const [view, setView] = useState<View>({ level: "rooms" });
   const [globalSearch, setGlobalSearch] = useState("");
+  useItemsRealtime();
 
   const goToRoom = (roomId: string) => setView({ level: "compartments", roomId });
   const goToCompartment = (roomId: string, compartmentId: string) =>
@@ -106,14 +109,16 @@ function RoomsView({
   const { data: allStats } = useAllStockStats();
 
   const statsMap = useMemo(() => {
-    const map = new Map<string, { count: number; expiring: number }>();
+    const map = new Map<string, { count: number; expiring: number; lowStock: number }>();
     for (const item of allStats ?? []) {
-      const cur = map.get(item.module) ?? { count: 0, expiring: 0 };
+      const cur = map.get(item.module) ?? { count: 0, expiring: 0, lowStock: 0 };
       cur.count++;
       if (item.expiration_date) {
         const d = differenceInDays(parseISO(item.expiration_date as unknown as string), new Date());
         if (d >= 0 && d <= 7) cur.expiring++;
       }
+      const threshold = (item as { low_stock_threshold?: number | null }).low_stock_threshold;
+      if (threshold != null && item.quantity <= threshold) cur.lowStock++;
       map.set(item.module, cur);
     }
     return map;
@@ -182,7 +187,7 @@ function RoomsView({
       {/* Room grid */}
       <div className="grid grid-cols-2 gap-3">
         {filteredRooms.map((room) => {
-          const stats = statsMap.get(room.id) ?? { count: 0, expiring: 0 };
+          const stats = statsMap.get(room.id) ?? { count: 0, expiring: 0, lowStock: 0 };
           return (
             <button
               key={room.id}
@@ -209,13 +214,21 @@ function RoomsView({
                   {stats.count} objet{stats.count !== 1 ? "s" : ""}
                 </p>
 
-                {/* Expiry badge */}
-                {stats.expiring > 0 && (
-                  <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-destructive/15 px-2 py-0.5 text-[10px] font-semibold text-destructive">
-                    <AlertTriangle className="h-2.5 w-2.5" />
-                    {stats.expiring} exp.
-                  </div>
-                )}
+                {/* Badges */}
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {stats.expiring > 0 && (
+                    <div className="inline-flex items-center gap-1 rounded-full bg-destructive/15 px-2 py-0.5 text-[10px] font-semibold text-destructive">
+                      <AlertTriangle className="h-2.5 w-2.5" />
+                      {stats.expiring} exp.
+                    </div>
+                  )}
+                  {stats.lowStock > 0 && (
+                    <div className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-semibold text-warning">
+                      <AlertTriangle className="h-2.5 w-2.5" />
+                      {stats.lowStock} stock bas
+                    </div>
+                  )}
+                </div>
               </div>
             </button>
           );
@@ -384,6 +397,7 @@ function ItemsView({
   const [open, setOpen] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
   const [barcodeOpen, setBarcodeOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<Tables<"items"> | null>(null);
   const [q, setQ] = useState("");
   const [expFilter, setExpFilter] = useState<"all" | "valid" | "soon" | "expired">("all");
   const [selecting, setSelecting] = useState(false);
@@ -629,6 +643,7 @@ function ItemsView({
                     onToggle={() => toggleOne(it.id)}
                     onDelete={() => del.mutate({ id: it.id, module: roomId })}
                     onQty={(qty) => update.mutate({ id: it.id, module: roomId, patch: { quantity: qty } })}
+                    onEdit={() => setEditingItem(it)}
                   />
                 ))}
               </ul>
@@ -656,6 +671,12 @@ function ItemsView({
           roomName={room.name}
           compName={comp.name}
           onClose={() => setOpen(false)}
+        />
+      )}
+      {editingItem && (
+        <ItemEditSheet
+          item={editingItem}
+          onClose={() => setEditingItem(null)}
         />
       )}
       {scanOpen && (
@@ -756,6 +777,7 @@ function ItemRow({
   item,
   onDelete,
   onQty,
+  onEdit,
   selecting = false,
   selected = false,
   onToggle,
@@ -763,6 +785,7 @@ function ItemRow({
   item: Tables<"items">;
   onDelete: () => void;
   onQty: (q: number) => void;
+  onEdit?: () => void;
   selecting?: boolean;
   selected?: boolean;
   onToggle?: () => void;
@@ -771,6 +794,8 @@ function ItemRow({
   const daysLeft = exp ? differenceInDays(exp, new Date()) : null;
   const expState =
     daysLeft == null ? null : daysLeft < 0 ? "expired" : daysLeft <= 7 ? "soon" : "ok";
+  const isLowStock =
+    item.low_stock_threshold != null && item.quantity <= item.low_stock_threshold;
 
   return (
     <li
@@ -801,6 +826,12 @@ function ItemRow({
         <p className="truncate text-sm font-semibold leading-tight">{item.name}</p>
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
           {item.unit && <span>{item.unit}</span>}
+          {isLowStock && (
+            <span className="inline-flex items-center gap-1 text-warning">
+              <AlertTriangle className="h-3 w-3" />
+              Stock bas
+            </span>
+          )}
           {exp && (
             <span
               className={
@@ -847,6 +878,16 @@ function ItemRow({
               <Plus className="h-3.5 w-3.5" />
             </button>
           </div>
+          {onEdit && (
+            <button
+              type="button"
+              onClick={onEdit}
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary"
+              aria-label="Modifier"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+          )}
           <button
             type="button"
             data-testid="stocks-item-delete"
@@ -1032,5 +1073,196 @@ function FormField({
         />
       )}
     </label>
+  );
+}
+
+// ─── Item Edit Sheet ──────────────────────────────────────────────────────────
+
+function ItemEditSheet({
+  item,
+  onClose,
+}: {
+  item: Tables<"items">;
+  onClose: () => void;
+}) {
+  const updateFull = useUpdateItemFull();
+  const del = useDeleteStockItem();
+
+  const [form, setForm] = useState({
+    name: item.name,
+    category: item.category ?? "",
+    quantity: String(item.quantity),
+    unit: item.unit ?? "",
+    expiration_date: item.expiration_date
+      ? (item.expiration_date as unknown as string).slice(0, 10)
+      : "",
+    notes: item.notes ?? "",
+    low_stock_threshold: item.low_stock_threshold != null ? String(item.low_stock_threshold) : "",
+  });
+
+  const [movingTo, setMovingTo] = useState<{ roomId: string; compartmentId: string }>({
+    roomId: item.module,
+    compartmentId: item.location ?? "",
+  });
+
+  const moveRoom = getRoomById(movingTo.roomId);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await updateFull.mutateAsync({
+      id: item.id,
+      oldModule: item.module,
+      oldQuantity: item.quantity,
+      itemName: item.name,
+      patch: {
+        name: form.name.trim() || item.name,
+        category: form.category.trim() || item.category,
+        quantity: Number(form.quantity) || item.quantity,
+        unit: form.unit.trim() || null,
+        location: movingTo.compartmentId || null,
+        module: movingTo.roomId,
+        expiration_date: form.expiration_date || null,
+        notes: form.notes.trim() || null,
+        low_stock_threshold: form.low_stock_threshold.trim() ? Number(form.low_stock_threshold) : null,
+      },
+    });
+    onClose();
+  };
+
+  const handleDelete = () => {
+    if (!confirm(`Supprimer "${item.name}" ?`)) return;
+    del.mutate({ id: item.id, module: item.module });
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm">
+      <div className="w-full max-w-[430px] rounded-t-3xl border border-border bg-card p-5 shadow-elevated">
+        {/* Handle */}
+        <div className="mb-4 flex justify-center">
+          <div className="h-1 w-10 rounded-full bg-white/20" />
+        </div>
+
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-bold">Modifier l'item</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-surface"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <form onSubmit={submit} className="space-y-3">
+          <FormField
+            label="Nom"
+            value={form.name}
+            onChange={(v) => setForm({ ...form, name: v })}
+            required
+          />
+          <div className="grid grid-cols-3 gap-3">
+            <FormField
+              label="Quantité"
+              type="number"
+              value={form.quantity}
+              onChange={(v) => setForm({ ...form, quantity: v })}
+            />
+            <FormField
+              label="Unité"
+              value={form.unit}
+              onChange={(v) => setForm({ ...form, unit: v })}
+              placeholder="g, L, pcs…"
+            />
+            <FormField
+              label="Expire le"
+              type="date"
+              value={form.expiration_date}
+              onChange={(v) => setForm({ ...form, expiration_date: v })}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <FormField
+              label="Catégorie"
+              value={form.category}
+              onChange={(v) => setForm({ ...form, category: v })}
+            />
+            <FormField
+              label="Alerte stock bas"
+              type="number"
+              value={form.low_stock_threshold}
+              onChange={(v) => setForm({ ...form, low_stock_threshold: v })}
+              placeholder="ex: 2"
+            />
+          </div>
+
+          {/* Move to different room/compartment */}
+          <div>
+            <label className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <Move className="h-3 w-3" />
+              Déplacer vers
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <select
+                value={movingTo.roomId}
+                onChange={(e) =>
+                  setMovingTo({ roomId: e.target.value, compartmentId: "" })
+                }
+                className="rounded-xl border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary"
+              >
+                {ROOMS.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.name}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={movingTo.compartmentId}
+                onChange={(e) =>
+                  setMovingTo((s) => ({ ...s, compartmentId: e.target.value }))
+                }
+                className="rounded-xl border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary"
+              >
+                <option value="">— Aucun —</option>
+                {(moveRoom?.compartments ?? []).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <FormField
+            label="Notes"
+            textarea
+            value={form.notes}
+            onChange={(v) => setForm({ ...form, notes: v })}
+          />
+
+          <button
+            type="submit"
+            disabled={updateFull.isPending}
+            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-gradient-primary text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-60"
+          >
+            {updateFull.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Pencil className="h-4 w-4" />
+            )}
+            Enregistrer
+          </button>
+
+          <button
+            type="button"
+            onClick={handleDelete}
+            className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-destructive/40 text-sm font-medium text-destructive hover:bg-destructive/10"
+          >
+            <Trash2 className="h-4 w-4" />
+            Supprimer l'item
+          </button>
+        </form>
+      </div>
+    </div>
   );
 }
