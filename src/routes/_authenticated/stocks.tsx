@@ -109,14 +109,16 @@ function RoomsView({
   const { data: allStats } = useAllStockStats();
 
   const statsMap = useMemo(() => {
-    const map = new Map<string, { count: number; expiring: number }>();
+    const map = new Map<string, { count: number; expiring: number; lowStock: number }>();
     for (const item of allStats ?? []) {
-      const cur = map.get(item.module) ?? { count: 0, expiring: 0 };
+      const cur = map.get(item.module) ?? { count: 0, expiring: 0, lowStock: 0 };
       cur.count++;
       if (item.expiration_date) {
         const d = differenceInDays(parseISO(item.expiration_date as unknown as string), new Date());
         if (d >= 0 && d <= 7) cur.expiring++;
       }
+      const threshold = (item as { low_stock_threshold?: number | null }).low_stock_threshold;
+      if (threshold != null && item.quantity <= threshold) cur.lowStock++;
       map.set(item.module, cur);
     }
     return map;
@@ -185,7 +187,7 @@ function RoomsView({
       {/* Room grid */}
       <div className="grid grid-cols-2 gap-3">
         {filteredRooms.map((room) => {
-          const stats = statsMap.get(room.id) ?? { count: 0, expiring: 0 };
+          const stats = statsMap.get(room.id) ?? { count: 0, expiring: 0, lowStock: 0 };
           return (
             <button
               key={room.id}
@@ -212,13 +214,21 @@ function RoomsView({
                   {stats.count} objet{stats.count !== 1 ? "s" : ""}
                 </p>
 
-                {/* Expiry badge */}
-                {stats.expiring > 0 && (
-                  <div className="mt-2 inline-flex items-center gap-1 rounded-full bg-destructive/15 px-2 py-0.5 text-[10px] font-semibold text-destructive">
-                    <AlertTriangle className="h-2.5 w-2.5" />
-                    {stats.expiring} exp.
-                  </div>
-                )}
+                {/* Badges */}
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {stats.expiring > 0 && (
+                    <div className="inline-flex items-center gap-1 rounded-full bg-destructive/15 px-2 py-0.5 text-[10px] font-semibold text-destructive">
+                      <AlertTriangle className="h-2.5 w-2.5" />
+                      {stats.expiring} exp.
+                    </div>
+                  )}
+                  {stats.lowStock > 0 && (
+                    <div className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-semibold text-warning">
+                      <AlertTriangle className="h-2.5 w-2.5" />
+                      {stats.lowStock} stock bas
+                    </div>
+                  )}
+                </div>
               </div>
             </button>
           );
@@ -784,6 +794,8 @@ function ItemRow({
   const daysLeft = exp ? differenceInDays(exp, new Date()) : null;
   const expState =
     daysLeft == null ? null : daysLeft < 0 ? "expired" : daysLeft <= 7 ? "soon" : "ok";
+  const isLowStock =
+    item.low_stock_threshold != null && item.quantity <= item.low_stock_threshold;
 
   return (
     <li
@@ -814,6 +826,12 @@ function ItemRow({
         <p className="truncate text-sm font-semibold leading-tight">{item.name}</p>
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
           {item.unit && <span>{item.unit}</span>}
+          {isLowStock && (
+            <span className="inline-flex items-center gap-1 text-warning">
+              <AlertTriangle className="h-3 w-3" />
+              Stock bas
+            </span>
+          )}
           {exp && (
             <span
               className={
@@ -1079,6 +1097,7 @@ function ItemEditSheet({
       ? (item.expiration_date as unknown as string).slice(0, 10)
       : "",
     notes: item.notes ?? "",
+    low_stock_threshold: item.low_stock_threshold != null ? String(item.low_stock_threshold) : "",
   });
 
   const [movingTo, setMovingTo] = useState<{ roomId: string; compartmentId: string }>({
@@ -1104,6 +1123,7 @@ function ItemEditSheet({
         module: movingTo.roomId,
         expiration_date: form.expiration_date || null,
         notes: form.notes.trim() || null,
+        low_stock_threshold: form.low_stock_threshold.trim() ? Number(form.low_stock_threshold) : null,
       },
     });
     onClose();
@@ -1161,11 +1181,20 @@ function ItemEditSheet({
               onChange={(v) => setForm({ ...form, expiration_date: v })}
             />
           </div>
-          <FormField
-            label="Catégorie"
-            value={form.category}
-            onChange={(v) => setForm({ ...form, category: v })}
-          />
+          <div className="grid grid-cols-2 gap-3">
+            <FormField
+              label="Catégorie"
+              value={form.category}
+              onChange={(v) => setForm({ ...form, category: v })}
+            />
+            <FormField
+              label="Alerte stock bas"
+              type="number"
+              value={form.low_stock_threshold}
+              onChange={(v) => setForm({ ...form, low_stock_threshold: v })}
+              placeholder="ex: 2"
+            />
+          </div>
 
           {/* Move to different room/compartment */}
           <div>

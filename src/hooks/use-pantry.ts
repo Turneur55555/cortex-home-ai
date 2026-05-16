@@ -12,6 +12,11 @@ export type PantryItem = {
   unit: string | null;
   location: string | null;
   expiration_date: string | null;
+  calories_per_100g: number | null;
+  protein_per_100g: number | null;
+  carbs_per_100g: number | null;
+  fat_per_100g: number | null;
+  low_stock_threshold: number | null;
 };
 
 // ─── Pantry query (cuisine items > 0 qty) ────────────────────────────────────
@@ -23,7 +28,7 @@ export function usePantryItems() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("items")
-        .select("id, name, quantity, unit, location, expiration_date")
+        .select("id, name, quantity, unit, location, expiration_date, calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, low_stock_threshold")
         .eq("module", "cuisine")
         .gt("quantity", 0)
         .order("name")
@@ -115,6 +120,7 @@ type ItemPatch = {
   module?: string;
   expiration_date?: string | null;
   notes?: string | null;
+  low_stock_threshold?: number | null;
 };
 
 export function useUpdateItemFull() {

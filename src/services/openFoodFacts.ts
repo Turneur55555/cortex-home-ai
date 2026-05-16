@@ -3,10 +3,12 @@ export interface FoodSuggestion {
   name: string;
   brand?: string;
   image?: string;
+  /** Values per 100 g */
   calories: number | null;
   proteins: number | null;
   carbs: number | null;
   fats: number | null;
+  source?: "local" | "off";
 }
 
 interface OFFProduct {

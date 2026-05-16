@@ -31,7 +31,7 @@ export function useAllStockStats() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("items")
-        .select("id, module, location, expiration_date")
+        .select("id, module, location, expiration_date, quantity, low_stock_threshold")
         .limit(2000);
       if (error) throw error;
       return data ?? [];

@@ -238,16 +238,24 @@ export type Database = {
       items: {
         Row: {
           alert_days_before: number
+          barcode: string | null
+          brand: string | null
+          calories_per_100g: number | null
+          carbs_per_100g: number | null
           category: string
           confidence_score: number | null
           created_at: string
           expiration_date: string | null
+          fat_per_100g: number | null
           flagged: boolean
           id: string
+          image_url: string | null
           location: string | null
+          low_stock_threshold: number | null
           module: string
           name: string
           notes: string | null
+          protein_per_100g: number | null
           quantity: number
           storage_path: string | null
           unit: string | null
@@ -255,16 +263,24 @@ export type Database = {
         }
         Insert: {
           alert_days_before?: number
+          barcode?: string | null
+          brand?: string | null
+          calories_per_100g?: number | null
+          carbs_per_100g?: number | null
           category: string
           confidence_score?: number | null
           created_at?: string
           expiration_date?: string | null
+          fat_per_100g?: number | null
           flagged?: boolean
           id?: string
+          image_url?: string | null
           location?: string | null
+          low_stock_threshold?: number | null
           module: string
           name: string
           notes?: string | null
+          protein_per_100g?: number | null
           quantity?: number
           storage_path?: string | null
           unit?: string | null
@@ -272,16 +288,24 @@ export type Database = {
         }
         Update: {
           alert_days_before?: number
+          barcode?: string | null
+          brand?: string | null
+          calories_per_100g?: number | null
+          carbs_per_100g?: number | null
           category?: string
           confidence_score?: number | null
           created_at?: string
           expiration_date?: string | null
+          fat_per_100g?: number | null
           flagged?: boolean
           id?: string
+          image_url?: string | null
           location?: string | null
+          low_stock_threshold?: number | null
           module?: string
           name?: string
           notes?: string | null
+          protein_per_100g?: number | null
           quantity?: number
           storage_path?: string | null
           unit?: string | null
