@@ -242,11 +242,12 @@ export type Database = {
           brand: string | null
           calories_per_100g: number | null
           carbs_per_100g: number | null
-          category: string
+          category: string | null
           confidence_score: number | null
           created_at: string
           expiration_date: string | null
           fat_per_100g: number | null
+          fiber_per_100g: number | null
           flagged: boolean
           id: string
           image_url: string | null
@@ -257,7 +258,10 @@ export type Database = {
           notes: string | null
           protein_per_100g: number | null
           quantity: number
+          room: string | null
+          sodium_per_100g: number | null
           storage_path: string | null
+          sugar_per_100g: number | null
           unit: string | null
           user_id: string
         }
@@ -267,22 +271,26 @@ export type Database = {
           brand?: string | null
           calories_per_100g?: number | null
           carbs_per_100g?: number | null
-          category: string
+          category?: string | null
           confidence_score?: number | null
           created_at?: string
           expiration_date?: string | null
           fat_per_100g?: number | null
+          fiber_per_100g?: number | null
           flagged?: boolean
           id?: string
           image_url?: string | null
           location?: string | null
           low_stock_threshold?: number | null
-          module: string
+          module?: string
           name: string
           notes?: string | null
           protein_per_100g?: number | null
           quantity?: number
+          room?: string | null
+          sodium_per_100g?: number | null
           storage_path?: string | null
+          sugar_per_100g?: number | null
           unit?: string | null
           user_id: string
         }
@@ -292,11 +300,12 @@ export type Database = {
           brand?: string | null
           calories_per_100g?: number | null
           carbs_per_100g?: number | null
-          category?: string
+          category?: string | null
           confidence_score?: number | null
           created_at?: string
           expiration_date?: string | null
           fat_per_100g?: number | null
+          fiber_per_100g?: number | null
           flagged?: boolean
           id?: string
           image_url?: string | null
@@ -307,7 +316,10 @@ export type Database = {
           notes?: string | null
           protein_per_100g?: number | null
           quantity?: number
+          room?: string | null
+          sodium_per_100g?: number | null
           storage_path?: string | null
+          sugar_per_100g?: number | null
           unit?: string | null
           user_id?: string
         }

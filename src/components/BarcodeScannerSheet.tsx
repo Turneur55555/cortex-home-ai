@@ -168,14 +168,17 @@ export function BarcodeScannerSheet({ roomId = "cuisine", onClose }: { roomId?: 
   const handleAddToStock = async () => {
     if (!product) return;
     try {
+      const n = product.nutriments;
       await addStock.mutateAsync({
-        module: roomId,
+        room: roomId,
         name: product.product_name || "Produit inconnu",
-        category: "alimentation",
         quantity: 1,
         unit: product.quantity || null,
-        expiration_date: format(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), "yyyy-MM-dd"), // Default 1 week
         notes: `Code-barres: ${product.barcode}`,
+        calories_per_100g: n?.["energy-kcal_100g"] ?? null,
+        protein_per_100g: n?.proteins_100g ?? null,
+        carbs_per_100g: n?.carbohydrates_100g ?? null,
+        fat_per_100g: n?.fat_100g ?? null,
       });
       onClose();
     } catch (e) {
