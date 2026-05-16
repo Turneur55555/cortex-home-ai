@@ -536,7 +536,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      ensure_home_categories_for_me: { Args: never; Returns: undefined }
     }
     Enums: {
       [_ in never]: never
