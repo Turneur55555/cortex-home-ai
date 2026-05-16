@@ -465,15 +465,24 @@ export function BarcodeScannerSheet({ roomId = "cuisine", onClose }: { roomId?: 
 
   const handleAddToNutrition = async () => {
     if (!product || !macros) return;
+    const baseMacros = computeMacros(product, portionQty);
     try {
       await addNutrition.mutateAsync({
-        date:     format(new Date(), "yyyy-MM-dd"),
-        name:     `${product.product_name || "Produit"} (${totalQty} ${portionUnit})`,
-        meal:     "collation",
-        calories: macros.calories,
-        proteins: macros.proteins,
-        carbs:    macros.carbs,
-        fats:     macros.fats,
+        date:                format(new Date(), "yyyy-MM-dd"),
+        name:                `${product.product_name || "Produit"} (${totalQty} ${portionUnit})`,
+        meal:                "collation",
+        calories:            macros.calories,
+        proteins:            macros.proteins,
+        carbs:               macros.carbs,
+        fats:                macros.fats,
+        base_calories:       baseMacros.calories,
+        base_proteins:       baseMacros.proteins,
+        base_carbs:          baseMacros.carbs,
+        base_fats:           baseMacros.fats,
+        consumed_quantity:   portionQty,
+        consumed_unit:       portionUnit,
+        serving_count:       portionCount,
+        percentage_consumed: 100,
       });
       toast.success("Ajouté à la nutrition");
       onClose();
