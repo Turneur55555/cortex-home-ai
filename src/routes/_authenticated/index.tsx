@@ -129,11 +129,9 @@ function HomePage() {
     <main className="flex flex-1 flex-col px-5 pb-6 pt-12">
       {/* ── Header ── */}
       <header className="mb-5">
-        <p className="text-[11px] font-medium uppercase tracking-widest text-muted-foreground">
-          {greeting}
-        </p>
         <h1 className="mt-0.5 text-xl font-bold tracking-tight">
-          Bonjour, <span className="text-primary">{name}</span>
+          {greeting},{" "}
+          <span className="text-primary">{name}</span>
         </h1>
       </header>
 
