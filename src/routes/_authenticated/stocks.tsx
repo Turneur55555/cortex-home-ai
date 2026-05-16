@@ -6,6 +6,7 @@ import {
   ChefHat,
   CheckSquare,
   ChevronRight,
+  Leaf,
   Loader2,
   Minus,
   Move,
@@ -20,6 +21,7 @@ import {
 import { ScanSheet } from "@/components/ScanSheet";
 import { BarcodeScannerSheet } from "@/components/BarcodeScannerSheet";
 import { RecipeAssistantSheet } from "@/components/RecipeAssistantSheet";
+import { FoodAutocomplete } from "@/components/FoodAutocomplete";
 import { toast } from "sonner";
 import { differenceInDays, format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
@@ -111,24 +113,21 @@ function RoomsView({
   const statsMap = useMemo(() => {
     const map = new Map<string, { count: number; expiring: number; lowStock: number }>();
     for (const item of allStats ?? []) {
-      const cur = map.get(item.module) ?? { count: 0, expiring: 0, lowStock: 0 };
+      const roomId = item.room ?? "__none__";
+      const cur = map.get(roomId) ?? { count: 0, expiring: 0, lowStock: 0 };
       cur.count++;
       if (item.expiration_date) {
         const d = differenceInDays(parseISO(item.expiration_date as unknown as string), new Date());
         if (d >= 0 && d <= 7) cur.expiring++;
       }
-      const threshold = (item as { low_stock_threshold?: number | null }).low_stock_threshold;
+      const threshold = item.low_stock_threshold;
       if (threshold != null && item.quantity <= threshold) cur.lowStock++;
-      map.set(item.module, cur);
+      map.set(roomId, cur);
     }
     return map;
   }, [allStats]);
 
-  const totalItems = useMemo(
-    () => (allStats ?? []).length,
-    [allStats],
-  );
-
+  const totalItems = (allStats ?? []).length;
   const totalExpiring = useMemo(
     () =>
       (allStats ?? []).filter((it) => {
@@ -147,7 +146,6 @@ function RoomsView({
 
   return (
     <>
-      {/* Header */}
       <header className="mb-5">
         <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
           Gestion
@@ -155,7 +153,6 @@ function RoomsView({
         <h1 className="mt-1 text-2xl font-bold tracking-tight">Maison</h1>
       </header>
 
-      {/* Global stats */}
       <div className="mb-4 grid grid-cols-2 gap-3">
         <div className="rounded-2xl border border-border bg-card p-3 shadow-card">
           <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
@@ -173,7 +170,6 @@ function RoomsView({
         </div>
       </div>
 
-      {/* Search */}
       <div className="relative mb-5">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <input
@@ -184,7 +180,6 @@ function RoomsView({
         />
       </div>
 
-      {/* Room grid */}
       <div className="grid grid-cols-2 gap-3">
         {filteredRooms.map((room) => {
           const stats = statsMap.get(room.id) ?? { count: 0, expiring: 0, lowStock: 0 };
@@ -195,26 +190,19 @@ function RoomsView({
               onClick={() => onRoomClick(room.id)}
               className="relative overflow-hidden rounded-2xl border border-white/5 bg-card p-4 text-left shadow-card transition-all active:scale-95"
             >
-              {/* Gradient overlay */}
               <div
                 className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${room.gradient}`}
               />
-
               <div className="relative">
-                {/* Icon */}
                 <div
                   className={`mb-3 inline-flex h-10 w-10 items-center justify-center rounded-xl ${room.iconBg}`}
                 >
                   <room.Icon className="h-5 w-5" />
                 </div>
-
-                {/* Name & count */}
                 <p className="truncate text-sm font-semibold leading-tight">{room.name}</p>
                 <p className="mt-0.5 text-[11px] text-muted-foreground">
                   {stats.count} objet{stats.count !== 1 ? "s" : ""}
                 </p>
-
-                {/* Badges */}
                 <div className="mt-2 flex flex-wrap gap-1">
                   {stats.expiring > 0 && (
                     <div className="inline-flex items-center gap-1 rounded-full bg-destructive/15 px-2 py-0.5 text-[10px] font-semibold text-destructive">
@@ -284,7 +272,6 @@ function CompartmentsView({
 
   return (
     <>
-      {/* Header */}
       <header className="mb-5">
         <button
           type="button"
@@ -295,9 +282,7 @@ function CompartmentsView({
           Maison
         </button>
         <div className="flex items-center gap-3">
-          <div
-            className={`flex h-10 w-10 items-center justify-center rounded-xl ${room.iconBg}`}
-          >
+          <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${room.iconBg}`}>
             <room.Icon className="h-5 w-5" />
           </div>
           <div>
@@ -312,7 +297,6 @@ function CompartmentsView({
         </div>
       </header>
 
-      {/* Action buttons */}
       <div className="mb-5 flex gap-2">
         <button
           type="button"
@@ -334,7 +318,6 @@ function CompartmentsView({
         )}
       </div>
 
-      {/* Compartments list */}
       <div className="space-y-2">
         {room.compartments.map((comp) => {
           const stats = compCounts.get(comp.id) ?? { count: 0, expiring: 0 };
@@ -367,9 +350,7 @@ function CompartmentsView({
         })}
       </div>
 
-      {scanOpen && (
-        <ScanSheet module={roomId} onClose={() => setScanOpen(false)} />
-      )}
+      {scanOpen && <ScanSheet room={roomId} onClose={() => setScanOpen(false)} />}
       {recipeOpen && <RecipeAssistantSheet onClose={() => setRecipeOpen(false)} />}
     </>
   );
@@ -403,7 +384,6 @@ function ItemsView({
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  // Items belonging to this compartment
   const data = useMemo(
     () => (allRoomItems ?? []).filter((it) => it.location === compartmentId),
     [allRoomItems, compartmentId],
@@ -427,10 +407,7 @@ function ItemsView({
         if (expFilter === "expired" && s !== "expired") return false;
       }
       if (!needle) return true;
-      return (
-        it.name.toLowerCase().includes(needle) ||
-        (it.category ?? "").toLowerCase().includes(needle)
-      );
+      return it.name.toLowerCase().includes(needle);
     });
   }, [data, q, expFilter]);
 
@@ -458,17 +435,6 @@ function ItemsView({
     [data],
   );
 
-  const grouped = useMemo(() => {
-    const map = new Map<string, Tables<"items">[]>();
-    for (const it of filtered) {
-      const k = it.category ?? "autre";
-      const arr = map.get(k) ?? [];
-      arr.push(it);
-      map.set(k, arr);
-    }
-    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-  }, [filtered]);
-
   const toggleOne = (id: string) =>
     setSelected((s) => {
       const next = new Set(s);
@@ -483,7 +449,6 @@ function ItemsView({
 
   return (
     <section className="flex flex-col gap-4">
-      {/* Header */}
       <header>
         <button
           type="button"
@@ -508,7 +473,6 @@ function ItemsView({
         </div>
       </header>
 
-      {/* Stats */}
       <div className="grid grid-cols-3 gap-2">
         <StatChip label="Total" value={data.length} tone="default" />
         <StatChip label="< 7 j" value={expiringSoon.length} tone="warning" />
@@ -619,7 +583,7 @@ function ItemsView({
         <div className="flex h-32 items-center justify-center">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
-      ) : grouped.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border bg-surface px-4 py-12 text-center">
           <p className="text-sm font-medium">Compartiment vide</p>
           <p className="mt-1 text-xs text-muted-foreground">
@@ -627,32 +591,23 @@ function ItemsView({
           </p>
         </div>
       ) : (
-        <div className={`flex flex-col gap-4 ${selecting && selected.size > 0 ? "pb-28" : ""}`}>
-          {grouped.map(([cat, items]) => (
-            <div key={cat}>
-              <h3 className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                {cat}
-              </h3>
-              <ul className="space-y-2">
-                {items.map((it) => (
-                  <ItemRow
-                    key={it.id}
-                    item={it}
-                    selecting={selecting}
-                    selected={selected.has(it.id)}
-                    onToggle={() => toggleOne(it.id)}
-                    onDelete={() => del.mutate({ id: it.id, module: roomId })}
-                    onQty={(qty) => update.mutate({ id: it.id, module: roomId, patch: { quantity: qty } })}
-                    onEdit={() => setEditingItem(it)}
-                  />
-                ))}
-              </ul>
-            </div>
+        <ul className={`space-y-2 ${selecting && selected.size > 0 ? "pb-28" : ""}`}>
+          {filtered.map((it) => (
+            <ItemRow
+              key={it.id}
+              item={it}
+              selecting={selecting}
+              selected={selected.has(it.id)}
+              onToggle={() => toggleOne(it.id)}
+              onDelete={() => del.mutate({ id: it.id, roomId })}
+              onQty={(qty) => update.mutate({ id: it.id, roomId, patch: { quantity: qty } })}
+              onEdit={() => setEditingItem(it)}
+            />
           ))}
-        </div>
+        </ul>
       )}
 
-      {/* FAB + sheets */}
+      {/* FAB */}
       {!selecting && (
         <button
           type="button"
@@ -674,14 +629,11 @@ function ItemsView({
         />
       )}
       {editingItem && (
-        <ItemEditSheet
-          item={editingItem}
-          onClose={() => setEditingItem(null)}
-        />
+        <ItemEditSheet item={editingItem} onClose={() => setEditingItem(null)} />
       )}
       {scanOpen && (
         <ScanSheet
-          module={roomId}
+          room={roomId}
           defaultLocation={compartmentId}
           onClose={() => setScanOpen(false)}
         />
@@ -696,12 +648,12 @@ function ItemsView({
             const targets = data
               .filter((it) => selected.has(it.id))
               .map((it) => ({ id: it.id, quantity: Math.max(0, it.quantity + delta) }));
-            bulkAdj.mutate({ items: targets, module: roomId }, { onSuccess: () => exitSelect() });
+            bulkAdj.mutate({ items: targets, roomId }, { onSuccess: () => exitSelect() });
           }}
           onDelete={() => {
             if (!confirm(`Supprimer ${selected.size} item(s) ?`)) return;
             bulkDel.mutate(
-              { ids: [...selected], module: roomId },
+              { ids: [...selected], roomId },
               { onSuccess: () => exitSelect() },
             );
           }}
@@ -796,6 +748,7 @@ function ItemRow({
     daysLeft == null ? null : daysLeft < 0 ? "expired" : daysLeft <= 7 ? "soon" : "ok";
   const isLowStock =
     item.low_stock_threshold != null && item.quantity <= item.low_stock_threshold;
+  const hasNutrition = item.calories_per_100g != null;
 
   return (
     <li
@@ -823,13 +776,25 @@ function ItemRow({
         </span>
       )}
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold leading-tight">{item.name}</p>
+        <div className="flex items-center gap-1.5">
+          <p className="truncate text-sm font-semibold leading-tight">{item.name}</p>
+          {hasNutrition && (
+            <span title="Valeurs nutritionnelles disponibles">
+              <Leaf className="h-3 w-3 shrink-0 text-accent opacity-70" />
+            </span>
+          )}
+        </div>
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
           {item.unit && <span>{item.unit}</span>}
           {isLowStock && (
             <span className="inline-flex items-center gap-1 text-warning">
               <AlertTriangle className="h-3 w-3" />
               Stock bas
+            </span>
+          )}
+          {hasNutrition && (
+            <span className="text-[10px] text-muted-foreground/70">
+              {Math.round(item.calories_per_100g!)} kcal/100g
             </span>
           )}
           {exp && (
@@ -918,36 +883,57 @@ function AddItemSheet({
   onClose: () => void;
 }) {
   const add = useAddStockItem();
+  const isCuisine = roomId === "cuisine";
+
   const [form, setForm] = useState({
     name: "",
-    category: "",
     quantity: "1",
     unit: "",
     expiration_date: "",
     alert_days_before: "7",
     notes: "",
+    low_stock_threshold: "",
+    calories_per_100g: "",
+    protein_per_100g: "",
+    carbs_per_100g: "",
+    fat_per_100g: "",
+    fiber_per_100g: "",
+    sugar_per_100g: "",
+    sodium_per_100g: "",
   });
+
+  const setF = (k: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
+  const num = (v: string) => (v.trim() === "" ? null : Number(v));
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim()) return;
     await add.mutateAsync({
-      module: roomId,
+      room: roomId,
+      location: compartmentId,
       name: form.name.trim(),
-      category: form.category.trim() || "autre",
       quantity: Number(form.quantity) || 1,
       unit: form.unit.trim() || null,
-      location: compartmentId,
       expiration_date: form.expiration_date || null,
       alert_days_before: Math.max(0, Number(form.alert_days_before) || 7),
       notes: form.notes.trim() || null,
+      low_stock_threshold: num(form.low_stock_threshold),
+      ...(isCuisine && {
+        calories_per_100g: num(form.calories_per_100g),
+        protein_per_100g: num(form.protein_per_100g),
+        carbs_per_100g: num(form.carbs_per_100g),
+        fat_per_100g: num(form.fat_per_100g),
+        fiber_per_100g: num(form.fiber_per_100g),
+        sugar_per_100g: num(form.sugar_per_100g),
+        sodium_per_100g: num(form.sodium_per_100g),
+      }),
     });
     onClose();
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm">
-      <div className="w-full max-w-[430px] rounded-t-3xl border border-border bg-card p-5 shadow-elevated">
+      <div className="w-full max-w-[430px] max-h-[92vh] overflow-y-auto rounded-t-3xl border border-border bg-card p-5 shadow-elevated">
         <div className="mb-4 flex items-center justify-between">
           <div>
             <p className="text-[11px] text-muted-foreground">{roomName}</p>
@@ -963,56 +949,104 @@ function AddItemSheet({
         </div>
 
         <form onSubmit={submit} className="space-y-3" data-testid="stocks-add-form">
-          <FormField
-            label="Nom *"
-            testId="stocks-field-name"
-            value={form.name}
-            onChange={(v) => setForm({ ...form, name: v })}
-            placeholder="Ex: Yaourt nature"
-            required
-          />
-          <div className="grid grid-cols-2 gap-3">
+          {/* Name — FoodAutocomplete for cuisine, plain input otherwise */}
+          {isCuisine ? (
+            <FoodAutocomplete
+              value={form.name}
+              onChange={setF("name")}
+              onSelect={(f) =>
+                setForm((prev) => ({
+                  ...prev,
+                  name: f.name,
+                  calories_per_100g: f.calories != null ? String(f.calories) : prev.calories_per_100g,
+                  protein_per_100g: f.proteins != null ? String(f.proteins) : prev.protein_per_100g,
+                  carbs_per_100g: f.carbs != null ? String(f.carbs) : prev.carbs_per_100g,
+                  fat_per_100g: f.fats != null ? String(f.fats) : prev.fat_per_100g,
+                }))
+              }
+              required
+            />
+          ) : (
             <FormField
-              label="Catégorie"
-              value={form.category}
-              onChange={(v) => setForm({ ...form, category: v })}
-              placeholder="alimentaire, soin…"
+              label="Nom *"
+              testId="stocks-field-name"
+              value={form.name}
+              onChange={setF("name")}
+              placeholder="Ex: Shampoing"
+              required
+            />
+          )}
+
+          <div className="grid grid-cols-3 gap-3">
+            <FormField
+              label="Quantité"
+              type="number"
+              value={form.quantity}
+              onChange={setF("quantity")}
+            />
+            <FormField
+              label="Unité"
+              value={form.unit}
+              onChange={setF("unit")}
+              placeholder="g, L, pcs…"
             />
             <FormField
               label="Expire le"
               type="date"
               testId="stocks-field-expiration"
               value={form.expiration_date}
-              onChange={(v) => setForm({ ...form, expiration_date: v })}
+              onChange={setF("expiration_date")}
             />
           </div>
-          <div className="grid grid-cols-3 gap-3">
-            <FormField
-              label="Quantité"
-              type="number"
-              value={form.quantity}
-              onChange={(v) => setForm({ ...form, quantity: v })}
-            />
-            <FormField
-              label="Unité"
-              value={form.unit}
-              onChange={(v) => setForm({ ...form, unit: v })}
-              placeholder="g, L, pcs…"
-            />
+
+          <div className="grid grid-cols-2 gap-3">
             <FormField
               label="Alerte (j)"
               type="number"
               value={form.alert_days_before}
-              onChange={(v) => setForm({ ...form, alert_days_before: v })}
+              onChange={setF("alert_days_before")}
               placeholder="7"
             />
+            <FormField
+              label="Alerte stock bas"
+              type="number"
+              value={form.low_stock_threshold}
+              onChange={setF("low_stock_threshold")}
+              placeholder="ex: 2"
+            />
           </div>
+
+          {/* Nutrition section — cuisine only */}
+          {isCuisine && (
+            <div className="rounded-2xl border border-accent/20 bg-accent/5 p-3">
+              <p className="mb-2.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-accent">
+                <Leaf className="h-3.5 w-3.5" />
+                Valeurs nutritionnelles /100g
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <FormField label="Calories (kcal)" type="number" value={form.calories_per_100g} onChange={setF("calories_per_100g")} placeholder="ex: 130" />
+                <FormField label="Protéines (g)" type="number" step="0.1" value={form.protein_per_100g} onChange={setF("protein_per_100g")} placeholder="ex: 3" />
+                <FormField label="Glucides (g)" type="number" step="0.1" value={form.carbs_per_100g} onChange={setF("carbs_per_100g")} placeholder="ex: 28" />
+                <FormField label="Lipides (g)" type="number" step="0.1" value={form.fat_per_100g} onChange={setF("fat_per_100g")} placeholder="ex: 0.3" />
+              </div>
+              <p className="mb-1.5 mt-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Optionnel
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                <FormField label="Fibres (g)" type="number" step="0.1" value={form.fiber_per_100g} onChange={setF("fiber_per_100g")} />
+                <FormField label="Sucre (g)" type="number" step="0.1" value={form.sugar_per_100g} onChange={setF("sugar_per_100g")} />
+                <FormField label="Sodium (mg)" type="number" value={form.sodium_per_100g} onChange={setF("sodium_per_100g")} />
+              </div>
+            </div>
+          )}
+
           <FormField
             label="Notes"
             textarea
             value={form.notes}
-            onChange={(v) => setForm({ ...form, notes: v })}
+            onChange={setF("notes")}
           />
+
           <button
             type="submit"
             data-testid="stocks-submit-add"
@@ -1033,6 +1067,7 @@ function FormField({
   value,
   onChange,
   type = "text",
+  step,
   required,
   placeholder,
   textarea,
@@ -1042,6 +1077,7 @@ function FormField({
   value: string;
   onChange: (v: string) => void;
   type?: string;
+  step?: string;
   required?: boolean;
   placeholder?: string;
   textarea?: boolean;
@@ -1064,6 +1100,7 @@ function FormField({
       ) : (
         <input
           type={type}
+          step={step}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           required={required}
@@ -1087,10 +1124,10 @@ function ItemEditSheet({
 }) {
   const updateFull = useUpdateItemFull();
   const del = useDeleteStockItem();
+  const isCuisine = item.room === "cuisine";
 
   const [form, setForm] = useState({
     name: item.name,
-    category: item.category ?? "",
     quantity: String(item.quantity),
     unit: item.unit ?? "",
     expiration_date: item.expiration_date
@@ -1098,32 +1135,50 @@ function ItemEditSheet({
       : "",
     notes: item.notes ?? "",
     low_stock_threshold: item.low_stock_threshold != null ? String(item.low_stock_threshold) : "",
+    alert_days_before: item.alert_days_before != null ? String(item.alert_days_before) : "7",
+    calories_per_100g: item.calories_per_100g != null ? String(item.calories_per_100g) : "",
+    protein_per_100g: item.protein_per_100g != null ? String(item.protein_per_100g) : "",
+    carbs_per_100g: item.carbs_per_100g != null ? String(item.carbs_per_100g) : "",
+    fat_per_100g: item.fat_per_100g != null ? String(item.fat_per_100g) : "",
+    fiber_per_100g: item.fiber_per_100g != null ? String(item.fiber_per_100g) : "",
+    sugar_per_100g: item.sugar_per_100g != null ? String(item.sugar_per_100g) : "",
+    sodium_per_100g: item.sodium_per_100g != null ? String(item.sodium_per_100g) : "",
   });
 
   const [movingTo, setMovingTo] = useState<{ roomId: string; compartmentId: string }>({
-    roomId: item.module,
+    roomId: item.room ?? "cuisine",
     compartmentId: item.location ?? "",
   });
 
   const moveRoom = getRoomById(movingTo.roomId);
+  const setF = (k: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
+  const num = (v: string) => (v.trim() === "" ? null : Number(v));
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     await updateFull.mutateAsync({
       id: item.id,
-      oldModule: item.module,
+      oldRoom: item.room ?? "maison",
       oldQuantity: item.quantity,
       itemName: item.name,
       patch: {
         name: form.name.trim() || item.name,
-        category: form.category.trim() || item.category,
         quantity: Number(form.quantity) || item.quantity,
         unit: form.unit.trim() || null,
         location: movingTo.compartmentId || null,
-        module: movingTo.roomId,
+        room: movingTo.roomId,
+        module: "maison",
         expiration_date: form.expiration_date || null,
         notes: form.notes.trim() || null,
-        low_stock_threshold: form.low_stock_threshold.trim() ? Number(form.low_stock_threshold) : null,
+        low_stock_threshold: num(form.low_stock_threshold),
+        alert_days_before: form.alert_days_before.trim() ? Number(form.alert_days_before) : undefined,
+        calories_per_100g: num(form.calories_per_100g),
+        protein_per_100g: num(form.protein_per_100g),
+        carbs_per_100g: num(form.carbs_per_100g),
+        fat_per_100g: num(form.fat_per_100g),
+        fiber_per_100g: num(form.fiber_per_100g),
+        sugar_per_100g: num(form.sugar_per_100g),
+        sodium_per_100g: num(form.sodium_per_100g),
       },
     });
     onClose();
@@ -1131,18 +1186,16 @@ function ItemEditSheet({
 
   const handleDelete = () => {
     if (!confirm(`Supprimer "${item.name}" ?`)) return;
-    del.mutate({ id: item.id, module: item.module });
+    del.mutate({ id: item.id, roomId: item.room ?? "maison" });
     onClose();
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm">
-      <div className="w-full max-w-[430px] rounded-t-3xl border border-border bg-card p-5 shadow-elevated">
-        {/* Handle */}
+      <div className="w-full max-w-[430px] max-h-[92vh] overflow-y-auto rounded-t-3xl border border-border bg-card p-5 shadow-elevated">
         <div className="mb-4 flex justify-center">
           <div className="h-1 w-10 rounded-full bg-white/20" />
         </div>
-
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-bold">Modifier l'item</h2>
           <button
@@ -1155,46 +1208,40 @@ function ItemEditSheet({
         </div>
 
         <form onSubmit={submit} className="space-y-3">
-          <FormField
-            label="Nom"
-            value={form.name}
-            onChange={(v) => setForm({ ...form, name: v })}
-            required
-          />
+          <FormField label="Nom" value={form.name} onChange={setF("name")} required />
           <div className="grid grid-cols-3 gap-3">
-            <FormField
-              label="Quantité"
-              type="number"
-              value={form.quantity}
-              onChange={(v) => setForm({ ...form, quantity: v })}
-            />
-            <FormField
-              label="Unité"
-              value={form.unit}
-              onChange={(v) => setForm({ ...form, unit: v })}
-              placeholder="g, L, pcs…"
-            />
-            <FormField
-              label="Expire le"
-              type="date"
-              value={form.expiration_date}
-              onChange={(v) => setForm({ ...form, expiration_date: v })}
-            />
+            <FormField label="Quantité" type="number" value={form.quantity} onChange={setF("quantity")} />
+            <FormField label="Unité" value={form.unit} onChange={setF("unit")} placeholder="g, L, pcs…" />
+            <FormField label="Expire le" type="date" value={form.expiration_date} onChange={setF("expiration_date")} />
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <FormField
-              label="Catégorie"
-              value={form.category}
-              onChange={(v) => setForm({ ...form, category: v })}
-            />
-            <FormField
-              label="Alerte stock bas"
-              type="number"
-              value={form.low_stock_threshold}
-              onChange={(v) => setForm({ ...form, low_stock_threshold: v })}
-              placeholder="ex: 2"
-            />
+            <FormField label="Alerte (j)" type="number" value={form.alert_days_before} onChange={setF("alert_days_before")} />
+            <FormField label="Alerte stock bas" type="number" value={form.low_stock_threshold} onChange={setF("low_stock_threshold")} placeholder="ex: 2" />
           </div>
+
+          {/* Nutrition section — cuisine only */}
+          {isCuisine && (
+            <div className="rounded-2xl border border-accent/20 bg-accent/5 p-3">
+              <p className="mb-2.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-accent">
+                <Leaf className="h-3.5 w-3.5" />
+                Valeurs nutritionnelles /100g
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <FormField label="Calories (kcal)" type="number" value={form.calories_per_100g} onChange={setF("calories_per_100g")} />
+                <FormField label="Protéines (g)" type="number" step="0.1" value={form.protein_per_100g} onChange={setF("protein_per_100g")} />
+                <FormField label="Glucides (g)" type="number" step="0.1" value={form.carbs_per_100g} onChange={setF("carbs_per_100g")} />
+                <FormField label="Lipides (g)" type="number" step="0.1" value={form.fat_per_100g} onChange={setF("fat_per_100g")} />
+              </div>
+              <p className="mb-1.5 mt-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Optionnel
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                <FormField label="Fibres (g)" type="number" step="0.1" value={form.fiber_per_100g} onChange={setF("fiber_per_100g")} />
+                <FormField label="Sucre (g)" type="number" step="0.1" value={form.sugar_per_100g} onChange={setF("sugar_per_100g")} />
+                <FormField label="Sodium (mg)" type="number" value={form.sodium_per_100g} onChange={setF("sodium_per_100g")} />
+              </div>
+            </div>
+          )}
 
           {/* Move to different room/compartment */}
           <div>
@@ -1205,40 +1252,27 @@ function ItemEditSheet({
             <div className="grid grid-cols-2 gap-2">
               <select
                 value={movingTo.roomId}
-                onChange={(e) =>
-                  setMovingTo({ roomId: e.target.value, compartmentId: "" })
-                }
+                onChange={(e) => setMovingTo({ roomId: e.target.value, compartmentId: "" })}
                 className="rounded-xl border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary"
               >
                 {ROOMS.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.name}
-                  </option>
+                  <option key={r.id} value={r.id}>{r.name}</option>
                 ))}
               </select>
               <select
                 value={movingTo.compartmentId}
-                onChange={(e) =>
-                  setMovingTo((s) => ({ ...s, compartmentId: e.target.value }))
-                }
+                onChange={(e) => setMovingTo((s) => ({ ...s, compartmentId: e.target.value }))}
                 className="rounded-xl border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary"
               >
                 <option value="">— Aucun —</option>
                 {(moveRoom?.compartments ?? []).map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
+                  <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
             </div>
           </div>
 
-          <FormField
-            label="Notes"
-            textarea
-            value={form.notes}
-            onChange={(v) => setForm({ ...form, notes: v })}
-          />
+          <FormField label="Notes" textarea value={form.notes} onChange={setF("notes")} />
 
           <button
             type="submit"

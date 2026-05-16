@@ -45,7 +45,7 @@ async function fileToBase64(file: File): Promise<{ b64: string; mime: string }> 
   return { b64, mime: "image/jpeg" };
 }
 
-export function ScanSheet({ module, defaultLocation, onClose }: { module: string; defaultLocation?: string; onClose: () => void; }) {
+export function ScanSheet({ room, defaultLocation, onClose }: { room: string; defaultLocation?: string; onClose: () => void; }) {
   const qc = useQueryClient();
   const camRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -58,7 +58,7 @@ export function ScanSheet({ module, defaultLocation, onClose }: { module: string
       const { b64, mime } = await fileToBase64(file);
       setPreview(`data:${mime};base64,${b64}`);
       const { data, error } = await supabase.functions.invoke("scan-fridge", {
-        body: { image_base64: b64, mime_type: mime, module },
+        body: { image_base64: b64, mime_type: mime, room },
       });
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
@@ -84,9 +84,9 @@ export function ScanSheet({ module, defaultLocation, onClose }: { module: string
         .filter(({ idx }) => !skipped.has(idx))
         .map(({ it }) => ({
           user_id: user.id,
-          module,
+          module: "maison",
+          room,
           name: it.name,
-          category: (it.category ?? "autre").toString(),
           quantity: Math.max(1, Math.round(it.quantity ?? 1)),
           unit: it.unit ?? null,
           location: it.location ?? defaultLocation ?? null,
@@ -100,7 +100,8 @@ export function ScanSheet({ module, defaultLocation, onClose }: { module: string
     onSuccess: (n) => {
       if (n > 0) {
         toast.success(`${n} item(s) ajouté(s)`);
-        qc.invalidateQueries({ queryKey: ["items", module] });
+        qc.invalidateQueries({ queryKey: ["items", room] });
+        qc.invalidateQueries({ queryKey: ["items_stats"] });
         qc.invalidateQueries({ queryKey: ["alerts_items"] });
         qc.invalidateQueries({ queryKey: ["dashboard_stats"] });
         onClose();
@@ -136,7 +137,7 @@ export function ScanSheet({ module, defaultLocation, onClose }: { module: string
             <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
               Scanner IA
             </p>
-            <h2 className="text-lg font-bold">{getRoomById(module)?.name ?? module}</h2>
+            <h2 className="text-lg font-bold">{getRoomById(room)?.name ?? room}</h2>
           </div>
           <button
             type="button"
@@ -207,14 +208,7 @@ export function ScanSheet({ module, defaultLocation, onClose }: { module: string
                         {skip ? <Plus className="h-4 w-4" /> : <Trash2 className="h-4 w-4" />}
                       </button>
                     </div>
-                    <div className="mt-2 grid grid-cols-3 gap-2">
-                      <input
-                        value={it.category ?? ""}
-                        onChange={(e) => updateItem(idx, { category: e.target.value })}
-                        disabled={skip}
-                        placeholder="Catégorie"
-                        className="rounded-lg border border-border bg-surface px-2 py-1.5 text-xs outline-none focus:border-primary"
-                      />
+                    <div className="mt-2 grid grid-cols-2 gap-2">
                       <input
                         type="number"
                         min={1}

@@ -16,10 +16,13 @@ export type PantryItem = {
   protein_per_100g: number | null;
   carbs_per_100g: number | null;
   fat_per_100g: number | null;
+  fiber_per_100g: number | null;
+  sugar_per_100g: number | null;
+  sodium_per_100g: number | null;
   low_stock_threshold: number | null;
 };
 
-// ─── Pantry query (cuisine items > 0 qty) ────────────────────────────────────
+// ─── Pantry query (cuisine items, qty > 0) ────────────────────────────────────
 
 export function usePantryItems() {
   return useQuery({
@@ -28,13 +31,17 @@ export function usePantryItems() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("items")
-        .select("id, name, quantity, unit, location, expiration_date, calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, low_stock_threshold")
-        .eq("module", "cuisine")
+        .select(
+          "id, name, quantity, unit, location, expiration_date, " +
+          "calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, " +
+          "fiber_per_100g, sugar_per_100g, sodium_per_100g, low_stock_threshold",
+        )
+        .eq("room", "cuisine")
         .gt("quantity", 0)
         .order("name")
         .limit(200);
       if (error) throw error;
-      return (data ?? []) as PantryItem[];
+      return (data ?? []) as unknown as PantryItem[];
     },
   });
 }
@@ -64,13 +71,12 @@ export function useDeductFromStock() {
 
       const { data: item, error: fetchErr } = await supabase
         .from("items")
-        .select("id, name, quantity, module")
+        .select("id, name, quantity, room")
         .eq("id", itemId)
         .maybeSingle();
       if (fetchErr) throw fetchErr;
       if (!item) throw new Error("Item introuvable");
 
-      // Anti-negative protection
       if (item.quantity < quantityUsed) {
         throw new Error(
           `Stock insuffisant — ${item.name} : ${item.quantity} disponible${item.quantity > 1 ? "s" : ""}`,
@@ -85,7 +91,6 @@ export function useDeductFromStock() {
         .eq("id", itemId);
       if (updateErr) throw updateErr;
 
-      // Fire-and-forget history log (silent if table absent)
       void (supabase as unknown as HistoryClient).from("stock_history").insert({
         user_id: user.id,
         item_id: itemId,
@@ -95,13 +100,13 @@ export function useDeductFromStock() {
         quantity_after: newQty,
         source: "nutrition",
         meal_name: mealName,
-        room_id: item.module,
+        room_id: item.room ?? "cuisine",
       });
 
-      return { module: item.module as string };
+      return { room: (item.room as string | null) ?? "cuisine" };
     },
-    onSuccess: ({ module }) => {
-      qc.invalidateQueries({ queryKey: ["items", module] });
+    onSuccess: ({ room }) => {
+      qc.invalidateQueries({ queryKey: ["items", room] });
       qc.invalidateQueries({ queryKey: ["items", "cuisine"] });
       qc.invalidateQueries({ queryKey: ["items_stats"] });
     },
@@ -113,14 +118,22 @@ export function useDeductFromStock() {
 
 type ItemPatch = {
   name?: string;
-  category?: string;
   quantity?: number;
   unit?: string | null;
   location?: string | null;
   module?: string;
+  room?: string | null;
   expiration_date?: string | null;
   notes?: string | null;
   low_stock_threshold?: number | null;
+  alert_days_before?: number;
+  calories_per_100g?: number | null;
+  protein_per_100g?: number | null;
+  carbs_per_100g?: number | null;
+  fat_per_100g?: number | null;
+  fiber_per_100g?: number | null;
+  sugar_per_100g?: number | null;
+  sodium_per_100g?: number | null;
 };
 
 export function useUpdateItemFull() {
@@ -129,13 +142,13 @@ export function useUpdateItemFull() {
     mutationFn: async ({
       id,
       patch,
-      oldModule,
+      oldRoom,
       oldQuantity,
       itemName,
     }: {
       id: string;
       patch: ItemPatch;
-      oldModule: string;
+      oldRoom: string;
       oldQuantity: number;
       itemName: string;
     }) => {
@@ -147,7 +160,6 @@ export function useUpdateItemFull() {
       const { error } = await supabase.from("items").update(patch).eq("id", id);
       if (error) throw error;
 
-      // Log quantity changes
       if (patch.quantity !== undefined && patch.quantity !== oldQuantity) {
         void (supabase as unknown as HistoryClient).from("stock_history").insert({
           user_id: user.id,
@@ -157,17 +169,17 @@ export function useUpdateItemFull() {
           quantity_before: oldQuantity,
           quantity_after: patch.quantity,
           source: "manual",
-          room_id: patch.module ?? oldModule,
+          room_id: patch.room ?? oldRoom,
         });
       }
 
-      return { oldModule, newModule: patch.module ?? oldModule };
+      return { oldRoom, newRoom: patch.room ?? oldRoom };
     },
-    onSuccess: ({ oldModule, newModule }) => {
+    onSuccess: ({ oldRoom, newRoom }) => {
       toast.success("Modifié");
-      qc.invalidateQueries({ queryKey: ["items", oldModule] });
-      if (newModule !== oldModule) {
-        qc.invalidateQueries({ queryKey: ["items", newModule] });
+      qc.invalidateQueries({ queryKey: ["items", oldRoom] });
+      if (newRoom !== oldRoom) {
+        qc.invalidateQueries({ queryKey: ["items", newRoom] });
       }
       qc.invalidateQueries({ queryKey: ["items_stats"] });
     },
