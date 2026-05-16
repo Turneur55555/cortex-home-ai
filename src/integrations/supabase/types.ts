@@ -235,6 +235,80 @@ export type Database = {
         }
         Relationships: []
       }
+      home_categories: {
+        Row: {
+          color: string
+          created_at: string
+          icon: string
+          id: string
+          name: string
+          position: number
+          slug: string
+          user_id: string
+        }
+        Insert: {
+          color: string
+          created_at?: string
+          icon: string
+          id?: string
+          name: string
+          position?: number
+          slug: string
+          user_id: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          icon?: string
+          id?: string
+          name?: string
+          position?: number
+          slug?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      home_subcategories: {
+        Row: {
+          category_id: string
+          created_at: string
+          icon: string
+          id: string
+          name: string
+          position: number
+          slug: string
+          user_id: string
+        }
+        Insert: {
+          category_id: string
+          created_at?: string
+          icon: string
+          id?: string
+          name: string
+          position?: number
+          slug: string
+          user_id: string
+        }
+        Update: {
+          category_id?: string
+          created_at?: string
+          icon?: string
+          id?: string
+          name?: string
+          position?: number
+          slug?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "home_subcategories_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "home_categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       items: {
         Row: {
           alert_days_before: number
