@@ -8,6 +8,7 @@ const ALLOWED_ORIGINS = [
   "https://id-preview--2c9444e5-f2d2-4c68-9566-e9e8569dc37a.lovable.app",
   "https://2c9444e5-f2d2-4c68-9566-e9e8569dc37a.lovableproject.com",
   "https://project--2c9444e5-f2d2-4c68-9566-e9e8569dc37a.lovable.app",
+  "https://cortex-home-ai.lovable.app",
   "http://localhost:8080",
   "http://localhost:5173",
 ];
