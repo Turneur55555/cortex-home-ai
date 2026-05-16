@@ -4,7 +4,7 @@ import { X } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
-interface PremiumSheetProps {
+interface AppSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   title: string;
@@ -17,14 +17,14 @@ interface PremiumSheetProps {
 /**
  * iOS-style premium bottom sheet with glass blur, drag handle and spring animation.
  */
-export function PremiumSheet({
+export function AppSheet({
   open,
   onOpenChange,
   title,
   description,
   children,
   size = "full",
-}: PremiumSheetProps) {
+}: AppSheetProps) {
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <AnimatePresence>

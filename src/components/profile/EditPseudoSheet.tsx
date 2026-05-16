@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { Check, Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { PremiumSheet } from "./PremiumSheet";
+import { AppSheet } from "./AppSheet";
 
 interface EditPseudoSheetProps {
   open: boolean;
@@ -55,7 +55,7 @@ export function EditPseudoSheet({ open, onOpenChange, current, onSave }: EditPse
   };
 
   return (
-    <PremiumSheet
+    <AppSheet
       open={open}
       onOpenChange={onOpenChange}
       title="Modifier le pseudo"
@@ -117,6 +117,6 @@ export function EditPseudoSheet({ open, onOpenChange, current, onSave }: EditPse
           )}
         </motion.button>
       </form>
-    </PremiumSheet>
+    </AppSheet>
   );
 }
