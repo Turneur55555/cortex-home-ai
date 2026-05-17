@@ -4,6 +4,8 @@ import { useGoals } from "@/hooks/useGoals";
 import { useStreak } from "@/hooks/useStreak";
 import { useProgress } from "@/hooks/useProgress";
 
+
+
 function Ring({ value, label, icon: Icon, color }: { value: number; label: string; icon: typeof Activity; color: string }) {
   const r = 22;
   const c = 2 * Math.PI * r;
@@ -26,10 +28,12 @@ function Ring({ value, label, icon: Icon, color }: { value: number; label: strin
 export function ProgressionCard() {
   const { stats } = useGoals();
   const { current: streak } = useStreak();
-  const { weeklyAvg } = useProgress();
+  const progress = useProgress();
+  const weeklyAvgVal = progress?.weekly.reduce((s, d) => s + d.value, 0) ?? 0;
+  const weeklyAvg = progress ? Math.round(weeklyAvgVal / progress.weekly.length) : 0;
 
   const goalsPct = stats.total ? Math.round((stats.done / stats.total) * 100) : 0;
-  const proteinsPct = Math.min(100, Math.round((weeklyAvg.proteins / 150) * 100));
+  const proteinsPct = weeklyAvg;
   const streakPct = Math.min(100, (streak / 30) * 100);
 
   return (
@@ -42,8 +46,8 @@ export function ProgressionCard() {
         <Ring value={Math.min(100, streak * 3)} label="Suivi" icon={Calendar} color="#06b6d4" />
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
-        <div>Protéines 7j : <span className="font-semibold text-foreground">{Math.round(weeklyAvg.proteins)}g</span></div>
-        <div>Calories 7j : <span className="font-semibold text-foreground">{Math.round(weeklyAvg.calories)}</span></div>
+        <div>Activité 7j : <span className="font-semibold text-foreground">{weeklyAvg}%</span></div>
+        <div>Tendance : <span className="font-semibold text-foreground">+{progress?.delta ?? 0}%</span></div>
       </div>
     </motion.section>
   );
