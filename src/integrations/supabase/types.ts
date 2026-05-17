@@ -507,6 +507,123 @@ export type Database = {
         }
         Relationships: []
       }
+      user_activity: {
+        Row: {
+          created_at: string
+          id: string
+          label: string
+          metadata: Json
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          label: string
+          metadata?: Json
+          type: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          label?: string
+          metadata?: Json
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_badges: {
+        Row: {
+          badge_key: string
+          icon: string
+          id: string
+          label: string
+          unlocked_at: string
+          user_id: string
+        }
+        Insert: {
+          badge_key: string
+          icon?: string
+          id?: string
+          label: string
+          unlocked_at?: string
+          user_id: string
+        }
+        Update: {
+          badge_key?: string
+          icon?: string
+          id?: string
+          label?: string
+          unlocked_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_preferences: {
+        Row: {
+          accent_color: string
+          ai_preferences: Json
+          animations_enabled: boolean
+          created_at: string
+          notifications_enabled: boolean
+          theme: string
+          units: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          accent_color?: string
+          ai_preferences?: Json
+          animations_enabled?: boolean
+          created_at?: string
+          notifications_enabled?: boolean
+          theme?: string
+          units?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          accent_color?: string
+          ai_preferences?: Json
+          animations_enabled?: boolean
+          created_at?: string
+          notifications_enabled?: boolean
+          theme?: string
+          units?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_stats: {
+        Row: {
+          created_at: string
+          level: number
+          total_actions: number
+          updated_at: string
+          user_id: string
+          xp: number
+        }
+        Insert: {
+          created_at?: string
+          level?: number
+          total_actions?: number
+          updated_at?: string
+          user_id: string
+          xp?: number
+        }
+        Update: {
+          created_at?: string
+          level?: number
+          total_actions?: number
+          updated_at?: string
+          user_id?: string
+          xp?: number
+        }
+        Relationships: []
+      }
       users_profiles: {
         Row: {
           created_at: string
