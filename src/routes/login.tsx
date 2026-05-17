@@ -48,14 +48,19 @@ function LoginPage() {
     setLoading(true);
     try {
       if (mode === "signup") {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email: parsed.data.email,
           password: parsed.data.password,
           options: { emailRedirectTo: window.location.origin },
         });
         if (error) throw error;
-        toast.success("Compte créé. Bienvenue !");
-        navigate({ to: "/" });
+        // Session null = confirmation email envoyée, session non-null = connexion directe
+        if (!data.session) {
+          toast.success("Compte créé ! Vérifiez votre email pour confirmer votre inscription.");
+        } else {
+          toast.success("Compte créé. Bienvenue !");
+          navigate({ to: "/" });
+        }
       } else {
         const { error } = await supabase.auth.signInWithPassword({
           email: parsed.data.email,
@@ -66,12 +71,12 @@ function LoginPage() {
         navigate({ to: "/" });
       }
     } catch (err) {
-      // Message générique uniforme pour éviter l'énumération de comptes / fuite d'erreurs internes.
-      console.error("[auth]", err);
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error("[auth] erreur :", msg, err);
       toast.error(
         mode === "signup"
-          ? "Impossible de créer le compte. Vérifiez vos informations ou réessayez plus tard."
-          : "Identifiants incorrects ou erreur de connexion.",
+          ? `Impossible de créer le compte : ${msg}`
+          : `Identifiants incorrects : ${msg}`,
       );
     } finally {
       setLoading(false);
