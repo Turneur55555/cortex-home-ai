@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const EXPECTED_PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID || 'bcwfvpwzxlmkxobvbtzp';
+const EXPECTED_PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID || 'bcwfvpwxzlmkxobvbtzp';
 
 // Purge toute session stockée qui appartient à une autre instance Supabase.
 // Empêche l'ancien token irbeaqabrrbbpstcvtsw de survivre après migration.
