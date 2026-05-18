@@ -75,8 +75,8 @@ function LoginPage() {
       console.error("[auth] erreur :", msg, err);
       toast.error(
         mode === "signup"
-          ? `Impossible de créer le compte : ${msg}`
-          : `Identifiants incorrects : ${msg}`,
+          ? "Si cet email n'est pas déjà utilisé, votre compte a été créé. Vérifiez votre messagerie."
+          : "Identifiants incorrects",
       );
     } finally {
       setLoading(false);

@@ -31,8 +31,10 @@ export function SecurityPanel() {
     setBusy(true);
     const { error } = await supabase.auth.updateUser({ password: pwd });
     setBusy(false);
-    if (error) toast.error(error.message);
-    else {
+    if (error) {
+      console.error("[auth] update password:", error);
+      toast.error("Impossible de mettre à jour le mot de passe");
+    } else {
       toast.success("Mot de passe mis à jour");
       setPwd("");
     }
