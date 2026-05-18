@@ -8,7 +8,6 @@ import {
   updateCategory,
   deleteCategory,
   reorderCategories,
-  subscribeCategories,
 } from "@/services/homeCategories";
 import type {
   HomeCategory,
@@ -23,6 +22,7 @@ const QK = ["home_categories"] as const;
 export function useHomeCategories() {
   const qc = useQueryClient();
   const seededRef = useRef(false);
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   const query = useQuery({
     queryKey: QK,
@@ -44,19 +44,51 @@ export function useHomeCategories() {
     });
   }, [query.isLoading, query.error, query.data, qc]);
 
-  // Realtime subscription
+  // Realtime — StrictMode-safe, sans race condition async
   useEffect(() => {
     let cancelled = false;
-    let unsub: (() => void) | undefined;
-    supabase.auth.getUser().then(({ data }) => {
+
+    const setup = async () => {
+      const { data } = await supabase.auth.getUser();
       if (cancelled || !data.user) return;
-      unsub = subscribeCategories(data.user.id, () => {
-        void qc.invalidateQueries({ queryKey: QK });
-      });
-    });
+
+      const userId = data.user.id;
+      // Nom unique par montage : évite la réutilisation d'un canal déjà souscrit
+      const channelName = `home_categories:${userId}:${Date.now()}`;
+
+      const channel = supabase
+        .channel(channelName)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "home_categories",
+            filter: `user_id=eq.${userId}`,
+          },
+          () => {
+            void qc.invalidateQueries({ queryKey: QK });
+          },
+        )
+        .subscribe();
+
+      // Si le cleanup a tiré pendant getUser(), on supprime immédiatement
+      if (cancelled) {
+        void supabase.removeChannel(channel);
+        return;
+      }
+
+      channelRef.current = channel;
+    };
+
+    void setup();
+
     return () => {
       cancelled = true;
-      unsub?.();
+      if (channelRef.current) {
+        void supabase.removeChannel(channelRef.current);
+        channelRef.current = null;
+      }
     };
   }, [qc]);
 
