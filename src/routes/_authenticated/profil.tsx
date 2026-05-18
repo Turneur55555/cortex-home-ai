@@ -11,6 +11,7 @@ import { GoalsManager } from "@/components/profile/GoalsManager";
 import { BadgesStrip } from "@/components/profile/BadgesStrip";
 import { ActivityTimeline } from "@/components/profile/ActivityTimeline";
 import { PersonalizationPanel } from "@/components/profile/PersonalizationPanel";
+import { PdfPanel } from "@/components/profile/PdfPanel";
 import { SecurityPanel } from "@/components/profile/SecurityPanel";
 import { EditPseudoSheet } from "@/components/profile/EditPseudoSheet";
 
@@ -59,6 +60,7 @@ function ProfilPage() {
       <BadgesStrip />
       <ActivityTimeline />
       <PersonalizationPanel />
+      <PdfPanel />
       <SecurityPanel />
 
       <EditPseudoSheet
