@@ -92,25 +92,3 @@ export async function reorderCategories(
   await Promise.all(updates);
 }
 
-export function subscribeCategories(
-  userId: string,
-  onChange: () => void,
-): () => void {
-  const channel = supabase
-    .channel(`home_categories:${userId}`)
-    .on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "home_categories",
-        filter: `user_id=eq.${userId}`,
-      },
-      onChange,
-    )
-    .subscribe();
-
-  return () => {
-    void supabase.removeChannel(channel);
-  };
-}
