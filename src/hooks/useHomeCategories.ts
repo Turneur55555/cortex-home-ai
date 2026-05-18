@@ -46,14 +46,18 @@ export function useHomeCategories() {
 
   // Realtime subscription
   useEffect(() => {
+    let cancelled = false;
     let unsub: (() => void) | undefined;
     supabase.auth.getUser().then(({ data }) => {
-      if (!data.user) return;
+      if (cancelled || !data.user) return;
       unsub = subscribeCategories(data.user.id, () => {
         void qc.invalidateQueries({ queryKey: QK });
       });
     });
-    return () => unsub?.();
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
   }, [qc]);
 
   return query;

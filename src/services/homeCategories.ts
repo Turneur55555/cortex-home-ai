@@ -96,8 +96,13 @@ export function subscribeCategories(
   userId: string,
   onChange: () => void,
 ): () => void {
+  // Unique channel name per call to avoid Supabase returning an already-
+  // subscribed channel instance (which throws "cannot add postgres_changes
+  // callbacks after subscribe()" when .on() is called on it again, notably
+  // under React StrictMode double-invoke).
+  const channelName = `home_categories:${userId}:${Math.random().toString(36).slice(2)}`;
   const channel = supabase
-    .channel(`home_categories:${userId}`)
+    .channel(channelName)
     .on(
       "postgres_changes",
       {
