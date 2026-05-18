@@ -3,6 +3,8 @@ import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   FileText,
+  FileImage,
+  Files,
   Upload,
   Trash2,
   AlertTriangle,
@@ -37,51 +39,103 @@ import {
   type DocModuleSelection,
   type AnalysisResult,
 } from "@/hooks/use-documents";
+import { useImageUpload, isImageFile, type UploadStage } from "@/hooks/useImageUpload";
 import type { Tables } from "@/integrations/supabase/types";
 
 export const Route = createFileRoute("/_authenticated/documents")({
   head: () => ({
     meta: [
       { title: "Documents — ICORTEX" },
-      { name: "description", content: "Analyse IA de vos PDF, déversés vers les modules." },
+      { name: "description", content: "Analyse IA de vos PDF et photos, déversés vers les modules." },
     ],
   }),
   component: DocumentsPage,
 });
 
+const STAGE_LABELS: Record<UploadStage, string> = {
+  idle: "",
+  validating: "Vérification…",
+  compressing: "Compression…",
+  uploading: "Envoi…",
+  ocr: "Lecture IA…",
+  parsing: "Extraction…",
+  done: "Terminé",
+  error: "Erreur",
+};
+
 function DocumentsPage() {
   const docs = useDocuments();
   const upload = useUploadAndAnalyze();
+  const imageUpload = useImageUpload();
   const remove = useDeleteDocument();
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [open, setOpen] = useState(false);
   const [module, setModule] = useState<DocModuleSelection>("auto");
   const [pickedFiles, setPickedFiles] = useState<File[]>([]);
-  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null);
   const [lastResult, setLastResult] = useState<{
     doc: Tables<"documents">;
     result: AnalysisResult;
   } | null>(null);
 
+  const isWorking = upload.isPending || imageUpload.isUploading;
+
   const handleSubmit = async () => {
-    if (pickedFiles.length === 0) return toast.error("Sélectionne au moins un PDF");
+    if (pickedFiles.length === 0) return toast.error("Sélectionne au moins un fichier");
     let last: { doc: Tables<"documents">; result: AnalysisResult } | null = null;
     let ok = 0;
+
     for (let i = 0; i < pickedFiles.length; i++) {
-      setProgress({ current: i + 1, total: pickedFiles.length });
+      setBatchProgress({ current: i + 1, total: pickedFiles.length });
+      const file = pickedFiles[i];
       try {
-        last = await upload.mutateAsync({ file: pickedFiles[i], module });
-        ok++;
+        if (isImageFile(file)) {
+          // Route images through GPT-4o Vision pipeline
+          const res = await imageUpload.upload(file, module);
+          if (res) {
+            last = { doc: res.doc, result: res.result };
+            if (res.wasAuto) {
+              toast.success(`Image analysée — détecté: ${MODULE_LABELS[res.detectedModule as DocModule] ?? res.detectedModule}`);
+            } else {
+              toast.success("Image analysée");
+            }
+            ok++;
+          }
+        } else {
+          // Route PDFs through Gemini pipeline
+          const res = await upload.mutateAsync({ file, module });
+          if (res) {
+            last = { doc: res.doc, result: res.result };
+            ok++;
+          }
+        }
       } catch {
-        // toast handled in hook
+        // toast handled in individual hooks
       }
     }
-    setProgress(null);
+
+    setBatchProgress(null);
     setLastResult(last);
     setPickedFiles([]);
     setOpen(false);
-    if (pickedFiles.length > 1) toast.success(`${ok}/${pickedFiles.length} PDF analysés`);
+    if (pickedFiles.length > 1) toast.success(`${ok}/${pickedFiles.length} fichiers analysés`);
+  };
+
+  // Button label based on active pipeline stage
+  const submitLabel = () => {
+    if (imageUpload.isUploading && imageUpload.stage !== "idle") {
+      const stageLabel = STAGE_LABELS[imageUpload.stage] || "Analyse…";
+      if (batchProgress) return `${stageLabel} (${batchProgress.current}/${batchProgress.total})`;
+      return stageLabel;
+    }
+    if (upload.isPending) {
+      if (batchProgress) return `Analyse ${batchProgress.current}/${batchProgress.total}…`;
+      return "Analyse en cours…";
+    }
+    return pickedFiles.length > 1
+      ? `Analyser ${pickedFiles.length} fichiers`
+      : "Analyser avec l'IA";
   };
 
   return (
@@ -90,7 +144,7 @@ function DocumentsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Documents</h1>
           <p className="mt-1 text-xs text-muted-foreground">
-            Importe un PDF — l'IA détecte le bon module et l'analyse pour toi.
+            Importe un PDF ou une photo — l'IA détecte le bon module et l'analyse pour toi.
           </p>
         </div>
         <Sheet open={open} onOpenChange={setOpen}>
@@ -101,7 +155,7 @@ function DocumentsPage() {
           </SheetTrigger>
           <SheetContent side="bottom" className="rounded-t-3xl border-border/60">
             <SheetHeader>
-              <SheetTitle>Importer un PDF</SheetTitle>
+              <SheetTitle>Importer un document</SheetTitle>
             </SheetHeader>
             <div className="mt-5 flex flex-col gap-4">
               <div>
@@ -124,7 +178,7 @@ function DocumentsPage() {
                 <input
                   ref={fileRef}
                   type="file"
-                  accept="application/pdf"
+                  accept="application/pdf,image/jpeg,image/jpg,image/png,image/webp,image/heic,image/heif"
                   multiple
                   className="hidden"
                   onChange={(e) =>
@@ -136,33 +190,53 @@ function DocumentsPage() {
                   className="w-full justify-start gap-2"
                   onClick={() => fileRef.current?.click()}
                 >
-                  <FileText className="h-4 w-4 text-primary" />
+                  {pickedFiles.length === 0 ? (
+                    <Files className="h-4 w-4 text-primary" />
+                  ) : pickedFiles.length === 1 ? (
+                    /\.(jpe?g|png|webp|heic|heif)$/i.test(pickedFiles[0].name) ||
+                    pickedFiles[0].type.startsWith("image/") ? (
+                      <FileImage className="h-4 w-4 text-primary" />
+                    ) : (
+                      <FileText className="h-4 w-4 text-primary" />
+                    )
+                  ) : (
+                    <Files className="h-4 w-4 text-primary" />
+                  )}
                   <span className="truncate">
                     {pickedFiles.length === 0
-                      ? "Choisir un ou plusieurs PDF"
+                      ? "Choisir un ou plusieurs fichiers"
                       : pickedFiles.length === 1
                         ? pickedFiles[0].name
-                        : `${pickedFiles.length} PDF sélectionnés`}
+                        : `${pickedFiles.length} fichiers sélectionnés`}
                   </span>
                 </Button>
-                <p className="mt-1 text-[11px] text-muted-foreground">PDF, 15 Mo max par fichier.</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  PDF, JPG, PNG, WEBP, HEIC — 15 Mo max. Les photos iPhone sont acceptées.
+                </p>
               </div>
+              {/* Progress bar for image pipeline */}
+              {imageUpload.isUploading && imageUpload.stage !== "idle" && (
+                <div className="h-1 w-full overflow-hidden rounded-full bg-border">
+                  <div
+                    className="h-full rounded-full bg-primary transition-all duration-700"
+                    style={{ width: `${imageUpload.progress}%` }}
+                  />
+                </div>
+              )}
               <Button
                 className="gap-1.5"
                 onClick={handleSubmit}
-                disabled={upload.isPending || pickedFiles.length === 0}
+                disabled={isWorking || pickedFiles.length === 0}
               >
-                {upload.isPending ? (
+                {isWorking ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    {progress
-                      ? `Analyse ${progress.current}/${progress.total}…`
-                      : "Analyse en cours…"}
+                    {submitLabel()}
                   </>
                 ) : (
                   <>
                     <Sparkles className="h-4 w-4" />
-                    Analyser{pickedFiles.length > 1 ? ` ${pickedFiles.length} PDF` : " avec l'IA"}
+                    {submitLabel()}
                   </>
                 )}
               </Button>
@@ -189,7 +263,7 @@ function DocumentsPage() {
           </div>
         ) : !docs.data?.length ? (
           <div className="rounded-2xl border border-dashed border-border bg-surface px-4 py-10 text-center text-sm text-muted-foreground">
-            Aucun PDF analysé pour l'instant.
+            Aucun document analysé pour l'instant.
           </div>
         ) : (
           docs.data.map((d) => (
@@ -285,7 +359,7 @@ function DocCard({ doc, onDelete }: { doc: Tables<"documents">; onDelete: () => 
     () => (Array.isArray(doc.alerts) ? (doc.alerts as string[]) : []),
     [doc.alerts],
   );
-  const extracted = useMemo<Array<Record<string, unknown>>>(() => {
+  const extracted = useMemo<Array<Record<string, unknown>>>(()  => {
     if (!doc.analysis) return [];
     try {
       const p = JSON.parse(doc.analysis);
@@ -298,6 +372,7 @@ function DocCard({ doc, onDelete }: { doc: Tables<"documents">; onDelete: () => 
   const pourMut = usePourIntoModule();
   const targetModule = doc.module as DocModule;
   const canPour = targetModule !== "documents" && extracted.length > 0;
+  const isImageDoc = /\.(jpe?g|png|webp|heic|heif|jpg)$/i.test(doc.storage_path);
 
   return (
     <div className="rounded-2xl border border-border bg-surface p-3.5">
@@ -306,7 +381,7 @@ function DocCard({ doc, onDelete }: { doc: Tables<"documents">; onDelete: () => 
         onClick={() => setOpen((v) => !v)}
       >
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary">
-          <FileText className="h-5 w-5" />
+          {isImageDoc ? <FileImage className="h-5 w-5" /> : <FileText className="h-5 w-5" />}
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">

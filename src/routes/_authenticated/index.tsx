@@ -1,248 +1,473 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
-import { Package, Dumbbell, FileText, Sparkles, Plus, Bell, Loader2, Quote } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
+import {
+  Dumbbell,
+  House,
+  Flame,
+  ChevronRight,
+  Loader2,
+  Check,
+  Droplets,
+  Moon,
+  Zap,
+  Shield,
+} from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { useProfile } from "@/hooks/useProfile";
 import { ChatBot } from "@/components/ChatBot";
+import { getContextualQuote } from "@/lib/quotes";
+import { useWorkouts } from "@/hooks/use-fitness";
+import { useRecoveryMap } from "@/hooks/useRecoveryMap";
+import { useStreak } from "@/hooks/useStreak";
+import { RECOVERY_COLORS } from "@/lib/fitness/recovery";
 import { supabase } from "@/integrations/supabase/client";
-import { getSessionQuote } from "@/lib/quotes";
 
 export const Route = createFileRoute("/_authenticated/")({
   head: () => ({
     meta: [
       { title: "ICORTEX — Accueil" },
-      { name: "description", content: "Votre tableau de bord intelligent ICORTEX." },
+      { name: "description", content: "Votre Personal Performance OS." },
     ],
   }),
   component: HomePage,
 });
 
-const modules = [
-  {
-    to: "/stocks",
-    label: "Stocks",
-    icon: Package,
-    accent: "from-violet-500 to-fuchsia-500",
-    desc: "Frigo, habits, pharmacie",
-  },
-  {
-    to: "/fitness",
-    label: "Fitness",
-    icon: Dumbbell,
-    accent: "from-cyan-400 to-blue-500",
-    desc: "Corps, séances, nutrition",
-  },
-  {
-    to: "/documents",
-    label: "Documents",
-    icon: FileText,
-    accent: "from-amber-400 to-orange-500",
-    desc: "PDF analysés par IA",
-  },
+// ─── Supplement data (daily localStorage tracking) ────────────────────────────
+
+const SUPPLEMENTS = [
+  { id: "creatine", label: "Créatine", hint: "5g · matin", icon: Zap },
+  { id: "zinc", label: "Zinc", hint: "15mg · soir", icon: Shield },
+  { id: "magnesium", label: "Magnésium", hint: "200mg · nuit", icon: Moon },
+  { id: "eau", label: "Hydratation", hint: "2L+ · objectif", icon: Droplets },
 ] as const;
+
+function useSupplementChecks() {
+  const key = `icortex.supps.${new Date().toISOString().slice(0, 10)}`;
+  const [checked, setChecked] = useState<Set<string>>(() => {
+    try {
+      const raw = typeof window !== "undefined" ? localStorage.getItem(key) : null;
+      return new Set<string>(raw ? JSON.parse(raw) : []);
+    } catch {
+      return new Set<string>();
+    }
+  });
+
+  const toggle = useCallback(
+    (id: string) => {
+      setChecked((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        try {
+          localStorage.setItem(key, JSON.stringify([...next]));
+        } catch {}
+        return next;
+      });
+    },
+    [key],
+  );
+
+  return { checked, toggle };
+}
+
+// ─── Latest body measurement ──────────────────────────────────────────────────
+
+function useLatestBody() {
+  return useQuery({
+    queryKey: ["body_tracking_latest"],
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("body_tracking")
+        .select("date, weight, body_fat, muscle_mass")
+        .or("weight.not.is.null,body_fat.not.is.null,muscle_mass.not.is.null")
+        .order("date", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 function HomePage() {
   const { user } = useAuth();
-  const stats = useDashboardStats();
+  const fallback = user?.email?.split("@")[0] ?? "vous";
+  const { pseudo: name } = useProfile(fallback);
+  const { data: workouts, isLoading: fitnessLoading } = useWorkouts();
+  const recoveryMap = useRecoveryMap(workouts);
+  const streak = useStreak();
+  const { data: latestBody } = useLatestBody();
+  const quote = useMemo(() => getContextualQuote(), []);
   const greeting = getGreeting();
-  const name = user?.email?.split("@")[0] ?? "vous";
-  const quote = useMemo(() => getSessionQuote(), []);
+
+  const weeklyCount = useMemo(() => {
+    if (!workouts) return 0;
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 6);
+    cutoff.setHours(0, 0, 0, 0);
+    return workouts.filter((w) => new Date(w.date + "T00:00:00") >= cutoff).length;
+  }, [workouts]);
+
+  const recoveryScore = useMemo(() => {
+    const trained = [...recoveryMap.values()].filter((m) => m.status !== "unknown");
+    if (!trained.length) return null;
+    const sum = trained.reduce((acc, m) => {
+      if (m.status === "ready") return acc + 1;
+      if (m.status === "recovering") return acc + 0.6;
+      return acc + 0.1;
+    }, 0);
+    return Math.round((sum / trained.length) * 100);
+  }, [recoveryMap]);
+
+  const lastWorkout = workouts?.[0];
 
   return (
     <main className="flex flex-1 flex-col px-5 pb-6 pt-12">
-      {/* Header */}
-      <header className="mb-8 flex items-start justify-between">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
-            {greeting}
-          </p>
-          <h1 className="mt-1 text-2xl font-bold tracking-tight">
-            Bonjour, <span className="text-primary">{name}</span>
-          </h1>
-        </div>
-        <button
-          type="button"
-          className="flex h-10 w-10 items-center justify-center rounded-full border border-border bg-surface text-muted-foreground transition-colors hover:text-foreground"
-          aria-label="Notifications"
-        >
-          <Bell className="h-5 w-5" />
-        </button>
+      {/* ── Header ── */}
+      <header className="mb-5">
+        <h1 className="mt-0.5 text-xl font-bold tracking-tight">
+          {greeting},{" "}
+          <span className="text-primary">{name}</span>
+        </h1>
       </header>
 
-      {/* Citation motivante du jour */}
-      <section className="mb-6 rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-4 shadow-card">
-        <div className="flex gap-3">
-          <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
-            <Quote className="h-4 w-4" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium leading-snug text-balance">"{quote.text}"</p>
-            <p className="mt-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              — {quote.author}
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* Hero card */}
-      <section className="mb-8 overflow-hidden rounded-3xl border border-border bg-gradient-surface p-6 shadow-elevated">
-        <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-primary/15 px-3 py-1 text-xs font-medium text-primary">
-          <Sparkles className="h-3.5 w-3.5" />
-          Assistant IA
-        </div>
-        <h2 className="text-xl font-semibold leading-snug text-balance">
-          Scannez un objet, l'IA s'occupe du reste.
-        </h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Photo de votre frigo, garde-robe ou armoire à pharmacie — inventaire instantané et alertes
-          automatiques.
+      {/* ── Quote ── */}
+      <blockquote className="mb-6 border-l-2 border-primary/40 pl-3">
+        <p className="text-[12px] italic leading-relaxed text-muted-foreground">
+          "{quote.text}"
         </p>
-        <Link
-          to="/stocks"
-          className="mt-5 inline-flex h-11 items-center gap-2 rounded-full bg-gradient-primary px-5 text-sm font-semibold text-primary-foreground shadow-glow transition-opacity hover:opacity-95"
-        >
-          <Plus className="h-4 w-4" />
-          Ajouter un item
-        </Link>
-      </section>
+        <footer className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50">
+          — {quote.author}
+        </footer>
+      </blockquote>
 
-      {/* Modules grid */}
-      <section className="mb-6">
-        <h3 className="mb-3 px-1 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-          Vos modules
-        </h3>
-        <ul className="space-y-3">
-          {modules.map(({ to, label, icon: Icon, accent, desc }) => (
-            <li key={to}>
-              <Link
-                to={to}
-                className="group flex items-center gap-4 rounded-2xl border border-border bg-card p-4 shadow-card transition-all hover:border-primary/40 hover:shadow-elevated"
-              >
-                <span
-                  className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${accent} shadow-glow`}
-                >
-                  <Icon className="h-6 w-6 text-white" />
-                </span>
-                <div className="flex-1">
-                  <p className="font-semibold leading-tight">{label}</p>
-                  <p className="text-xs text-muted-foreground">{desc}</p>
-                </div>
-                <span className="text-muted-foreground transition-transform group-hover:translate-x-1">
-                  →
-                </span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      </section>
+      {/* ── Performance ── */}
+      <FitnessHero
+        loading={fitnessLoading}
+        recoveryScore={recoveryScore}
+        weeklyCount={weeklyCount}
+        streak={streak.current}
+      />
 
-      <section className="grid grid-cols-2 gap-3">
-        <StatCard
-          label="Items suivis"
-          value={stats.isLoading ? "…" : String(stats.data?.tracked ?? 0)}
-          tone="primary"
-          loading={stats.isLoading}
-        />
-        <StatCard
-          label="PDF analysés"
-          value={stats.isLoading ? "…" : String(stats.data?.documents ?? 0)}
-          tone="warning"
-          loading={stats.isLoading}
-        />
-      </section>
+      {/* ── Corps ── */}
+      <BodySummaryCard
+        loading={fitnessLoading}
+        latestBody={latestBody}
+        recoveryMap={recoveryMap}
+        lastWorkout={lastWorkout}
+      />
 
-      {stats.data?.latestBody && (
-        <section className="mt-3 rounded-2xl border border-border bg-card p-4 shadow-card">
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Dernière mesure
-          </p>
-          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
-            {stats.data.latestBody.weight != null && <span>{stats.data.latestBody.weight} kg</span>}
-            {stats.data.latestBody.muscle_mass != null && (
-              <span>MM {stats.data.latestBody.muscle_mass} kg</span>
-            )}
-            {stats.data.latestBody.body_fat != null && (
-              <span>MG {stats.data.latestBody.body_fat}%</span>
-            )}
-          </div>
-        </section>
-      )}
+      {/* ── Rappels ── */}
+      <SupplementCard />
+
+      {/* ── Maison ── */}
+      <Link
+        to="/stocks"
+        className="mt-4 flex items-center gap-3 rounded-2xl border border-border bg-card p-4 shadow-card transition-all hover:border-primary/30 hover:shadow-elevated"
+      >
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 shadow-glow">
+          <House className="h-5 w-5 text-white" />
+        </span>
+        <div className="flex-1">
+          <p className="text-sm font-semibold">Maison</p>
+          <p className="text-xs text-muted-foreground">Frigo, pharmacie, habits</p>
+        </div>
+        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+      </Link>
 
       <ChatBot />
     </main>
   );
 }
 
-function useDashboardStats() {
-  return useQuery({
-    queryKey: ["dashboard_stats"],
-    queryFn: async () => {
-      const [items, body, nutrition, workouts, documents, latestBody] = await Promise.all([
-        supabase.from("items").select("id", { count: "exact", head: true }),
-        supabase.from("body_tracking").select("id", { count: "exact", head: true }),
-        supabase.from("nutrition").select("id", { count: "exact", head: true }),
-        supabase.from("workouts").select("id", { count: "exact", head: true }),
-        supabase.from("documents").select("id", { count: "exact", head: true }),
-        supabase
-          .from("body_tracking")
-          .select("date, weight, body_fat, muscle_mass")
-          .or("weight.not.is.null,body_fat.not.is.null,muscle_mass.not.is.null")
-          .order("date", { ascending: false })
-          .limit(1)
-          .maybeSingle(),
-      ]);
+// ─── Performance card ─────────────────────────────────────────────────────────
 
-      const error =
-        items.error ??
-        body.error ??
-        nutrition.error ??
-        workouts.error ??
-        documents.error ??
-        latestBody.error;
-      if (error) throw error;
+function FitnessHero({
+  loading,
+  recoveryScore,
+  weeklyCount,
+  streak,
+}: {
+  loading: boolean;
+  recoveryScore: number | null;
+  weeklyCount: number;
+  streak: number;
+}) {
+  const scoreColor =
+    recoveryScore == null
+      ? "text-muted-foreground"
+      : recoveryScore >= 70
+        ? "text-emerald-400"
+        : recoveryScore >= 40
+          ? "text-amber-400"
+          : "text-red-400";
 
-      return {
-        tracked:
-          (items.count ?? 0) + (body.count ?? 0) + (nutrition.count ?? 0) + (workouts.count ?? 0),
-        documents: documents.count ?? 0,
-        latestBody: latestBody.data,
-      };
-    },
-  });
+  return (
+    <section className="overflow-hidden rounded-3xl border border-border bg-gradient-surface p-5 shadow-elevated">
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Flame className="h-4 w-4 text-orange-400" />
+          <span className="text-sm font-semibold">Performance</span>
+        </div>
+        <Link
+          to="/fitness"
+          className="text-[11px] font-medium text-primary transition-opacity hover:opacity-80"
+        >
+          Voir tout →
+        </Link>
+      </div>
+
+      {loading ? (
+        <div className="flex h-20 items-center justify-center">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      ) : (
+        <>
+          <div className="mb-4 grid grid-cols-3 gap-2">
+            <KpiCard
+              label="Récupération"
+              value={recoveryScore != null ? `${recoveryScore}%` : "—"}
+              valueClass={scoreColor}
+            />
+            <KpiCard label="Séances / sem." value={String(weeklyCount)} />
+            <KpiCard
+              label="Streak"
+              value={`${streak}j`}
+              icon={<Flame className="h-3 w-3 text-orange-400" />}
+            />
+          </div>
+
+          {recoveryScore != null && (
+            <div className="mb-4">
+              <div className="h-1.5 overflow-hidden rounded-full bg-white/8">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-400 transition-all duration-700"
+                  style={{ width: `${recoveryScore}%` }}
+                />
+              </div>
+              <p className="mt-1.5 text-[10px] text-muted-foreground">
+                {recoveryScore >= 70
+                  ? "Muscles prêts à l'entraînement"
+                  : recoveryScore >= 40
+                    ? "Récupération en cours"
+                    : "Repos recommandé aujourd'hui"}
+              </p>
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <Link
+              to="/fitness"
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-border bg-surface py-2.5 text-xs font-semibold transition-colors hover:border-primary/40"
+            >
+              <Dumbbell className="h-3.5 w-3.5" />
+              Mes séances
+            </Link>
+            <Link
+              to="/fitness"
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-primary py-2.5 text-xs font-semibold text-primary-foreground shadow-glow"
+            >
+              + Nouvelle séance
+            </Link>
+          </div>
+        </>
+      )}
+    </section>
+  );
 }
 
-function StatCard({
+// ─── Body summary card ────────────────────────────────────────────────────────
+
+function BodySummaryCard({
+  loading,
+  latestBody,
+  recoveryMap,
+  lastWorkout,
+}: {
+  loading: boolean;
+  latestBody: { weight: number | null; body_fat: number | null; muscle_mass: number | null } | null | undefined;
+  recoveryMap: ReturnType<typeof useRecoveryMap>;
+  lastWorkout: { name: string; date: string } | undefined;
+}) {
+  const leanMass = useMemo(() => {
+    const { weight, body_fat } = latestBody ?? {};
+    if (weight == null || body_fat == null) return null;
+    return Math.round(weight * (1 - body_fat / 100) * 10) / 10;
+  }, [latestBody]);
+
+  const trainedMuscles = useMemo(
+    () => [...recoveryMap.values()].filter((m) => m.status !== "unknown"),
+    [recoveryMap],
+  );
+
+  const hasBodyData = latestBody?.weight != null || latestBody?.body_fat != null;
+
+  return (
+    <section className="mt-4 overflow-hidden rounded-3xl border border-border bg-gradient-surface p-5 shadow-elevated">
+      <div className="mb-4 flex items-center justify-between">
+        <span className="text-sm font-semibold">Corps</span>
+        <Link
+          to="/fitness"
+          className="text-[11px] font-medium text-primary transition-opacity hover:opacity-80"
+        >
+          Mesures →
+        </Link>
+      </div>
+
+      {loading ? (
+        <div className="flex h-16 items-center justify-center">
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        </div>
+      ) : (
+        <>
+          {/* Body metrics */}
+          {hasBodyData ? (
+            <div className="mb-4 grid grid-cols-3 gap-2">
+              {latestBody?.weight != null && (
+                <KpiCard label="Poids" value={`${latestBody.weight} kg`} />
+              )}
+              {latestBody?.body_fat != null && (
+                <KpiCard label="Masse grasse" value={`${latestBody.body_fat}%`} />
+              )}
+              {leanMass != null && (
+                <KpiCard label="Masse maigre" value={`${leanMass} kg`} />
+              )}
+            </div>
+          ) : (
+            <p className="mb-4 text-[11px] text-muted-foreground">
+              Aucune mesure enregistrée. Ajoutez votre première.
+            </p>
+          )}
+
+          {/* Muscle status */}
+          {trainedMuscles.length > 0 && (
+            <div className="mb-4 flex flex-wrap gap-1.5">
+              {trainedMuscles.map((m) => (
+                <span
+                  key={m.id}
+                  className="inline-flex items-center gap-1 rounded-full border border-white/8 bg-white/5 px-2.5 py-0.5 text-[10px] font-medium"
+                >
+                  <span
+                    className="h-1.5 w-1.5 rounded-full"
+                    style={{ backgroundColor: RECOVERY_COLORS[m.status].stroke }}
+                  />
+                  {m.label}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Last workout */}
+          {lastWorkout && (
+            <p className="mb-4 text-[11px] text-muted-foreground">
+              Dernière séance :{" "}
+              <span className="font-semibold text-foreground">{lastWorkout.name}</span>
+              <span className="ml-1 text-muted-foreground/60">· {formatDate(lastWorkout.date)}</span>
+            </p>
+          )}
+
+          <Link
+            to="/fitness"
+            className="flex items-center justify-center gap-1.5 rounded-xl border border-border bg-surface py-2.5 text-xs font-semibold transition-colors hover:border-primary/40"
+          >
+            Voir Corps →
+          </Link>
+        </>
+      )}
+    </section>
+  );
+}
+
+// ─── Supplement reminders ─────────────────────────────────────────────────────
+
+function SupplementCard() {
+  const { checked, toggle } = useSupplementChecks();
+  const done = SUPPLEMENTS.filter((s) => checked.has(s.id)).length;
+
+  return (
+    <section className="mt-4 overflow-hidden rounded-3xl border border-border bg-gradient-surface p-5 shadow-elevated">
+      <div className="mb-3 flex items-center justify-between">
+        <span className="text-sm font-semibold">Rappels du jour</span>
+        <span className="text-[11px] font-medium text-muted-foreground">
+          {done}/{SUPPLEMENTS.length}
+        </span>
+      </div>
+      <ul className="space-y-2">
+        {SUPPLEMENTS.map(({ id, label, hint, icon: Icon }) => {
+          const active = checked.has(id);
+          return (
+            <li key={id}>
+              <button
+                type="button"
+                onClick={() => toggle(id)}
+                className="flex w-full items-center gap-3 rounded-xl border border-white/6 bg-white/[0.03] px-3 py-2.5 text-left transition-all active:scale-[0.99]"
+              >
+                <span
+                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors ${active ? "bg-emerald-500/20 text-emerald-400" : "bg-white/5 text-muted-foreground"}`}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                </span>
+                <span className="flex-1">
+                  <span
+                    className={`block text-xs font-semibold ${active ? "text-muted-foreground line-through" : "text-foreground"}`}
+                  >
+                    {label}
+                  </span>
+                  <span className="block text-[10px] text-muted-foreground/60">{hint}</span>
+                </span>
+                <span
+                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors ${active ? "border-emerald-500 bg-emerald-500 text-white" : "border-white/20 bg-transparent"}`}
+                >
+                  {active && <Check className="h-3 w-3" />}
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+// ─── Shared sub-components ────────────────────────────────────────────────────
+
+function KpiCard({
   label,
   value,
-  tone,
-  loading,
+  valueClass = "text-foreground",
+  icon,
 }: {
   label: string;
   value: string;
-  tone: "primary" | "warning";
-  loading?: boolean;
+  valueClass?: string;
+  icon?: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-border bg-card p-4 shadow-card">
-      <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
-      <div
-        className={
-          tone === "primary"
-            ? "mt-2 flex items-center gap-2 text-3xl font-bold text-primary"
-            : "mt-2 flex items-center gap-2 text-3xl font-bold text-warning"
-        }
-      >
-        {loading && <Loader2 className="h-5 w-5 animate-spin" />}
-        <span>{value}</span>
+    <div className="rounded-xl border border-border bg-card/50 px-2 py-3 text-center">
+      <div className={`flex items-center justify-center gap-1 text-xl font-bold ${valueClass}`}>
+        {icon}
+        {value}
       </div>
+      <p className="mt-0.5 text-[10px] leading-tight text-muted-foreground">{label}</p>
     </div>
   );
 }
 
+// ─── Utilities ────────────────────────────────────────────────────────────────
+
 function getGreeting() {
   const h = new Date().getHours();
-  if (h < 6) return "Bonne nuit";
+  if (h < 5) return "Bonne nuit";
   if (h < 12) return "Bonjour";
   if (h < 18) return "Bon après-midi";
   return "Bonsoir";
+}
+
+function formatDate(iso: string) {
+  const d = new Date(iso + "T00:00:00");
+  return d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
 }

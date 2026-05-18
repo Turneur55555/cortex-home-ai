@@ -1,5 +1,6 @@
-// Scanne une photo (frigo, placard, armoire, etc.) via Lovable AI Gateway
-// Renvoie une liste d'items détectés au format du module cible.
+// Scanne une photo (frigo, placard, etc.) via IA.
+// Tente LOVABLE_API_KEY (Gemini 2.5 Pro) puis OPENAI_API_KEY (GPT-4o) en fallback.
+// Retourne TOUJOURS HTTP 200 — les erreurs sont dans { error: "..." }.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { checkRateLimit, recordRateLimit } from "../_shared/rate-limit.ts";
 
@@ -26,50 +27,217 @@ const MODULE_HINTS: Record<string, string> = {
   alimentation:
     "Inventaire alimentaire (frigo, garde-manger). Identifie chaque produit visible : name (FR), category (produit_laitier, viande, légume, fruit, boisson, conserve, sauce, féculent, surgelé, autre), quantity (entier estimé), unit (ex: bouteille, pot, paquet), location (Frigo / Congélateur / Placard si déductible), expiration_date YYYY-MM-DD UNIQUEMENT si la date est lisible sur l'étiquette.",
   pharmacie:
-    "Identifie chaque médicament/produit pharmaceutique visible : name (marque + dosage si lisible), category (antalgique, antibiotique, vitamine, sirop, autre), quantity, unit (boîte, comprimé, ml), expiration_date si lisible.",
+    "Médicaments/produits pharmaceutiques. name (marque + dosage si lisible), category (antalgique, antibiotique, vitamine, sirop, autre), quantity, unit (boîte, comprimé, ml), expiration_date si lisible.",
   habits:
-    "Identifie chaque vêtement visible : name (ex: T-shirt blanc), category (haut, bas, chaussure, accessoire, sous-vêtement), quantity, location si déductible.",
+    "Vêtements. name (ex: T-shirt blanc), category (haut, bas, chaussure, accessoire, sous-vêtement), quantity, location si déductible.",
   menager:
-    "Identifie chaque produit ménager visible : name, category (entretien, hygiène, papier, lessive), quantity, unit.",
+    "Produits ménagers. name, category (entretien, hygiène, papier, lessive), quantity, unit.",
 };
+
+// ─── Parser robuste ───────────────────────────────────────────────────────────
+
+interface ScanResult {
+  summary: string;
+  extracted_items: unknown[];
+}
+
+function extractScanFromAiResponse(aiJson: unknown): ScanResult | null {
+  // Chemin 1 : tool_calls standard
+  const calls = (aiJson as { choices?: Array<{ message?: { tool_calls?: Array<{ function: { name: string; arguments: string } }> } }> })
+    ?.choices?.[0]?.message?.tool_calls;
+  if (calls && calls.length > 0) {
+    try {
+      const p = JSON.parse(calls[0].function.arguments);
+      if (Array.isArray(p?.extracted_items)) {
+        console.log("[scan-fridge] parsed via tool_call, items:", p.extracted_items.length);
+        return { summary: p.summary ?? "", extracted_items: p.extracted_items };
+      }
+    } catch (e) {
+      console.warn("[scan-fridge] tool_call JSON parse failed:", e);
+    }
+  }
+
+  // Chemin 2 : contenu textuel
+  const rawContent = (aiJson as { choices?: Array<{ message?: { content?: string | unknown[] } }> })
+    ?.choices?.[0]?.message?.content;
+  const text =
+    typeof rawContent === "string"
+      ? rawContent
+      : Array.isArray(rawContent)
+      ? (rawContent as Array<{ text?: string }>).map((c) => c?.text ?? "").join("")
+      : "";
+
+  if (text) {
+    const match = text.match(/\{[\s\S]*\}/);
+    if (match) {
+      try {
+        const p = JSON.parse(match[0]);
+        if (Array.isArray(p?.extracted_items)) {
+          console.log("[scan-fridge] parsed via content fallback");
+          return { summary: p.summary ?? "", extracted_items: p.extracted_items };
+        }
+      } catch {/* ignore */}
+    }
+  }
+
+  console.error("[scan-fridge] extractScanFromAiResponse: échec, raw:", JSON.stringify(aiJson).slice(0, 600));
+  return null;
+}
+
+// ─── Appels IA ────────────────────────────────────────────────────────────────
+
+async function callLovable(
+  apiKey: string,
+  b64: string,
+  mt: string,
+  systemPrompt: string,
+  userText: string,
+  tool: unknown
+): Promise<unknown> {
+  console.log("[scan-fridge] → Lovable gateway (Gemini 2.5 Pro)");
+  const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Lovable-API-Key": apiKey,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "google/gemini-2.5-pro",
+      messages: [
+        { role: "system", content: systemPrompt },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: userText },
+            { type: "image_url", image_url: { url: `data:${mt};base64,${b64}` } },
+          ],
+        },
+      ],
+      tools: [tool],
+      tool_choice: { type: "function", function: { name: "save_scan" } },
+    }),
+  });
+  console.log("[scan-fridge] Lovable status:", res.status);
+  if (!res.ok) {
+    const body = await res.text();
+    console.error("[scan-fridge] Lovable error:", body.slice(0, 400));
+    if (res.status === 429) throw new Error("Limite Lovable atteinte");
+    if (res.status === 402) throw new Error("Crédits Lovable épuisés");
+    throw new Error(`Lovable ${res.status}: ${body.slice(0, 200)}`);
+  }
+  const json = await res.json();
+  console.log("[scan-fridge] Lovable response:", JSON.stringify(json).slice(0, 400));
+  return json;
+}
+
+async function callOpenAI(
+  apiKey: string,
+  b64: string,
+  mt: string,
+  systemPrompt: string,
+  userText: string,
+  tool: unknown
+): Promise<unknown> {
+  console.log("[scan-fridge] → OpenAI GPT-4o");
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "gpt-4o",
+      messages: [
+        { role: "system", content: systemPrompt },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: userText },
+            { type: "image_url", image_url: { url: `data:${mt};base64,${b64}`, detail: "high" } },
+          ],
+        },
+      ],
+      tools: [tool],
+      tool_choice: { type: "function", function: { name: "save_scan" } },
+      max_tokens: 4096,
+    }),
+  });
+  console.log("[scan-fridge] OpenAI status:", res.status);
+  if (!res.ok) {
+    const body = await res.text();
+    console.error("[scan-fridge] OpenAI error:", body.slice(0, 400));
+    if (res.status === 429) throw new Error("Limite OpenAI atteinte");
+    if (res.status === 402) throw new Error("Crédits OpenAI épuisés");
+    throw new Error(`OpenAI ${res.status}: ${body.slice(0, 200)}`);
+  }
+  const json = await res.json();
+  console.log("[scan-fridge] OpenAI response:", JSON.stringify(json).slice(0, 400));
+  return json;
+}
+
+// ─── Handler principal ────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
   const corsHeaders = buildCors(req);
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
-  const fail = (publicMsg: string, status = 400, internal?: unknown) => {
-    if (internal) console.error("[scan-fridge]", publicMsg, internal);
-    return new Response(JSON.stringify({ error: publicMsg }), {
-      status,
+  const json200 = (body: Record<string, unknown>) =>
+    new Response(JSON.stringify(body), {
+      status: 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
+
+  const fail = (userMsg: string, internalDetails?: unknown) => {
+    if (internalDetails !== undefined) console.error("[scan-fridge] FAIL:", userMsg, internalDetails);
+    else console.warn("[scan-fridge] FAIL:", userMsg);
+    return json200({ error: userMsg });
   };
 
   try {
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) return fail("Service indisponible", 500, "LOVABLE_API_KEY manquant");
+    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+    console.log("[scan-fridge] START — keys:", { lovable: !!LOVABLE_API_KEY, openai: !!OPENAI_API_KEY });
 
+    if (!LOVABLE_API_KEY && !OPENAI_API_KEY) {
+      return fail("Service IA indisponible (aucune clé API configurée).", "No keys");
+    }
+
+    // ── Auth ──
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_ANON =
       Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY")!;
-    const auth = req.headers.get("Authorization") ?? "";
     const supa = createClient(SUPABASE_URL, SUPABASE_ANON, {
-      global: { headers: { Authorization: auth } },
+      global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } },
     });
-
     const { data: userData, error: userErr } = await supa.auth.getUser();
-    if (userErr || !userData.user) return fail("Non authentifié", 401, userErr);
+    if (userErr || !userData.user) return fail("Non authentifié.", userErr?.message);
+    console.log("[scan-fridge] auth ok:", userData.user.id);
 
+    // ── Rate limit ──
     const rl = await checkRateLimit(supa, userData.user.id, "scan_fridge", 20);
-    if (!rl.ok) return fail("Limite atteinte (20 scans/h). Réessaie plus tard.", 429);
+    if (!rl.ok) return fail(`Limite atteinte (${rl.count}/20 scans/h). Réessaie plus tard.`);
 
-    const { image_base64, mime_type, module } = await req.json();
-    if (!image_base64 || typeof image_base64 !== "string") return fail("Image manquante", 400);
-    if (!module || !MODULE_HINTS[module]) return fail("Module invalide", 400);
-    if (image_base64.length > 12_000_000) return fail("Image trop volumineuse", 413);
+    // ── Parsing du body ──
+    let body: Record<string, unknown>;
+    try {
+      body = await req.json();
+    } catch (e) {
+      return fail("Corps de requête invalide.", e instanceof Error ? e.message : String(e));
+    }
+
+    const { image_base64, mime_type, module } = body;
+    if (!image_base64 || typeof image_base64 !== "string" || image_base64.length < 100) {
+      return fail("image_base64 manquant ou invalide.");
+    }
+    if (!module || !MODULE_HINTS[module as string]) {
+      return fail("Module invalide. Valeurs acceptées : alimentation, pharmacie, habits, menager.");
+    }
+    if (image_base64.length > 12_000_000) return fail("Image trop volumineuse (max ~9 Mo).");
+    console.log("[scan-fridge] image length:", image_base64.length, "module:", module);
 
     const mt = typeof mime_type === "string" && mime_type.startsWith("image/") ? mime_type : "image/jpeg";
 
+    // ── Schéma outil ──
     const itemSchema = {
       type: "object",
       properties: {
@@ -81,18 +249,14 @@ Deno.serve(async (req) => {
         expiration_date: {
           type: "string",
           description:
-            "Date au format YYYY-MM-DD. PRIORITÉ 1 : la date lue sur l'étiquette. PRIORITÉ 2 (si rien n'est lisible) : une estimation raisonnable basée sur la catégorie du produit et la date du jour fournie. Toujours renseigner ce champ.",
+            "YYYY-MM-DD. PRIORITÉ 1 : date lue sur l'étiquette. PRIORITÉ 2 : estimation par catégorie si rien de lisible.",
         },
         expiration_source: {
           type: "string",
           enum: ["label", "estimated"],
-          description: "'label' si la date a été lue sur l'emballage, 'estimated' si déduite de la catégorie.",
         },
-        expiration_raw: {
-          type: "string",
-          description: "Texte exact lu sur l'étiquette (ex: 'DLC 12/06/2026', 'EXP 06.2026', 'BB 2026-06-12'). Vide si estimée.",
-        },
-        confidence: { type: "number", description: "0..1 confiance dans l'identification du produit" },
+        expiration_raw: { type: "string" },
+        confidence: { type: "number" },
       },
       required: ["name", "expiration_date", "expiration_source"],
     };
@@ -120,98 +284,71 @@ Deno.serve(async (req) => {
 
     const today = new Date().toISOString().slice(0, 10);
     const systemPrompt = `Tu es un expert en reconnaissance visuelle d'inventaire ET en OCR de dates de péremption. Module cible: "${module}". Date du jour: ${today}.
-${MODULE_HINTS[module]}
+${MODULE_HINTS[module as string]}
 
-=== EXTRACTION DE LA DATE DE PÉREMPTION (priorité absolue) ===
-1) Cherche AGRESSIVEMENT la date sur chaque emballage. Mots-clés FR/EN à repérer (zoome mentalement) :
-   - DLC, DLUO, DDM, "À consommer avant", "À consommer jusqu'au", "À consommer de préférence avant"
-   - EXP, EXP.DATE, EXPIRY, "Best before", "BB", "BBE", "Use by", "Mfg/Exp"
-   - Lot + date imprimée à côté
-2) Formats à reconnaître et NORMALISER en YYYY-MM-DD :
-   - JJ/MM/AAAA, JJ-MM-AAAA, JJ.MM.AAAA, JJ MM AAAA
-   - JJ/MM/AA → 20AA. Ex : 12/06/26 → 2026-06-12
-   - MM/AAAA ou MM-AAAA (mois seul) → dernier jour du mois (ex : 06/2026 → 2026-06-30)
-   - AAAA-MM-JJ déjà bon
-   - Si l'année a 2 chiffres et < 50 → 20XX, sinon 19XX
-3) Mets le texte BRUT lu dans expiration_raw + expiration_source = "label".
-4) Si la date est PARTIELLEMENT lisible (ex: "..06/26"), tente la meilleure interprétation et baisse confidence.
+=== EXTRACTION DATE DE PÉREMPTION (priorité absolue) ===
+1) Cherche AGRESSIVEMENT la date sur chaque emballage. Mots-clés FR/EN : DLC, DLUO, DDM, "À consommer avant", EXP, "Best before", "Use by", "BB", "BBE".
+2) Normalise en YYYY-MM-DD. Exemples : 12/06/26 → 2026-06-12, 06/2026 → 2026-06-30.
+3) Mets le texte brut dans expiration_raw + expiration_source = "label".
+4) Si illisible → estime par catégorie (expiration_source = "estimated").
 
-=== FALLBACK : ESTIMATION PAR CATÉGORIE (si AUCUNE date n'est lisible) ===
-Calcule expiration_date = date du jour + durée typique selon la nature du produit, puis expiration_source = "estimated".
-Durées indicatives à partir d'aujourd'hui (${today}) :
-- Produits laitiers frais (yaourt, crème, lait ouvert) : +10 jours
-- Lait UHT non ouvert : +90 jours
-- Fromage frais : +14 jours / fromage à pâte dure : +60 jours
-- Viande / poisson frais : +3 jours
-- Viande / poisson surgelé : +180 jours
-- Charcuterie sous vide : +21 jours
-- Œufs : +21 jours
-- Légumes frais : +7 jours / fruits frais : +7 jours
-- Surgelés : +180 jours
-- Conserves, bocaux, pâtes sèches, riz, café : +730 jours
-- Boissons (jus ouvert) : +5 jours / non ouvert : +180 jours / sodas, eau : +365 jours
-- Sauces ouvertes : +30 jours / non ouvertes : +365 jours
-- Pain : +3 jours / pâtisseries : +5 jours
-- Médicaments génériques sans date lisible : +365 jours
-- Produits ménagers : +730 jours
-- Vêtements : +3650 jours (purement formel)
-Si tu hésites entre deux catégories, prends la plus COURTE durée (sécurité alimentaire).
+=== RÈGLES ===
+- Retourne STRICTEMENT du JSON via tool calling. Tout en FRANÇAIS.
+- Ne liste que ce qui est clairement visible. N'invente pas de produits.
+- confidence ≥ 0.6 requis pour inclure un item.`;
 
-=== RÈGLES GÉNÉRALES ===
-- Liste UNIQUEMENT ce que tu vois clairement sur la photo, en FRANÇAIS.
-- N'invente JAMAIS le nom d'un produit. Mieux vaut omettre.
-- Si plusieurs exemplaires identiques : UNE ligne, quantity = nombre estimé.
-- confidence : 0.9+ certain, 0.6-0.9 probable, <0.6 ne pas inclure.
-- expiration_date est OBLIGATOIRE pour chaque item retourné (lue ou estimée).
-- Retourne STRICTEMENT du JSON via tool calling.`;
+    const userText = `Identifie tous les items visibles pour le module "${module}". Pour CHAQUE item, renseigne expiration_date (lue ou estimée selon les règles).`;
 
-    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Lovable-API-Key": LOVABLE_API_KEY,
-        "X-Lovable-AIG-SDK": "vercel-ai-sdk",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-pro",
-        messages: [
-          { role: "system", content: systemPrompt },
-          {
-            role: "user",
-            content: [
-              { type: "text", text: `Identifie tous les items visibles sur cette photo pour le module "${module}". Pour CHAQUE item, renseigne expiration_date (lue OU estimée selon les règles).` },
-              { type: "image_url", image_url: { url: `data:${mt};base64,${image_base64}` } },
-            ],
-          },
-        ],
-        tools: [tool],
-        tool_choice: { type: "function", function: { name: "save_scan" } },
-      }),
-    });
+    // ── Appel IA avec fallback ──
+    let aiJson: unknown = null;
+    const aiErrors: string[] = [];
 
-    if (!aiRes.ok) {
-      const txt = await aiRes.text();
-      if (aiRes.status === 429)
-        return fail("Limite de requêtes atteinte. Réessayez dans un instant.", 429);
-      if (aiRes.status === 402) return fail("Crédits IA épuisés.", 402);
-      return fail("Erreur d'analyse IA", 502, `${aiRes.status} ${txt.slice(0, 500)}`);
+    if (LOVABLE_API_KEY) {
+      try {
+        const t0 = Date.now();
+        aiJson = await callLovable(LOVABLE_API_KEY, image_base64 as string, mt, systemPrompt, userText, tool);
+        console.log("[scan-fridge] Lovable ok, ms:", Date.now() - t0);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        aiErrors.push(msg);
+        aiJson = null;
+      }
     }
 
-    const aiJson = await aiRes.json();
-    const call = aiJson.choices?.[0]?.message?.tool_calls?.[0];
-    if (!call) return fail("Réponse IA invalide", 502);
-    const parsed = JSON.parse(call.function.arguments);
+    if (!aiJson && OPENAI_API_KEY) {
+      try {
+        const t0 = Date.now();
+        aiJson = await callOpenAI(OPENAI_API_KEY, image_base64 as string, mt, systemPrompt, userText, tool);
+        console.log("[scan-fridge] OpenAI ok, ms:", Date.now() - t0);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        aiErrors.push(msg);
+        aiJson = null;
+      }
+    }
 
+    if (!aiJson) {
+      return fail(
+        "Le service d'analyse IA est temporairement indisponible. Réessaie dans un instant.",
+        aiErrors
+      );
+    }
+
+    const parsed = extractScanFromAiResponse(aiJson);
+    if (!parsed) {
+      return fail("L'IA n'a pas pu analyser cette image. Essaie avec une photo plus nette et mieux éclairée.");
+    }
+
+    console.log("[scan-fridge] SUCCESS, items:", parsed.extracted_items.length);
     await recordRateLimit(supa, userData.user.id, "scan_fridge");
 
-    return new Response(
-      JSON.stringify({
-        summary: parsed.summary ?? "",
-        extracted_items: Array.isArray(parsed.extracted_items) ? parsed.extracted_items : [],
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    return json200({
+      summary: parsed.summary,
+      extracted_items: Array.isArray(parsed.extracted_items) ? parsed.extracted_items : [],
+    });
+
   } catch (e) {
-    return fail("Erreur lors du scan", 500, e);
+    console.error("[scan-fridge] unhandled exception:", e);
+    return json200({ error: "Erreur inattendue lors du scan. Réessaie." });
   }
 });

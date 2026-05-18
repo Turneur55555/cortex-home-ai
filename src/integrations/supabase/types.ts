@@ -235,55 +235,156 @@ export type Database = {
         }
         Relationships: []
       }
+      home_categories: {
+        Row: {
+          color: string
+          created_at: string
+          icon: string
+          id: string
+          name: string
+          position: number
+          slug: string
+          user_id: string
+        }
+        Insert: {
+          color: string
+          created_at?: string
+          icon: string
+          id?: string
+          name: string
+          position?: number
+          slug: string
+          user_id: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          icon?: string
+          id?: string
+          name?: string
+          position?: number
+          slug?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      home_subcategories: {
+        Row: {
+          category_id: string
+          created_at: string
+          icon: string
+          id: string
+          name: string
+          position: number
+          slug: string
+          user_id: string
+        }
+        Insert: {
+          category_id: string
+          created_at?: string
+          icon: string
+          id?: string
+          name: string
+          position?: number
+          slug: string
+          user_id: string
+        }
+        Update: {
+          category_id?: string
+          created_at?: string
+          icon?: string
+          id?: string
+          name?: string
+          position?: number
+          slug?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "home_subcategories_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "home_categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       items: {
         Row: {
           alert_days_before: number
+          calories_per_100g: number | null
+          carbs_per_100g: number | null
           category: string
           confidence_score: number | null
           created_at: string
           expiration_date: string | null
+          fat_per_100g: number | null
+          fiber_per_100g: number | null
           flagged: boolean
           id: string
           location: string | null
+          low_stock_threshold: number | null
           module: string
           name: string
           notes: string | null
+          protein_per_100g: number | null
           quantity: number
+          room: string | null
+          sodium_per_100g: number | null
           storage_path: string | null
+          sugar_per_100g: number | null
           unit: string | null
           user_id: string
         }
         Insert: {
           alert_days_before?: number
+          calories_per_100g?: number | null
+          carbs_per_100g?: number | null
           category: string
           confidence_score?: number | null
           created_at?: string
           expiration_date?: string | null
+          fat_per_100g?: number | null
+          fiber_per_100g?: number | null
           flagged?: boolean
           id?: string
           location?: string | null
+          low_stock_threshold?: number | null
           module: string
           name: string
           notes?: string | null
+          protein_per_100g?: number | null
           quantity?: number
+          room?: string | null
+          sodium_per_100g?: number | null
           storage_path?: string | null
+          sugar_per_100g?: number | null
           unit?: string | null
           user_id: string
         }
         Update: {
           alert_days_before?: number
+          calories_per_100g?: number | null
+          carbs_per_100g?: number | null
           category?: string
           confidence_score?: number | null
           created_at?: string
           expiration_date?: string | null
+          fat_per_100g?: number | null
+          fiber_per_100g?: number | null
           flagged?: boolean
           id?: string
           location?: string | null
+          low_stock_threshold?: number | null
           module?: string
           name?: string
           notes?: string | null
+          protein_per_100g?: number | null
           quantity?: number
+          room?: string | null
+          sodium_per_100g?: number | null
           storage_path?: string | null
+          sugar_per_100g?: number | null
           unit?: string | null
           user_id?: string
         }
@@ -291,39 +392,63 @@ export type Database = {
       }
       nutrition: {
         Row: {
+          base_calories: number | null
+          base_carbs: number | null
+          base_fats: number | null
+          base_proteins: number | null
           calories: number | null
           carbs: number | null
+          consumed_quantity: number | null
+          consumed_unit: string | null
           created_at: string
           date: string
           fats: number | null
           id: string
           meal: string | null
           name: string
+          percentage_consumed: number | null
           proteins: number | null
+          serving_count: number | null
           user_id: string
         }
         Insert: {
+          base_calories?: number | null
+          base_carbs?: number | null
+          base_fats?: number | null
+          base_proteins?: number | null
           calories?: number | null
           carbs?: number | null
+          consumed_quantity?: number | null
+          consumed_unit?: string | null
           created_at?: string
           date: string
           fats?: number | null
           id?: string
           meal?: string | null
           name: string
+          percentage_consumed?: number | null
           proteins?: number | null
+          serving_count?: number | null
           user_id: string
         }
         Update: {
+          base_calories?: number | null
+          base_carbs?: number | null
+          base_fats?: number | null
+          base_proteins?: number | null
           calories?: number | null
           carbs?: number | null
+          consumed_quantity?: number | null
+          consumed_unit?: string | null
           created_at?: string
           date?: string
           fats?: number | null
           id?: string
           meal?: string | null
           name?: string
+          percentage_consumed?: number | null
           proteins?: number | null
+          serving_count?: number | null
           user_id?: string
         }
         Relationships: []
@@ -382,21 +507,138 @@ export type Database = {
         }
         Relationships: []
       }
-      users_profiles: {
+      user_activity: {
         Row: {
           created_at: string
           id: string
-          premium: boolean
+          label: string
+          metadata: Json
+          type: string
+          user_id: string
         }
         Insert: {
           created_at?: string
-          id: string
-          premium?: boolean
+          id?: string
+          label: string
+          metadata?: Json
+          type: string
+          user_id: string
         }
         Update: {
           created_at?: string
           id?: string
-          premium?: boolean
+          label?: string
+          metadata?: Json
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_badges: {
+        Row: {
+          badge_key: string
+          icon: string
+          id: string
+          label: string
+          unlocked_at: string
+          user_id: string
+        }
+        Insert: {
+          badge_key: string
+          icon?: string
+          id?: string
+          label: string
+          unlocked_at?: string
+          user_id: string
+        }
+        Update: {
+          badge_key?: string
+          icon?: string
+          id?: string
+          label?: string
+          unlocked_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_preferences: {
+        Row: {
+          accent_color: string
+          ai_preferences: Json
+          animations_enabled: boolean
+          created_at: string
+          notifications_enabled: boolean
+          theme: string
+          units: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          accent_color?: string
+          ai_preferences?: Json
+          animations_enabled?: boolean
+          created_at?: string
+          notifications_enabled?: boolean
+          theme?: string
+          units?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          accent_color?: string
+          ai_preferences?: Json
+          animations_enabled?: boolean
+          created_at?: string
+          notifications_enabled?: boolean
+          theme?: string
+          units?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_stats: {
+        Row: {
+          created_at: string
+          level: number
+          total_actions: number
+          updated_at: string
+          user_id: string
+          xp: number
+        }
+        Insert: {
+          created_at?: string
+          level?: number
+          total_actions?: number
+          updated_at?: string
+          user_id: string
+          xp?: number
+        }
+        Update: {
+          created_at?: string
+          level?: number
+          total_actions?: number
+          updated_at?: string
+          user_id?: string
+          xp?: number
+        }
+        Relationships: []
+      }
+      users_profiles: {
+        Row: {
+          created_at: string
+          display_name: string | null
+          id: string
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string | null
+          id: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string | null
+          id?: string
         }
         Relationships: []
       }
@@ -435,7 +677,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      ensure_home_categories_for_me: { Args: never; Returns: undefined }
     }
     Enums: {
       [_ in never]: never

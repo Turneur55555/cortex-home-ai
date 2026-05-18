@@ -86,10 +86,10 @@ export function ChatBot() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="fixed bottom-24 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-primary text-primary-foreground shadow-glow transition-transform active:scale-90"
+        className="fixed bottom-24 right-4 z-40 flex h-11 w-11 items-center justify-center rounded-full bg-gradient-primary text-primary-foreground shadow-[0_0_12px_rgba(108,99,255,0.45)] transition-transform active:scale-90"
         aria-label="Ouvrir le chat"
       >
-        <MessageCircle className="h-6 w-6" />
+        <MessageCircle className="h-5 w-5" />
       </button>
     );
   }

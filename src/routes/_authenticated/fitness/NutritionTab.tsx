@@ -1,12 +1,17 @@
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useMutation } from "@tanstack/react-query";
 import {
   Apple,
+  Barcode,
   Calendar,
   Camera,
+  ChefHat,
+  ChevronDown,
+  ChevronUp,
   ImageIcon,
   Loader2,
+  Scale,
   Sparkles,
   Target,
   Trash2,
@@ -16,12 +21,18 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   useAddNutrition,
   useDeleteNutrition,
+  useUpdateNutrition,
   useNutrition,
   useNutritionGoals,
   useUpsertNutritionGoals,
   type NutritionGoals,
 } from "@/hooks/use-fitness";
 import { FabAdd, Field, Sheet, SubmitButton } from "@/components/shared/FormComponents";
+import { BarcodeScannerSheet } from "@/components/BarcodeScannerSheet";
+import { FoodAutocomplete } from "@/components/FoodAutocomplete";
+import { usePantryItems, useDeductFromStock } from "@/hooks/use-pantry";
+import type { PantryItem } from "@/hooks/use-pantry";
+import type { FoodSuggestion } from "@/services/openFoodFacts";
 
 type MealPrefill = {
   name: string;
@@ -32,30 +43,83 @@ type MealPrefill = {
   fats: string;
 };
 
+interface NutritionEntry {
+  id: string;
+  name: string | null;
+  percentage_consumed: number | null;
+  serving_count: number | null;
+  base_calories: number | null;
+  base_proteins: number | null;
+  base_carbs: number | null;
+  base_fats: number | null;
+  calories: number | null;
+  proteins: number | null;
+  carbs: number | null;
+  fats: number | null;
+}
+
+function getPortionBadge(pct: number | null, count: number | null): string | null {
+  const p = pct ?? 100;
+  const c = count ?? 1;
+  if (p === 100 && c === 1) return null;
+  if (p === 50 && c === 1) return "½";
+  if (p === 25 && c === 1) return "¼";
+  if (p === 75 && c === 1) return "¾";
+  if (p === 150 && c === 1) return "1½";
+  if (p === 200 && c === 1) return "×2";
+  if (p === 100 && c !== 1) return `×${c}`;
+  return `${p}%`;
+}
+
 async function fileToBase64Compressed(file: File): Promise<{ b64: string; mime: string }> {
+  // Étape 1 : lecture du fichier en DataURL (toujours disponible, même HEIC)
   const dataUrl = await new Promise<string>((res, rej) => {
     const r = new FileReader();
     r.onload = () => res(r.result as string);
-    r.onerror = rej;
+    r.onerror = () => rej(new Error("Impossible de lire le fichier image"));
     r.readAsDataURL(file);
   });
-  const img = await new Promise<HTMLImageElement>((res, rej) => {
-    const i = new Image();
-    i.onload = () => res(i);
-    i.onerror = rej;
-    i.src = dataUrl;
-  });
-  const max = 1600;
-  const ratio = Math.min(1, max / Math.max(img.width, img.height));
-  const w = Math.round(img.width * ratio);
-  const h = Math.round(img.height * ratio);
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext("2d")!;
-  ctx.drawImage(img, 0, 0, w, h);
-  const out = canvas.toDataURL("image/jpeg", 0.85);
-  return { b64: out.split(",")[1] ?? "", mime: "image/jpeg" };
+
+  // Étape 2 : compression canvas (JPEG 1280px max, qualité 0.82)
+  // Peut échouer sur certains navigateurs pour HEIC → fallback raw
+  try {
+    const img = await new Promise<HTMLImageElement>((res, rej) => {
+      const i = new Image();
+      // Timeout 15s pour iOS qui décode HEIC lentement
+      const t = setTimeout(() => rej(new Error("Timeout chargement image")), 15_000);
+      i.onload = () => { clearTimeout(t); res(i); };
+      i.onerror = () => { clearTimeout(t); rej(new Error("Format image non supporté par le navigateur")); };
+      i.src = dataUrl;
+    });
+
+    const max = 1280;
+    const ratio = Math.min(1, max / Math.max(img.width, img.height, 1));
+    const w = Math.round(img.width * ratio);
+    const h = Math.round(img.height * ratio);
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas 2D non disponible");
+    ctx.drawImage(img, 0, 0, w, h);
+    const out = canvas.toDataURL("image/jpeg", 0.82);
+
+    // Si le canvas produit une image vide (bug HEIC sur certains Safari), fallback
+    if (out.length < 1000) throw new Error("Canvas a produit une image vide");
+
+    return { b64: out.split(",")[1] ?? "", mime: "image/jpeg" };
+
+  } catch (canvasErr) {
+    // Fallback : envoyer le fichier raw sans compression
+    // Le modèle IA (Gemini / GPT-4o) supporte HEIC, WebP, PNG, JPEG nativement
+    console.warn("[scan-meal] canvas compression failed, fallback raw:", canvasErr);
+    const parts = dataUrl.split(",");
+    const mimeMatch = parts[0]?.match(/data:(image\/[^;]+)/);
+    return {
+      b64: parts[1] ?? "",
+      mime: mimeMatch?.[1] ?? "image/jpeg",
+    };
+  }
 }
 
 export function NutritionTab() {
@@ -66,7 +130,9 @@ export function NutritionTab() {
   const [open, setOpen] = useState(false);
   const [goalsOpen, setGoalsOpen] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
+  const [barcodeOpen, setBarcodeOpen] = useState(false);
   const [prefill, setPrefill] = useState<MealPrefill | null>(null);
+  const [portionItem, setPortionItem] = useState<NutritionEntry | null>(null);
 
   const totals = useMemo(() => {
     return (data ?? []).reduce(
@@ -183,21 +249,37 @@ export function NutritionTab() {
         </div>
       </div>
 
-      <button
-        type="button"
-        onClick={() => setScanOpen(true)}
-        className="flex items-center gap-3 rounded-2xl border border-primary/30 bg-gradient-to-r from-primary/15 via-primary/5 to-transparent p-4 text-left shadow-card transition-all active:scale-[0.99]"
-      >
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-primary text-primary-foreground shadow-glow">
-          <Sparkles className="h-5 w-5" />
-        </span>
-        <span className="flex-1">
-          <span className="block text-sm font-semibold">Scanner mon repas</span>
-          <span className="block text-[11px] text-muted-foreground">
-            Une photo → kcal + macros estimés par l'IA.
+      <div className="grid grid-cols-2 gap-3">
+        <button
+          type="button"
+          onClick={() => setScanOpen(true)}
+          className="flex items-center gap-3 rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/15 to-transparent p-3 text-left shadow-card transition-all active:scale-[0.98]"
+        >
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-primary text-primary-foreground shadow-glow">
+            <Sparkles className="h-5 w-5" />
           </span>
-        </span>
-      </button>
+          <span className="min-w-0 flex-1">
+            <span className="block text-xs font-semibold">Scan Repas</span>
+            <span className="block truncate text-[10px] text-muted-foreground">Photo → IA</span>
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setBarcodeOpen(true)}
+          className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-3 text-left shadow-card transition-all active:scale-[0.98]"
+        >
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary text-secondary-foreground">
+            <Barcode className="h-5 w-5" />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-xs font-semibold">Code-barres</span>
+            <span className="block truncate text-[10px] text-muted-foreground">
+              Open Food Facts
+            </span>
+          </span>
+        </button>
+      </div>
 
       {isLoading && (
         <div className="flex h-20 items-center justify-center">
@@ -221,38 +303,60 @@ export function NutritionTab() {
             {g.label}
           </h3>
           <ul className="space-y-2">
-            {g.items.map((m) => (
-              <li
-                key={m.id}
-                className="flex items-center justify-between rounded-xl border border-border bg-card p-3 shadow-card"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium">{m.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {m.calories ?? 0} kcal · P{m.proteins ?? 0} G{m.carbs ?? 0} L{m.fats ?? 0}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => del.mutate(m.id)}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                  aria-label="Supprimer"
+            {g.items.map((m) => {
+              const badge = getPortionBadge(m.percentage_consumed, m.serving_count);
+              return (
+                <li
+                  key={m.id}
+                  className="flex items-center gap-2 rounded-xl border border-border bg-card p-3 shadow-card"
                 >
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </li>
-            ))}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-sm font-medium">{m.name}</p>
+                      {badge && (
+                        <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-bold text-primary">
+                          {badge}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {m.calories ?? 0} kcal · P{m.proteins ?? 0} G{m.carbs ?? 0} L{m.fats ?? 0}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPortionItem(m)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                    aria-label="Modifier la portion"
+                  >
+                    <Scale className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => del.mutate(m.id)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                    aria-label="Supprimer"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </div>
       ))}
 
       <FabAdd onClick={openManual} label="Ajouter un repas" />
-      {open && (
-        <NutritionSheet date={date} prefill={prefill} onClose={() => setOpen(false)} />
-      )}
+      {open && <NutritionSheet date={date} prefill={prefill} onClose={() => setOpen(false)} />}
       {goalsOpen && <GoalsSheet current={goals ?? null} onClose={() => setGoalsOpen(false)} />}
-      {scanOpen && (
-        <MealScanSheet onClose={() => setScanOpen(false)} onResult={handleScanResult} />
+      {scanOpen && <MealScanSheet onClose={() => setScanOpen(false)} onResult={handleScanResult} />}
+      {barcodeOpen && <BarcodeScannerSheet onClose={() => setBarcodeOpen(false)} />}
+      {portionItem && (
+        <PortionEditModal
+          item={portionItem}
+          date={date}
+          onClose={() => setPortionItem(null)}
+        />
       )}
     </section>
   );
@@ -311,13 +415,7 @@ function ProgressBar({
   );
 }
 
-function GoalsSheet({
-  current,
-  onClose,
-}: {
-  current: NutritionGoals | null;
-  onClose: () => void;
-}) {
+function GoalsSheet({ current, onClose }: { current: NutritionGoals | null; onClose: () => void }) {
   const upsert = useUpsertNutritionGoals();
   const [form, setForm] = useState({
     calories: current?.calories != null ? String(current.calories) : "",
@@ -396,11 +494,32 @@ function MealScanSheet({
     mutationFn: async (file: File) => {
       const { b64, mime } = await fileToBase64Compressed(file);
       setPreview(`data:${mime};base64,${b64}`);
+
+      console.log("[MealScan] envoi image, b64 length:", b64.length, "mime:", mime);
+      if (!b64 || b64.length < 100) throw new Error("Image vide ou illisible. Réessaie.");
+
       const { data, error } = await supabase.functions.invoke("scan-meal", {
         body: { image_base64: b64, mime_type: mime },
       });
-      if (error) throw new Error(error.message);
-      if (data?.error) throw new Error(data.error);
+
+      // Erreur réseau / infrastructure (non-2xx non géré par la fonction)
+      if (error) {
+        // Tente d'extraire le corps de la réponse pour un message précis
+        let detail = "";
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const ctx = (error as any).context;
+          if (ctx && typeof ctx.json === "function") {
+            const body = await ctx.json();
+            detail = body?.error ?? "";
+          }
+        } catch {/* ignore */}
+        throw new Error(detail || "Erreur de connexion au service IA. Vérifie ta connexion et réessaie.");
+      }
+
+      // La fonction retourne toujours 200 — l'erreur est dans data.error
+      if (data?.error) throw new Error(data.error as string);
+
       return data as {
         name: string;
         meal?: string;
@@ -498,6 +617,19 @@ function MealScanSheet({
   );
 }
 
+function computeMacrosFor(food: FoodSuggestion, grams: number) {
+  const r1 = (v: number | null) =>
+    v != null ? String(Math.round((v * grams) / 100)) : "";
+  const r1d = (v: number | null) =>
+    v != null ? String(Math.round((v * grams) / 100 * 10) / 10) : "";
+  return {
+    calories: r1(food.calories),
+    proteins: r1d(food.proteins),
+    carbs: r1d(food.carbs),
+    fats: r1d(food.fats),
+  };
+}
+
 function NutritionSheet({
   date,
   onClose,
@@ -508,6 +640,15 @@ function NutritionSheet({
   prefill?: MealPrefill | null;
 }) {
   const add = useAddNutrition();
+  const deduct = useDeductFromStock();
+  const [pantryOpen, setPantryOpen] = useState(false);
+  const [pantryItem, setPantryItem] = useState<PantryItem | null>(null);
+  const [pantryQty, setPantryQty] = useState("1");
+
+  // Per-100g reference when a known food is selected (from autocomplete or pantry)
+  const [baseFood, setBaseFood] = useState<FoodSuggestion | null>(null);
+  const [gramQty, setGramQty] = useState("100");
+
   const [form, setForm] = useState({
     name: prefill?.name ?? "",
     meal: prefill?.meal ?? "petit-dej",
@@ -519,31 +660,168 @@ function NutritionSheet({
 
   const num = (v: string) => (v.trim() === "" ? null : Number(v));
 
+  // Auto-recompute macros whenever gram quantity changes
+  useEffect(() => {
+    if (!baseFood) return;
+    const grams = Number(gramQty) || 0;
+    if (grams <= 0) return;
+    setForm((f) => ({ ...f, ...computeMacrosFor(baseFood, grams) }));
+  }, [gramQty, baseFood]);
+
+  const selectBaseFood = useCallback((food: FoodSuggestion, grams = 100) => {
+    setBaseFood(food);
+    setGramQty(String(grams));
+    setForm((f) => ({ ...f, name: food.name, ...computeMacrosFor(food, grams) }));
+  }, []);
+
+  const handlePantrySelect = (it: PantryItem) => {
+    setPantryItem(it);
+    setPantryQty("1");
+    if (it.calories_per_100g != null) {
+      const food: FoodSuggestion = {
+        id: it.id,
+        name: it.name,
+        calories: it.calories_per_100g,
+        proteins: it.protein_per_100g,
+        carbs: it.carbs_per_100g,
+        fats: it.fat_per_100g,
+        source: "local",
+      };
+      selectBaseFood(food, 100);
+    } else {
+      setForm((f) => ({ ...f, name: it.name }));
+    }
+  };
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim()) return;
+
+    if (pantryItem) {
+      const qty = Number(pantryQty) || 1;
+      try {
+        await deduct.mutateAsync({
+          itemId: pantryItem.id,
+          quantityUsed: qty,
+          mealName: form.name.trim(),
+        });
+      } catch {
+        return;
+      }
+    }
+
+    const calories = num(form.calories) as number | null;
+    const proteins = num(form.proteins);
+    const carbs = num(form.carbs);
+    const fats = num(form.fats);
+
     await add.mutateAsync({
       date,
       name: form.name.trim(),
       meal: form.meal,
-      calories: num(form.calories) as number | null,
-      proteins: num(form.proteins),
-      carbs: num(form.carbs),
-      fats: num(form.fats),
+      calories,
+      proteins,
+      carbs,
+      fats,
+      base_calories: calories,
+      base_proteins: proteins,
+      base_carbs: carbs,
+      base_fats: fats,
+      serving_count: 1,
+      percentage_consumed: 100,
+      ...(baseFood
+        ? {
+            consumed_quantity: Number(gramQty) || null,
+            consumed_unit: "g",
+          }
+        : {}),
     });
     onClose();
   };
 
+  const busy = add.isPending || deduct.isPending;
+
   return (
     <Sheet title={prefill ? "Confirmer le repas" : "Nouveau repas"} onClose={onClose}>
       <form onSubmit={submit} className="space-y-4">
-        <Field
-          label="Nom"
-          placeholder="Poulet riz, Salade…"
+
+        {/* Pantry picker section */}
+        <div className="rounded-2xl border border-border bg-surface overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setPantryOpen((o) => !o)}
+            className="flex w-full items-center justify-between px-3 py-2.5 text-xs font-semibold"
+          >
+            <span className="flex items-center gap-2 text-primary">
+              <ChefHat className="h-3.5 w-3.5" />
+              Depuis ma cuisine
+              {pantryItem && (
+                <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] text-primary">
+                  {pantryItem.name}
+                </span>
+              )}
+            </span>
+            {pantryOpen ? (
+              <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
+            ) : (
+              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+            )}
+          </button>
+
+          {pantryOpen && (
+            <div className="border-t border-border px-3 pb-3 pt-2">
+              <PantryPicker
+                selected={pantryItem}
+                onSelect={handlePantrySelect}
+                onClear={() => { setPantryItem(null); setBaseFood(null); }}
+              />
+              {pantryItem && (
+                <div className="mt-2 flex items-center gap-2">
+                  <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Qté utilisée
+                  </label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="0.5"
+                    max={pantryItem.quantity}
+                    value={pantryQty}
+                    onChange={(e) => setPantryQty(e.target.value)}
+                    className="w-20 rounded-lg border border-border bg-card px-2 py-1.5 text-center text-sm outline-none focus:border-primary"
+                  />
+                  <span className="text-xs text-muted-foreground">
+                    / {pantryItem.quantity} {pantryItem.unit ?? ""}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <FoodAutocomplete
           value={form.name}
           onChange={(v) => setForm({ ...form, name: v })}
+          onSelect={(f) => selectBaseFood(f, 100)}
           required
         />
+
+        {/* Gram portion stepper — shown when a food with known per-100g values is selected */}
+        {baseFood && (
+          <div className="flex items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 px-3 py-2">
+            <Scale className="h-4 w-4 shrink-0 text-primary" />
+            <span className="flex-1 text-xs font-semibold text-primary">Portion</span>
+            <input
+              type="number"
+              min="1"
+              step="5"
+              value={gramQty}
+              onChange={(e) => setGramQty(e.target.value)}
+              className="w-20 rounded-lg border border-border bg-card px-2 py-1.5 text-center text-sm font-semibold outline-none focus:border-primary"
+            />
+            <span className="text-xs text-muted-foreground">g</span>
+          </div>
+        )}
+
         <div>
           <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Repas
@@ -560,7 +838,7 @@ function NutritionSheet({
           </select>
         </div>
         <Field
-          label="Calories (kcal)"
+          label={baseFood ? "Calories (kcal, auto)" : "Calories (kcal)"}
           type="number"
           value={form.calories}
           onChange={(v) => setForm({ ...form, calories: v })}
@@ -588,8 +866,218 @@ function NutritionSheet({
             onChange={(v) => setForm({ ...form, fats: v })}
           />
         </div>
-        <SubmitButton pending={add.isPending}>Ajouter le repas</SubmitButton>
+        <SubmitButton pending={busy}>Ajouter le repas</SubmitButton>
       </form>
     </Sheet>
+  );
+}
+
+// ─── PortionEditModal ─────────────────────────────────────────────────────────
+
+function PortionEditModal({
+  item,
+  date,
+  onClose,
+}: {
+  item: NutritionEntry;
+  date: string;
+  onClose: () => void;
+}) {
+  const update = useUpdateNutrition();
+
+  const baseCal = item.base_calories ?? item.calories ?? 0;
+  const basePro = item.base_proteins ?? item.proteins ?? 0;
+  const baseCar = item.base_carbs ?? item.carbs ?? 0;
+  const baseFat = item.base_fats ?? item.fats ?? 0;
+
+  const [pct, setPct] = useState(item.percentage_consumed ?? 100);
+  const [count, setCount] = useState(item.serving_count ?? 1);
+
+  const PRESETS = [25, 50, 75, 100, 150, 200];
+
+  const preview = useMemo(
+    () => ({
+      calories: Math.round((baseCal * pct * count) / 100),
+      proteins: Math.round(((basePro * pct * count) / 100) * 10) / 10,
+      carbs: Math.round(((baseCar * pct * count) / 100) * 10) / 10,
+      fats: Math.round(((baseFat * pct * count) / 100) * 10) / 10,
+    }),
+    [baseCal, basePro, baseCar, baseFat, pct, count],
+  );
+
+  const submit = async () => {
+    await update.mutateAsync({
+      id: item.id,
+      date,
+      patch: {
+        percentage_consumed: pct,
+        serving_count: count,
+        calories: preview.calories,
+        proteins: preview.proteins,
+        carbs: preview.carbs,
+        fats: preview.fats,
+        base_calories: baseCal,
+        base_proteins: basePro,
+        base_carbs: baseCar,
+        base_fats: baseFat,
+      },
+    });
+    onClose();
+  };
+
+  return (
+    <Sheet title="Modifier la portion" onClose={onClose}>
+      <div className="space-y-5">
+        <p className="truncate text-sm font-semibold">{item.name}</p>
+
+        {/* Presets pourcentage */}
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Portion consommée
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {PRESETS.map((p) => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => setPct(p)}
+                className={`rounded-xl px-3 py-2 text-xs font-bold transition-all ${
+                  pct === p
+                    ? "bg-primary text-primary-foreground shadow-glow"
+                    : "border border-border bg-surface text-foreground hover:border-primary/50"
+                }`}
+              >
+                {p}%
+              </button>
+            ))}
+          </div>
+          <input
+            type="range"
+            min="10"
+            max="200"
+            step="5"
+            value={pct}
+            onChange={(e) => setPct(Number(e.target.value))}
+            className="mt-3 w-full accent-primary"
+          />
+          <p className="mt-1 text-center text-lg font-bold text-primary">{pct}%</p>
+        </div>
+
+        {/* Stepper nombre de portions */}
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            Nombre de portions
+          </p>
+          <div className="flex items-center justify-center gap-4">
+            <button
+              type="button"
+              onClick={() => setCount((c) => Math.max(0.5, Math.round((c - 0.5) * 10) / 10))}
+              className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-surface text-xl font-bold hover:bg-muted"
+            >
+              −
+            </button>
+            <span className="w-16 text-center text-xl font-bold tabular-nums">{count}</span>
+            <button
+              type="button"
+              onClick={() => setCount((c) => Math.round((c + 0.5) * 10) / 10)}
+              className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-surface text-xl font-bold hover:bg-muted"
+            >
+              +
+            </button>
+          </div>
+        </div>
+
+        {/* Aperçu macros */}
+        <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-primary">
+            Aperçu
+          </p>
+          <div className="grid grid-cols-4 gap-2 text-center">
+            {[
+              { label: "kcal", val: preview.calories, color: "text-primary" },
+              { label: "Prot.", val: preview.proteins, color: "text-accent" },
+              { label: "Gluc.", val: preview.carbs, color: "text-warning" },
+              { label: "Lip.", val: preview.fats, color: "text-destructive" },
+            ].map((m) => (
+              <div key={m.label}>
+                <p className={`text-lg font-bold tabular-nums ${m.color}`}>{m.val}</p>
+                <p className="text-[10px] text-muted-foreground">{m.label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={submit}
+          disabled={update.isPending}
+          className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-gradient-primary text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-60"
+        >
+          {update.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+          Enregistrer
+        </button>
+      </div>
+    </Sheet>
+  );
+}
+
+function PantryPicker({
+  selected,
+  onSelect,
+  onClear,
+}: {
+  selected: PantryItem | null;
+  onSelect: (item: PantryItem) => void;
+  onClear: () => void;
+}) {
+  const { data: items, isLoading } = usePantryItems();
+  const [q, setQ] = useState("");
+
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    if (!needle) return (items ?? []).slice(0, 12);
+    return (items ?? []).filter((it) => it.name.toLowerCase().includes(needle)).slice(0, 12);
+  }, [items, q]);
+
+  return (
+    <div className="space-y-2">
+      <input
+        type="text"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="Rechercher dans ma cuisine…"
+        className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary"
+      />
+      {isLoading && (
+        <div className="flex justify-center py-2">
+          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        </div>
+      )}
+      {!isLoading && filtered.length === 0 && (
+        <p className="py-2 text-center text-xs text-muted-foreground">
+          Aucun aliment dans la cuisine
+        </p>
+      )}
+      <div className="flex flex-wrap gap-1.5">
+        {filtered.map((it) => (
+          <button
+            key={it.id}
+            type="button"
+            onClick={() => (selected?.id === it.id ? onClear() : onSelect(it))}
+            className={
+              "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors " +
+              (selected?.id === it.id
+                ? "border-primary bg-primary/15 text-primary"
+                : "border-border bg-card text-foreground hover:border-primary/50")
+            }
+          >
+            {it.name}
+            <span className="text-[10px] text-muted-foreground">
+              {it.quantity}{it.unit ? ` ${it.unit}` : ""}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }

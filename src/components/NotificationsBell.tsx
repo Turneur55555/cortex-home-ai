@@ -5,7 +5,8 @@ import { differenceInDays, parseISO, format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { Link } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
-import { STOCK_MODULE_LABELS, type StockModule } from "@/hooks/use-stocks";
+import { getRoomById } from "@/lib/maison/rooms";
+import { useHomeCategories } from "@/hooks/useHomeCategories";
 
 const DISMISSED_KEY = "cortex_dismissed_alerts_v1";
 
@@ -28,6 +29,7 @@ export function NotificationsBell() {
   const [open, setOpen] = useState(false);
   const [dismissed, setDismissed] = useState<Record<string, string>>({});
   const qc = useQueryClient();
+  const { data: dynCategories = [] } = useHomeCategories();
 
   useEffect(() => {
     setDismissed(getDismissed());
@@ -54,7 +56,7 @@ export function NotificationsBell() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("items")
-        .select("id, name, module, expiration_date, alert_days_before, location")
+        .select("id, name, room, expiration_date, alert_days_before, location")
         .not("expiration_date", "is", null)
         .order("expiration_date", { ascending: true })
         .limit(500);
@@ -179,7 +181,14 @@ export function NotificationsBell() {
                             </button>
                           </div>
                           <p className="text-[11px] text-muted-foreground">
-                            {STOCK_MODULE_LABELS[a.module as StockModule] ?? a.module}
+                            {(() => {
+                              const roomSlug = (a as { room?: string | null }).room ?? "";
+                              const name =
+                                dynCategories.find((c) => c.slug === roomSlug)?.name ??
+                                getRoomById(roomSlug)?.name ??
+                                roomSlug;
+                              return name || "Maison";
+                            })()}
                             {a.location ? ` • ${a.location}` : ""}
                           </p>
                           <p
