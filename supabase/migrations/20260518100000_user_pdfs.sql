@@ -1,5 +1,6 @@
 -- ============================================================
 -- Table user_pdfs — stockage simple de PDF par utilisateur
+-- v2: ajout --include-all dans le workflow pour forcer l'application
 -- ============================================================
 CREATE TABLE IF NOT EXISTS public.user_pdfs (
   id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
