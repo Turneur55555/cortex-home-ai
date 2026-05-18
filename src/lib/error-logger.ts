@@ -89,6 +89,7 @@ export async function logError(
 
     if (shouldPersist(level)) {
       const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null; // Anonymous logging disabled (RLS requires auth)
 
       const row = {
         support_id,

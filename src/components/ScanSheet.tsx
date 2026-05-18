@@ -85,6 +85,7 @@ export function ScanSheet({ room, defaultLocation, onClose }: { room: string; de
         .map(({ it }) => ({
           user_id: user.id,
           module: "maison",
+          category: "autre",
           room,
           name: it.name,
           quantity: Math.max(1, Math.round(it.quantity ?? 1)),

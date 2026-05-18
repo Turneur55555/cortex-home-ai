@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { Activity, ArrowUpRight, CheckCircle2, Circle } from "lucide-react";
-import { PremiumSheet } from "./PremiumSheet";
+import { AppSheet } from "./AppSheet";
 import { useProgress } from "@/hooks/useProgress";
 
 interface ProgressSheetProps {
@@ -12,7 +12,7 @@ export function ProgressSheet({ open, onOpenChange }: ProgressSheetProps) {
   const data = useProgress();
 
   return (
-    <PremiumSheet
+    <AppSheet
       open={open}
       onOpenChange={onOpenChange}
       title="Progression"
@@ -113,6 +113,6 @@ export function ProgressSheet({ open, onOpenChange }: ProgressSheetProps) {
           </motion.div>
         </div>
       )}
-    </PremiumSheet>
+    </AppSheet>
   );
 }

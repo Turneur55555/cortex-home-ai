@@ -1,6 +1,6 @@
 import { motion } from "framer-motion";
 import { Award, Flame, Trophy } from "lucide-react";
-import { PremiumSheet } from "./PremiumSheet";
+import { AppSheet } from "./AppSheet";
 import { useStreak } from "@/hooks/useStreak";
 import { cn } from "@/lib/utils";
 
@@ -36,7 +36,7 @@ export function StreakSheet({ open, onOpenChange }: StreakSheetProps) {
   }
 
   return (
-    <PremiumSheet
+    <AppSheet
       open={open}
       onOpenChange={onOpenChange}
       title="Streak"
@@ -144,6 +144,6 @@ export function StreakSheet({ open, onOpenChange }: StreakSheetProps) {
           </ul>
         </motion.div>
       </div>
-    </PremiumSheet>
+    </AppSheet>
   );
 }

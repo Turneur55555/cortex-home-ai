@@ -124,7 +124,7 @@ function RoomsView({
   onRoomClick: (roomId: string) => void;
 }) {
   const { data: allStats } = useAllStockStats();
-  const { data: categories = [], isLoading: catsLoading } = useHomeCategories();
+  const { data: categories = [], isLoading: catsLoading, error: catsError } = useHomeCategories();
   const createCat = useCreateCategory();
   const updateCat = useUpdateCategory();
   const deleteCat = useDeleteCategory();
@@ -232,6 +232,13 @@ function RoomsView({
       {catsLoading ? (
         <div className="flex justify-center py-12">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : catsError ? (
+        <div className="rounded-2xl border border-destructive/20 bg-destructive/10 p-6 text-center">
+          <p className="text-sm font-semibold text-destructive">Erreur de chargement</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {(catsError as Error).message}
+          </p>
         </div>
       ) : (
         <SortableCategoryList

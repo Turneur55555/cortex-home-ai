@@ -35,3 +35,6 @@ dist-ssr
 /test-results/
 /playwright-report/
 /playwright/.cache/
+
+# Supabase CLI cache
+supabase/.temp/
