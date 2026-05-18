@@ -38,3 +38,5 @@ dist-ssr
 
 # Supabase CLI cache
 supabase/.temp/
+
+supabase/.temp/
