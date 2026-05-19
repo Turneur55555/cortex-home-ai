@@ -67,7 +67,6 @@ function LoginPage() {
           password: parsed.data.password,
         });
         if (error) throw error;
-        toast.success("Connecté");
         navigate({ to: "/" });
       }
     } catch (err) {
