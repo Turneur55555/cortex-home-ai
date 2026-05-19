@@ -1,6 +1,6 @@
 -- ============================================================
 -- Table user_pdfs — stockage simple de PDF par utilisateur
--- v2: migration entièrement idempotente (DROP POLICY IF EXISTS)
+-- v3: bucket créé via API Management dans le workflow CI
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS public.user_pdfs (

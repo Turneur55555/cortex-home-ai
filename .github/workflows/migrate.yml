@@ -27,3 +27,26 @@ jobs:
         run: supabase db push --yes --include-all
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
+      - name: Create storage bucket pdfs
+        run: |
+          STATUS=$(curl -s -o /tmp/bucket_response.json -w "%{http_code}" \
+            -X POST \
+            "https://api.supabase.com/v1/projects/${{ secrets.SUPABASE_PROJECT_REF }}/storage/buckets" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ACCESS_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "name": "pdfs",
+              "public": false,
+              "file_size_limit": 52428800,
+              "allowed_mime_types": ["application/pdf"]
+            }')
+          cat /tmp/bucket_response.json
+          if [ "$STATUS" = "200" ] || [ "$STATUS" = "201" ] || [ "$STATUS" = "409" ]; then
+            echo "Bucket pdfs OK (HTTP $STATUS)"
+          else
+            echo "Erreur création bucket (HTTP $STATUS)"
+            exit 1
+          fi
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
