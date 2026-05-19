@@ -267,6 +267,16 @@ Deno.serve(async (req) => {
     const userId = userData.user.id;
     console.log("[analyze-image] STEP 1: auth ok, user:", userId);
 
+    const rl = await checkRateLimit(userSupa, userId, "analyze_image", 20);
+    if (!rl.ok) {
+      return jsonResp(
+        { success: false, error: "rate_limit", user_message: "Limite atteinte (20 analyses/h). Réessaie plus tard." },
+        429,
+      );
+    }
+    await recordRateLimit(userSupa, userId, "analyze_image");
+
+
     // STEP 2: Parse FormData
     let formData: FormData;
     try {
