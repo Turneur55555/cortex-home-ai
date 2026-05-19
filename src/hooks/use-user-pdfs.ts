@@ -18,12 +18,12 @@ export function useUserPdfs() {
   return useQuery({
     queryKey: QK,
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("user_pdfs")
         .select("*")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data as UserPdf[];
+      return (data ?? []) as UserPdf[];
     },
   });
 }
