@@ -230,7 +230,7 @@ function PdfRow({
 // ─── Main panel ───────────────────────────────────────────────────────────────
 
 export function PdfPanel() {
-  const { data: pdfs, isLoading } = useUserPdfs();
+  const { data: pdfs, isLoading, isError } = useUserPdfs();
   const upload = useUploadPdf();
   const remove = useDeletePdf();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -333,6 +333,12 @@ export function PdfPanel() {
               <PdfSkeleton />
               <PdfSkeleton />
             </>
+          ) : isError ? (
+            /* Error state */
+            <div className="flex flex-col items-center gap-2 px-4 py-8 text-center">
+              <p className="text-sm text-muted-foreground">Impossible de charger les PDF.</p>
+              <p className="text-[11px] text-muted-foreground/60">Vérifie ta connexion et réessaie.</p>
+            </div>
           ) : !pdfs?.length ? (
             /* Empty state */
             <div className="flex flex-col items-center gap-3 px-4 py-10 text-center">

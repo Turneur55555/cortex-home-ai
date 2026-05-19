@@ -1,7 +1,8 @@
 -- ============================================================
 -- Table user_pdfs — stockage simple de PDF par utilisateur
--- v2: ajout --include-all dans le workflow pour forcer l'application
+-- v2: migration entièrement idempotente (DROP POLICY IF EXISTS)
 -- ============================================================
+
 CREATE TABLE IF NOT EXISTS public.user_pdfs (
   id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id     uuid        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -13,12 +14,16 @@ CREATE TABLE IF NOT EXISTS public.user_pdfs (
 
 ALTER TABLE public.user_pdfs ENABLE ROW LEVEL SECURITY;
 
+-- Policies table — idempotentes
+DROP POLICY IF EXISTS "user_pdfs_select_own" ON public.user_pdfs;
 CREATE POLICY "user_pdfs_select_own" ON public.user_pdfs
   FOR SELECT USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "user_pdfs_insert_own" ON public.user_pdfs;
 CREATE POLICY "user_pdfs_insert_own" ON public.user_pdfs
   FOR INSERT WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "user_pdfs_delete_own" ON public.user_pdfs;
 CREATE POLICY "user_pdfs_delete_own" ON public.user_pdfs
   FOR DELETE USING (auth.uid() = user_id);
 
@@ -37,13 +42,15 @@ VALUES (
 )
 ON CONFLICT (id) DO NOTHING;
 
--- Storage RLS — l'utilisateur n'accède qu'à son propre dossier
+-- Policies storage — idempotentes
+DROP POLICY IF EXISTS "pdfs_select_own" ON storage.objects;
 CREATE POLICY "pdfs_select_own" ON storage.objects
   FOR SELECT USING (
     bucket_id = 'pdfs'
     AND auth.uid()::text = (storage.foldername(name))[1]
   );
 
+DROP POLICY IF EXISTS "pdfs_insert_own" ON storage.objects;
 CREATE POLICY "pdfs_insert_own" ON storage.objects
   FOR INSERT WITH CHECK (
     bucket_id = 'pdfs'
@@ -51,6 +58,7 @@ CREATE POLICY "pdfs_insert_own" ON storage.objects
     AND auth.role() = 'authenticated'
   );
 
+DROP POLICY IF EXISTS "pdfs_delete_own" ON storage.objects;
 CREATE POLICY "pdfs_delete_own" ON storage.objects
   FOR DELETE USING (
     bucket_id = 'pdfs'
