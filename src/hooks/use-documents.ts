@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { FunctionsHttpError, FunctionsFetchError } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -140,11 +141,12 @@ export function useUploadAndAnalyze() {
         let friendlyMsg = isImage
           ? "Impossible d'analyser cette image. Essayez un format JPG ou PNG clair."
           : "Impossible d'analyser ce PDF. Vérifiez que le fichier n'est pas corrompu.";
-        try {
-          // FunctionsHttpError.context is the already-parsed JSON body (not a Response)
-          const ctx = (fnErr as unknown as { context?: Record<string, unknown> }).context;
-          if (ctx?.error && typeof ctx.error === "string") friendlyMsg = ctx.error;
-        } catch { /* keep default */ }
+        if (fnErr instanceof FunctionsFetchError) {
+          friendlyMsg = "Service d'analyse inaccessible. Vérifie ta connexion ou réessaie.";
+        } else if (fnErr instanceof FunctionsHttpError) {
+          const body = await (fnErr.context as Response).json().catch(() => null) as Record<string, unknown> | null;
+          if (body?.error && typeof body.error === "string") friendlyMsg = body.error;
+        }
         throw new Error(friendlyMsg);
       }
       if (ai?.error) throw new Error(ai.error);
