@@ -275,6 +275,40 @@ function DocumentsPage() {
   );
 }
 
+const POURABLE_MODULES: DocModule[] = [
+  "alimentation",
+  "pharmacie",
+  "habits",
+  "menager",
+  "nutrition",
+  "fitness",
+  "body",
+];
+
+function ModuleOverride({
+  value,
+  onChange,
+}: {
+  value: DocModule;
+  onChange: (m: DocModule) => void;
+}) {
+  return (
+    <div>
+      <label className="mb-1 block text-[11px] uppercase tracking-wider text-muted-foreground">
+        Déverser vers
+      </label>
+      <Select value={value} onValueChange={(v) => onChange(v as DocModule)}>
+        <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          {POURABLE_MODULES.map((m) => (
+            <SelectItem key={m} value={m}>{MODULE_LABELS[m]}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
 function ResultCard({
   doc,
   result,
@@ -286,12 +320,14 @@ function ResultCard({
 }) {
   const pourMut = usePourIntoModule();
   const items = result.extracted_items ?? [];
-  const targetModule = doc.module as DocModule;
+  const detected = doc.module as DocModule;
+  const initialTarget: DocModule =
+    detected === "documents" ? "fitness" : detected;
+  const [target, setTarget] = useState<DocModule>(initialTarget);
 
   const pour = async () => {
-    if (targetModule === "documents") return toast.info("Aucun déversement pour ce module.");
     try {
-      await pourMut.mutateAsync({ module: targetModule, items });
+      await pourMut.mutateAsync({ module: target, items });
       onDismiss();
     } catch {
       // toast handled in hook
@@ -304,7 +340,7 @@ function ResultCard({
       <div className="flex items-center gap-2">
         <Sparkles className="h-4 w-4 text-primary" />
         <span className="text-xs font-semibold uppercase tracking-wider text-primary">
-          Analyse IA — {MODULE_LABELS[targetModule]}
+          Analyse IA — détecté: {MODULE_LABELS[detected]}
         </span>
       </div>
       <p className="mt-2 text-sm text-foreground">{result.summary}</p>
@@ -330,8 +366,11 @@ function ResultCard({
       )}
 
       <div className="mt-3 rounded-xl bg-surface px-3 py-2 text-xs text-muted-foreground">
-        <span className="font-semibold text-foreground">{items.length}</span> élément(s) extrait(s)
-        prêt(s) à déverser dans <span className="font-semibold text-foreground">{MODULE_LABELS[targetModule]}</span>.
+        <span className="font-semibold text-foreground">{items.length}</span> élément(s) extrait(s).
+      </div>
+
+      <div className="mt-3">
+        <ModuleOverride value={target} onChange={setTarget} />
       </div>
 
       <div className="mt-3 flex gap-2">
@@ -339,10 +378,10 @@ function ResultCard({
           size="sm"
           className="flex-1 gap-1.5"
           onClick={pour}
-          disabled={pouring || items.length === 0 || targetModule === "documents"}
+          disabled={pouring || items.length === 0}
         >
           {pouring ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChevronDown className="h-4 w-4" />}
-          Déverser
+          Déverser vers {MODULE_LABELS[target]}
         </Button>
         <Button size="sm" variant="ghost" onClick={onDismiss}>Fermer</Button>
       </div>
@@ -370,8 +409,11 @@ function DocCard({ doc, onDelete }: { doc: Tables<"documents">; onDelete: () => 
   }, [doc.analysis]);
   const [open, setOpen] = useState(false);
   const pourMut = usePourIntoModule();
-  const targetModule = doc.module as DocModule;
-  const canPour = targetModule !== "documents" && extracted.length > 0;
+  const detected = doc.module as DocModule;
+  const [target, setTarget] = useState<DocModule>(
+    detected === "documents" ? "fitness" : detected,
+  );
+  const canPour = extracted.length > 0;
   const isImageDoc = /\.(jpe?g|png|webp|heic|heif|jpg)$/i.test(doc.storage_path);
 
   return (
@@ -388,7 +430,7 @@ function DocCard({ doc, onDelete }: { doc: Tables<"documents">; onDelete: () => 
             <p className="truncate text-sm font-semibold">{doc.name}</p>
           </div>
           <p className="mt-0.5 text-[11px] uppercase tracking-wider text-muted-foreground">
-            {MODULE_LABELS[doc.module as DocModule] ?? doc.module} ·{" "}
+            {MODULE_LABELS[detected] ?? doc.module} ·{" "}
             {new Date(doc.created_at).toLocaleDateString("fr-FR")}
           </p>
           {doc.summary && (
@@ -398,7 +440,7 @@ function DocCard({ doc, onDelete }: { doc: Tables<"documents">; onDelete: () => 
       </button>
 
       {open && (
-        <div className="mt-3 flex flex-col gap-2 border-t border-border pt-3">
+        <div className="mt-3 flex flex-col gap-3 border-t border-border pt-3">
           {insights.length > 0 && (
             <ul className="flex flex-col gap-1">
               {insights.map((k, i) => (
@@ -417,12 +459,13 @@ function DocCard({ doc, onDelete }: { doc: Tables<"documents">; onDelete: () => 
               ))}
             </ul>
           )}
-          <div className="flex items-center justify-between gap-2">
-            {canPour ? (
+          {canPour && (
+            <>
+              <ModuleOverride value={target} onChange={setTarget} />
               <Button
                 size="sm"
                 className="gap-1.5"
-                onClick={() => pourMut.mutate({ module: targetModule, items: extracted })}
+                onClick={() => pourMut.mutate({ module: target, items: extracted })}
                 disabled={pourMut.isPending}
               >
                 {pourMut.isPending ? (
@@ -430,9 +473,11 @@ function DocCard({ doc, onDelete }: { doc: Tables<"documents">; onDelete: () => 
                 ) : (
                   <ChevronDown className="h-4 w-4" />
                 )}
-                Déverser ({extracted.length}) vers {MODULE_LABELS[targetModule]}
+                Déverser ({extracted.length}) vers {MODULE_LABELS[target]}
               </Button>
-            ) : <span />}
+            </>
+          )}
+          <div className="flex justify-end">
             <Button size="sm" variant="ghost" className="text-destructive" onClick={onDelete}>
               <Trash2 className="h-4 w-4" /> Supprimer
             </Button>
