@@ -363,8 +363,6 @@ function ResultCard({
 // ─── History card ─────────────────────────────────────────────────────────────
 
 function DocCard({ doc, onDelete }: { doc: Tables<"documents">; onDelete: () => void }) {
-  console.log("PDF CARD RENDER", { id: doc.id, module: doc.module, analysis: doc.analysis });
-
   const insights = useMemo<string[]>(
     () => (Array.isArray(doc.key_insights) ? (doc.key_insights as string[]) : []),
     [doc.key_insights],
@@ -373,11 +371,7 @@ function DocCard({ doc, onDelete }: { doc: Tables<"documents">; onDelete: () => 
     () => (Array.isArray(doc.alerts) ? (doc.alerts as string[]) : []),
     [doc.alerts],
   );
-  const extracted = useMemo(() => {
-    const items = parseDocAnalysis(doc.analysis);
-    console.log("EXTRACTED ITEMS", { docId: doc.id, analysis: doc.analysis, items });
-    return items;
-  }, [doc.analysis, doc.id]);
+  const extracted = useMemo(() => parseDocAnalysis(doc.analysis), [doc.analysis]);
 
   const [open, setOpen] = useState(false);
   const detected = doc.module as DocModule;
@@ -431,49 +425,9 @@ function DocCard({ doc, onDelete }: { doc: Tables<"documents">; onDelete: () => 
         </div>
       )}
 
-      {/* ── DEBUG: bouton inconditionnel — à supprimer après diagnostic ──── */}
-      {(() => {
-        console.log("TRANSFER BUTTON RENDER", { docId: doc.id, extractedCount: extracted.length, module: doc.module });
-        return null;
-      })()}
-      <div
-        style={{
-          position: "relative",
-          zIndex: 99999,
-          padding: 16,
-          background: "red",
-          marginTop: 12,
-          borderRadius: 12,
-        }}
-      >
-        <div style={{ fontSize: 11, color: "white", marginBottom: 8 }}>
-          DEBUG — analysis: {doc.analysis ? `${doc.analysis.slice(0, 60)}…` : "NULL"} | items: {extracted.length}
-        </div>
-        <button
-          type="button"
-          style={{
-            width: "100%",
-            height: 56,
-            background: "#7c5cff",
-            color: "white",
-            fontSize: 18,
-            borderRadius: 16,
-            border: "none",
-            cursor: "pointer",
-            WebkitAppearance: "none",
-          }}
-          onClick={() => alert(`TEST OK — ${extracted.length} items`)}
-        >
-          TEST DEVERSER
-        </button>
-      </div>
-
-      {/* ── Actions réelles ──────────────────────────────────────────────── */}
+      {/* ── Actions — toujours visibles ───────────────────────────────────── */}
       <div className="mt-3 flex flex-col gap-2 border-t border-border pt-3">
-        <TransferPanel
-          items={extracted}
-          defaultTarget={toTransferTarget(detected)}
-        />
+        <TransferPanel items={extracted} defaultTarget={toTransferTarget(detected)} />
         <div className="flex justify-end">
           <Button
             type="button"
