@@ -29,24 +29,43 @@ jobs:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
       - name: Create storage bucket pdfs
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: |
-          STATUS=$(curl -s -o /tmp/bucket_response.json -w "%{http_code}" \
+          # Récupérer le service_role key via le CLI Supabase (déjà authentifié)
+          SERVICE_KEY=$(supabase projects api-keys \
+            --project-ref "$PROJECT_REF" \
+            --output json \
+            | jq -r '.[] | select(.name == "service_role") | .api_key')
+
+          if [ -z "$SERVICE_KEY" ] || [ "$SERVICE_KEY" = "null" ]; then
+            echo "Impossible d'obtenir le service_role key"
+            exit 1
+          fi
+
+          # Créer le bucket via l'API Storage REST du projet
+          STATUS=$(curl -s -o /tmp/bucket_resp.json -w "%{http_code}" \
             -X POST \
-            "https://api.supabase.com/v1/projects/${{ secrets.SUPABASE_PROJECT_REF }}/storage/buckets" \
-            -H "Authorization: Bearer ${{ secrets.SUPABASE_ACCESS_TOKEN }}" \
+            "https://${PROJECT_REF}.supabase.co/storage/v1/bucket" \
+            -H "Authorization: Bearer ${SERVICE_KEY}" \
+            -H "apikey: ${SERVICE_KEY}" \
             -H "Content-Type: application/json" \
             -d '{
+              "id": "pdfs",
               "name": "pdfs",
               "public": false,
               "file_size_limit": 52428800,
               "allowed_mime_types": ["application/pdf"]
             }')
-          cat /tmp/bucket_response.json
-          if [ "$STATUS" = "200" ] || [ "$STATUS" = "201" ] || [ "$STATUS" = "409" ]; then
+
+          cat /tmp/bucket_resp.json
+          echo ""
+
+          # 200/201 = créé, 400 = déjà existant ("The resource already exists")
+          if [ "$STATUS" = "200" ] || [ "$STATUS" = "201" ] || [ "$STATUS" = "400" ]; then
             echo "Bucket pdfs OK (HTTP $STATUS)"
           else
             echo "Erreur création bucket (HTTP $STATUS)"
             exit 1
           fi
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}

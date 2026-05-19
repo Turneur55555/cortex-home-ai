@@ -1,6 +1,6 @@
 -- ============================================================
 -- Table user_pdfs — stockage simple de PDF par utilisateur
--- v3: bucket créé via API Management dans le workflow CI
+-- v4: bucket créé via API Storage REST avec service_role key
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS public.user_pdfs (
