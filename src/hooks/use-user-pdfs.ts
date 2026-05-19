@@ -47,7 +47,7 @@ export function useUploadPdf() {
         .upload(path, file, { contentType: "application/pdf", upsert: false });
       if (upErr) throw new Error(upErr.message);
 
-      const { data, error: insErr } = await supabase
+      const { data, error: insErr } = await (supabase as any)
         .from("user_pdfs")
         .insert({ user_id: user.id, file_name: file.name, file_path: path, file_size: file.size })
         .select()
