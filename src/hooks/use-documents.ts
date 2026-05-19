@@ -141,8 +141,11 @@ export function useUploadAndAnalyze() {
           ? "Impossible d'analyser cette image. Essayez un format JPG ou PNG clair."
           : "Impossible d'analyser ce PDF. Vérifiez que le fichier n'est pas corrompu.";
         try {
-          const body = await (fnErr as { context?: { json?: () => Promise<Record<string, unknown>> } }).context?.json?.();
-          if (body?.error && typeof body.error === "string") friendlyMsg = body.error;
+          const ctx = (fnErr as unknown as { context?: Response }).context;
+          if (ctx) {
+            const body = (await ctx.json().catch(() => null)) as Record<string, unknown> | null;
+            if (body?.error && typeof body.error === "string") friendlyMsg = body.error;
+          }
         } catch { /* keep default */ }
         throw new Error(friendlyMsg);
       }
