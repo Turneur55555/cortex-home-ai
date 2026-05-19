@@ -2,16 +2,15 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
-  FileText,
+  AlertTriangle,
+  Check,
   FileImage,
   Files,
-  Upload,
-  Trash2,
-  AlertTriangle,
-  Sparkles,
+  FileText,
   Loader2,
-  Check,
-  ChevronDown,
+  Sparkles,
+  Trash2,
+  Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,7 +31,6 @@ import {
   useDocuments,
   useUploadAndAnalyze,
   useDeleteDocument,
-  usePourIntoModule,
   MODULE_LABELS,
   MODULE_SELECTION_LABELS,
   type DocModule,
@@ -41,6 +39,9 @@ import {
 } from "@/hooks/use-documents";
 import { useImageUpload, isImageFile, type UploadStage } from "@/hooks/useImageUpload";
 import type { Tables } from "@/integrations/supabase/types";
+import { TransferPanel } from "@/features/transfer/components/TransferPanel";
+import { parseDocAnalysis } from "@/features/transfer/utils/detectContent";
+import type { TransferTarget } from "@/features/transfer/types";
 
 export const Route = createFileRoute("/_authenticated/documents")({
   head: () => ({
@@ -62,6 +63,12 @@ const STAGE_LABELS: Record<UploadStage, string> = {
   done: "Terminé",
   error: "Erreur",
 };
+
+function toTransferTarget(module: DocModule): TransferTarget {
+  return module === "documents" ? "nutrition" : (module as TransferTarget);
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 function DocumentsPage() {
   const docs = useDocuments();
@@ -91,7 +98,6 @@ function DocumentsPage() {
       const file = pickedFiles[i];
       try {
         if (isImageFile(file)) {
-          // Route images through GPT-4o Vision pipeline
           const res = await imageUpload.upload(file, module);
           if (res) {
             last = { doc: res.doc, result: res.result };
@@ -103,7 +109,6 @@ function DocumentsPage() {
             ok++;
           }
         } else {
-          // Route PDFs through Gemini pipeline
           const res = await upload.mutateAsync({ file, module });
           if (res) {
             last = { doc: res.doc, result: res.result };
@@ -111,7 +116,7 @@ function DocumentsPage() {
           }
         }
       } catch {
-        // toast handled in individual hooks
+        // toast handled in hooks
       }
     }
 
@@ -122,7 +127,6 @@ function DocumentsPage() {
     if (pickedFiles.length > 1) toast.success(`${ok}/${pickedFiles.length} fichiers analysés`);
   };
 
-  // Button label based on active pipeline stage
   const submitLabel = () => {
     if (imageUpload.isUploading && imageUpload.stage !== "idle") {
       const stageLabel = STAGE_LABELS[imageUpload.stage] || "Analyse…";
@@ -140,11 +144,12 @@ function DocumentsPage() {
 
   return (
     <main className="flex flex-1 flex-col gap-4 px-4 pt-5">
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
       <header className="flex items-end justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Documents</h1>
           <p className="mt-1 text-xs text-muted-foreground">
-            Importe un PDF ou une photo — l'IA détecte le bon module et l'analyse pour toi.
+            Importe un PDF ou une photo — l'IA détecte le bon module et l'analyse.
           </p>
         </div>
         <Sheet open={open} onOpenChange={setOpen}>
@@ -163,7 +168,9 @@ function DocumentsPage() {
                   Module cible
                 </label>
                 <Select value={module} onValueChange={(v) => setModule(v as DocModuleSelection)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger style={{ WebkitTapHighlightColor: "transparent" }}>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     {(Object.keys(MODULE_SELECTION_LABELS) as DocModuleSelection[]).map((m) => (
                       <SelectItem key={m} value={m}>{MODULE_SELECTION_LABELS[m]}</SelectItem>
@@ -186,6 +193,7 @@ function DocumentsPage() {
                   }
                 />
                 <Button
+                  type="button"
                   variant="outline"
                   className="w-full justify-start gap-2"
                   onClick={() => fileRef.current?.click()}
@@ -211,10 +219,9 @@ function DocumentsPage() {
                   </span>
                 </Button>
                 <p className="mt-1 text-[11px] text-muted-foreground">
-                  PDF, JPG, PNG, WEBP, HEIC — 15 Mo max. Les photos iPhone sont acceptées.
+                  PDF, JPG, PNG, WEBP, HEIC — 15 Mo max. Photos iPhone acceptées.
                 </p>
               </div>
-              {/* Progress bar for image pipeline */}
               {imageUpload.isUploading && imageUpload.stage !== "idle" && (
                 <div className="h-1 w-full overflow-hidden rounded-full bg-border">
                   <div
@@ -224,8 +231,9 @@ function DocumentsPage() {
                 </div>
               )}
               <Button
+                type="button"
                 className="gap-1.5"
-                onClick={handleSubmit}
+                onClick={() => void handleSubmit()}
                 disabled={isWorking || pickedFiles.length === 0}
               >
                 {isWorking ? (
@@ -245,6 +253,7 @@ function DocumentsPage() {
         </Sheet>
       </header>
 
+      {/* ── Last result card ───────────────────────────────────────────────── */}
       {lastResult && (
         <ResultCard
           doc={lastResult.doc}
@@ -253,6 +262,7 @@ function DocumentsPage() {
         />
       )}
 
+      {/* ── History ────────────────────────────────────────────────────────── */}
       <section className="flex flex-col gap-2 pb-6">
         <h2 className="px-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           Historique
@@ -275,6 +285,8 @@ function DocumentsPage() {
   );
 }
 
+// ─── Result card (after fresh upload) ─────────────────────────────────────────
+
 function ResultCard({
   doc,
   result,
@@ -284,71 +296,71 @@ function ResultCard({
   result: AnalysisResult;
   onDismiss: () => void;
 }) {
-  const pourMut = usePourIntoModule();
   const items = result.extracted_items ?? [];
-  const targetModule = doc.module as DocModule;
-
-  const pour = async () => {
-    if (targetModule === "documents") return toast.info("Aucun déversement pour ce module.");
-    try {
-      await pourMut.mutateAsync({ module: targetModule, items });
-      onDismiss();
-    } catch {
-      // toast handled in hook
-    }
-  };
-  const pouring = pourMut.isPending;
+  const detected = doc.module as DocModule;
 
   return (
-    <div className="rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/10 to-transparent p-4 shadow-glow">
+    <div className="rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/10 to-transparent p-4">
+      {/* Header */}
       <div className="flex items-center gap-2">
         <Sparkles className="h-4 w-4 text-primary" />
         <span className="text-xs font-semibold uppercase tracking-wider text-primary">
-          Analyse IA — {MODULE_LABELS[targetModule]}
+          Analyse IA — détecté : {MODULE_LABELS[detected] ?? detected}
         </span>
       </div>
+
+      {/* Summary */}
       <p className="mt-2 text-sm text-foreground">{result.summary}</p>
 
+      {/* Insights */}
       {result.key_insights.length > 0 && (
         <ul className="mt-3 flex flex-col gap-1.5">
           {result.key_insights.map((k, i) => (
             <li key={i} className="flex gap-2 text-xs text-muted-foreground">
-              <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" /> <span>{k}</span>
+              <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+              <span>{k}</span>
             </li>
           ))}
         </ul>
       )}
 
+      {/* Alerts */}
       {result.alerts.length > 0 && (
         <ul className="mt-3 flex flex-col gap-1.5 rounded-xl border border-destructive/30 bg-destructive/5 p-2.5">
           {result.alerts.map((a, i) => (
             <li key={i} className="flex gap-2 text-xs text-destructive">
-              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> <span>{a}</span>
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>{a}</span>
             </li>
           ))}
         </ul>
       )}
 
-      <div className="mt-3 rounded-xl bg-surface px-3 py-2 text-xs text-muted-foreground">
-        <span className="font-semibold text-foreground">{items.length}</span> élément(s) extrait(s)
-        prêt(s) à déverser dans <span className="font-semibold text-foreground">{MODULE_LABELS[targetModule]}</span>.
-      </div>
+      {/* Transfer panel */}
+      <TransferPanel
+        items={items}
+        defaultTarget={toTransferTarget(detected)}
+        onSuccess={onDismiss}
+        className="mt-4"
+      />
 
-      <div className="mt-3 flex gap-2">
+      {/* Dismiss */}
+      <div className="mt-3 flex justify-end">
         <Button
+          type="button"
           size="sm"
-          className="flex-1 gap-1.5"
-          onClick={pour}
-          disabled={pouring || items.length === 0 || targetModule === "documents"}
+          variant="ghost"
+          onClick={onDismiss}
+          className="min-h-[2.75rem] px-4"
         >
-          {pouring ? <Loader2 className="h-4 w-4 animate-spin" /> : <ChevronDown className="h-4 w-4" />}
-          Déverser
+          Fermer
         </Button>
-        <Button size="sm" variant="ghost" onClick={onDismiss}>Fermer</Button>
       </div>
     </div>
   );
 }
+
+// ─── History card ─────────────────────────────────────────────────────────────
 
 function DocCard({ doc, onDelete }: { doc: Tables<"documents">; onDelete: () => void }) {
   const insights = useMemo<string[]>(
@@ -359,36 +371,28 @@ function DocCard({ doc, onDelete }: { doc: Tables<"documents">; onDelete: () => 
     () => (Array.isArray(doc.alerts) ? (doc.alerts as string[]) : []),
     [doc.alerts],
   );
-  const extracted = useMemo<Array<Record<string, unknown>>>(()  => {
-    if (!doc.analysis) return [];
-    try {
-      const p = JSON.parse(doc.analysis);
-      return Array.isArray(p) ? p : [];
-    } catch {
-      return [];
-    }
-  }, [doc.analysis]);
+  const extracted = useMemo(() => parseDocAnalysis(doc.analysis), [doc.analysis]);
+
   const [open, setOpen] = useState(false);
-  const pourMut = usePourIntoModule();
-  const targetModule = doc.module as DocModule;
-  const canPour = targetModule !== "documents" && extracted.length > 0;
+  const detected = doc.module as DocModule;
   const isImageDoc = /\.(jpe?g|png|webp|heic|heif|jpg)$/i.test(doc.storage_path);
 
   return (
     <div className="rounded-2xl border border-border bg-surface p-3.5">
+      {/* ── Clickable header ─────────────────────────────────────────────── */}
       <button
+        type="button"
         className="flex w-full items-start gap-3 text-left"
         onClick={() => setOpen((v) => !v)}
+        style={{ WebkitTapHighlightColor: "transparent" }}
       >
         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary">
           {isImageDoc ? <FileImage className="h-5 w-5" /> : <FileText className="h-5 w-5" />}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <p className="truncate text-sm font-semibold">{doc.name}</p>
-          </div>
+          <p className="truncate text-sm font-semibold">{doc.name}</p>
           <p className="mt-0.5 text-[11px] uppercase tracking-wider text-muted-foreground">
-            {MODULE_LABELS[doc.module as DocModule] ?? doc.module} ·{" "}
+            {MODULE_LABELS[detected] ?? doc.module} ·{" "}
             {new Date(doc.created_at).toLocaleDateString("fr-FR")}
           </p>
           {doc.summary && (
@@ -397,7 +401,8 @@ function DocCard({ doc, onDelete }: { doc: Tables<"documents">; onDelete: () => 
         </div>
       </button>
 
-      {open && (
+      {/* ── Expandable insights / alerts ─────────────────────────────────── */}
+      {open && (insights.length > 0 || alerts.length > 0) && (
         <div className="mt-3 flex flex-col gap-2 border-t border-border pt-3">
           {insights.length > 0 && (
             <ul className="flex flex-col gap-1">
@@ -417,28 +422,24 @@ function DocCard({ doc, onDelete }: { doc: Tables<"documents">; onDelete: () => 
               ))}
             </ul>
           )}
-          <div className="flex items-center justify-between gap-2">
-            {canPour ? (
-              <Button
-                size="sm"
-                className="gap-1.5"
-                onClick={() => pourMut.mutate({ module: targetModule, items: extracted })}
-                disabled={pourMut.isPending}
-              >
-                {pourMut.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <ChevronDown className="h-4 w-4" />
-                )}
-                Déverser ({extracted.length}) vers {MODULE_LABELS[targetModule]}
-              </Button>
-            ) : <span />}
-            <Button size="sm" variant="ghost" className="text-destructive" onClick={onDelete}>
-              <Trash2 className="h-4 w-4" /> Supprimer
-            </Button>
-          </div>
         </div>
       )}
+
+      {/* ── Actions — toujours visibles ───────────────────────────────────── */}
+      <div className="mt-3 flex flex-col gap-2 border-t border-border pt-3">
+        <TransferPanel items={extracted} defaultTarget={toTransferTarget(detected)} />
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="min-h-[2.75rem] gap-1.5 px-3 text-destructive hover:bg-destructive/10 hover:text-destructive"
+            onClick={onDelete}
+          >
+            <Trash2 className="h-4 w-4" /> Supprimer
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
