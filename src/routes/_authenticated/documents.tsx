@@ -398,11 +398,20 @@ function DocCard({ doc, onDelete }: { doc: Tables<"documents">; onDelete: () => 
     () => (Array.isArray(doc.alerts) ? (doc.alerts as string[]) : []),
     [doc.alerts],
   );
-  const extracted = useMemo<Array<Record<string, unknown>>>(()  => {
+  const extracted = useMemo<Array<Record<string, unknown>>>(() => {
     if (!doc.analysis) return [];
     try {
       const p = JSON.parse(doc.analysis);
-      return Array.isArray(p) ? p : [];
+      if (Array.isArray(p)) return p;
+      // Handle wrapped objects: { items: [...] } or { extracted_items: [...] }
+      if (p && typeof p === "object") {
+        const val =
+          (p as Record<string, unknown>).items ??
+          (p as Record<string, unknown>).extracted_items ??
+          (p as Record<string, unknown>).data;
+        return Array.isArray(val) ? (val as Array<Record<string, unknown>>) : [];
+      }
+      return [];
     } catch {
       return [];
     }
@@ -439,8 +448,8 @@ function DocCard({ doc, onDelete }: { doc: Tables<"documents">; onDelete: () => 
         </div>
       </button>
 
-      {open && (
-        <div className="mt-3 flex flex-col gap-3 border-t border-border pt-3">
+      {open && (insights.length > 0 || alerts.length > 0) && (
+        <div className="mt-3 flex flex-col gap-2 border-t border-border pt-3">
           {insights.length > 0 && (
             <ul className="flex flex-col gap-1">
               {insights.map((k, i) => (
@@ -459,31 +468,35 @@ function DocCard({ doc, onDelete }: { doc: Tables<"documents">; onDelete: () => 
               ))}
             </ul>
           )}
-          {canPour && (
-            <>
-              <ModuleOverride value={target} onChange={setTarget} />
-              <Button
-                size="sm"
-                className="gap-1.5"
-                onClick={() => pourMut.mutate({ module: target, items: extracted })}
-                disabled={pourMut.isPending}
-              >
-                {pourMut.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <ChevronDown className="h-4 w-4" />
-                )}
-                Déverser ({extracted.length}) vers {MODULE_LABELS[target]}
-              </Button>
-            </>
-          )}
-          <div className="flex justify-end">
-            <Button size="sm" variant="ghost" className="text-destructive" onClick={onDelete}>
-              <Trash2 className="h-4 w-4" /> Supprimer
-            </Button>
-          </div>
         </div>
       )}
+
+      {/* Actions — toujours visibles sans déplier la carte */}
+      <div className="mt-2.5 flex min-h-[2.5rem] flex-col gap-2 border-t border-border pt-2.5">
+        {canPour && <ModuleOverride value={target} onChange={setTarget} />}
+        <div className="flex items-center justify-between gap-2">
+          {canPour ? (
+            <Button
+              size="sm"
+              className="gap-1.5"
+              onClick={() => pourMut.mutate({ module: target, items: extracted })}
+              disabled={pourMut.isPending}
+            >
+              {pourMut.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <ChevronDown className="h-4 w-4" />
+              )}
+              Déverser ({extracted.length})
+            </Button>
+          ) : (
+            <span />
+          )}
+          <Button size="sm" variant="ghost" className="text-destructive" onClick={onDelete}>
+            <Trash2 className="h-4 w-4" /> Supprimer
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
