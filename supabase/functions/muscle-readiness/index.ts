@@ -2,20 +2,16 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { checkRateLimit, recordRateLimit } from "../_shared/rate-limit.ts";
 
-const ALLOWED_ORIGINS = [
-  "https://id-preview--2c9444e5-f2d2-4c68-9566-e9e8569dc37a.lovable.app",
-  "https://2c9444e5-f2d2-4c68-9566-e9e8569dc37a.lovableproject.com",
-  "https://project--2c9444e5-f2d2-4c68-9566-e9e8569dc37a.lovable.app",
-  "https://cortex-home-ai.lovable.app",
-  "http://localhost:8080",
-  "http://localhost:5173",
-];
-
 function buildCors(req: Request) {
   const origin = req.headers.get("origin") ?? "";
-  const allow = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  const isAllowed =
+    /^https:\/\/[a-z0-9-]+\.lovable\.app$/.test(origin) ||
+    /^https:\/\/[a-z0-9-]+\.lovableproject\.com$/.test(origin) ||
+    /^http:\/\/localhost(:\d+)?$/.test(origin);
+  const allow = isAllowed ? origin : "https://cortex-home-ai.lovable.app";
   return {
     "Access-Control-Allow-Origin": allow,
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
     Vary: "Origin",
   };
