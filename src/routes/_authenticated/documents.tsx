@@ -409,8 +409,11 @@ function DocCard({ doc, onDelete }: { doc: Tables<"documents">; onDelete: () => 
   }, [doc.analysis]);
   const [open, setOpen] = useState(false);
   const pourMut = usePourIntoModule();
-  const targetModule = doc.module as DocModule;
-  const canPour = targetModule !== "documents" && extracted.length > 0;
+  const detected = doc.module as DocModule;
+  const [target, setTarget] = useState<DocModule>(
+    detected === "documents" ? "fitness" : detected,
+  );
+  const canPour = extracted.length > 0;
   const isImageDoc = /\.(jpe?g|png|webp|heic|heif|jpg)$/i.test(doc.storage_path);
 
   return (
@@ -427,7 +430,7 @@ function DocCard({ doc, onDelete }: { doc: Tables<"documents">; onDelete: () => 
             <p className="truncate text-sm font-semibold">{doc.name}</p>
           </div>
           <p className="mt-0.5 text-[11px] uppercase tracking-wider text-muted-foreground">
-            {MODULE_LABELS[doc.module as DocModule] ?? doc.module} ·{" "}
+            {MODULE_LABELS[detected] ?? doc.module} ·{" "}
             {new Date(doc.created_at).toLocaleDateString("fr-FR")}
           </p>
           {doc.summary && (
@@ -437,7 +440,7 @@ function DocCard({ doc, onDelete }: { doc: Tables<"documents">; onDelete: () => 
       </button>
 
       {open && (
-        <div className="mt-3 flex flex-col gap-2 border-t border-border pt-3">
+        <div className="mt-3 flex flex-col gap-3 border-t border-border pt-3">
           {insights.length > 0 && (
             <ul className="flex flex-col gap-1">
               {insights.map((k, i) => (
@@ -456,12 +459,13 @@ function DocCard({ doc, onDelete }: { doc: Tables<"documents">; onDelete: () => 
               ))}
             </ul>
           )}
-          <div className="flex items-center justify-between gap-2">
-            {canPour ? (
+          {canPour && (
+            <>
+              <ModuleOverride value={target} onChange={setTarget} />
               <Button
                 size="sm"
                 className="gap-1.5"
-                onClick={() => pourMut.mutate({ module: targetModule, items: extracted })}
+                onClick={() => pourMut.mutate({ module: target, items: extracted })}
                 disabled={pourMut.isPending}
               >
                 {pourMut.isPending ? (
@@ -469,9 +473,11 @@ function DocCard({ doc, onDelete }: { doc: Tables<"documents">; onDelete: () => 
                 ) : (
                   <ChevronDown className="h-4 w-4" />
                 )}
-                Déverser ({extracted.length}) vers {MODULE_LABELS[targetModule]}
+                Déverser ({extracted.length}) vers {MODULE_LABELS[target]}
               </Button>
-            ) : <span />}
+            </>
+          )}
+          <div className="flex justify-end">
             <Button size="sm" variant="ghost" className="text-destructive" onClick={onDelete}>
               <Trash2 className="h-4 w-4" /> Supprimer
             </Button>
