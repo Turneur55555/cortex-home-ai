@@ -429,6 +429,8 @@ Deno.serve(async (req) => {
 
     console.log("[analyze-pdf] done, extracted_items:", (parsed.extracted_items as unknown[])?.length ?? 0);
 
+    await recordRateLimit(supa, userData.user.id, "analyze_pdf");
+
     return new Response(
       JSON.stringify({
         summary: parsed.summary ?? "",
