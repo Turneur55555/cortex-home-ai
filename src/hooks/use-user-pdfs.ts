@@ -74,7 +74,7 @@ export function useDeletePdf() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
       await supabase.storage.from("pdfs").remove([pdf.file_path]);
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from("user_pdfs")
         .delete()
         .eq("id", pdf.id)
