@@ -7,8 +7,10 @@ import {
   createCategory,
   updateCategory,
   deleteCategory,
+  deleteCategories,
   reorderCategories,
 } from "@/services/homeCategories";
+
 import type {
   HomeCategory,
   CreateCategoryInput,
