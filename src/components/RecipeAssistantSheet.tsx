@@ -130,7 +130,25 @@ export function RecipeAssistantSheet({ onClose }: { onClose: () => void }) {
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      return (data?.recipes ?? []) as Recipe[];
+      // Normalise la réponse : gère l'ancien format (string[]) et le nouveau (objet[])
+      return ((data?.recipes ?? []) as unknown[]).map((r) => {
+        const rec = r as Record<string, unknown>;
+        return {
+          ...rec,
+          servings: (rec.servings as number) || 1,
+          ingredients_used: ((rec.ingredients_used as unknown[]) ?? []).map((i) =>
+            typeof i === "string"
+              ? { name: i, quantity: 0, unit: "", estimatedGrams: 0, calories: 0, proteins: 0, carbs: 0, fats: 0, fibers: 0 }
+              : i
+          ),
+          missing_ingredients: ((rec.missing_ingredients as unknown[]) ?? []).map((i) =>
+            typeof i === "string" ? { name: i } : i
+          ),
+          nutrition_total: (rec.nutrition_total as object) ?? null,
+          tags: (rec.tags as string[]) ?? [],
+          goal_match: (rec.goal_match as string) ?? null,
+        } as Recipe;
+      });
     },
     onSuccess: (r) => setRecipes(r),
     onError: (e: Error) => toast.error(e.message),
