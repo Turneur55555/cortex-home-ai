@@ -235,14 +235,49 @@ function RoomsView({
     setDeleteTarget(null);
   };
 
+  const handleBulkDeleteConfirm = () => {
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    bulkDeleteCats.mutate(ids);
+    exitEditMode();
+  };
+
   return (
     <>
-      <header className="mb-5">
-        <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
-          Gestion
-        </p>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight">Maison</h1>
+      <header className="mb-5 flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+            Gestion
+          </p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight">Maison</h1>
+        </div>
+        {categories.length > 0 && (
+          <button
+            type="button"
+            onClick={() => (editMode ? exitEditMode() : enterEditMode())}
+            className={`inline-flex h-9 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-colors ${
+              editMode
+                ? "border-primary/40 bg-primary/15 text-primary"
+                : "border-border bg-surface text-foreground hover:bg-accent"
+            }`}
+            aria-pressed={editMode}
+            aria-label={editMode ? "Terminer la sélection" : "Modifier les catégories"}
+          >
+            {editMode ? (
+              <>
+                <X className="h-3.5 w-3.5" />
+                Terminer
+              </>
+            ) : (
+              <>
+                <Pencil className="h-3.5 w-3.5" />
+                Modifier
+              </>
+            )}
+          </button>
+        )}
       </header>
+
 
       {/* Stats globales */}
       <div className="mb-4 grid grid-cols-2 gap-3">
