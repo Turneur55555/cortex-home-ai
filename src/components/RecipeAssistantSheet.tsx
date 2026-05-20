@@ -1,20 +1,16 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { ChefHat, Clock, Loader2, Sparkles, X, AlertTriangle, Utensils } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useStockItems } from "@/hooks/use-stocks";
-
-type Recipe = {
-  title: string;
-  time_minutes: number;
-  difficulty: string;
-  ingredients_used: string[];
-  missing_ingredients: string[];
-  steps: string[];
-  why_fits: string;
-};
+import { type Recipe, GOAL_LABELS } from "@/lib/recipeTypes";
+import { useNutritionCalculator } from "@/hooks/useNutritionCalculator";
+import { RecipeMacros } from "@/components/recipe/RecipeMacros";
+import { PortionSelector } from "@/components/recipe/PortionSelector";
+import { NutritionScore } from "@/components/recipe/NutritionScore";
+import { NutritionBadge } from "@/components/recipe/NutritionBadge";
 
 function useFoodPreferences() {
   return useQuery({
@@ -32,6 +28,81 @@ function useFoodPreferences() {
     },
   });
 }
+
+const RecipeCard = memo(function RecipeCard({ recipe }: { recipe: Recipe }) {
+  const [portions, setPortions] = useState(Math.max(1, recipe.servings ?? 1));
+  const { perServing, score, letter, tags } = useNutritionCalculator(recipe, portions);
+
+  return (
+    <li className="rounded-2xl border border-border bg-card p-4 shadow-card">
+      <div className="mb-1 flex items-start justify-between gap-2">
+        <h3 className="text-sm font-bold leading-tight">{recipe.title}</h3>
+        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-surface px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+          <Clock className="h-3 w-3" />
+          {recipe.time_minutes} min
+        </span>
+      </div>
+
+      <p className="mb-2 text-[11px] capitalize text-muted-foreground">{recipe.difficulty}</p>
+
+      {recipe.why_fits && (
+        <p className="mb-3 rounded-lg bg-primary/10 p-2 text-[11px] italic text-primary">
+          {recipe.why_fits}
+        </p>
+      )}
+
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <PortionSelector value={portions} onChange={setPortions} />
+        <NutritionScore score={score} letter={letter} />
+      </div>
+
+      <div className="mb-3 rounded-xl border border-border bg-surface/50 p-3">
+        <RecipeMacros nutrition={perServing} />
+        <p className="mt-1.5 text-[10px] text-muted-foreground">
+          par portion · {recipe.servings} portion{recipe.servings > 1 ? "s" : ""} au total
+        </p>
+      </div>
+
+      {tags.length > 0 && (
+        <div className="mb-3 flex flex-wrap gap-1.5">
+          {tags.map((tag) => (
+            <NutritionBadge key={tag} label={tag} variant="tag" />
+          ))}
+          {recipe.goal_match && (
+            <NutritionBadge label={GOAL_LABELS[recipe.goal_match]} variant="goal" />
+          )}
+        </div>
+      )}
+
+      <div className="mb-2">
+        <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Ingrédients en stock
+        </p>
+        <p className="text-xs">{recipe.ingredients_used.map((i) => i.name).join(", ")}</p>
+      </div>
+
+      {recipe.missing_ingredients?.length > 0 && (
+        <div className="mb-2">
+          <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-warning">
+            À acheter
+          </p>
+          <p className="text-xs">{recipe.missing_ingredients.map((i) => i.name).join(", ")}</p>
+        </div>
+      )}
+
+      <div>
+        <p className="mb-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Étapes
+        </p>
+        <ol className="ml-4 list-decimal space-y-0.5 text-xs">
+          {recipe.steps.map((s, j) => (
+            <li key={j}>{s}</li>
+          ))}
+        </ol>
+      </div>
+    </li>
+  );
+});
 
 export function RecipeAssistantSheet({ onClose }: { onClose: () => void }) {
   const { data: items } = useStockItems("alimentation");
@@ -102,7 +173,6 @@ export function RecipeAssistantSheet({ onClose }: { onClose: () => void }) {
             </div>
           ) : (
             <>
-              {/* Préférences résumées */}
               <div className="mb-4 rounded-xl border border-border bg-surface p-3">
                 <div className="mb-1.5 flex items-center justify-between">
                   <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -167,6 +237,7 @@ export function RecipeAssistantSheet({ onClose }: { onClose: () => void }) {
                 disabled={generate.isPending}
                 onClick={() => generate.mutate()}
                 className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-gradient-primary text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-60"
+                style={{ WebkitTapHighlightColor: "transparent" }}
               >
                 {generate.isPending ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -185,50 +256,7 @@ export function RecipeAssistantSheet({ onClose }: { onClose: () => void }) {
               {recipes && recipes.length > 0 && (
                 <ul className="mt-4 space-y-3">
                   {recipes.map((r, i) => (
-                    <li
-                      key={i}
-                      className="rounded-2xl border border-border bg-card p-4 shadow-card"
-                    >
-                      <div className="mb-1 flex items-start justify-between gap-2">
-                        <h3 className="text-sm font-bold leading-tight">{r.title}</h3>
-                        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-surface px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                          <Clock className="h-3 w-3" />
-                          {r.time_minutes} min
-                        </span>
-                      </div>
-                      <p className="mb-2 text-[11px] capitalize text-muted-foreground">
-                        {r.difficulty}
-                      </p>
-                      {r.why_fits && (
-                        <p className="mb-2 rounded-lg bg-primary/10 p-2 text-[11px] italic text-primary">
-                          {r.why_fits}
-                        </p>
-                      )}
-                      <div className="mb-2">
-                        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                          Ingrédients en stock
-                        </p>
-                        <p className="text-xs">{r.ingredients_used.join(", ")}</p>
-                      </div>
-                      {r.missing_ingredients?.length > 0 && (
-                        <div className="mb-2">
-                          <p className="text-[10px] font-semibold uppercase tracking-wider text-warning">
-                            À acheter
-                          </p>
-                          <p className="text-xs">{r.missing_ingredients.join(", ")}</p>
-                        </div>
-                      )}
-                      <div>
-                        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                          Étapes
-                        </p>
-                        <ol className="ml-4 list-decimal space-y-0.5 text-xs">
-                          {r.steps.map((s, j) => (
-                            <li key={j}>{s}</li>
-                          ))}
-                        </ol>
-                      </div>
-                    </li>
+                    <RecipeCard key={i} recipe={r} />
                   ))}
                 </ul>
               )}

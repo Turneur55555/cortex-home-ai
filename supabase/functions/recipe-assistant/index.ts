@@ -98,16 +98,22 @@ Deno.serve(async (req) => {
         typeof rawPrefs?.other_rules === "string" ? rawPrefs.other_rules.slice(0, 500) : null,
     };
 
-    const sys = `Tu es un chef-assistant. Tu proposes 3 recettes RÉALISABLES principalement avec les ingrédients en stock fournis.
-Tu DOIS respecter STRICTEMENT les règles alimentaires de l'utilisateur :
+    const sys = `Tu es un chef-assistant et nutritionniste expert. Tu proposes 3 recettes RÉALISABLES principalement avec les ingrédients en stock fournis.
+RÈGLES STRICTES à respecter :
 - Allergies : ${preferences.allergies.join(", ") || "aucune"}
 - Aliments à éviter : ${preferences.foods_to_avoid.join(", ") || "aucun"}
 - Objectif nutritionnel : ${preferences.goal || "aucun"}
-- ${preferences.no_meat_dairy_mix ? "INTERDICTION ABSOLUE de mélanger viande et produits laitiers dans une même recette (règle casher). Une recette ne peut contenir QUE l'un OU l'autre." : ""}
+- ${preferences.no_meat_dairy_mix ? "INTERDICTION ABSOLUE de mélanger viande et produits laitiers dans une même recette (règle casher)." : ""}
 - Règles supplémentaires : ${preferences.other_rules || "aucune"}
 
-Privilégie les ingrédients qui expirent bientôt. Réponds en JSON valide uniquement :
-{"recipes":[{"title":"...","time_minutes":number,"difficulty":"facile|moyen|difficile","ingredients_used":["..."],"missing_ingredients":["..."],"steps":["..."],"why_fits":"..."}]}`;
+Privilégie les ingrédients qui expirent bientôt.
+Pour chaque recette, estime avec précision les macros nutritionnelles (calories, protéines, glucides, lipides, fibres) pour l'ensemble de la recette (nutrition_total) ET par ingrédient utilisé.
+Pour nutrition_total, calcule la somme de tous les ingredients_used.
+Pour tags, choisis parmi : "Riche en protéines", "Faible en calories", "Riche en fibres", "Faible en glucides", "Équilibré", "Haute satiété" (max 3).
+Pour goal_match, indique : "seche", "maintien", "prise_de_masse", "recomposition", ou null.
+
+Réponds UNIQUEMENT en JSON valide avec cette structure exacte :
+{"recipes":[{"title":"string","time_minutes":number,"difficulty":"facile|moyen|difficile","servings":number,"ingredients_used":[{"name":"string","quantity":number,"unit":"string","estimatedGrams":number,"calories":number,"proteins":number,"carbs":number,"fats":number,"fibers":number}],"missing_ingredients":[{"name":"string"}],"steps":["string"],"why_fits":"string","nutrition_total":{"calories":number,"proteins":number,"carbs":number,"fats":number,"fibers":number},"tags":["string"],"goal_match":null}]}`;
 
     const stockList = items.length
       ? items.map((i) => `- ${i.name}${i.quantity ? ` (${i.quantity}${i.unit ? " " + i.unit : ""})` : ""}${i.expiration_date ? ` [exp: ${i.expiration_date.slice(0, 10)}]` : ""}`).join("\n")
