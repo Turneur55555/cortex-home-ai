@@ -6,10 +6,8 @@ import {
   ChefHat,
   CheckSquare,
   ChevronRight,
-  Leaf,
+  CheckCircle2,
   Loader2,
-  Minus,
-  Move,
   Pencil,
   Plus,
   Search,
@@ -17,23 +15,17 @@ import {
   Trash2,
   X,
   ArrowLeft,
-  CheckCircle2,
-
 } from "lucide-react";
 import { ScanSheet } from "@/components/ScanSheet";
 import { BarcodeScannerSheet } from "@/components/BarcodeScannerSheet";
 import { RecipeAssistantSheet } from "@/components/RecipeAssistantSheet";
-import { FoodAutocomplete } from "@/components/FoodAutocomplete";
 import { SortableCategoryList } from "@/components/home/SortableCategoryList";
 import { AddCategoryButton } from "@/components/home/AddCategoryButton";
 import { CategoryModal } from "@/components/home/CategoryModal";
 import { DeleteCategoryDialog } from "@/components/home/DeleteCategoryDialog";
 import { SubcategoryList } from "@/components/home/SubcategoryList";
-import { toast } from "sonner";
-import { differenceInDays, format, parseISO } from "date-fns";
-import { fr } from "date-fns/locale";
+import { differenceInDays, parseISO } from "date-fns";
 import {
-  useAddStockItem,
   useAllStockStats,
   useBulkAdjustStockItems,
   useBulkDeleteStockItems,
@@ -41,7 +33,7 @@ import {
   useStockItems,
   useUpdateStockItem,
 } from "@/hooks/use-stocks";
-import { useItemsRealtime, useUpdateItemFull } from "@/hooks/use-pantry";
+import { useItemsRealtime } from "@/hooks/use-pantry";
 import {
   useHomeCategories,
   useCreateCategory,
@@ -60,12 +52,18 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-
 import { useHomeSubcategories } from "@/hooks/useHomeSubcategories";
-import { getRoomById, getCompartmentById } from "@/lib/maison/rooms";
+import { getRoomById } from "@/lib/maison/rooms";
 import { getIcon } from "@/lib/maison/icons";
 import type { Tables } from "@/integrations/supabase/types";
 import type { HomeCategory, CreateCategoryInput, UpdateCategoryInput } from "@/types/home";
+
+// Extracted components
+import { StatChip } from "@/components/stocks/StatChip";
+import { BulkActionBar } from "@/components/stocks/BulkActionBar";
+import { ItemRow } from "@/components/stocks/ItemRow";
+import { AddItemSheet } from "@/components/stocks/AddItemSheet";
+import { ItemEditSheet } from "@/components/stocks/ItemEditSheet";
 
 export const Route = createFileRoute("/_authenticated/stocks")({
   head: () => ({
@@ -611,7 +609,7 @@ function ItemsView({
   onBack: () => void;
 }) {
   const room = getRoomById(roomId);
-  const comp = getCompartmentById(roomId, compartmentId);
+  const comp = room?.compartments.find((c) => c.id === compartmentId);
   const { data: allRoomItems, isLoading } = useStockItems(roomId);
   const del = useDeleteStockItem();
   const update = useUpdateStockItem();
@@ -674,7 +672,11 @@ function ItemsView({
   );
 
   const validCount = useMemo(
-    () => data.filter((it) => { const s = expStateOf(it); return s === "valid" || s === "none"; }).length,
+    () =>
+      data.filter((it) => {
+        const s = expStateOf(it);
+        return s === "valid" || s === "none";
+      }).length,
     [data],
   );
 
@@ -686,7 +688,10 @@ function ItemsView({
       return next;
     });
 
-  const exitSelect = () => { setSelecting(false); setSelected(new Set()); };
+  const exitSelect = () => {
+    setSelecting(false);
+    setSelected(new Set());
+  };
 
   if (!room || !comp) return null;
 
@@ -778,9 +783,13 @@ function ItemsView({
           const active = expFilter === c.key;
           const toneCls =
             c.tone === "danger"
-              ? active ? "border-destructive bg-destructive text-destructive-foreground" : "border-border text-destructive"
+              ? active
+                ? "border-destructive bg-destructive text-destructive-foreground"
+                : "border-border text-destructive"
               : c.tone === "warning"
-                ? active ? "border-warning bg-warning text-warning-foreground" : "border-border text-warning"
+                ? active
+                  ? "border-warning bg-warning text-warning-foreground"
+                  : "border-border text-warning"
                 : active
                   ? "border-primary bg-primary text-primary-foreground"
                   : "border-border text-muted-foreground";
@@ -793,7 +802,9 @@ function ItemsView({
               className={`inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition-colors ${toneCls}`}
             >
               {c.label}
-              <span className={`rounded-full px-1.5 py-0 text-[10px] font-bold tabular-nums ${active ? "bg-background/25" : "bg-surface"}`}>
+              <span
+                className={`rounded-full px-1.5 py-0 text-[10px] font-bold tabular-nums ${active ? "bg-background/25" : "bg-surface"}`}
+              >
                 {c.count}
               </span>
             </button>
@@ -811,7 +822,9 @@ function ItemsView({
             type="button"
             onClick={() =>
               setSelected((s) =>
-                s.size === filtered.length ? new Set() : new Set(filtered.map((it) => it.id)),
+                s.size === filtered.length
+                  ? new Set()
+                  : new Set(filtered.map((it) => it.id)),
               )
             }
             className="font-semibold text-primary"
@@ -881,7 +894,9 @@ function ItemsView({
           onClose={() => setScanOpen(false)}
         />
       )}
-      {barcodeOpen && <BarcodeScannerSheet roomId={roomId} onClose={() => setBarcodeOpen(false)} />}
+      {barcodeOpen && (
+        <BarcodeScannerSheet roomId={roomId} onClose={() => setBarcodeOpen(false)} />
+      )}
 
       {selecting && selected.size > 0 && (
         <BulkActionBar
@@ -903,644 +918,5 @@ function ItemsView({
         />
       )}
     </section>
-  );
-}
-
-// ─── Shared UI ────────────────────────────────────────────────────────────────
-
-function StatChip({ label, value, tone }: { label: string; value: number; tone: "default" | "warning" | "danger" }) {
-  const color = tone === "danger" ? "text-destructive" : tone === "warning" ? "text-warning" : "text-foreground";
-  return (
-    <div className="rounded-2xl border border-border bg-card p-3 shadow-card">
-      <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
-      <p className={`mt-1 text-xl font-bold ${color}`}>{value}</p>
-    </div>
-  );
-}
-
-function BulkActionBar({
-  count,
-  busy,
-  onAdjust,
-  onDelete,
-}: {
-  count: number;
-  busy: boolean;
-  onAdjust: (delta: number) => void;
-  onDelete: () => void;
-}) {
-  return (
-    <div className="fixed bottom-20 left-1/2 z-40 w-[min(420px,calc(100vw-1.5rem))] -translate-x-1/2 rounded-2xl border border-border bg-card/95 p-2.5 shadow-elevated backdrop-blur">
-      <div className="flex items-center gap-2">
-        <span className="px-2 text-xs font-semibold text-muted-foreground">{count}</span>
-        <div className="flex flex-1 items-center gap-1 rounded-xl border border-border bg-surface p-0.5">
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => onAdjust(-1)}
-            className="flex h-9 flex-1 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground disabled:opacity-50"
-          >
-            <Minus className="h-4 w-4" />
-          </button>
-          <span className="px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Qté
-          </span>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => onAdjust(1)}
-            className="flex h-9 flex-1 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground disabled:opacity-50"
-          >
-            <Plus className="h-4 w-4" />
-          </button>
-        </div>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={onDelete}
-          className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-destructive px-3 text-xs font-semibold text-destructive-foreground disabled:opacity-50"
-        >
-          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-          Supprimer
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function ItemRow({
-  item,
-  onDelete,
-  onQty,
-  onEdit,
-  selecting = false,
-  selected = false,
-  onToggle,
-}: {
-  item: Tables<"items">;
-  onDelete: () => void;
-  onQty: (q: number) => void;
-  onEdit?: () => void;
-  selecting?: boolean;
-  selected?: boolean;
-  onToggle?: () => void;
-}) {
-  const exp = item.expiration_date ? parseISO(item.expiration_date as unknown as string) : null;
-  const daysLeft = exp ? differenceInDays(exp, new Date()) : null;
-  const expState =
-    daysLeft == null ? null : daysLeft < 0 ? "expired" : daysLeft <= 7 ? "soon" : "ok";
-  const isLowStock =
-    item.low_stock_threshold != null && item.quantity <= item.low_stock_threshold;
-  const hasNutrition = item.calories_per_100g != null;
-
-  return (
-    <li
-      data-testid="stocks-item"
-      data-item-name={item.name}
-      onClick={selecting ? onToggle : undefined}
-      className={
-        "flex items-center gap-3 rounded-2xl border bg-card p-3 shadow-card transition-colors " +
-        (selecting
-          ? selected
-            ? "cursor-pointer border-primary bg-primary/5"
-            : "cursor-pointer border-border"
-          : "border-border")
-      }
-    >
-      {selecting && (
-        <span
-          className={
-            "flex h-5 w-5 shrink-0 items-center justify-center rounded-md border " +
-            (selected ? "border-primary bg-primary text-primary-foreground" : "border-border bg-surface")
-          }
-          aria-hidden
-        >
-          {selected && <CheckSquare className="h-3 w-3" />}
-        </span>
-      )}
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5">
-          <p className="truncate text-sm font-semibold leading-tight">{item.name}</p>
-          {hasNutrition && (
-            <span title="Valeurs nutritionnelles disponibles">
-              <Leaf className="h-3 w-3 shrink-0 text-accent opacity-70" />
-            </span>
-          )}
-        </div>
-        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
-          {item.unit && <span>{item.unit}</span>}
-          {isLowStock && (
-            <span className="inline-flex items-center gap-1 text-warning">
-              <AlertTriangle className="h-3 w-3" />
-              Stock bas
-            </span>
-          )}
-          {hasNutrition && (
-            <span className="text-[10px] text-muted-foreground/70">
-              {Math.round(item.calories_per_100g!)} kcal/100g
-            </span>
-          )}
-          {exp && (
-            <span
-              className={
-                expState === "expired"
-                  ? "inline-flex items-center gap-1 text-destructive"
-                  : expState === "soon"
-                    ? "inline-flex items-center gap-1 text-warning"
-                    : "inline-flex items-center gap-1"
-              }
-            >
-              {(expState === "expired" || expState === "soon") && (
-                <AlertTriangle className="h-3 w-3" />
-              )}
-              {expState === "expired"
-                ? `Expiré ${format(exp, "d MMM", { locale: fr })}`
-                : format(exp, "d MMM yyyy", { locale: fr })}
-            </span>
-          )}
-        </div>
-      </div>
-
-      {selecting ? (
-        <span className="text-sm font-semibold tabular-nums text-muted-foreground">
-          ×{item.quantity}
-        </span>
-      ) : (
-        <>
-          <div className="flex items-center gap-1 rounded-xl border border-border bg-surface p-0.5">
-            <button
-              type="button"
-              onClick={() => onQty(Math.max(0, item.quantity - 1))}
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground"
-            >
-              <Minus className="h-3.5 w-3.5" />
-            </button>
-            <span className="min-w-[1.5rem] text-center text-sm font-semibold tabular-nums">
-              {item.quantity}
-            </span>
-            <button
-              type="button"
-              onClick={() => onQty(item.quantity + 1)}
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground"
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </button>
-          </div>
-          {onEdit && (
-            <button
-              type="button"
-              onClick={onEdit}
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary"
-              aria-label="Modifier"
-            >
-              <Pencil className="h-3.5 w-3.5" />
-            </button>
-          )}
-          <button
-            type="button"
-            data-testid="stocks-item-delete"
-            onClick={onDelete}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-        </>
-      )}
-    </li>
-  );
-}
-
-// ─── Add item sheet ───────────────────────────────────────────────────────────
-
-function AddItemSheet({
-  roomId,
-  compartmentId,
-  roomName,
-  compName,
-  onClose,
-}: {
-  roomId: string;
-  compartmentId: string;
-  roomName: string;
-  compName: string;
-  onClose: () => void;
-}) {
-  const add = useAddStockItem();
-  const isCuisine = roomId === "cuisine";
-
-  const [form, setForm] = useState({
-    name: "",
-    quantity: "1",
-    unit: "",
-    expiration_date: "",
-    alert_days_before: "7",
-    notes: "",
-    low_stock_threshold: "",
-    calories_per_100g: "",
-    protein_per_100g: "",
-    carbs_per_100g: "",
-    fat_per_100g: "",
-    fiber_per_100g: "",
-    sugar_per_100g: "",
-    sodium_per_100g: "",
-  });
-
-  const setF = (k: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
-  const num = (v: string) => (v.trim() === "" ? null : Number(v));
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.name.trim()) return;
-    await add.mutateAsync({
-      room: roomId,
-      location: compartmentId,
-      name: form.name.trim(),
-      quantity: Number(form.quantity) || 1,
-      unit: form.unit.trim() || null,
-      expiration_date: form.expiration_date || null,
-      alert_days_before: Math.max(0, Number(form.alert_days_before) || 7),
-      notes: form.notes.trim() || null,
-      low_stock_threshold: num(form.low_stock_threshold),
-      ...(isCuisine && {
-        calories_per_100g: num(form.calories_per_100g),
-        protein_per_100g: num(form.protein_per_100g),
-        carbs_per_100g: num(form.carbs_per_100g),
-        fat_per_100g: num(form.fat_per_100g),
-        fiber_per_100g: num(form.fiber_per_100g),
-        sugar_per_100g: num(form.sugar_per_100g),
-        sodium_per_100g: num(form.sodium_per_100g),
-      }),
-    });
-    onClose();
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm">
-      <div className="w-full max-w-[430px] max-h-[92vh] overflow-y-auto rounded-t-3xl border border-border bg-card p-5 shadow-elevated">
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <p className="text-[11px] text-muted-foreground">{roomName}</p>
-            <h2 className="text-lg font-bold leading-tight">{compName}</h2>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-surface"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        <form onSubmit={submit} className="space-y-3" data-testid="stocks-add-form">
-          {/* Name — FoodAutocomplete for cuisine, plain input otherwise */}
-          {isCuisine ? (
-            <FoodAutocomplete
-              value={form.name}
-              onChange={setF("name")}
-              onSelect={(f) =>
-                setForm((prev) => ({
-                  ...prev,
-                  name: f.name,
-                  calories_per_100g: f.calories != null ? String(f.calories) : prev.calories_per_100g,
-                  protein_per_100g: f.proteins != null ? String(f.proteins) : prev.protein_per_100g,
-                  carbs_per_100g: f.carbs != null ? String(f.carbs) : prev.carbs_per_100g,
-                  fat_per_100g: f.fats != null ? String(f.fats) : prev.fat_per_100g,
-                }))
-              }
-              required
-            />
-          ) : (
-            <FormField
-              label="Nom *"
-              testId="stocks-field-name"
-              value={form.name}
-              onChange={setF("name")}
-              placeholder="Ex: Shampoing"
-              required
-            />
-          )}
-
-          <div className="grid grid-cols-3 gap-3">
-            <FormField
-              label="Quantité"
-              type="number"
-              value={form.quantity}
-              onChange={setF("quantity")}
-            />
-            <FormField
-              label="Unité"
-              value={form.unit}
-              onChange={setF("unit")}
-              placeholder="g, L, pcs…"
-            />
-            <FormField
-              label="Expire le"
-              type="date"
-              testId="stocks-field-expiration"
-              value={form.expiration_date}
-              onChange={setF("expiration_date")}
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <FormField
-              label="Alerte (j)"
-              type="number"
-              value={form.alert_days_before}
-              onChange={setF("alert_days_before")}
-              placeholder="7"
-            />
-            <FormField
-              label="Alerte stock bas"
-              type="number"
-              value={form.low_stock_threshold}
-              onChange={setF("low_stock_threshold")}
-              placeholder="ex: 2"
-            />
-          </div>
-
-          {/* Nutrition section — cuisine only */}
-          {isCuisine && (
-            <div className="rounded-2xl border border-accent/20 bg-accent/5 p-3">
-              <p className="mb-2.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-accent">
-                <Leaf className="h-3.5 w-3.5" />
-                Valeurs nutritionnelles /100g
-              </p>
-              <div className="grid grid-cols-2 gap-2">
-                <FormField label="Calories (kcal)" type="number" value={form.calories_per_100g} onChange={setF("calories_per_100g")} placeholder="ex: 130" />
-                <FormField label="Protéines (g)" type="number" step="0.1" value={form.protein_per_100g} onChange={setF("protein_per_100g")} placeholder="ex: 3" />
-                <FormField label="Glucides (g)" type="number" step="0.1" value={form.carbs_per_100g} onChange={setF("carbs_per_100g")} placeholder="ex: 28" />
-                <FormField label="Lipides (g)" type="number" step="0.1" value={form.fat_per_100g} onChange={setF("fat_per_100g")} placeholder="ex: 0.3" />
-              </div>
-              <p className="mb-1.5 mt-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Optionnel
-              </p>
-              <div className="grid grid-cols-3 gap-2">
-                <FormField label="Fibres (g)" type="number" step="0.1" value={form.fiber_per_100g} onChange={setF("fiber_per_100g")} />
-                <FormField label="Sucre (g)" type="number" step="0.1" value={form.sugar_per_100g} onChange={setF("sugar_per_100g")} />
-                <FormField label="Sodium (mg)" type="number" value={form.sodium_per_100g} onChange={setF("sodium_per_100g")} />
-              </div>
-            </div>
-          )}
-
-          <FormField
-            label="Notes"
-            textarea
-            value={form.notes}
-            onChange={setF("notes")}
-          />
-
-          <button
-            type="submit"
-            data-testid="stocks-submit-add"
-            disabled={add.isPending}
-            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-gradient-primary text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-60"
-          >
-            {add.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-            Enregistrer
-          </button>
-        </form>
-      </div>
-    </div>
-  );
-}
-
-function FormField({
-  label,
-  value,
-  onChange,
-  type = "text",
-  step,
-  required,
-  placeholder,
-  textarea,
-  testId,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  type?: string;
-  step?: string;
-  required?: boolean;
-  placeholder?: string;
-  textarea?: boolean;
-  testId?: string;
-}) {
-  return (
-    <label className="block">
-      <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-        {label}
-      </span>
-      {textarea ? (
-        <textarea
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={placeholder}
-          data-testid={testId}
-          rows={2}
-          className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary"
-        />
-      ) : (
-        <input
-          type={type}
-          step={step}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          required={required}
-          placeholder={placeholder}
-          data-testid={testId}
-          className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary"
-        />
-      )}
-    </label>
-  );
-}
-
-// ─── Item Edit Sheet ──────────────────────────────────────────────────────────
-
-function ItemEditSheet({
-  item,
-  onClose,
-}: {
-  item: Tables<"items">;
-  onClose: () => void;
-}) {
-  const updateFull = useUpdateItemFull();
-  const del = useDeleteStockItem();
-  const isCuisine = item.room === "cuisine";
-  const { data: allCategories = [] } = useHomeCategories();
-
-  const [form, setForm] = useState({
-    name: item.name,
-    quantity: String(item.quantity),
-    unit: item.unit ?? "",
-    expiration_date: item.expiration_date
-      ? (item.expiration_date as unknown as string).slice(0, 10)
-      : "",
-    notes: item.notes ?? "",
-    low_stock_threshold: item.low_stock_threshold != null ? String(item.low_stock_threshold) : "",
-    alert_days_before: item.alert_days_before != null ? String(item.alert_days_before) : "7",
-    calories_per_100g: item.calories_per_100g != null ? String(item.calories_per_100g) : "",
-    protein_per_100g: item.protein_per_100g != null ? String(item.protein_per_100g) : "",
-    carbs_per_100g: item.carbs_per_100g != null ? String(item.carbs_per_100g) : "",
-    fat_per_100g: item.fat_per_100g != null ? String(item.fat_per_100g) : "",
-    fiber_per_100g: item.fiber_per_100g != null ? String(item.fiber_per_100g) : "",
-    sugar_per_100g: item.sugar_per_100g != null ? String(item.sugar_per_100g) : "",
-    sodium_per_100g: item.sodium_per_100g != null ? String(item.sodium_per_100g) : "",
-  });
-
-  const [movingTo, setMovingTo] = useState<{ roomId: string; compartmentId: string }>({
-    roomId: item.room ?? "cuisine",
-    compartmentId: item.location ?? "",
-  });
-
-  const moveRoom = getRoomById(movingTo.roomId);
-  const setF = (k: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
-  const num = (v: string) => (v.trim() === "" ? null : Number(v));
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    await updateFull.mutateAsync({
-      id: item.id,
-      oldRoom: item.room ?? "maison",
-      oldQuantity: item.quantity,
-      itemName: item.name,
-      patch: {
-        name: form.name.trim() || item.name,
-        quantity: Number(form.quantity) || item.quantity,
-        unit: form.unit.trim() || null,
-        location: movingTo.compartmentId || null,
-        room: movingTo.roomId,
-        module: "maison",
-        expiration_date: form.expiration_date || null,
-        notes: form.notes.trim() || null,
-        low_stock_threshold: num(form.low_stock_threshold),
-        alert_days_before: form.alert_days_before.trim() ? Number(form.alert_days_before) : undefined,
-        calories_per_100g: num(form.calories_per_100g),
-        protein_per_100g: num(form.protein_per_100g),
-        carbs_per_100g: num(form.carbs_per_100g),
-        fat_per_100g: num(form.fat_per_100g),
-        fiber_per_100g: num(form.fiber_per_100g),
-        sugar_per_100g: num(form.sugar_per_100g),
-        sodium_per_100g: num(form.sodium_per_100g),
-      },
-    });
-    onClose();
-  };
-
-  const handleDelete = () => {
-    if (!confirm(`Supprimer "${item.name}" ?`)) return;
-    del.mutate({ id: item.id, roomId: item.room ?? "maison" });
-    onClose();
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm">
-      <div className="w-full max-w-[430px] max-h-[92vh] overflow-y-auto rounded-t-3xl border border-border bg-card p-5 shadow-elevated">
-        <div className="mb-4 flex justify-center">
-          <div className="h-1 w-10 rounded-full bg-white/20" />
-        </div>
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-bold">Modifier l'item</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-surface"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        <form onSubmit={submit} className="space-y-3">
-          <FormField label="Nom" value={form.name} onChange={setF("name")} required />
-          <div className="grid grid-cols-3 gap-3">
-            <FormField label="Quantité" type="number" value={form.quantity} onChange={setF("quantity")} />
-            <FormField label="Unité" value={form.unit} onChange={setF("unit")} placeholder="g, L, pcs…" />
-            <FormField label="Expire le" type="date" value={form.expiration_date} onChange={setF("expiration_date")} />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <FormField label="Alerte (j)" type="number" value={form.alert_days_before} onChange={setF("alert_days_before")} />
-            <FormField label="Alerte stock bas" type="number" value={form.low_stock_threshold} onChange={setF("low_stock_threshold")} placeholder="ex: 2" />
-          </div>
-
-          {/* Nutrition section — cuisine only */}
-          {isCuisine && (
-            <div className="rounded-2xl border border-accent/20 bg-accent/5 p-3">
-              <p className="mb-2.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-accent">
-                <Leaf className="h-3.5 w-3.5" />
-                Valeurs nutritionnelles /100g
-              </p>
-              <div className="grid grid-cols-2 gap-2">
-                <FormField label="Calories (kcal)" type="number" value={form.calories_per_100g} onChange={setF("calories_per_100g")} />
-                <FormField label="Protéines (g)" type="number" step="0.1" value={form.protein_per_100g} onChange={setF("protein_per_100g")} />
-                <FormField label="Glucides (g)" type="number" step="0.1" value={form.carbs_per_100g} onChange={setF("carbs_per_100g")} />
-                <FormField label="Lipides (g)" type="number" step="0.1" value={form.fat_per_100g} onChange={setF("fat_per_100g")} />
-              </div>
-              <p className="mb-1.5 mt-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Optionnel
-              </p>
-              <div className="grid grid-cols-3 gap-2">
-                <FormField label="Fibres (g)" type="number" step="0.1" value={form.fiber_per_100g} onChange={setF("fiber_per_100g")} />
-                <FormField label="Sucre (g)" type="number" step="0.1" value={form.sugar_per_100g} onChange={setF("sugar_per_100g")} />
-                <FormField label="Sodium (mg)" type="number" value={form.sodium_per_100g} onChange={setF("sodium_per_100g")} />
-              </div>
-            </div>
-          )}
-
-          {/* Move to different room/compartment */}
-          <div>
-            <label className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              <Move className="h-3 w-3" />
-              Déplacer vers
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              <select
-                value={movingTo.roomId}
-                onChange={(e) => setMovingTo({ roomId: e.target.value, compartmentId: "" })}
-                className="rounded-xl border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary"
-              >
-                {allCategories.map((c) => (
-                  <option key={c.slug} value={c.slug}>{c.name}</option>
-                ))}
-              </select>
-              <select
-                value={movingTo.compartmentId}
-                onChange={(e) => setMovingTo((s) => ({ ...s, compartmentId: e.target.value }))}
-                className="rounded-xl border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary"
-              >
-                <option value="">— Aucun —</option>
-                {(moveRoom?.compartments ?? []).map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <FormField label="Notes" textarea value={form.notes} onChange={setF("notes")} />
-
-          <button
-            type="submit"
-            disabled={updateFull.isPending}
-            className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-gradient-primary text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-60"
-          >
-            {updateFull.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Pencil className="h-4 w-4" />
-            )}
-            Enregistrer
-          </button>
-
-          <button
-            type="button"
-            onClick={handleDelete}
-            className="inline-flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-destructive/40 text-sm font-medium text-destructive hover:bg-destructive/10"
-          >
-            <Trash2 className="h-4 w-4" />
-            Supprimer l'item
-          </button>
-        </form>
-      </div>
-    </div>
   );
 }
