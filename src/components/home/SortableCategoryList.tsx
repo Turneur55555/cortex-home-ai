@@ -27,11 +27,15 @@ interface SortableItemProps {
   onEdit: () => void;
   onDelete: () => void;
   onManageCompartments: () => void;
+  editMode: boolean;
+  selected: boolean;
+  onToggleSelect: () => void;
+  onRequestEditMode: () => void;
 }
 
-function SortableItem({ category, ...props }: SortableItemProps) {
+function SortableItem({ category, editMode, ...props }: SortableItemProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: category.id });
+    useSortable({ id: category.id, disabled: editMode });
 
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -43,7 +47,8 @@ function SortableItem({ category, ...props }: SortableItemProps) {
       <CategoryCard
         category={category}
         isDragging={isDragging}
-        dragHandleProps={{ ...attributes, ...listeners }}
+        dragHandleProps={editMode ? undefined : { ...attributes, ...listeners }}
+        editMode={editMode}
         {...props}
       />
     </div>
@@ -58,6 +63,10 @@ interface SortableCategoryListProps {
   onDelete: (category: HomeCategory) => void;
   onManageCompartments: (category: HomeCategory) => void;
   onReorder: (newOrder: HomeCategory[]) => void;
+  editMode: boolean;
+  selectedIds: Set<string>;
+  onToggleSelect: (id: string) => void;
+  onRequestEditMode: () => void;
 }
 
 export function SortableCategoryList({
@@ -68,6 +77,10 @@ export function SortableCategoryList({
   onDelete,
   onManageCompartments,
   onReorder,
+  editMode,
+  selectedIds,
+  onToggleSelect,
+  onRequestEditMode,
 }: SortableCategoryListProps) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -102,6 +115,10 @@ export function SortableCategoryList({
               onEdit={() => onEdit(cat)}
               onDelete={() => onDelete(cat)}
               onManageCompartments={() => onManageCompartments(cat)}
+              editMode={editMode}
+              selected={selectedIds.has(cat.id)}
+              onToggleSelect={() => onToggleSelect(cat.id)}
+              onRequestEditMode={onRequestEditMode}
             />
           ))}
         </div>
