@@ -112,7 +112,6 @@ async function fileToBase64Compressed(file: File): Promise<{ b64: string; mime: 
   } catch (canvasErr) {
     // Fallback : envoyer le fichier raw sans compression
     // Le modèle IA (Gemini / GPT-4o) supporte HEIC, WebP, PNG, JPEG nativement
-    console.warn("[scan-meal] canvas compression failed, fallback raw:", canvasErr);
     const parts = dataUrl.split(",");
     const mimeMatch = parts[0]?.match(/data:(image\/[^;]+)/);
     return {
@@ -495,7 +494,6 @@ function MealScanSheet({
       const { b64, mime } = await fileToBase64Compressed(file);
       setPreview(`data:${mime};base64,${b64}`);
 
-      console.log("[MealScan] envoi image, b64 length:", b64.length, "mime:", mime);
       if (!b64 || b64.length < 100) throw new Error("Image vide ou illisible. Réessaie.");
 
       const { data, error } = await supabase.functions.invoke("scan-meal", {
