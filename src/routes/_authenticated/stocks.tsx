@@ -17,6 +17,8 @@ import {
   Trash2,
   X,
   ArrowLeft,
+  CheckCircle2,
+
 } from "lucide-react";
 import { ScanSheet } from "@/components/ScanSheet";
 import { BarcodeScannerSheet } from "@/components/BarcodeScannerSheet";
