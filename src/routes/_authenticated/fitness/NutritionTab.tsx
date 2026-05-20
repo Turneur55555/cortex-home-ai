@@ -109,7 +109,7 @@ async function fileToBase64Compressed(file: File): Promise<{ b64: string; mime: 
 
     return { b64: out.split(",")[1] ?? "", mime: "image/jpeg" };
 
-  } catch (canvasErr) {
+  } catch {
     // Fallback : envoyer le fichier raw sans compression
     // Le modèle IA (Gemini / GPT-4o) supporte HEIC, WebP, PNG, JPEG nativement
     const parts = dataUrl.split(",");
