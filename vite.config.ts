@@ -12,4 +12,46 @@ export default defineConfig({
   tanstackStart: {
     server: { entry: "server" },
   },
+  vite: {
+    build: {
+      // Seuil d'alerte pour les chunks (en Ko)
+      chunkSizeWarningLimit: 600,
+      // esbuild est inclus dans Vite — rapide, sans dépendance externe
+      minify: "esbuild",
+      rollupOptions: {
+        output: {
+          manualChunks: (id) => {
+            if (id.includes("node_modules")) {
+              // UI — Radix + lucide-react
+              if (
+                id.includes("@radix-ui") ||
+                id.includes("lucide-react")
+              ) {
+                return "vendor-ui";
+              }
+              // Charts — recharts (d3 non présent en dépendance directe)
+              if (id.includes("recharts")) {
+                return "vendor-charts";
+              }
+              // Supabase
+              if (id.includes("@supabase")) {
+                return "vendor-supabase";
+              }
+              // TanStack — router + query + start
+              if (id.includes("@tanstack")) {
+                return "vendor-tanstack";
+              }
+              // React core
+              if (
+                id.includes("react-dom") ||
+                id.includes("react/")
+              ) {
+                return "vendor-react";
+              }
+            }
+          },
+        },
+      },
+    },
+  },
 });
