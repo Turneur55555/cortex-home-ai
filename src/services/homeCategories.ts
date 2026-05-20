@@ -92,3 +92,13 @@ export async function reorderCategories(
   await Promise.all(updates);
 }
 
+export async function deleteCategories(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const { error } = await supabase
+    .from("home_categories")
+    .delete()
+    .in("id", ids);
+  if (error) throw error;
+}
+
+
