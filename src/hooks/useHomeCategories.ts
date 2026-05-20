@@ -155,6 +155,33 @@ export function useDeleteCategory() {
   });
 }
 
+export function useBulkDeleteCategories() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids: string[]) => deleteCategories(ids),
+    onMutate: async (ids) => {
+      await qc.cancelQueries({ queryKey: QK });
+      const prev = qc.getQueryData<HomeCategory[]>(QK);
+      const set = new Set(ids);
+      qc.setQueryData<HomeCategory[]>(QK, (old = []) => old.filter((c) => !set.has(c.id)));
+      return { prev };
+    },
+    onSuccess: (_d, ids) => {
+      toast.success(
+        ids.length > 1
+          ? `${ids.length} catégories supprimées`
+          : "Catégorie supprimée",
+      );
+    },
+    onError: (e: Error, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(QK, ctx.prev);
+      toast.error(e.message);
+    },
+    onSettled: () => void qc.invalidateQueries({ queryKey: QK }),
+  });
+}
+
+
 // ─── Reorder ──────────────────────────────────────────────────────────────────
 
 export function useReorderCategories() {
