@@ -38,11 +38,9 @@ export function useHomeCategories() {
     if ((query.data?.length ?? -1) !== 0) return;
     if (seededRef.current) return;
     seededRef.current = true;
-    console.log("[useHomeCategories] aucune catégorie, seed automatique…");
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (supabase.rpc as any)("ensure_home_categories_for_me").then(({ error }: { error: unknown }) => {
-      if (error) console.error("[useHomeCategories] seed échoué :", error);
-      else void qc.invalidateQueries({ queryKey: QK });
+      if (!error) void qc.invalidateQueries({ queryKey: QK });
     });
   }, [query.isLoading, query.error, query.data, qc]);
 

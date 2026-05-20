@@ -1,5 +1,5 @@
 // Analyse une photo de repas → estime calories + macros via IA.
-// Tente LOVABLE_API_KEY (Gemini 2.5 Pro) puis OPENAI_API_KEY (GPT-4o) en fallback.
+// Tente LOVABLE_API_KEY (Gemini 2.5 Flash) puis OPENAI_API_KEY (GPT-4o) en fallback.
 // Retourne TOUJOURS HTTP 200 — les erreurs sont dans { error: "..." }.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { checkRateLimit, recordRateLimit } from "../_shared/rate-limit.ts";
@@ -129,15 +129,16 @@ function extractMealFromAiResponse(aiJson: unknown): MealResult | null {
 // ─── Appels IA ────────────────────────────────────────────────────────────────
 
 async function callLovable(apiKey: string, b64: string, mt: string): Promise<unknown> {
-  console.log("[scan-meal] → Lovable gateway (Gemini 2.5 Pro), b64 length:", b64.length);
+  console.log("[scan-meal] → Lovable gateway (Gemini 2.5 Flash), b64 length:", b64.length);
   const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
     headers: {
       "Lovable-API-Key": apiKey,
       "Content-Type": "application/json",
     },
+    signal: AbortSignal.timeout(45_000),
     body: JSON.stringify({
-      model: "google/gemini-2.5-pro",
+      model: "google/gemini-2.5-flash",
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         {
@@ -176,6 +177,7 @@ async function callOpenAI(apiKey: string, b64: string, mt: string): Promise<unkn
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
+    signal: AbortSignal.timeout(45_000),
     body: JSON.stringify({
       model: "gpt-4o",
       messages: [

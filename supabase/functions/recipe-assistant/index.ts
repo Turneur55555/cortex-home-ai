@@ -125,6 +125,7 @@ Réponds UNIQUEMENT en JSON valide avec cette structure exacte :
     const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(45_000),
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
         messages: [
@@ -139,7 +140,8 @@ Réponds UNIQUEMENT en JSON valide avec cette structure exacte :
     if (resp.status === 402) return fail("Crédits IA épuisés.", 402);
     if (!resp.ok) {
       const txt = await resp.text();
-      return fail("Erreur d'analyse IA", 502, `${resp.status} ${txt.slice(0, 300)}`);
+      console.error("[recipe-assistant] AI error:", resp.status, txt.slice(0, 500));
+      return fail("Erreur d'analyse IA. Réessaie dans un instant.", 502);
     }
 
     const data = await resp.json();

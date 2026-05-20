@@ -425,8 +425,7 @@ export function BarcodeScannerSheet({ roomId = "cuisine", onClose }: { roomId?: 
           if (result) { const code = result.getText(); stopCamera(); fetchProduct(code); }
         },
       );
-    } catch (e) {
-      console.error(e);
+    } catch {
       setCamStatus("denied");
       setScanning(false);
       setError("Accès caméra refusé");
@@ -458,8 +457,8 @@ export function BarcodeScannerSheet({ roomId = "cuisine", onClose }: { roomId?: 
       });
       toast.success("Ajouté aux stocks");
       onClose();
-    } catch (e) {
-      console.error("Failed to add to stock", e);
+    } catch {
+      // error handled via toast in mutateAsync
     }
   };
 
@@ -486,8 +485,8 @@ export function BarcodeScannerSheet({ roomId = "cuisine", onClose }: { roomId?: 
       });
       toast.success("Ajouté à la nutrition");
       onClose();
-    } catch (e) {
-      console.error("Failed to add to nutrition", e);
+    } catch {
+      // error handled via toast in mutateAsync
     }
   };
 

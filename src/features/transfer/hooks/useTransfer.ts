@@ -12,12 +12,10 @@ export function useTransfer() {
   const transfer = useCallback(
     async (target: TransferTarget, items: Array<Record<string, unknown>>) => {
       setStatus({ phase: "pending" });
-      console.log("[TRANSFER HOOK] Starting", { target, itemCount: items.length });
 
       try {
         const count = await transferData(target, items);
         setStatus({ phase: "success", count, target });
-        console.log("[TRANSFER HOOK] Success", { count });
 
         if (count === 0) {
           toast.info("Aucune donnée exploitable à ajouter");
@@ -33,7 +31,6 @@ export function useTransfer() {
         return count;
       } catch (err) {
         const message = err instanceof Error ? err.message : "Erreur lors du déversement";
-        console.error("[TRANSFER HOOK] Error", err);
         setStatus({ phase: "error", message });
         toast.error(message);
         throw err;

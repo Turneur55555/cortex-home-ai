@@ -42,7 +42,6 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   const [supportId, setSupportId] = useState<string | null>(null);
 
   useEffect(() => {
-    console.error(error);
     logError(
       {
         level: "error",

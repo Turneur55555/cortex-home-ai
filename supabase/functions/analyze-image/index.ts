@@ -392,6 +392,7 @@ Tout le texte (summary, insights, alerts) doit être en FRANÇAIS.`;
         Authorization: `Bearer ${OPENAI_API_KEY}`,
         "Content-Type": "application/json",
       },
+      signal: AbortSignal.timeout(45_000),
       body: JSON.stringify({
         model: "gpt-4o",
         messages: [

@@ -36,7 +36,6 @@ export function TransferPanel({ items, defaultTarget, onSuccess, className }: Pr
 
   const handleTransfer = async () => {
     if (!canTransfer || status.phase === "pending") return;
-    console.log("[TRANSFER PANEL] Déversement", { target, totalItems });
     try {
       await transfer(target, items);
       onSuccess?.();

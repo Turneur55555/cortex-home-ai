@@ -134,6 +134,7 @@ ${JSON.stringify(summary, null, 2)}`;
     const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: { "Lovable-API-Key": LOVABLE_API_KEY, "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(45_000),
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
         messages: [
@@ -149,7 +150,8 @@ ${JSON.stringify(summary, null, 2)}`;
       const txt = await aiRes.text();
       if (aiRes.status === 429) return fail("Limite de requêtes atteinte.", 429);
       if (aiRes.status === 402) return fail("Crédits IA épuisés.", 402);
-      return fail("Erreur d'analyse IA", 502, `${aiRes.status} ${txt.slice(0, 500)}`);
+      console.error("[muscle-readiness] AI error:", aiRes.status, txt.slice(0, 500));
+      return fail("Erreur d'analyse IA. Réessaie dans un instant.", 502);
     }
 
     const aiJson = await aiRes.json();

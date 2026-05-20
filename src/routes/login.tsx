@@ -69,9 +69,7 @@ function LoginPage() {
         if (error) throw error;
         navigate({ to: "/" });
       }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error("[auth] erreur :", msg, err);
+    } catch {
       toast.error(
         mode === "signup"
           ? "Si cet email n'est pas déjà utilisé, votre compte a été créé. Vérifiez votre messagerie."

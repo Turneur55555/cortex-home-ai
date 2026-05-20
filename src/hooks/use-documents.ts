@@ -134,27 +134,22 @@ export function useUploadAndAnalyze() {
         .upload(path, uploadBlob, { contentType, upsert: false });
       if (upErr) throw upErr;
 
-      console.log("[AI] invoke analyze-pdf →", { path, module, contentType });
       const { data: ai, error: fnErr } = await supabase.functions.invoke("analyze-pdf", {
         body: { storage_path: path, module, name: displayName, content_type: contentType },
       });
 
       if (fnErr) {
-        console.error("[AI] fnErr type:", fnErr.constructor?.name, fnErr);
         let friendlyMsg = isImage
           ? "Impossible d'analyser cette image. Essayez un format JPG ou PNG clair."
           : "Impossible d'analyser ce PDF. Vérifiez que le fichier n'est pas corrompu.";
         if (fnErr instanceof FunctionsFetchError) {
-          console.error("[AI] FunctionsFetchError (réseau/CORS):", fnErr.message);
           friendlyMsg = "Service d'analyse inaccessible (erreur réseau). Réessaie dans un instant.";
         } else if (fnErr instanceof FunctionsHttpError) {
           const body = await (fnErr.context as Response).json().catch(() => null) as Record<string, unknown> | null;
-          console.error("[AI] FunctionsHttpError body:", body);
           if (body?.error && typeof body.error === "string") friendlyMsg = body.error;
         }
         throw new Error(friendlyMsg);
       }
-      console.log("[AI] response:", ai);
       if (ai?.error) throw new Error(ai.error);
 
       const result = ai as AnalysisResult;

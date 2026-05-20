@@ -40,15 +40,10 @@ export async function transferData(
   target: TransferTarget,
   items: Array<Record<string, unknown>>,
 ): Promise<number> {
-  console.log("[TRANSFER START]", { target, count: items.length });
-  console.log("[TRANSFER PAYLOAD]", JSON.stringify(items, null, 2));
-
   const { data: { user }, error: authErr } = await supabase.auth.getUser();
   if (authErr || !user) {
-    console.error("[TRANSFER AUTH ERROR]", authErr);
     throw new Error("Non authentifié");
   }
-  console.log("[TRANSFER USER]", user.id);
 
   if (!items.length) return 0;
 
@@ -75,11 +70,9 @@ export async function transferData(
       }))
       .filter((r) => r.name !== "Sans nom" || r.category !== "autre");
 
-    console.log("[TRANSFER ROWS]", rows);
     if (!rows.length) return 0;
     const { error, count } = await supabase.from("items").insert(rows, { count: "exact" });
-    console.log("[TRANSFER RESULT]", { error, count });
-    if (error) { console.error("[TRANSFER SUPABASE ERROR]", error); throw error; }
+    if (error) { throw error; }
     return count ?? rows.length;
   }
 
@@ -105,11 +98,9 @@ export async function transferData(
           r.fats != null,
       );
 
-    console.log("[TRANSFER ROWS]", rows);
     if (!rows.length) return 0;
     const { error, count } = await supabase.from("nutrition").insert(rows, { count: "exact" });
-    console.log("[TRANSFER RESULT]", { error, count });
-    if (error) { console.error("[TRANSFER SUPABASE ERROR]", error); throw error; }
+    if (error) { throw error; }
     return count ?? rows.length;
   }
 
@@ -145,13 +136,11 @@ export async function transferData(
           Boolean(r.notes),
       );
 
-    console.log("[TRANSFER ROWS]", rows);
     if (!rows.length) return 0;
     const { error, count } = await supabase
       .from("body_tracking")
       .insert(rows, { count: "exact" });
-    console.log("[TRANSFER RESULT]", { error, count });
-    if (error) { console.error("[TRANSFER SUPABASE ERROR]", error); throw error; }
+    if (error) { throw error; }
     return count ?? rows.length;
   }
 
@@ -169,8 +158,7 @@ export async function transferData(
         })
         .select()
         .single();
-      console.log("[TRANSFER WORKOUT]", { w, error: wErr });
-      if (wErr) { console.error("[TRANSFER SUPABASE ERROR]", wErr); throw wErr; }
+      if (wErr) { throw wErr; }
 
       const exs = Array.isArray(it.exercises)
         ? (it.exercises as Array<Record<string, unknown>>)
@@ -185,15 +173,13 @@ export async function transferData(
           weight: num(ex.weight),
           notes: str(ex.notes),
         }));
-        console.log("[TRANSFER EXERCISES]", exerciseRows);
         const { error: eErr } = await supabase.from("exercises").insert(exerciseRows);
-        if (eErr) { console.error("[TRANSFER SUPABASE ERROR]", eErr); throw eErr; }
+        if (eErr) { throw eErr; }
       }
       total++;
     }
     return total;
   }
 
-  console.warn("[TRANSFER] Module non géré:", target);
   return 0;
 }

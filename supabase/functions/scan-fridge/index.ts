@@ -1,5 +1,5 @@
 // Scanne une photo (frigo, placard, etc.) via IA.
-// Tente LOVABLE_API_KEY (Gemini 2.5 Pro) puis OPENAI_API_KEY (GPT-4o) en fallback.
+// Tente LOVABLE_API_KEY (Gemini 2.5 Flash) puis OPENAI_API_KEY (GPT-4o) en fallback.
 // Retourne TOUJOURS HTTP 200 — les erreurs sont dans { error: "..." }.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { checkRateLimit, recordRateLimit } from "../_shared/rate-limit.ts";
@@ -90,15 +90,16 @@ async function callLovable(
   userText: string,
   tool: unknown
 ): Promise<unknown> {
-  console.log("[scan-fridge] → Lovable gateway (Gemini 2.5 Pro)");
+  console.log("[scan-fridge] → Lovable gateway (Gemini 2.5 Flash)");
   const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
     method: "POST",
     headers: {
       "Lovable-API-Key": apiKey,
       "Content-Type": "application/json",
     },
+    signal: AbortSignal.timeout(45_000),
     body: JSON.stringify({
-      model: "google/gemini-2.5-pro",
+      model: "google/gemini-2.5-flash",
       messages: [
         { role: "system", content: systemPrompt },
         {
@@ -141,6 +142,7 @@ async function callOpenAI(
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
+    signal: AbortSignal.timeout(45_000),
     body: JSON.stringify({
       model: "gpt-4o",
       messages: [
