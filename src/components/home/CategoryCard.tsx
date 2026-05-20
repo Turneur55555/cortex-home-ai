@@ -1,7 +1,8 @@
-import { memo } from "react";
-import { AlertTriangle, TrendingDown } from "lucide-react";
+import { memo, useRef } from "react";
+import { AlertTriangle, Check, TrendingDown, X } from "lucide-react";
 import { getIcon } from "@/lib/maison/icons";
 import { CategoryMenu } from "./CategoryMenu";
+import { cn } from "@/lib/utils";
 import type { HomeCategory, CategoryStats } from "@/types/home";
 
 interface CategoryCardProps {
@@ -13,6 +14,21 @@ interface CategoryCardProps {
   onManageCompartments: () => void;
   dragHandleProps?: React.HTMLAttributes<HTMLDivElement>;
   isDragging?: boolean;
+  // Multi-select edit mode
+  editMode?: boolean;
+  selected?: boolean;
+  onToggleSelect?: () => void;
+  onRequestEditMode?: () => void;
+}
+
+function triggerHaptic(ms = 12) {
+  if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+    try {
+      navigator.vibrate(ms);
+    } catch {
+      /* noop */
+    }
+  }
 }
 
 export const CategoryCard = memo(function CategoryCard({
@@ -24,20 +40,93 @@ export const CategoryCard = memo(function CategoryCard({
   onManageCompartments,
   dragHandleProps,
   isDragging,
+  editMode = false,
+  selected = false,
+  onToggleSelect,
+  onRequestEditMode,
 }: CategoryCardProps) {
   const Icon = getIcon(category.icon);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressTriggered = useRef(false);
+
+  const clearLongPress = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+
+  const handlePointerDown = () => {
+    if (editMode || !onRequestEditMode) return;
+    longPressTriggered.current = false;
+    longPressTimer.current = setTimeout(() => {
+      longPressTriggered.current = true;
+      triggerHaptic(20);
+      onRequestEditMode?.();
+    }, 500);
+  };
+
+  const handleClick = () => {
+    if (longPressTriggered.current) {
+      longPressTriggered.current = false;
+      return;
+    }
+    if (editMode) {
+      triggerHaptic(8);
+      onToggleSelect?.();
+      return;
+    }
+    onPress();
+  };
 
   return (
     <div
-      className={`relative flex flex-col gap-3 rounded-3xl border border-white/5 bg-surface p-4 cursor-pointer transition-all duration-200 select-none ${
-        isDragging ? "shadow-2xl scale-[1.02] opacity-90 z-50" : "hover:border-white/10 active:scale-[0.98]"
-      }`}
-      onClick={onPress}
+      className={cn(
+        "relative flex flex-col gap-3 rounded-3xl border p-4 cursor-pointer transition-all duration-200 select-none",
+        "bg-surface",
+        selected
+          ? "border-primary/70 shadow-[0_0_0_2px_oklch(0.62_0.22_285_/_0.6),0_8px_30px_-12px_oklch(0.62_0.22_285_/_0.5)]"
+          : "border-white/5 hover:border-white/10",
+        editMode && !selected && "border-white/10",
+        editMode && "animate-wiggle",
+        isDragging && "shadow-2xl scale-[1.02] opacity-90 z-50 animate-none",
+        !editMode && "active:scale-[0.98]",
+      )}
+      onClick={handleClick}
+      onPointerDown={handlePointerDown}
+      onPointerUp={clearLongPress}
+      onPointerLeave={clearLongPress}
+      onPointerCancel={clearLongPress}
+      onContextMenu={(e) => e.preventDefault()}
       role="button"
       tabIndex={0}
-      onKeyDown={(e) => e.key === "Enter" && onPress()}
-      aria-label={`Ouvrir ${category.name}`}
+      onKeyDown={(e) => e.key === "Enter" && handleClick()}
+      aria-label={editMode ? `Sélectionner ${category.name}` : `Ouvrir ${category.name}`}
+      aria-pressed={editMode ? selected : undefined}
     >
+      {/* Red delete cross — edit mode */}
+      {editMode && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            triggerHaptic(12);
+            onDelete();
+          }}
+          aria-label={`Supprimer ${category.name}`}
+          className="absolute -left-1.5 -top-1.5 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-destructive text-destructive-foreground shadow-lg ring-2 ring-background animate-none"
+        >
+          <X className="h-3.5 w-3.5" strokeWidth={3} />
+        </button>
+      )}
+
+      {/* Selected check — top right corner */}
+      {editMode && selected && (
+        <div className="absolute -right-1.5 -top-1.5 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg ring-2 ring-background animate-none">
+          <Check className="h-3.5 w-3.5" strokeWidth={3} />
+        </div>
+      )}
+
       {/* Icon + Menu */}
       <div className="flex items-start justify-between">
         <div
@@ -47,28 +136,29 @@ export const CategoryCard = memo(function CategoryCard({
           <Icon className="h-5 w-5" />
         </div>
 
-        <div className="flex items-center gap-1">
-          {/* Drag handle */}
-          {dragHandleProps && (
-            <div
-              {...dragHandleProps}
-              onClick={(e) => e.stopPropagation()}
-              className="flex h-7 w-7 cursor-grab items-center justify-center rounded-lg text-muted-foreground/40 hover:text-muted-foreground active:cursor-grabbing"
-              aria-label="Réorganiser"
-            >
-              <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M7 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 14a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 14a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
-              </svg>
-            </div>
-          )}
-          <CategoryMenu
-            onEdit={onEdit}
-            onDelete={onDelete}
-            onChangeColor={onEdit}
-            onChangeIcon={onEdit}
-            onManageCompartments={onManageCompartments}
-          />
-        </div>
+        {!editMode && (
+          <div className="flex items-center gap-1">
+            {dragHandleProps && (
+              <div
+                {...dragHandleProps}
+                onClick={(e) => e.stopPropagation()}
+                className="flex h-7 w-7 cursor-grab items-center justify-center rounded-lg text-muted-foreground/40 hover:text-muted-foreground active:cursor-grabbing"
+                aria-label="Réorganiser"
+              >
+                <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M7 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 14a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM13 14a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
+                </svg>
+              </div>
+            )}
+            <CategoryMenu
+              onEdit={onEdit}
+              onDelete={onDelete}
+              onChangeColor={onEdit}
+              onChangeIcon={onEdit}
+              onManageCompartments={onManageCompartments}
+            />
+          </div>
+        )}
       </div>
 
       {/* Name + count */}
