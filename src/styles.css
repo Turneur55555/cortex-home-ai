@@ -206,3 +206,14 @@
     text-wrap: balance;
   }
 }
+
+@layer utilities {
+  @keyframes wiggle {
+    0%, 100% { transform: rotate(-0.8deg); }
+    50%      { transform: rotate(0.8deg); }
+  }
+  .animate-wiggle {
+    animation: wiggle 0.22s ease-in-out infinite;
+    transform-origin: center;
+  }
+}
