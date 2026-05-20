@@ -22,6 +22,7 @@ import { useAddStockItem } from "@/hooks/use-stocks";
 import { useAddNutrition } from "@/hooks/use-fitness";
 import { Sheet } from "@/components/shared/FormComponents";
 import { format } from "date-fns";
+import { computeMacros, type ProductNutriments } from "@/lib/nutrition/macros";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -33,16 +34,7 @@ interface Product {
   nutrition_grades?: string;
   quantity?: string;
   serving_size?: string;
-  nutriments?: {
-    "energy-kcal_100g"?: number;
-    proteins_100g?: number;
-    carbohydrates_100g?: number;
-    fat_100g?: number;
-    "energy-kcal_serving"?: number;
-    proteins_serving?: number;
-    carbohydrates_serving?: number;
-    fat_serving?: number;
-  };
+  nutriments?: ProductNutriments;
   nova_group?: number;
 }
 
@@ -83,20 +75,6 @@ function parseProductQuantity(raw: string | undefined): { qty: number; unit: Uni
     case "cl":  return { qty: Math.round(num * 10),   unit: "ml" };
     default:    return { qty: Math.round(num), unit: rawUnit as Unit };
   }
-}
-
-function computeMacros(product: Product, totalQty: number) {
-  const n = product.nutriments;
-  const r = (v: number | undefined | null) =>
-    v != null ? Math.round((v * totalQty) / 100) : null;
-  const r1 = (v: number | undefined | null) =>
-    v != null ? Math.round((v * totalQty) / 100 * 10) / 10 : null;
-  return {
-    calories: r(n?.["energy-kcal_100g"]),
-    proteins: r1(n?.proteins_100g),
-    carbs:    r1(n?.carbohydrates_100g),
-    fats:     r1(n?.fat_100g),
-  };
 }
 
 function loadPresets(barcode: string): PortionPreset[] {
@@ -345,8 +323,8 @@ export function BarcodeScannerSheet({ roomId = "cuisine", onClose }: { roomId?: 
 
   // Computed macros based on current portion
   const totalQty = portionQty * portionCount;
-  const macros   = useMemo(() => product ? computeMacros(product, totalQty) : null, [product, totalQty]);
-  const per100   = useMemo(() => product ? computeMacros(product, 100) : null, [product]);
+  const macros   = useMemo(() => product ? computeMacros(product.nutriments, totalQty) : null, [product, totalQty]);
+  const per100   = useMemo(() => product ? computeMacros(product.nutriments, 100) : null, [product]);
 
   // Reset portion when product changes
   useEffect(() => {
@@ -464,7 +442,7 @@ export function BarcodeScannerSheet({ roomId = "cuisine", onClose }: { roomId?: 
 
   const handleAddToNutrition = async () => {
     if (!product || !macros) return;
-    const baseMacros = computeMacros(product, portionQty);
+    const baseMacros = computeMacros(product.nutriments, portionQty);
     try {
       await addNutrition.mutateAsync({
         date:                format(new Date(), "yyyy-MM-dd"),
