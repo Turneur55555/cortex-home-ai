@@ -1,4 +1,4 @@
-// Analyze PDF or image via Lovable AI Gateway (Gemini 2.5 Pro)
+// Analyze PDF or image via Lovable AI Gateway (Gemini 2.5 Flash)
 // Returns structured JSON: summary, key_insights[], alerts[], extracted_items[]
 // Items are typed for the target module so the client can "pour" them in.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
@@ -365,8 +365,9 @@ Deno.serve(async (req) => {
         "X-Lovable-AIG-SDK": "vercel-ai-sdk",
         "Content-Type": "application/json",
       },
+      signal: AbortSignal.timeout(45_000),
       body: JSON.stringify({
-        model: "google/gemini-2.5-pro",
+        model: "google/gemini-2.5-flash",
         messages: [
           { role: "system", content: systemPrompt },
           {
@@ -389,17 +390,11 @@ Deno.serve(async (req) => {
 
     if (!aiRes.ok) {
       const txt = await aiRes.text();
-      console.error("[analyze-pdf] Gemini error body:", txt.slice(0, 800));
+      console.error("[analyze-pdf] AI error:", aiRes.status, txt.slice(0, 500));
       if (aiRes.status === 429)
         return fail("Limite de requêtes atteinte. Réessayez dans un instant.", 429);
       if (aiRes.status === 402) return fail("Crédits IA épuisés.", 402);
-      return fail(
-        isImage
-          ? "Impossible d'analyser cette image. Essayez un format JPG ou PNG de bonne qualité."
-          : "Erreur d'analyse IA",
-        502,
-        `${aiRes.status} ${txt.slice(0, 500)}`,
-      );
+      return fail("Erreur d'analyse IA. Réessaie dans un instant.", 502);
     }
 
     let aiJson: unknown;
