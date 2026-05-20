@@ -321,19 +321,83 @@ function RoomsView({
           </p>
         </div>
       ) : (
-        <SortableCategoryList
-          categories={filteredCategories}
-          statsMap={statsMap}
-          onPress={(cat) => onRoomClick(cat.slug)}
-          onEdit={(cat) => setCatModal(cat)}
-          onDelete={(cat) => setDeleteTarget(cat)}
-          onManageCompartments={(cat) => setSubcatTarget(cat)}
-          onReorder={handleReorder}
-        />
+        <div className={editMode ? "pb-24" : undefined}>
+          <SortableCategoryList
+            categories={filteredCategories}
+            statsMap={statsMap}
+            onPress={(cat) => onRoomClick(cat.slug)}
+            onEdit={(cat) => setCatModal(cat)}
+            onDelete={(cat) => setDeleteTarget(cat)}
+            onManageCompartments={(cat) => setSubcatTarget(cat)}
+            onReorder={handleReorder}
+            editMode={editMode}
+            selectedIds={selectedIds}
+            onToggleSelect={toggleSelect}
+            onRequestEditMode={enterEditMode}
+          />
+        </div>
       )}
 
-      {/* FAB */}
-      <AddCategoryButton onClick={() => setCatModal("new")} />
+      {/* FAB — masqué en mode édition */}
+      {!editMode && <AddCategoryButton onClick={() => setCatModal("new")} />}
+
+      {/* Barre d'action fixe — mode édition */}
+      {editMode && (
+        <div
+          className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 px-4 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-3 backdrop-blur-xl animate-in slide-in-from-bottom duration-200"
+          role="toolbar"
+          aria-label="Actions de sélection"
+        >
+          <div className="mx-auto flex max-w-md items-center gap-2">
+            <button
+              type="button"
+              onClick={selectAll}
+              className="inline-flex h-11 flex-1 items-center justify-center gap-1.5 rounded-2xl border border-border bg-surface text-xs font-semibold text-foreground active:scale-[0.98]"
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              Tout sélectionner
+            </button>
+            <button
+              type="button"
+              disabled={selectedIds.size === 0 || bulkDeleteCats.isPending}
+              onClick={() => setBulkConfirmOpen(true)}
+              className="inline-flex h-11 flex-[1.4] items-center justify-center gap-2 rounded-2xl bg-destructive text-sm font-semibold text-destructive-foreground shadow-lg transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {bulkDeleteCats.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
+              Supprimer ({selectedIds.size})
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation suppression multiple */}
+      <AlertDialog open={bulkConfirmOpen} onOpenChange={setBulkConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Supprimer {selectedIds.size} catégorie{selectedIds.size > 1 ? "s" : ""} ?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Cette action est irréversible. Les objets associés ne seront pas supprimés mais
+              perdront leur catégorie.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDeleteConfirm}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Supprimer
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
 
       {/* Modal création / édition */}
       {catModal !== null && (
