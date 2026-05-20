@@ -142,12 +142,43 @@ function RoomsView({
   const createCat = useCreateCategory();
   const updateCat = useUpdateCategory();
   const deleteCat = useDeleteCategory();
+  const bulkDeleteCats = useBulkDeleteCategories();
   const reorderCats = useReorderCategories();
 
   // Modals state
   const [catModal, setCatModal] = useState<HomeCategory | "new" | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<HomeCategory | null>(null);
   const [subcatTarget, setSubcatTarget] = useState<HomeCategory | null>(null);
+
+  // Multi-select edit mode
+  const [editMode, setEditMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
+
+  const enterEditMode = useCallback(() => {
+    setEditMode(true);
+    setSelectedIds(new Set());
+  }, []);
+
+  const exitEditMode = useCallback(() => {
+    setEditMode(false);
+    setSelectedIds(new Set());
+    setBulkConfirmOpen(false);
+  }, []);
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const selectAll = useCallback(() => {
+    setSelectedIds(new Set(categories.map((c) => c.id)));
+  }, [categories]);
+
 
   const statsMap = useMemo(() => {
     const map = new Map<string, { count: number; expiring: number; lowStock: number }>();
