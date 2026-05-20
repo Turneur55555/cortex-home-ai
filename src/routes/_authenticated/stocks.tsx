@@ -47,8 +47,20 @@ import {
   useCreateCategory,
   useUpdateCategory,
   useDeleteCategory,
+  useBulkDeleteCategories,
   useReorderCategories,
 } from "@/hooks/useHomeCategories";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+
 import { useHomeSubcategories } from "@/hooks/useHomeSubcategories";
 import { getRoomById, getCompartmentById } from "@/lib/maison/rooms";
 import { getIcon } from "@/lib/maison/icons";
