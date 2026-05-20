@@ -16,8 +16,8 @@ export async function checkRateLimit(
     .eq("action", action)
     .gte("window_start", since);
   if (error) {
-    console.error("[rate-limit] check failed", error);
-    return { ok: true, count: 0 }; // fail-open to avoid locking out users on transient DB errors
+    console.error("[rate-limit] DB unavailable:", error);
+    return { ok: false, count: 0 }; // fail-close : en cas de doute, bloquer
   }
   return { ok: (count ?? 0) < maxPerHour, count: count ?? 0 };
 }
