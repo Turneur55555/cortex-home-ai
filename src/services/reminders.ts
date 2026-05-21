@@ -45,8 +45,7 @@ export const reminderInputSchema = z.object({
 export type ReminderInput = z.infer<typeof reminderInputSchema>;
 
 const TABLE = "reminders" as const;
-// @ts-expect-error - reminders not yet in generated types
-const db = () => supabase.from(TABLE);
+const db = () => (supabase as unknown as { from: (t: string) => ReturnType<typeof supabase.from> }).from(TABLE);
 
 export async function listReminders(): Promise<Reminder[]> {
   const { data, error } = await db()
@@ -87,9 +86,7 @@ export async function toggleComplete(r: Reminder): Promise<Reminder> {
   return updateReminder(r.id, {
     status: done ? "done" : "todo",
   } as Partial<ReminderInput>).then(async (res) => {
-    // also stamp completed_at via direct update (not in schema)
-    // @ts-expect-error untyped
-    await supabase.from(TABLE).update({ completed_at: done ? new Date().toISOString() : null }).eq("id", r.id);
+    await db().update({ completed_at: done ? new Date().toISOString() : null }).eq("id", r.id);
     return { ...res, completed_at: done ? new Date().toISOString() : null };
   });
 }
