@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Download, KeyRound, LogOut, Mail, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
@@ -46,7 +47,7 @@ export function SecurityPanel() {
       const tables = ["items", "nutrition", "workouts", "exercises", "body_tracking", "food_preferences", "documents"] as const;
       const payload: Record<string, unknown> = { exported_at: new Date().toISOString(), user_id: user.id };
       for (const t of tables) {
-        const { data } = await (supabase as any).from(t).select("*").eq("user_id", user.id);
+        const { data } = await (supabase as unknown as SupabaseClient).from(t).select("*").eq("user_id", user.id);
         payload[t] = data ?? [];
       }
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
