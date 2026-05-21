@@ -29,6 +29,7 @@ CREATE INDEX IF NOT EXISTS idx_home_subcategories_category ON public.home_subcat
 ALTER TABLE public.home_categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.home_subcategories ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users manage own categories" ON public.home_categories;
 CREATE POLICY "Users manage own categories"
 ON public.home_categories
 FOR ALL
@@ -36,6 +37,7 @@ TO authenticated
 USING (auth.uid() = user_id)
 WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users manage own subcategories" ON public.home_subcategories;
 CREATE POLICY "Users manage own subcategories"
 ON public.home_subcategories
 FOR ALL

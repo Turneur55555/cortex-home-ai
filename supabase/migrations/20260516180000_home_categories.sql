@@ -13,9 +13,13 @@ CREATE TABLE IF NOT EXISTS public.home_categories (
 
 ALTER TABLE public.home_categories ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "hc_select" ON public.home_categories;
 CREATE POLICY "hc_select" ON public.home_categories FOR SELECT USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "hc_insert" ON public.home_categories;
 CREATE POLICY "hc_insert" ON public.home_categories FOR INSERT WITH CHECK (auth.uid() = user_id);
+DROP POLICY IF EXISTS "hc_update" ON public.home_categories;
 CREATE POLICY "hc_update" ON public.home_categories FOR UPDATE USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "hc_delete" ON public.home_categories;
 CREATE POLICY "hc_delete" ON public.home_categories FOR DELETE USING (auth.uid() = user_id);
 
 CREATE INDEX IF NOT EXISTS idx_home_categories_user
@@ -36,9 +40,13 @@ CREATE TABLE IF NOT EXISTS public.home_subcategories (
 
 ALTER TABLE public.home_subcategories ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "hs_select" ON public.home_subcategories;
 CREATE POLICY "hs_select" ON public.home_subcategories FOR SELECT USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "hs_insert" ON public.home_subcategories;
 CREATE POLICY "hs_insert" ON public.home_subcategories FOR INSERT WITH CHECK (auth.uid() = user_id);
+DROP POLICY IF EXISTS "hs_update" ON public.home_subcategories;
 CREATE POLICY "hs_update" ON public.home_subcategories FOR UPDATE USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "hs_delete" ON public.home_subcategories;
 CREATE POLICY "hs_delete" ON public.home_subcategories FOR DELETE USING (auth.uid() = user_id);
 
 CREATE INDEX IF NOT EXISTS idx_home_subcategories_category

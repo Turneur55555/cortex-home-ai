@@ -35,9 +35,11 @@ EXCEPTION WHEN OTHERS THEN NULL; END $$;
 CREATE POLICY "Users select own profile" ON public.users_profiles
   FOR SELECT TO authenticated USING (auth.uid() = id);
 
+DROP POLICY IF EXISTS "Users insert own profile" ON public.users_profiles;
 CREATE POLICY "Users insert own profile" ON public.users_profiles
   FOR INSERT TO authenticated WITH CHECK (auth.uid() = id);
 
+DROP POLICY IF EXISTS "Users update own profile" ON public.users_profiles;
 CREATE POLICY "Users update own profile" ON public.users_profiles
   FOR UPDATE TO authenticated USING (auth.uid() = id) WITH CHECK (auth.uid() = id);
 
@@ -324,8 +326,11 @@ DROP POLICY IF EXISTS "Block update on rate_limits"  ON public.rate_limits;
 DROP POLICY IF EXISTS "Block delete on rate_limits"  ON public.rate_limits;
 
 CREATE POLICY "Users see own rate limits"    ON public.rate_limits FOR SELECT USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users insert own rate limits" ON public.rate_limits;
 CREATE POLICY "Users insert own rate limits" ON public.rate_limits FOR INSERT WITH CHECK (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Block update on rate_limits" ON public.rate_limits;
 CREATE POLICY "Block update on rate_limits"  ON public.rate_limits AS RESTRICTIVE FOR UPDATE TO public USING (false) WITH CHECK (false);
+DROP POLICY IF EXISTS "Block delete on rate_limits" ON public.rate_limits;
 CREATE POLICY "Block delete on rate_limits"  ON public.rate_limits AS RESTRICTIVE FOR DELETE TO public USING (false);
 
 CREATE INDEX IF NOT EXISTS idx_rate_limits_user_action ON public.rate_limits(user_id, action, window_start);
@@ -355,6 +360,7 @@ DROP POLICY IF EXISTS "Users view own errors"   ON public.error_logs;
 
 CREATE POLICY "Users insert own errors" ON public.error_logs
   FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users view own errors" ON public.error_logs;
 CREATE POLICY "Users view own errors" ON public.error_logs
   FOR SELECT USING (auth.uid() = user_id);
 
@@ -473,9 +479,11 @@ CREATE INDEX IF NOT EXISTS idx_home_subcategories_cat   ON public.home_subcatego
 ALTER TABLE public.home_categories    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.home_subcategories ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "hc_all" ON public.home_categories;
 CREATE POLICY "hc_all" ON public.home_categories
   FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "hs_all" ON public.home_subcategories;
 CREATE POLICY "hs_all" ON public.home_subcategories
   FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
@@ -610,21 +618,26 @@ CREATE POLICY "Users read own files" ON storage.objects FOR SELECT
   USING (bucket_id IN ('food-images','clothes-images','pharmacy-images','pdf-documents','exercise-images')
     AND auth.uid()::text = (storage.foldername(name))[1]);
 
+DROP POLICY IF EXISTS "Users upload own files" ON storage.objects;
 CREATE POLICY "Users upload own files" ON storage.objects FOR INSERT
   WITH CHECK (bucket_id IN ('food-images','clothes-images','pharmacy-images','pdf-documents','exercise-images')
     AND auth.uid()::text = (storage.foldername(name))[1]);
 
+DROP POLICY IF EXISTS "Users update own files" ON storage.objects;
 CREATE POLICY "Users update own files" ON storage.objects FOR UPDATE
   USING (bucket_id IN ('food-images','clothes-images','pharmacy-images','pdf-documents','exercise-images')
     AND auth.uid()::text = (storage.foldername(name))[1]);
 
+DROP POLICY IF EXISTS "Users delete own files" ON storage.objects;
 CREATE POLICY "Users delete own files" ON storage.objects FOR DELETE
   USING (bucket_id IN ('food-images','clothes-images','pharmacy-images','pdf-documents','exercise-images')
     AND auth.uid()::text = (storage.foldername(name))[1]);
 
+DROP POLICY IF EXISTS "Users can view own health images" ON storage.objects;
 CREATE POLICY "Users can view own health images" ON storage.objects FOR SELECT TO authenticated
   USING (bucket_id = 'health-images' AND auth.uid()::text = (storage.foldername(name))[1]);
 
+DROP POLICY IF EXISTS "Users can delete own health images" ON storage.objects;
 CREATE POLICY "Users can delete own health images" ON storage.objects FOR DELETE TO authenticated
   USING (bucket_id = 'health-images' AND auth.uid()::text = (storage.foldername(name))[1]);
 

@@ -49,5 +49,10 @@ CREATE TRIGGER trg_reminders_updated_at
   BEFORE UPDATE ON public.reminders
   FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();
 
-ALTER PUBLICATION supabase_realtime ADD TABLE public.reminders;
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.reminders;
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
 ALTER TABLE public.reminders REPLICA IDENTITY FULL;

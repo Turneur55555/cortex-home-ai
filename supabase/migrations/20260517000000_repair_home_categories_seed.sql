@@ -67,11 +67,13 @@ CREATE INDEX IF NOT EXISTS idx_home_subcategories_cat
 ALTER TABLE public.home_categories    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.home_subcategories ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "hc_all" ON public.home_categories;
 CREATE POLICY "hc_all" ON public.home_categories
   FOR ALL TO authenticated
   USING     (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "hs_all" ON public.home_subcategories;
 CREATE POLICY "hs_all" ON public.home_subcategories
   FOR ALL TO authenticated
   USING     (auth.uid() = user_id)

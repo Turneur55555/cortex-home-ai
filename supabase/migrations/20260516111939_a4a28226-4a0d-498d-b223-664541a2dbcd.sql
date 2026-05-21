@@ -8,16 +8,19 @@ DROP POLICY IF EXISTS "Users select own profile" ON public.users_profiles;
 
 ALTER TABLE public.users_profiles DROP COLUMN IF EXISTS premium;
 
+DROP POLICY IF EXISTS "Users select own profile" ON public.users_profiles;
 CREATE POLICY "Users select own profile"
   ON public.users_profiles FOR SELECT
   TO authenticated
   USING (auth.uid() = id);
 
+DROP POLICY IF EXISTS "Users insert own profile" ON public.users_profiles;
 CREATE POLICY "Users insert own profile"
   ON public.users_profiles FOR INSERT
   TO authenticated
   WITH CHECK (auth.uid() = id);
 
+DROP POLICY IF EXISTS "Users update own profile" ON public.users_profiles;
 CREATE POLICY "Users update own profile"
   ON public.users_profiles FOR UPDATE
   TO authenticated

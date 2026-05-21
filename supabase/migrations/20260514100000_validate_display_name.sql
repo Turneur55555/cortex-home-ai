@@ -35,7 +35,8 @@ BEGIN
       AND tablename  = 'users_profiles'
       AND policyname = 'Users select own profile'
   ) THEN
-    CREATE POLICY "Users select own profile" ON public.users_profiles
+    DROP POLICY IF EXISTS "Users select own profile" ON public.users_profiles;
+CREATE POLICY "Users select own profile" ON public.users_profiles
       FOR SELECT USING (auth.uid() = id);
   END IF;
 
@@ -46,7 +47,8 @@ BEGIN
       AND tablename  = 'users_profiles'
       AND policyname = 'Users insert own profile'
   ) THEN
-    CREATE POLICY "Users insert own profile" ON public.users_profiles
+    DROP POLICY IF EXISTS "Users insert own profile" ON public.users_profiles;
+CREATE POLICY "Users insert own profile" ON public.users_profiles
       FOR INSERT TO authenticated
       WITH CHECK (auth.uid() = id AND premium = false);
   END IF;
@@ -58,7 +60,8 @@ BEGIN
       AND tablename  = 'users_profiles'
       AND policyname = 'Users update own profile'
   ) THEN
-    CREATE POLICY "Users update own profile" ON public.users_profiles
+    DROP POLICY IF EXISTS "Users update own profile" ON public.users_profiles;
+CREATE POLICY "Users update own profile" ON public.users_profiles
       FOR UPDATE TO authenticated
       USING  (auth.uid() = id)
       WITH CHECK (auth.uid() = id);

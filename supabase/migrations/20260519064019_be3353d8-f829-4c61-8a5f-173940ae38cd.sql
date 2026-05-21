@@ -13,10 +13,13 @@ CREATE INDEX IF NOT EXISTS idx_user_pdfs_user_id ON public.user_pdfs(user_id, cr
 
 ALTER TABLE public.user_pdfs ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users select own pdfs" ON public.user_pdfs;
 CREATE POLICY "Users select own pdfs" ON public.user_pdfs
   FOR SELECT TO authenticated USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users insert own pdfs" ON public.user_pdfs;
 CREATE POLICY "Users insert own pdfs" ON public.user_pdfs
   FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users delete own pdfs" ON public.user_pdfs;
 CREATE POLICY "Users delete own pdfs" ON public.user_pdfs
   FOR DELETE TO authenticated USING (auth.uid() = user_id);
 
@@ -26,14 +29,17 @@ VALUES ('pdfs', 'pdfs', false)
 ON CONFLICT (id) DO NOTHING;
 
 -- Storage policies : chaque utilisateur gère son propre dossier
+DROP POLICY IF EXISTS "Users read own pdfs in storage" ON storage.objects;
 CREATE POLICY "Users read own pdfs in storage" ON storage.objects
   FOR SELECT TO authenticated
   USING (bucket_id = 'pdfs' AND auth.uid()::text = (storage.foldername(name))[1]);
 
+DROP POLICY IF EXISTS "Users upload own pdfs to storage" ON storage.objects;
 CREATE POLICY "Users upload own pdfs to storage" ON storage.objects
   FOR INSERT TO authenticated
   WITH CHECK (bucket_id = 'pdfs' AND auth.uid()::text = (storage.foldername(name))[1]);
 
+DROP POLICY IF EXISTS "Users delete own pdfs from storage" ON storage.objects;
 CREATE POLICY "Users delete own pdfs from storage" ON storage.objects
   FOR DELETE TO authenticated
   USING (bucket_id = 'pdfs' AND auth.uid()::text = (storage.foldername(name))[1]);

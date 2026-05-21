@@ -17,10 +17,11 @@ CREATE TABLE IF NOT EXISTS public.stock_history (
 
 ALTER TABLE public.stock_history ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users manage own stock history" ON public.stock_history;
 CREATE POLICY "Users manage own stock history"
   ON public.stock_history FOR ALL
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
 
-CREATE INDEX idx_stock_history_user ON public.stock_history (user_id, created_at DESC);
-CREATE INDEX idx_stock_history_item ON public.stock_history (item_id) WHERE item_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_stock_history_user ON public.stock_history (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_stock_history_item ON public.stock_history (item_id) WHERE item_id IS NOT NULL;

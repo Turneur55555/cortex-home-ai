@@ -24,11 +24,13 @@ $$;
 ALTER TABLE ai_cache ENABLE ROW LEVEL SECURITY;
 
 -- Un user ne peut voir que son propre cache
+DROP POLICY IF EXISTS "Users can read own cache" ON ai_cache;
 CREATE POLICY "Users can read own cache"
   ON ai_cache FOR SELECT TO authenticated
   USING (user_id = auth.uid());
 
 -- Seul le service role peut insérer/supprimer (depuis les edge functions)
+DROP POLICY IF EXISTS "Service role manages cache" ON ai_cache;
 CREATE POLICY "Service role manages cache"
   ON ai_cache FOR ALL TO service_role
   USING (true) WITH CHECK (true);

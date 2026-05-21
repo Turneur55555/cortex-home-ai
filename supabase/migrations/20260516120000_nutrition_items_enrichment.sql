@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS public.shopping_list (
 
 ALTER TABLE public.shopping_list ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users manage own shopping list" ON public.shopping_list;
 CREATE POLICY "Users manage own shopping list"
   ON public.shopping_list FOR ALL
   USING  (auth.uid() = user_id)

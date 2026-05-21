@@ -2,7 +2,7 @@
 -- ============================================
 -- USERS PROFILES
 -- ============================================
-create table public.users_profiles (
+CREATE TABLE IF NOT EXISTS public.users_profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   premium boolean not null default false,
   created_at timestamptz not null default now()
@@ -10,10 +10,13 @@ create table public.users_profiles (
 
 alter table public.users_profiles enable row level security;
 
+DROP POLICY IF EXISTS "Users select own profile" ON public.users_profiles;
 create policy "Users select own profile" on public.users_profiles
   for select using (auth.uid() = id);
+DROP POLICY IF EXISTS "Users insert own profile" ON public.users_profiles;
 create policy "Users insert own profile" on public.users_profiles
   for insert with check (auth.uid() = id);
+DROP POLICY IF EXISTS "Users update own profile" ON public.users_profiles;
 create policy "Users update own profile" on public.users_profiles
   for update using (auth.uid() = id);
 
@@ -31,6 +34,7 @@ begin
 end;
 $$;
 
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
@@ -38,7 +42,7 @@ create trigger on_auth_user_created
 -- ============================================
 -- ITEMS
 -- ============================================
-create table public.items (
+CREATE TABLE IF NOT EXISTS public.items (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   name text not null check (char_length(name) <= 200),
@@ -56,13 +60,14 @@ create table public.items (
 );
 
 alter table public.items enable row level security;
+DROP POLICY IF EXISTS "Users manage own items" ON public.items;
 create policy "Users manage own items" on public.items
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 -- ============================================
 -- BODY TRACKING
 -- ============================================
-create table public.body_tracking (
+CREATE TABLE IF NOT EXISTS public.body_tracking (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   date date not null check (date <= current_date),
@@ -81,13 +86,14 @@ create table public.body_tracking (
 );
 
 alter table public.body_tracking enable row level security;
+DROP POLICY IF EXISTS "Users manage own body" ON public.body_tracking;
 create policy "Users manage own body" on public.body_tracking
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 -- ============================================
 -- WORKOUTS
 -- ============================================
-create table public.workouts (
+CREATE TABLE IF NOT EXISTS public.workouts (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   date date not null,
@@ -98,13 +104,14 @@ create table public.workouts (
 );
 
 alter table public.workouts enable row level security;
+DROP POLICY IF EXISTS "Users manage own workouts" ON public.workouts;
 create policy "Users manage own workouts" on public.workouts
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 -- ============================================
 -- EXERCISES
 -- ============================================
-create table public.exercises (
+CREATE TABLE IF NOT EXISTS public.exercises (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   workout_id uuid not null references public.workouts(id) on delete cascade,
@@ -116,13 +123,14 @@ create table public.exercises (
 );
 
 alter table public.exercises enable row level security;
+DROP POLICY IF EXISTS "Users manage own exercises" ON public.exercises;
 create policy "Users manage own exercises" on public.exercises
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 -- ============================================
 -- NUTRITION
 -- ============================================
-create table public.nutrition (
+CREATE TABLE IF NOT EXISTS public.nutrition (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   date date not null,
@@ -136,13 +144,14 @@ create table public.nutrition (
 );
 
 alter table public.nutrition enable row level security;
+DROP POLICY IF EXISTS "Users manage own nutrition" ON public.nutrition;
 create policy "Users manage own nutrition" on public.nutrition
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 -- ============================================
 -- DOCUMENTS
 -- ============================================
-create table public.documents (
+CREATE TABLE IF NOT EXISTS public.documents (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   name text not null check (char_length(name) <= 200),
@@ -156,13 +165,14 @@ create table public.documents (
 );
 
 alter table public.documents enable row level security;
+DROP POLICY IF EXISTS "Users manage own documents" ON public.documents;
 create policy "Users manage own documents" on public.documents
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 -- ============================================
 -- RATE LIMITS
 -- ============================================
-create table public.rate_limits (
+CREATE TABLE IF NOT EXISTS public.rate_limits (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   action text not null check (action in ('scan_image','analyze_pdf')),
@@ -171,23 +181,25 @@ create table public.rate_limits (
 );
 
 alter table public.rate_limits enable row level security;
+DROP POLICY IF EXISTS "Users see own rate limits" ON public.rate_limits;
 create policy "Users see own rate limits" on public.rate_limits
   for select using (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users insert own rate limits" ON public.rate_limits;
 create policy "Users insert own rate limits" on public.rate_limits
   for insert with check (auth.uid() = user_id);
 
 -- ============================================
 -- INDEX
 -- ============================================
-create index idx_items_user_module on public.items(user_id, module);
-create index idx_items_expiration on public.items(expiration_date) where expiration_date is not null;
-create index idx_items_flagged on public.items(user_id, flagged) where flagged = true;
-create index idx_body_tracking_user_date on public.body_tracking(user_id, date desc);
-create index idx_workouts_user_date on public.workouts(user_id, date desc);
-create index idx_exercises_workout on public.exercises(workout_id);
-create index idx_nutrition_user_date on public.nutrition(user_id, date desc);
-create index idx_documents_user on public.documents(user_id);
-create index idx_rate_limits_user_action on public.rate_limits(user_id, action, window_start);
+CREATE INDEX IF NOT EXISTS idx_items_user_module on public.items(user_id, module);
+CREATE INDEX IF NOT EXISTS idx_items_expiration on public.items(expiration_date) where expiration_date is not null;
+CREATE INDEX IF NOT EXISTS idx_items_flagged on public.items(user_id, flagged) where flagged = true;
+CREATE INDEX IF NOT EXISTS idx_body_tracking_user_date on public.body_tracking(user_id, date desc);
+CREATE INDEX IF NOT EXISTS idx_workouts_user_date on public.workouts(user_id, date desc);
+CREATE INDEX IF NOT EXISTS idx_exercises_workout on public.exercises(workout_id);
+CREATE INDEX IF NOT EXISTS idx_nutrition_user_date on public.nutrition(user_id, date desc);
+CREATE INDEX IF NOT EXISTS idx_documents_user on public.documents(user_id);
+CREATE INDEX IF NOT EXISTS idx_rate_limits_user_action on public.rate_limits(user_id, action, window_start);
 
 -- ============================================
 -- TRIGGERS FREE PLAN
@@ -209,6 +221,7 @@ begin
 end;
 $$;
 
+DROP TRIGGER IF EXISTS check_free_plan_items ON public.items;
 create trigger check_free_plan_items
   before insert on public.items
   for each row execute function public.enforce_free_plan_items();
@@ -229,6 +242,7 @@ begin
 end;
 $$;
 
+DROP TRIGGER IF EXISTS check_free_plan_documents ON public.documents;
 create trigger check_free_plan_documents
   before insert on public.documents
   for each row execute function public.enforce_free_plan_documents();
@@ -243,24 +257,28 @@ insert into storage.buckets (id, name, public) values
   ('pdf-documents','pdf-documents',false)
 on conflict (id) do nothing;
 
+DROP POLICY IF EXISTS "Users read own files" ON storage.objects;
 create policy "Users read own files" on storage.objects
   for select using (
     bucket_id in ('food-images','clothes-images','pharmacy-images','pdf-documents')
     and auth.uid()::text = (storage.foldername(name))[1]
   );
 
+DROP POLICY IF EXISTS "Users upload own files" ON storage.objects;
 create policy "Users upload own files" on storage.objects
   for insert with check (
     bucket_id in ('food-images','clothes-images','pharmacy-images','pdf-documents')
     and auth.uid()::text = (storage.foldername(name))[1]
   );
 
+DROP POLICY IF EXISTS "Users update own files" ON storage.objects;
 create policy "Users update own files" on storage.objects
   for update using (
     bucket_id in ('food-images','clothes-images','pharmacy-images','pdf-documents')
     and auth.uid()::text = (storage.foldername(name))[1]
   );
 
+DROP POLICY IF EXISTS "Users delete own files" ON storage.objects;
 create policy "Users delete own files" on storage.objects
   for delete using (
     bucket_id in ('food-images','clothes-images','pharmacy-images','pdf-documents')

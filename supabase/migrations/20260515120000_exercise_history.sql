@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS public.exercise_history (
 
 ALTER TABLE public.exercise_history ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users manage own exercise history" ON public.exercise_history;
 CREATE POLICY "Users manage own exercise history"
   ON public.exercise_history
   FOR ALL

@@ -2,72 +2,200 @@ name: Supabase Migrations
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+  pull_request:
+    branches: [main]
     paths:
       - 'supabase/migrations/**'
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write   # auto-commit des corrections idempotentes
+  pull-requests: write
 
+# ─── Job 1 : Validation statique ────────────────────────────────────────────
 jobs:
-  migrate:
+  validate:
+    name: Validate migrations (static)
     runs-on: ubuntu-latest
+    outputs:
+      fixes_applied: ${{ steps.validate.outputs.fixes_applied }}
+
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Nécessaire pour pousser les auto-corrections
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run static validator
+        id: validate
+        run: |
+          node scripts/validate-supabase.mjs --fix --ci
+          if git diff --quiet supabase/migrations/; then
+            echo "fixes_applied=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "fixes_applied=true"  >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Auto-commit idempotency fixes
+        if: steps.validate.outputs.fixes_applied == 'true' && github.event_name == 'push'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add supabase/migrations/
+          git commit -m "ci: auto-fix migration idempotency [skip ci]"
+          git push
+
+      - name: Fail on unfixed issues (PR only)
+        if: steps.validate.outputs.fixes_applied == 'true' && github.event_name == 'pull_request'
+        run: |
+          echo "::error::Des migrations non-idempotentes ont été détectées."
+          echo "Lancez 'npm run validate:supabase:fix' localement et committez les corrections."
+          exit 1
+
+# ─── Job 2 : Push vers Supabase (main uniquement) ───────────────────────────
+  migrate:
+    name: Push migrations to Supabase
+    runs-on: ubuntu-latest
+    needs: validate
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: supabase/setup-cli@v1
         with:
           version: latest
 
+      # ── 1. Link ────────────────────────────────────────────────────────────
       - name: Link Supabase project
-        run: supabase link --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: supabase link --project-ref "$PROJECT_REF"
 
+      # ── 2. Détecter et réparer les migrations orphelines ──────────────────
       - name: Repair orphaned remote migrations
-        # Détecte les versions présentes dans schema_migrations mais absentes
-        # localement (suite à une suppression accidentelle de fichier) et les
-        # marque comme "reverted" pour débloquer le push suivant.
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        id: repair
         run: |
+          echo "Récupération de la liste des migrations distantes..."
+
+          # Comparer fichiers locaux vs remote
           LOCAL_VERSIONS=$(ls supabase/migrations/*.sql \
             | xargs -I{} basename {} \
             | grep -oP '^\d+' \
             | sort)
 
-          REMOTE_VERSIONS=$(supabase migration list \
+          # Obtenir les migrations du remote (format JSON)
+          RAW=$(supabase migration list \
             --project-ref "$PROJECT_REF" \
-            --output json 2>/dev/null \
-            | jq -r '.[] | select(.local_version == null) | .remote_version' \
-            2>/dev/null || echo "")
+            --output json 2>/dev/null || echo "[]")
 
-          if [ -z "$REMOTE_VERSIONS" ]; then
-            echo "✅ Aucune migration orpheline détectée"
+          # Extraire les versions remote sans fichier local
+          ORPHANED=$(echo "$RAW" | node --input-type=module <<'EOF'
+          const data = JSON.parse(await new Promise(r => {
+            let s = '';
+            process.stdin.on('data', d => s += d);
+            process.stdin.on('end', () => r(s));
+          }));
+          // Supabase CLI renvoie status: "LOCAL_ONLY" | "REMOTE_ONLY" | "APPLIED"
+          const orphaned = data
+            .filter(m => m.status === 'REMOTE_ONLY' || (!m.local && m.remote))
+            .map(m => m.version ?? m.remote ?? m.remote_version)
+            .filter(Boolean);
+          console.log(orphaned.join('\n'));
+          EOF
+          )
+
+          if [ -z "$ORPHANED" ]; then
+            echo "✅ Aucune migration orpheline"
           else
-            for VERSION in $REMOTE_VERSIONS; do
-              echo "🔧 Réparation migration orpheline: $VERSION"
+            echo "🔧 Migrations orphelines détectées :"
+            for VERSION in $ORPHANED; do
+              echo "   → $VERSION"
               supabase migration repair \
                 --project-ref "$PROJECT_REF" \
                 --status reverted \
-                "$VERSION"
+                "$VERSION" && echo "   ✅ Réparée" || echo "   ⚠️  Réparation ignorée"
             done
           fi
 
-      - name: Push migrations
-        run: supabase db push --yes --include-all
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-
-      - name: Create storage bucket pdfs
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      # ── 3. Push avec retry exponentiel ────────────────────────────────────
+      - name: Push migrations (with retry)
+        id: push
         run: |
-          # Récupérer le service_role key via le CLI Supabase (déjà authentifié)
+          MAX=3
+          DELAY=10
+          for attempt in $(seq 1 $MAX); do
+            echo "════════════════════════════════════════"
+            echo "Tentative $attempt/$MAX — $(date -u '+%H:%M:%S UTC')"
+            echo "════════════════════════════════════════"
+
+            # Capturer stdout + stderr dans un fichier de log
+            if supabase db push --yes --include-all \
+                 --project-ref "$PROJECT_REF" \
+                 2>&1 | tee /tmp/push_output.txt; then
+              echo "✅ Push réussi (tentative $attempt)"
+              echo "success=true" >> "$GITHUB_OUTPUT"
+              break
+            fi
+
+            echo "❌ Tentative $attempt échouée"
+            cat /tmp/push_output.txt
+
+            # ── Détection automatique des causes connues ─────────────────
+            OUTPUT=$(cat /tmp/push_output.txt)
+
+            # Cause : migration orpheline détectée en cours de push
+            if echo "$OUTPUT" | grep -q "Remote migration versions not found"; then
+              ORPHAN=$(echo "$OUTPUT" \
+                | grep -oP 'supabase migration repair --status reverted \K\d+' \
+                | head -1)
+              if [ -n "$ORPHAN" ]; then
+                echo "🔧 Auto-repair migration orpheline : $ORPHAN"
+                supabase migration repair \
+                  --project-ref "$PROJECT_REF" \
+                  --status reverted \
+                  "$ORPHAN" || true
+                DELAY=2
+              fi
+            fi
+
+            # Cause : conflit de fonction (retente sans attente)
+            if echo "$OUTPUT" | grep -qE "function .+ does not exist|42883"; then
+              echo "⚠️  Fonction manquante — vérifier validate-supabase.mjs"
+            fi
+
+            # Cause : relation/policy/trigger déjà existante
+            if echo "$OUTPUT" | grep -qE "already exists|42710|42P16"; then
+              echo "⚠️  Objet déjà existant — migrations non-idempotentes"
+            fi
+
+            if [ "$attempt" -eq "$MAX" ]; then
+              echo "success=false" >> "$GITHUB_OUTPUT"
+              echo "::error::Push Supabase échoué après $MAX tentatives"
+              exit 1
+            fi
+
+            echo "⏳ Attente ${DELAY}s avant la prochaine tentative..."
+            sleep "$DELAY"
+            DELAY=$((DELAY * 2))
+          done
+
+      # ── 4. Créer le bucket pdfs (idempotent) ──────────────────────────────
+      - name: Ensure storage bucket pdfs
+        if: steps.push.outputs.success == 'true'
+        run: |
           SERVICE_KEY=$(supabase projects api-keys \
             --project-ref "$PROJECT_REF" \
             --output json \
@@ -80,7 +208,6 @@ jobs:
             exit 1
           fi
 
-          # Créer le bucket via l'API Storage REST du projet
           STATUS=$(curl -s -o /tmp/bucket_resp.json -w "%{http_code}" \
             -X POST \
             "https://${PROJECT_REF}.supabase.co/storage/v1/bucket" \
@@ -95,13 +222,36 @@ jobs:
               "allowed_mime_types": ["application/pdf"]
             }')
 
-          cat /tmp/bucket_resp.json
-          echo ""
-
-          # 200/201 = créé, 400 = déjà existant ("The resource already exists")
+          # 200/201 = créé, 400 = déjà existant
           if [ "$STATUS" = "200" ] || [ "$STATUS" = "201" ] || [ "$STATUS" = "400" ]; then
-            echo "Bucket pdfs OK (HTTP $STATUS)"
+            echo "✅ Bucket pdfs OK (HTTP $STATUS)"
           else
-            echo "Erreur création bucket (HTTP $STATUS)"
+            echo "Erreur bucket (HTTP $STATUS) :"
+            cat /tmp/bucket_resp.json
             exit 1
           fi
+
+      # ── 5. GitHub Step Summary ────────────────────────────────────────────
+      - name: Generate summary
+        if: always()
+        run: |
+          PUSH_OK="${{ steps.push.outputs.success }}"
+          MIGS=$(ls supabase/migrations/*.sql | wc -l)
+          STATUS_EMOJI="✅"
+          [ "$PUSH_OK" != "true" ] && STATUS_EMOJI="❌"
+
+          cat >> "$GITHUB_STEP_SUMMARY" <<MARKDOWN
+          ## ${STATUS_EMOJI} Supabase Migrations
+
+          | | |
+          |---|---|
+          | **Status** | ${PUSH_OK:-false} |
+          | **Migrations locales** | ${MIGS} |
+          | **Commit** | \`${{ github.sha }}\` |
+          | **Branche** | \`${{ github.ref_name }}\` |
+
+          ### Dernières migrations
+          \`\`\`
+          $(ls -t supabase/migrations/*.sql | head -5 | xargs -I{} basename {} | sed 's/^/  /')
+          \`\`\`
+          MARKDOWN
