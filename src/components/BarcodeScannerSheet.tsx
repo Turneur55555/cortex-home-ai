@@ -300,9 +300,10 @@ function PortionModal({
 // ─── Main component ────────────────────────────────────────────────────────────
 
 export function BarcodeScannerSheet({ roomId = "cuisine", onClose }: { roomId?: string; onClose: () => void }) {
-  const videoRef    = useRef<HTMLVideoElement>(null);
-  const readerRef   = useRef<BrowserMultiFormatReader | null>(null);
-  const controlsRef = useRef<{ stop: () => void } | null>(null);
+  const videoRef      = useRef<HTMLVideoElement>(null);
+  const readerRef     = useRef<BrowserMultiFormatReader | null>(null);
+  const controlsRef   = useRef<{ stop: () => void } | null>(null);
+  const fetchAbortRef = useRef<AbortController | null>(null);
 
   const [scanning,    setScanning]    = useState(false);
   const [loading,     setLoading]     = useState(false);
@@ -348,12 +349,19 @@ export function BarcodeScannerSheet({ roomId = "cuisine", onClose }: { roomId?: 
   const fetchProduct = useCallback(async (barcode: string) => {
     const code = barcode.trim();
     if (!code) return;
+
+    // Annuler tout fetch précédent encore en cours
+    fetchAbortRef.current?.abort();
+    const controller = new AbortController();
+    fetchAbortRef.current = controller;
+
     setError(null);
     setProduct(null);
     setLoading(true);
     try {
       const res  = await fetch(
         `https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,brands,image_front_small_url,nutrition_grades,nutriments,nova_group,quantity,serving_size`,
+        { signal: controller.signal },
       );
       const data = await res.json();
       if (data.status !== 1 || !data.product) {
@@ -367,11 +375,15 @@ export function BarcodeScannerSheet({ roomId = "cuisine", onClose }: { roomId?: 
           return [p, ...filtered].slice(0, 8);
         });
       }
-    } catch {
+    } catch (e) {
+      if (e instanceof Error && e.name === "AbortError") return; // Démontage ou annulation normale
       setError("Erreur réseau");
       toast.error("Erreur lors de la récupération du produit");
     } finally {
-      setLoading(false);
+      // Ne pas passer loading à false si la requête a été annulée
+      if (!controller.signal.aborted) {
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -413,7 +425,10 @@ export function BarcodeScannerSheet({ roomId = "cuisine", onClose }: { roomId?: 
 
   useEffect(() => {
     readerRef.current = new BrowserMultiFormatReader();
-    return () => { stopCamera(); };
+    return () => {
+      stopCamera();
+      fetchAbortRef.current?.abort(); // Annuler tout fetch en cours au démontage
+    };
   }, [stopCamera]);
 
   const handleAddToStock = async () => {
