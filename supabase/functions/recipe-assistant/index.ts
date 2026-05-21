@@ -1,5 +1,5 @@
 // Suggests recipes from user's food stocks while respecting their food preferences.
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { createClient } from "@supabase/supabase-js";
 import { checkRateLimit, recordRateLimit } from "../_shared/rate-limit.ts";
 
 function buildCors(req: Request) {

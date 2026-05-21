@@ -1,4 +1,4 @@
-import { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 const DEFAULT_TTL_HOURS = 24; // Cache valide 24h par défaut
 

@@ -1,7 +1,7 @@
 // Scanne une photo (frigo, placard, etc.) via IA.
 // Tente LOVABLE_API_KEY (Gemini 2.5 Flash) puis OPENAI_API_KEY (GPT-4o) en fallback.
 // Retourne TOUJOURS HTTP 200 — les erreurs sont dans { error: "..." }.
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { createClient } from "@supabase/supabase-js";
 import { checkRateLimit, recordRateLimit } from "../_shared/rate-limit.ts";
 
 function buildCors(req: Request) {

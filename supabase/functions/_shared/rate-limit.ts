@@ -1,6 +1,6 @@
 // Server-side rate limiter using rate_limits table (insert-only).
 // RLS: users insert/select their own; nothing can update/delete.
-import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export async function checkRateLimit(
   supa: SupabaseClient,

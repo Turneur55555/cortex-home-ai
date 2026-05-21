@@ -1,7 +1,7 @@
 // Analyze PDF or image via Lovable AI Gateway (Gemini 2.5 Flash)
 // Returns structured JSON: summary, key_insights[], alerts[], extracted_items[]
 // Items are typed for the target module so the client can "pour" them in.
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { createClient } from "@supabase/supabase-js";
 import { checkRateLimit, recordRateLimit } from "../_shared/rate-limit.ts";
 import { getCachedResult, setCachedResult } from "../_shared/ai-cache.ts";
 

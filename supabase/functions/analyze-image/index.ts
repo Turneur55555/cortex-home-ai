@@ -2,7 +2,7 @@
 // Accepts FormData: image (File), module (string), name (string)
 // Magic bytes MIME detection — no Sharp, never rejects on MIME alone
 // Always returns JSON { success, ... } even on error
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { createClient } from "@supabase/supabase-js";
 import { checkRateLimit, recordRateLimit } from "../_shared/rate-limit.ts";
 
 function buildCors(req: Request) {

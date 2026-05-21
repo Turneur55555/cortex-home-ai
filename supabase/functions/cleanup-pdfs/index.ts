@@ -1,6 +1,6 @@
 // Nettoyage automatique des PDFs > 90 jours
 // Appelée via webhook externe ou cron Supabase
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { createClient } from "@supabase/supabase-js";
 
 function buildCors(req: Request) {
   const origin = req.headers.get("origin") ?? "";
