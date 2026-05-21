@@ -1,6 +1,6 @@
 
 -- USER PREFERENCES
-CREATE TABLE public.user_preferences (
+CREATE TABLE IF NOT EXISTS public.user_preferences (
   user_id uuid PRIMARY KEY,
   theme text NOT NULL DEFAULT 'dark',
   accent_color text NOT NULL DEFAULT '#6c63ff',
@@ -12,11 +12,12 @@ CREATE TABLE public.user_preferences (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 ALTER TABLE public.user_preferences ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Users manage own preferences" ON public.user_preferences;
 CREATE POLICY "Users manage own preferences" ON public.user_preferences
   FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
 -- USER STATS
-CREATE TABLE public.user_stats (
+CREATE TABLE IF NOT EXISTS public.user_stats (
   user_id uuid PRIMARY KEY,
   xp integer NOT NULL DEFAULT 0,
   level integer NOT NULL DEFAULT 1,
@@ -25,11 +26,12 @@ CREATE TABLE public.user_stats (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 ALTER TABLE public.user_stats ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Users manage own stats" ON public.user_stats;
 CREATE POLICY "Users manage own stats" ON public.user_stats
   FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
 -- USER BADGES
-CREATE TABLE public.user_badges (
+CREATE TABLE IF NOT EXISTS public.user_badges (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL,
   badge_key text NOT NULL,
@@ -39,12 +41,13 @@ CREATE TABLE public.user_badges (
   UNIQUE (user_id, badge_key)
 );
 ALTER TABLE public.user_badges ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Users manage own badges" ON public.user_badges;
 CREATE POLICY "Users manage own badges" ON public.user_badges
   FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
-CREATE INDEX idx_user_badges_user ON public.user_badges (user_id, unlocked_at DESC);
+CREATE INDEX IF NOT EXISTS idx_user_badges_user ON public.user_badges (user_id, unlocked_at DESC);
 
 -- USER ACTIVITY
-CREATE TABLE public.user_activity (
+CREATE TABLE IF NOT EXISTS public.user_activity (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL,
   type text NOT NULL,
@@ -53,17 +56,21 @@ CREATE TABLE public.user_activity (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 ALTER TABLE public.user_activity ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Users manage own activity" ON public.user_activity;
 CREATE POLICY "Users manage own activity" ON public.user_activity
   FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
-CREATE INDEX idx_user_activity_user ON public.user_activity (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_user_activity_user ON public.user_activity (user_id, created_at DESC);
 
--- updated_at trigger
+-- touch_updated_at est définie dans 20260510000001 — CREATE OR REPLACE reste idempotent
 CREATE OR REPLACE FUNCTION public.touch_updated_at()
 RETURNS trigger LANGUAGE plpgsql SET search_path = public AS $$
 BEGIN NEW.updated_at = now(); RETURN NEW; END $$;
 
+DROP TRIGGER IF EXISTS user_preferences_touch ON public.user_preferences;
 CREATE TRIGGER user_preferences_touch BEFORE UPDATE ON public.user_preferences
   FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();
+
+DROP TRIGGER IF EXISTS user_stats_touch ON public.user_stats;
 CREATE TRIGGER user_stats_touch BEFORE UPDATE ON public.user_stats
   FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();
 
@@ -71,14 +78,21 @@ CREATE TRIGGER user_stats_touch BEFORE UPDATE ON public.user_stats
 INSERT INTO storage.buckets (id, name, public) VALUES ('avatars', 'avatars', true)
   ON CONFLICT (id) DO NOTHING;
 
+DROP POLICY IF EXISTS "Avatar images public read" ON storage.objects;
 CREATE POLICY "Avatar images public read" ON storage.objects
   FOR SELECT USING (bucket_id = 'avatars');
+
+DROP POLICY IF EXISTS "Users upload own avatar" ON storage.objects;
 CREATE POLICY "Users upload own avatar" ON storage.objects
   FOR INSERT TO authenticated
   WITH CHECK (bucket_id = 'avatars' AND auth.uid()::text = (storage.foldername(name))[1]);
+
+DROP POLICY IF EXISTS "Users update own avatar" ON storage.objects;
 CREATE POLICY "Users update own avatar" ON storage.objects
   FOR UPDATE TO authenticated
   USING (bucket_id = 'avatars' AND auth.uid()::text = (storage.foldername(name))[1]);
+
+DROP POLICY IF EXISTS "Users delete own avatar" ON storage.objects;
 CREATE POLICY "Users delete own avatar" ON storage.objects
   FOR DELETE TO authenticated
   USING (bucket_id = 'avatars' AND auth.uid()::text = (storage.foldername(name))[1]);
