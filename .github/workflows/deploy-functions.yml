@@ -27,6 +27,7 @@ jobs:
             analyze-pdf \
             analyze-image \
             chat \
+            cleanup-pdfs \
             coach-workout \
             muscle-readiness \
             recipe-assistant \
