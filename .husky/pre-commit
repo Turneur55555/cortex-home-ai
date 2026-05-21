@@ -1,6 +1,6 @@
 #!/bin/sh
 echo "🔍 Vérification TypeScript..."
-npx tsc --noEmit --quiet
+npx tsc --noEmit
 if [ $? -ne 0 ]; then
   echo "❌ Erreurs TypeScript détectées. Corrige-les avant de committer."
   exit 1
