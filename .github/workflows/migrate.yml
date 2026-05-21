@@ -26,6 +26,37 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
+      - name: Repair orphaned remote migrations
+        # Détecte les versions présentes dans schema_migrations mais absentes
+        # localement (suite à une suppression accidentelle de fichier) et les
+        # marque comme "reverted" pour débloquer le push suivant.
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: |
+          LOCAL_VERSIONS=$(ls supabase/migrations/*.sql \
+            | xargs -I{} basename {} \
+            | grep -oP '^\d+' \
+            | sort)
+
+          REMOTE_VERSIONS=$(supabase migration list \
+            --project-ref "$PROJECT_REF" \
+            --output json 2>/dev/null \
+            | jq -r '.[] | select(.local_version == null) | .remote_version' \
+            2>/dev/null || echo "")
+
+          if [ -z "$REMOTE_VERSIONS" ]; then
+            echo "✅ Aucune migration orpheline détectée"
+          else
+            for VERSION in $REMOTE_VERSIONS; do
+              echo "🔧 Réparation migration orpheline: $VERSION"
+              supabase migration repair \
+                --project-ref "$PROJECT_REF" \
+                --status reverted \
+                "$VERSION"
+            done
+          fi
+
       - name: Push migrations
         run: supabase db push --yes --include-all
         env:

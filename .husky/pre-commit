@@ -6,3 +6,22 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 echo "✅ TypeScript OK"
+
+# Vérification : interdire la suppression de fichiers de migration Supabase.
+# Les migrations déjà appliquées au remote ne peuvent pas être supprimées sans
+# risquer de casser la synchronisation schema_migrations ↔ local.
+DELETED_MIGRATIONS=$(git diff --cached --name-only --diff-filter=D \
+  | grep "supabase/migrations/.*\.sql$" || true)
+
+if [ -n "$DELETED_MIGRATIONS" ]; then
+  echo ""
+  echo "❌ Suppression de migrations Supabase interdite :"
+  echo "$DELETED_MIGRATIONS"
+  echo ""
+  echo "   Les migrations appliquées au remote ne peuvent pas être supprimées."
+  echo "   Si la migration est orpheline sur le remote, utilisez :"
+  echo "   supabase migration repair --status reverted <version>"
+  echo ""
+  exit 1
+fi
+echo "✅ Migrations Supabase OK"
