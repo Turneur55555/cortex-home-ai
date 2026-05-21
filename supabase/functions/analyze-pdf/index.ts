@@ -3,6 +3,7 @@
 // Items are typed for the target module so the client can "pour" them in.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 import { checkRateLimit, recordRateLimit } from "../_shared/rate-limit.ts";
+import { getCachedResult, setCachedResult } from "../_shared/ai-cache.ts";
 
 function buildCors(req: Request) {
   const origin = req.headers.get("origin") ?? "";
@@ -94,6 +95,16 @@ Deno.serve(async (req) => {
     const ALLOWED_MODULES = new Set([...Object.keys(MODULE_HINTS), "auto"]);
     if (typeof module !== "string" || !ALLOWED_MODULES.has(module)) {
       return fail("Module invalide", 400);
+    }
+
+    // Vérifier le cache avant l'appel IA
+    const cacheKey = `analyze-pdf:${storage_path}:${module}`;
+    const cached = await getCachedResult(supa, cacheKey);
+    if (cached) {
+      console.log("[analyze-pdf] Cache hit:", cacheKey);
+      return new Response(JSON.stringify(cached), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     // Detect file type — default to PDF for backward compatibility
@@ -422,14 +433,19 @@ Deno.serve(async (req) => {
 
     await recordRateLimit(supa, userData.user.id, "analyze_pdf");
 
+    const responsePayload = {
+      summary: parsed.summary ?? "",
+      key_insights: parsed.key_insights ?? [],
+      alerts: parsed.alerts ?? [],
+      extracted_items: parsed.extracted_items ?? [],
+      detected_module: parsed.detected_module ?? null,
+    };
+
+    // Sauvegarder dans le cache (TTL 24h pour les analyses PDF)
+    await setCachedResult(supa, cacheKey, "analyze-pdf", responsePayload, userData.user.id);
+
     return new Response(
-      JSON.stringify({
-        summary: parsed.summary ?? "",
-        key_insights: parsed.key_insights ?? [],
-        alerts: parsed.alerts ?? [],
-        extracted_items: parsed.extracted_items ?? [],
-        detected_module: parsed.detected_module ?? null,
-      }),
+      JSON.stringify(responsePayload),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (e) {

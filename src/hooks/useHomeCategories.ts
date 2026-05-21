@@ -56,19 +56,23 @@ export function useHomeCategories() {
       // Nom unique par montage : évite la réutilisation d'un canal déjà souscrit
       const channelName = `home_categories:${userId}:${Date.now()}`;
 
+      const invalidate = () => void qc.invalidateQueries({ queryKey: QK });
       const channel = supabase
         .channel(channelName)
         .on(
           "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "home_categories",
-            filter: `user_id=eq.${userId}`,
-          },
-          () => {
-            void qc.invalidateQueries({ queryKey: QK });
-          },
+          { event: "INSERT", schema: "public", table: "home_categories", filter: `user_id=eq.${userId}` },
+          invalidate,
+        )
+        .on(
+          "postgres_changes",
+          { event: "UPDATE", schema: "public", table: "home_categories", filter: `user_id=eq.${userId}` },
+          invalidate,
+        )
+        .on(
+          "postgres_changes",
+          { event: "DELETE", schema: "public", table: "home_categories", filter: `user_id=eq.${userId}` },
+          invalidate,
         )
         .subscribe();
 

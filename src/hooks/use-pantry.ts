@@ -192,12 +192,16 @@ export function useUpdateItemFull() {
 export function useItemsRealtime() {
   const qc = useQueryClient();
   useEffect(() => {
+    const channelName = `items_rt_${Math.random().toString(36).slice(2, 9)}`;
+    const invalidate = () => {
+      qc.invalidateQueries({ queryKey: ["items"] });
+      qc.invalidateQueries({ queryKey: ["items_stats"] });
+    };
     const channel = supabase
-      .channel("items_rt")
-      .on("postgres_changes", { event: "*", schema: "public", table: "items" }, () => {
-        qc.invalidateQueries({ queryKey: ["items"] });
-        qc.invalidateQueries({ queryKey: ["items_stats"] });
-      })
+      .channel(channelName)
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "items" }, invalidate)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "items" }, invalidate)
+      .on("postgres_changes", { event: "DELETE", schema: "public", table: "items" }, invalidate)
       .subscribe();
     return () => {
       void supabase.removeChannel(channel);
