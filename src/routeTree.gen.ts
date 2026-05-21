@@ -14,6 +14,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedStocksRouteImport } from './routes/_authenticated/stocks'
+import { Route as AuthenticatedRappelsRouteImport } from './routes/_authenticated/rappels'
 import { Route as AuthenticatedProfilRouteImport } from './routes/_authenticated/profil'
 import { Route as AuthenticatedPreferencesAlimentairesRouteImport } from './routes/_authenticated/preferences-alimentaires'
 import { Route as AuthenticatedDocumentsRouteImport } from './routes/_authenticated/documents'
@@ -41,6 +42,11 @@ const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
 const AuthenticatedStocksRoute = AuthenticatedStocksRouteImport.update({
   id: '/stocks',
   path: '/stocks',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedRappelsRoute = AuthenticatedRappelsRouteImport.update({
+  id: '/rappels',
+  path: '/rappels',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedProfilRoute = AuthenticatedProfilRouteImport.update({
@@ -73,6 +79,7 @@ export interface FileRoutesByFullPath {
   '/documents': typeof AuthenticatedDocumentsRoute
   '/preferences-alimentaires': typeof AuthenticatedPreferencesAlimentairesRoute
   '/profil': typeof AuthenticatedProfilRoute
+  '/rappels': typeof AuthenticatedRappelsRoute
   '/stocks': typeof AuthenticatedStocksRoute
   '/fitness/': typeof AuthenticatedFitnessIndexRoute
 }
@@ -82,6 +89,7 @@ export interface FileRoutesByTo {
   '/documents': typeof AuthenticatedDocumentsRoute
   '/preferences-alimentaires': typeof AuthenticatedPreferencesAlimentairesRoute
   '/profil': typeof AuthenticatedProfilRoute
+  '/rappels': typeof AuthenticatedRappelsRoute
   '/stocks': typeof AuthenticatedStocksRoute
   '/': typeof AuthenticatedIndexRoute
   '/fitness': typeof AuthenticatedFitnessIndexRoute
@@ -94,6 +102,7 @@ export interface FileRoutesById {
   '/_authenticated/documents': typeof AuthenticatedDocumentsRoute
   '/_authenticated/preferences-alimentaires': typeof AuthenticatedPreferencesAlimentairesRoute
   '/_authenticated/profil': typeof AuthenticatedProfilRoute
+  '/_authenticated/rappels': typeof AuthenticatedRappelsRoute
   '/_authenticated/stocks': typeof AuthenticatedStocksRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/fitness/': typeof AuthenticatedFitnessIndexRoute
@@ -107,6 +116,7 @@ export interface FileRouteTypes {
     | '/documents'
     | '/preferences-alimentaires'
     | '/profil'
+    | '/rappels'
     | '/stocks'
     | '/fitness/'
   fileRoutesByTo: FileRoutesByTo
@@ -116,6 +126,7 @@ export interface FileRouteTypes {
     | '/documents'
     | '/preferences-alimentaires'
     | '/profil'
+    | '/rappels'
     | '/stocks'
     | '/'
     | '/fitness'
@@ -127,6 +138,7 @@ export interface FileRouteTypes {
     | '/_authenticated/documents'
     | '/_authenticated/preferences-alimentaires'
     | '/_authenticated/profil'
+    | '/_authenticated/rappels'
     | '/_authenticated/stocks'
     | '/_authenticated/'
     | '/_authenticated/fitness/'
@@ -175,6 +187,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedStocksRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/rappels': {
+      id: '/_authenticated/rappels'
+      path: '/rappels'
+      fullPath: '/rappels'
+      preLoaderRoute: typeof AuthenticatedRappelsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/profil': {
       id: '/_authenticated/profil'
       path: '/profil'
@@ -210,6 +229,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedDocumentsRoute: typeof AuthenticatedDocumentsRoute
   AuthenticatedPreferencesAlimentairesRoute: typeof AuthenticatedPreferencesAlimentairesRoute
   AuthenticatedProfilRoute: typeof AuthenticatedProfilRoute
+  AuthenticatedRappelsRoute: typeof AuthenticatedRappelsRoute
   AuthenticatedStocksRoute: typeof AuthenticatedStocksRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedFitnessIndexRoute: typeof AuthenticatedFitnessIndexRoute
@@ -220,6 +240,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedPreferencesAlimentairesRoute:
     AuthenticatedPreferencesAlimentairesRoute,
   AuthenticatedProfilRoute: AuthenticatedProfilRoute,
+  AuthenticatedRappelsRoute: AuthenticatedRappelsRoute,
   AuthenticatedStocksRoute: AuthenticatedStocksRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedFitnessIndexRoute: AuthenticatedFitnessIndexRoute,
