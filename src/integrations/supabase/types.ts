@@ -507,6 +507,63 @@ export type Database = {
         }
         Relationships: []
       }
+      reminders: {
+        Row: {
+          all_day: boolean
+          category: string | null
+          completed_at: string | null
+          created_at: string
+          description: string | null
+          due_at: string | null
+          favorite: boolean
+          id: string
+          notify_before_minutes: number
+          priority: Database["public"]["Enums"]["reminder_priority"]
+          recurrence: Database["public"]["Enums"]["reminder_recurrence"]
+          recurrence_until: string | null
+          status: Database["public"]["Enums"]["reminder_status"]
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          all_day?: boolean
+          category?: string | null
+          completed_at?: string | null
+          created_at?: string
+          description?: string | null
+          due_at?: string | null
+          favorite?: boolean
+          id?: string
+          notify_before_minutes?: number
+          priority?: Database["public"]["Enums"]["reminder_priority"]
+          recurrence?: Database["public"]["Enums"]["reminder_recurrence"]
+          recurrence_until?: string | null
+          status?: Database["public"]["Enums"]["reminder_status"]
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          all_day?: boolean
+          category?: string | null
+          completed_at?: string | null
+          created_at?: string
+          description?: string | null
+          due_at?: string | null
+          favorite?: boolean
+          id?: string
+          notify_before_minutes?: number
+          priority?: Database["public"]["Enums"]["reminder_priority"]
+          recurrence?: Database["public"]["Enums"]["reminder_recurrence"]
+          recurrence_until?: string | null
+          status?: Database["public"]["Enums"]["reminder_status"]
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_activity: {
         Row: {
           created_at: string
@@ -707,7 +764,9 @@ export type Database = {
       ensure_home_categories_for_me: { Args: never; Returns: undefined }
     }
     Enums: {
-      [_ in never]: never
+      reminder_priority: "low" | "medium" | "high" | "urgent"
+      reminder_recurrence: "none" | "daily" | "weekly" | "monthly" | "yearly"
+      reminder_status: "todo" | "in_progress" | "done"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -834,6 +893,10 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      reminder_priority: ["low", "medium", "high", "urgent"],
+      reminder_recurrence: ["none", "daily", "weekly", "monthly", "yearly"],
+      reminder_status: ["todo", "in_progress", "done"],
+    },
   },
 } as const
