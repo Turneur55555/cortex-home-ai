@@ -1,5 +1,5 @@
 
-CREATE TABLE public.food_preferences (
+CREATE TABLE IF NOT EXISTS public.food_preferences (
   user_id uuid PRIMARY KEY,
   allergies text[] NOT NULL DEFAULT '{}',
   foods_to_avoid text[] NOT NULL DEFAULT '{}',
@@ -12,10 +12,12 @@ CREATE TABLE public.food_preferences (
 
 ALTER TABLE public.food_preferences ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users manage own food prefs" ON public.food_preferences;
 CREATE POLICY "Users manage own food prefs"
 ON public.food_preferences FOR ALL
 USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
+DROP TRIGGER IF EXISTS trg_food_preferences_updated_at ON public.food_preferences;
 CREATE TRIGGER trg_food_preferences_updated_at
 BEFORE UPDATE ON public.food_preferences
 FOR EACH ROW EXECUTE FUNCTION public.set_nutrition_goals_updated_at();

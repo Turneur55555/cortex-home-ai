@@ -1,5 +1,5 @@
 -- Table d'objectifs nutritionnels par utilisateur (1 ligne par user)
-CREATE TABLE public.nutrition_goals (
+CREATE TABLE IF NOT EXISTS public.nutrition_goals (
   user_id UUID PRIMARY KEY,
   calories INTEGER,
   proteins DOUBLE PRECISION,
@@ -11,6 +11,7 @@ CREATE TABLE public.nutrition_goals (
 
 ALTER TABLE public.nutrition_goals ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users manage own nutrition goals" ON public.nutrition_goals;
 CREATE POLICY "Users manage own nutrition goals"
   ON public.nutrition_goals
   FOR ALL
@@ -28,6 +29,7 @@ BEGIN
 END;
 $$;
 
+DROP TRIGGER IF EXISTS trg_nutrition_goals_updated_at ON public.nutrition_goals;
 CREATE TRIGGER trg_nutrition_goals_updated_at
 BEFORE UPDATE ON public.nutrition_goals
 FOR EACH ROW

@@ -1,5 +1,5 @@
 -- health_data_imports: tracks raw image analysis records (separate from documents/PDF pipeline)
-CREATE TABLE public.health_data_imports (
+CREATE TABLE IF NOT EXISTS public.health_data_imports (
   id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id     UUID        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   image_path  TEXT        NOT NULL,
@@ -14,6 +14,7 @@ CREATE TABLE public.health_data_imports (
 
 ALTER TABLE public.health_data_imports ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users own their health imports" ON public.health_data_imports;
 CREATE POLICY "Users own their health imports"
   ON public.health_data_imports
   FOR ALL TO authenticated
@@ -31,12 +32,12 @@ VALUES (
 )
 ON CONFLICT (id) DO NOTHING;
 
--- Users can read their own images
+DROP POLICY IF EXISTS "Users can view own health images" ON storage.objects;
 CREATE POLICY "Users can view own health images"
   ON storage.objects FOR SELECT TO authenticated
   USING (bucket_id = 'health-images' AND auth.uid()::text = (storage.foldername(name))[1]);
 
--- Users can delete their own images
+DROP POLICY IF EXISTS "Users can delete own health images" ON storage.objects;
 CREATE POLICY "Users can delete own health images"
   ON storage.objects FOR DELETE TO authenticated
   USING (bucket_id = 'health-images' AND auth.uid()::text = (storage.foldername(name))[1]);

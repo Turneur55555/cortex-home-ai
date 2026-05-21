@@ -1,5 +1,5 @@
 -- Table de journalisation des erreurs front-end
-CREATE TABLE public.error_logs (
+CREATE TABLE IF NOT EXISTS public.error_logs (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   support_id text NOT NULL UNIQUE,
   user_id uuid,
@@ -16,12 +16,12 @@ CREATE TABLE public.error_logs (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_error_logs_user ON public.error_logs(user_id, created_at DESC);
-CREATE INDEX idx_error_logs_support ON public.error_logs(support_id);
+CREATE INDEX IF NOT EXISTS idx_error_logs_user ON public.error_logs(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_error_logs_support ON public.error_logs(support_id);
 
 ALTER TABLE public.error_logs ENABLE ROW LEVEL SECURITY;
 
--- Insert: utilisateur connecté insère pour lui-même; autorise aussi anonyme avec user_id null
+DROP POLICY IF EXISTS "Users insert own errors" ON public.error_logs;
 CREATE POLICY "Users insert own errors"
   ON public.error_logs FOR INSERT
   WITH CHECK (
@@ -29,6 +29,7 @@ CREATE POLICY "Users insert own errors"
     OR (auth.uid() IS NULL AND user_id IS NULL)
   );
 
+DROP POLICY IF EXISTS "Users view own errors" ON public.error_logs;
 CREATE POLICY "Users view own errors"
   ON public.error_logs FOR SELECT
   USING (auth.uid() = user_id);
