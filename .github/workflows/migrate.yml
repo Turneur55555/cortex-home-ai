@@ -85,49 +85,103 @@ jobs:
         run: supabase link --project-ref "$PROJECT_REF"
 
       # ── 2. Détecter et réparer les migrations orphelines ──────────────────
+      #
+      # POURQUOI set +e ici :
+      #   GitHub Actions exécute chaque `run:` avec bash -eo pipefail.
+      #   `supabase migration list` peut retourner un exit code non-zéro
+      #   (ex. 13 = erreur réseau/auth dans le CLI Go) et `|| echo "[]"`
+      #   ne suffit pas à l'absorber dans tous les contextes de pipeline.
+      #   On désactive temporairement le bail-on-error pour capturer
+      #   proprement le code retour et diagnostiquer l'erreur réelle.
+      #
+      # POURQUOI jq au lieu de node --input-type=module <<'EOF' :
+      #   La syntaxe `echo "$RAW" | node --input-type=module <<'EOF'` est
+      #   un bug bash : le heredoc redirige stdin de node (pour le script JS),
+      #   ce qui prive le pipe de lecteur. echo écrit dans le vide → SIGPIPE
+      #   (signal 13). Avec set -eo pipefail, le job meurt avec exit 13.
+      #   jq est préinstallé sur ubuntu-latest et n'a pas ce problème.
       - name: Repair orphaned remote migrations
         id: repair
         run: |
           echo "Récupération de la liste des migrations distantes..."
 
-          # Comparer fichiers locaux vs remote
-          LOCAL_VERSIONS=$(ls supabase/migrations/*.sql \
-            | xargs -I{} basename {} \
-            | grep -oP '^\d+' \
-            | sort)
-
-          # Obtenir les migrations du remote (format JSON)
+          # ── Appel CLI avec capture complète (stdout + stderr) ──────────
+          set +e
           RAW=$(supabase migration list \
             --project-ref "$PROJECT_REF" \
-            --output json 2>/dev/null || echo "[]")
+            --output json 2>&1)
+          SUPABASE_EXIT=$?
+          set -e
 
-          # Extraire les versions remote sans fichier local
-          ORPHANED=$(echo "$RAW" | node --input-type=module <<'EOF'
-          const data = JSON.parse(await new Promise(r => {
-            let s = '';
-            process.stdin.on('data', d => s += d);
-            process.stdin.on('end', () => r(s));
-          }));
-          // Supabase CLI renvoie status: "LOCAL_ONLY" | "REMOTE_ONLY" | "APPLIED"
-          const orphaned = data
-            .filter(m => m.status === 'REMOTE_ONLY' || (!m.local && m.remote))
-            .map(m => m.version ?? m.remote ?? m.remote_version)
-            .filter(Boolean);
-          console.log(orphaned.join('\n'));
-          EOF
-          )
+          if [ "$SUPABASE_EXIT" -ne 0 ]; then
+            echo "⚠️  supabase migration list a retourné exit code $SUPABASE_EXIT"
+            echo "   Sortie brute (5 premières lignes) :"
+            echo "$RAW" | head -5 | sed 's/^/     /'
+            echo "   → Réparation ignorée (le push détectera les orphelins si besoin)"
+            exit 0
+          fi
 
+          # ── Vérifications défensives du contenu ────────────────────────
+          if [ -z "$RAW" ]; then
+            echo "⚠️  Réponse vide — aucune migration distante connue"
+            exit 0
+          fi
+
+          # Extraire uniquement la portion JSON (ignore les éventuels warnings ANSI)
+          JSON_PART=$(echo "$RAW" | grep -o '\[.*' | head -1 || true)
+          if [ -z "$JSON_PART" ]; then
+            JSON_PART="$RAW"
+          fi
+
+          # Valider la syntaxe JSON avec jq (disponible nativement sur ubuntu-latest)
+          if ! echo "$JSON_PART" | jq empty 2>/dev/null; then
+            echo "⚠️  Réponse non-JSON de supabase migration list :"
+            echo "$RAW" | head -10 | sed 's/^/     /'
+            echo "   → Réparation ignorée"
+            exit 0
+          fi
+
+          # ── Extraction des orphelins avec jq ───────────────────────────
+          # status "REMOTE_ONLY" = présent sur le remote mais absent en local
+          # Supabase CLI peut aussi utiliser des champs sans .status (ancien format)
+          ORPHANED=$(echo "$JSON_PART" | jq -r '
+            if type == "array" then
+              .[]
+              | select(
+                  (.status // "") == "REMOTE_ONLY"
+                  or (
+                    (.local // .local_path // null) == null
+                    and (.remote // .remote_version // null) != null
+                  )
+                )
+              | (.version // .remote // .remote_version // "")
+              | select(length > 0)
+            else
+              empty
+            end
+          ' 2>/dev/null || true)
+
+          # ── Réparation ─────────────────────────────────────────────────
           if [ -z "$ORPHANED" ]; then
             echo "✅ Aucune migration orpheline"
           else
             echo "🔧 Migrations orphelines détectées :"
-            for VERSION in $ORPHANED; do
+            while IFS= read -r VERSION; do
+              [ -z "$VERSION" ] && continue
               echo "   → $VERSION"
+              set +e
               supabase migration repair \
                 --project-ref "$PROJECT_REF" \
                 --status reverted \
-                "$VERSION" && echo "   ✅ Réparée" || echo "   ⚠️  Réparation ignorée"
-            done
+                "$VERSION"
+              REPAIR_EXIT=$?
+              set -e
+              if [ "$REPAIR_EXIT" -eq 0 ]; then
+                echo "   ✅ Réparée"
+              else
+                echo "   ⚠️  Réparation ignorée (exit $REPAIR_EXIT) — le push retentera"
+              fi
+            done <<< "$ORPHANED"
           fi
 
       # ── 3. Push avec retry exponentiel ────────────────────────────────────
