@@ -1,0 +1,16 @@
+#!/bin/sh
+MSG=$(cat "$1")
+MSG_LOWER=$(echo "$MSG" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
+
+if echo "$MSG_LOWER" | grep -qE "^(changes|wip|fix|update|test|commit|todo|asdf|temp|tmp|xxx)$"; then
+  echo "❌ Message de commit trop générique: '$MSG'"
+  echo "   Utilisez un message descriptif (ex: 'feat(stocks): ajouter filtrage par catégorie')"
+  exit 1
+fi
+
+if [ ${#MSG} -lt 10 ]; then
+  echo "❌ Message de commit trop court (min 10 caractères): '$MSG'"
+  exit 1
+fi
+
+echo "✅ Message de commit valide"

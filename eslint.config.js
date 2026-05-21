@@ -33,7 +33,15 @@ export default tseslint.config(
         },
       ],
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
-      "@typescript-eslint/no-unused-vars": "off",
+      // Bloquer les console.log en production (seul console.error toléré)
+      "no-console": ["warn", { allow: ["error"] }],
+      // Bloquer les any explicites
+      "@typescript-eslint/no-explicit-any": "warn",
+      // Bloquer les variables non utilisées (avec exception pour _prefix)
+      "@typescript-eslint/no-unused-vars": ["warn", {
+        argsIgnorePattern: "^_",
+        varsIgnorePattern: "^_"
+      }],
     },
   },
   eslintPluginPrettier,
