@@ -453,15 +453,19 @@ function ViewBtn({
   active,
   onClick,
   icon: Icon,
+  label,
 }: {
   active: boolean;
   onClick: () => void;
   icon: typeof Bell;
+  label?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      title={label}
+      aria-label={label}
       className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
         active ? "bg-primary/20 text-foreground" : "text-muted-foreground hover:text-foreground"
       }`}
