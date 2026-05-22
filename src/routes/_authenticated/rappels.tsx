@@ -270,6 +270,9 @@ function RappelsPage() {
           </div>
         </div>
 
+        {/* Smart natural-language input */}
+        <SmartInput onCreate={handleSmartCreate} onOpenAdvanced={openCreate} />
+
         {/* Toolbar */}
         <div className="mb-3 flex items-center gap-2">
           <div className="relative flex-1">
@@ -277,16 +280,19 @@ function RappelsPage() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Rechercher…"
+              placeholder="Rechercher… ( / )"
+              aria-label="Recherche rappels"
               className="h-10 w-full rounded-xl border border-border bg-card/60 pl-9 pr-3 text-sm outline-none focus:border-primary"
             />
           </div>
           <div className="flex items-center rounded-xl border border-border bg-card/60 p-1">
-            <ViewBtn active={view === "list"} onClick={() => setView("list")} icon={LayoutList} />
+            <ViewBtn active={view === "list"} onClick={() => setView("list")} icon={LayoutList} label="Liste (1)" />
+            <ViewBtn active={view === "kanban"} onClick={() => setView("kanban")} icon={Columns3} label="Kanban (2)" />
             <ViewBtn
               active={view === "calendar"}
               onClick={() => setView("calendar")}
               icon={CalendarIcon}
+              label="Calendrier (3)"
             />
           </div>
         </div>
@@ -372,6 +378,17 @@ function RappelsPage() {
               </AnimatePresence>
             </div>
           )
+        ) : view === "kanban" ? (
+          <KanbanView
+            reminders={filtered}
+            onMove={handleKanbanMove}
+            onPick={(r) => {
+              setEditing(r);
+              setSheetOpen(true);
+            }}
+            onToggle={(r) => toggleMut.mutate(r)}
+            onFavorite={(r) => favMut.mutate(r)}
+          />
         ) : (
           <CalendarView
             cursor={calCursor}
@@ -387,6 +404,7 @@ function RappelsPage() {
           />
         )}
       </div>
+
 
       <AnimatePresence>
         {sheetOpen && (
