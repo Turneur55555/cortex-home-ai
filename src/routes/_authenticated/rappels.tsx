@@ -18,6 +18,7 @@ import {
   Bell,
   ChevronLeft,
   ChevronRight,
+  Columns3,
   LayoutList,
   ListFilter,
   Plus,
@@ -29,6 +30,8 @@ import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
 import { ReminderCard } from "@/components/reminders/ReminderCard";
 import { ReminderSheet } from "@/components/reminders/ReminderSheet";
+import { SmartInput } from "@/components/reminders/SmartInput";
+import { KanbanView } from "@/components/reminders/KanbanView";
 import {
   useCreateReminder,
   useDeleteReminder,
@@ -54,7 +57,7 @@ export const Route = createFileRoute("/_authenticated/rappels")({
   component: RappelsPage,
 });
 
-type ViewMode = "list" | "calendar";
+type ViewMode = "list" | "kanban" | "calendar";
 type StatusFilter = "all" | ReminderStatus | "favorites" | "overdue";
 
 function RappelsPage() {
