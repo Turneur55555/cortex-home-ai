@@ -18,6 +18,7 @@ import {
   Bell,
   ChevronLeft,
   ChevronRight,
+  Columns3,
   LayoutList,
   ListFilter,
   Plus,
@@ -29,6 +30,8 @@ import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
 import { ReminderCard } from "@/components/reminders/ReminderCard";
 import { ReminderSheet } from "@/components/reminders/ReminderSheet";
+import { SmartInput } from "@/components/reminders/SmartInput";
+import { KanbanView } from "@/components/reminders/KanbanView";
 import {
   useCreateReminder,
   useDeleteReminder,
@@ -54,7 +57,7 @@ export const Route = createFileRoute("/_authenticated/rappels")({
   component: RappelsPage,
 });
 
-type ViewMode = "list" | "calendar";
+type ViewMode = "list" | "kanban" | "calendar";
 type StatusFilter = "all" | ReminderStatus | "favorites" | "overdue";
 
 function RappelsPage() {
@@ -179,6 +182,54 @@ function RappelsPage() {
     }
   };
 
+  const handleSmartCreate = async (input: ReminderInput) => {
+    try {
+      await createMut.mutateAsync(input);
+      toast.success("Rappel créé via IA ✨");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erreur");
+    }
+  };
+
+  const handleKanbanMove = (id: string, status: ReminderStatus) => {
+    updateMut.mutate({ id, patch: { status } });
+  };
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const inField =
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable);
+      if (inField) {
+        if (e.key === "Escape" && sheetOpen) {
+          setSheetOpen(false);
+          setEditing(null);
+        }
+        return;
+      }
+      if (e.key === "n" || e.key === "N") {
+        e.preventDefault();
+        openCreate();
+      } else if (e.key === "/") {
+        e.preventDefault();
+        document.querySelector<HTMLInputElement>('input[aria-label="Recherche rappels"]')?.focus();
+      } else if (e.key === "1") setView("list");
+      else if (e.key === "2") setView("kanban");
+      else if (e.key === "3") setView("calendar");
+      else if (e.key === "Escape" && sheetOpen) {
+        setSheetOpen(false);
+        setEditing(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [sheetOpen]);
+
   return (
     <AppShell>
       <div className="pb-32">
@@ -219,6 +270,9 @@ function RappelsPage() {
           </div>
         </div>
 
+        {/* Smart natural-language input */}
+        <SmartInput onCreate={handleSmartCreate} onOpenAdvanced={openCreate} />
+
         {/* Toolbar */}
         <div className="mb-3 flex items-center gap-2">
           <div className="relative flex-1">
@@ -226,16 +280,19 @@ function RappelsPage() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Rechercher…"
+              placeholder="Rechercher… ( / )"
+              aria-label="Recherche rappels"
               className="h-10 w-full rounded-xl border border-border bg-card/60 pl-9 pr-3 text-sm outline-none focus:border-primary"
             />
           </div>
           <div className="flex items-center rounded-xl border border-border bg-card/60 p-1">
-            <ViewBtn active={view === "list"} onClick={() => setView("list")} icon={LayoutList} />
+            <ViewBtn active={view === "list"} onClick={() => setView("list")} icon={LayoutList} label="Liste (1)" />
+            <ViewBtn active={view === "kanban"} onClick={() => setView("kanban")} icon={Columns3} label="Kanban (2)" />
             <ViewBtn
               active={view === "calendar"}
               onClick={() => setView("calendar")}
               icon={CalendarIcon}
+              label="Calendrier (3)"
             />
           </div>
         </div>
@@ -321,6 +378,17 @@ function RappelsPage() {
               </AnimatePresence>
             </div>
           )
+        ) : view === "kanban" ? (
+          <KanbanView
+            reminders={filtered}
+            onMove={handleKanbanMove}
+            onPick={(r) => {
+              setEditing(r);
+              setSheetOpen(true);
+            }}
+            onToggle={(r) => toggleMut.mutate(r)}
+            onFavorite={(r) => favMut.mutate(r)}
+          />
         ) : (
           <CalendarView
             cursor={calCursor}
@@ -336,6 +404,7 @@ function RappelsPage() {
           />
         )}
       </div>
+
 
       <AnimatePresence>
         {sheetOpen && (
@@ -384,15 +453,19 @@ function ViewBtn({
   active,
   onClick,
   icon: Icon,
+  label,
 }: {
   active: boolean;
   onClick: () => void;
   icon: typeof Bell;
+  label?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      title={label}
+      aria-label={label}
       className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
         active ? "bg-primary/20 text-foreground" : "text-muted-foreground hover:text-foreground"
       }`}
