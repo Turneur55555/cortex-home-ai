@@ -182,6 +182,54 @@ function RappelsPage() {
     }
   };
 
+  const handleSmartCreate = async (input: ReminderInput) => {
+    try {
+      await createMut.mutateAsync(input);
+      toast.success("Rappel créé via IA ✨");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erreur");
+    }
+  };
+
+  const handleKanbanMove = (id: string, status: ReminderStatus) => {
+    updateMut.mutate({ id, patch: { status } });
+  };
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const inField =
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable);
+      if (inField) {
+        if (e.key === "Escape" && sheetOpen) {
+          setSheetOpen(false);
+          setEditing(null);
+        }
+        return;
+      }
+      if (e.key === "n" || e.key === "N") {
+        e.preventDefault();
+        openCreate();
+      } else if (e.key === "/") {
+        e.preventDefault();
+        document.querySelector<HTMLInputElement>('input[aria-label="Recherche rappels"]')?.focus();
+      } else if (e.key === "1") setView("list");
+      else if (e.key === "2") setView("kanban");
+      else if (e.key === "3") setView("calendar");
+      else if (e.key === "Escape" && sheetOpen) {
+        setSheetOpen(false);
+        setEditing(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [sheetOpen]);
+
   return (
     <AppShell>
       <div className="pb-32">
