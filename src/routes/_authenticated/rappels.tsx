@@ -27,7 +27,7 @@ import {
   Calendar as CalendarIcon,
 } from "lucide-react";
 import { toast } from "sonner";
-import { AppShell } from "@/components/AppShell";
+
 import { ReminderCard } from "@/components/reminders/ReminderCard";
 import { ReminderSheet } from "@/components/reminders/ReminderSheet";
 import { SmartInput } from "@/components/reminders/SmartInput";
@@ -231,8 +231,9 @@ function RappelsPage() {
   }, [sheetOpen]);
 
   return (
-    <AppShell>
-      <div className="pb-32">
+    <>
+      <div className="px-3 pt-14 pb-32">
+
         {/* Hero header */}
         <div className="relative mb-4 overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-primary/15 via-card to-card p-5 shadow-elevated">
           <div
@@ -420,8 +421,9 @@ function RappelsPage() {
           />
         )}
       </AnimatePresence>
-    </AppShell>
+    </>
   );
+
 }
 
 function Stat({
