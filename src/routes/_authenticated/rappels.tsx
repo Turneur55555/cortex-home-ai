@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   addMonths,
@@ -16,14 +16,19 @@ import {
 import { fr } from "date-fns/locale";
 import {
   Bell,
+  Check,
   ChevronLeft,
   ChevronRight,
   Columns3,
+  Droplets,
   LayoutList,
   ListFilter,
+  Moon,
   Plus,
   Search,
+  Shield,
   Sparkles,
+  Zap,
   Calendar as CalendarIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -46,6 +51,93 @@ import {
   type Reminder,
   type ReminderInput,
 } from "@/services/reminders";
+
+// ─── Daily supplement checklist (localStorage) ────────────────────────────────
+
+const SUPPLEMENTS = [
+  { id: "creatine", label: "Créatine", hint: "5g · matin", icon: Zap },
+  { id: "zinc", label: "Zinc", hint: "15mg · soir", icon: Shield },
+  { id: "magnesium", label: "Magnésium", hint: "200mg · nuit", icon: Moon },
+  { id: "eau", label: "Hydratation", hint: "2L+ · objectif", icon: Droplets },
+] as const;
+
+function useSupplementChecks() {
+  const key = `icortex.supps.${new Date().toISOString().slice(0, 10)}`;
+  const [checked, setChecked] = useState<Set<string>>(() => {
+    try {
+      const raw = typeof window !== "undefined" ? localStorage.getItem(key) : null;
+      return new Set<string>(raw ? JSON.parse(raw) : []);
+    } catch {
+      return new Set<string>();
+    }
+  });
+
+  const toggle = useCallback(
+    (id: string) => {
+      setChecked((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        try {
+          localStorage.setItem(key, JSON.stringify([...next]));
+        } catch {}
+        return next;
+      });
+    },
+    [key],
+  );
+
+  return { checked, toggle };
+}
+
+function DailySupplementCard() {
+  const { checked, toggle } = useSupplementChecks();
+  const done = SUPPLEMENTS.filter((s) => checked.has(s.id)).length;
+
+  return (
+    <section className="mb-4 overflow-hidden rounded-3xl border border-border bg-gradient-surface p-5 shadow-elevated">
+      <div className="mb-3 flex items-center justify-between">
+        <span className="text-sm font-semibold">Rappels du jour</span>
+        <span className="text-[11px] font-medium text-muted-foreground">
+          {done}/{SUPPLEMENTS.length}
+        </span>
+      </div>
+      <ul className="space-y-2">
+        {SUPPLEMENTS.map(({ id, label, hint, icon: Icon }) => {
+          const active = checked.has(id);
+          return (
+            <li key={id}>
+              <button
+                type="button"
+                onClick={() => toggle(id)}
+                className="flex w-full items-center gap-3 rounded-xl border border-white/6 bg-white/[0.03] px-3 py-2.5 text-left transition-all active:scale-[0.99]"
+              >
+                <span
+                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors ${active ? "bg-emerald-500/20 text-emerald-400" : "bg-white/5 text-muted-foreground"}`}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                </span>
+                <span className="flex-1">
+                  <span
+                    className={`block text-xs font-semibold ${active ? "text-muted-foreground line-through" : "text-foreground"}`}
+                  >
+                    {label}
+                  </span>
+                  <span className="block text-[10px] text-muted-foreground/60">{hint}</span>
+                </span>
+                <span
+                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition-colors ${active ? "border-emerald-500 bg-emerald-500 text-white" : "border-white/20 bg-transparent"}`}
+                >
+                  {active && <Check className="h-3 w-3" />}
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
 
 export const Route = createFileRoute("/_authenticated/rappels")({
   head: () => ({
@@ -270,6 +362,9 @@ function RappelsPage() {
             <Stat label="En retard" value={stats.overdue} tone="danger" />
           </div>
         </div>
+
+        {/* Daily supplement checklist */}
+        <DailySupplementCard />
 
         {/* Smart natural-language input */}
         <SmartInput onCreate={handleSmartCreate} onOpenAdvanced={openCreate} />
