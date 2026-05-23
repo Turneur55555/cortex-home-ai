@@ -317,15 +317,19 @@ function AddGoalForm({ onClose }: { onClose: () => void }) {
   const handleSubmit = async () => {
     if (!title.trim() || !targetDate) return;
     const config = GOAL_TYPE_CONFIG[selectedType];
-    await addGoal.mutateAsync({
-      title: title.trim(),
-      goal_type: selectedType,
-      target_value: config.hasValue ? targetValue : null,
-      target_date: targetDate,
-      xp_reward: selectedType === "custom" ? 100 : 150,
-    });
-    toast.success("Objectif créé !");
-    onClose();
+    try {
+      await addGoal.mutateAsync({
+        title: title.trim(),
+        goal_type: selectedType,
+        target_value: config.hasValue ? targetValue : null,
+        target_date: targetDate,
+        xp_reward: selectedType === "custom" ? 100 : 150,
+      });
+      toast.success("Objectif créé !");
+      onClose();
+    } catch {
+      toast.error("Impossible de créer l'objectif. Réessayez.");
+    }
   };
 
   return (

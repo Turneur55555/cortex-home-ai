@@ -191,7 +191,7 @@ export function useBadgeSystem() {
   const unlockMutation = useMutation({
     mutationFn: async (badge: BadgeCatalogEntry) => {
       if (!user) return;
-      await (supabase as any).from("user_badges").upsert(
+      const { error } = await (supabase as any).from("user_badges").upsert(
         {
           user_id: user.id,
           badge_key: badge.badge_key,
@@ -204,11 +204,13 @@ export function useBadgeSystem() {
         },
         { onConflict: "user_id,badge_key" },
       );
+      if (error) throw error;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["user_badges", user?.id] });
       qc.invalidateQueries({ queryKey: ["user_stats", user?.id] });
     },
+    onError: () => { /* silencieux — retry au prochain recalcul */ },
   });
 
   // Auto-unlock badges when criteria are met

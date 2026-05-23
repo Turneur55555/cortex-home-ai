@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -96,7 +97,7 @@ function useTodayProtein() {
 function useProteinTarget() {
   const { user } = useAuth();
   return useQuery({
-    queryKey: ["nutrition_goals"],
+    queryKey: ["nutrition_goals_protein_target", user?.id],
     enabled: !!user,
     staleTime: 120_000,
     queryFn: async () => {
@@ -167,6 +168,7 @@ export function useAddGoal() {
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["goals", user?.id] }),
+    onError: () => toast.error("Impossible de créer l'objectif"),
   });
 }
 
@@ -187,6 +189,7 @@ export function useCompleteGoal() {
       qc.invalidateQueries({ queryKey: ["goals", user?.id] });
       qc.invalidateQueries({ queryKey: ["goals_completed_count", user?.id] });
     },
+    onError: () => toast.error("Impossible de mettre à jour l'objectif"),
   });
 }
 
@@ -204,6 +207,7 @@ export function useRemoveGoal() {
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["goals", user?.id] }),
+    onError: () => toast.error("Impossible de supprimer l'objectif"),
   });
 }
 
