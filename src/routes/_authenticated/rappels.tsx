@@ -27,7 +27,7 @@ import {
   Calendar as CalendarIcon,
 } from "lucide-react";
 import { toast } from "sonner";
-import { AppShell } from "@/components/AppShell";
+
 import { ReminderCard } from "@/components/reminders/ReminderCard";
 import { ReminderSheet } from "@/components/reminders/ReminderSheet";
 import { SmartInput } from "@/components/reminders/SmartInput";
