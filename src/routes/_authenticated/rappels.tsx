@@ -231,8 +231,9 @@ function RappelsPage() {
   }, [sheetOpen]);
 
   return (
-    <AppShell>
-      <div className="pb-32">
+    <>
+      <div className="px-3 pt-14 pb-32">
+
         {/* Hero header */}
         <div className="relative mb-4 overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-primary/15 via-card to-card p-5 shadow-elevated">
           <div
