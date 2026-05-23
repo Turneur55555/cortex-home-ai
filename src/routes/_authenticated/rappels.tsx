@@ -421,8 +421,9 @@ function RappelsPage() {
           />
         )}
       </AnimatePresence>
-    </AppShell>
+    </>
   );
+
 }
 
 function Stat({
