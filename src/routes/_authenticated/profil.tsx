@@ -6,7 +6,6 @@ import { useProfile } from "@/hooks/useProfile";
 import { useStreak } from "@/hooks/useStreak";
 import { useUserStats } from "@/hooks/useUserStats";
 import { ProfileHeader } from "@/components/profile/ProfileHeader";
-import { ProgressionCard } from "@/components/profile/ProgressionCard";
 import { GoalsManager } from "@/components/profile/GoalsManager";
 import { BadgesStrip } from "@/components/profile/BadgesStrip";
 import { ActivityTimeline } from "@/components/profile/ActivityTimeline";
@@ -55,7 +54,6 @@ function ProfilPage() {
         onAvatarChange={onAvatarChange}
       />
 
-      <ProgressionCard />
       <GoalsManager />
       <BadgesStrip />
       <ActivityTimeline />
