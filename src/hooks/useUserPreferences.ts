@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -51,7 +52,11 @@ export function useUserPreferences() {
       return next;
     },
     onSuccess: (next) => qc.setQueryData(qk, next),
+    onError: () => toast.error("Impossible de mettre à jour les préférences"),
   });
 
-  return { prefs: query.data ?? { user_id: user?.id ?? "", ...DEFAULTS }, isLoading: query.isLoading, update: update.mutateAsync };
+  const safeUpdate = (patch: Partial<Omit<UserPreferences, "user_id">>) =>
+    update.mutateAsync(patch).catch(() => { /* handled by onError */ });
+
+  return { prefs: query.data ?? { user_id: user?.id ?? "", ...DEFAULTS }, isLoading: query.isLoading, update: safeUpdate };
 }

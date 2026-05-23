@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Apple,
   Check,
-  ChevronDown,
   Dumbbell,
   Plus,
   Star,
