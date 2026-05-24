@@ -7,9 +7,10 @@ import { Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated")({
   beforeLoad: async () => {
-    // getUser() valide le JWT côté serveur Supabase (vs getSession() qui lit localStorage sans vérification).
-    const { data, error } = await supabase.auth.getUser();
-    if (error || !data.user) throw redirect({ to: "/login" });
+    // getSession() auto-refresh le token via le refresh token si l'access token a expiré,
+    // évitant la race condition où getUser() rejette un token valide-mais-expiré.
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) throw redirect({ to: "/login" });
   },
   component: AuthenticatedLayout,
 });
@@ -35,7 +36,7 @@ function AuthGate() {
   }
   if (!user) return null; // beforeLoad will redirect
   return (
-    <AppShell>
+    <AppShell showBell>
       <div className="flex flex-1 flex-col pb-2">
         <Outlet />
       </div>

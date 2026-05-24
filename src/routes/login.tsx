@@ -1,6 +1,5 @@
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
-import { z } from "zod";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -18,43 +17,79 @@ export const Route = createFileRoute("/login")({
     ],
   }),
   beforeLoad: async () => {
-    // Vérification JWT côté serveur (pas seulement le cache localStorage).
     const { data, error } = await supabase.auth.getUser();
     if (!error && data.user) throw redirect({ to: "/" });
   },
   component: LoginPage,
 });
 
-const credSchema = z.object({
-  email: z.string().email("Email invalide").max(255),
-  password: z.string().min(8, "8 caractères minimum").max(128),
-});
+type FieldErrors = { email?: string; password?: string; confirmPassword?: string };
+
+function validateFields(
+  email: string,
+  password: string,
+  confirmPassword: string,
+  mode: "login" | "signup",
+): FieldErrors {
+  const errs: FieldErrors = {};
+  if (!email.trim()) {
+    errs.email = "Email requis";
+  } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+    errs.email = "Email invalide";
+  }
+  if (!password) {
+    errs.password = "Mot de passe requis";
+  } else if (password.length < 8) {
+    errs.password = "8 caractères minimum";
+  }
+  if (mode === "signup") {
+    if (!confirmPassword) {
+      errs.confirmPassword = "Confirmation requise";
+    } else if (confirmPassword !== password) {
+      errs.confirmPassword = "Les mots de passe ne correspondent pas";
+    }
+  }
+  return errs;
+}
 
 function LoginPage() {
   const navigate = useNavigate();
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState(false);
+  const [forgotLoading, setForgotLoading] = useState(false);
+  const [errors, setErrors] = useState<FieldErrors>({});
+
+  const switchMode = (newMode: "login" | "signup") => {
+    setMode(newMode);
+    setErrors({});
+    setConfirmPassword("");
+  };
+
+  const clearError = (field: keyof FieldErrors) => {
+    if (errors[field]) setErrors((prev) => ({ ...prev, [field]: undefined }));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const parsed = credSchema.safeParse({ email, password });
-    if (!parsed.success) {
-      toast.error(parsed.error.issues[0]?.message ?? "Données invalides");
+    const errs = validateFields(email, password, confirmPassword, mode);
+    if (Object.keys(errs).length > 0) {
+      setErrors(errs);
       return;
     }
+    setErrors({});
     setLoading(true);
     try {
       if (mode === "signup") {
         const { data, error } = await supabase.auth.signUp({
-          email: parsed.data.email,
-          password: parsed.data.password,
+          email: email.trim(),
+          password,
           options: { emailRedirectTo: window.location.origin },
         });
         if (error) throw error;
-        // Session null = confirmation email envoyée, session non-null = connexion directe
         if (!data.session) {
           toast.success("Compte créé ! Vérifiez votre email pour confirmer votre inscription.");
         } else {
@@ -63,8 +98,8 @@ function LoginPage() {
         }
       } else {
         const { error } = await supabase.auth.signInWithPassword({
-          email: parsed.data.email,
-          password: parsed.data.password,
+          email: email.trim(),
+          password,
         });
         if (error) throw error;
         navigate({ to: "/" });
@@ -77,6 +112,25 @@ function LoginPage() {
       );
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email.trim()) {
+      setErrors((prev) => ({ ...prev, email: "Entrez votre email pour recevoir le lien" }));
+      return;
+    }
+    setForgotLoading(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+      if (error) throw error;
+      toast.success("Email de réinitialisation envoyé. Vérifiez votre messagerie.");
+    } catch {
+      toast.error("Impossible d'envoyer l'email de réinitialisation.");
+    } finally {
+      setForgotLoading(false);
     }
   };
 
@@ -110,11 +164,12 @@ function LoginPage() {
           <p className="mt-2 text-sm text-muted-foreground">Votre maison, plus intelligente.</p>
         </div>
 
+        {/* Onglets Connexion / Inscription */}
         <div className="mb-6 grid grid-cols-2 gap-1 rounded-full border border-border bg-surface p-1">
           <button
             type="button"
             data-testid="auth-tab-login"
-            onClick={() => setMode("login")}
+            onClick={() => switchMode("login")}
             className={
               mode === "login"
                 ? "rounded-full bg-primary py-2 text-sm font-semibold text-primary-foreground shadow-glow"
@@ -126,7 +181,7 @@ function LoginPage() {
           <button
             type="button"
             data-testid="auth-tab-signup"
-            onClick={() => setMode("signup")}
+            onClick={() => switchMode("signup")}
             className={
               mode === "signup"
                 ? "rounded-full bg-primary py-2 text-sm font-semibold text-primary-foreground shadow-glow"
@@ -137,42 +192,89 @@ function LoginPage() {
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
+        <form onSubmit={handleSubmit} noValidate className="space-y-4">
+          {/* Email */}
+          <div className="space-y-1">
             <Label htmlFor="email">Email</Label>
             <Input
               id="email"
               data-testid="auth-email"
               type="email"
               autoComplete="email"
-              required
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="h-12 rounded-xl bg-surface"
+              onChange={(e) => { setEmail(e.target.value); clearError("email"); }}
+              className={`h-12 rounded-xl bg-surface${errors.email ? " border-destructive focus-visible:ring-destructive" : ""}`}
               placeholder="vous@exemple.com"
             />
+            {errors.email && (
+              <p className="text-xs text-destructive">{errors.email}</p>
+            )}
           </div>
-          <div className="space-y-2">
+
+          {/* Mot de passe */}
+          <div className="space-y-1">
             <Label htmlFor="password">Mot de passe</Label>
             <Input
               id="password"
               data-testid="auth-password"
               type="password"
               autoComplete={mode === "signup" ? "new-password" : "current-password"}
-              required
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="h-12 rounded-xl bg-surface"
+              onChange={(e) => { setPassword(e.target.value); clearError("password"); }}
+              className={`h-12 rounded-xl bg-surface${errors.password ? " border-destructive focus-visible:ring-destructive" : ""}`}
               placeholder="••••••••"
             />
+            {errors.password && (
+              <p className="text-xs text-destructive">{errors.password}</p>
+            )}
+            {mode === "login" && (
+              <div className="flex justify-end pt-0.5">
+                <button
+                  type="button"
+                  onClick={handleForgotPassword}
+                  disabled={forgotLoading}
+                  className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
+                >
+                  {forgotLoading && <Loader2 className="h-3 w-3 animate-spin" />}
+                  Mot de passe oublié ?
+                </button>
+              </div>
+            )}
           </div>
+
+          {/* Confirmer le mot de passe (inscription uniquement) */}
+          {mode === "signup" && (
+            <div className="space-y-1">
+              <Label htmlFor="confirmPassword">Confirmer le mot de passe</Label>
+              <Input
+                id="confirmPassword"
+                data-testid="auth-confirm-password"
+                type="password"
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(e) => { setConfirmPassword(e.target.value); clearError("confirmPassword"); }}
+                className={`h-12 rounded-xl bg-surface${errors.confirmPassword ? " border-destructive focus-visible:ring-destructive" : ""}`}
+                placeholder="••••••••"
+              />
+              {errors.confirmPassword && (
+                <p className="text-xs text-destructive">{errors.confirmPassword}</p>
+              )}
+            </div>
+          )}
+
           <Button
             type="submit"
             data-testid="auth-submit"
             disabled={loading}
             className="h-12 w-full rounded-full bg-gradient-primary text-base font-semibold shadow-glow hover:opacity-95"
           >
-            {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : mode === "login" ? "Se connecter" : "Créer mon compte"}
+            {loading ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : mode === "login" ? (
+              "Se connecter"
+            ) : (
+              "Créer mon compte"
+            )}
           </Button>
         </form>
 
