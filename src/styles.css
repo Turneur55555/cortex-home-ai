@@ -21,6 +21,25 @@
   --radius-2xl: 1.5rem;
   --radius-3xl: 2rem;
 
+  /* Spacing scale — exposed as CSS variables so non-Tailwind code (inline
+     styles, motion configs) can reference the same scale as utilities. */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+
+  /* Motion tokens — animation timings/easings should reference these. */
+  --motion-fast: 120ms;
+  --motion-base: 180ms;
+  --motion-slow: 280ms;
+  --motion-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --motion-ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);

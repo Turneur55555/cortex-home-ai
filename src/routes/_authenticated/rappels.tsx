@@ -1,23 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { AnimatePresence } from "framer-motion";
 import {
-  addMonths,
-  endOfMonth,
-  endOfWeek,
-  format,
-  isSameDay,
-  isSameMonth,
-  parseISO,
-  startOfMonth,
-  startOfWeek,
-  subMonths,
-} from "date-fns";
-import { fr } from "date-fns/locale";
-import {
-  Bell,
-  ChevronLeft,
-  ChevronRight,
   Columns3,
   LayoutList,
   ListFilter,
@@ -32,6 +16,7 @@ import { ReminderCard } from "@/components/reminders/ReminderCard";
 import { ReminderSheet } from "@/components/reminders/ReminderSheet";
 import { SmartInput } from "@/components/reminders/SmartInput";
 import { KanbanView } from "@/components/reminders/KanbanView";
+import { CalendarView } from "@/components/reminders/CalendarView";
 import {
   useCreateReminder,
   useDeleteReminder,
@@ -40,41 +25,17 @@ import {
   useToggleFavorite,
   useUpdateReminder,
 } from "@/hooks/useReminders";
+import { useReminderNotifications } from "@/hooks/useReminderNotifications";
+import { useReminderShortcuts } from "@/hooks/useReminderShortcuts";
+import { useSeedSupplements } from "@/hooks/useSeedSupplements";
 import {
   ReminderPriority,
   ReminderStatus,
   type Reminder,
   type ReminderInput,
 } from "@/services/reminders";
-
-// ─── One-time supplement seeding into Supabase ────────────────────────────────
-
-function seedTime(h: number, m: number): string {
-  const d = new Date();
-  d.setHours(h, m, 0, 0);
-  return d.toISOString();
-}
-
-const SUPPLEMENT_SEEDS: ReminderInput[] = [
-  { title: "Créatine", description: "5g", category: "Suppléments", due_at: seedTime(8, 0), recurrence: "daily", priority: "medium", all_day: false, notify_before_minutes: 10 },
-  { title: "Zinc", description: "15mg", category: "Suppléments", due_at: seedTime(20, 0), recurrence: "daily", priority: "medium", all_day: false, notify_before_minutes: 10 },
-  { title: "Magnésium", description: "200mg", category: "Suppléments", due_at: seedTime(22, 0), recurrence: "daily", priority: "medium", all_day: false, notify_before_minutes: 10 },
-  { title: "Hydratation", description: "Objectif 2L+", category: "Suppléments", due_at: seedTime(18, 0), recurrence: "daily", priority: "medium", all_day: false, notify_before_minutes: 10 },
-];
-
-function useSeedSupplements(isLoading: boolean) {
-  const createMut = useCreateReminder();
-  const done = useRef(false);
-
-  useEffect(() => {
-    if (isLoading || done.current) return;
-    if (localStorage.getItem("icortex.supps_seeded_v1")) { done.current = true; return; }
-    done.current = true;
-    localStorage.setItem("icortex.supps_seeded_v1", "1");
-    SUPPLEMENT_SEEDS.forEach((s) => createMut.mutate(s));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoading]);
-}
+import { EmptyState, FilterPill, IconBtn, Stat } from "@/ui/primitives";
+import { Bell } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/rappels")({
   head: () => ({
@@ -89,9 +50,19 @@ export const Route = createFileRoute("/_authenticated/rappels")({
 type ViewMode = "list" | "kanban" | "calendar";
 type StatusFilter = "all" | ReminderStatus | "favorites" | "overdue";
 
+const PRIORITY_LABEL: Record<ReminderPriority | "all", string> = {
+  all: "Toutes priorités",
+  low: "Faible",
+  medium: "Moyenne",
+  high: "Haute",
+  urgent: "Urgente",
+};
+
 function RappelsPage() {
   const { data: reminders = [], isLoading } = useReminders();
   useSeedSupplements(isLoading);
+  useReminderNotifications(reminders);
+
   const createMut = useCreateReminder();
   const updateMut = useUpdateReminder();
   const deleteMut = useDeleteReminder();
@@ -112,39 +83,6 @@ function RappelsPage() {
     const t = setTimeout(() => setDebounced(search.trim().toLowerCase()), 200);
     return () => clearTimeout(t);
   }, [search]);
-
-  // Browser notifications: request permission once, then check upcoming due reminders.
-  useEffect(() => {
-    if (typeof window === "undefined" || !("Notification" in window)) return;
-    if (Notification.permission === "default") Notification.requestPermission().catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || !("Notification" in window)) return;
-    if (Notification.permission !== "granted") return;
-    const sent = new Set<string>(
-      JSON.parse(sessionStorage.getItem("icortex.reminders_notified") ?? "[]"),
-    );
-    const tick = () => {
-      const now = Date.now();
-      reminders.forEach((r) => {
-        if (!r.due_at || r.status === "done") return;
-        const due = new Date(r.due_at).getTime();
-        const fire = due - r.notify_before_minutes * 60_000;
-        if (now >= fire && now < due + 60_000 && !sent.has(r.id)) {
-          new Notification(r.title, {
-            body: r.description ?? "Rappel ICORTEX",
-            tag: r.id,
-          });
-          sent.add(r.id);
-          sessionStorage.setItem("icortex.reminders_notified", JSON.stringify([...sent]));
-        }
-      });
-    };
-    tick();
-    const id = setInterval(tick, 30_000);
-    return () => clearInterval(id);
-  }, [reminders]);
 
   const stats = useMemo(() => {
     const today = new Date();
@@ -179,10 +117,28 @@ function RappelsPage() {
     });
   }, [reminders, statusFilter, priorityFilter, debounced]);
 
-  const openCreate = () => {
+  const openCreate = useCallback(() => {
     setEditing(null);
     setSheetOpen(true);
-  };
+  }, []);
+
+  const closeSheet = useCallback(() => {
+    setSheetOpen(false);
+    setEditing(null);
+  }, []);
+
+  const openEdit = useCallback((r: Reminder) => {
+    setEditing(r);
+    setSheetOpen(true);
+  }, []);
+
+  useReminderShortcuts({
+    onCreate: openCreate,
+    onFocusSearch: () =>
+      document.querySelector<HTMLInputElement>('input[aria-label="Recherche rappels"]')?.focus(),
+    onSetView: setView,
+    onEscape: () => sheetOpen && closeSheet(),
+  });
 
   const handleSubmit = async (input: ReminderInput) => {
     try {
@@ -193,8 +149,7 @@ function RappelsPage() {
         await createMut.mutateAsync(input);
         toast.success("Rappel créé");
       }
-      setSheetOpen(false);
-      setEditing(null);
+      closeSheet();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erreur");
     }
@@ -205,8 +160,7 @@ function RappelsPage() {
     try {
       await deleteMut.mutateAsync(editing.id);
       toast.success("Rappel supprimé");
-      setSheetOpen(false);
-      setEditing(null);
+      closeSheet();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erreur");
     }
@@ -221,49 +175,9 @@ function RappelsPage() {
     }
   };
 
-  const handleKanbanMove = (id: string, status: ReminderStatus) => {
-    updateMut.mutate({ id, patch: { status } });
-  };
-
-  // Keyboard shortcuts
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null;
-      const inField =
-        target &&
-        (target.tagName === "INPUT" ||
-          target.tagName === "TEXTAREA" ||
-          target.tagName === "SELECT" ||
-          target.isContentEditable);
-      if (inField) {
-        if (e.key === "Escape" && sheetOpen) {
-          setSheetOpen(false);
-          setEditing(null);
-        }
-        return;
-      }
-      if (e.key === "n" || e.key === "N") {
-        e.preventDefault();
-        openCreate();
-      } else if (e.key === "/") {
-        e.preventDefault();
-        document.querySelector<HTMLInputElement>('input[aria-label="Recherche rappels"]')?.focus();
-      } else if (e.key === "1") setView("list");
-      else if (e.key === "2") setView("kanban");
-      else if (e.key === "3") setView("calendar");
-      else if (e.key === "Escape" && sheetOpen) {
-        setSheetOpen(false);
-        setEditing(null);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [sheetOpen]);
-
   return (
     <>
       <div className="px-3 pt-14 pb-32">
-
         {/* Hero header */}
         <div className="relative mb-4 overflow-hidden rounded-3xl border border-border bg-gradient-to-br from-primary/15 via-card to-card p-5 shadow-elevated">
           <div
@@ -317,14 +231,9 @@ function RappelsPage() {
             />
           </div>
           <div className="flex items-center rounded-xl border border-border bg-card/60 p-1">
-            <ViewBtn active={view === "list"} onClick={() => setView("list")} icon={LayoutList} label="Liste (1)" />
-            <ViewBtn active={view === "kanban"} onClick={() => setView("kanban")} icon={Columns3} label="Kanban (2)" />
-            <ViewBtn
-              active={view === "calendar"}
-              onClick={() => setView("calendar")}
-              icon={CalendarIcon}
-              label="Calendrier (3)"
-            />
+            <IconBtn active={view === "list"} onClick={() => setView("list")} icon={LayoutList} label="Liste (1)" />
+            <IconBtn active={view === "kanban"} onClick={() => setView("kanban")} icon={Columns3} label="Kanban (2)" />
+            <IconBtn active={view === "calendar"} onClick={() => setView("calendar")} icon={CalendarIcon} label="Calendrier (3)" />
           </div>
         </div>
 
@@ -368,15 +277,7 @@ function RappelsPage() {
               active={priorityFilter === p}
               onClick={() => setPriorityFilter(p)}
             >
-              {p === "all"
-                ? "Toutes priorités"
-                : p === "low"
-                ? "Faible"
-                : p === "medium"
-                ? "Moyenne"
-                : p === "high"
-                ? "Haute"
-                : "Urgente"}
+              {PRIORITY_LABEL[p]}
             </FilterPill>
           ))}
         </div>
@@ -390,7 +291,13 @@ function RappelsPage() {
           </div>
         ) : view === "list" ? (
           filtered.length === 0 ? (
-            <EmptyState onCreate={openCreate} />
+            <EmptyState
+              icon={Bell}
+              title="Aucun rappel"
+              description="Créez votre premier rappel pour ne rien oublier."
+              actionLabel="Créer un rappel"
+              onAction={openCreate}
+            />
           ) : (
             <div className="space-y-2">
               <AnimatePresence initial={false}>
@@ -400,10 +307,7 @@ function RappelsPage() {
                     reminder={r}
                     onToggle={() => toggleMut.mutate(r)}
                     onFavorite={() => favMut.mutate(r)}
-                    onClick={() => {
-                      setEditing(r);
-                      setSheetOpen(true);
-                    }}
+                    onClick={() => openEdit(r)}
                   />
                 ))}
               </AnimatePresence>
@@ -412,11 +316,8 @@ function RappelsPage() {
         ) : view === "kanban" ? (
           <KanbanView
             reminders={filtered}
-            onMove={handleKanbanMove}
-            onPick={(r) => {
-              setEditing(r);
-              setSheetOpen(true);
-            }}
+            onMove={(id, status) => updateMut.mutate({ id, patch: { status } })}
+            onPick={openEdit}
             onToggle={(r) => toggleMut.mutate(r)}
             onFavorite={(r) => favMut.mutate(r)}
           />
@@ -427,24 +328,17 @@ function RappelsPage() {
             selected={calSelected}
             setSelected={setCalSelected}
             reminders={filtered}
-            onPick={(r) => {
-              setEditing(r);
-              setSheetOpen(true);
-            }}
+            onPick={openEdit}
             onCreate={openCreate}
           />
         )}
       </div>
 
-
       <AnimatePresence>
         {sheetOpen && (
           <ReminderSheet
             reminder={editing}
-            onClose={() => {
-              setSheetOpen(false);
-              setEditing(null);
-            }}
+            onClose={closeSheet}
             onSubmit={handleSubmit}
             onDelete={editing ? handleDelete : undefined}
             submitting={createMut.isPending || updateMut.isPending}
@@ -452,259 +346,5 @@ function RappelsPage() {
         )}
       </AnimatePresence>
     </>
-  );
-
-}
-
-function Stat({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: number;
-  tone?: "indigo" | "danger";
-}) {
-  const valClass =
-    tone === "danger"
-      ? "text-destructive"
-      : tone === "indigo"
-      ? "text-indigo-300"
-      : "text-foreground";
-  return (
-    <div className="rounded-2xl border border-border bg-card/60 p-2.5 backdrop-blur">
-      <div className={`text-xl font-bold ${valClass}`}>{value}</div>
-      <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-        {label}
-      </div>
-    </div>
-  );
-}
-
-function ViewBtn({
-  active,
-  onClick,
-  icon: Icon,
-  label,
-}: {
-  active: boolean;
-  onClick: () => void;
-  icon: typeof Bell;
-  label?: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={label}
-      aria-label={label}
-      className={`flex h-8 w-8 items-center justify-center rounded-lg transition-colors ${
-        active ? "bg-primary/20 text-foreground" : "text-muted-foreground hover:text-foreground"
-      }`}
-    >
-      <Icon className="h-4 w-4" />
-    </button>
-  );
-}
-
-function FilterPill({
-  active,
-  onClick,
-  children,
-  tone,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-  tone?: "danger" | "amber";
-}) {
-  const activeClass =
-    tone === "danger"
-      ? "border-destructive/50 bg-destructive/15 text-destructive"
-      : tone === "amber"
-      ? "border-amber-500/40 bg-amber-500/15 text-amber-300"
-      : "border-primary/50 bg-primary/15 text-foreground";
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1 text-[11px] font-semibold transition-all ${
-        active
-          ? activeClass
-          : "border-border bg-card/60 text-muted-foreground hover:text-foreground"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function EmptyState({ onCreate }: { onCreate: () => void }) {
-  return (
-    <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-border bg-card/30 p-10 text-center">
-      <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-primary/15 text-primary">
-        <Bell className="h-5 w-5" />
-      </div>
-      <h3 className="text-sm font-bold">Aucun rappel</h3>
-      <p className="mt-1 max-w-[260px] text-xs text-muted-foreground">
-        Créez votre premier rappel pour ne rien oublier.
-      </p>
-      <button
-        type="button"
-        onClick={onCreate}
-        className="mt-4 inline-flex h-10 items-center gap-1.5 rounded-full bg-gradient-primary px-4 text-xs font-semibold text-primary-foreground shadow-glow"
-      >
-        <Plus className="h-4 w-4" /> Créer un rappel
-      </button>
-    </div>
-  );
-}
-
-function CalendarView({
-  cursor,
-  setCursor,
-  selected,
-  setSelected,
-  reminders,
-  onPick,
-  onCreate,
-}: {
-  cursor: Date;
-  setCursor: (d: Date) => void;
-  selected: Date | null;
-  setSelected: (d: Date) => void;
-  reminders: Reminder[];
-  onPick: (r: Reminder) => void;
-  onCreate: () => void;
-}) {
-  const monthStart = startOfMonth(cursor);
-  const monthEnd = endOfMonth(cursor);
-  const gridStart = startOfWeek(monthStart, { weekStartsOn: 1 });
-  const gridEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
-  const days: Date[] = [];
-  for (let d = gridStart; d <= gridEnd; d = new Date(d.getTime() + 86400000)) days.push(d);
-
-  const byDay = useMemo(() => {
-    const m = new Map<string, Reminder[]>();
-    reminders.forEach((r) => {
-      if (!r.due_at) return;
-      const k = format(parseISO(r.due_at), "yyyy-MM-dd");
-      const arr = m.get(k) ?? [];
-      arr.push(r);
-      m.set(k, arr);
-    });
-    return m;
-  }, [reminders]);
-
-  const dayReminders = selected
-    ? byDay.get(format(selected, "yyyy-MM-dd")) ?? []
-    : [];
-
-  return (
-    <div className="space-y-3">
-      <div className="rounded-2xl border border-border bg-card/60 p-3 backdrop-blur">
-        <div className="mb-2 flex items-center justify-between">
-          <button
-            type="button"
-            onClick={() => setCursor(subMonths(cursor, 1))}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-surface"
-            aria-label="Mois précédent"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          <div className="text-sm font-bold capitalize">
-            {format(cursor, "MMMM yyyy", { locale: fr })}
-          </div>
-          <button
-            type="button"
-            onClick={() => setCursor(addMonths(cursor, 1))}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-surface"
-            aria-label="Mois suivant"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="mb-1 grid grid-cols-7 gap-1 text-center text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-          {["L", "M", "M", "J", "V", "S", "D"].map((d, i) => (
-            <div key={i}>{d}</div>
-          ))}
-        </div>
-        <div className="grid grid-cols-7 gap-1">
-          {days.map((d) => {
-            const key = format(d, "yyyy-MM-dd");
-            const count = byDay.get(key)?.length ?? 0;
-            const isSel = selected && isSameDay(d, selected);
-            const inMonth = isSameMonth(d, cursor);
-            const today = isSameDay(d, new Date());
-            return (
-              <button
-                type="button"
-                key={key}
-                onClick={() => setSelected(d)}
-                className={`relative flex aspect-square flex-col items-center justify-center rounded-lg text-xs transition-all ${
-                  isSel
-                    ? "bg-gradient-primary font-bold text-primary-foreground shadow-glow"
-                    : today
-                    ? "border border-primary/40 text-foreground"
-                    : inMonth
-                    ? "text-foreground hover:bg-surface"
-                    : "text-muted-foreground/40 hover:bg-surface"
-                }`}
-              >
-                {format(d, "d")}
-                {count > 0 && (
-                  <span
-                    className={`absolute bottom-1 h-1 w-1 rounded-full ${
-                      isSel ? "bg-primary-foreground" : "bg-primary"
-                    }`}
-                  />
-                )}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      <div>
-        <div className="mb-2 flex items-center justify-between">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-            {selected ? format(selected, "EEEE d MMMM", { locale: fr }) : "Sélectionnez un jour"}
-          </h3>
-          <span className="text-[11px] text-muted-foreground">{dayReminders.length} rappel(s)</span>
-        </div>
-        {dayReminders.length === 0 ? (
-          <button
-            type="button"
-            onClick={onCreate}
-            className="flex w-full items-center justify-center gap-1.5 rounded-2xl border border-dashed border-border bg-card/30 py-5 text-xs font-semibold text-muted-foreground hover:text-foreground"
-          >
-            <Plus className="h-3.5 w-3.5" /> Ajouter pour ce jour
-          </button>
-        ) : (
-          <div className="space-y-2">
-            {dayReminders.map((r) => (
-              <motion.button
-                key={r.id}
-                layout
-                onClick={() => onPick(r)}
-                className="w-full rounded-xl border border-border bg-card/70 p-2.5 text-left backdrop-blur hover:border-primary/40"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="truncate text-sm font-semibold">{r.title}</span>
-                  <span className="text-[10px] font-medium text-muted-foreground">
-                    {r.due_at ? format(parseISO(r.due_at), "HH:mm") : "—"}
-                  </span>
-                </div>
-                {r.description && (
-                  <p className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground">
-                    {r.description}
-                  </p>
-                )}
-              </motion.button>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
   );
 }
