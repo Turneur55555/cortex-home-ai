@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence } from "framer-motion";
 import {
   Columns3,
@@ -9,14 +9,12 @@ import {
   Search,
   Sparkles,
   Calendar as CalendarIcon,
+  Bell,
 } from "lucide-react";
 import { toast } from "sonner";
 
 import { ReminderCard } from "@/components/reminders/ReminderCard";
-import { ReminderSheet } from "@/components/reminders/ReminderSheet";
 import { SmartInput } from "@/components/reminders/SmartInput";
-import { KanbanView } from "@/components/reminders/KanbanView";
-import { CalendarView } from "@/components/reminders/CalendarView";
 import {
   useCreateReminder,
   useDeleteReminder,
@@ -36,7 +34,26 @@ import {
   type ReminderStatus,
 } from "@/types/reminder";
 import { EmptyState, FilterPill, IconBtn, Stat } from "@/ui/primitives";
-import { Bell } from "lucide-react";
+
+// Lazy-load heavy views to shrink the initial bundle on the Rappels route.
+const KanbanView = lazy(() =>
+  import("@/components/reminders/KanbanView").then((m) => ({ default: m.KanbanView })),
+);
+const CalendarView = lazy(() =>
+  import("@/components/reminders/CalendarView").then((m) => ({ default: m.CalendarView })),
+);
+const ReminderSheet = lazy(() =>
+  import("@/components/reminders/ReminderSheet").then((m) => ({ default: m.ReminderSheet })),
+);
+
+const ViewFallback = () => (
+  <div className="space-y-2">
+    {Array.from({ length: 3 }).map((_, i) => (
+      <div key={i} className="h-20 animate-pulse rounded-2xl bg-card/50" />
+    ))}
+  </div>
+);
+
 
 export const Route = createFileRoute("/_authenticated/rappels")({
   head: () => ({
@@ -132,6 +149,15 @@ function RappelsPage() {
     setEditing(r);
     setSheetOpen(true);
   }, []);
+
+  // Stable per-item handlers — prevents ReminderCard re-renders on parent state changes.
+  const handleToggle = useCallback((r: Reminder) => toggleMut.mutate(r), [toggleMut]);
+  const handleFavorite = useCallback((r: Reminder) => favMut.mutate(r), [favMut]);
+  const handleMove = useCallback(
+    (id: string, status: ReminderStatus) => updateMut.mutate({ id, patch: { status } }),
+    [updateMut],
+  );
+
 
   useReminderShortcuts({
     onCreate: openCreate,
@@ -306,46 +332,54 @@ function RappelsPage() {
                   <ReminderCard
                     key={r.id}
                     reminder={r}
-                    onToggle={() => toggleMut.mutate(r)}
-                    onFavorite={() => favMut.mutate(r)}
-                    onClick={() => openEdit(r)}
+                    onToggle={handleToggle}
+                    onFavorite={handleFavorite}
+                    onClick={openEdit}
                   />
                 ))}
               </AnimatePresence>
             </div>
           )
         ) : view === "kanban" ? (
-          <KanbanView
-            reminders={filtered}
-            onMove={(id, status) => updateMut.mutate({ id, patch: { status } })}
-            onPick={openEdit}
-            onToggle={(r) => toggleMut.mutate(r)}
-            onFavorite={(r) => favMut.mutate(r)}
-          />
+          <Suspense fallback={<ViewFallback />}>
+            <KanbanView
+              reminders={filtered}
+              onMove={handleMove}
+              onPick={openEdit}
+              onToggle={handleToggle}
+              onFavorite={handleFavorite}
+            />
+          </Suspense>
         ) : (
-          <CalendarView
-            cursor={calCursor}
-            setCursor={setCalCursor}
-            selected={calSelected}
-            setSelected={setCalSelected}
-            reminders={filtered}
-            onPick={openEdit}
-            onCreate={openCreate}
-          />
+          <Suspense fallback={<ViewFallback />}>
+            <CalendarView
+              cursor={calCursor}
+              setCursor={setCalCursor}
+              selected={calSelected}
+              setSelected={setCalSelected}
+              reminders={filtered}
+              onPick={openEdit}
+              onCreate={openCreate}
+            />
+          </Suspense>
         )}
+
       </div>
 
       <AnimatePresence>
         {sheetOpen && (
-          <ReminderSheet
-            reminder={editing}
-            onClose={closeSheet}
-            onSubmit={handleSubmit}
-            onDelete={editing ? handleDelete : undefined}
-            submitting={createMut.isPending || updateMut.isPending}
-          />
+          <Suspense fallback={null}>
+            <ReminderSheet
+              reminder={editing}
+              onClose={closeSheet}
+              onSubmit={handleSubmit}
+              onDelete={editing ? handleDelete : undefined}
+              submitting={createMut.isPending || updateMut.isPending}
+            />
+          </Suspense>
         )}
       </AnimatePresence>
+
     </>
   );
 }
