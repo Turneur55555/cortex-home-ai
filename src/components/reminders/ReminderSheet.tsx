@@ -2,31 +2,18 @@ import { useEffect, useState } from "react";
 import { Loader2, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import {
-  ReminderPriority,
-  ReminderRecurrence,
-  ReminderStatus,
+  PRIORITY_LABEL,
+  RECURRENCE_LABEL,
+  REMINDER_PRIORITIES,
+  REMINDER_RECURRENCES,
+  REMINDER_STATUSES,
+  STATUS_LABEL,
   type Reminder,
   type ReminderInput,
-} from "@/services/reminders";
-
-const PRIORITY_LABEL: Record<ReminderPriority, string> = {
-  low: "Faible",
-  medium: "Moyenne",
-  high: "Haute",
-  urgent: "Urgente",
-};
-const STATUS_LABEL: Record<ReminderStatus, string> = {
-  todo: "À faire",
-  in_progress: "En cours",
-  done: "Terminé",
-};
-const RECUR_LABEL: Record<ReminderRecurrence, string> = {
-  none: "Aucune",
-  daily: "Quotidienne",
-  weekly: "Hebdomadaire",
-  monthly: "Mensuelle",
-  yearly: "Annuelle",
-};
+  type ReminderPriority,
+  type ReminderRecurrence,
+  type ReminderStatus,
+} from "@/types/reminder";
 
 function toLocalInputValue(iso: string | null): string {
   if (!iso) return "";
@@ -157,7 +144,7 @@ export function ReminderSheet({
                 onChange={(e) => setPriority(e.target.value as ReminderPriority)}
                 className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary"
               >
-                {ReminderPriority.map((p) => (
+                {REMINDER_PRIORITIES.map((p) => (
                   <option key={p} value={p}>{PRIORITY_LABEL[p]}</option>
                 ))}
               </select>
@@ -168,7 +155,7 @@ export function ReminderSheet({
                 onChange={(e) => setStatus(e.target.value as ReminderStatus)}
                 className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary"
               >
-                {ReminderStatus.map((s) => (
+                {REMINDER_STATUSES.map((s) => (
                   <option key={s} value={s}>{STATUS_LABEL[s]}</option>
                 ))}
               </select>
@@ -182,8 +169,8 @@ export function ReminderSheet({
                 onChange={(e) => setRecurrence(e.target.value as ReminderRecurrence)}
                 className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary"
               >
-                {ReminderRecurrence.map((r) => (
-                  <option key={r} value={r}>{RECUR_LABEL[r]}</option>
+                {REMINDER_RECURRENCES.map((r) => (
+                  <option key={r} value={r}>{RECURRENCE_LABEL[r]}</option>
                 ))}
               </select>
             </Field>

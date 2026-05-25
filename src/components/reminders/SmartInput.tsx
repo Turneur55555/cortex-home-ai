@@ -2,7 +2,7 @@ import { useState, type KeyboardEvent } from "react";
 import { Loader2, Sparkles, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import type { ReminderInput } from "@/services/reminders";
+import type { ReminderInput } from "@/types/reminder";
 
 interface SmartInputProps {
   onCreate: (input: ReminderInput) => Promise<void> | void;

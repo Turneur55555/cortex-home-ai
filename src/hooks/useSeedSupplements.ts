@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useCreateReminder } from "@/hooks/useReminders";
-import type { ReminderInput } from "@/services/reminders";
+import type { ReminderInput } from "@/types/reminder";
 
 const SEED_FLAG = "icortex.supps_seeded_v1";
 

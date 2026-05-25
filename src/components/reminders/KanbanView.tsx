@@ -14,7 +14,7 @@ import {
 } from "@dnd-kit/core";
 import { AnimatePresence } from "framer-motion";
 import { ReminderCard } from "./ReminderCard";
-import type { Reminder, ReminderStatus } from "@/services/reminders";
+import type { Reminder, ReminderStatus } from "@/types/reminder";
 
 const COLUMNS: { id: ReminderStatus; label: string; tone: string }[] = [
   { id: "todo", label: "À faire", tone: "text-muted-foreground" },

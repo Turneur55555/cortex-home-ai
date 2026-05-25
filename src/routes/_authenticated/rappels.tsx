@@ -29,11 +29,12 @@ import { useReminderNotifications } from "@/hooks/useReminderNotifications";
 import { useReminderShortcuts } from "@/hooks/useReminderShortcuts";
 import { useSeedSupplements } from "@/hooks/useSeedSupplements";
 import {
-  ReminderPriority,
-  ReminderStatus,
+  REMINDER_PRIORITIES,
   type Reminder,
   type ReminderInput,
-} from "@/services/reminders";
+  type ReminderPriority,
+  type ReminderStatus,
+} from "@/types/reminder";
 import { EmptyState, FilterPill, IconBtn, Stat } from "@/ui/primitives";
 import { Bell } from "lucide-react";
 
@@ -271,7 +272,7 @@ function RappelsPage() {
           <span className="mx-1 text-muted-foreground/40">
             <ListFilter className="h-3.5 w-3.5" />
           </span>
-          {(["all", ...ReminderPriority] as const).map((p) => (
+          {(["all", ...REMINDER_PRIORITIES] as const).map((p) => (
             <FilterPill
               key={p}
               active={priorityFilter === p}
