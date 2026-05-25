@@ -150,6 +150,15 @@ function RappelsPage() {
     setSheetOpen(true);
   }, []);
 
+  // Stable per-item handlers — prevents ReminderCard re-renders on parent state changes.
+  const handleToggle = useCallback((r: Reminder) => toggleMut.mutate(r), [toggleMut]);
+  const handleFavorite = useCallback((r: Reminder) => favMut.mutate(r), [favMut]);
+  const handleMove = useCallback(
+    (id: string, status: ReminderStatus) => updateMut.mutate({ id, patch: { status } }),
+    [updateMut],
+  );
+
+
   useReminderShortcuts({
     onCreate: openCreate,
     onFocusSearch: () =>
