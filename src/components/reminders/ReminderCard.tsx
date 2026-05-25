@@ -58,7 +58,7 @@ export const ReminderCard = memo(function ReminderCard({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -6 }}
       transition={{ duration: 0.18 }}
-      onClick={onClick}
+      onClick={() => onClick(reminder)}
       className="group relative cursor-pointer overflow-hidden rounded-2xl border border-border bg-card/70 p-3.5 shadow-sm backdrop-blur-md transition-all hover:border-primary/40 hover:shadow-elevated"
     >
       <div className="flex items-start gap-3">
@@ -66,7 +66,7 @@ export const ReminderCard = memo(function ReminderCard({
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            onToggle();
+            onToggle(reminder);
           }}
           className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 transition-all ${
             done
