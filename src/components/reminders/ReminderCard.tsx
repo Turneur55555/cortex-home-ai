@@ -1,8 +1,10 @@
+import { memo } from "react";
 import { motion } from "framer-motion";
 import { Bell, Calendar, Check, Repeat, Star } from "lucide-react";
 import { format, isPast, isToday, isTomorrow, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
 import type { Reminder, ReminderPriority } from "@/types/reminder";
+
 
 const PRIORITY_CLASS: Record<ReminderPriority, string> = {
   low: "border-sky-500/30 bg-sky-500/10 text-sky-300",
