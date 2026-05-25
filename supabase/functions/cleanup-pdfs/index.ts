@@ -24,18 +24,27 @@ Deno.serve(async (req) => {
   try {
     // Vérifier le secret de déclenchement (pour appels cron externes)
     const authHeader = req.headers.get("Authorization") ?? "";
+    const provided = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : authHeader;
     const cronSecret = Deno.env.get("CRON_SECRET");
 
-    // Accepter soit le service role key, soit un CRON_SECRET dédié
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    if (!SERVICE_ROLE_KEY) {
+    if (!SERVICE_ROLE_KEY || !cronSecret) {
       return new Response(JSON.stringify({ error: "Service indisponible" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    // Authentification : accepter le CRON_SECRET OU le service role key
+    if (provided !== cronSecret && provided !== SERVICE_ROLE_KEY) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
 
     // Utiliser le service role pour bypasser RLS (nécessaire pour cleanup)
     const supa = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
