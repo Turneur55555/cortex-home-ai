@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import type { Reminder } from "@/services/reminders";
+import type { Reminder } from "@/types/reminder";
 
 const STORAGE_KEY = "icortex.reminders_notified";
 
