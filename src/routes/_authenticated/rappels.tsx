@@ -332,33 +332,38 @@ function RappelsPage() {
                   <ReminderCard
                     key={r.id}
                     reminder={r}
-                    onToggle={() => toggleMut.mutate(r)}
-                    onFavorite={() => favMut.mutate(r)}
-                    onClick={() => openEdit(r)}
+                    onToggle={handleToggle}
+                    onFavorite={handleFavorite}
+                    onClick={openEdit}
                   />
                 ))}
               </AnimatePresence>
             </div>
           )
         ) : view === "kanban" ? (
-          <KanbanView
-            reminders={filtered}
-            onMove={(id, status) => updateMut.mutate({ id, patch: { status } })}
-            onPick={openEdit}
-            onToggle={(r) => toggleMut.mutate(r)}
-            onFavorite={(r) => favMut.mutate(r)}
-          />
+          <Suspense fallback={<ViewFallback />}>
+            <KanbanView
+              reminders={filtered}
+              onMove={handleMove}
+              onPick={openEdit}
+              onToggle={handleToggle}
+              onFavorite={handleFavorite}
+            />
+          </Suspense>
         ) : (
-          <CalendarView
-            cursor={calCursor}
-            setCursor={setCalCursor}
-            selected={calSelected}
-            setSelected={setCalSelected}
-            reminders={filtered}
-            onPick={openEdit}
-            onCreate={openCreate}
-          />
+          <Suspense fallback={<ViewFallback />}>
+            <CalendarView
+              cursor={calCursor}
+              setCursor={setCalCursor}
+              selected={calSelected}
+              setSelected={setCalSelected}
+              reminders={filtered}
+              onPick={openEdit}
+              onCreate={openCreate}
+            />
+          </Suspense>
         )}
+
       </div>
 
       <AnimatePresence>
