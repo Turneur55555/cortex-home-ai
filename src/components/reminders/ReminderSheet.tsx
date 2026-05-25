@@ -2,31 +2,18 @@ import { useEffect, useState } from "react";
 import { Loader2, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import {
-  ReminderPriority,
-  ReminderRecurrence,
-  ReminderStatus,
+  PRIORITY_LABEL,
+  RECURRENCE_LABEL,
+  REMINDER_PRIORITIES,
+  REMINDER_RECURRENCES,
+  REMINDER_STATUSES,
+  STATUS_LABEL,
   type Reminder,
   type ReminderInput,
-} from "@/services/reminders";
-
-const PRIORITY_LABEL: Record<ReminderPriority, string> = {
-  low: "Faible",
-  medium: "Moyenne",
-  high: "Haute",
-  urgent: "Urgente",
-};
-const STATUS_LABEL: Record<ReminderStatus, string> = {
-  todo: "À faire",
-  in_progress: "En cours",
-  done: "Terminé",
-};
-const RECUR_LABEL: Record<ReminderRecurrence, string> = {
-  none: "Aucune",
-  daily: "Quotidienne",
-  weekly: "Hebdomadaire",
-  monthly: "Mensuelle",
-  yearly: "Annuelle",
-};
+  type ReminderPriority,
+  type ReminderRecurrence,
+  type ReminderStatus,
+} from "@/types/reminder";
 
 function toLocalInputValue(iso: string | null): string {
   if (!iso) return "";
