@@ -28,18 +28,19 @@ function formatDue(iso: string | null): { label: string; tone: "past" | "today" 
   return { label: format(d, "d MMM · HH:mm", { locale: fr }), tone: "later" };
 }
 
-export function ReminderCard({
+export const ReminderCard = memo(function ReminderCard({
   reminder,
   onToggle,
   onFavorite,
   onClick,
 }: {
   reminder: Reminder;
-  onToggle: () => void;
-  onFavorite: () => void;
-  onClick: () => void;
+  onToggle: (r: Reminder) => void;
+  onFavorite: (r: Reminder) => void;
+  onClick: (r: Reminder) => void;
 }) {
   const done = reminder.status === "done";
+
   const due = formatDue(reminder.due_at);
   const toneClass =
     due.tone === "past"
