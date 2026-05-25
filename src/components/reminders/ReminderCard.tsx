@@ -91,7 +91,7 @@ export const ReminderCard = memo(function ReminderCard({
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                onFavorite();
+                onFavorite(reminder);
               }}
               className="shrink-0 text-muted-foreground transition-colors hover:text-amber-400"
               aria-label="Favori"
