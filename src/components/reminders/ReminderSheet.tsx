@@ -144,7 +144,7 @@ export function ReminderSheet({
                 onChange={(e) => setPriority(e.target.value as ReminderPriority)}
                 className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary"
               >
-                {ReminderPriority.map((p) => (
+                {REMINDER_PRIORITIES.map((p) => (
                   <option key={p} value={p}>{PRIORITY_LABEL[p]}</option>
                 ))}
               </select>
@@ -155,7 +155,7 @@ export function ReminderSheet({
                 onChange={(e) => setStatus(e.target.value as ReminderStatus)}
                 className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary"
               >
-                {ReminderStatus.map((s) => (
+                {REMINDER_STATUSES.map((s) => (
                   <option key={s} value={s}>{STATUS_LABEL[s]}</option>
                 ))}
               </select>
@@ -169,8 +169,8 @@ export function ReminderSheet({
                 onChange={(e) => setRecurrence(e.target.value as ReminderRecurrence)}
                 className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary"
               >
-                {ReminderRecurrence.map((r) => (
-                  <option key={r} value={r}>{RECUR_LABEL[r]}</option>
+                {REMINDER_RECURRENCES.map((r) => (
+                  <option key={r} value={r}>{RECURRENCE_LABEL[r]}</option>
                 ))}
               </select>
             </Field>
