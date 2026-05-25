@@ -29,11 +29,12 @@ import { useReminderNotifications } from "@/hooks/useReminderNotifications";
 import { useReminderShortcuts } from "@/hooks/useReminderShortcuts";
 import { useSeedSupplements } from "@/hooks/useSeedSupplements";
 import {
-  ReminderPriority,
-  ReminderStatus,
+  REMINDER_PRIORITIES,
   type Reminder,
   type ReminderInput,
-} from "@/services/reminders";
+  type ReminderPriority,
+  type ReminderStatus,
+} from "@/types/reminder";
 import { EmptyState, FilterPill, IconBtn, Stat } from "@/ui/primitives";
 import { Bell } from "lucide-react";
 
