@@ -368,15 +368,18 @@ function RappelsPage() {
 
       <AnimatePresence>
         {sheetOpen && (
-          <ReminderSheet
-            reminder={editing}
-            onClose={closeSheet}
-            onSubmit={handleSubmit}
-            onDelete={editing ? handleDelete : undefined}
-            submitting={createMut.isPending || updateMut.isPending}
-          />
+          <Suspense fallback={null}>
+            <ReminderSheet
+              reminder={editing}
+              onClose={closeSheet}
+              onSubmit={handleSubmit}
+              onDelete={editing ? handleDelete : undefined}
+              submitting={createMut.isPending || updateMut.isPending}
+            />
+          </Suspense>
         )}
       </AnimatePresence>
+
     </>
   );
 }
