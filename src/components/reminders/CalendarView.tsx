@@ -14,7 +14,7 @@ import {
 } from "date-fns";
 import { fr } from "date-fns/locale";
 import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
-import type { Reminder } from "@/services/reminders";
+import type { Reminder } from "@/types/reminder";
 
 export interface CalendarViewProps {
   cursor: Date;
