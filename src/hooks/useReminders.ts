@@ -8,9 +8,8 @@ import {
   toggleComplete,
   toggleFavorite,
   updateReminder,
-  type Reminder,
-  type ReminderInput,
 } from "@/services/reminders";
+import type { Reminder, ReminderInput } from "@/types/reminder";
 
 const KEY = ["reminders"] as const;
 
