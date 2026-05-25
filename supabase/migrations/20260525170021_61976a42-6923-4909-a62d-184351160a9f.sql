@@ -29,6 +29,7 @@ CREATE POLICY "Users read own exercise images"
   ON storage.objects FOR SELECT TO authenticated
   USING (bucket_id = 'exercise-images' AND (auth.uid())::text = (storage.foldername(name))[1]);
 
+DROP POLICY IF EXISTS "Users upload own exercise images" ON storage.objects;
 CREATE POLICY "Users upload own exercise images"
   ON storage.objects FOR INSERT TO authenticated
   WITH CHECK (bucket_id = 'exercise-images' AND (auth.uid())::text = (storage.foldername(name))[1]);
