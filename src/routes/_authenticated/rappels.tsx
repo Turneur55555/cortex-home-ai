@@ -272,7 +272,7 @@ function RappelsPage() {
           <span className="mx-1 text-muted-foreground/40">
             <ListFilter className="h-3.5 w-3.5" />
           </span>
-          {(["all", ...ReminderPriority] as const).map((p) => (
+          {(["all", ...REMINDER_PRIORITIES] as const).map((p) => (
             <FilterPill
               key={p}
               active={priorityFilter === p}
