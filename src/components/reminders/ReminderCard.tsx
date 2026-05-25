@@ -133,4 +133,5 @@ export const ReminderCard = memo(function ReminderCard({
       </div>
     </motion.div>
   );
-}
+});
+
