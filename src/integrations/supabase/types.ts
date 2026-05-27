@@ -68,6 +68,27 @@ export type Database = {
         }
         Relationships: []
       }
+      calendar_tokens: {
+        Row: {
+          created_at: string
+          id: string
+          token: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          token: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          token?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       documents: {
         Row: {
           alerts: Json | null
