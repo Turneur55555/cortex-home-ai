@@ -19,6 +19,7 @@ import { Route as AuthenticatedProfilRouteImport } from './routes/_authenticated
 import { Route as AuthenticatedPreferencesAlimentairesRouteImport } from './routes/_authenticated/preferences-alimentaires'
 import { Route as AuthenticatedDocumentsRouteImport } from './routes/_authenticated/documents'
 import { Route as AuthenticatedFitnessIndexRouteImport } from './routes/_authenticated/fitness/index'
+import { Route as ApiPublicCalendarTokenDoticsRouteImport } from './routes/api/public/calendar.$token[.]ics'
 
 const Char91indexChar93Route = Char91indexChar93RouteImport.update({
   id: '/index',
@@ -71,6 +72,12 @@ const AuthenticatedFitnessIndexRoute =
     path: '/fitness/',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const ApiPublicCalendarTokenDoticsRoute =
+  ApiPublicCalendarTokenDoticsRouteImport.update({
+    id: '/api/public/calendar/$token.ics',
+    path: '/api/public/calendar/$token.ics',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -82,6 +89,7 @@ export interface FileRoutesByFullPath {
   '/rappels': typeof AuthenticatedRappelsRoute
   '/stocks': typeof AuthenticatedStocksRoute
   '/fitness/': typeof AuthenticatedFitnessIndexRoute
+  '/api/public/calendar/$token.ics': typeof ApiPublicCalendarTokenDoticsRoute
 }
 export interface FileRoutesByTo {
   '/index': typeof Char91indexChar93Route
@@ -93,6 +101,7 @@ export interface FileRoutesByTo {
   '/stocks': typeof AuthenticatedStocksRoute
   '/': typeof AuthenticatedIndexRoute
   '/fitness': typeof AuthenticatedFitnessIndexRoute
+  '/api/public/calendar/$token.ics': typeof ApiPublicCalendarTokenDoticsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -106,6 +115,7 @@ export interface FileRoutesById {
   '/_authenticated/stocks': typeof AuthenticatedStocksRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/fitness/': typeof AuthenticatedFitnessIndexRoute
+  '/api/public/calendar/$token.ics': typeof ApiPublicCalendarTokenDoticsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -119,6 +129,7 @@ export interface FileRouteTypes {
     | '/rappels'
     | '/stocks'
     | '/fitness/'
+    | '/api/public/calendar/$token.ics'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/index'
@@ -130,6 +141,7 @@ export interface FileRouteTypes {
     | '/stocks'
     | '/'
     | '/fitness'
+    | '/api/public/calendar/$token.ics'
   id:
     | '__root__'
     | '/_authenticated'
@@ -142,12 +154,14 @@ export interface FileRouteTypes {
     | '/_authenticated/stocks'
     | '/_authenticated/'
     | '/_authenticated/fitness/'
+    | '/api/public/calendar/$token.ics'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   Char91indexChar93Route: typeof Char91indexChar93Route
   LoginRoute: typeof LoginRoute
+  ApiPublicCalendarTokenDoticsRoute: typeof ApiPublicCalendarTokenDoticsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -222,6 +236,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedFitnessIndexRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/api/public/calendar/$token.ics': {
+      id: '/api/public/calendar/$token.ics'
+      path: '/api/public/calendar/$token.ics'
+      fullPath: '/api/public/calendar/$token.ics'
+      preLoaderRoute: typeof ApiPublicCalendarTokenDoticsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -254,6 +275,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   Char91indexChar93Route: Char91indexChar93Route,
   LoginRoute: LoginRoute,
+  ApiPublicCalendarTokenDoticsRoute: ApiPublicCalendarTokenDoticsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

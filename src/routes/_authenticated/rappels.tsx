@@ -14,6 +14,7 @@ import {
 import { toast } from "sonner";
 
 import { ReminderCard } from "@/components/reminders/ReminderCard";
+import { AppleCalendarButton } from "@/components/reminders/AppleCalendarButton";
 import { SmartInput } from "@/components/reminders/SmartInput";
 import {
   useCreateReminder,
@@ -225,13 +226,16 @@ function RappelsPage() {
                 Organisez vos échéances en toute fluidité.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={openCreate}
-              className="inline-flex h-10 items-center gap-1.5 rounded-full bg-gradient-primary px-3.5 text-xs font-semibold text-primary-foreground shadow-glow active:scale-95"
-            >
-              <Plus className="h-4 w-4" /> Nouveau
-            </button>
+            <div className="flex items-center gap-2">
+              <AppleCalendarButton />
+              <button
+                type="button"
+                onClick={openCreate}
+                className="inline-flex h-10 items-center gap-1.5 rounded-full bg-gradient-primary px-3.5 text-xs font-semibold text-primary-foreground shadow-glow active:scale-95"
+              >
+                <Plus className="h-4 w-4" /> Nouveau
+              </button>
+            </div>
           </div>
 
           <div className="relative mt-4 grid grid-cols-4 gap-2">
