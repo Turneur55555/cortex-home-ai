@@ -5,7 +5,8 @@ export const Route = createFileRoute("/api/public/calendar/$token.ics")({
   server: {
     handlers: {
       GET: async ({ params }) => {
-        const token = String((params as { token: string }).token || "").trim();
+        const raw = (params as Record<string, string>).token ?? (params as Record<string, string>)["token.ics"] ?? "";
+        const token = String(raw).replace(/\.ics$/i, "").trim();
         if (!token || !/^[a-zA-Z0-9_-]{16,128}$/.test(token)) {
           return new Response("Invalid token", { status: 400 });
         }
