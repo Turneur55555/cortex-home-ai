@@ -125,17 +125,26 @@ const STATUS_CONFIG = {
 const ICON_MAP = { Dumbbell, Apple, TrendingDown, Star };
 
 // ─── Goal card ───────────────────────────────────────────────────────────────
-
 function GoalCard({
   goal,
   onToggle,
   onRemove,
+  onSave,
 }: {
   goal: GoalWithProgress;
   onToggle: () => void;
   onRemove: () => void;
+  onSave: (patch: { title: string; target_value: number | null; target_date: string }) => void;
 }) {
   const s = STATUS_CONFIG[goal.status];
+  const Icon = ICON_MAP[goal.icon as keyof typeof ICON_MAP] ?? Star;
+  const isDone = goal.status === "done";
+  const typeConfig = GOAL_TYPE_CONFIG[goal.goal_type];
+  const [editing, setEditing] = useState(false);
+  const [eTitle, setETitle] = useState(goal.title);
+  const [eTarget, setETarget] = useState(goal.target_value ?? 0);
+  const [eDate, setEDate] = useState(goal.target_date);
+
   const Icon = ICON_MAP[goal.icon as keyof typeof ICON_MAP] ?? Star;
   const isDone = goal.status === "done";
   const typeConfig = GOAL_TYPE_CONFIG[goal.goal_type];
