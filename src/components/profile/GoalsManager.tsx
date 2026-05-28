@@ -623,6 +623,17 @@ export function GoalsManager() {
 
         </AnimatePresence>
 
+        {!isLoading && doneGoals.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowDone((v) => !v)}
+            className="w-full rounded-xl border border-white/[0.06] bg-white/[0.02] py-2 text-[11px] font-medium text-muted-foreground/70 hover:bg-white/[0.05]"
+          >
+            {showDone ? "Masquer" : "Afficher"} les {doneGoals.length} objectif{doneGoals.length > 1 ? "s" : ""} complété{doneGoals.length > 1 ? "s" : ""}
+          </button>
+        )}
+
+
         {!isLoading && goals.length === 0 && !showForm && (
           <motion.div
             initial={{ opacity: 0 }}
