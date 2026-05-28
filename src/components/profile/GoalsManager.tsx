@@ -539,9 +539,22 @@ export function GoalsManager() {
   const { goals, isLoading } = useGoalsWithProgress();
   const completeGoal = useCompleteGoal();
   const removeGoal = useRemoveGoal();
+  const updateGoal = useUpdateGoal();
   const [showForm, setShowForm] = useState(false);
+  const [showDone, setShowDone] = useState(false);
 
-  const doneCount = goals.filter((g) => g.status === "done").length;
+  // Auto-mark typed goals as completed once they hit 100%
+  useEffect(() => {
+    goals.forEach((g) => {
+      if (!g.is_completed && g.progress >= 100 && g.goal_type !== "custom") {
+        completeGoal.mutate({ id: g.id, done: true });
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [goals.map((g) => `${g.id}:${g.progress}:${g.is_completed}`).join("|")]);
+
+  const activeGoals = goals.filter((g) => !g.is_completed);
+  const doneGoals = goals.filter((g) => g.is_completed);
 
   return (
     <section className="mb-6">
@@ -553,7 +566,7 @@ export function GoalsManager() {
           </h2>
           {goals.length > 0 && (
             <p className="text-[10px] text-muted-foreground/50">
-              {doneCount} / {goals.length} complétés
+              {doneGoals.length} / {goals.length} complétés
             </p>
           )}
         </div>
@@ -593,7 +606,7 @@ export function GoalsManager() {
 
         <AnimatePresence initial={false}>
           {!isLoading &&
-            goals.map((g) => (
+            (showDone ? goals : activeGoals).map((g) => (
               <GoalCard
                 key={g.id}
                 goal={g}
@@ -601,8 +614,13 @@ export function GoalsManager() {
                   completeGoal.mutate({ id: g.id, done: !g.is_completed })
                 }
                 onRemove={() => removeGoal.mutate(g.id)}
+                onSave={(patch) => {
+                  updateGoal.mutate({ id: g.id, ...patch });
+                  toast.success("Objectif mis à jour");
+                }}
               />
             ))}
+
         </AnimatePresence>
 
         {!isLoading && goals.length === 0 && !showForm && (
