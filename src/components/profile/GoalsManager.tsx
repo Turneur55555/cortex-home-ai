@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Apple,
   Check,
   Dumbbell,
+  Pencil,
   Plus,
   Star,
   Trash2,
@@ -16,11 +17,13 @@ import {
   useAddGoal,
   useCompleteGoal,
   useRemoveGoal,
+  useUpdateGoal,
   type GoalType,
   type GoalWithProgress,
 } from "@/hooks/useGoalsWithProgress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+
 
 // ─── Goal type config ────────────────────────────────────────────────────────
 
