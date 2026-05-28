@@ -208,7 +208,15 @@ export function useUpdateGoal() {
 }
 
 export function useCompleteGoal() {
-
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, done }: { id: string; done: boolean }) => {
+      if (!user) throw new Error("Non authentifié");
+      const { error } = await (supabase as any)
+        .from("goals")
+        .update({ is_completed: done, completed_at: done ? new Date().toISOString() : null })
+        .eq("id", id)
         .eq("user_id", user.id);
       if (error) throw error;
     },
@@ -219,6 +227,7 @@ export function useCompleteGoal() {
     onError: () => toast.error("Impossible de mettre à jour l'objectif"),
   });
 }
+
 
 export function useRemoveGoal() {
   const { user } = useAuth();
