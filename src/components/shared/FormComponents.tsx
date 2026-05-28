@@ -2,16 +2,19 @@ import { Loader2, Plus, X } from "lucide-react";
 
 export function FabAdd({ onClick, label }: { onClick: () => void; label: string }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="fixed bottom-24 left-1/2 z-30 inline-flex h-12 -translate-x-1/2 items-center gap-2 rounded-full bg-gradient-primary px-6 text-sm font-semibold text-primary-foreground shadow-glow transition-transform active:scale-95"
-    >
-      <Plus className="h-4 w-4" />
-      {label}
-    </button>
+    <div className="pointer-events-none fixed inset-x-0 bottom-24 z-30 mx-auto flex w-full max-w-[430px] justify-center px-4">
+      <button
+        type="button"
+        onClick={onClick}
+        className="pointer-events-auto inline-flex h-12 items-center gap-2 rounded-full bg-gradient-primary px-6 text-sm font-semibold text-primary-foreground shadow-glow transition-transform active:scale-95"
+      >
+        <Plus className="h-4 w-4" />
+        {label}
+      </button>
+    </div>
   );
 }
+
 
 export function Sheet({
   title,
