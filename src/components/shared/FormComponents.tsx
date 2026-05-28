@@ -2,7 +2,10 @@ import { Loader2, Plus, X } from "lucide-react";
 
 export function FabAdd({ onClick, label }: { onClick: () => void; label: string }) {
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-24 z-30 mx-auto flex w-full max-w-[430px] justify-center px-4">
+    <div
+      className="pointer-events-none fixed inset-x-0 z-30 mx-auto flex w-full max-w-[430px] justify-center px-4"
+      style={{ bottom: "calc(5.5rem + env(safe-area-inset-bottom))" }}
+    >
       <button
         type="button"
         onClick={onClick}
