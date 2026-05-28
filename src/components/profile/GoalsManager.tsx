@@ -145,9 +145,8 @@ function GoalCard({
   const [eTarget, setETarget] = useState(goal.target_value ?? 0);
   const [eDate, setEDate] = useState(goal.target_date);
 
-  const Icon = ICON_MAP[goal.icon as keyof typeof ICON_MAP] ?? Star;
-  const isDone = goal.status === "done";
-  const typeConfig = GOAL_TYPE_CONFIG[goal.goal_type];
+
+  return (
 
   return (
     <motion.div
