@@ -256,6 +256,48 @@ export type Database = {
         }
         Relationships: []
       }
+      goals: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          goal_type: Database["public"]["Enums"]["goal_type"]
+          id: string
+          is_completed: boolean
+          target_date: string
+          target_value: number | null
+          title: string
+          updated_at: string
+          user_id: string
+          xp_reward: number
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          goal_type?: Database["public"]["Enums"]["goal_type"]
+          id?: string
+          is_completed?: boolean
+          target_date: string
+          target_value?: number | null
+          title: string
+          updated_at?: string
+          user_id: string
+          xp_reward?: number
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          goal_type?: Database["public"]["Enums"]["goal_type"]
+          id?: string
+          is_completed?: boolean
+          target_date?: string
+          target_value?: number | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+          xp_reward?: number
+        }
+        Relationships: []
+      }
       home_categories: {
         Row: {
           color: string
@@ -785,6 +827,7 @@ export type Database = {
       ensure_home_categories_for_me: { Args: never; Returns: undefined }
     }
     Enums: {
+      goal_type: "workouts_weekly" | "protein_daily" | "weight_loss" | "custom"
       reminder_priority: "low" | "medium" | "high" | "urgent"
       reminder_recurrence: "none" | "daily" | "weekly" | "monthly" | "yearly"
       reminder_status: "todo" | "in_progress" | "done"
@@ -915,6 +958,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      goal_type: ["workouts_weekly", "protein_daily", "weight_loss", "custom"],
       reminder_priority: ["low", "medium", "high", "urgent"],
       reminder_recurrence: ["none", "daily", "weekly", "monthly", "yearly"],
       reminder_status: ["todo", "in_progress", "done"],
