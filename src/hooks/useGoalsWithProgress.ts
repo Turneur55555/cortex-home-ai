@@ -181,7 +181,34 @@ export function useCompleteGoal() {
       const { error } = await (supabase as any)
         .from("goals")
         .update({ is_completed: done, completed_at: done ? new Date().toISOString() : null })
+export function useUpdateGoal() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      ...patch
+    }: {
+      id: string;
+      title?: string;
+      target_value?: number | null;
+      target_date?: string;
+    }) => {
+      if (!user) throw new Error("Non authentifié");
+      const { error } = await (supabase as any)
+        .from("goals")
+        .update(patch)
         .eq("id", id)
+        .eq("user_id", user.id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["goals", user?.id] }),
+    onError: () => toast.error("Impossible de modifier l'objectif"),
+  });
+}
+
+export function useCompleteGoal() {
+
         .eq("user_id", user.id);
       if (error) throw error;
     },
