@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Apple,
   Check,
   Dumbbell,
+  Pencil,
   Plus,
   Star,
   Trash2,
@@ -16,11 +17,13 @@ import {
   useAddGoal,
   useCompleteGoal,
   useRemoveGoal,
+  useUpdateGoal,
   type GoalType,
   type GoalWithProgress,
 } from "@/hooks/useGoalsWithProgress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+
 
 // ─── Goal type config ────────────────────────────────────────────────────────
 
@@ -122,22 +125,28 @@ const STATUS_CONFIG = {
 const ICON_MAP = { Dumbbell, Apple, TrendingDown, Star };
 
 // ─── Goal card ───────────────────────────────────────────────────────────────
-
 function GoalCard({
   goal,
   onToggle,
   onRemove,
+  onSave,
 }: {
   goal: GoalWithProgress;
   onToggle: () => void;
   onRemove: () => void;
+  onSave: (patch: { title: string; target_value: number | null; target_date: string }) => void;
 }) {
   const s = STATUS_CONFIG[goal.status];
   const Icon = ICON_MAP[goal.icon as keyof typeof ICON_MAP] ?? Star;
   const isDone = goal.status === "done";
   const typeConfig = GOAL_TYPE_CONFIG[goal.goal_type];
+  const [editing, setEditing] = useState(false);
+  const [eTitle, setETitle] = useState(goal.title);
+  const [eTarget, setETarget] = useState(goal.target_value ?? 0);
+  const [eDate, setEDate] = useState(goal.target_date);
 
   return (
+
     <motion.div
       layout
       initial={{ opacity: 0, y: 10, scale: 0.98 }}
@@ -186,14 +195,25 @@ function GoalCard({
             >
               {goal.title}
             </p>
-            <button
-              type="button"
-              onClick={onRemove}
-              className="shrink-0 mt-0.5 text-muted-foreground/40 opacity-0 transition-opacity group-hover:opacity-100 hover:text-red-400"
-              aria-label="Supprimer"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
+            <div className="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setEditing((v) => !v)}
+                className="mt-0.5 text-muted-foreground/40 opacity-0 transition-opacity group-hover:opacity-100 hover:text-violet-400 sm:opacity-100"
+                aria-label="Modifier"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={onRemove}
+                className="mt-0.5 text-muted-foreground/40 opacity-0 transition-opacity group-hover:opacity-100 hover:text-red-400 sm:opacity-100"
+                aria-label="Supprimer"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
           </div>
 
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
@@ -286,6 +306,79 @@ function GoalCard({
           )}
         </button>
       )}
+
+      {/* Inline edit form */}
+      <AnimatePresence>
+        {editing && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="mt-3 space-y-2 border-t border-white/[0.06] pt-3">
+              <input
+                type="text"
+                value={eTitle}
+                onChange={(e) => setETitle(e.target.value)}
+                className="w-full rounded-lg border border-white/[0.08] bg-white/[0.05] px-3 py-2 text-xs focus:border-violet-500/40 focus:outline-none"
+                placeholder="Titre"
+              />
+              <div className="grid grid-cols-2 gap-2">
+                {typeConfig.hasValue && (
+                  <input
+                    type="number"
+                    min={1}
+                    value={eTarget}
+                    onChange={(e) => setETarget(Number(e.target.value))}
+                    className="rounded-lg border border-white/[0.08] bg-white/[0.05] px-3 py-2 text-xs focus:border-violet-500/40 focus:outline-none"
+                    placeholder={typeConfig.valueLabel}
+                  />
+                )}
+                <input
+                  type="date"
+                  value={eDate}
+                  onChange={(e) => setEDate(e.target.value)}
+                  className={cn(
+                    "rounded-lg border border-white/[0.08] bg-white/[0.05] px-3 py-2 text-xs focus:border-violet-500/40 focus:outline-none",
+                    !typeConfig.hasValue && "col-span-2",
+                  )}
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setETitle(goal.title);
+                    setETarget(goal.target_value ?? 0);
+                    setEDate(goal.target_date);
+                    setEditing(false);
+                  }}
+                  className="flex-1 rounded-lg border border-white/[0.08] py-2 text-xs text-muted-foreground hover:bg-white/[0.05]"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!eTitle.trim() || !eDate) return;
+                    onSave({
+                      title: eTitle.trim(),
+                      target_value: typeConfig.hasValue ? eTarget : null,
+                      target_date: eDate,
+                    });
+                    setEditing(false);
+                  }}
+                  className="flex-[2] rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 py-2 text-xs font-semibold text-white"
+                >
+                  Enregistrer
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
     </motion.div>
   );
 }
@@ -446,9 +539,22 @@ export function GoalsManager() {
   const { goals, isLoading } = useGoalsWithProgress();
   const completeGoal = useCompleteGoal();
   const removeGoal = useRemoveGoal();
+  const updateGoal = useUpdateGoal();
   const [showForm, setShowForm] = useState(false);
+  const [showDone, setShowDone] = useState(false);
 
-  const doneCount = goals.filter((g) => g.status === "done").length;
+  // Auto-mark typed goals as completed once they hit 100%
+  useEffect(() => {
+    goals.forEach((g) => {
+      if (!g.is_completed && g.progress >= 100 && g.goal_type !== "custom") {
+        completeGoal.mutate({ id: g.id, done: true });
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [goals.map((g) => `${g.id}:${g.progress}:${g.is_completed}`).join("|")]);
+
+  const activeGoals = goals.filter((g) => !g.is_completed);
+  const doneGoals = goals.filter((g) => g.is_completed);
 
   return (
     <section className="mb-6">
@@ -460,7 +566,7 @@ export function GoalsManager() {
           </h2>
           {goals.length > 0 && (
             <p className="text-[10px] text-muted-foreground/50">
-              {doneCount} / {goals.length} complétés
+              {doneGoals.length} / {goals.length} complétés
             </p>
           )}
         </div>
@@ -500,7 +606,7 @@ export function GoalsManager() {
 
         <AnimatePresence initial={false}>
           {!isLoading &&
-            goals.map((g) => (
+            (showDone ? goals : activeGoals).map((g) => (
               <GoalCard
                 key={g.id}
                 goal={g}
@@ -508,9 +614,25 @@ export function GoalsManager() {
                   completeGoal.mutate({ id: g.id, done: !g.is_completed })
                 }
                 onRemove={() => removeGoal.mutate(g.id)}
+                onSave={(patch) => {
+                  updateGoal.mutate({ id: g.id, ...patch });
+                  toast.success("Objectif mis à jour");
+                }}
               />
             ))}
+
         </AnimatePresence>
+
+        {!isLoading && doneGoals.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowDone((v) => !v)}
+            className="w-full rounded-xl border border-white/[0.06] bg-white/[0.02] py-2 text-[11px] font-medium text-muted-foreground/70 hover:bg-white/[0.05]"
+          >
+            {showDone ? "Masquer" : "Afficher"} les {doneGoals.length} objectif{doneGoals.length > 1 ? "s" : ""} complété{doneGoals.length > 1 ? "s" : ""}
+          </button>
+        )}
+
 
         {!isLoading && goals.length === 0 && !showForm && (
           <motion.div

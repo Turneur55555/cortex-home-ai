@@ -172,6 +172,32 @@ export function useAddGoal() {
   });
 }
 
+export function useUpdateGoal() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      ...patch
+    }: {
+      id: string;
+      title?: string;
+      target_value?: number | null;
+      target_date?: string;
+    }) => {
+      if (!user) throw new Error("Non authentifié");
+      const { error } = await (supabase as any)
+        .from("goals")
+        .update(patch)
+        .eq("id", id)
+        .eq("user_id", user.id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["goals", user?.id] }),
+    onError: () => toast.error("Impossible de modifier l'objectif"),
+  });
+}
+
 export function useCompleteGoal() {
   const { user } = useAuth();
   const qc = useQueryClient();
@@ -192,6 +218,7 @@ export function useCompleteGoal() {
     onError: () => toast.error("Impossible de mettre à jour l'objectif"),
   });
 }
+
 
 export function useRemoveGoal() {
   const { user } = useAuth();
