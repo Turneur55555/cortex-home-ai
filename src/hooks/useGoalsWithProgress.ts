@@ -173,7 +173,6 @@ export function useAddGoal() {
 }
 
 export function useUpdateGoal() {
-export function useUpdateGoal() {
   const { user } = useAuth();
   const qc = useQueryClient();
   return useMutation({
