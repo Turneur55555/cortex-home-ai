@@ -145,10 +145,8 @@ function GoalCard({
   const [eTarget, setETarget] = useState(goal.target_value ?? 0);
   const [eDate, setEDate] = useState(goal.target_date);
 
-
   return (
 
-  return (
     <motion.div
       layout
       initial={{ opacity: 0, y: 10, scale: 0.98 }}
