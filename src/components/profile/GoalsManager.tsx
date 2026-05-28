@@ -195,14 +195,25 @@ function GoalCard({
             >
               {goal.title}
             </p>
-            <button
-              type="button"
-              onClick={onRemove}
-              className="shrink-0 mt-0.5 text-muted-foreground/40 opacity-0 transition-opacity group-hover:opacity-100 hover:text-red-400"
-              aria-label="Supprimer"
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
+            <div className="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setEditing((v) => !v)}
+                className="mt-0.5 text-muted-foreground/40 opacity-0 transition-opacity group-hover:opacity-100 hover:text-violet-400 sm:opacity-100"
+                aria-label="Modifier"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={onRemove}
+                className="mt-0.5 text-muted-foreground/40 opacity-0 transition-opacity group-hover:opacity-100 hover:text-red-400 sm:opacity-100"
+                aria-label="Supprimer"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
           </div>
 
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
