@@ -40,6 +40,7 @@ CREATE POLICY "Users update own exercise images"
   USING (bucket_id = 'exercise-images' AND (auth.uid())::text = (storage.foldername(name))[1])
   WITH CHECK (bucket_id = 'exercise-images' AND (auth.uid())::text = (storage.foldername(name))[1]);
 
+DROP POLICY IF EXISTS "Users delete own exercise images" ON storage.objects;
 CREATE POLICY "Users delete own exercise images"
   ON storage.objects FOR DELETE TO authenticated
   USING (bucket_id = 'exercise-images' AND (auth.uid())::text = (storage.foldername(name))[1]);

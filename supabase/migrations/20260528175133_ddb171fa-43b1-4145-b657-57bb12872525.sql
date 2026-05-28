@@ -3,7 +3,7 @@ DO $$ BEGIN
   CREATE TYPE public.goal_type AS ENUM ('workouts_weekly', 'protein_daily', 'weight_loss', 'custom');
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
-CREATE TABLE public.goals (
+CREATE TABLE IF NOT EXISTS public.goals (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL,
   title text NOT NULL,
@@ -17,13 +17,14 @@ CREATE TABLE public.goals (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_goals_user ON public.goals(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_goals_user ON public.goals(user_id, created_at DESC);
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.goals TO authenticated;
 GRANT ALL ON public.goals TO service_role;
 
 ALTER TABLE public.goals ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users view own goals" ON public.goals;
 CREATE POLICY "Users view own goals" ON public.goals
   FOR SELECT TO authenticated USING (auth.uid() = user_id);
 CREATE POLICY "Users insert own goals" ON public.goals
@@ -33,6 +34,7 @@ CREATE POLICY "Users update own goals" ON public.goals
 CREATE POLICY "Users delete own goals" ON public.goals
   FOR DELETE TO authenticated USING (auth.uid() = user_id);
 
+DROP TRIGGER IF EXISTS goals_touch_updated_at ON public.goals;
 CREATE TRIGGER goals_touch_updated_at
   BEFORE UPDATE ON public.goals
   FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();
