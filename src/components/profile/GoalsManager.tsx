@@ -306,6 +306,79 @@ function GoalCard({
           )}
         </button>
       )}
+
+      {/* Inline edit form */}
+      <AnimatePresence>
+        {editing && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="mt-3 space-y-2 border-t border-white/[0.06] pt-3">
+              <input
+                type="text"
+                value={eTitle}
+                onChange={(e) => setETitle(e.target.value)}
+                className="w-full rounded-lg border border-white/[0.08] bg-white/[0.05] px-3 py-2 text-xs focus:border-violet-500/40 focus:outline-none"
+                placeholder="Titre"
+              />
+              <div className="grid grid-cols-2 gap-2">
+                {typeConfig.hasValue && (
+                  <input
+                    type="number"
+                    min={1}
+                    value={eTarget}
+                    onChange={(e) => setETarget(Number(e.target.value))}
+                    className="rounded-lg border border-white/[0.08] bg-white/[0.05] px-3 py-2 text-xs focus:border-violet-500/40 focus:outline-none"
+                    placeholder={typeConfig.valueLabel}
+                  />
+                )}
+                <input
+                  type="date"
+                  value={eDate}
+                  onChange={(e) => setEDate(e.target.value)}
+                  className={cn(
+                    "rounded-lg border border-white/[0.08] bg-white/[0.05] px-3 py-2 text-xs focus:border-violet-500/40 focus:outline-none",
+                    !typeConfig.hasValue && "col-span-2",
+                  )}
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setETitle(goal.title);
+                    setETarget(goal.target_value ?? 0);
+                    setEDate(goal.target_date);
+                    setEditing(false);
+                  }}
+                  className="flex-1 rounded-lg border border-white/[0.08] py-2 text-xs text-muted-foreground hover:bg-white/[0.05]"
+                >
+                  Annuler
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!eTitle.trim() || !eDate) return;
+                    onSave({
+                      title: eTitle.trim(),
+                      target_value: typeConfig.hasValue ? eTarget : null,
+                      target_date: eDate,
+                    });
+                    setEditing(false);
+                  }}
+                  className="flex-[2] rounded-lg bg-gradient-to-r from-violet-600 to-purple-600 py-2 text-xs font-semibold text-white"
+                >
+                  Enregistrer
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
     </motion.div>
   );
 }
