@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      badges_catalog: {
+        Row: {
+          badge_key: string
+          created_at: string
+          description: string
+          icon: string
+          id: string
+          label: string
+          rarity: string
+          requirement_type: string
+          requirement_value: number
+          sort_order: number
+          xp_reward: number
+        }
+        Insert: {
+          badge_key: string
+          created_at?: string
+          description: string
+          icon?: string
+          id?: string
+          label: string
+          rarity?: string
+          requirement_type: string
+          requirement_value: number
+          sort_order?: number
+          xp_reward?: number
+        }
+        Update: {
+          badge_key?: string
+          created_at?: string
+          description?: string
+          icon?: string
+          id?: string
+          label?: string
+          rarity?: string
+          requirement_type?: string
+          requirement_value?: number
+          sort_order?: number
+          xp_reward?: number
+        }
+        Relationships: []
+      }
       body_tracking: {
         Row: {
           body_fat: number | null
@@ -657,27 +699,36 @@ export type Database = {
       user_badges: {
         Row: {
           badge_key: string
+          description: string
           icon: string
           id: string
           label: string
+          rarity: string
           unlocked_at: string
           user_id: string
+          xp_reward: number
         }
         Insert: {
           badge_key: string
+          description?: string
           icon?: string
           id?: string
           label: string
+          rarity?: string
           unlocked_at?: string
           user_id: string
+          xp_reward?: number
         }
         Update: {
           badge_key?: string
+          description?: string
           icon?: string
           id?: string
           label?: string
+          rarity?: string
           unlocked_at?: string
           user_id?: string
+          xp_reward?: number
         }
         Relationships: []
       }
@@ -824,6 +875,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      compute_level_from_xp: { Args: { _xp: number }; Returns: number }
       ensure_home_categories_for_me: { Args: never; Returns: undefined }
     }
     Enums: {
