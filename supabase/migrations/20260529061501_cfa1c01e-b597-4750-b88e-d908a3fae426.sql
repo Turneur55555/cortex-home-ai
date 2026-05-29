@@ -19,6 +19,7 @@ GRANT ALL ON public.badges_catalog TO service_role;
 
 ALTER TABLE public.badges_catalog ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Badges catalog readable by all" ON public.badges_catalog;
 CREATE POLICY "Badges catalog readable by all"
 ON public.badges_catalog FOR SELECT
 USING (true);

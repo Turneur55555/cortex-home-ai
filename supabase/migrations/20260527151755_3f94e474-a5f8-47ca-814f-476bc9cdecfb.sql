@@ -17,6 +17,7 @@ CREATE POLICY "Users view own calendar tokens" ON public.calendar_tokens
 DROP POLICY IF EXISTS "Users insert own calendar tokens" ON public.calendar_tokens;
 CREATE POLICY "Users insert own calendar tokens" ON public.calendar_tokens
   FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users update own calendar tokens" ON public.calendar_tokens;
 CREATE POLICY "Users update own calendar tokens" ON public.calendar_tokens
   FOR UPDATE TO authenticated USING (auth.uid() = user_id);
 CREATE POLICY "Users delete own calendar tokens" ON public.calendar_tokens
