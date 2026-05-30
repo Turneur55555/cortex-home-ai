@@ -56,8 +56,9 @@ export function NotificationsBell() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("items")
-        .select("id, name, room, expiration_date, alert_days_before, location")
+        .select("id, name, room, expiration_date, alert_days_before, location, quantity")
         .not("expiration_date", "is", null)
+        .gt("quantity", 0)
         .order("expiration_date", { ascending: true })
         .limit(500);
       if (error) throw error;
