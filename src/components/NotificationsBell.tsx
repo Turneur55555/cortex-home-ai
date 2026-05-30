@@ -76,7 +76,7 @@ export function NotificationsBell() {
         const threshold = it.alert_days_before ?? 7;
         return { ...it, days, threshold };
       })
-      .filter((it) => it.days <= it.threshold)
+      .filter((it) => it.days <= 0)
       .filter((it) => {
         const d = dismissed[it.id];
         return d !== ((it.expiration_date as unknown as string) ?? "none");
