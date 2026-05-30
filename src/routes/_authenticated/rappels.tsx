@@ -68,7 +68,7 @@ export const Route = createFileRoute("/_authenticated/rappels")({
 });
 
 type ViewMode = "list" | "kanban" | "calendar";
-type StatusFilter = "all" | ReminderStatus | "favorites" | "overdue";
+type StatusFilter = "all" | ReminderStatus | "favorites" | "overdue" | "today";
 
 const PRIORITY_LABEL: Record<ReminderPriority | "all", string> = {
   all: "Toutes priorités",
@@ -92,7 +92,7 @@ function RappelsPage() {
   const [view, setView] = useState<ViewMode>("list");
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("today");
   const [priorityFilter, setPriorityFilter] = useState<"all" | ReminderPriority>("all");
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editing, setEditing] = useState<Reminder | null>(null);
@@ -125,6 +125,8 @@ function RappelsPage() {
       if (statusFilter === "favorites" && !r.favorite) return false;
       if (statusFilter === "overdue") {
         if (r.status === "done" || !r.due_at || new Date(r.due_at) >= now) return false;
+      } else if (statusFilter === "today") {
+        if (!r.due_at || !isToday(new Date(r.due_at))) return false;
       } else if (statusFilter !== "all" && statusFilter !== "favorites") {
         if (r.status !== statusFilter) return false;
       }
