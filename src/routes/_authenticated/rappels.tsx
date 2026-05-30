@@ -12,6 +12,7 @@ import {
   Bell,
 } from "lucide-react";
 import { toast } from "sonner";
+import { isToday } from "date-fns";
 
 import { ReminderCard } from "@/components/reminders/ReminderCard";
 import { AppleCalendarButton } from "@/components/reminders/AppleCalendarButton";
