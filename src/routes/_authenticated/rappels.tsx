@@ -273,7 +273,7 @@ function RappelsPage() {
 
         {/* Filter pills */}
         <div className="mb-3 flex items-center gap-1.5 overflow-x-auto pb-1">
-          <FilterPill active={statusFilter === "today"} onClick={() => setStatusFilter("today")} tone="indigo">
+          <FilterPill active={statusFilter === "today"} onClick={() => setStatusFilter("today")} tone="primary">
             Aujourd'hui
           </FilterPill>
           <FilterPill active={statusFilter === "all"} onClick={() => setStatusFilter("all")}>
