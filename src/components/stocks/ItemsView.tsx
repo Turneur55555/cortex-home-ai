@@ -18,7 +18,10 @@ import {
   useStockItems,
   useUpdateStockItem,
 } from "@/hooks/use-stocks";
+import { useHomeCategories } from "@/hooks/useHomeCategories";
+import { useHomeSubcategories } from "@/hooks/useHomeSubcategories";
 import { getRoomById } from "@/lib/maison/rooms";
+import { getIcon } from "@/lib/maison/icons";
 import type { Tables } from "@/integrations/supabase/types";
 import { StatChip } from "@/components/stocks/StatChip";
 import { BulkActionBar } from "@/components/stocks/BulkActionBar";
@@ -37,8 +40,21 @@ export function ItemsView({
   compartmentId: string;
   onBack: () => void;
 }) {
-  const room = getRoomById(roomId);
-  const comp = room?.compartments.find((c) => c.id === compartmentId);
+  // Résolution dynamique (catégories/sous-catégories DB) avec fallback statique
+  const { data: categories = [] } = useHomeCategories();
+  const dynCategory = categories.find((c) => c.slug === roomId);
+  const staticRoom = getRoomById(roomId);
+  const { data: dynSubs = [] } = useHomeSubcategories(dynCategory?.id);
+  const dynComp = dynSubs.find((s) => s.slug === compartmentId);
+  const staticComp = staticRoom?.compartments.find((c) => c.id === compartmentId);
+
+  const catName = dynCategory?.name ?? staticRoom?.name ?? roomId;
+  const catColor = dynCategory?.color ?? null;
+  const compName = dynComp?.name ?? staticComp?.name ?? compartmentId;
+  const CompIcon = dynComp
+    ? getIcon(dynComp.icon)
+    : staticComp?.Icon ?? getIcon("Box");
+
   const { data: allRoomItems, isLoading } = useStockItems(roomId);
   const del = useDeleteStockItem();
   const update = useUpdateStockItem();
@@ -122,7 +138,8 @@ export function ItemsView({
     setSelected(new Set());
   };
 
-  if (!room || !comp) return null;
+  // Ne bloque que si la catégorie elle-même est introuvable (ni dynamique ni statique).
+  if (!dynCategory && !staticRoom) return null;
 
   return (
     <section className="flex flex-col gap-4">
@@ -133,16 +150,21 @@ export function ItemsView({
           className="mb-3 inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" />
-          {room.name}
+          {catName}
         </button>
         <div className="flex items-center gap-3">
           <div
-            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${room.iconBg}`}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+            style={
+              catColor
+                ? { backgroundColor: catColor + "20", color: catColor }
+                : undefined
+            }
           >
-            <comp.Icon className="h-5 w-5" />
+            <CompIcon className="h-5 w-5" />
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight">{comp.name}</h1>
+            <h1 className="text-xl font-bold tracking-tight">{compName}</h1>
             <p className="text-xs text-muted-foreground">
               {isLoading ? "…" : `${data.length} objet${data.length !== 1 ? "s" : ""}`}
             </p>
@@ -308,8 +330,8 @@ export function ItemsView({
         <AddItemSheet
           roomId={roomId}
           compartmentId={compartmentId}
-          roomName={room.name}
-          compName={comp.name}
+          roomName={catName}
+          compName={compName}
           onClose={() => setOpen(false)}
         />
       )}
