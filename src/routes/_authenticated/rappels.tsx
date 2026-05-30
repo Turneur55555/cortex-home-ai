@@ -273,6 +273,9 @@ function RappelsPage() {
 
         {/* Filter pills */}
         <div className="mb-3 flex items-center gap-1.5 overflow-x-auto pb-1">
+          <FilterPill active={statusFilter === "today"} onClick={() => setStatusFilter("today")} tone="indigo">
+            Aujourd'hui
+          </FilterPill>
           <FilterPill active={statusFilter === "all"} onClick={() => setStatusFilter("all")}>
             Tous
           </FilterPill>
@@ -364,7 +367,7 @@ function RappelsPage() {
               setCursor={setCalCursor}
               selected={calSelected}
               setSelected={setCalSelected}
-              reminders={filtered}
+              reminders={reminders}
               onPick={openEdit}
               onCreate={openCreate}
             />
