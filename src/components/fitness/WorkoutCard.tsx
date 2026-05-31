@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
+  ChevronDown,
   BarChart3,
   Clock,
   Dumbbell,
