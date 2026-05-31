@@ -218,7 +218,7 @@ export function WorkoutCard({
           <StatTile
             icon={<Layers className="h-3.5 w-3.5" />}
             label="Exos"
-            value={`${stats.count}`}
+            value={`${exoCount}`}
           />
         </div>
       </div>
