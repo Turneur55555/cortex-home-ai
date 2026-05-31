@@ -2,14 +2,16 @@ import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   BarChart3,
-  Calendar,
   Clock,
   Dumbbell,
+  Flame,
+  Layers,
   Loader2,
   Plus,
   Repeat,
   Trash2,
   Trophy,
+  TrendingUp,
   X,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
@@ -88,119 +90,163 @@ export function WorkoutCard({
     }
   };
 
+  // ─── Stats agrégées de la séance ───────────────────────────────────────────
+  const stats = useMemo(() => {
+    const exs = w.exercises ?? [];
+    let volume = 0;
+    for (const ex of exs) {
+      if (ex.weight != null) {
+        volume += (ex.sets ?? 1) * (ex.reps ?? 1) * ex.weight;
+      }
+    }
+    const duration = w.duration_minutes ?? 0;
+    // Estimation ~6 kcal/min en musculation modérée
+    const calories = duration > 0 ? Math.round(duration * 6) : null;
+    return { volume: Math.round(volume), duration, calories, count: exs.length };
+  }, [w]);
+
+  const dateLabel = format(parseISO(w.date), "EEEE d MMMM • HH'h'mm", { locale: fr });
+
   return (
-    <li className="rounded-2xl border border-border bg-card p-4 shadow-card">
-      {/* En-tête séance */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <EditableText
-            value={w.name}
-            onSave={(name) => updateName.mutate({ id: w.id, name })}
-            className="font-semibold leading-tight"
-          />
-          <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-            <span className="inline-flex items-center gap-1">
-              <Calendar className="h-3 w-3" />
-              {format(parseISO(w.date), "d MMM yyyy", { locale: fr })}
-            </span>
-            {w.duration_minutes != null && (
-              <span className="inline-flex items-center gap-1">
-                <Clock className="h-3 w-3" />
-                {w.duration_minutes} min
-              </span>
-            )}
+    <li className="overflow-hidden rounded-3xl border border-white/5 bg-gradient-to-b from-card/95 to-card/70 shadow-[0_10px_40px_-15px_rgba(0,0,0,0.6)] backdrop-blur-xl">
+      {/* ─── En-tête immersif ───────────────────────────────────────────────── */}
+      <div className="relative px-5 pb-4 pt-5">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-primary/10 to-transparent"
+        />
+        <div className="relative flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground/80">
+              {dateLabel}
+            </p>
+            <EditableText
+              value={w.name}
+              onSave={(name) => updateName.mutate({ id: w.id, name })}
+              className="mt-1 text-xl font-bold leading-tight tracking-tight"
+            />
+          </div>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => onOpenFromTemplate(w)}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-white/5 text-muted-foreground transition-all active:scale-90 hover:bg-primary/15 hover:text-primary"
+              title="Refaire"
+            >
+              <Repeat className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmDelete(true)}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-white/5 text-muted-foreground transition-all active:scale-90 hover:bg-destructive/15 hover:text-destructive"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
           </div>
         </div>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => onOpenFromTemplate(w)}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary"
-            title="Refaire"
-          >
-            <Repeat className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setConfirmDelete(true)}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
+
+        {/* ─── Tuiles de stats ──────────────────────────────────────────────── */}
+        <div className="relative mt-4 grid grid-cols-4 gap-2">
+          <StatTile
+            icon={<Clock className="h-3.5 w-3.5" />}
+            label="Durée"
+            value={stats.duration > 0 ? `${stats.duration}` : "—"}
+            unit={stats.duration > 0 ? "min" : undefined}
+          />
+          <StatTile
+            icon={<TrendingUp className="h-3.5 w-3.5" />}
+            label="Volume"
+            value={stats.volume > 0 ? formatVolume(stats.volume) : "—"}
+            unit={stats.volume > 0 ? "kg" : undefined}
+          />
+          <StatTile
+            icon={<Flame className="h-3.5 w-3.5" />}
+            label="Calories"
+            value={stats.calories != null ? `${stats.calories}` : "—"}
+            unit={stats.calories != null ? "kcal" : undefined}
+          />
+          <StatTile
+            icon={<Layers className="h-3.5 w-3.5" />}
+            label="Exos"
+            value={`${stats.count}`}
+          />
         </div>
       </div>
 
-      {/* Liste exercices */}
+      {/* ─── Liste exercices premium ─────────────────────────────────────────── */}
       {w.exercises && w.exercises.length > 0 && (
-        <ul className="mt-3 space-y-0.5 border-t border-border pt-3">
+        <ul className="space-y-2 px-3 pb-3">
           {w.exercises.map((ex) => {
             const key = ex.name.trim().toLowerCase();
             const isPR = ex.weight != null && prByName.get(key) === ex.weight;
             const isLatestPR = isPR && w.date === latestDate;
             const imgUrl = ex.image_path ? (imageUrls?.get(ex.image_path) ?? null) : null;
+
+            const repsLabel = ex.reps != null ? `${ex.reps} reps` : null;
+            const setsLabel = ex.sets != null ? `${ex.sets} ${ex.sets > 1 ? "séries" : "série"}` : null;
+            const weightLabel = ex.weight != null ? `${ex.weight} kg` : null;
+            const meta = [setsLabel, repsLabel, weightLabel].filter(Boolean).join(" • ");
+
             return (
-              <SwipeableExerciseRow
-                key={ex.id}
-                onDelete={() => deleteEx.mutate(ex.id)}
-              >
-                <div className="flex items-center gap-2.5 py-1.5 text-xs">
-                  {/* Thumbnail photo */}
+              <SwipeableExerciseRow key={ex.id} onDelete={() => deleteEx.mutate(ex.id)}>
+                <div className="group flex items-center gap-3 rounded-2xl bg-white/[0.03] p-2.5 transition-all active:scale-[0.98] active:bg-white/[0.06]">
+                  {/* Miniature */}
                   {imgUrl ? (
                     uploadingExId === ex.id ? (
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted">
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-muted">
+                        <Loader2 className="h-4 w-4 animate-spin" />
                       </div>
                     ) : (
                       <button
                         type="button"
                         onClick={() => setPhotoModal({ url: imgUrl, exId: ex.id })}
-                        className="h-9 w-9 shrink-0 overflow-hidden rounded-lg"
+                        className="h-14 w-14 shrink-0 overflow-hidden rounded-xl ring-1 ring-white/5"
                       >
-                        <img src={imgUrl} alt={ex.name} className="h-full w-full object-cover" loading="lazy" />
+                        <img
+                          src={imgUrl}
+                          alt={ex.name}
+                          className="h-full w-full object-cover"
+                          loading="lazy"
+                        />
                       </button>
                     )
                   ) : ex.image_path ? (
-                    <div className="h-9 w-9 shrink-0 animate-pulse rounded-lg bg-muted" />
+                    <div className="h-14 w-14 shrink-0 animate-pulse rounded-xl bg-muted" />
                   ) : (
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-dashed border-border text-muted-foreground/40">
-                      <Dumbbell className="h-3.5 w-3.5" />
+                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/15 to-primary/5 text-primary/70">
+                      <Dumbbell className="h-5 w-5" />
                     </div>
                   )}
 
-                  {/* Nom (éditable) */}
-                  <EditableText
-                    value={ex.name}
-                    onSave={(name) => updateEx.mutate({ id: ex.id, name })}
-                    className="flex-1 font-medium"
-                  />
-
-                  {/* Badge PR */}
-                  {isPR && (
-                    <Trophy
-                      className={`h-3 w-3 shrink-0 text-warning ${isLatestPR ? "animate-pulse" : ""}`}
-                      aria-label={isLatestPR ? "Nouveau record !" : "Record personnel"}
-                    />
-                  )}
+                  {/* Contenu */}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <EditableText
+                        value={ex.name}
+                        onSave={(name) => updateEx.mutate({ id: ex.id, name })}
+                        className="truncate text-[15px] font-semibold leading-tight"
+                      />
+                      {isPR && (
+                        <Trophy
+                          className={`h-3.5 w-3.5 shrink-0 text-warning ${isLatestPR ? "animate-pulse" : ""}`}
+                          aria-label={isLatestPR ? "Nouveau record !" : "Record personnel"}
+                        />
+                      )}
+                    </div>
+                    {meta && (
+                      <p className="mt-0.5 truncate text-xs text-muted-foreground">{meta}</p>
+                    )}
+                  </div>
 
                   {/* Bouton stats */}
                   <button
                     type="button"
                     onClick={() => setStatsKey(key)}
-                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground/60 hover:text-primary"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground/70 transition-all active:scale-90 hover:bg-primary/10 hover:text-primary"
                     title="Statistiques"
                   >
-                    <BarChart3 className="h-3.5 w-3.5" />
+                    <BarChart3 className="h-4 w-4" />
                   </button>
-
-                  {/* Séries/reps/poids */}
-                  <span className="shrink-0 text-muted-foreground">
-                    {[
-                      ex.sets != null && `${ex.sets}×${ex.reps ?? "?"}`,
-                      ex.weight != null && `${ex.weight} kg`,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </span>
                 </div>
               </SwipeableExerciseRow>
             );
@@ -208,23 +254,24 @@ export function WorkoutCard({
         </ul>
       )}
 
-      {/* Ajouter un exercice */}
-      <div className="mt-2 border-t border-border pt-2">
+      {/* ─── Ajouter un exercice ────────────────────────────────────────────── */}
+      <div className="px-3 pb-3">
         <button
           type="button"
           onClick={() => setShowAddModal(true)}
-          className="flex items-center gap-1 text-xs font-medium text-primary/60 hover:text-primary"
+          className="flex w-full items-center justify-center gap-1.5 rounded-2xl border border-dashed border-white/10 bg-white/[0.02] py-2.5 text-xs font-medium text-muted-foreground transition-all active:scale-[0.99] hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
         >
           <Plus className="h-3.5 w-3.5" />
-          Exercice
+          Ajouter un exercice
         </button>
       </div>
 
       {w.notes && (
-        <p className="mt-2 border-t border-border pt-2 text-xs italic text-muted-foreground">
+        <p className="mx-5 mb-4 rounded-2xl bg-white/[0.03] px-4 py-3 text-xs italic leading-relaxed text-muted-foreground">
           {w.notes}
         </p>
       )}
+
 
       {/* Input caché pour modifier une photo */}
       <input
@@ -281,6 +328,37 @@ export function WorkoutCard({
       )}
     </li>
   );
+}
+
+// ─── Tuile de stat premium ──────────────────────────────────────────────────
+function StatTile({
+  icon,
+  label,
+  value,
+  unit,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  unit?: string;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-0.5 rounded-2xl bg-white/[0.04] px-2 py-2.5 ring-1 ring-white/5">
+      <span className="text-muted-foreground/70">{icon}</span>
+      <span className="mt-0.5 flex items-baseline gap-0.5">
+        <span className="text-base font-bold leading-none tracking-tight">{value}</span>
+        {unit && <span className="text-[9px] font-medium text-muted-foreground">{unit}</span>}
+      </span>
+      <span className="text-[9px] font-medium uppercase tracking-wider text-muted-foreground/70">
+        {label}
+      </span>
+    </div>
+  );
+}
+
+function formatVolume(v: number): string {
+  if (v >= 1000) return `${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k`;
+  return `${v}`;
 }
 
 // ─── 2-step modal: picker → form ──────────────────────────────────────────────
