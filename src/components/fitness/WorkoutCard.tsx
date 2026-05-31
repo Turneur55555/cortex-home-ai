@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
+  ChevronDown,
   BarChart3,
   Clock,
   Dumbbell,
@@ -66,6 +67,7 @@ export function WorkoutCard({
   const [photoModal, setPhotoModal] = useState<{ url: string; exId: string } | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [uploadingExId, setUploadingExId] = useState<string | null>(null);
+  const [openGroupKey, setOpenGroupKey] = useState<string | null>(null);
   const photoFileRef = useRef<HTMLInputElement>(null);
   const modifyExIdRef = useRef<string>("");
 
@@ -102,9 +104,57 @@ export function WorkoutCard({
     const duration = w.duration_minutes ?? 0;
     // Estimation ~6 kcal/min en musculation modérée
     const calories = duration > 0 ? Math.round(duration * 6) : null;
-    return { volume: Math.round(volume), duration, calories, count: exs.length };
+    return { volume: Math.round(volume), duration, calories };
   }, [w]);
 
+  // ─── Regroupement des exercices par nom ────────────────────────────────────
+  type ExerciseSet = NonNullable<WorkoutRow["exercises"]>[number];
+  type ExerciseGroup = {
+    key: string;
+    sets: ExerciseSet[];
+    totalSets: number;
+    totalReps: number;
+    minReps: number | null;
+    maxReps: number | null;
+    maxWeight: number | null;
+    volume: number;
+  };
+
+  const groupedExercises = useMemo<ExerciseGroup[]>(() => {
+    const exs = w.exercises ?? [];
+    const map = new Map<string, ExerciseGroup>();
+    for (const ex of exs) {
+      const key = ex.name.trim().toLowerCase();
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          sets: [],
+          totalSets: 0,
+          totalReps: 0,
+          minReps: null,
+          maxReps: null,
+          maxWeight: null,
+          volume: 0,
+        });
+      }
+      const g = map.get(key)!;
+      g.sets.push(ex);
+      const setCount = ex.sets ?? 1;
+      g.totalSets += setCount;
+      if (ex.reps != null) {
+        g.totalReps += ex.reps * setCount;
+        g.minReps = g.minReps == null ? ex.reps : Math.min(g.minReps, ex.reps);
+        g.maxReps = g.maxReps == null ? ex.reps : Math.max(g.maxReps, ex.reps);
+      }
+      if (ex.weight != null) {
+        g.maxWeight = g.maxWeight == null ? ex.weight : Math.max(g.maxWeight, ex.weight);
+        if (ex.reps != null) g.volume += setCount * ex.reps * ex.weight;
+      }
+    }
+    return Array.from(map.values());
+  }, [w]);
+
+  const exoCount = groupedExercises.length;
   const dateLabel = format(parseISO(w.date), "EEEE d MMMM • HH'h'mm", { locale: fr });
 
   return (
@@ -168,49 +218,58 @@ export function WorkoutCard({
           <StatTile
             icon={<Layers className="h-3.5 w-3.5" />}
             label="Exos"
-            value={`${stats.count}`}
+            value={`${exoCount}`}
           />
         </div>
       </div>
 
-      {/* ─── Liste exercices premium ─────────────────────────────────────────── */}
-      {w.exercises && w.exercises.length > 0 && (
+      {/* ─── Liste exercices premium (groupés par nom) ──────────────────────── */}
+      {groupedExercises.length > 0 && (
         <ul className="space-y-2 px-3 pb-3">
-          {w.exercises.map((ex) => {
-            const key = ex.name.trim().toLowerCase();
-            const isPR = ex.weight != null && prByName.get(key) === ex.weight;
+          {groupedExercises.map((group) => {
+            const isOpen = openGroupKey === group.key;
+            const firstEx = group.sets[0];
+            const imgPath = group.sets.find((s) => s.image_path)?.image_path ?? null;
+            const imgUrl = imgPath ? (imageUrls?.get(imgPath) ?? null) : null;
+            const isPR =
+              group.maxWeight != null && prByName.get(group.key) === group.maxWeight;
             const isLatestPR = isPR && w.date === latestDate;
-            const imgUrl = ex.image_path ? (imageUrls?.get(ex.image_path) ?? null) : null;
 
-            const repsLabel = ex.reps != null ? `${ex.reps} reps` : null;
-            const setsLabel = ex.sets != null ? `${ex.sets} ${ex.sets > 1 ? "séries" : "série"}` : null;
-            const weightLabel = ex.weight != null ? `${ex.weight} kg` : null;
-            const meta = [setsLabel, repsLabel, weightLabel].filter(Boolean).join(" • ");
+            const repsRange =
+              group.minReps != null && group.maxReps != null
+                ? group.minReps === group.maxReps
+                  ? `${group.minReps} reps`
+                  : `${group.minReps}-${group.maxReps} reps`
+                : null;
+            const meta = [
+              `${group.totalSets} ${group.totalSets > 1 ? "séries" : "série"}`,
+              repsRange,
+              group.maxWeight != null ? `max ${group.maxWeight} kg` : null,
+            ]
+              .filter(Boolean)
+              .join(" • ");
 
             return (
-              <SwipeableExerciseRow key={ex.id} onDelete={() => deleteEx.mutate(ex.id)}>
-                <div className="group flex items-center gap-3 rounded-2xl bg-white/[0.03] p-2.5 transition-all active:scale-[0.98] active:bg-white/[0.06]">
+              <li
+                key={group.key}
+                className="overflow-hidden rounded-2xl bg-white/[0.03] transition-colors"
+              >
+                <button
+                  type="button"
+                  onClick={() => setOpenGroupKey(isOpen ? null : group.key)}
+                  className="flex w-full items-center gap-3 p-2.5 text-left transition-all active:scale-[0.98] active:bg-white/[0.06]"
+                >
                   {/* Miniature */}
                   {imgUrl ? (
-                    uploadingExId === ex.id ? (
-                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-muted">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setPhotoModal({ url: imgUrl, exId: ex.id })}
-                        className="h-14 w-14 shrink-0 overflow-hidden rounded-xl ring-1 ring-white/5"
-                      >
-                        <img
-                          src={imgUrl}
-                          alt={ex.name}
-                          className="h-full w-full object-cover"
-                          loading="lazy"
-                        />
-                      </button>
-                    )
-                  ) : ex.image_path ? (
+                    <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl ring-1 ring-white/5">
+                      <img
+                        src={imgUrl}
+                        alt={firstEx.name}
+                        className="h-full w-full object-cover"
+                        loading="lazy"
+                      />
+                    </div>
+                  ) : imgPath ? (
                     <div className="h-14 w-14 shrink-0 animate-pulse rounded-xl bg-muted" />
                   ) : (
                     <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/15 to-primary/5 text-primary/70">
@@ -221,11 +280,9 @@ export function WorkoutCard({
                   {/* Contenu */}
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
-                      <EditableText
-                        value={ex.name}
-                        onSave={(name) => updateEx.mutate({ id: ex.id, name })}
-                        className="truncate text-[15px] font-semibold leading-tight"
-                      />
+                      <span className="truncate text-[15px] font-semibold leading-tight">
+                        {firstEx.name}
+                      </span>
                       {isPR && (
                         <Trophy
                           className={`h-3.5 w-3.5 shrink-0 text-warning ${isLatestPR ? "animate-pulse" : ""}`}
@@ -233,26 +290,85 @@ export function WorkoutCard({
                         />
                       )}
                     </div>
-                    {meta && (
-                      <p className="mt-0.5 truncate text-xs text-muted-foreground">{meta}</p>
-                    )}
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">{meta}</p>
                   </div>
 
-                  {/* Bouton stats */}
-                  <button
-                    type="button"
-                    onClick={() => setStatsKey(key)}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground/70 transition-all active:scale-90 hover:bg-primary/10 hover:text-primary"
-                    title="Statistiques"
-                  >
-                    <BarChart3 className="h-4 w-4" />
-                  </button>
+                  <ChevronDown
+                    className={`h-4 w-4 shrink-0 text-muted-foreground/70 transition-transform duration-300 ${isOpen ? "rotate-180" : ""}`}
+                  />
+                </button>
+
+                {/* Contenu déplié */}
+                <div
+                  className={`grid transition-all duration-300 ease-out ${
+                    isOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
+                  }`}
+                >
+                  <div className="overflow-hidden">
+                    <div className="space-y-2 border-t border-white/5 px-3 pb-3 pt-3">
+                      {/* Liste des séries */}
+                      <ul className="space-y-1.5">
+                        {group.sets.map((ex, idx) => (
+                          <SwipeableExerciseRow
+                            key={ex.id}
+                            onDelete={() => deleteEx.mutate(ex.id)}
+                          >
+                            <div className="flex items-center gap-3 rounded-xl bg-white/[0.04] px-3 py-2">
+                              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[11px] font-bold text-primary">
+                                {idx + 1}
+                              </span>
+                              <div className="flex-1 text-sm font-medium tabular-nums">
+                                {ex.reps != null ? `${ex.reps} reps` : "—"}
+                                <span className="mx-1.5 text-muted-foreground/50">•</span>
+                                {ex.weight != null ? `${ex.weight} kg` : "—"}
+                              </div>
+                              {ex.weight != null &&
+                                ex.weight === group.maxWeight &&
+                                isPR && (
+                                  <Trophy className="h-3.5 w-3.5 shrink-0 text-warning" />
+                                )}
+                            </div>
+                          </SwipeableExerciseRow>
+                        ))}
+                      </ul>
+
+                      {/* Récap & stats */}
+                      <div className="flex items-center justify-between rounded-xl bg-white/[0.02] px-3 py-2 text-xs">
+                        <div className="flex flex-col">
+                          <span className="text-[10px] uppercase tracking-wider text-muted-foreground/70">
+                            Volume total
+                          </span>
+                          <span className="font-bold tabular-nums">
+                            {group.volume > 0 ? `${formatVolume(group.volume)} kg` : "—"}
+                          </span>
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-[10px] uppercase tracking-wider text-muted-foreground/70">
+                            Total reps
+                          </span>
+                          <span className="font-bold tabular-nums">{group.totalReps}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setStatsKey(group.key);
+                          }}
+                          className="flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-all active:scale-95"
+                        >
+                          <BarChart3 className="h-3.5 w-3.5" />
+                          Stats
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </SwipeableExerciseRow>
+              </li>
             );
           })}
         </ul>
       )}
+
 
       {/* ─── Ajouter un exercice ────────────────────────────────────────────── */}
       <div className="px-3 pb-3">
