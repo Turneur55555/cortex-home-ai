@@ -67,6 +67,7 @@ export function WorkoutCard({
   const [photoModal, setPhotoModal] = useState<{ url: string; exId: string } | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [uploadingExId, setUploadingExId] = useState<string | null>(null);
+  const [openGroupKey, setOpenGroupKey] = useState<string | null>(null);
   const photoFileRef = useRef<HTMLInputElement>(null);
   const modifyExIdRef = useRef<string>("");
 
