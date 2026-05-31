@@ -2,14 +2,16 @@ import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   BarChart3,
-  Calendar,
   Clock,
   Dumbbell,
+  Flame,
+  Layers,
   Loader2,
   Plus,
   Repeat,
   Trash2,
   Trophy,
+  TrendingUp,
   X,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
