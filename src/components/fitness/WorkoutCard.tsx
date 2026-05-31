@@ -104,9 +104,57 @@ export function WorkoutCard({
     const duration = w.duration_minutes ?? 0;
     // Estimation ~6 kcal/min en musculation modérée
     const calories = duration > 0 ? Math.round(duration * 6) : null;
-    return { volume: Math.round(volume), duration, calories, count: exs.length };
+    return { volume: Math.round(volume), duration, calories };
   }, [w]);
 
+  // ─── Regroupement des exercices par nom ────────────────────────────────────
+  type ExerciseSet = NonNullable<WorkoutRow["exercises"]>[number];
+  type ExerciseGroup = {
+    key: string;
+    sets: ExerciseSet[];
+    totalSets: number;
+    totalReps: number;
+    minReps: number | null;
+    maxReps: number | null;
+    maxWeight: number | null;
+    volume: number;
+  };
+
+  const groupedExercises = useMemo<ExerciseGroup[]>(() => {
+    const exs = w.exercises ?? [];
+    const map = new Map<string, ExerciseGroup>();
+    for (const ex of exs) {
+      const key = ex.name.trim().toLowerCase();
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
+          sets: [],
+          totalSets: 0,
+          totalReps: 0,
+          minReps: null,
+          maxReps: null,
+          maxWeight: null,
+          volume: 0,
+        });
+      }
+      const g = map.get(key)!;
+      g.sets.push(ex);
+      const setCount = ex.sets ?? 1;
+      g.totalSets += setCount;
+      if (ex.reps != null) {
+        g.totalReps += ex.reps * setCount;
+        g.minReps = g.minReps == null ? ex.reps : Math.min(g.minReps, ex.reps);
+        g.maxReps = g.maxReps == null ? ex.reps : Math.max(g.maxReps, ex.reps);
+      }
+      if (ex.weight != null) {
+        g.maxWeight = g.maxWeight == null ? ex.weight : Math.max(g.maxWeight, ex.weight);
+        if (ex.reps != null) g.volume += setCount * ex.reps * ex.weight;
+      }
+    }
+    return Array.from(map.values());
+  }, [w]);
+
+  const exoCount = groupedExercises.length;
   const dateLabel = format(parseISO(w.date), "EEEE d MMMM • HH'h'mm", { locale: fr });
 
   return (
