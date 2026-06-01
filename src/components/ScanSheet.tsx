@@ -57,11 +57,19 @@ export function ScanSheet({ room, defaultLocation, onClose }: { room: string; de
     mutationFn: async (file: File) => {
       const { b64, mime } = await fileToBase64(file);
       setPreview(`data:${mime};base64,${b64}`);
+      const module = resolveScanModule(room);
+      console.log("[ScanSheet] invoke scan-fridge", { room, module, mime, bytes: b64.length });
       const { data, error } = await supabase.functions.invoke("scan-fridge", {
-        body: { image_base64: b64, mime_type: mime, room },
+        body: { image_base64: b64, mime_type: mime, room, module },
       });
-      if (error) throw new Error(error.message);
-      if (data?.error) throw new Error(data.error);
+      if (error) {
+        console.error("[ScanSheet] scan-fridge error", { room, module, error });
+        throw new Error(error.message);
+      }
+      if (data?.error) {
+        console.error("[ScanSheet] scan-fridge data.error", { room, module, error: data.error });
+        throw new Error(data.error);
+      }
       return (data?.extracted_items ?? []) as DetectedItem[];
     },
     onSuccess: (list) => {
