@@ -3,7 +3,8 @@ import { Camera, ImageIcon, Loader2, Sparkles, Trash2, X, Plus, Check } from "lu
 import { toast } from "sonner";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { getRoomById, resolveScanModule } from "@/lib/maison/rooms";
+import { getRoomById } from "@/lib/maison/rooms";
+import { buildScanFridgeRequest } from "@/lib/maison/scan";
 
 type DetectedItem = {
   name: string;
@@ -57,17 +58,20 @@ export function ScanSheet({ room, defaultLocation, onClose }: { room: string; de
     mutationFn: async (file: File) => {
       const { b64, mime } = await fileToBase64(file);
       setPreview(`data:${mime};base64,${b64}`);
-      const module = resolveScanModule(room);
-      console.log("[ScanSheet] invoke scan-fridge", { room, module, mime, bytes: b64.length });
-      const { data, error } = await supabase.functions.invoke("scan-fridge", {
-        body: { image_base64: b64, mime_type: mime, room, module },
+      const payload = buildScanFridgeRequest({ room, b64, mime });
+      console.log("[ScanSheet] invoke scan-fridge", {
+        room,
+        module: payload.module,
+        mime,
+        bytes: b64.length,
       });
+      const { data, error } = await supabase.functions.invoke("scan-fridge", { body: payload });
       if (error) {
-        console.error("[ScanSheet] scan-fridge error", { room, module, error });
+        console.error("[ScanSheet] scan-fridge error", { room, module: payload.module, error });
         throw new Error(error.message);
       }
       if (data?.error) {
-        console.error("[ScanSheet] scan-fridge data.error", { room, module, error: data.error });
+        console.error("[ScanSheet] scan-fridge data.error", { room, module: payload.module, error: data.error });
         throw new Error(data.error);
       }
       return (data?.extracted_items ?? []) as DetectedItem[];
