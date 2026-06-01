@@ -211,3 +211,62 @@ export function getRoomById(id: string): Room | undefined {
 export function getCompartmentById(roomId: string, compId: string): Compartment | undefined {
   return getRoomById(roomId)?.compartments.find((c) => c.id === compId);
 }
+
+/** Modules acceptés par l'edge function scan-fridge. */
+export type ScanModule = "alimentation" | "pharmacie" | "habits" | "menager";
+
+/**
+ * Mapping robuste entre une pièce (id ou label UI) et le module backend.
+ * Toute valeur inconnue retombe sur "menager" et émet un warning.
+ */
+const ROOM_TO_MODULE: Record<string, ScanModule> = {
+  // Alimentation
+  cuisine: "alimentation",
+  alimentation: "alimentation",
+  food: "alimentation",
+  grocery: "alimentation",
+  pantry: "alimentation",
+  frigo: "alimentation",
+  congelateur: "alimentation",
+  cave: "alimentation",
+  // Pharmacie
+  "salle-de-bain": "pharmacie",
+  pharmacie: "pharmacie",
+  "armoire-pharmacie": "pharmacie",
+  // Habits
+  dressing: "habits",
+  habits: "habits",
+  vetement: "habits",
+  vetements: "habits",
+  garderobe: "habits",
+  entree: "habits",
+  // Ménager (catch-all maison)
+  menager: "menager",
+  menage: "menager",
+  buanderie: "menager",
+  salon: "menager",
+  chambre: "menager",
+  bureau: "menager",
+  garage: "menager",
+  balcon: "menager",
+};
+
+export function resolveScanModule(roomOrLabel: string | undefined | null): ScanModule {
+  if (!roomOrLabel) {
+    console.warn("[resolveScanModule] valeur vide → fallback menager");
+    return "menager";
+  }
+  const key = roomOrLabel
+    .toString()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .replace(/\s+/g, "-");
+  const mod = ROOM_TO_MODULE[key];
+  if (mod) return mod;
+  console.warn(
+    `[resolveScanModule] valeur inconnue "${roomOrLabel}" (key="${key}") → fallback menager`,
+  );
+  return "menager";
+}
