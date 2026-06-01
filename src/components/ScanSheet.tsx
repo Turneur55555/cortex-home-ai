@@ -3,7 +3,8 @@ import { Camera, ImageIcon, Loader2, Sparkles, Trash2, X, Plus, Check } from "lu
 import { toast } from "sonner";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { getRoomById, resolveScanModule } from "@/lib/maison/rooms";
+import { getRoomById } from "@/lib/maison/rooms";
+import { buildScanFridgeRequest } from "@/lib/maison/scan";
 
 type DetectedItem = {
   name: string;
