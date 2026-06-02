@@ -30,6 +30,7 @@ CREATE POLICY "Users view own goals" ON public.goals
 DROP POLICY IF EXISTS "Users insert own goals" ON public.goals;
 CREATE POLICY "Users insert own goals" ON public.goals
   FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users update own goals" ON public.goals;
 CREATE POLICY "Users update own goals" ON public.goals
   FOR UPDATE TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Users delete own goals" ON public.goals
