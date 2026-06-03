@@ -78,6 +78,7 @@ WITH CHECK (
   AND auth.uid()::text = (storage.foldername(name))[1]
 );
 
+DROP POLICY IF EXISTS "Users update own files" ON storage.objects;
 CREATE POLICY "Users update own files"
 ON storage.objects FOR UPDATE TO authenticated
 USING (
