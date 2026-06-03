@@ -191,19 +191,9 @@ export function useBadgeSystem() {
   const unlockMutation = useMutation({
     mutationFn: async (badge: BadgeCatalogEntry) => {
       if (!user) return;
-      const { error } = await (supabase as any).from("user_badges").upsert(
-        {
-          user_id: user.id,
-          badge_key: badge.badge_key,
-          label: badge.label,
-          icon: badge.icon,
-          rarity: badge.rarity,
-          xp_reward: badge.xp_reward,
-          description: badge.description,
-          unlocked_at: new Date().toISOString(),
-        },
-        { onConflict: "user_id,badge_key" },
-      );
+      const { error } = await (supabase as any).rpc("unlock_user_badge", {
+        _badge_key: badge.badge_key,
+      });
       if (error) throw error;
     },
     onSuccess: () => {

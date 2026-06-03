@@ -877,6 +877,26 @@ export type Database = {
     Functions: {
       compute_level_from_xp: { Args: { _xp: number }; Returns: number }
       ensure_home_categories_for_me: { Args: never; Returns: undefined }
+      unlock_user_badge: {
+        Args: { _badge_key: string }
+        Returns: {
+          badge_key: string
+          description: string
+          icon: string
+          id: string
+          label: string
+          rarity: string
+          unlocked_at: string
+          user_id: string
+          xp_reward: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "user_badges"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
     }
     Enums: {
       goal_type: "workouts_weekly" | "protein_daily" | "weight_loss" | "custom"
