@@ -1,0 +1,31 @@
+name: RLS Regression Tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/lib/security/**'
+      - 'supabase/migrations/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/lib/security/**'
+      - 'supabase/migrations/**'
+  workflow_dispatch:
+
+jobs:
+  rls-tests:
+    name: RLS isolation tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
+      - name: Run RLS regression tests
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: bunx vitest run src/lib/security/rls.test.ts
