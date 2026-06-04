@@ -14,6 +14,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedStocksRouteImport } from './routes/_authenticated/stocks'
+import { Route as AuthenticatedRlsStatusRouteImport } from './routes/_authenticated/rls-status'
 import { Route as AuthenticatedRappelsRouteImport } from './routes/_authenticated/rappels'
 import { Route as AuthenticatedProfilRouteImport } from './routes/_authenticated/profil'
 import { Route as AuthenticatedPreferencesAlimentairesRouteImport } from './routes/_authenticated/preferences-alimentaires'
@@ -43,6 +44,11 @@ const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
 const AuthenticatedStocksRoute = AuthenticatedStocksRouteImport.update({
   id: '/stocks',
   path: '/stocks',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedRlsStatusRoute = AuthenticatedRlsStatusRouteImport.update({
+  id: '/rls-status',
+  path: '/rls-status',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedRappelsRoute = AuthenticatedRappelsRouteImport.update({
@@ -87,6 +93,7 @@ export interface FileRoutesByFullPath {
   '/preferences-alimentaires': typeof AuthenticatedPreferencesAlimentairesRoute
   '/profil': typeof AuthenticatedProfilRoute
   '/rappels': typeof AuthenticatedRappelsRoute
+  '/rls-status': typeof AuthenticatedRlsStatusRoute
   '/stocks': typeof AuthenticatedStocksRoute
   '/fitness/': typeof AuthenticatedFitnessIndexRoute
   '/api/public/calendar/$token.ics': typeof ApiPublicCalendarTokenDoticsRoute
@@ -98,6 +105,7 @@ export interface FileRoutesByTo {
   '/preferences-alimentaires': typeof AuthenticatedPreferencesAlimentairesRoute
   '/profil': typeof AuthenticatedProfilRoute
   '/rappels': typeof AuthenticatedRappelsRoute
+  '/rls-status': typeof AuthenticatedRlsStatusRoute
   '/stocks': typeof AuthenticatedStocksRoute
   '/': typeof AuthenticatedIndexRoute
   '/fitness': typeof AuthenticatedFitnessIndexRoute
@@ -112,6 +120,7 @@ export interface FileRoutesById {
   '/_authenticated/preferences-alimentaires': typeof AuthenticatedPreferencesAlimentairesRoute
   '/_authenticated/profil': typeof AuthenticatedProfilRoute
   '/_authenticated/rappels': typeof AuthenticatedRappelsRoute
+  '/_authenticated/rls-status': typeof AuthenticatedRlsStatusRoute
   '/_authenticated/stocks': typeof AuthenticatedStocksRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/fitness/': typeof AuthenticatedFitnessIndexRoute
@@ -127,6 +136,7 @@ export interface FileRouteTypes {
     | '/preferences-alimentaires'
     | '/profil'
     | '/rappels'
+    | '/rls-status'
     | '/stocks'
     | '/fitness/'
     | '/api/public/calendar/$token.ics'
@@ -138,6 +148,7 @@ export interface FileRouteTypes {
     | '/preferences-alimentaires'
     | '/profil'
     | '/rappels'
+    | '/rls-status'
     | '/stocks'
     | '/'
     | '/fitness'
@@ -151,6 +162,7 @@ export interface FileRouteTypes {
     | '/_authenticated/preferences-alimentaires'
     | '/_authenticated/profil'
     | '/_authenticated/rappels'
+    | '/_authenticated/rls-status'
     | '/_authenticated/stocks'
     | '/_authenticated/'
     | '/_authenticated/fitness/'
@@ -199,6 +211,13 @@ declare module '@tanstack/react-router' {
       path: '/stocks'
       fullPath: '/stocks'
       preLoaderRoute: typeof AuthenticatedStocksRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/rls-status': {
+      id: '/_authenticated/rls-status'
+      path: '/rls-status'
+      fullPath: '/rls-status'
+      preLoaderRoute: typeof AuthenticatedRlsStatusRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/rappels': {
@@ -251,6 +270,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedPreferencesAlimentairesRoute: typeof AuthenticatedPreferencesAlimentairesRoute
   AuthenticatedProfilRoute: typeof AuthenticatedProfilRoute
   AuthenticatedRappelsRoute: typeof AuthenticatedRappelsRoute
+  AuthenticatedRlsStatusRoute: typeof AuthenticatedRlsStatusRoute
   AuthenticatedStocksRoute: typeof AuthenticatedStocksRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedFitnessIndexRoute: typeof AuthenticatedFitnessIndexRoute
@@ -262,6 +282,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
     AuthenticatedPreferencesAlimentairesRoute,
   AuthenticatedProfilRoute: AuthenticatedProfilRoute,
   AuthenticatedRappelsRoute: AuthenticatedRappelsRoute,
+  AuthenticatedRlsStatusRoute: AuthenticatedRlsStatusRoute,
   AuthenticatedStocksRoute: AuthenticatedStocksRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedFitnessIndexRoute: AuthenticatedFitnessIndexRoute,
@@ -280,13 +301,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
