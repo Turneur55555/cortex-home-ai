@@ -223,7 +223,9 @@ describe("requestReminderNotificationPermission", () => {
     globalThis.Notification.permission = "default";
     const res = await requestReminderNotificationPermission();
     expect(res).toBe("granted");
-    // @ts-expect-error spy
-    expect(globalThis.Notification.requestPermission).toHaveBeenCalled();
+    expect(
+      (globalThis.Notification as unknown as { requestPermission: ReturnType<typeof vi.fn> })
+        .requestPermission,
+    ).toHaveBeenCalled();
   });
 });
