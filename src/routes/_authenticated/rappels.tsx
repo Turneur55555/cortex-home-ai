@@ -17,6 +17,7 @@ import { isToday } from "date-fns";
 import { ReminderCard } from "@/components/reminders/ReminderCard";
 import { AppleCalendarButton } from "@/components/reminders/AppleCalendarButton";
 import { SmartInput } from "@/components/reminders/SmartInput";
+import { NotificationPermissionPrompt } from "@/components/reminders/NotificationPermissionPrompt";
 import {
   useCreateReminder,
   useDeleteReminder,
@@ -248,6 +249,9 @@ function RappelsPage() {
             <Stat label="En retard" value={stats.overdue} tone="danger" />
           </div>
         </div>
+
+        {/* Notification permission banner */}
+        <NotificationPermissionPrompt />
 
         {/* Smart natural-language input */}
         <SmartInput onCreate={handleSmartCreate} onOpenAdvanced={openCreate} />
