@@ -17,6 +17,7 @@ import { isToday } from "date-fns";
 import { ReminderCard } from "@/components/reminders/ReminderCard";
 import { AppleCalendarButton } from "@/components/reminders/AppleCalendarButton";
 import { SmartInput } from "@/components/reminders/SmartInput";
+import { NotificationPermissionPrompt } from "@/components/reminders/NotificationPermissionPrompt";
 import {
   useCreateReminder,
   useDeleteReminder,
@@ -25,7 +26,7 @@ import {
   useToggleFavorite,
   useUpdateReminder,
 } from "@/hooks/useReminders";
-import { useReminderNotifications } from "@/hooks/useReminderNotifications";
+// Notifications are mounted globally via GlobalReminderNotifier in _authenticated.tsx.
 import { useReminderShortcuts } from "@/hooks/useReminderShortcuts";
 import { useSeedSupplements } from "@/hooks/useSeedSupplements";
 import {
@@ -81,7 +82,7 @@ const PRIORITY_LABEL: Record<ReminderPriority | "all", string> = {
 function RappelsPage() {
   const { data: reminders = [], isLoading } = useReminders();
   useSeedSupplements(isLoading);
-  useReminderNotifications(reminders);
+  // useReminderNotifications is mounted globally in _authenticated layout.
 
   const createMut = useCreateReminder();
   const updateMut = useUpdateReminder();
@@ -248,6 +249,9 @@ function RappelsPage() {
             <Stat label="En retard" value={stats.overdue} tone="danger" />
           </div>
         </div>
+
+        {/* Notification permission banner */}
+        <NotificationPermissionPrompt />
 
         {/* Smart natural-language input */}
         <SmartInput onCreate={handleSmartCreate} onOpenAdvanced={openCreate} />

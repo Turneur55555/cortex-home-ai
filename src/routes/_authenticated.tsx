@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { AppShell } from "@/components/AppShell";
 import { BottomNav } from "@/components/BottomNav";
+import { GlobalReminderNotifier } from "@/components/reminders/GlobalReminderNotifier";
 import { Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated")({
@@ -37,6 +38,7 @@ function AuthGate() {
   if (!user) return null; // beforeLoad will redirect
   return (
     <AppShell showBell>
+      <GlobalReminderNotifier />
       <div className="flex flex-1 flex-col pb-2">
         <Outlet />
       </div>
