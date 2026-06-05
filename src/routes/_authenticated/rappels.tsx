@@ -26,7 +26,7 @@ import {
   useToggleFavorite,
   useUpdateReminder,
 } from "@/hooks/useReminders";
-import { useReminderNotifications } from "@/hooks/useReminderNotifications";
+// Notifications are mounted globally via GlobalReminderNotifier in _authenticated.tsx.
 import { useReminderShortcuts } from "@/hooks/useReminderShortcuts";
 import { useSeedSupplements } from "@/hooks/useSeedSupplements";
 import {
@@ -82,7 +82,7 @@ const PRIORITY_LABEL: Record<ReminderPriority | "all", string> = {
 function RappelsPage() {
   const { data: reminders = [], isLoading } = useReminders();
   useSeedSupplements(isLoading);
-  useReminderNotifications(reminders);
+  // useReminderNotifications is mounted globally in _authenticated layout.
 
   const createMut = useCreateReminder();
   const updateMut = useUpdateReminder();
