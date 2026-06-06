@@ -1,7 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
-  ChevronDown,
   BarChart3,
   Clock,
   Dumbbell,
@@ -27,7 +26,6 @@ import {
   useWorkouts,
 } from "@/hooks/use-fitness";
 import { EditableText } from "./EditableText";
-import { SwipeableExerciseRow } from "./SwipeableExerciseRow";
 import { PhotoModal } from "./PhotoModal";
 import { WorkoutDeleteDialog } from "./WorkoutDeleteDialog";
 import { ExerciseStatsSheet } from "./ExerciseStatsSheet";
@@ -39,6 +37,75 @@ import {
 import { normalize } from "@/lib/fitness/exerciseCatalog";
 
 export type WorkoutRow = NonNullable<ReturnType<typeof useWorkouts>["data"]>[number];
+type ExerciseRow = NonNullable<WorkoutRow["exercises"]>[number];
+
+type SerieView = {
+  index: number;
+  reps: number | null;
+  weight: number | null;
+  sourceId: string;
+};
+
+type ExerciseGroup = {
+  key: string;
+  name: string;
+  imagePath: string | null;
+  series: SerieView[];
+  totalSeries: number;
+  totalReps: number;
+  maxWeight: number | null;
+  volume: number;
+  sourceIds: string[];
+};
+
+// One DB row may represent N identical series (legacy). Expand to per-série rows.
+function expandToSeries(rows: ExerciseRow[]): SerieView[] {
+  const out: SerieView[] = [];
+  let idx = 1;
+  for (const r of rows) {
+    const n = Math.max(1, r.sets ?? 1);
+    for (let i = 0; i < n; i++) {
+      out.push({ index: idx++, reps: r.reps, weight: r.weight, sourceId: r.id });
+    }
+  }
+  return out;
+}
+
+function buildGroups(rows: ExerciseRow[]): ExerciseGroup[] {
+  const byKey = new Map<string, ExerciseRow[]>();
+  for (const r of rows) {
+    const key = r.name.trim().toLowerCase();
+    if (!key) continue;
+    if (!byKey.has(key)) byKey.set(key, []);
+    byKey.get(key)!.push(r);
+  }
+  const groups: ExerciseGroup[] = [];
+  for (const [key, list] of byKey) {
+    const series = expandToSeries(list);
+    let totalReps = 0;
+    let volume = 0;
+    let maxWeight: number | null = null;
+    for (const s of series) {
+      if (s.reps != null) totalReps += s.reps;
+      if (s.weight != null) {
+        maxWeight = maxWeight == null ? s.weight : Math.max(maxWeight, s.weight);
+        if (s.reps != null) volume += s.reps * s.weight;
+      }
+    }
+    groups.push({
+      key,
+      name: list[0].name,
+      imagePath: list.find((r) => r.image_path)?.image_path ?? null,
+      series,
+      totalSeries: series.length,
+      totalReps,
+      maxWeight,
+      volume,
+      sourceIds: Array.from(new Set(list.map((r) => r.id))),
+    });
+  }
+  return groups;
+}
 
 export function WorkoutCard({
   w,
@@ -67,9 +134,35 @@ export function WorkoutCard({
   const [photoModal, setPhotoModal] = useState<{ url: string; exId: string } | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [uploadingExId, setUploadingExId] = useState<string | null>(null);
-  const [openGroupKey, setOpenGroupKey] = useState<string | null>(null);
   const photoFileRef = useRef<HTMLInputElement>(null);
   const modifyExIdRef = useRef<string>("");
+
+  const groups = useMemo(() => buildGroups(w.exercises ?? []), [w.exercises]);
+
+  // Stats agrégées RÉELLES de la séance (basées sur séries expansées)
+  const stats = useMemo(() => {
+    let volume = 0;
+    let totalSeries = 0;
+    let totalReps = 0;
+    for (const g of groups) {
+      volume += g.volume;
+      totalSeries += g.totalSeries;
+      totalReps += g.totalReps;
+    }
+    const duration = w.duration_minutes ?? 0;
+    // ~0.5 kcal / kg soulevé + ~5 kcal/min si durée renseignée
+    const caloriesFromVolume = Math.round(volume * 0.05);
+    const caloriesFromDuration = duration > 0 ? duration * 5 : 0;
+    const calories = caloriesFromVolume + caloriesFromDuration;
+    return {
+      volume: Math.round(volume),
+      duration,
+      calories: calories > 0 ? calories : null,
+      exoCount: groups.length,
+      totalSeries,
+      totalReps,
+    };
+  }, [groups, w.duration_minutes]);
 
   const handlePhotoUpload = async (exId: string, file: File) => {
     setUploadingExId(exId);
@@ -92,74 +185,15 @@ export function WorkoutCard({
     }
   };
 
-  // ─── Stats agrégées de la séance ───────────────────────────────────────────
-  const stats = useMemo(() => {
-    const exs = w.exercises ?? [];
-    let volume = 0;
-    for (const ex of exs) {
-      if (ex.weight != null) {
-        volume += (ex.sets ?? 1) * (ex.reps ?? 1) * ex.weight;
-      }
-    }
-    const duration = w.duration_minutes ?? 0;
-    // Estimation ~6 kcal/min en musculation modérée
-    const calories = duration > 0 ? Math.round(duration * 6) : null;
-    return { volume: Math.round(volume), duration, calories };
-  }, [w]);
-
-  // ─── Regroupement des exercices par nom ────────────────────────────────────
-  type ExerciseSet = NonNullable<WorkoutRow["exercises"]>[number];
-  type ExerciseGroup = {
-    key: string;
-    sets: ExerciseSet[];
-    totalSets: number;
-    totalReps: number;
-    minReps: number | null;
-    maxReps: number | null;
-    maxWeight: number | null;
-    volume: number;
+  const deleteGroup = (g: ExerciseGroup) => {
+    for (const id of g.sourceIds) deleteEx.mutate(id);
   };
 
-  const groupedExercises = useMemo<ExerciseGroup[]>(() => {
-    const exs = w.exercises ?? [];
-    const map = new Map<string, ExerciseGroup>();
-    for (const ex of exs) {
-      const key = ex.name.trim().toLowerCase();
-      if (!map.has(key)) {
-        map.set(key, {
-          key,
-          sets: [],
-          totalSets: 0,
-          totalReps: 0,
-          minReps: null,
-          maxReps: null,
-          maxWeight: null,
-          volume: 0,
-        });
-      }
-      const g = map.get(key)!;
-      g.sets.push(ex);
-      const setCount = ex.sets ?? 1;
-      g.totalSets += setCount;
-      if (ex.reps != null) {
-        g.totalReps += ex.reps * setCount;
-        g.minReps = g.minReps == null ? ex.reps : Math.min(g.minReps, ex.reps);
-        g.maxReps = g.maxReps == null ? ex.reps : Math.max(g.maxReps, ex.reps);
-      }
-      if (ex.weight != null) {
-        g.maxWeight = g.maxWeight == null ? ex.weight : Math.max(g.maxWeight, ex.weight);
-        if (ex.reps != null) g.volume += setCount * ex.reps * ex.weight;
-      }
-    }
-    return Array.from(map.values());
-  }, [w]);
-
-  const exoCount = groupedExercises.length;
   const dateLabel = format(parseISO(w.date), "EEEE d MMMM • HH'h'mm", { locale: fr });
 
   return (
     <li className="overflow-hidden rounded-3xl border border-white/5 bg-gradient-to-b from-card/95 to-card/70 shadow-[0_10px_40px_-15px_rgba(0,0,0,0.6)] backdrop-blur-xl">
-      {/* ─── En-tête immersif ───────────────────────────────────────────────── */}
+      {/* En-tête */}
       <div className="relative px-5 pb-4 pt-5">
         <div
           aria-hidden
@@ -195,7 +229,7 @@ export function WorkoutCard({
           </div>
         </div>
 
-        {/* ─── Tuiles de stats ──────────────────────────────────────────────── */}
+        {/* Tuiles de stats — calculs réels */}
         <div className="relative mt-4 grid grid-cols-4 gap-2">
           <StatTile
             icon={<Clock className="h-3.5 w-3.5" />}
@@ -218,150 +252,123 @@ export function WorkoutCard({
           <StatTile
             icon={<Layers className="h-3.5 w-3.5" />}
             label="Exos"
-            value={`${exoCount}`}
+            value={`${stats.exoCount}`}
           />
         </div>
       </div>
 
-      {/* ─── Liste exercices premium (groupés par nom) ──────────────────────── */}
-      {groupedExercises.length > 0 && (
-        <ul className="space-y-2 px-3 pb-3">
-          {groupedExercises.map((group) => {
-            const isOpen = openGroupKey === group.key;
-            const firstEx = group.sets[0];
-            const imgPath = group.sets.find((s) => s.image_path)?.image_path ?? null;
-            const imgUrl = imgPath ? (imageUrls?.get(imgPath) ?? null) : null;
-            const isPR =
-              group.maxWeight != null && prByName.get(group.key) === group.maxWeight;
+      {/* Liste exercices — format tableau toujours visible */}
+      {groups.length > 0 && (
+        <ul className="space-y-3 px-4 pb-3">
+          {groups.map((g) => {
+            const imgUrl = g.imagePath ? (imageUrls?.get(g.imagePath) ?? null) : null;
+            const isPR = g.maxWeight != null && prByName.get(g.key) === g.maxWeight;
             const isLatestPR = isPR && w.date === latestDate;
-
-            const repsRange =
-              group.minReps != null && group.maxReps != null
-                ? group.minReps === group.maxReps
-                  ? `${group.minReps} reps`
-                  : `${group.minReps}-${group.maxReps} reps`
-                : null;
-            const meta = [
-              `${group.totalSets} ${group.totalSets > 1 ? "séries" : "série"}`,
-              repsRange,
-              group.maxWeight != null ? `max ${group.maxWeight} kg` : null,
-            ]
-              .filter(Boolean)
-              .join(" • ");
-
             return (
               <li
-                key={group.key}
-                className="overflow-hidden rounded-2xl bg-white/[0.03] transition-colors"
+                key={g.key}
+                className="overflow-hidden rounded-2xl border border-white/5 bg-white/[0.03]"
               >
-                <button
-                  type="button"
-                  onClick={() => setOpenGroupKey(isOpen ? null : group.key)}
-                  className="flex w-full items-center gap-3 p-2.5 text-left transition-all active:scale-[0.98] active:bg-white/[0.06]"
-                >
-                  {/* Miniature */}
+                {/* En-tête exercice */}
+                <div className="flex items-center gap-3 p-3">
                   {imgUrl ? (
-                    <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl ring-1 ring-white/5">
+                    <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl ring-1 ring-white/10">
                       <img
                         src={imgUrl}
-                        alt={firstEx.name}
+                        alt={g.name}
                         className="h-full w-full object-cover"
                         loading="lazy"
                       />
                     </div>
-                  ) : imgPath ? (
+                  ) : g.imagePath ? (
                     <div className="h-14 w-14 shrink-0 animate-pulse rounded-xl bg-muted" />
                   ) : (
                     <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/15 to-primary/5 text-primary/70">
                       <Dumbbell className="h-5 w-5" />
                     </div>
                   )}
-
-                  {/* Contenu */}
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
-                      <span className="truncate text-[15px] font-semibold leading-tight">
-                        {firstEx.name}
-                      </span>
+                      <h3 className="truncate text-[16px] font-bold leading-tight tracking-tight">
+                        {g.name}
+                      </h3>
                       {isPR && (
                         <Trophy
-                          className={`h-3.5 w-3.5 shrink-0 text-warning ${isLatestPR ? "animate-pulse" : ""}`}
+                          className={`h-4 w-4 shrink-0 text-warning ${isLatestPR ? "animate-pulse" : ""}`}
                           aria-label={isLatestPR ? "Nouveau record !" : "Record personnel"}
                         />
                       )}
                     </div>
-                    <p className="mt-0.5 truncate text-xs text-muted-foreground">{meta}</p>
+                    <p className="mt-0.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/80">
+                      {g.totalSeries} {g.totalSeries > 1 ? "séries" : "série"}
+                      {g.maxWeight != null && (
+                        <>
+                          <span className="mx-1.5 text-muted-foreground/40">·</span>
+                          max {g.maxWeight} kg
+                        </>
+                      )}
+                    </p>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setStatsKey(g.key)}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary transition-all active:scale-90"
+                    aria-label="Statistiques"
+                  >
+                    <BarChart3 className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteGroup(g)}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/5 text-muted-foreground transition-all active:scale-90 hover:bg-destructive/15 hover:text-destructive"
+                    aria-label="Supprimer l'exercice"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
 
-                  <ChevronDown
-                    className={`h-4 w-4 shrink-0 text-muted-foreground/70 transition-transform duration-300 ${isOpen ? "rotate-180" : ""}`}
-                  />
-                </button>
-
-                {/* Contenu déplié */}
-                <div
-                  className={`grid transition-all duration-300 ease-out ${
-                    isOpen ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"
-                  }`}
-                >
-                  <div className="overflow-hidden">
-                    <div className="space-y-2 border-t border-white/5 px-3 pb-3 pt-3">
-                      {/* Liste des séries */}
-                      <ul className="space-y-1.5">
-                        {group.sets.map((ex, idx) => (
-                          <SwipeableExerciseRow
-                            key={ex.id}
-                            onDelete={() => deleteEx.mutate(ex.id)}
-                          >
-                            <div className="flex items-center gap-3 rounded-xl bg-white/[0.04] px-3 py-2">
-                              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[11px] font-bold text-primary">
-                                {idx + 1}
-                              </span>
-                              <div className="flex-1 text-sm font-medium tabular-nums">
-                                {ex.reps != null ? `${ex.reps} reps` : "—"}
-                                <span className="mx-1.5 text-muted-foreground/50">•</span>
-                                {ex.weight != null ? `${ex.weight} kg` : "—"}
-                              </div>
-                              {ex.weight != null &&
-                                ex.weight === group.maxWeight &&
-                                isPR && (
-                                  <Trophy className="h-3.5 w-3.5 shrink-0 text-warning" />
-                                )}
-                            </div>
-                          </SwipeableExerciseRow>
-                        ))}
-                      </ul>
-
-                      {/* Récap & stats */}
-                      <div className="flex items-center justify-between rounded-xl bg-white/[0.02] px-3 py-2 text-xs">
-                        <div className="flex flex-col">
-                          <span className="text-[10px] uppercase tracking-wider text-muted-foreground/70">
-                            Volume total
-                          </span>
-                          <span className="font-bold tabular-nums">
-                            {group.volume > 0 ? `${formatVolume(group.volume)} kg` : "—"}
-                          </span>
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="text-[10px] uppercase tracking-wider text-muted-foreground/70">
-                            Total reps
-                          </span>
-                          <span className="font-bold tabular-nums">{group.totalReps}</span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setStatsKey(group.key);
-                          }}
-                          className="flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary transition-all active:scale-95"
+                {/* Tableau des séries — toujours visible */}
+                <div className="mx-3 mb-3 overflow-hidden rounded-xl border border-white/5 bg-black/20">
+                  <div className="grid grid-cols-[56px_1fr_1fr] border-b border-white/5 bg-white/[0.02] py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80">
+                    <div className="text-center">Série</div>
+                    <div className="text-center">Reps</div>
+                    <div className="text-center">Kg</div>
+                  </div>
+                  <ul className="divide-y divide-white/5">
+                    {g.series.map((s) => {
+                      const isMax = s.weight != null && s.weight === g.maxWeight && isPR;
+                      return (
+                        <li
+                          key={`${s.sourceId}-${s.index}`}
+                          className="grid grid-cols-[56px_1fr_1fr] items-center py-2.5 text-sm tabular-nums"
                         >
-                          <BarChart3 className="h-3.5 w-3.5" />
-                          Stats
-                        </button>
-                      </div>
+                          <div className="flex items-center justify-center">
+                            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/15 text-[11px] font-bold text-primary">
+                              {s.index}
+                            </span>
+                          </div>
+                          <div className="text-center font-semibold">
+                            {s.reps ?? "—"}
+                          </div>
+                          <div className="flex items-center justify-center gap-1 text-center font-semibold">
+                            {s.weight ?? "—"}
+                            {isMax && <Trophy className="h-3 w-3 text-warning" />}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  {/* Récap volume */}
+                  {g.volume > 0 && (
+                    <div className="flex items-center justify-between border-t border-white/5 bg-white/[0.02] px-3 py-2 text-[11px]">
+                      <span className="uppercase tracking-wider text-muted-foreground/70">
+                        Volume
+                      </span>
+                      <span className="font-bold tabular-nums">
+                        {formatVolume(g.volume)} kg
+                      </span>
                     </div>
-                  </div>
+                  )}
                 </div>
               </li>
             );
@@ -369,13 +376,12 @@ export function WorkoutCard({
         </ul>
       )}
 
-
-      {/* ─── Ajouter un exercice ────────────────────────────────────────────── */}
-      <div className="px-3 pb-3">
+      {/* Ajouter un exercice */}
+      <div className="px-4 pb-4">
         <button
           type="button"
           onClick={() => setShowAddModal(true)}
-          className="flex w-full items-center justify-center gap-1.5 rounded-2xl border border-dashed border-white/10 bg-white/[0.02] py-2.5 text-xs font-medium text-muted-foreground transition-all active:scale-[0.99] hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
+          className="flex w-full items-center justify-center gap-1.5 rounded-2xl border border-dashed border-white/10 bg-white/[0.02] py-3 text-xs font-medium text-muted-foreground transition-all active:scale-[0.99] hover:border-primary/30 hover:bg-primary/5 hover:text-primary"
         >
           <Plus className="h-3.5 w-3.5" />
           Ajouter un exercice
@@ -388,8 +394,6 @@ export function WorkoutCard({
         </p>
       )}
 
-
-      {/* Input caché pour modifier une photo */}
       <input
         ref={photoFileRef}
         type="file"
@@ -442,11 +446,19 @@ export function WorkoutCard({
           onClose={() => setShowAddModal(false)}
         />
       )}
+
+      {uploadingExId && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-20 z-50 flex justify-center">
+          <div className="rounded-full bg-card/90 px-4 py-2 text-xs text-muted-foreground shadow-lg backdrop-blur">
+            <Loader2 className="mr-2 inline h-3 w-3 animate-spin" />
+            Upload en cours…
+          </div>
+        </div>
+      )}
     </li>
   );
 }
 
-// ─── Tuile de stat premium ──────────────────────────────────────────────────
 function StatTile({
   icon,
   label,
@@ -486,7 +498,7 @@ function AddExerciseModal({
   workoutId: string;
   onClose: () => void;
 }) {
-  const { data: workouts } = useWorkouts(); // cache hit — already fetched by SeancesTab
+  const { data: workouts } = useWorkouts();
   const addEx = useAddExerciseToWorkout();
   const [step, setStep] = useState<"pick" | "fill">("pick");
   const [picked, setPicked] = useState<PickedExercise | null>(null);
@@ -558,7 +570,6 @@ function AddExerciseModal({
         onClick={(e) => e.stopPropagation()}
         onSubmit={handleSubmit}
       >
-        {/* Handle */}
         <div className="mb-4 flex justify-center">
           <div className="h-1 w-10 rounded-full bg-white/20" />
         </div>
@@ -589,20 +600,20 @@ function AddExerciseModal({
             const { key, label } = item;
             const step = "step" in item ? item.step : undefined;
             return (
-            <div key={key} className="flex flex-col gap-1.5">
-              <label className="text-center text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                {label}
-              </label>
-              <input
-                type="number"
-                inputMode="decimal"
-                step={step}
-                value={form[key]}
-                onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-                placeholder="—"
-                className={inputCls}
-              />
-            </div>
+              <div key={key} className="flex flex-col gap-1.5">
+                <label className="text-center text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  {label}
+                </label>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step={step}
+                  value={form[key]}
+                  onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
+                  placeholder="—"
+                  className={inputCls}
+                />
+              </div>
             );
           })}
         </div>
