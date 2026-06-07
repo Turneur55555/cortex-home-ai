@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   BarChart3,
+  ChevronRight,
   Clock,
   Dumbbell,
   Flame,
@@ -133,6 +134,7 @@ export function WorkoutCard({
 
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [statsKey, setStatsKey] = useState<string | null>(null);
+  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
   const [photoModal, setPhotoModal] = useState<{ url: string; exId: string } | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [uploadingExId, setUploadingExId] = useState<string | null>(null);
@@ -266,13 +268,24 @@ export function WorkoutCard({
             const imgUrl = g.imagePath ? (imageUrls?.get(g.imagePath) ?? null) : null;
             const isPR = g.maxWeight != null && prByName.get(g.key) === g.maxWeight;
             const isLatestPR = isPR && w.date === latestDate;
+            const isOpen = expandedKeys.has(g.key);
             return (
               <li
                 key={g.key}
                 className="overflow-hidden rounded-2xl border border-white/5 bg-white/[0.03]"
               >
-                {/* En-tête exercice */}
-                <div className="flex items-center gap-3 p-3">
+                {/* En-tête exercice — ligne cliquable entière */}
+                <div
+                  className="flex cursor-pointer select-none items-center gap-3 p-3"
+                  onClick={() => {
+                    setExpandedKeys((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(g.key)) next.delete(g.key);
+                      else next.add(g.key);
+                      return next;
+                    });
+                  }}
+                >
                   {imgUrl ? (
                     <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl ring-1 ring-white/10">
                       <img
@@ -311,9 +324,17 @@ export function WorkoutCard({
                       )}
                     </p>
                   </div>
+
+                  <ChevronRight
+                    className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-300 ${isOpen ? "rotate-90" : ""}`}
+                  />
+
                   <button
                     type="button"
-                    onClick={() => setStatsKey(g.key)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setStatsKey(g.key);
+                    }}
                     className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary transition-all active:scale-90"
                     aria-label="Statistiques"
                   >
@@ -321,7 +342,10 @@ export function WorkoutCard({
                   </button>
                   <button
                     type="button"
-                    onClick={() => deleteGroup(g)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteGroup(g);
+                    }}
                     className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/5 text-muted-foreground transition-all active:scale-90 hover:bg-destructive/15 hover:text-destructive"
                     aria-label="Supprimer l'exercice"
                   >
@@ -329,48 +353,56 @@ export function WorkoutCard({
                   </button>
                 </div>
 
-                {/* Tableau des séries — toujours visible */}
-                <div className="mx-3 mb-3 overflow-hidden rounded-xl border border-white/5 bg-black/20">
-                  <div className="grid grid-cols-[56px_1fr_1fr] border-b border-white/5 bg-white/[0.02] py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80">
-                    <div className="text-center">Série</div>
-                    <div className="text-center">Reps</div>
-                    <div className="text-center">Kg</div>
-                  </div>
-                  <ul className="divide-y divide-white/5">
-                    {g.series.map((s) => {
-                      const isMax = s.weight != null && s.weight === g.maxWeight && isPR;
-                      return (
-                        <li
-                          key={`${s.sourceId}-${s.index}`}
-                          className="grid grid-cols-[56px_1fr_1fr] items-center py-2.5 text-sm tabular-nums"
-                        >
-                          <div className="flex items-center justify-center">
-                            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/15 text-[11px] font-bold text-primary">
-                              {s.index}
-                            </span>
-                          </div>
-                          <div className="text-center font-semibold">
-                            {s.reps ?? "—"}
-                          </div>
-                          <div className="flex items-center justify-center gap-1 text-center font-semibold">
-                            {s.weight ?? "—"}
-                            {isMax && <Trophy className="h-3 w-3 text-warning" />}
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                  {/* Récap volume */}
-                  {g.volume > 0 && (
-                    <div className="flex items-center justify-between border-t border-white/5 bg-white/[0.02] px-3 py-2 text-[11px]">
-                      <span className="uppercase tracking-wider text-muted-foreground/70">
-                        Volume
-                      </span>
-                      <span className="font-bold tabular-nums">
-                        {formatVolume(g.volume)} kg
-                      </span>
+                {/* Tableau des séries — accordéon */}
+                <div
+                  className="overflow-hidden transition-all duration-300 ease-out"
+                  style={{
+                    maxHeight: isOpen ? "800px" : "0px",
+                    opacity: isOpen ? 1 : 0,
+                  }}
+                >
+                  <div className="mx-3 mb-3 overflow-hidden rounded-xl border border-white/5 bg-black/20">
+                    <div className="grid grid-cols-[56px_1fr_1fr] border-b border-white/5 bg-white/[0.02] py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80">
+                      <div className="text-center">Série</div>
+                      <div className="text-center">Reps</div>
+                      <div className="text-center">Kg</div>
                     </div>
-                  )}
+                    <ul className="divide-y divide-white/5">
+                      {g.series.map((s) => {
+                        const isMax = s.weight != null && s.weight === g.maxWeight && isPR;
+                        return (
+                          <li
+                            key={`${s.sourceId}-${s.index}`}
+                            className="grid grid-cols-[56px_1fr_1fr] items-center py-2.5 text-sm tabular-nums"
+                          >
+                            <div className="flex items-center justify-center">
+                              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/15 text-[11px] font-bold text-primary">
+                                {s.index}
+                              </span>
+                            </div>
+                            <div className="text-center font-semibold">
+                              {s.reps ?? "—"}
+                            </div>
+                            <div className="flex items-center justify-center gap-1 text-center font-semibold">
+                              {s.weight ?? "—"}
+                              {isMax && <Trophy className="h-3 w-3 text-warning" />}
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    {/* Récap volume */}
+                    {g.volume > 0 && (
+                      <div className="flex items-center justify-between border-t border-white/5 bg-white/[0.02] px-3 py-2 text-[11px]">
+                        <span className="uppercase tracking-wider text-muted-foreground/70">
+                          Volume
+                        </span>
+                        <span className="font-bold tabular-nums">
+                          {formatVolume(g.volume)} kg
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </li>
             );
