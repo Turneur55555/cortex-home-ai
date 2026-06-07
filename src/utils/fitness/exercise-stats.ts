@@ -31,10 +31,15 @@ export function computePRs(workouts: WorkoutWithExercises[] | null | undefined) 
       const key = ex.name.trim().toLowerCase();
       if (!key) continue;
       freq.set(key, (freq.get(key) ?? 0) + 1);
-      if (ex.weight != null) {
-        if (!sessionMax.has(key) || ex.weight > sessionMax.get(key)!) sessionMax.set(key, ex.weight);
-        if (!prByName.has(key) || ex.weight > prByName.get(key)!) prByName.set(key, ex.weight);
-        const vol = (ex.sets ?? 1) * (ex.reps ?? 1) * ex.weight;
+      // Même convention que WorkoutCard : 1 ligne = 1 série. Si weight est NULL,
+      // sets contient les reps et reps contient le poids (données legacy / IA).
+      const hasExplicitWeight = ex.weight != null;
+      const reps = hasExplicitWeight ? ex.reps : (ex.sets ?? ex.reps);
+      const weight = hasExplicitWeight ? ex.weight : (ex.sets != null ? ex.reps : null);
+      if (weight != null) {
+        if (!sessionMax.has(key) || weight > sessionMax.get(key)!) sessionMax.set(key, weight);
+        if (!prByName.has(key) || weight > prByName.get(key)!) prByName.set(key, weight);
+        const vol = (reps ?? 1) * weight;
         sessionVol.set(key, (sessionVol.get(key) ?? 0) + vol);
       }
     }
