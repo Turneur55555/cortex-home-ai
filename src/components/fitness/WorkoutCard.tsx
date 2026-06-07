@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   BarChart3,
+  ChevronRight,
   Clock,
   Dumbbell,
   Flame,
