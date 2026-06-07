@@ -134,6 +134,7 @@ export function WorkoutCard({
 
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [statsKey, setStatsKey] = useState<string | null>(null);
+  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
   const [photoModal, setPhotoModal] = useState<{ url: string; exId: string } | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [uploadingExId, setUploadingExId] = useState<string | null>(null);
