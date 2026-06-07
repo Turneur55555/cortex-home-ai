@@ -1,5 +1,6 @@
 
 -- 1) Restrictive block policies on user_badges (no direct client writes)
+DROP POLICY IF EXISTS "Block direct insert on user_badges" ON public.user_badges;
 CREATE POLICY "Block direct insert on user_badges"
   ON public.user_badges AS RESTRICTIVE FOR INSERT TO authenticated, anon
   WITH CHECK (false);

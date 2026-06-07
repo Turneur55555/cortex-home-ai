@@ -86,6 +86,7 @@ USING (
   AND auth.uid()::text = (storage.foldername(name))[1]
 );
 
+DROP POLICY IF EXISTS "Users delete own files" ON storage.objects;
 CREATE POLICY "Users delete own files"
 ON storage.objects FOR DELETE TO authenticated
 USING (
