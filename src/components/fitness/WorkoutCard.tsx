@@ -58,17 +58,19 @@ type ExerciseGroup = {
   sourceIds: string[];
 };
 
-// One DB row may represent N identical series (legacy). Expand to per-série rows.
+// 1 ligne `exercises` en base = 1 série affichée.
+// Convention legacy : si `weight` est NULL, la colonne `sets` contient en réalité les reps
+// et la colonne `reps` contient la charge (kg). On reste fidèle aux enregistrements bruts
+// sans inventer de séries supplémentaires.
+function rowToSerie(r: ExerciseRow, index: number): SerieView {
+  const hasExplicitWeight = r.weight != null;
+  const reps = hasExplicitWeight ? r.reps : (r.sets ?? r.reps);
+  const weight = hasExplicitWeight ? r.weight : (r.sets != null ? r.reps : null);
+  return { index, reps, weight, sourceId: r.id };
+}
+
 function expandToSeries(rows: ExerciseRow[]): SerieView[] {
-  const out: SerieView[] = [];
-  let idx = 1;
-  for (const r of rows) {
-    const n = Math.max(1, r.sets ?? 1);
-    for (let i = 0; i < n; i++) {
-      out.push({ index: idx++, reps: r.reps, weight: r.weight, sourceId: r.id });
-    }
-  }
-  return out;
+  return rows.map((r, i) => rowToSerie(r, i + 1));
 }
 
 function buildGroups(rows: ExerciseRow[]): ExerciseGroup[] {
