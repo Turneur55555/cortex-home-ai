@@ -534,14 +534,19 @@ function StatTile({
   label,
   value,
   unit,
+  title,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
   unit?: string;
+  title?: string;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-0.5 rounded-2xl bg-white/[0.04] px-2 py-2.5 ring-1 ring-white/5">
+    <div
+      title={title}
+      className="flex flex-col items-center justify-center gap-0.5 rounded-2xl bg-white/[0.04] px-2 py-2.5 ring-1 ring-white/5"
+    >
       <span className="text-muted-foreground/70">{icon}</span>
       <span className="mt-0.5 flex items-baseline gap-0.5">
         <span className="text-base font-bold leading-none tracking-tight">{value}</span>
@@ -553,6 +558,7 @@ function StatTile({
     </div>
   );
 }
+
 
 function formatVolume(v: number): string {
   if (v >= 1000) return `${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k`;
