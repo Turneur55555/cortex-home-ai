@@ -13,6 +13,7 @@ import {
   Trash2,
   Trophy,
   TrendingUp,
+  AlertTriangle,
   X,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
@@ -153,20 +154,43 @@ export function WorkoutCard({
       totalSeries += g.totalSeries;
       totalReps += g.totalReps;
     }
+
+    // Contrôle d'intégrité : recalcul indépendant depuis les lignes brutes Supabase.
+    let rawVolume = 0;
+    for (const r of w.exercises ?? []) {
+      const hasExplicitWeight = r.weight != null;
+      const reps = hasExplicitWeight ? r.reps : (r.sets ?? r.reps);
+      const weight = hasExplicitWeight ? r.weight : (r.sets != null ? r.reps : null);
+      if (weight != null && reps != null) rawVolume += reps * weight;
+    }
+    const delta = Math.abs(rawVolume - volume);
+    const volumeMismatch = delta > 0.5;
+    if (volumeMismatch && typeof console !== "undefined") {
+      console.warn("[WorkoutCard] Volume mismatch", {
+        workoutId: w.id,
+        computed: volume,
+        rawFromSupabase: rawVolume,
+        delta,
+      });
+    }
+    // Fallback : on affiche la valeur brute Supabase si écart détecté.
+    const safeVolume = volumeMismatch ? rawVolume : volume;
+
     const duration = w.duration_minutes ?? 0;
-    // ~0.5 kcal / kg soulevé + ~5 kcal/min si durée renseignée
-    const caloriesFromVolume = Math.round(volume * 0.05);
+    const caloriesFromVolume = Math.round(safeVolume * 0.05);
     const caloriesFromDuration = duration > 0 ? duration * 5 : 0;
     const calories = caloriesFromVolume + caloriesFromDuration;
     return {
-      volume: Math.round(volume),
+      volume: Math.round(safeVolume),
+      volumeMismatch,
       duration,
       calories: calories > 0 ? calories : null,
       exoCount: groups.length,
       totalSeries,
       totalReps,
     };
-  }, [groups, w.duration_minutes]);
+  }, [groups, w.duration_minutes, w.exercises, w.id]);
+
 
   const handlePhotoUpload = async (exId: string, file: File) => {
     setUploadingExId(exId);
@@ -242,11 +266,23 @@ export function WorkoutCard({
             unit={stats.duration > 0 ? "min" : undefined}
           />
           <StatTile
-            icon={<TrendingUp className="h-3.5 w-3.5" />}
+            icon={
+              stats.volumeMismatch ? (
+                <AlertTriangle className="h-3.5 w-3.5 text-warning" />
+              ) : (
+                <TrendingUp className="h-3.5 w-3.5" />
+              )
+            }
             label="Volume"
             value={stats.volume > 0 ? formatVolume(stats.volume) : "—"}
             unit={stats.volume > 0 ? "kg" : undefined}
+            title={
+              stats.volumeMismatch
+                ? "Écart détecté — valeur recalculée depuis la base affichée"
+                : undefined
+            }
           />
+
           <StatTile
             icon={<Flame className="h-3.5 w-3.5" />}
             label="Calories"
@@ -498,14 +534,19 @@ function StatTile({
   label,
   value,
   unit,
+  title,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
   unit?: string;
+  title?: string;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-0.5 rounded-2xl bg-white/[0.04] px-2 py-2.5 ring-1 ring-white/5">
+    <div
+      title={title}
+      className="flex flex-col items-center justify-center gap-0.5 rounded-2xl bg-white/[0.04] px-2 py-2.5 ring-1 ring-white/5"
+    >
       <span className="text-muted-foreground/70">{icon}</span>
       <span className="mt-0.5 flex items-baseline gap-0.5">
         <span className="text-base font-bold leading-none tracking-tight">{value}</span>
@@ -517,6 +558,7 @@ function StatTile({
     </div>
   );
 }
+
 
 function formatVolume(v: number): string {
   if (v >= 1000) return `${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k`;
