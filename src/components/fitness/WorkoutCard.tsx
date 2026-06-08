@@ -216,8 +216,11 @@ export function WorkoutCard({
   };
 
   const deleteGroup = (g: ExerciseGroup) => {
-    for (const id of g.sourceIds) deleteEx.mutate(id);
+    if (g.sourceIds.length === 0) return;
+    deleteExBatch.mutate(g.sourceIds);
   };
+  // Préserve l'usage local (hover-card photo) sans nouvelle invalidation supplémentaire.
+  void deleteEx;
 
   const dateLabel = format(parseISO(w.date), "EEEE d MMMM • HH'h'mm", { locale: fr });
 
