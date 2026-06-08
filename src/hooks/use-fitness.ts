@@ -319,6 +319,34 @@ export function useUpdateWorkoutName() {
   });
 }
 
+// Type alias pour le cache `workouts` (incluant les exercices imbriqués).
+type WorkoutsCache = Array<{
+  id: string;
+  exercises?: Array<{
+    id: string;
+    workout_id: string;
+    user_id: string;
+    name: string;
+    sets: number | null;
+    reps: number | null;
+    weight: number | null;
+    image_path: string | null;
+  }> | null;
+  [k: string]: unknown;
+}>;
+
+const WORKOUTS_KEY = ["workouts"] as const;
+
+function patchWorkoutsCache(
+  qc: ReturnType<typeof useQueryClient>,
+  updater: (rows: WorkoutsCache) => WorkoutsCache,
+) {
+  const prev = qc.getQueryData<WorkoutsCache>(WORKOUTS_KEY);
+  if (!prev) return prev;
+  qc.setQueryData<WorkoutsCache>(WORKOUTS_KEY, updater(prev));
+  return prev;
+}
+
 export function useUpdateExercise() {
   const qc = useQueryClient();
   return useMutation({
@@ -329,6 +357,9 @@ export function useUpdateExercise() {
       id: string;
       name?: string;
       image_path?: string | null;
+      sets?: number | null;
+      reps?: number | null;
+      weight?: number | null;
     }) => {
       const {
         data: { user },
@@ -341,10 +372,25 @@ export function useUpdateExercise() {
         .eq("user_id", user.id);
       if (error) throw error;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["workouts"] });
+    onMutate: async ({ id, ...fields }) => {
+      await qc.cancelQueries({ queryKey: WORKOUTS_KEY });
+      const prev = patchWorkoutsCache(qc, (rows) =>
+        rows.map((w) => ({
+          ...w,
+          exercises: (w.exercises ?? []).map((ex) =>
+            ex.id === id ? { ...ex, ...fields } : ex,
+          ),
+        })),
+      );
+      return { prev };
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(WORKOUTS_KEY, ctx.prev);
+      toast.error(e.message);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: WORKOUTS_KEY });
+    },
   });
 }
 
@@ -363,11 +409,63 @@ export function useDeleteExercise() {
         .eq("user_id", user.id);
       if (error) throw error;
     },
-    onSuccess: () => {
-      toast.success("Exercice supprimé");
-      qc.invalidateQueries({ queryKey: ["workouts"] });
+    onMutate: async (id) => {
+      await qc.cancelQueries({ queryKey: WORKOUTS_KEY });
+      const prev = patchWorkoutsCache(qc, (rows) =>
+        rows.map((w) => ({
+          ...w,
+          exercises: (w.exercises ?? []).filter((ex) => ex.id !== id),
+        })),
+      );
+      return { prev };
     },
-    onError: (e: Error) => toast.error(e.message),
+    onSuccess: () => toast.success("Exercice supprimé"),
+    onError: (e: Error, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(WORKOUTS_KEY, ctx.prev);
+      toast.error(e.message);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: WORKOUTS_KEY });
+    },
+  });
+}
+
+// Suppression batchée : une seule requête + une seule invalidation.
+export function useDeleteExercises() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (ids: string[]) => {
+      if (ids.length === 0) return;
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Non authentifié");
+      const { error } = await supabase
+        .from("exercises")
+        .delete()
+        .in("id", ids)
+        .eq("user_id", user.id);
+      if (error) throw error;
+    },
+    onMutate: async (ids) => {
+      await qc.cancelQueries({ queryKey: WORKOUTS_KEY });
+      const set = new Set(ids);
+      const prev = patchWorkoutsCache(qc, (rows) =>
+        rows.map((w) => ({
+          ...w,
+          exercises: (w.exercises ?? []).filter((ex) => !set.has(ex.id)),
+        })),
+      );
+      return { prev };
+    },
+    onSuccess: () => toast.success("Exercice supprimé"),
+    onError: (e: Error, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(WORKOUTS_KEY, ctx.prev);
+      toast.error(e.message);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: WORKOUTS_KEY });
+    },
   });
 }
 
@@ -401,11 +499,41 @@ export function useAddExerciseToWorkout() {
       });
       if (error) throw error;
     },
-    onSuccess: () => {
-      toast.success("Exercice ajouté");
-      qc.invalidateQueries({ queryKey: ["workouts"] });
+    onMutate: async ({ workoutId, exercise }) => {
+      await qc.cancelQueries({ queryKey: WORKOUTS_KEY });
+      const tempId = `optimistic-${crypto.randomUUID()}`;
+      const prev = patchWorkoutsCache(qc, (rows) =>
+        rows.map((w) =>
+          w.id === workoutId
+            ? {
+                ...w,
+                exercises: [
+                  ...(w.exercises ?? []),
+                  {
+                    id: tempId,
+                    workout_id: workoutId,
+                    user_id: "optimistic",
+                    name: exercise.name,
+                    sets: exercise.sets ?? null,
+                    reps: exercise.reps ?? null,
+                    weight: exercise.weight ?? null,
+                    image_path: null,
+                  },
+                ],
+              }
+            : w,
+        ),
+      );
+      return { prev };
     },
-    onError: (e: Error) => toast.error(e.message),
+    onSuccess: () => toast.success("Exercice ajouté"),
+    onError: (e: Error, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(WORKOUTS_KEY, ctx.prev);
+      toast.error(e.message);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: WORKOUTS_KEY });
+    },
   });
 }
 
