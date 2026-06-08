@@ -266,11 +266,23 @@ export function WorkoutCard({
             unit={stats.duration > 0 ? "min" : undefined}
           />
           <StatTile
-            icon={<TrendingUp className="h-3.5 w-3.5" />}
+            icon={
+              stats.volumeMismatch ? (
+                <AlertTriangle className="h-3.5 w-3.5 text-warning" />
+              ) : (
+                <TrendingUp className="h-3.5 w-3.5" />
+              )
+            }
             label="Volume"
             value={stats.volume > 0 ? formatVolume(stats.volume) : "—"}
             unit={stats.volume > 0 ? "kg" : undefined}
+            title={
+              stats.volumeMismatch
+                ? "Écart détecté — valeur recalculée depuis la base affichée"
+                : undefined
+            }
           />
+
           <StatTile
             icon={<Flame className="h-3.5 w-3.5" />}
             label="Calories"
