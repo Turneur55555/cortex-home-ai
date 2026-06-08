@@ -13,6 +13,7 @@ import {
   Trash2,
   Trophy,
   TrendingUp,
+  AlertTriangle,
   X,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
