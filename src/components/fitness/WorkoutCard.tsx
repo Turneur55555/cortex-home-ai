@@ -20,7 +20,7 @@ import { format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  useDeleteExercise,
+  useDeleteExercises,
   useDeleteWorkout,
   useAddExerciseToWorkout,
   useUpdateExercise,
@@ -130,7 +130,7 @@ export function WorkoutCard({
 }) {
   const updateName = useUpdateWorkoutName();
   const updateEx = useUpdateExercise();
-  const deleteEx = useDeleteExercise();
+  const deleteExBatch = useDeleteExercises();
   const deleteWorkout = useDeleteWorkout();
 
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -214,7 +214,8 @@ export function WorkoutCard({
   };
 
   const deleteGroup = (g: ExerciseGroup) => {
-    for (const id of g.sourceIds) deleteEx.mutate(id);
+    if (g.sourceIds.length === 0) return;
+    deleteExBatch.mutate(g.sourceIds);
   };
 
   const dateLabel = format(parseISO(w.date), "EEEE d MMMM • HH'h'mm", { locale: fr });
