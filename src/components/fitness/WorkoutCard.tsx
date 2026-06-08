@@ -132,6 +132,7 @@ export function WorkoutCard({
   const updateName = useUpdateWorkoutName();
   const updateEx = useUpdateExercise();
   const deleteEx = useDeleteExercise();
+  const deleteExBatch = useDeleteExercises();
   const deleteWorkout = useDeleteWorkout();
 
   const [confirmDelete, setConfirmDelete] = useState(false);
