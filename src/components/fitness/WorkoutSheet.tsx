@@ -30,6 +30,7 @@ export function WorkoutSheet({
     date: format(new Date(), "yyyy-MM-dd"),
     duration_minutes: "",
     notes: template?.notes ?? "",
+    gym_location: "Keep Cool",
   });
 
   const [exercises, setExercises] = useState<
