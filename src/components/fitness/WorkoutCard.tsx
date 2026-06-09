@@ -116,6 +116,8 @@ export function WorkoutCard({
   prByName,
   histByName,
   volByName,
+  prByGym,
+  histByGym,
   imageUrls,
   latestDate,
   onOpenFromTemplate,
@@ -124,6 +126,8 @@ export function WorkoutCard({
   prByName: Map<string, number>;
   histByName: Map<string, Array<{ date: string; weight: number }>>;
   volByName: Map<string, Array<{ date: string; volume: number }>>;
+  prByGym: Map<string, Map<string, number>>;
+  histByGym: Map<string, Map<string, Array<{ date: string; weight: number }>>>;
   imageUrls: Map<string, string> | undefined;
   latestDate: string;
   onOpenFromTemplate: (w: WorkoutRow) => void;
