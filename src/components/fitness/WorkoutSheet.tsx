@@ -233,6 +233,32 @@ export function WorkoutSheet({
             />
           </div>
 
+          {/* Salle */}
+          <div>
+            <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Salle
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {(["Keep Cool", "On Air"] as const).map((gym) => {
+                const selected = form.gym_location === gym;
+                return (
+                  <button
+                    key={gym}
+                    type="button"
+                    onClick={() => setForm({ ...form, gym_location: gym })}
+                    className={`rounded-xl border px-3 py-2.5 text-sm font-semibold transition-colors ${
+                      selected
+                        ? "border-primary bg-primary/20 text-primary"
+                        : "border-border bg-card text-muted-foreground"
+                    }`}
+                  >
+                    {gym}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           {/* Exercises */}
           <div>
             <div className="mb-2 flex items-center justify-between">
