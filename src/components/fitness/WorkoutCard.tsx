@@ -240,6 +240,11 @@ export function WorkoutCard({
           <div className="min-w-0 flex-1">
             <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground/80">
               {dateLabel}
+              {gymLocation !== "Salle inconnue" && (
+                <span className="ml-2 inline-flex items-center rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold tracking-normal text-primary">
+                  {gymLocation}
+                </span>
+              )}
             </p>
             <EditableText
               value={w.name}
