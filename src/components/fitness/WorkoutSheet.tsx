@@ -151,6 +151,7 @@ export function WorkoutSheet({
       date: form.date,
       duration_minutes: num(form.duration_minutes),
       notes: form.notes.trim() || null,
+      gym_location: form.gym_location,
       exercises: payloadExercises,
     });
 
