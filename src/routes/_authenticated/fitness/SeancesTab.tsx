@@ -109,6 +109,8 @@ export function SeancesTab() {
               prByName={prByName}
               histByName={histByName}
               volByName={volByName}
+              prByGym={prByGym}
+              histByGym={histByGym}
               imageUrls={listImageUrls}
               latestDate={latestDate}
               onOpenFromTemplate={openFromTemplate}
