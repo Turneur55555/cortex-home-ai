@@ -316,7 +316,12 @@ export function WorkoutCard({
         <ul className="space-y-3 px-4 pb-3">
           {groups.map((g) => {
             const imgUrl = g.imagePath ? (imageUrls?.get(g.imagePath) ?? null) : null;
-            const isPR = g.maxWeight != null && prByName.get(g.key) === g.maxWeight;
+            const gymPR = prByGym.get(gymLocation)?.get(g.key) ?? null;
+            const isPR =
+              g.maxWeight != null &&
+              (gymPR != null
+                ? g.maxWeight === gymPR
+                : prByName.get(g.key) === g.maxWeight);
             const isLatestPR = isPR && w.date === latestDate;
             const isOpen = expandedKeys.has(g.key);
             return (
