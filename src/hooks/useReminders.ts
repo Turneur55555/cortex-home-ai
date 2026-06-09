@@ -39,8 +39,13 @@ export function useReminders() {
   // Throttle realtime invalidations to avoid storms when many rows mutate at once.
   const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
+    // Unique channel name per hook instance: useReminders is mounted in multiple
+    // places (GlobalReminderNotifier + Rappels page). Supabase's .channel(name)
+    // returns the existing channel when the name matches, and calling .on()
+    // after .subscribe() throws "cannot add postgres_changes callbacks ... after subscribe()".
+    const channelName = `reminders_rt_${Math.random().toString(36).slice(2, 9)}`;
     const channel = supabase
-      .channel("reminders_realtime")
+      .channel(channelName)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "reminders" },
@@ -55,7 +60,7 @@ export function useReminders() {
       .subscribe();
     return () => {
       if (pending.current) clearTimeout(pending.current);
-      supabase.removeChannel(channel);
+      void supabase.removeChannel(channel);
     };
   }, [qc]);
 
