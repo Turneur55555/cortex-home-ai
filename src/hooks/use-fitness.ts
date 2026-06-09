@@ -136,6 +136,7 @@ export function useAddWorkout() {
       date: string;
       duration_minutes?: number | null;
       notes?: string | null;
+      gym_location?: string;
       exercises: Array<{
         name: string;
         sets?: number | null;
@@ -156,7 +157,8 @@ export function useAddWorkout() {
           date: input.date,
           duration_minutes: input.duration_minutes ?? null,
           notes: input.notes ?? null,
-        })
+          gym_location: input.gym_location ?? "Salle inconnue",
+        } as TablesInsert<"workouts">)
         .select()
         .single();
       if (error) throw error;
