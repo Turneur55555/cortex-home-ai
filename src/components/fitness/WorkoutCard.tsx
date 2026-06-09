@@ -378,6 +378,11 @@ export function WorkoutCard({
                         </>
                       )}
                     </p>
+                    {gymPR != null && gymLocation !== "Salle inconnue" && (
+                      <p className="mt-0.5 text-[10px] font-medium text-primary/80">
+                        Record {gymLocation} : {gymPR} kg
+                      </p>
+                    )}
                   </div>
 
                   <ChevronRight
