@@ -158,7 +158,7 @@ export function useAddWorkout() {
           duration_minutes: input.duration_minutes ?? null,
           notes: input.notes ?? null,
           gym_location: input.gym_location ?? "Salle inconnue",
-        } as TablesInsert<"workouts">)
+        } as unknown as TablesInsert<"workouts">)
         .select()
         .single();
       if (error) throw error;
