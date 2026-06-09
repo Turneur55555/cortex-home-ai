@@ -30,6 +30,7 @@ export function WorkoutSheet({
     date: format(new Date(), "yyyy-MM-dd"),
     duration_minutes: "",
     notes: template?.notes ?? "",
+    gym_location: "Keep Cool",
   });
 
   const [exercises, setExercises] = useState<
@@ -150,6 +151,7 @@ export function WorkoutSheet({
       date: form.date,
       duration_minutes: num(form.duration_minutes),
       notes: form.notes.trim() || null,
+      gym_location: form.gym_location,
       exercises: payloadExercises,
     });
 
@@ -229,6 +231,32 @@ export function WorkoutSheet({
               value={form.duration_minutes}
               onChange={(v) => setForm({ ...form, duration_minutes: v })}
             />
+          </div>
+
+          {/* Salle */}
+          <div>
+            <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Salle
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {(["Keep Cool", "On Air"] as const).map((gym) => {
+                const selected = form.gym_location === gym;
+                return (
+                  <button
+                    key={gym}
+                    type="button"
+                    onClick={() => setForm({ ...form, gym_location: gym })}
+                    className={`rounded-xl border px-3 py-2.5 text-sm font-semibold transition-colors ${
+                      selected
+                        ? "border-primary bg-primary/20 text-primary"
+                        : "border-border bg-card text-muted-foreground"
+                    }`}
+                  >
+                    {gym}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Exercises */}

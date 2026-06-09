@@ -5,6 +5,7 @@ type WorkoutWithExercises = {
   id: string;
   date: string;
   name: string;
+  gym_location?: string | null;
   exercises?: Array<{
     id: string;
     name: string;
@@ -19,20 +20,32 @@ export function computePRs(workouts: WorkoutWithExercises[] | null | undefined) 
   const prByName = new Map<string, number>();
   const histByName = new Map<string, Array<{ date: string; weight: number }>>();
   const volByName = new Map<string, Array<{ date: string; volume: number }>>();
+  const prByGym = new Map<string, Map<string, number>>();
+  const histByGym = new Map<
+    string,
+    Map<string, Array<{ date: string; weight: number }>>
+  >();
   const freq = new Map<string, number>();
 
-  if (!workouts) return { prByName, histByName, volByName, topExercises: [] as string[] };
+  if (!workouts)
+    return {
+      prByName,
+      histByName,
+      volByName,
+      prByGym,
+      histByGym,
+      topExercises: [] as string[],
+    };
 
   for (const w of workouts) {
     const sessionMax = new Map<string, number>();
     const sessionVol = new Map<string, number>();
+    const gym = (w.gym_location ?? "Salle inconnue") || "Salle inconnue";
 
     for (const ex of w.exercises ?? []) {
       const key = ex.name.trim().toLowerCase();
       if (!key) continue;
       freq.set(key, (freq.get(key) ?? 0) + 1);
-      // Même convention que WorkoutCard : 1 ligne = 1 série. Si weight est NULL,
-      // sets contient les reps et reps contient le poids (données legacy / IA).
       const hasExplicitWeight = ex.weight != null;
       const reps = hasExplicitWeight ? ex.reps : (ex.sets ?? ex.reps);
       const weight = hasExplicitWeight ? ex.weight : (ex.sets != null ? ex.reps : null);
@@ -41,12 +54,22 @@ export function computePRs(workouts: WorkoutWithExercises[] | null | undefined) 
         if (!prByName.has(key) || weight > prByName.get(key)!) prByName.set(key, weight);
         const vol = (reps ?? 1) * weight;
         sessionVol.set(key, (sessionVol.get(key) ?? 0) + vol);
+
+        // PR par salle
+        if (!prByGym.has(gym)) prByGym.set(gym, new Map());
+        const gymMap = prByGym.get(gym)!;
+        if (!gymMap.has(key) || weight > gymMap.get(key)!) gymMap.set(key, weight);
       }
     }
 
     for (const [k, v] of sessionMax) {
       if (!histByName.has(k)) histByName.set(k, []);
       histByName.get(k)!.push({ date: w.date, weight: v });
+
+      if (!histByGym.has(gym)) histByGym.set(gym, new Map());
+      const gymHist = histByGym.get(gym)!;
+      if (!gymHist.has(k)) gymHist.set(k, []);
+      gymHist.get(k)!.push({ date: w.date, weight: v });
     }
     for (const [k, v] of sessionVol) {
       if (!volByName.has(k)) volByName.set(k, []);
@@ -56,6 +79,9 @@ export function computePRs(workouts: WorkoutWithExercises[] | null | undefined) 
 
   for (const arr of histByName.values()) arr.sort((a, b) => a.date.localeCompare(b.date));
   for (const arr of volByName.values()) arr.sort((a, b) => a.date.localeCompare(b.date));
+  for (const gymMap of histByGym.values()) {
+    for (const arr of gymMap.values()) arr.sort((a, b) => a.date.localeCompare(b.date));
+  }
 
   const topExercises = Array.from(freq.entries())
     .filter(([k, n]) => n >= 2 && (histByName.get(k)?.length ?? 0) >= 2)
@@ -63,7 +89,7 @@ export function computePRs(workouts: WorkoutWithExercises[] | null | undefined) 
     .slice(0, 3)
     .map(([k]) => k);
 
-  return { prByName, histByName, volByName, topExercises };
+  return { prByName, histByName, volByName, prByGym, histByGym, topExercises };
 }
 
 export function mockWeightHistory(

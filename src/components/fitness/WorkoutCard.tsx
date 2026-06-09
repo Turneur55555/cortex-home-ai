@@ -116,6 +116,8 @@ export function WorkoutCard({
   prByName,
   histByName,
   volByName,
+  prByGym,
+  histByGym,
   imageUrls,
   latestDate,
   onOpenFromTemplate,
@@ -124,6 +126,8 @@ export function WorkoutCard({
   prByName: Map<string, number>;
   histByName: Map<string, Array<{ date: string; weight: number }>>;
   volByName: Map<string, Array<{ date: string; volume: number }>>;
+  prByGym: Map<string, Map<string, number>>;
+  histByGym: Map<string, Map<string, Array<{ date: string; weight: number }>>>;
   imageUrls: Map<string, string> | undefined;
   latestDate: string;
   onOpenFromTemplate: (w: WorkoutRow) => void;
@@ -143,6 +147,10 @@ export function WorkoutCard({
   const modifyExIdRef = useRef<string>("");
 
   const groups = useMemo(() => buildGroups(w.exercises ?? []), [w.exercises]);
+  const gymLocation =
+    ((w as unknown as { gym_location?: string | null }).gym_location ?? "Salle inconnue") ||
+    "Salle inconnue";
+  void histByGym;
 
   // Stats agrégées RÉELLES de la séance (basées sur séries expansées)
   const stats = useMemo(() => {
@@ -232,6 +240,11 @@ export function WorkoutCard({
           <div className="min-w-0 flex-1">
             <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground/80">
               {dateLabel}
+              {gymLocation !== "Salle inconnue" && (
+                <span className="ml-2 inline-flex items-center rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold tracking-normal text-primary">
+                  {gymLocation}
+                </span>
+              )}
             </p>
             <EditableText
               value={w.name}
@@ -303,7 +316,12 @@ export function WorkoutCard({
         <ul className="space-y-3 px-4 pb-3">
           {groups.map((g) => {
             const imgUrl = g.imagePath ? (imageUrls?.get(g.imagePath) ?? null) : null;
-            const isPR = g.maxWeight != null && prByName.get(g.key) === g.maxWeight;
+            const gymPR = prByGym.get(gymLocation)?.get(g.key) ?? null;
+            const isPR =
+              g.maxWeight != null &&
+              (gymPR != null
+                ? g.maxWeight === gymPR
+                : prByName.get(g.key) === g.maxWeight);
             const isLatestPR = isPR && w.date === latestDate;
             const isOpen = expandedKeys.has(g.key);
             return (
@@ -360,6 +378,11 @@ export function WorkoutCard({
                         </>
                       )}
                     </p>
+                    {gymPR != null && gymLocation !== "Salle inconnue" && (
+                      <p className="mt-0.5 text-[10px] font-medium text-primary/80">
+                        Record {gymLocation} : {gymPR} kg
+                      </p>
+                    )}
                   </div>
 
                   <ChevronRight
