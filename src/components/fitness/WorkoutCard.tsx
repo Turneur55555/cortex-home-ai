@@ -147,6 +147,10 @@ export function WorkoutCard({
   const modifyExIdRef = useRef<string>("");
 
   const groups = useMemo(() => buildGroups(w.exercises ?? []), [w.exercises]);
+  const gymLocation =
+    ((w as unknown as { gym_location?: string | null }).gym_location ?? "Salle inconnue") ||
+    "Salle inconnue";
+  void histByGym;
 
   // Stats agrégées RÉELLES de la séance (basées sur séries expansées)
   const stats = useMemo(() => {
