@@ -18,7 +18,7 @@ export function SeancesTab() {
   const [coachOpen, setCoachOpen] = useState(false);
   const [coachInitialMuscles, setCoachInitialMuscles] = useState<string[] | null>(null);
 
-  const { prByName, histByName, volByName, topExercises } = useMemo(
+  const { prByName, histByName, volByName, prByGym, histByGym, topExercises } = useMemo(
     () => computePRs(data),
     [data],
   );
