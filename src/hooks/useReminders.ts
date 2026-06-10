@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { logReminderAudit } from "@/lib/reminderAudit";
 import {
   createReminder,
   deleteReminder,
@@ -49,7 +50,8 @@ export function useReminders() {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "reminders" },
-        () => {
+        (payload) => {
+          logReminderAudit(payload as unknown as Parameters<typeof logReminderAudit>[0]);
           if (pending.current) return;
           pending.current = setTimeout(() => {
             pending.current = null;
