@@ -3,6 +3,22 @@ import type { Database } from './types';
 
 const EXPECTED_PROJECT_ID = 'bcwfvpwxzlmkxobvbtzp';
 
+const persistentStorage = {
+  getItem(key: string) {
+    if (typeof window === 'undefined') return null;
+    return window.localStorage.getItem(key) ?? window.sessionStorage.getItem(key);
+  },
+  setItem(key: string, value: string) {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem(key, value);
+  },
+  removeItem(key: string) {
+    if (typeof window === 'undefined') return;
+    window.localStorage.removeItem(key);
+    window.sessionStorage.removeItem(key);
+  },
+};
+
 // Purge toute session stockée qui appartient à une autre instance Supabase.
 // Empêche l'ancien token irbeaqabrrbbpstcvtsw de survivre après migration.
 function purgeStaleSession() {
@@ -44,7 +60,8 @@ function createSupabaseClient() {
 
   return createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
     auth: {
-      storage: typeof window !== 'undefined' ? localStorage : undefined,
+      storage: typeof window !== 'undefined' ? persistentStorage : undefined,
+      storageKey: `sb-${EXPECTED_PROJECT_ID}-auth-token`,
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: true,

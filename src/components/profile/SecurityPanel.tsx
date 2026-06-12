@@ -66,10 +66,11 @@ export function SecurityPanel() {
   };
 
   const handleSignOut = async () => {
+    await qc.cancelQueries();
     qc.clear();
     await signOut();
     toast.success("Déconnecté");
-    navigate({ to: "/login" });
+    navigate({ to: "/login", replace: true });
   };
 
   return (
