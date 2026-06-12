@@ -55,10 +55,7 @@ function readEntries(): AuthDiagnosticEntry[] {
 function writeEntries(entries: AuthDiagnosticEntry[]) {
   if (!isBrowser() || !storageAvailable(window.localStorage)) return;
   try {
-    window.localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify(entries.slice(-MAX_ENTRIES)),
-    );
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(entries.slice(-MAX_ENTRIES)));
   } catch {
     // Diagnostics must never affect authentication.
   }
@@ -80,7 +77,11 @@ function sanitize(value: unknown, depth = 0): unknown {
     const out: Record<string, unknown> = {};
     for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
       const normalized = key.toLowerCase();
-      if (normalized.includes("token") || normalized.includes("password") || normalized.includes("secret")) {
+      if (
+        normalized.includes("token") ||
+        normalized.includes("password") ||
+        normalized.includes("secret")
+      ) {
         out[key] = "[redacted]";
       } else {
         out[key] = sanitize(nested, depth + 1);
@@ -139,7 +140,6 @@ export function logAuthEvent(event: string, detail?: unknown) {
     detail: sanitize(detail),
   };
   writeEntries([...readEntries(), entry]);
-
 }
 
 export function getAuthDiagnosticsLog() {

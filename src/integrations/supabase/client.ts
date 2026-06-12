@@ -44,7 +44,8 @@ function purgeStaleSession() {
 
 function createSupabaseClient() {
   const SUPABASE_URL = "https://bcwfvpwxzlmkxobvbtzp.supabase.co";
-  const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJjd2Z2cHd4emxta3hvYnZidHpwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5MjU5NzgsImV4cCI6MjA5NDUwMTk3OH0.wYsoYUMaYDuEv91TbpFBz3fAGTAXO6eh3vHuWrLbsek";
+  const SUPABASE_PUBLISHABLE_KEY =
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJjd2Z2cHd4emxta3hvYnZidHpwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5MjU5NzgsImV4cCI6MjA5NDUwMTk3OH0.wYsoYUMaYDuEv91TbpFBz3fAGTAXO6eh3vHuWrLbsek";
 
   if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
     const missing = [
@@ -79,4 +80,3 @@ export const supabase = new Proxy({} as ReturnType<typeof createSupabaseClient>,
     return Reflect.get(_supabase, prop, receiver);
   },
 });
-

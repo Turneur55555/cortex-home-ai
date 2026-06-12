@@ -2,7 +2,11 @@ import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { logAuthEvent, summarizeSession } from "@/lib/authDiagnostics";
 
-const RESTORE_EVENTS = new Set<AuthChangeEvent>(["INITIAL_SESSION", "SIGNED_IN", "TOKEN_REFRESHED"]);
+const RESTORE_EVENTS = new Set<AuthChangeEvent>([
+  "INITIAL_SESSION",
+  "SIGNED_IN",
+  "TOKEN_REFRESHED",
+]);
 
 export async function restoreAuthSession(source: string, waitMs = 900): Promise<Session | null> {
   logAuthEvent("session:restore:start", { source });
