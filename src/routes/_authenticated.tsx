@@ -1,17 +1,18 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
-import { supabase } from "@/integrations/supabase/client";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { AppShell } from "@/components/AppShell";
 import { BottomNav } from "@/components/BottomNav";
 import { GlobalReminderNotifier } from "@/components/reminders/GlobalReminderNotifier";
 import { Loader2 } from "lucide-react";
+import { logAuthEvent, summarizeSession } from "@/lib/authDiagnostics";
+import { restoreAuthSession } from "@/lib/authSession";
 
 export const Route = createFileRoute("/_authenticated")({
+  ssr: false,
   beforeLoad: async () => {
-    // getSession() auto-refresh le token via le refresh token si l'access token a expiré,
-    // évitant la race condition où getUser() rejette un token valide-mais-expiré.
-    const { data: { session } } = await supabase.auth.getSession();
+    const session = await restoreAuthSession("protected-route:beforeLoad", 1500);
     if (!session) throw redirect({ to: "/login" });
+    logAuthEvent("protected-route:session-ok", { session: summarizeSession(session) });
   },
   component: AuthenticatedLayout,
 });
