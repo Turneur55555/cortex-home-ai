@@ -1,6 +1,8 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import { installAuthDiagnostics, logAuthEvent, summarizeSession } from "@/lib/authDiagnostics";
+import { refreshAuthSession, restoreAuthSession } from "@/lib/authSession";
 
 interface AuthContextValue {
   user: User | null;
@@ -16,18 +18,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // onAuthStateChange fires INITIAL_SESSION (from localStorage) immediately,
-    // then TOKEN_REFRESHED / SIGNED_OUT as the token lifecycle proceeds.
-    // autoRefreshToken:true in the client handles expiry automatically.
-    // The beforeLoad guard in _authenticated.tsx validates the JWT server-side
-    // on every navigation, so a separate getUser() here is redundant and races
-    // against INITIAL_SESSION (overwriting a valid session on transient errors).
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setSession(newSession);
+    installAuthDiagnostics();
+    let mounted = true;
+    let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+
+    function scheduleRefresh(currentSession: Session | null) {
+      if (refreshTimer) clearTimeout(refreshTimer);
+      if (!currentSession?.expires_at) return;
+      const expiresInMs = currentSession.expires_at * 1000 - Date.now();
+      const refreshInMs = Math.max(30_000, expiresInMs - 5 * 60_000);
+      refreshTimer = setTimeout(() => {
+        refreshAuthSession("AuthProvider:scheduled-refresh").catch(() => undefined);
+      }, refreshInMs);
+      logAuthEvent("session:refresh:scheduled", { refreshInMs, session: summarizeSession(currentSession) });
+    }
+
+    restoreAuthSession("AuthProvider:mount").then((restored) => {
+      if (!mounted) return;
+      setSession(restored);
       setLoading(false);
+      scheduleRefresh(restored);
     });
 
-    return () => subscription.unsubscribe();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
+      logAuthEvent(`auth:${event}`, { session: summarizeSession(newSession) });
+      if (!mounted) return;
+      setSession(newSession);
+      setLoading(false);
+      scheduleRefresh(newSession);
+    });
+
+    return () => {
+      mounted = false;
+      if (refreshTimer) clearTimeout(refreshTimer);
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signOut = async () => {
