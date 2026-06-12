@@ -4,12 +4,15 @@ import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable";
+import { logAuthEvent, summarizeSession } from "@/lib/authDiagnostics";
+import { restoreAuthSession } from "@/lib/authSession";
 import { AppShell } from "@/components/AppShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 export const Route = createFileRoute("/login")({
+  ssr: false,
   head: () => ({
     meta: [
       { title: "Connexion — ICORTEX" },
@@ -17,8 +20,11 @@ export const Route = createFileRoute("/login")({
     ],
   }),
   beforeLoad: async () => {
-    const { data, error } = await supabase.auth.getUser();
-    if (!error && data.user) throw redirect({ to: "/" });
+    const session = await restoreAuthSession("login:beforeLoad", 1200);
+    if (session) {
+      logAuthEvent("login:redirect-authenticated", { session: summarizeSession(session) });
+      throw redirect({ to: "/" });
+    }
   },
   component: LoginPage,
 });
@@ -93,15 +99,17 @@ function LoginPage() {
         if (!data.session) {
           toast.success("Compte créé ! Vérifiez votre email pour confirmer votre inscription.");
         } else {
+          logAuthEvent("auth:signup-session-created", { session: summarizeSession(data.session) });
           toast.success("Compte créé. Bienvenue !");
           navigate({ to: "/" });
         }
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data, error } = await supabase.auth.signInWithPassword({
           email: email.trim(),
           password,
         });
         if (error) throw error;
+        logAuthEvent("auth:password-signin-success", { session: summarizeSession(data.session) });
         navigate({ to: "/" });
       }
     } catch {
