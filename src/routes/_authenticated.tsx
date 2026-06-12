@@ -1,5 +1,4 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
-import { supabase } from "@/integrations/supabase/client";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { AppShell } from "@/components/AppShell";
 import { BottomNav } from "@/components/BottomNav";
@@ -9,6 +8,7 @@ import { logAuthEvent, summarizeSession } from "@/lib/authDiagnostics";
 import { restoreAuthSession } from "@/lib/authSession";
 
 export const Route = createFileRoute("/_authenticated")({
+  ssr: false,
   beforeLoad: async () => {
     const session = await restoreAuthSession("protected-route:beforeLoad", 1500);
     if (!session) throw redirect({ to: "/login" });
