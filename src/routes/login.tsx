@@ -210,13 +210,14 @@ function LoginPage() {
               type="email"
               autoComplete="email"
               value={email}
-              onChange={(e) => { setEmail(e.target.value); clearError("email"); }}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                clearError("email");
+              }}
               className={`h-12 rounded-xl bg-surface${errors.email ? " border-destructive focus-visible:ring-destructive" : ""}`}
               placeholder="vous@exemple.com"
             />
-            {errors.email && (
-              <p className="text-xs text-destructive">{errors.email}</p>
-            )}
+            {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}
           </div>
 
           {/* Mot de passe */}
@@ -228,13 +229,14 @@ function LoginPage() {
               type="password"
               autoComplete={mode === "signup" ? "new-password" : "current-password"}
               value={password}
-              onChange={(e) => { setPassword(e.target.value); clearError("password"); }}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                clearError("password");
+              }}
               className={`h-12 rounded-xl bg-surface${errors.password ? " border-destructive focus-visible:ring-destructive" : ""}`}
               placeholder="••••••••"
             />
-            {errors.password && (
-              <p className="text-xs text-destructive">{errors.password}</p>
-            )}
+            {errors.password && <p className="text-xs text-destructive">{errors.password}</p>}
             {mode === "login" && (
               <div className="flex justify-end pt-0.5">
                 <button
@@ -260,7 +262,10 @@ function LoginPage() {
                 type="password"
                 autoComplete="new-password"
                 value={confirmPassword}
-                onChange={(e) => { setConfirmPassword(e.target.value); clearError("confirmPassword"); }}
+                onChange={(e) => {
+                  setConfirmPassword(e.target.value);
+                  clearError("confirmPassword");
+                }}
                 className={`h-12 rounded-xl bg-surface${errors.confirmPassword ? " border-destructive focus-visible:ring-destructive" : ""}`}
                 placeholder="••••••••"
               />
