@@ -28,7 +28,9 @@ function ResetPasswordPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
       logAuthEvent(`reset-password:${event}`, { session: summarizeSession(session) });
       if (event === "PASSWORD_RECOVERY" || session) setReady(true);
     });
@@ -105,7 +107,11 @@ function ResetPasswordPage() {
                 placeholder="••••••••"
               />
             </div>
-            <Button type="submit" disabled={loading} className="h-12 w-full rounded-full bg-gradient-primary text-base font-semibold shadow-glow hover:opacity-95">
+            <Button
+              type="submit"
+              disabled={loading}
+              className="h-12 w-full rounded-full bg-gradient-primary text-base font-semibold shadow-glow hover:opacity-95"
+            >
               {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : "Enregistrer"}
             </Button>
           </form>

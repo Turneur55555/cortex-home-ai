@@ -13,7 +13,11 @@ export async function restoreAuthSession(source: string, waitMs = 900): Promise<
       return null;
     }
     if (first.data.session) {
-      logAuthEvent("session:restore:success", { source, mode: "storage", session: summarizeSession(first.data.session) });
+      logAuthEvent("session:restore:success", {
+        source,
+        mode: "storage",
+        session: summarizeSession(first.data.session),
+      });
       return first.data.session;
     }
   } catch (error) {
@@ -45,7 +49,11 @@ export async function restoreAuthSession(source: string, waitMs = 900): Promise<
     }
 
     const result = supabase.auth.onAuthStateChange((event, session) => {
-      logAuthEvent("session:restore:event", { source, event, session: summarizeSession(session) });
+      logAuthEvent("session:restore:event", {
+        source,
+        event,
+        session: summarizeSession(session),
+      });
       if (RESTORE_EVENTS.has(event) || session) finish(session ?? null, "auth-event");
     });
     subscription = result.data.subscription;
@@ -53,7 +61,9 @@ export async function restoreAuthSession(source: string, waitMs = 900): Promise<
     timer = setTimeout(async () => {
       try {
         const retry = await supabase.auth.getSession();
-        if (retry.error) logAuthEvent("session:restore:error", { source, error: retry.error });
+        if (retry.error) {
+          logAuthEvent("session:restore:error", { source, error: retry.error });
+        }
         finish(retry.data.session ?? null, "timeout-retry");
       } catch (error) {
         logAuthEvent("session:restore:error", { source, error });
@@ -71,7 +81,10 @@ export async function refreshAuthSession(source: string): Promise<Session | null
       logAuthEvent("session:refresh:error", { source, error });
       return null;
     }
-    logAuthEvent("session:refresh:success", { source, session: summarizeSession(data.session) });
+    logAuthEvent("session:refresh:success", {
+      source,
+      session: summarizeSession(data.session),
+    });
     return data.session ?? null;
   } catch (error) {
     logAuthEvent("session:refresh:error", { source, error });

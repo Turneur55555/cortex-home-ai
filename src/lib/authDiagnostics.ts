@@ -55,7 +55,10 @@ function readEntries(): AuthDiagnosticEntry[] {
 function writeEntries(entries: AuthDiagnosticEntry[]) {
   if (!isBrowser() || !storageAvailable(window.localStorage)) return;
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(entries.slice(-MAX_ENTRIES)));
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify(entries.slice(-MAX_ENTRIES)),
+    );
   } catch {
     // Diagnostics must never affect authentication.
   }
@@ -64,7 +67,12 @@ function writeEntries(entries: AuthDiagnosticEntry[]) {
 function sanitize(value: unknown, depth = 0): unknown {
   if (depth > 4) return "[max-depth]";
   if (value instanceof Error) return { name: value.name, message: value.message };
-  if (value == null || typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+  if (
+    value == null ||
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
     return value;
   }
   if (Array.isArray(value)) return value.slice(0, 20).map((item) => sanitize(item, depth + 1));
@@ -97,7 +105,12 @@ export function summarizeSession(session: Session | null | undefined) {
 
 export function getAuthStorageSnapshot() {
   if (!isBrowser()) {
-    return { browser: false, localStorageAvailable: false, sessionStorageAvailable: false, localAuthKeyCount: 0 };
+    return {
+      browser: false,
+      localStorageAvailable: false,
+      sessionStorageAvailable: false,
+      localAuthKeyCount: 0,
+    };
   }
   const localStorageAvailable = storageAvailable(window.localStorage);
   const sessionStorageAvailable = storageAvailable(window.sessionStorage);
@@ -108,7 +121,12 @@ export function getAuthStorageSnapshot() {
       if (key.startsWith("sb-") || key.includes("auth")) localAuthKeyCount += 1;
     }
   }
-  return { browser: true, localStorageAvailable, sessionStorageAvailable, localAuthKeyCount };
+  return {
+    browser: true,
+    localStorageAvailable,
+    sessionStorageAvailable,
+    localAuthKeyCount,
+  };
 }
 
 export function logAuthEvent(event: string, detail?: unknown) {
@@ -122,10 +140,6 @@ export function logAuthEvent(event: string, detail?: unknown) {
   };
   writeEntries([...readEntries(), entry]);
 
-  if (isBrowser()) {
-    const level = event.includes("error") || event.includes("failed") ? "warn" : "info";
-    console[level]("[Auth]", entry.event, entry.detail ?? "");
-  }
 }
 
 export function getAuthDiagnosticsLog() {
@@ -150,7 +164,9 @@ export function installAuthDiagnostics() {
   window.addEventListener("offline", () => logAuthEvent("network:offline"));
   window.addEventListener("storage", (event) => {
     if (event.key?.startsWith("sb-") || event.key?.includes("auth")) {
-      logAuthEvent("storage:auth-key-changed", { keyType: event.key.startsWith("sb-") ? "backend-auth" : "app-auth" });
+      logAuthEvent("storage:auth-key-changed", {
+        keyType: event.key.startsWith("sb-") ? "backend-auth" : "app-auth",
+      });
     }
   });
 }

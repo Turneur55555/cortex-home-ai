@@ -30,7 +30,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       refreshTimer = setTimeout(() => {
         refreshAuthSession("AuthProvider:scheduled-refresh").catch(() => undefined);
       }, refreshInMs);
-      logAuthEvent("session:refresh:scheduled", { refreshInMs, session: summarizeSession(currentSession) });
+      logAuthEvent("session:refresh:scheduled", {
+        refreshInMs,
+        session: summarizeSession(currentSession),
+      });
     }
 
     restoreAuthSession("AuthProvider:mount").then((restored) => {
@@ -40,7 +43,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       scheduleRefresh(restored);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, newSession) => {
       logAuthEvent(`auth:${event}`, { session: summarizeSession(newSession) });
       if (!mounted) return;
       setSession(newSession);
