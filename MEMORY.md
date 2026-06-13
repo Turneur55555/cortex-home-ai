@@ -75,7 +75,15 @@ App **ICORTEX** (nom officiel dans les titres de pages) : assistant personnel mu
 - `components/fitness/WorkoutCard.tsx` — 1RM estimé par exercice (Epley, affiché dans header groupe), tuile "Tonnage" utilise formatTonnage (remplace "Volume" + formatVolume local)
 - WorkoutCard local était une version obsolète — remplacé par la version GitHub premium (buildGroups, ExerciseGroup, StatTile)
 - ⚠️ Fichiers locaux (Google Drive) désynchronisés vs GitHub — workflow : lire sur GitHub raw avant toute modification
-- Prochaine étape V1 : migration exercise_sets (set-by-set + RPE) — à valider SQL avant apply
+
+### Fitness — V1 set-by-set + RPE (juin 13) — TERMINÉ
+- ✅ Table Supabase `exercise_sets` (projet bcwfvpwxzlmkxobvbtzp) : id, exercise_id (FK exercises), user_id (FK users), set_number (smallint ≥1), reps (smallint), weight (numeric), rpe (numeric check 0-10), notes, created_at. RLS "Users manage own exercise sets" (ALL). UNIQUE (exercise_id, set_number). Index exercise_id + user_id.
+- ✅ `types.ts` régénéré → bloc `exercise_sets` ajouté (table désormais typée).
+- ✅ `lib/fitness/sets.ts` (domaine pur) : WorkingSet, isValidSet, setsTonnage, bestEstimated1RM, topSet, totalReps, averageRpe (pondéré reps), summarizeSets.
+- ✅ `hooks/useExerciseSets.ts` : useExerciseSets(exerciseId), useReplaceExerciseSets (delete+insert renuméroté), useAddExerciseSet, useDeleteExerciseSet. Typé via Tables<"exercise_sets"> (plus de cast `as any`).
+- ✅ `hooks/use-fitness.ts` — useAddWorkout étendu : champ optionnel `setDetails` par exercice ; insert exercises avec `.select("id")` puis insert exercise_sets ; le résumé sets/reps/weight de la ligne `exercises` est dérivé du top set quand des séries détaillées existent (rétro-compat WorkoutCard/tonnage).
+- ✅ `components/fitness/WorkoutSheet.tsx` — éditeur série-par-série : toggle "Détailler les séries (RPE)", une ligne par série (reps/kg/RPE), +/- série, résumé live (tonnage via formatTonnage, 1RM estimé, RPE moyen) via summarizeSets.
+- Typecheck strict : 0 erreur sur les fichiers touchés (seules erreurs projet = calendar.tsx / react-day-picker, pré-existantes).
 
 ### Nutrition
 - Macros quotidiennes (NutritionSheet, PortionEditModal)
