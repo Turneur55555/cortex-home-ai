@@ -1,6 +1,15 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Camera, ChevronDown, Loader2, Timer, X } from "lucide-react";
+import {
+  Camera,
+  ChevronDown,
+  Loader2,
+  Minus,
+  Plus,
+  SlidersHorizontal,
+  Timer,
+  X,
+} from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useAddWorkout, useExerciseImageUrls, useWorkouts } from "@/hooks/use-fitness";
@@ -12,7 +21,33 @@ import {
   type RecentExercise,
 } from "./ExercisePickerSheet";
 import { normalize } from "@/lib/fitness/exerciseCatalog";
+import { summarizeSets, type WorkingSet } from "@/lib/fitness/sets";
+import { formatTonnage } from "@/lib/fitness/strength";
 import { RestTimer } from "./RestTimer";
+
+type SetRow = { reps: string; weight: string; rpe: string };
+
+type ExerciseDraft = {
+  name: string;
+  sets: string;
+  reps: string;
+  weight: string;
+  image_path: string | null;
+  detailed: boolean;
+  setRows: SetRow[];
+};
+
+const emptySetRow = (): SetRow => ({ reps: "", weight: "", rpe: "" });
+
+const emptyExercise = (): ExerciseDraft => ({
+  name: "",
+  sets: "",
+  reps: "",
+  weight: "",
+  image_path: null,
+  detailed: false,
+  setRows: [emptySetRow()],
+});
 
 export function WorkoutSheet({
   onClose,
@@ -34,12 +69,18 @@ export function WorkoutSheet({
     gym_location: "Keep Cool",
   });
 
-  const [exercises, setExercises] = useState<
-    Array<{ name: string; sets: string; reps: string; weight: string; image_path: string | null }>
-  >(
+  const [exercises, setExercises] = useState<ExerciseDraft[]>(
     template?.exercises && template.exercises.length > 0
-      ? template.exercises
-      : [{ name: "", sets: "", reps: "", weight: "", image_path: null }],
+      ? template.exercises.map((e) => ({
+          name: e.name ?? "",
+          sets: e.sets ?? "",
+          reps: e.reps ?? "",
+          weight: e.weight ?? "",
+          image_path: e.image_path ?? null,
+          detailed: false,
+          setRows: [emptySetRow()],
+        }))
+      : [emptyExercise()],
   );
 
   const [uploading, setUploading] = useState<number | null>(null);
@@ -72,10 +113,57 @@ export function WorkoutSheet({
 
   const updateEx = (
     i: number,
-    k: keyof (typeof exercises)[number],
+    k: "name" | "sets" | "reps" | "weight" | "image_path",
     v: string | null,
   ) => {
     setExercises((arr) => arr.map((e, idx) => (idx === i ? { ...e, [k]: v } : e)));
+  };
+
+  const toggleDetailed = (i: number) => {
+    setExercises((arr) =>
+      arr.map((e, idx) => {
+        if (idx !== i) return e;
+        const detailed = !e.detailed;
+        // Au premier passage en mode détaillé, pré-remplir une série avec
+        // les valeurs simples si elles existent.
+        const setRows =
+          detailed && e.setRows.length === 1 && !e.setRows[0].reps && !e.setRows[0].weight
+            ? [{ reps: e.reps, weight: e.weight, rpe: "" }]
+            : e.setRows;
+        return { ...e, detailed, setRows };
+      }),
+    );
+  };
+
+  const updateSetRow = (exIdx: number, setIdx: number, k: keyof SetRow, v: string) => {
+    setExercises((arr) =>
+      arr.map((e, idx) =>
+        idx === exIdx
+          ? {
+              ...e,
+              setRows: e.setRows.map((r, j) => (j === setIdx ? { ...r, [k]: v } : r)),
+            }
+          : e,
+      ),
+    );
+  };
+
+  const addSetRow = (exIdx: number) => {
+    setExercises((arr) =>
+      arr.map((e, idx) =>
+        idx === exIdx ? { ...e, setRows: [...e.setRows, emptySetRow()] } : e,
+      ),
+    );
+  };
+
+  const removeSetRow = (exIdx: number, setIdx: number) => {
+    setExercises((arr) =>
+      arr.map((e, idx) =>
+        idx === exIdx
+          ? { ...e, setRows: e.setRows.filter((_, j) => j !== setIdx) }
+          : e,
+      ),
+    );
   };
 
   const openPicker = (i: number) => {
@@ -102,10 +190,7 @@ export function WorkoutSheet({
 
   const addExercise = () => {
     const newIdx = exercises.length;
-    setExercises((a) => [
-      ...a,
-      { name: "", sets: "", reps: "", weight: "", image_path: null },
-    ]);
+    setExercises((a) => [...a, emptyExercise()]);
     setPickerIndex(newIdx);
   };
 
@@ -135,18 +220,30 @@ export function WorkoutSheet({
   const { data: exImageUrls } = useExerciseImageUrls(exImagePaths);
   const num = (v: string) => (v.trim() === "" ? null : Number(v));
 
+  // Convertit les séries détaillées d'un exercice en WorkingSet[] pour le résumé.
+  const toWorkingSets = (rows: SetRow[]): WorkingSet[] =>
+    rows.map((r) => ({ reps: num(r.reps), weight: num(r.weight), rpe: num(r.rpe) }));
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim()) return;
     const payloadExercises = exercises
       .filter((ex) => ex.name.trim())
-      .map((ex) => ({
-        name: ex.name.trim(),
-        sets: num(ex.sets),
-        reps: num(ex.reps),
-        weight: num(ex.weight),
-        image_path: ex.image_path,
-      }));
+      .map((ex) => {
+        const setDetails = ex.detailed
+          ? toWorkingSets(ex.setRows)
+              .filter((s) => s.reps != null && s.weight != null)
+              .map((s) => ({ reps: s.reps ?? null, weight: s.weight ?? null, rpe: s.rpe ?? null }))
+          : null;
+        return {
+          name: ex.name.trim(),
+          sets: num(ex.sets),
+          reps: num(ex.reps),
+          weight: num(ex.weight),
+          image_path: ex.image_path,
+          setDetails: setDetails && setDetails.length > 0 ? setDetails : null,
+        };
+      });
 
     await add.mutateAsync({
       name: form.name.trim(),
@@ -285,6 +382,9 @@ export function WorkoutSheet({
                 const hasHint =
                   recent &&
                   (recent.lastSets || recent.lastReps || recent.lastWeight);
+                const summary = ex.detailed
+                  ? summarizeSets(toWorkingSets(ex.setRows))
+                  : null;
 
                 return (
                   <div
@@ -379,41 +479,153 @@ export function WorkoutSheet({
                       </button>
                     )}
 
-                    {/* Sets / Reps / Weight */}
-                    <div className="mt-2.5 grid grid-cols-3 gap-2">
-                      {(
-                        [
-                          { key: "sets", placeholder: "Séries", label: "séries" },
-                          { key: "reps", placeholder: "Reps", label: "reps" },
-                          { key: "weight", placeholder: "Kg", label: "kg", step: "0.5" },
-                        ] as const
-                      ).map((item) => {
-                        const { key, placeholder, label } = item;
-                        const step = "step" in item ? item.step : undefined;
-                        return (
-                          <div key={key} className="flex flex-col gap-1">
+                    {/* Mode simple : Sets / Reps / Weight */}
+                    {!ex.detailed && (
+                      <div className="mt-2.5 grid grid-cols-3 gap-2">
+                        {(
+                          [
+                            { key: "sets", placeholder: "Séries", label: "séries" },
+                            { key: "reps", placeholder: "Reps", label: "reps" },
+                            { key: "weight", placeholder: "Kg", label: "kg", step: "0.5" },
+                          ] as const
+                        ).map((item) => {
+                          const { key, placeholder, label } = item;
+                          const step = "step" in item ? item.step : undefined;
+                          return (
+                            <div key={key} className="flex flex-col gap-1">
+                              <input
+                                type="number"
+                                inputMode="decimal"
+                                step={step}
+                                value={ex[key]}
+                                onChange={(e) => updateEx(i, key, e.target.value)}
+                                placeholder={placeholder}
+                                className="rounded-xl border border-border bg-card px-2 py-2.5 text-center text-sm outline-none focus:border-primary"
+                              />
+                              <span className="text-center text-[9px] uppercase tracking-wider text-muted-foreground/60">
+                                {label}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Mode détaillé : une ligne par série (reps / kg / RPE) */}
+                    {ex.detailed && (
+                      <div className="mt-2.5 space-y-2">
+                        <div className="grid grid-cols-[1.5rem_1fr_1fr_1fr_1.75rem] items-center gap-1.5 px-0.5 text-[9px] uppercase tracking-wider text-muted-foreground/60">
+                          <span className="text-center">#</span>
+                          <span className="text-center">reps</span>
+                          <span className="text-center">kg</span>
+                          <span className="text-center">RPE</span>
+                          <span />
+                        </div>
+                        {ex.setRows.map((row, j) => (
+                          <div
+                            key={j}
+                            className="grid grid-cols-[1.5rem_1fr_1fr_1fr_1.75rem] items-center gap-1.5"
+                          >
+                            <span className="text-center text-xs font-semibold text-muted-foreground">
+                              {j + 1}
+                            </span>
+                            <input
+                              type="number"
+                              inputMode="numeric"
+                              value={row.reps}
+                              onChange={(e) => updateSetRow(i, j, "reps", e.target.value)}
+                              placeholder="—"
+                              className="rounded-lg border border-border bg-card px-1.5 py-2 text-center text-sm outline-none focus:border-primary"
+                            />
                             <input
                               type="number"
                               inputMode="decimal"
-                              step={step}
-                              value={ex[key]}
-                              onChange={(e) => updateEx(i, key, e.target.value)}
-                              placeholder={placeholder}
-                              className="rounded-xl border border-border bg-card px-2 py-2.5 text-center text-sm outline-none focus:border-primary"
+                              step="0.5"
+                              value={row.weight}
+                              onChange={(e) => updateSetRow(i, j, "weight", e.target.value)}
+                              placeholder="—"
+                              className="rounded-lg border border-border bg-card px-1.5 py-2 text-center text-sm outline-none focus:border-primary"
                             />
-                            <span className="text-center text-[9px] uppercase tracking-wider text-muted-foreground/60">
-                              {label}
-                            </span>
+                            <input
+                              type="number"
+                              inputMode="decimal"
+                              step="0.5"
+                              min="0"
+                              max="10"
+                              value={row.rpe}
+                              onChange={(e) => updateSetRow(i, j, "rpe", e.target.value)}
+                              placeholder="—"
+                              className="rounded-lg border border-border bg-card px-1.5 py-2 text-center text-sm outline-none focus:border-primary"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => removeSetRow(i, j)}
+                              disabled={ex.setRows.length <= 1}
+                              className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-30"
+                              aria-label="Supprimer la série"
+                            >
+                              <Minus className="h-3.5 w-3.5" />
+                            </button>
                           </div>
-                        );
-                      })}
-                    </div>
+                        ))}
+
+                        <button
+                          type="button"
+                          onClick={() => addSetRow(i)}
+                          className="flex w-full items-center justify-center gap-1 rounded-lg border border-dashed border-border py-1.5 text-xs font-semibold text-muted-foreground hover:border-primary/40 hover:text-primary"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          Ajouter une série
+                        </button>
+
+                        {summary && summary.setCount > 0 && (
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-card/60 px-2.5 py-1.5 text-[10px] text-muted-foreground">
+                            <span>
+                              Tonnage{" "}
+                              <span className="font-semibold text-foreground/80">
+                                {formatTonnage(summary.tonnage)}
+                              </span>
+                            </span>
+                            {summary.best1RM != null && (
+                              <span>
+                                1RM est.{" "}
+                                <span className="font-semibold text-foreground/80">
+                                  {summary.best1RM} kg
+                                </span>
+                              </span>
+                            )}
+                            {summary.avgRpe != null && (
+                              <span>
+                                RPE moy.{" "}
+                                <span className="font-semibold text-foreground/80">
+                                  {summary.avgRpe}
+                                </span>
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Toggle mode détaillé */}
+                    <button
+                      type="button"
+                      onClick={() => toggleDetailed(i)}
+                      className={`mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-xl border py-2 text-xs font-semibold transition-all active:scale-[0.99] ${
+                        ex.detailed
+                          ? "border-primary/40 bg-primary/10 text-primary"
+                          : "border-border bg-surface/50 text-muted-foreground hover:border-primary/40 hover:text-primary"
+                      }`}
+                    >
+                      <SlidersHorizontal className="h-3.5 w-3.5" />
+                      {ex.detailed ? "Mode simple" : "Détailler les séries (RPE)"}
+                    </button>
 
                     {/* Rest Timer trigger */}
                     <button
                       type="button"
                       onClick={() => setRestTimerOpen(true)}
-                      className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-xl border border-border bg-surface/50 py-2 text-xs font-semibold text-muted-foreground transition-all active:scale-[0.99] hover:border-primary/40 hover:text-primary"
+                      className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-xl border border-border bg-surface/50 py-2 text-xs font-semibold text-muted-foreground transition-all active:scale-[0.99] hover:border-primary/40 hover:text-primary"
                     >
                       <Timer className="h-3.5 w-3.5" />
                       Démarrer le repos
@@ -443,9 +655,7 @@ export function WorkoutSheet({
         />
       )}
 
-      {restTimerOpen && (
-        <RestTimer onClose={() => setRestTimerOpen(false)} />
-      )}
+      {restTimerOpen && <RestTimer onClose={() => setRestTimerOpen(false)} />}
     </>
   );
-      }
+}
