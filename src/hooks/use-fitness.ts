@@ -143,6 +143,12 @@ export function useAddWorkout() {
         reps?: number | null;
         weight?: number | null;
         image_path?: string | null;
+        // Séries détaillées optionnelles (set-by-set + RPE).
+        setDetails?: Array<{
+          reps: number | null;
+          weight: number | null;
+          rpe?: number | null;
+        }> | null;
       }>;
     }) => {
       const {
@@ -163,18 +169,63 @@ export function useAddWorkout() {
         .single();
       if (error) throw error;
       if (input.exercises.length > 0) {
-        const { error: exErr } = await supabase.from("exercises").insert(
-          input.exercises.map((e) => ({
-            user_id: user.id,
-            workout_id: workout.id,
-            name: e.name,
-            sets: e.sets ?? null,
-            reps: e.reps ?? null,
-            weight: e.weight ?? null,
-            image_path: e.image_path ?? null,
-          })),
-        );
+        const { data: insertedExercises, error: exErr } = await supabase
+          .from("exercises")
+          .insert(
+            input.exercises.map((e) => {
+              const valid = (e.setDetails ?? []).filter(
+                (d) => d.reps != null && d.weight != null && d.reps > 0 && d.weight > 0,
+              );
+              // Si des séries détaillées existent, on en dérive le résumé stocké
+              // sur la ligne `exercises` (rétro-compat WorkoutCard / tonnage).
+              const top = valid.reduce<{ reps: number; weight: number } | null>(
+                (best, d) =>
+                  best == null ||
+                  (d.weight as number) > best.weight ||
+                  ((d.weight as number) === best.weight && (d.reps as number) > best.reps)
+                    ? { reps: d.reps as number, weight: d.weight as number }
+                    : best,
+                null,
+              );
+              return {
+                user_id: user.id,
+                workout_id: workout.id,
+                name: e.name,
+                sets: valid.length > 0 ? valid.length : (e.sets ?? null),
+                reps: top ? top.reps : (e.reps ?? null),
+                weight: top ? top.weight : (e.weight ?? null),
+                image_path: e.image_path ?? null,
+              };
+            }),
+          )
+          .select("id");
         if (exErr) throw exErr;
+
+        // Insertion des séries détaillées (set-by-set + RPE) pour les exercices
+        // qui en fournissent. L'ordre renvoyé suit l'ordre d'insertion.
+        if (insertedExercises) {
+          const setRows = input.exercises.flatMap((e, i) => {
+            const exerciseId = insertedExercises[i]?.id;
+            if (!exerciseId) return [];
+            const valid = (e.setDetails ?? []).filter(
+              (d) => d.reps != null && d.weight != null && d.reps > 0 && d.weight > 0,
+            );
+            return valid.map((d, j) => ({
+              exercise_id: exerciseId,
+              user_id: user.id,
+              set_number: j + 1,
+              reps: d.reps,
+              weight: d.weight,
+              rpe: d.rpe ?? null,
+            }));
+          });
+          if (setRows.length > 0) {
+            const { error: setErr } = await supabase
+              .from("exercise_sets")
+              .insert(setRows);
+            if (setErr) throw setErr;
+          }
+        }
       }
     },
     onSuccess: () => {
