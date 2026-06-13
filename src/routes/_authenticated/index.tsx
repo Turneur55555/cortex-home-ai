@@ -3,9 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import {
   Dumbbell,
-  House,
   Flame,
-  ChevronRight,
   Loader2,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
@@ -17,6 +15,7 @@ import { useRecoveryMap } from "@/hooks/useRecoveryMap";
 import { useStreak } from "@/hooks/useStreak";
 import { RECOVERY_COLORS } from "@/lib/fitness/recovery";
 import { supabase } from "@/integrations/supabase/client";
+import { HomeDashboard } from "@/components/home/HomeDashboard";
 
 export const Route = createFileRoute("/_authenticated/")({
   head: () => ({
@@ -118,20 +117,8 @@ function HomePage() {
         lastWorkout={lastWorkout}
       />
 
-      {/* ── Maison ── */}
-      <Link
-        to="/stocks"
-        className="mt-4 flex items-center gap-3 rounded-2xl border border-border bg-card p-4 shadow-card transition-all hover:border-primary/30 hover:shadow-elevated"
-      >
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 shadow-glow">
-          <House className="h-5 w-5 text-white" />
-        </span>
-        <div className="flex-1">
-          <p className="text-sm font-semibold">Maison</p>
-          <p className="text-xs text-muted-foreground">Frigo, pharmacie, habits</p>
-        </div>
-        <ChevronRight className="h-4 w-4 text-muted-foreground" />
-      </Link>
+      {/* ── Tableau de bord cross-domaine (nutrition / maison / rappels) ── */}
+      <HomeDashboard />
 
       <ChatBot />
     </main>
