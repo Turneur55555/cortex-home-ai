@@ -37,6 +37,7 @@ import {
   type RecentExercise,
 } from "./ExercisePickerSheet";
 import { normalize } from "@/lib/fitness/exerciseCatalog";
+import { estimate1RM, formatTonnage } from "@/lib/fitness/strength";
 
 export type WorkoutRow = NonNullable<ReturnType<typeof useWorkouts>["data"]>[number];
 type ExerciseRow = NonNullable<WorkoutRow["exercises"]>[number];
@@ -56,6 +57,7 @@ type ExerciseGroup = {
   totalSeries: number;
   totalReps: number;
   maxWeight: number | null;
+  best1RM: number | null;
   volume: number;
   sourceIds: string[];
 };
@@ -89,11 +91,16 @@ function buildGroups(rows: ExerciseRow[]): ExerciseGroup[] {
     let totalReps = 0;
     let volume = 0;
     let maxWeight: number | null = null;
+    let best1RM: number | null = null;
     for (const s of series) {
       if (s.reps != null) totalReps += s.reps;
       if (s.weight != null) {
         maxWeight = maxWeight == null ? s.weight : Math.max(maxWeight, s.weight);
-        if (s.reps != null) volume += s.reps * s.weight;
+        if (s.reps != null) {
+          volume += s.reps * s.weight;
+          const rm = estimate1RM(s.weight, s.reps);
+          if (rm != null && (best1RM == null || rm > best1RM)) best1RM = rm;
+        }
       }
     }
     groups.push({
@@ -104,6 +111,7 @@ function buildGroups(rows: ExerciseRow[]): ExerciseGroup[] {
       totalSeries: series.length,
       totalReps,
       maxWeight,
+      best1RM,
       volume,
       sourceIds: Array.from(new Set(list.map((r) => r.id))),
     });
@@ -287,16 +295,14 @@ export function WorkoutCard({
                 <TrendingUp className="h-3.5 w-3.5" />
               )
             }
-            label="Volume"
-            value={stats.volume > 0 ? formatVolume(stats.volume) : "—"}
-            unit={stats.volume > 0 ? "kg" : undefined}
+            label="Tonnage"
+            value={stats.volume > 0 ? formatTonnage(stats.volume) : "—"}
             title={
               stats.volumeMismatch
                 ? "Écart détecté — valeur recalculée depuis la base affichée"
                 : undefined
             }
           />
-
           <StatTile
             icon={<Flame className="h-3.5 w-3.5" />}
             label="Calories"
@@ -377,6 +383,12 @@ export function WorkoutCard({
                           max {g.maxWeight} kg
                         </>
                       )}
+                      {g.best1RM != null && (
+                        <>
+                          <span className="mx-1.5 text-muted-foreground/40">·</span>
+                          ~{Math.round(g.best1RM)} kg 1RM
+                        </>
+                      )}
                     </p>
                     {gymPR != null && gymLocation !== "Salle inconnue" && (
                       <p className="mt-0.5 text-[10px] font-medium text-primary/80">
@@ -451,14 +463,14 @@ export function WorkoutCard({
                         );
                       })}
                     </ul>
-                    {/* Récap volume */}
+                    {/* Récap tonnage */}
                     {g.volume > 0 && (
                       <div className="flex items-center justify-between border-t border-white/5 bg-white/[0.02] px-3 py-2 text-[11px]">
                         <span className="uppercase tracking-wider text-muted-foreground/70">
-                          Volume
+                          Tonnage
                         </span>
                         <span className="font-bold tabular-nums">
-                          {formatVolume(g.volume)} kg
+                          {formatTonnage(g.volume)}
                         </span>
                       </div>
                     )}
@@ -581,12 +593,6 @@ function StatTile({
       </span>
     </div>
   );
-}
-
-
-function formatVolume(v: number): string {
-  if (v >= 1000) return `${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k`;
-  return `${v}`;
 }
 
 // ─── 2-step modal: picker → form ──────────────────────────────────────────────
@@ -737,4 +743,4 @@ function AddExerciseModal({
       </form>
     </div>
   );
-}
+  }
