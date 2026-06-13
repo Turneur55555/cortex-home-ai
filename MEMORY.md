@@ -151,6 +151,12 @@ App **ICORTEX** (nom officiel dans les titres de pages) : assistant personnel mu
 
 ---
 
+## V2 — Chantier 1 : Progression & stats fitness (juin 14)
+- ✅ `lib/fitness/progression.ts` (domaine pur) : buildSessionStats (séries temporelles 1RM/tonnage/topWeight/RPE par séance + flags PR running-max), currentBests, progressionPct.
+- ✅ `hooks/useExerciseSetHistory.ts` : historique des séries (exercise_sets) par nom d'exercice, agrégé par séance (exercises ilike name → exercise_sets → workouts.date), trié par date.
+- ✅ `components/fitness/ExerciseStatsSheet.tsx` enrichi : onglet "1RM est." (courbe réelle depuis exercise_sets), carte "1RM max", section "Détail des séries" (chips reps×kg @RPE, badge PR par séance, tonnage/RPE moy.). Fallback mock conservé quand pas de données réelles. Sheet rendu scrollable (max-h-[88vh]).
+- Prochain chantier V2 demandé par Nathan : Dashboard d'accueil unifié (cross-domaine).
+
 ## Règles UX importantes
 - Interface fluide, design premium
 - Animations légères
