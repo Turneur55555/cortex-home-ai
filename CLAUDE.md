@@ -6,6 +6,15 @@
 3. /docs/features.md
 4. /docs/bugs.md
 
+## Workflow GitHub (CRITIQUE — depuis juin 13)
+- Le dossier Google Drive local est désynchronisé : les fichiers `src/components/fitness/` et `src/hooks/` présents localement peuvent être des versions obsolètes
+- **Toujours lire la version GitHub** avant toute modification : `https://raw.githubusercontent.com/Turneur55555/cortex-home-ai/main/<chemin>`
+- Après modification locale, l'utilisateur doit faire `git add + git commit + git push` pour que Lovable voie les changements
+- Remote : `https://github.com/Turneur55555/cortex-home-ai.git` (branch `main`)
+
+## À la fin de chaque session, mettre à jour :
+- MEMORY.md → ajouter tout nouveau composant, hook, migration, feature, décision d'archi découvert pendant la session
+
 ## Stack technique
 - React + TypeScript
 - Vite
