@@ -4,9 +4,11 @@ import { BodyMap } from "@/components/fitness/BodyMap";
 import { WorkoutCard, type WorkoutRow } from "@/components/fitness/WorkoutCard";
 import { WorkoutSheet } from "@/components/fitness/WorkoutSheet";
 import { WorkoutProgressCharts } from "@/components/fitness/WorkoutProgressCharts";
-import { useExerciseImageUrls, useWorkouts } from "@/hooks/use-fitness";
+import { useDeleteWorkout, useExerciseImageUrls, useWorkouts } from "@/hooks/use-fitness";
 import { useRecoveryMap } from "@/hooks/useRecoveryMap";
+import { useFitnessStreak } from "@/hooks/useFitnessStreak";
 import { FabAdd } from "@/components/shared/FormComponents";
+import { formatTonnage, workoutTonnage } from "@/lib/fitness/strength";
 import { CoachSheet, type WorkoutTemplate } from "./CoachSheet";
 import { computePRs } from "@/utils/fitness/exercise-stats";
 
@@ -25,6 +27,17 @@ export function SeancesTab() {
   // === État des données ===
   const { data, isLoading, error } = useWorkouts();
   const recoveryMap = useRecoveryMap(data);
+  const deleteWorkout = useDeleteWorkout();
+  const streak = useFitnessStreak(data);
+  const weekTonnage = useMemo(() => {
+    if (!data) return 0;
+    const now = new Date();
+    const start = new Date(now);
+    start.setDate(start.getDate() - 7);
+    return data
+      .filter((w) => new Date(w.date) >= start)
+      .reduce((acc, w) => acc + workoutTonnage(w.exercises ?? []), 0);
+  }, [data]);
 
   // === État des modales ===
   const [open, setOpen] = useState(false);
@@ -105,16 +118,16 @@ export function SeancesTab() {
   }, []);
 
   const handleDeleteConfirm = useCallback(async () => {
-    if (workoutToDelete) {
-      try {
-        console.log("Suppression de la séance:", workoutToDelete);
-        setWorkoutToDelete(null);
-        setDeleteConfirmOpen(false);
-      } catch (err) {
-        console.error("Erreur lors de la suppression:", err);
-      }
+    if (!workoutToDelete) return;
+    try {
+      await deleteWorkout.mutateAsync(workoutToDelete);
+    } catch (err) {
+      console.error("Erreur lors de la suppression:", err);
+    } finally {
+      setWorkoutToDelete(null);
+      setDeleteConfirmOpen(false);
     }
-  }, [workoutToDelete]);
+  }, [workoutToDelete, deleteWorkout]);
 
   const handleDeleteCancel = useCallback(() => {
     setWorkoutToDelete(null);
