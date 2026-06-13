@@ -157,6 +157,14 @@ App **ICORTEX** (nom officiel dans les titres de pages) : assistant personnel mu
 - ✅ `components/fitness/ExerciseStatsSheet.tsx` enrichi : onglet "1RM est." (courbe réelle depuis exercise_sets), carte "1RM max", section "Détail des séries" (chips reps×kg @RPE, badge PR par séance, tonnage/RPE moy.). Fallback mock conservé quand pas de données réelles. Sheet rendu scrollable (max-h-[88vh]).
 - Prochain chantier V2 demandé par Nathan : Dashboard d'accueil unifié (cross-domaine).
 
+## V2 — Chantier 2 : Dashboard d'accueil unifié (juin 14)
+- ✅ `components/home/HomeDashboard.tsx` (NOUVEAU) : 3 widgets cross-domaine sur l'accueil
+  - NutritionTodayCard : calories/protéines du jour vs objectifs (useNutrition(today) + useNutritionGoals), barre de progression.
+  - MaisonCard : nb articles, stock bas, péremptions < 7j (useAllStockStats) — remplace l'ancien lien Maison nu, reste cliquable vers /stocks.
+  - RappelsTodayCard : rappels en retard + échéances du jour (useReminders), top 3 listés.
+- ✅ `routes/_authenticated/index.tsx` : importe et rend `<HomeDashboard />` après la carte Corps ; imports House/ChevronRight retirés (devenus inutiles).
+- Accueil = désormais vue d'ensemble fitness + nutrition + maison + rappels.
+
 ## Règles UX importantes
 - Interface fluide, design premium
 - Animations légères
