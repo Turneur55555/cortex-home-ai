@@ -1,11 +1,19 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Activity, Apple, Dumbbell } from "lucide-react";
+import { z } from "zod";
 import { CorpsTab } from "./CorpsTab";
 import { SeancesTab } from "./SeancesTab";
 import { NutritionTab } from "./NutritionTab";
 
+const tabSchema = z.enum(["corps", "seances", "nutrition"]).catch("corps");
+type Tab = z.infer<typeof tabSchema>;
+
+const searchSchema = z.object({
+  tab: tabSchema.optional(),
+});
+
 export const Route = createFileRoute("/_authenticated/fitness/")({
+  validateSearch: searchSchema,
   head: () => ({
     meta: [
       { title: "Fitness — ICORTEX" },
@@ -15,10 +23,13 @@ export const Route = createFileRoute("/_authenticated/fitness/")({
   component: FitnessPage,
 });
 
-type Tab = "corps" | "seances" | "nutrition";
-
 function FitnessPage() {
-  const [tab, setTab] = useState<Tab>("corps");
+  const { tab = "corps" } = Route.useSearch();
+  const navigate = useNavigate({ from: Route.fullPath });
+
+  const setTab = (next: Tab) => {
+    navigate({ search: { tab: next }, replace: true });
+  };
 
   return (
     <main className="flex flex-1 flex-col px-5 pb-6 pt-12">

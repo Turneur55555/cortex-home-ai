@@ -4,9 +4,11 @@ import { BodyMap } from "@/components/fitness/BodyMap";
 import { WorkoutCard, type WorkoutRow } from "@/components/fitness/WorkoutCard";
 import { WorkoutSheet } from "@/components/fitness/WorkoutSheet";
 import { WorkoutProgressCharts } from "@/components/fitness/WorkoutProgressCharts";
-import { useExerciseImageUrls, useWorkouts } from "@/hooks/use-fitness";
+import { useDeleteWorkout, useExerciseImageUrls, useWorkouts } from "@/hooks/use-fitness";
 import { useRecoveryMap } from "@/hooks/useRecoveryMap";
+import { useFitnessStreak } from "@/hooks/useFitnessStreak";
 import { FabAdd } from "@/components/shared/FormComponents";
+import { formatTonnage, workoutTonnage } from "@/lib/fitness/strength";
 import { CoachSheet, type WorkoutTemplate } from "./CoachSheet";
 import { computePRs } from "@/utils/fitness/exercise-stats";
 
@@ -25,6 +27,17 @@ export function SeancesTab() {
   // === État des données ===
   const { data, isLoading, error } = useWorkouts();
   const recoveryMap = useRecoveryMap(data);
+  const deleteWorkout = useDeleteWorkout();
+  const streak = useFitnessStreak(data);
+  const weekTonnage = useMemo(() => {
+    if (!data) return 0;
+    const now = new Date();
+    const start = new Date(now);
+    start.setDate(start.getDate() - 7);
+    return data
+      .filter((w) => new Date(w.date) >= start)
+      .reduce((acc, w) => acc + workoutTonnage(w.exercises ?? []), 0);
+  }, [data]);
 
   // === État des modales ===
   const [open, setOpen] = useState(false);
@@ -105,16 +118,16 @@ export function SeancesTab() {
   }, []);
 
   const handleDeleteConfirm = useCallback(async () => {
-    if (workoutToDelete) {
-      try {
-        console.log("Suppression de la séance:", workoutToDelete);
-        setWorkoutToDelete(null);
-        setDeleteConfirmOpen(false);
-      } catch (err) {
-        console.error("Erreur lors de la suppression:", err);
-      }
+    if (!workoutToDelete) return;
+    try {
+      await deleteWorkout.mutateAsync(workoutToDelete);
+    } catch (err) {
+      console.error("Erreur lors de la suppression:", err);
+    } finally {
+      setWorkoutToDelete(null);
+      setDeleteConfirmOpen(false);
     }
-  }, [workoutToDelete]);
+  }, [workoutToDelete, deleteWorkout]);
 
   const handleDeleteCancel = useCallback(() => {
     setWorkoutToDelete(null);
@@ -144,6 +157,26 @@ export function SeancesTab() {
           </span>
         </span>
       </button>
+
+      {data && data.length > 0 && (
+        <div className="grid grid-cols-3 gap-2">
+          <KpiTile
+            label="Streak"
+            value={`${streak.current}`}
+            sub={`sem. ≥ ${streak.threshold}/sem`}
+          />
+          <KpiTile
+            label="Cette semaine"
+            value={`${streak.thisWeekCount}`}
+            sub={streak.thisWeekCount >= streak.threshold ? "Objectif ✓" : `${streak.threshold - streak.thisWeekCount} restantes`}
+          />
+          <KpiTile
+            label="Tonnage 7j"
+            value={formatTonnage(weekTonnage)}
+            sub="volume total"
+          />
+        </div>
+      )}
 
       {isLoading && (
         <div className="flex h-32 items-center justify-center">
@@ -201,10 +234,10 @@ export function SeancesTab() {
               <button
                 type="button"
                 onClick={() => handleDeleteClick(w.id)}
-                className="absolute top-2 right-2 p-2 opacity-0 hover:opacity-100 transition-opacity rounded-lg bg-red-100 hover:bg-red-200"
+                className="absolute top-2 right-2 flex h-9 w-9 items-center justify-center rounded-full bg-card/90 backdrop-blur border border-border shadow-sm active:scale-95 transition-transform"
                 aria-label="Supprimer cette séance"
               >
-                <Trash2 className="h-4 w-4 text-red-600" />
+                <Trash2 className="h-4 w-4 text-destructive" />
               </button>
             </div>
           ))}
@@ -256,5 +289,15 @@ export function SeancesTab() {
         </div>
       )}
     </section>
+  );
+}
+
+function KpiTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="rounded-2xl border border-border bg-card p-3">
+      <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className="mt-1 text-lg font-bold leading-none">{value}</p>
+      {sub && <p className="mt-1 text-[10px] text-muted-foreground">{sub}</p>}
+    </div>
   );
 }
