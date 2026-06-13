@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Camera, ChevronDown, Loader2, X } from "lucide-react";
+import { Camera, ChevronDown, Loader2, Timer, X } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useAddWorkout, useExerciseImageUrls, useWorkouts } from "@/hooks/use-fitness";
@@ -12,6 +12,7 @@ import {
   type RecentExercise,
 } from "./ExercisePickerSheet";
 import { normalize } from "@/lib/fitness/exerciseCatalog";
+import { RestTimer } from "./RestTimer";
 
 export function WorkoutSheet({
   onClose,
@@ -43,6 +44,7 @@ export function WorkoutSheet({
 
   const [uploading, setUploading] = useState<number | null>(null);
   const [pickerIndex, setPickerIndex] = useState<number | null>(null);
+  const [restTimerOpen, setRestTimerOpen] = useState(false);
 
   // Derive recent exercises from cached workouts (most recent first, deduplicated)
   const recentExercises = useMemo<RecentExercise[]>(() => {
@@ -406,6 +408,16 @@ export function WorkoutSheet({
                         );
                       })}
                     </div>
+
+                    {/* Rest Timer trigger */}
+                    <button
+                      type="button"
+                      onClick={() => setRestTimerOpen(true)}
+                      className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-xl border border-border bg-surface/50 py-2 text-xs font-semibold text-muted-foreground transition-all active:scale-[0.99] hover:border-primary/40 hover:text-primary"
+                    >
+                      <Timer className="h-3.5 w-3.5" />
+                      Démarrer le repos
+                    </button>
                   </div>
                 );
               })}
@@ -430,6 +442,10 @@ export function WorkoutSheet({
           initialQuery={exercises[pickerIndex]?.name ?? ""}
         />
       )}
+
+      {restTimerOpen && (
+        <RestTimer onClose={() => setRestTimerOpen(false)} />
+      )}
     </>
   );
-}
+      }
