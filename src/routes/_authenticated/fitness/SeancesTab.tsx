@@ -158,6 +158,26 @@ export function SeancesTab() {
         </span>
       </button>
 
+      {data && data.length > 0 && (
+        <div className="grid grid-cols-3 gap-2">
+          <KpiTile
+            label="Streak"
+            value={`${streak.current}`}
+            sub={`sem. ≥ ${streak.threshold}/sem`}
+          />
+          <KpiTile
+            label="Cette semaine"
+            value={`${streak.thisWeekCount}`}
+            sub={streak.thisWeekCount >= streak.threshold ? "Objectif ✓" : `${streak.threshold - streak.thisWeekCount} restantes`}
+          />
+          <KpiTile
+            label="Tonnage 7j"
+            value={formatTonnage(weekTonnage)}
+            sub="volume total"
+          />
+        </div>
+      )}
+
       {isLoading && (
         <div className="flex h-32 items-center justify-center">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -214,10 +234,10 @@ export function SeancesTab() {
               <button
                 type="button"
                 onClick={() => handleDeleteClick(w.id)}
-                className="absolute top-2 right-2 p-2 opacity-0 hover:opacity-100 transition-opacity rounded-lg bg-red-100 hover:bg-red-200"
+                className="absolute top-2 right-2 flex h-9 w-9 items-center justify-center rounded-full bg-card/90 backdrop-blur border border-border shadow-sm active:scale-95 transition-transform"
                 aria-label="Supprimer cette séance"
               >
-                <Trash2 className="h-4 w-4 text-red-600" />
+                <Trash2 className="h-4 w-4 text-destructive" />
               </button>
             </div>
           ))}
