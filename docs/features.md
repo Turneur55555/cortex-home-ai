@@ -28,3 +28,14 @@
 - MealPlanSheet, ouvert via le bouton « Planning de la semaine » dans l'onglet Nutrition
 - Tables : recipes, recipe_ingredients, meal_plans (réutilise items et shopping_list)
 - Domaine pur : lib/nutrition/recipes.ts, lib/nutrition/shoppingList.ts ; hooks/useRecipes.ts, hooks/useMealPlan.ts
+
+## V3 — Différenciation premium (juin 14)
+
+### Coach recovery-aware (vague 1, livré)
+- Le Coach IA tient compte de la récupération musculaire : pastille de statut (fatigué / en récup / prêt) sur chaque groupe dans CoachSheet, avertissement « Encore fatigué : X (récup ~Yh) » et suggestion des muscles prêts.
+- Le contexte de récupération est transmis à l'edge function `coach-workout`, dont le prompt évite les muscles fatigués (<48h) et allège les muscles en récupération. Testé en live : pectoraux fatigués → séance générée sans aucun exercice pectoraux.
+- Correctif au passage : CoachSheet envoyait des noms de muscles capitalisés rejetés par l'edge (validation en minuscules) → la génération muscu était cassée ; désormais noms normalisés en minuscules + dédup + cardio.
+- Domaine pur : lib/fitness/recoveryAdvice.ts (+ tests). UI : CoachSheet.tsx, SeancesTab.tsx (passe recoveryMap). Edge : supabase/functions/coach-workout (lecture de body.recovery, normalisation des muscles).
+
+### À venir (V3)
+- Périodisation adaptative (deload auto 4-6 sem), récap narratif IA mensuel, import Apple Health (fichier d'export Santé). Comparaison communauté : abandonnée.
