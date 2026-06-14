@@ -162,3 +162,10 @@ App **ICORTEX** (nom officiel dans les titres de pages) : assistant personnel mu
 
 ## Process (juin 14)
 - Après chaque change : tester sur le site déployé (Cloudflare Workers, worker tanstack-start-app) et indiquer le résultat à Nathan.
+
+## V3 — Coach recovery-aware (juin 14)
+- lib/fitness/recoveryAdvice.ts (pur, + recoveryAdvice.test.ts) : MUSCLE_AI_NAME (MuscleId→nom edge minuscule), worstStatus, selectionRecovery, readyAlternatives, buildAiRecoveryContext.
+- CoachSheet.tsx : prop recoveryMap → pastilles de récup par muscle + avertissement muscles fatigués + suggestions muscles prêts ; envoie `recovery` à l'edge. Fix : noms de muscles passés en minuscules (aiMuscleNames) car l'edge valide en minuscules (génération muscu était cassée avant).
+- SeancesTab.tsx : passe recoveryMap (déjà calculé) à CoachSheet.
+- Edge supabase/functions/coach-workout : déployée v7 via MCP Supabase (normalizeMuscle + buildRecoverySection à partir de body.recovery). ⚠️ La version déployée fait foi et DIVERGE du repo (le repo n'a pas _shared/ai.ts). Modifier l'edge = redéployer via MCP, pas via GitHub. Le Publish Lovable n'écrase pas le runtime edge.
+- Hébergement réel : Lovable (cortex-home-ai.lovable.app). Déploiement = Publish/Update dans le projet Lovable après commit GitHub.
