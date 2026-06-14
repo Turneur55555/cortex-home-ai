@@ -48,7 +48,8 @@ const GOAL_PROFILES: Record<ProgramGoal, GoalProfile> = {
   peaking: { baseIntensity: 85, baseRpe: 8.5, repRange: { min: 1, max: 3 } },
 };
 
-const round = (v: number, step: number) => Math.round(v / step) * step;
+// Arrondi au pas demandé, nettoyé des artefacts de virgule flottante (ex. 0.7000000000000001).
+const round = (v: number, step: number) => Number((Math.round(v / step) * step).toFixed(6));
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
 /** Semaine de décharge : volume et intensité réduits, RPE bas. */
@@ -127,7 +128,7 @@ function blockWeek(posInProgram: number, workingWeeks: number, profile: GoalProf
 
 /**
  * Génère la planification semaine-par-semaine d'un programme.
- * Retourne un tableau de longueur `totalWeeks`.
+ * Retourne un tableau de longueur totalWeeks.
  */
 export function generateProgramWeeks(options: GenerateProgramOptions): ProgramWeekPlan[] {
   const totalWeeks = clamp(Math.trunc(options.totalWeeks) || 0, 1, 52);
