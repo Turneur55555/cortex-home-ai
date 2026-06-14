@@ -1,7 +1,7 @@
 # Mémoire projet — cortex-home-ai
 
 ## Dernière mise à jour
-2026-06-13
+2026-06-14
 
 ## ⚠️ Règle : mettre ce fichier à jour à la fin de chaque session
 Toujours mettre à jour ce fichier avec les nouveaux composants, hooks, migrations, features découverts.
@@ -77,13 +77,8 @@ App **ICORTEX** (nom officiel dans les titres de pages) : assistant personnel mu
 - ⚠️ Fichiers locaux (Google Drive) désynchronisés vs GitHub — workflow : lire sur GitHub raw avant toute modification
 
 ### Fitness — V1 set-by-set + RPE (juin 13) — TERMINÉ
-- ✅ Table Supabase `exercise_sets` (projet bcwfvpwxzlmkxobvbtzp) : id, exercise_id (FK exercises), user_id (FK users), set_number (smallint ≥1), reps (smallint), weight (numeric), rpe (numeric check 0-10), notes, created_at. RLS "Users manage own exercise sets" (ALL). UNIQUE (exercise_id, set_number). Index exercise_id + user_id.
-- ✅ `types.ts` régénéré → bloc `exercise_sets` ajouté (table désormais typée).
-- ✅ `lib/fitness/sets.ts` (domaine pur) : WorkingSet, isValidSet, setsTonnage, bestEstimated1RM, topSet, totalReps, averageRpe (pondéré reps), summarizeSets.
-- ✅ `hooks/useExerciseSets.ts` : useExerciseSets(exerciseId), useReplaceExerciseSets (delete+insert renuméroté), useAddExerciseSet, useDeleteExerciseSet. Typé via Tables<"exercise_sets"> (plus de cast `as any`).
-- ✅ `hooks/use-fitness.ts` — useAddWorkout étendu : champ optionnel `setDetails` par exercice ; insert exercises avec `.select("id")` puis insert exercise_sets ; le résumé sets/reps/weight de la ligne `exercises` est dérivé du top set quand des séries détaillées existent (rétro-compat WorkoutCard/tonnage).
-- ✅ `components/fitness/WorkoutSheet.tsx` — éditeur série-par-série : toggle "Détailler les séries (RPE)", une ligne par série (reps/kg/RPE), +/- série, résumé live (tonnage via formatTonnage, 1RM estimé, RPE moyen) via summarizeSets.
-- Typecheck strict : 0 erreur sur les fichiers touchés (seules erreurs projet = calendar.tsx / react-day-picker, pré-existantes).
+- Table exercise_sets (id, exercise_id FK, user_id, set_number, reps, weight, rpe 0-10, notes, created_at). RLS, UNIQUE(exercise_id, set_number).
+- lib/fitness/sets.ts (WorkingSet, setsTonnage, bestEstimated1RM, topSet, totalReps, averageRpe, summarizeSets), hooks/useExerciseSets.ts, use-fitness.ts useAddWorkout étendu (setDetails), WorkoutSheet éditeur série-par-série.
 
 ### Nutrition
 - Macros quotidiennes (NutritionSheet, PortionEditModal)
@@ -124,46 +119,15 @@ App **ICORTEX** (nom officiel dans les titres de pages) : assistant personnel mu
 
 ### Auth — Persistance de session (gros chantier juin 12)
 - **Problème résolu** : sessions perdues après reload / nouveau contexte / multi-onglets
-- `lib/authDiagnostics.ts` — système de diagnostics auth complet, exposé globalement comme `window.__ICORTEX_AUTH_DIAGNOSTICS__` (getLog, clear, snapshot). Log tous les événements auth dans localStorage.
-- `lib/authSession.ts` — `restoreAuthSession(source, waitMs)` + `refreshAuthSession(source)` : restauration robuste avec fallback sur onAuthStateChange + timeout retry
-- `client.ts` — `persistentStorage` custom (fallback localStorage→sessionStorage), PKCE flow activé, `storageKey` explicite, `detectSessionInUrl: true`
-- `use-auth.tsx` — `scheduleRefresh()` planifie le refresh 5 min avant expiry, `restoreAuthSession` au mount
-- `_authenticated.tsx` — `ssr: false`, utilise `restoreAuthSession` dans beforeLoad (timeout 1500ms)
-- `login.tsx` — `ssr: false`, diagnostics intégrés
-- `routes/reset-password.tsx` — nouvelle page reset MDP (écoute event PASSWORD_RECOVERY)
-- `e2e/auth-persistence.spec.ts` — test E2E : reload + nouveau contexte + multi-onglets
-- `SecurityPanel.tsx` — `qc.cancelQueries()` avant signOut + `replace: true` sur navigate
-
-### Rappels — Journal d'audit (juin 10)
-- `lib/reminderAudit.ts` — log des payloads realtime postgres_changes en sessionStorage (500 entrées max)
-- Exposé comme `window.__REMINDER_AUDIT__` (getLog, clear) pour debug prod
-- useReminders.ts — branche le logReminderAudit sur le callback realtime
+- `lib/authDiagnostics.ts`, `lib/authSession.ts` (restoreAuthSession, refreshAuthSession), client.ts persistentStorage + PKCE, use-auth.tsx scheduleRefresh, _authenticated.tsx ssr:false, routes/reset-password.tsx, e2e/auth-persistence.spec.ts
 
 ### Contrôle de Paie
 - ⚠️ Projet SÉPARÉ, sans lien avec Icortex — ne pas intégrer dans cette app
 
 ### Sécurité & Perf (juin 5 + juin 12)
-- Audit RLS complet (sec1-sec6)
-- Révocation accès anon sur fonctions security definer
-- Indexes manquants ajoutés
-- optimize_rls_policies_initplan (juin 12)
-- optimize_realtime_messages_policy (juin 12)
+- Audit RLS complet (sec1-sec6), révocation accès anon, indexes manquants, optimize_rls_policies_initplan, optimize_realtime_messages_policy
 
 ---
-
-## V2 — Chantier 1 : Progression & stats fitness (juin 14)
-- ✅ `lib/fitness/progression.ts` (domaine pur) : buildSessionStats (séries temporelles 1RM/tonnage/topWeight/RPE par séance + flags PR running-max), currentBests, progressionPct.
-- ✅ `hooks/useExerciseSetHistory.ts` : historique des séries (exercise_sets) par nom d'exercice, agrégé par séance (exercises ilike name → exercise_sets → workouts.date), trié par date.
-- ✅ `components/fitness/ExerciseStatsSheet.tsx` enrichi : onglet "1RM est." (courbe réelle depuis exercise_sets), carte "1RM max", section "Détail des séries" (chips reps×kg @RPE, badge PR par séance, tonnage/RPE moy.). Fallback mock conservé quand pas de données réelles. Sheet rendu scrollable (max-h-[88vh]).
-- Prochain chantier V2 demandé par Nathan : Dashboard d'accueil unifié (cross-domaine).
-
-## V2 — Chantier 2 : Dashboard d'accueil unifié (juin 14)
-- ✅ `components/home/HomeDashboard.tsx` (NOUVEAU) : 3 widgets cross-domaine sur l'accueil
-  - NutritionTodayCard : calories/protéines du jour vs objectifs (useNutrition(today) + useNutritionGoals), barre de progression.
-  - MaisonCard : nb articles, stock bas, péremptions < 7j (useAllStockStats) — remplace l'ancien lien Maison nu, reste cliquable vers /stocks.
-  - RappelsTodayCard : rappels en retard + échéances du jour (useReminders), top 3 listés.
-- ✅ `routes/_authenticated/index.tsx` : importe et rend `<HomeDashboard />` après la carte Corps ; imports House/ChevronRight retirés (devenus inutiles).
-- Accueil = désormais vue d'ensemble fitness + nutrition + maison + rappels.
 
 ## Règles UX importantes
 - Interface fluide, design premium
@@ -173,13 +137,6 @@ App **ICORTEX** (nom officiel dans les titres de pages) : assistant personnel mu
 
 ---
 
-## Composants supprimés définitivement (suite)
-- MuscleMap.tsx → supprimé juin 12 (code mort, aucun import)
-- profile/GoalsSheet.tsx → supprimé juin 12 (doublon, aucun import — fitness/GoalsSheet.tsx est la version active)
-- renderers/BodyHighlighterRenderer.tsx → supprimé juin 12 (wrapper mort, aucun import)
-- Icortex/ fichiers temporaires → supprimés juin 12 (rapports, guides, drafts — CLAUDE.md conservé)
-- point.md racine → supprimé juin 12 (rapport architecture mai, obsolète)
-
 ## Renderer SVG canonique
 - BodyMap.tsx = seul renderer SVG actif (mode "recovery" + mode "measurement")
 - Importé dans SeancesTab.tsx et CorpsTab.tsx
@@ -187,3 +144,21 @@ App **ICORTEX** (nom officiel dans les titres de pages) : assistant personnel mu
 ## Points de vigilance
 - use-pantry.ts existe sans route visible → feature en cours ou à connecter
 - Contrôle de Paie = projet SÉPARÉ, sans lien avec Icortex
+
+---
+
+## Fitness — Coach IA V2 (juin 14)
+- Tables Supabase : training_programs, program_weeks (périodisation), program_sessions, program_exercises. RLS auth.uid()=user_id, index, cascades. Migrations additives appliquées en prod.
+- Domaine pur : lib/fitness/periodization.ts (generateProgramWeeks, modèles linear/undulating/block, deload, phaseLabel) + lib/fitness/loadRecommendation.ts (recommendLoad : auto-régulation RPE = reps en réserve via Epley inverse, modulée par la récupération).
+- hooks/usePrograms.ts : usePrograms, useProgramWeeks, useCreateProgram (peuple program_weeks via la périodisation pure), useUpdateProgram, useDeleteProgram. Cast `supabase as any` (types.ts non régénéré).
+- components/fitness/ProgramSheet.tsx : création + aperçu live périodisation + liste/détail. Branché via bouton « Coach IA » dans routes/_authenticated/fitness/index.tsx (en-tête).
+- 30 tests unitaires des fonctions pures : OK.
+
+## Nutrition — V2 (juin 14)
+- Tables Supabase : recipes, recipe_ingredients (FK items pour macros via *_per_100g), meal_plans. Réutilise items et shopping_list. RLS + index. Migrations additives en prod.
+- Domaine pur : lib/nutrition/recipes.ts (recipeMacros, perServing, scaleServings, sumMacros) + lib/nutrition/shoppingList.ts (aggregateNeeds, buildShoppingList = besoins moins stock).
+- hooks/useRecipes.ts (CRUD recettes + macros calculées) ; hooks/useMealPlan.ts (planning hebdo + useGenerateShoppingList + useSaveShoppingList vers shopping_list).
+- components/fitness/MealPlanSheet.tsx : planning semaine + génération liste de courses. Branché via bouton « Planning de la semaine » dans NutritionTab.tsx.
+
+## Process (juin 14)
+- Après chaque change : tester sur le site déployé (Cloudflare Workers, worker tanstack-start-app) et indiquer le résultat à Nathan.
