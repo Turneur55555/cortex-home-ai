@@ -259,6 +259,7 @@ export function SeancesTab() {
           onClose={handleCloseCoach}
           onResult={handleCoachResult}
           initialMuscles={coachInitialMuscles}
+          recoveryMap={recoveryMap}
         />
       )}
 

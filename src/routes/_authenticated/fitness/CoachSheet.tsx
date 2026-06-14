@@ -1,10 +1,17 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { useMutation } from "@tanstack/react-query";
-import { Dumbbell, Sparkles } from "lucide-react";
+import { Dumbbell, Sparkles, BatteryWarning } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Field, Sheet, SubmitButton } from "@/components/shared/FormComponents";
 import { MUSCLE_META, type MuscleId } from "@/lib/fitness/muscleMapping";
+import { RECOVERY_COLORS, RECOVERY_LABELS, type MuscleRecovery } from "@/lib/fitness/recovery";
+import {
+  MUSCLE_AI_NAME,
+  worstStatus,
+  selectionRecovery,
+  buildAiRecoveryContext,
+} from "@/lib/fitness/recoveryAdvice";
 
 export type WorkoutTemplate = {
   name: string;
@@ -39,14 +46,18 @@ export const MUSCLE_OPTIONS: MuscleOption[] = [
   { id: "cardio",  label: "Cardio",  isCardio: true },
 ];
 
-// Resolves UI selections → domain MuscleId[] (cardio bypassed, aliases expanded)
-function resolveMuscleSlugs(selected: string[]): MuscleId[] {
+// Muscles fins du domaine sollicités par une option UI (vide pour le cardio).
+function optionMuscleIds(opt: MuscleOption): MuscleId[] {
+  if ("isCardio" in opt) return [];
+  if ("isAlias"  in opt) return opt.resolves;
+  return [opt.id];
+}
+
+// Résout les sélections UI → MuscleId[] du domaine (cardio ignoré, alias étendus).
+function resolveMuscleIds(selected: string[]): MuscleId[] {
   return selected.flatMap((id) => {
     const opt = MUSCLE_OPTIONS.find((o) => o.id === id);
-    if (!opt) return [];
-    if ("isCardio" in opt) return [];
-    if ("isAlias"  in opt) return opt.resolves;
-    return [opt.id];
+    return opt ? optionMuscleIds(opt) : [];
   });
 }
 
@@ -55,6 +66,13 @@ function hasCardio(selected: string[]): boolean {
     const opt = MUSCLE_OPTIONS.find((o) => o.id === id);
     return opt != null && "isCardio" in opt;
   });
+}
+
+// Noms de groupes attendus par l'edge (minuscules), dédupliqués. + "cardio" si sélectionné.
+function aiMuscleNames(selected: string[]): string[] {
+  const names = resolveMuscleIds(selected).map((id) => MUSCLE_AI_NAME[id]);
+  if (hasCardio(selected)) names.push("cardio");
+  return [...new Set(names)];
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -78,11 +96,14 @@ export function CoachSheet({
   onClose,
   onResult,
   initialMuscles,
+  recoveryMap,
 }: {
   onClose: () => void;
   onResult: (tpl: WorkoutTemplate) => void;
   initialMuscles?: string[];
+  recoveryMap?: Map<MuscleId, MuscleRecovery>;
 }) {
+  const recovery = recoveryMap ?? new Map<MuscleId, MuscleRecovery>();
   const [mode, setMode] = useState<Mode>("muscu");
   const [muscles, setMuscles] = useState<string[]>(
     initialMuscles && initialMuscles.length > 0 ? initialMuscles : ["pectoraux"],
@@ -98,18 +119,28 @@ export function CoachSheet({
   const toggleMuscle = (id: string) =>
     setMuscles((arr) => (arr.includes(id) ? arr.filter((m) => m !== id) : [...arr, id]));
 
+  // ── Contexte de récupération de la sélection courante ──
+  const selectedIds = resolveMuscleIds(muscles);
+  const { fatigued: fatiguedSel, recovering: recoveringSel } = selectionRecovery(selectedIds, recovery);
+  // Alternatives prêtes : options non sélectionnées dont tous les muscles sont 'ready'.
+  const readyOptions = MUSCLE_OPTIONS.filter(
+    (o) => !("isCardio" in o) && !muscles.includes(o.id) && worstStatus(optionMuscleIds(o), recovery) === "ready",
+  );
+  const hasRecoveryData = recovery.size > 0;
+
   const generate = useMutation({
     mutationFn: async () => {
       const payload =
         mode === "muscu"
           ? {
               mode: "muscu",
-              muscles: resolveMuscleSlugs(muscles).map((id) => MUSCLE_META[id].label),
+              muscles: aiMuscleNames(muscles),
               has_cardio: hasCardio(muscles),
               duration_minutes: Number(duration) || 45,
               equipment,
               level,
               goal,
+              recovery: buildAiRecoveryContext(selectedIds, recovery),
             }
           : {
               mode: "autre",
@@ -208,23 +239,77 @@ export function CoachSheet({
               <div className="flex flex-wrap gap-2">
                 {MUSCLE_OPTIONS.map((m) => {
                   const active = muscles.includes(m.id);
+                  const status = "isCardio" in m ? "unknown" : worstStatus(optionMuscleIds(m), recovery);
+                  const showDot = hasRecoveryData && status !== "unknown";
                   return (
                     <button
                       key={m.id}
                       type="button"
                       onClick={() => toggleMuscle(m.id)}
+                      title={showDot ? `Récupération : ${RECOVERY_LABELS[status]}` : undefined}
                       className={
-                        "rounded-full border px-3 py-1.5 text-xs font-semibold transition-all " +
+                        "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-all " +
                         (active
                           ? "border-primary bg-primary/15 text-primary"
                           : "border-border bg-surface text-muted-foreground hover:text-foreground")
                       }
                     >
+                      {showDot && (
+                        <span
+                          aria-hidden
+                          className="h-2 w-2 rounded-full"
+                          style={{ backgroundColor: RECOVERY_COLORS[status].stroke }}
+                        />
+                      )}
                       {m.label}
                     </button>
                   );
                 })}
               </div>
+
+              {/* Avertissement récupération (recovery-aware coach) */}
+              {(fatiguedSel.length > 0 || recoveringSel.length > 0) && (
+                <div className="mt-3 rounded-xl border border-border bg-surface p-3">
+                  <div className="flex items-start gap-2">
+                    <BatteryWarning className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                    <div className="space-y-1 text-xs">
+                      {fatiguedSel.length > 0 && (
+                        <p className="text-foreground">
+                          <span className="font-semibold">Encore fatigué :</span>{" "}
+                          {fatiguedSel
+                            .map((f) => f.hoursRemaining ? `${f.label} (récup ~${f.hoursRemaining}h)` : f.label)
+                            .join(", ")}
+                          . Le coach l'évitera ou l'allègera.
+                        </p>
+                      )}
+                      {recoveringSel.length > 0 && (
+                        <p className="text-muted-foreground">
+                          <span className="font-semibold">En récupération :</span>{" "}
+                          {recoveringSel
+                            .map((f) => f.hoursRemaining ? `${f.label} (~${f.hoursRemaining}h)` : f.label)
+                            .join(", ")}
+                          . Volume réduit conseillé.
+                        </p>
+                      )}
+                      {readyOptions.length > 0 && (
+                        <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                          <span className="text-muted-foreground">Prêts :</span>
+                          {readyOptions.map((o) => (
+                            <button
+                              key={o.id}
+                              type="button"
+                              onClick={() => toggleMuscle(o.id)}
+                              className="rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary transition hover:bg-primary/20"
+                            >
+                              + {o.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
