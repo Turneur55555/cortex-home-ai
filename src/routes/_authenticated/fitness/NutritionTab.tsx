@@ -19,6 +19,7 @@ import { FabAdd } from "@/components/shared/FormComponents";
 import { BarcodeScannerSheet } from "@/components/BarcodeScannerSheet";
 import { MealScanSheet } from "@/components/fitness/MealScanSheet";
 import { NutritionSheet } from "@/components/fitness/NutritionSheet";
+import { MealPlanSheet } from "@/components/fitness/MealPlanSheet";
 import { GoalsSheet } from "@/components/fitness/GoalsSheet";
 import { PortionEditModal } from "@/components/fitness/PortionEditModal";
 import { getPortionBadge } from "@/lib/nutrition/utils";
@@ -31,6 +32,7 @@ export function NutritionTab() {
   const del = useDeleteNutrition();
   const [open, setOpen] = useState(false);
   const [goalsOpen, setGoalsOpen] = useState(false);
+  const [planOpen, setPlanOpen] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
   const [barcodeOpen, setBarcodeOpen] = useState(false);
   const [prefill, setPrefill] = useState<MealPrefill | null>(null);
@@ -183,6 +185,15 @@ export function NutritionTab() {
         </button>
       </div>
 
+      <button
+        type="button"
+        onClick={() => setPlanOpen(true)}
+        className="flex w-full items-center justify-center gap-2 rounded-2xl border border-primary/30 bg-primary/5 py-2.5 text-sm font-semibold text-primary"
+      >
+        <Calendar className="h-4 w-4" />
+        Planning de la semaine
+      </button>
+
       {isLoading && (
         <div className="flex h-20 items-center justify-center">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -251,6 +262,7 @@ export function NutritionTab() {
       <FabAdd onClick={openManual} label="Ajouter un repas" />
       {open && <NutritionSheet date={date} prefill={prefill} onClose={() => setOpen(false)} />}
       {goalsOpen && <GoalsSheet current={goals ?? null} onClose={() => setGoalsOpen(false)} />}
+      {planOpen && <MealPlanSheet onClose={() => setPlanOpen(false)} />}
       {scanOpen && <MealScanSheet onClose={() => setScanOpen(false)} onResult={handleScanResult} />}
       {barcodeOpen && <BarcodeScannerSheet onClose={() => setBarcodeOpen(false)} />}
       {portionItem && (
@@ -264,7 +276,7 @@ export function NutritionTab() {
   );
 }
 
-// ─── Composants UI locaux ─────────────────────────────────────────────────────
+// ─── Composants UI locaux ─────────────────────────────────────────────────
 // MacroProgress et ProgressBar restent ici car ils sont exclusivement utilisés
 // dans NutritionTab et ne justifient pas un fichier séparé.
 
