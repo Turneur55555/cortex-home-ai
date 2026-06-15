@@ -694,6 +694,28 @@ export function useDeleteExerciseSet() {
   });
 }
 
+export function useDeleteExercises() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (ids: string[]) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Non authentifié");
+      const { error } = await supabase
+        .from("exercises")
+        .delete()
+        .in("id", ids)
+        .eq("user_id", user.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Exercice supprimé");
+      qc.invalidateQueries({ queryKey: ACTIVE_KEY });
+      qc.invalidateQueries({ queryKey: ["workouts"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+}
+
 // ---------- Exercise images ----------
 export function useExerciseImageUrls(paths: Array<string | null | undefined>) {
   const key = paths.filter(Boolean).sort().join("|");
