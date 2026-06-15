@@ -29,8 +29,8 @@ Deno.serve(async (req) => {
   };
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) return fail("Service indisponible", 500, "LOVABLE_API_KEY manquant");
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    if (!GEMINI_API_KEY) return fail("Service indisponible", 500, "GEMINI_API_KEY manquant");
 
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_ANON =
@@ -83,15 +83,15 @@ Règles :
 - Reste bref : 2-4 phrases max sauf si on te demande plus de détails
 - Utilise un ton décontracté mais professionnel`;
 
-    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const aiRes = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
       method: "POST",
       headers: {
-        "Lovable-API-Key": LOVABLE_API_KEY,
+        "Authorization": `Bearer ${GEMINI_API_KEY}`,
         "Content-Type": "application/json",
       },
       signal: AbortSignal.timeout(45_000),
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "gemini-2.5-flash",
         messages: [{ role: "system", content: systemPrompt }, ...messages],
       }),
     });

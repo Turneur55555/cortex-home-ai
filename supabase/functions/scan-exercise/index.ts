@@ -78,17 +78,17 @@ ${list}
 Si plusieurs exercices sont plausibles sur la même machine (ex: poulie haute → tirage vertical large / serrée / neutre), propose-les classés par probabilité décroissante. Si rien ne correspond, renvoie quand même les 3 plus proches avec confidence faible.`;
 }
 
-async function callLovable(apiKey: string, b64: string, mt: string, systemPrompt: string): Promise<unknown> {
+async function callGemini(apiKey: string, b64: string, mt: string, systemPrompt: string): Promise<unknown> {
   console.log("[scan-exercise] → Lovable Gemini, b64 length:", b64.length);
-  const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+  const res = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
     method: "POST",
     headers: {
-      "Lovable-API-Key": apiKey,
+      "Authorization": `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     signal: AbortSignal.timeout(45_000),
     body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
+      model: "gemini-2.5-flash",
       messages: [
         { role: "system", content: systemPrompt },
         {
@@ -146,8 +146,8 @@ Deno.serve(async (req) => {
   };
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) return fail("Service IA indisponible.");
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    if (!GEMINI_API_KEY) return fail("Service IA indisponible.");
 
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_ANON = Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -188,7 +188,7 @@ Deno.serve(async (req) => {
 
     const mt = typeof mime_type === "string" && mime_type.startsWith("image/") ? mime_type : "image/jpeg";
 
-    const aiJson = await callLovable(LOVABLE_API_KEY, image_base64, mt, buildSystemPrompt(safeCatalog));
+    const aiJson = await callGemini(GEMINI_API_KEY, image_base64, mt, buildSystemPrompt(safeCatalog));
     const parsed = extractFromAi(aiJson);
 
     if (!parsed || !parsed.suggestions?.length) {

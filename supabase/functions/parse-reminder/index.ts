@@ -30,8 +30,8 @@ Deno.serve(async (req) => {
   };
 
   try {
-    const apiKey = Deno.env.get("LOVABLE_API_KEY");
-    if (!apiKey) return fail("Service indisponible", 500, "LOVABLE_API_KEY manquant");
+    const apiKey = Deno.env.get("GEMINI_API_KEY");
+    if (!apiKey) return fail("Service indisponible", 500, "GEMINI_API_KEY manquant");
 
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_ANON =
@@ -63,12 +63,12 @@ Règles:
 - category: ex "Maison", "Santé", "Travail", "Courses" si évident, sinon null
 - recurrence: détecte "tous les jours", "chaque semaine", etc.`;
 
-    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const aiRes = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
       signal: AbortSignal.timeout(20_000),
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model: "gemini-2.5-flash",
         messages: [
           { role: "system", content: sys },
           { role: "user", content: `<input>${safeText}</input>` },

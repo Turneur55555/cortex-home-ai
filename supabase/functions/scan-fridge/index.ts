@@ -1,5 +1,5 @@
 // Scanne une photo (frigo, placard, etc.) via IA.
-// Tente LOVABLE_API_KEY (Gemini 2.5 Flash) puis OPENAI_API_KEY (GPT-4o) en fallback.
+// Tente GEMINI_API_KEY (Gemini 2.5 Flash) puis OPENAI_API_KEY (GPT-4o) en fallback.
 // Retourne TOUJOURS HTTP 200 — les erreurs sont dans { error: "..." }.
 import { createClient } from "@supabase/supabase-js";
 import { checkRateLimit, recordRateLimit } from "../_shared/rate-limit.ts";
@@ -82,7 +82,7 @@ function extractScanFromAiResponse(aiJson: unknown): ScanResult | null {
 
 // ─── Appels IA ────────────────────────────────────────────────────────────────
 
-async function callLovable(
+async function callGemini(
   apiKey: string,
   b64: string,
   mt: string,
@@ -91,15 +91,15 @@ async function callLovable(
   tool: unknown
 ): Promise<unknown> {
   console.log("[scan-fridge] → Lovable gateway (Gemini 2.5 Flash)");
-  const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+  const res = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
     method: "POST",
     headers: {
-      "Lovable-API-Key": apiKey,
+      "Authorization": `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
     signal: AbortSignal.timeout(45_000),
     body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
+      model: "gemini-2.5-flash",
       messages: [
         { role: "system", content: systemPrompt },
         {
@@ -192,11 +192,11 @@ Deno.serve(async (req) => {
   };
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
     const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
-    console.log("[scan-fridge] START — keys:", { lovable: !!LOVABLE_API_KEY, openai: !!OPENAI_API_KEY });
+    console.log("[scan-fridge] START — keys:", { lovable: !!GEMINI_API_KEY, openai: !!OPENAI_API_KEY });
 
-    if (!LOVABLE_API_KEY && !OPENAI_API_KEY) {
+    if (!GEMINI_API_KEY && !OPENAI_API_KEY) {
       return fail("Service IA indisponible (aucune clé API configurée).", "No keys");
     }
 
@@ -301,10 +301,10 @@ ${MODULE_HINTS[module as string]}
     let aiJson: unknown = null;
     const aiErrors: string[] = [];
 
-    if (LOVABLE_API_KEY) {
+    if (GEMINI_API_KEY) {
       try {
         const t0 = Date.now();
-        aiJson = await callLovable(LOVABLE_API_KEY, image_base64 as string, mt, systemPrompt, userText, tool);
+        aiJson = await callGemini(GEMINI_API_KEY, image_base64 as string, mt, systemPrompt, userText, tool);
         console.log("[scan-fridge] Lovable ok, ms:", Date.now() - t0);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
