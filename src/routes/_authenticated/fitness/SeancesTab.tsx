@@ -1,10 +1,16 @@
 import { useMemo, useState, useCallback } from "react";
-import { Dumbbell, Loader2, Sparkles, AlertCircle, Trash2 } from "lucide-react";
+import { Dumbbell, Loader2, Sparkles, AlertCircle } from "lucide-react";
 import { BodyMap } from "@/components/fitness/BodyMap";
 import { WorkoutCard, type WorkoutRow } from "@/components/fitness/WorkoutCard";
 import { WorkoutSheet } from "@/components/fitness/WorkoutSheet";
 import { WorkoutProgressCharts } from "@/components/fitness/WorkoutProgressCharts";
-import { useDeleteWorkout, useExerciseImageUrls, useWorkouts } from "@/hooks/use-fitness";
+import { StartWorkoutSheet } from "@/components/fitness/StartWorkoutSheet";
+import { ActiveWorkoutView } from "@/components/fitness/ActiveWorkoutView";
+import {
+  useExerciseImageUrls,
+  useWorkouts,
+  useActiveWorkout,
+} from "@/hooks/use-fitness";
 import { useRecoveryMap } from "@/hooks/useRecoveryMap";
 import { useFitnessStreak } from "@/hooks/useFitnessStreak";
 import { FabAdd } from "@/components/shared/FormComponents";
@@ -12,23 +18,13 @@ import { formatTonnage, workoutTonnage } from "@/lib/fitness/strength";
 import { CoachSheet, type WorkoutTemplate } from "./CoachSheet";
 import { computePRs } from "@/utils/fitness/exercise-stats";
 
-/**
- * SeancesTab - Module principal de gestion des séances de fitness
- *
- * Améliorations:
- * ✅ Gestion d'erreurs complète
- * ✅ Validation des données
- * ✅ Optimisation des re-rendus avec useCallback
- * ✅ Confirmation de suppression
- * ✅ État cohérent (null vs undefined)
- * ✅ Messages d'erreur explicites
- */
 export function SeancesTab() {
-  // === État des données ===
+  // === Données ===
   const { data, isLoading, error } = useWorkouts();
+  const { data: activeWorkout, isLoading: activeLoading } = useActiveWorkout();
   const recoveryMap = useRecoveryMap(data);
-  const deleteWorkout = useDeleteWorkout();
   const streak = useFitnessStreak(data);
+
   const weekTonnage = useMemo(() => {
     if (!data) return 0;
     const now = new Date();
@@ -40,16 +36,13 @@ export function SeancesTab() {
   }, [data]);
 
   // === État des modales ===
+  const [startOpen, setStartOpen] = useState(false);
   const [open, setOpen] = useState(false);
   const [template, setTemplate] = useState<WorkoutTemplate | null>(null);
   const [coachOpen, setCoachOpen] = useState(false);
   const [coachInitialMuscles, setCoachInitialMuscles] = useState<string[] | undefined>(undefined);
 
-  // === État de suppression ===
-  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [workoutToDelete, setWorkoutToDelete] = useState<string | null>(null);
-
-  // === Calculs mémoïsés ===
+  // === Calculs ===
   const { prByName, histByName, volByName, prByGym, histByGym, topExercises } = useMemo(
     () => computePRs(data ?? []),
     [data],
@@ -59,26 +52,12 @@ export function SeancesTab() {
     () => (data ?? []).flatMap((w) => (w.exercises ?? []).map((ex) => ex.image_path)),
     [data],
   );
-
   const { data: listImageUrls } = useExerciseImageUrls(allImagePaths);
+  const latestDate = useMemo(() => data?.[0]?.date ?? "", [data]);
 
-  const latestDate = useMemo(
-    () => data?.[0]?.date ?? "",
-    [data],
-  );
-
-  // === Callbacks mémoïsés ===
-  const openNew = useCallback(() => {
-    setTemplate(null);
-    setOpen(true);
-  }, []);
-
+  // === Callbacks ===
   const openFromTemplate = useCallback((w: WorkoutRow) => {
-    if (!w.id || !w.exercises) {
-      console.error("Données de séance invalides", w);
-      return;
-    }
-
+    if (!w.id || !w.exercises) return;
     setTemplate({
       name: w.name || "Séance sans nom",
       exercises: (w.exercises ?? []).map((ex) => ({
@@ -103,44 +82,31 @@ export function SeancesTab() {
     setCoachOpen(true);
   }, []);
 
-  const handleCloseSheet = useCallback(() => {
-    setOpen(false);
-  }, []);
+  // Chargement initial combiné
+  if (activeLoading && isLoading) {
+    return (
+      <div className="flex h-40 items-center justify-center">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
-  const handleCloseCoach = useCallback(() => {
-    setCoachOpen(false);
-  }, []);
+  // ── VUE SÉANCE ACTIVE ──────────────────────────────────────────────────────
+  // Quand une séance est en cours, on masque tout l'historique.
+  if (activeWorkout) {
+    return (
+      <section className="flex flex-col gap-4">
+        <ActiveWorkoutView workout={activeWorkout} />
+      </section>
+    );
+  }
 
-  // === Gestion de la suppression ===
-  const handleDeleteClick = useCallback((workoutId: string) => {
-    setWorkoutToDelete(workoutId);
-    setDeleteConfirmOpen(true);
-  }, []);
-
-  const handleDeleteConfirm = useCallback(async () => {
-    if (!workoutToDelete) return;
-    try {
-      await deleteWorkout.mutateAsync(workoutToDelete);
-    } catch (err) {
-      console.error("Erreur lors de la suppression:", err);
-    } finally {
-      setWorkoutToDelete(null);
-      setDeleteConfirmOpen(false);
-    }
-  }, [workoutToDelete, deleteWorkout]);
-
-  const handleDeleteCancel = useCallback(() => {
-    setWorkoutToDelete(null);
-    setDeleteConfirmOpen(false);
-  }, []);
-
-  // === Rendu ===
+  // ── VUE HISTORIQUE ─────────────────────────────────────────────────────────
   return (
     <section className="flex flex-col gap-4">
-      {data && (
-        <BodyMap mode="recovery" recoveryMap={recoveryMap} />
-      )}
+      {data && <BodyMap mode="recovery" recoveryMap={recoveryMap} />}
 
+      {/* Coach IA */}
       <button
         type="button"
         onClick={() => openCoach()}
@@ -158,43 +124,41 @@ export function SeancesTab() {
         </span>
       </button>
 
+      {/* KPIs */}
       {data && data.length > 0 && (
         <div className="grid grid-cols-3 gap-2">
-          <KpiTile
-            label="Streak"
-            value={`${streak.current}`}
-            sub={`sem. ≥ ${streak.threshold}/sem`}
-          />
+          <KpiTile label="Streak" value={`${streak.current}`} sub={`sem. ≥ ${streak.threshold}/sem`} />
           <KpiTile
             label="Cette semaine"
             value={`${streak.thisWeekCount}`}
-            sub={streak.thisWeekCount >= streak.threshold ? "Objectif ✓" : `${streak.threshold - streak.thisWeekCount} restantes`}
+            sub={
+              streak.thisWeekCount >= streak.threshold
+                ? "Objectif ✓"
+                : `${streak.threshold - streak.thisWeekCount} restantes`
+            }
           />
-          <KpiTile
-            label="Tonnage 7j"
-            value={formatTonnage(weekTonnage)}
-            sub="volume total"
-          />
+          <KpiTile label="Tonnage 7j" value={formatTonnage(weekTonnage)} sub="volume total" />
+        </div>
+      )}
+
+      {/* Erreur */}
+      {error && !isLoading && (
+        <div className="rounded-2xl border border-destructive/50 bg-destructive/10 p-4">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="h-5 w-5 shrink-0 mt-0.5 text-destructive" />
+            <div>
+              <h3 className="font-semibold text-destructive">Erreur de chargement</h3>
+              <p className="mt-1 text-sm text-destructive/80">
+                {error instanceof Error ? error.message : "Une erreur est survenue"}
+              </p>
+            </div>
+          </div>
         </div>
       )}
 
       {isLoading && (
         <div className="flex h-32 items-center justify-center">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </div>
-      )}
-
-      {error && !isLoading && (
-        <div className="rounded-2xl border border-destructive/50 bg-destructive/10 p-4">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <h3 className="font-semibold text-destructive">Erreur de chargement</h3>
-              <p className="text-sm text-destructive/80 mt-1">
-                {error instanceof Error ? error.message : "Une erreur est survenue"}
-              </p>
-            </div>
-          </div>
         </div>
       )}
 
@@ -216,78 +180,46 @@ export function SeancesTab() {
         </div>
       )}
 
+      {/* Liste séances historiques — WorkoutCard gère sa propre suppression */}
       {data && data.length > 0 && !isLoading && (
         <ul className="space-y-3">
           {data.map((w) => (
-            <div key={w.id} className="relative">
-              <WorkoutCard
-                w={w}
-                prByName={prByName}
-                histByName={histByName}
-                volByName={volByName}
-                prByGym={prByGym}
-                histByGym={histByGym}
-                imageUrls={listImageUrls}
-                latestDate={latestDate}
-                onOpenFromTemplate={openFromTemplate}
-              />
-              <button
-                type="button"
-                onClick={() => handleDeleteClick(w.id)}
-                className="absolute top-2 right-2 flex h-9 w-9 items-center justify-center rounded-full bg-card/90 backdrop-blur border border-border shadow-sm active:scale-95 transition-transform"
-                aria-label="Supprimer cette séance"
-              >
-                <Trash2 className="h-4 w-4 text-destructive" />
-              </button>
-            </div>
+            <WorkoutCard
+              key={w.id}
+              w={w}
+              prByName={prByName}
+              histByName={histByName}
+              volByName={volByName}
+              prByGym={prByGym}
+              histByGym={histByGym}
+              imageUrls={listImageUrls}
+              latestDate={latestDate}
+              onOpenFromTemplate={openFromTemplate}
+            />
           ))}
         </ul>
       )}
 
-      <FabAdd onClick={openNew} label="Nouvelle séance" />
+      {/* FAB → démarre une séance live */}
+      <FabAdd onClick={() => setStartOpen(true)} label="Nouvelle séance" />
 
+      {startOpen && <StartWorkoutSheet onClose={() => setStartOpen(false)} />}
+
+      {/* WorkoutSheet = seulement pour "Refaire" / Coach */}
       {open && (
         <WorkoutSheet
           template={template}
           priorPRs={prByName}
-          onClose={handleCloseSheet}
+          onClose={() => { setOpen(false); setTemplate(null); }}
         />
       )}
 
       {coachOpen && (
         <CoachSheet
-          onClose={handleCloseCoach}
+          onClose={() => setCoachOpen(false)}
           onResult={handleCoachResult}
           initialMuscles={coachInitialMuscles}
-          recoveryMap={recoveryMap}
         />
-      )}
-
-      {deleteConfirmOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 rounded-lg">
-          <div className="bg-card rounded-2xl p-6 max-w-sm shadow-lg">
-            <h3 className="text-lg font-semibold mb-2">Supprimer cette séance?</h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              Cette action ne peut pas être annulée.
-            </p>
-            <div className="flex gap-2 justify-end">
-              <button
-                type="button"
-                onClick={handleDeleteCancel}
-                className="px-4 py-2 rounded-lg border border-border hover:bg-muted transition-colors"
-              >
-                Annuler
-              </button>
-              <button
-                type="button"
-                onClick={handleDeleteConfirm}
-                className="px-4 py-2 rounded-lg bg-destructive text-destructive-foreground hover:bg-destructive/90 transition-colors"
-              >
-                Supprimer
-              </button>
-            </div>
-          </div>
-        </div>
       )}
     </section>
   );
