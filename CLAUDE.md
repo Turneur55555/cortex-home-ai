@@ -40,3 +40,14 @@
 - Jamais de couleur dans le domaine (lib/)
 - Jamais de slug UI comme "jambes" ou "cardio" dans computeRecovery()
 - Jamais de logique métier dans un composant Lovable
+
+## Clé GitHub (mise à jour 15/06/2026)
+- Token valide, expire le 15/07/2026 (scope: repo) — stocker dans un gestionnaire de mots de passe
+- Remote : `https://github.com/Turneur55555/cortex-home-ai.git` (branch `main`)
+
+## Edge Functions IA (migration 15/06/2026)
+- Toutes les edge functions utilisent désormais `GEMINI_API_KEY` + `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`
+- **Plus de `LOVABLE_API_KEY` ni de gateway Lovable**
+- Modèle : `gemini-2.5-flash`
+- Fonctions migrées : analyze-pdf, analyze-image, chat, scan-meal, scan-fridge, coach-workout, muscle-readiness, recipe-assistant, parse-reminder, scan-exercise
+- ⚠️ Ajouter le secret `GEMINI_API_KEY` sur Supabase projet `bcwfvpwxzlmkxobvbtzp` (Edge Functions → Manage secrets)
