@@ -8,6 +8,7 @@ import {
   Flame,
   Layers,
   Loader2,
+  MoreVertical,
   Plus,
   Repeat,
   Trash2,
@@ -146,6 +147,8 @@ export function WorkoutCard({
   const deleteWorkout = useDeleteWorkout();
 
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [confirmDeleteGroup, setConfirmDeleteGroup] = useState<ExerciseGroup | null>(null);
   const [statsKey, setStatsKey] = useState<string | null>(null);
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
   const [photoModal, setPhotoModal] = useState<{ url: string; exId: string } | null>(null);
@@ -230,8 +233,14 @@ export function WorkoutCard({
   };
 
   const deleteGroup = (g: ExerciseGroup) => {
-    if (g.sourceIds.length === 0) return;
-    deleteExBatch.mutate(g.sourceIds);
+    setConfirmDeleteGroup(g);
+  };
+
+  const confirmGroupDelete = () => {
+    if (!confirmDeleteGroup) return;
+    if (confirmDeleteGroup.sourceIds.length === 0) return;
+    deleteExBatch.mutate(confirmDeleteGroup.sourceIds);
+    setConfirmDeleteGroup(null);
   };
 
   const dateLabel = format(parseISO(w.date), "EEEE d MMMM • HH'h'mm", { locale: fr });
@@ -260,22 +269,45 @@ export function WorkoutCard({
               className="mt-1 text-xl font-bold leading-tight tracking-tight"
             />
           </div>
-          <div className="flex shrink-0 items-center gap-1.5">
+          <div className="relative flex shrink-0 items-center gap-1.5">
             <button
               type="button"
               onClick={() => onOpenFromTemplate(w)}
               className="flex h-9 w-9 items-center justify-center rounded-full bg-white/5 text-muted-foreground transition-all active:scale-90 hover:bg-primary/15 hover:text-primary"
-              title="Refaire"
+              title="Refaire cette séance"
+              aria-label="Refaire cette séance"
             >
               <Repeat className="h-4 w-4" />
             </button>
+            {/* Menu 3 points — suppression séance accessible ici uniquement */}
             <button
               type="button"
-              onClick={() => setConfirmDelete(true)}
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-white/5 text-muted-foreground transition-all active:scale-90 hover:bg-destructive/15 hover:text-destructive"
+              onClick={() => setMenuOpen((v) => !v)}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-white/5 text-muted-foreground transition-all active:scale-90 hover:bg-white/10"
+              aria-label="Options de la séance"
             >
-              <Trash2 className="h-4 w-4" />
+              <MoreVertical className="h-4 w-4" />
             </button>
+            {menuOpen && (
+              <div className="absolute right-0 top-10 z-20 min-w-[180px] overflow-hidden rounded-2xl border border-border bg-card shadow-elevated">
+                <button
+                  type="button"
+                  onClick={() => { setMenuOpen(false); onOpenFromTemplate(w); }}
+                  className="flex w-full items-center gap-3 px-4 py-3 text-sm font-medium transition-colors hover:bg-white/5"
+                >
+                  <Repeat className="h-4 w-4 text-muted-foreground" />
+                  Refaire cette séance
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setMenuOpen(false); setConfirmDelete(true); }}
+                  className="flex w-full items-center gap-3 border-t border-border px-4 py-3 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Supprimer la séance
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -364,17 +396,9 @@ export function WorkoutCard({
                     </div>
                   )}
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <h3 className="truncate text-[16px] font-bold leading-tight tracking-tight">
-                        {g.name}
-                      </h3>
-                      {isPR && (
-                        <Trophy
-                          className={`h-4 w-4 shrink-0 text-warning ${isLatestPR ? "animate-pulse" : ""}`}
-                          aria-label={isLatestPR ? "Nouveau record !" : "Record personnel"}
-                        />
-                      )}
-                    </div>
+                    <h3 className="text-[15px] font-bold leading-tight tracking-tight break-words">
+                      {g.name}
+                    </h3>
                     <p className="mt-0.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/80">
                       {g.totalSeries} {g.totalSeries > 1 ? "séries" : "série"}
                       {g.maxWeight != null && (
@@ -383,13 +407,23 @@ export function WorkoutCard({
                           max {g.maxWeight} kg
                         </>
                       )}
-                      {g.best1RM != null && (
+                      {g.volume > 0 && (
                         <>
                           <span className="mx-1.5 text-muted-foreground/40">·</span>
-                          ~{Math.round(g.best1RM)} kg 1RM
+                          <span className="text-muted-foreground/60">
+                            {g.volume >= 1000 ? `${(g.volume / 1000).toFixed(1)}k` : g.volume} kg
+                          </span>
                         </>
                       )}
                     </p>
+                    {isPR && (
+                      <span
+                        className={`mt-1 inline-flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-bold text-warning ${isLatestPR ? "animate-pulse" : ""}`}
+                      >
+                        <Trophy className="h-3 w-3" />
+                        {isLatestPR ? "Nouveau PR !" : "Record personnel"}
+                      </span>
+                    )}
                     {gymPR != null && gymLocation !== "Salle inconnue" && (
                       <p className="mt-0.5 text-[10px] font-medium text-primary/80">
                         Record {gymLocation} : {gymPR} kg
@@ -544,6 +578,38 @@ export function WorkoutCard({
           onConfirm={() => { deleteWorkout.mutate(w.id); setConfirmDelete(false); }}
           onCancel={() => setConfirmDelete(false)}
         />
+      )}
+
+      {/* Confirmation suppression exercice */}
+      {confirmDeleteGroup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-lg">
+            <h3 className="text-base font-bold">
+              Supprimer « {confirmDeleteGroup.name} » ?
+            </h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {confirmDeleteGroup.totalSeries} série
+              {confirmDeleteGroup.totalSeries > 1 ? "s" : ""} supprimée
+              {confirmDeleteGroup.totalSeries > 1 ? "s" : ""}.
+            </p>
+            <div className="mt-4 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteGroup(null)}
+                className="flex-1 rounded-xl border border-border py-2.5 text-sm font-medium"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={confirmGroupDelete}
+                className="flex-1 rounded-xl bg-destructive py-2.5 text-sm font-semibold text-destructive-foreground"
+              >
+                Supprimer
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {showAddModal && (
@@ -743,4 +809,4 @@ function AddExerciseModal({
       </form>
     </div>
   );
-  }
+}
