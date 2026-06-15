@@ -11,6 +11,7 @@ CREATE POLICY "Block direct update on user_badges"
   USING (false) WITH CHECK (false);
 
 -- 2) Restrictive block policies on user_stats (writes only via triggers / service role)
+DROP POLICY IF EXISTS "Block direct insert on user_stats" ON public.user_stats;
 CREATE POLICY "Block direct insert on user_stats"
   ON public.user_stats AS RESTRICTIVE FOR INSERT TO authenticated, anon
   WITH CHECK (false);
