@@ -136,12 +136,19 @@ export function useAddWorkout() {
       date: string;
       duration_minutes?: number | null;
       notes?: string | null;
+      gym_location?: string;
       exercises: Array<{
         name: string;
         sets?: number | null;
         reps?: number | null;
         weight?: number | null;
         image_path?: string | null;
+        // Séries détaillées optionnelles (set-by-set + RPE).
+        setDetails?: Array<{
+          reps: number | null;
+          weight: number | null;
+          rpe?: number | null;
+        }> | null;
       }>;
     }) => {
       const {
@@ -156,23 +163,69 @@ export function useAddWorkout() {
           date: input.date,
           duration_minutes: input.duration_minutes ?? null,
           notes: input.notes ?? null,
-        })
+          gym_location: input.gym_location ?? "Salle inconnue",
+        } as unknown as TablesInsert<"workouts">)
         .select()
         .single();
       if (error) throw error;
       if (input.exercises.length > 0) {
-        const { error: exErr } = await supabase.from("exercises").insert(
-          input.exercises.map((e) => ({
-            user_id: user.id,
-            workout_id: workout.id,
-            name: e.name,
-            sets: e.sets ?? null,
-            reps: e.reps ?? null,
-            weight: e.weight ?? null,
-            image_path: e.image_path ?? null,
-          })),
-        );
+        const { data: insertedExercises, error: exErr } = await supabase
+          .from("exercises")
+          .insert(
+            input.exercises.map((e) => {
+              const valid = (e.setDetails ?? []).filter(
+                (d) => d.reps != null && d.weight != null && d.reps > 0 && d.weight > 0,
+              );
+              // Si des séries détaillées existent, on en dérive le résumé stocké
+              // sur la ligne `exercises` (rétro-compat WorkoutCard / tonnage).
+              const top = valid.reduce<{ reps: number; weight: number } | null>(
+                (best, d) =>
+                  best == null ||
+                  (d.weight as number) > best.weight ||
+                  ((d.weight as number) === best.weight && (d.reps as number) > best.reps)
+                    ? { reps: d.reps as number, weight: d.weight as number }
+                    : best,
+                null,
+              );
+              return {
+                user_id: user.id,
+                workout_id: workout.id,
+                name: e.name,
+                sets: valid.length > 0 ? valid.length : (e.sets ?? null),
+                reps: top ? top.reps : (e.reps ?? null),
+                weight: top ? top.weight : (e.weight ?? null),
+                image_path: e.image_path ?? null,
+              };
+            }),
+          )
+          .select("id");
         if (exErr) throw exErr;
+
+        // Insertion des séries détaillées (set-by-set + RPE) pour les exercices
+        // qui en fournissent. L'ordre renvoyé suit l'ordre d'insertion.
+        if (insertedExercises) {
+          const setRows = input.exercises.flatMap((e, i) => {
+            const exerciseId = insertedExercises[i]?.id;
+            if (!exerciseId) return [];
+            const valid = (e.setDetails ?? []).filter(
+              (d) => d.reps != null && d.weight != null && d.reps > 0 && d.weight > 0,
+            );
+            return valid.map((d, j) => ({
+              exercise_id: exerciseId,
+              user_id: user.id,
+              set_number: j + 1,
+              reps: d.reps,
+              weight: d.weight,
+              rpe: d.rpe ?? null,
+            }));
+          });
+          if (setRows.length > 0) {
+            const { error: setErr } = await supabase
+              .from("exercise_sets")
+              .insert(setRows);
+            if (setErr) throw setErr;
+          }
+        }
       }
     },
     onSuccess: () => {
@@ -319,6 +372,35 @@ export function useUpdateWorkoutName() {
   });
 }
 
+// Type alias pour le cache `workouts` (incluant les exercices imbriqués).
+type WorkoutsCache = Array<{
+  id: string;
+  exercises?: Array<{
+    id: string;
+    workout_id: string;
+    user_id: string;
+    name: string;
+    sets: number | null;
+    reps: number | null;
+    weight: number | null;
+    image_path: string | null;
+  }> | null;
+  [k: string]: unknown;
+}>;
+
+const WORKOUTS_KEY = ["workouts"] as const;
+const ACTIVE_KEY = ["active_workout"] as const;
+
+function patchWorkoutsCache(
+  qc: ReturnType<typeof useQueryClient>,
+  updater: (rows: WorkoutsCache) => WorkoutsCache,
+) {
+  const prev = qc.getQueryData<WorkoutsCache>(WORKOUTS_KEY);
+  if (!prev) return prev;
+  qc.setQueryData<WorkoutsCache>(WORKOUTS_KEY, updater(prev));
+  return prev;
+}
+
 export function useUpdateExercise() {
   const qc = useQueryClient();
   return useMutation({
@@ -329,6 +411,9 @@ export function useUpdateExercise() {
       id: string;
       name?: string;
       image_path?: string | null;
+      sets?: number | null;
+      reps?: number | null;
+      weight?: number | null;
     }) => {
       const {
         data: { user },
@@ -341,10 +426,25 @@ export function useUpdateExercise() {
         .eq("user_id", user.id);
       if (error) throw error;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["workouts"] });
+    onMutate: async ({ id, ...fields }) => {
+      await qc.cancelQueries({ queryKey: WORKOUTS_KEY });
+      const prev = patchWorkoutsCache(qc, (rows) =>
+        rows.map((w) => ({
+          ...w,
+          exercises: (w.exercises ?? []).map((ex) =>
+            ex.id === id ? { ...ex, ...fields } : ex,
+          ),
+        })),
+      );
+      return { prev };
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(WORKOUTS_KEY, ctx.prev);
+      toast.error(e.message);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: WORKOUTS_KEY });
+    },
   });
 }
 
@@ -363,11 +463,64 @@ export function useDeleteExercise() {
         .eq("user_id", user.id);
       if (error) throw error;
     },
-    onSuccess: () => {
-      toast.success("Exercice supprimé");
-      qc.invalidateQueries({ queryKey: ["workouts"] });
+    onMutate: async (id) => {
+      await qc.cancelQueries({ queryKey: WORKOUTS_KEY });
+      const prev = patchWorkoutsCache(qc, (rows) =>
+        rows.map((w) => ({
+          ...w,
+          exercises: (w.exercises ?? []).filter((ex) => ex.id !== id),
+        })),
+      );
+      return { prev };
     },
-    onError: (e: Error) => toast.error(e.message),
+    onSuccess: () => toast.success("Exercice supprimé"),
+    onError: (e: Error, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(WORKOUTS_KEY, ctx.prev);
+      toast.error(e.message);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: WORKOUTS_KEY });
+    },
+  });
+}
+
+// Suppression batchée : une seule requête + une seule invalidation.
+export function useDeleteExercises() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (ids: string[]) => {
+      if (ids.length === 0) return;
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Non authentifié");
+      const { error } = await supabase
+        .from("exercises")
+        .delete()
+        .in("id", ids)
+        .eq("user_id", user.id);
+      if (error) throw error;
+    },
+    onMutate: async (ids) => {
+      await qc.cancelQueries({ queryKey: WORKOUTS_KEY });
+      const set = new Set(ids);
+      const prev = patchWorkoutsCache(qc, (rows) =>
+        rows.map((w) => ({
+          ...w,
+          exercises: (w.exercises ?? []).filter((ex) => !set.has(ex.id)),
+        })),
+      );
+      return { prev };
+    },
+    onSuccess: () => toast.success("Exercice supprimé"),
+    onError: (e: Error, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(WORKOUTS_KEY, ctx.prev);
+      toast.error(e.message);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: WORKOUTS_KEY });
+      qc.invalidateQueries({ queryKey: ACTIVE_KEY });
+    },
   });
 }
 
@@ -401,201 +554,233 @@ export function useAddExerciseToWorkout() {
       });
       if (error) throw error;
     },
-    onSuccess: () => {
-      toast.success("Exercice ajouté");
-      qc.invalidateQueries({ queryKey: ["workouts"] });
+    onMutate: async ({ workoutId, exercise }) => {
+      await qc.cancelQueries({ queryKey: WORKOUTS_KEY });
+      const tempId = `optimistic-${crypto.randomUUID()}`;
+      const prev = patchWorkoutsCache(qc, (rows) =>
+        rows.map((w) =>
+          w.id === workoutId
+            ? {
+                ...w,
+                exercises: [
+                  ...(w.exercises ?? []),
+                  {
+                    id: tempId,
+                    workout_id: workoutId,
+                    user_id: "optimistic",
+                    name: exercise.name,
+                    sets: exercise.sets ?? null,
+                    reps: exercise.reps ?? null,
+                    weight: exercise.weight ?? null,
+                    image_path: null,
+                  },
+                ],
+              }
+            : w,
+        ),
+      );
+      return { prev };
     },
-    onError: (e: Error) => toast.error(e.message),
+    onSuccess: () => toast.success("Exercice ajouté"),
+    onError: (e: Error, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(WORKOUTS_KEY, ctx.prev);
+      toast.error(e.message);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: WORKOUTS_KEY });
+    },
   });
 }
 
-// ---------- Active workout (live session) ----------
-
+// ---------- Active Workout types ----------
 export type ActiveSet = {
   id: string;
-  exercise_id: string;
-  user_id: string;
   set_number: number;
   reps: number | null;
   weight: number | null;
   rpe: number | null;
-  tempo: string | null;
-  rest_seconds: number | null;
-  notes: string | null;
-  created_at: string;
 };
 
 export type ActiveExercise = {
   id: string;
-  workout_id: string;
-  user_id: string;
   name: string;
+  image_path: string | null;
   sets: number | null;
   reps: number | null;
   weight: number | null;
-  image_path: string | null;
-  notes: string | null;
   exercise_sets: ActiveSet[];
 };
 
 export type ActiveWorkout = {
   id: string;
-  user_id: string;
-  date: string;
   name: string;
-  duration_minutes: number | null;
-  notes: string | null;
   gym_location: string;
   created_at: string;
-  status: string;
   exercises: ActiveExercise[];
 };
 
-const ACTIVE_KEY = ["active_workout"] as const;
+// ---------- Active Workout hooks ----------
 
+/** Retourne la séance commencée aujourd'hui non encore terminée, ou null. */
 export function useActiveWorkout() {
   return useQuery({
     queryKey: ACTIVE_KEY,
-    queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+    queryFn: async (): Promise<ActiveWorkout | null> => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) return null;
+      // Fenêtre glissante de 24h pour couvrir les séances tardives
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("workouts")
-        .select("*, exercises(*, exercise_sets(*))")
+        .select(
+          "id, name, gym_location, created_at, exercises(id, name, image_path, sets, reps, weight, exercise_sets(id, set_number, reps, weight, rpe))",
+        )
         .eq("user_id", user.id)
-        .eq("status", "active")
+        .is("duration_minutes", null)
+        .gte("created_at", since)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
       if (error) throw error;
-      return data as ActiveWorkout | null;
+      if (!data) return null;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const raw = data as any;
+      return {
+        id: raw.id,
+        name: raw.name,
+        gym_location: raw.gym_location,
+        created_at: raw.created_at,
+        exercises: (raw.exercises ?? []).map((ex: any) => ({
+          id: ex.id,
+          name: ex.name,
+          image_path: ex.image_path ?? null,
+          sets: ex.sets ?? null,
+          reps: ex.reps ?? null,
+          weight: ex.weight ?? null,
+          exercise_sets: (ex.exercise_sets ?? []).map((s: any) => ({
+            id: s.id,
+            set_number: s.set_number,
+            reps: s.reps ?? null,
+            weight: s.weight ?? null,
+            rpe: s.rpe ?? null,
+          })),
+        })),
+      };
     },
   });
 }
 
+/** Crée une nouvelle séance active (sans duration_minutes = non terminée). */
 export function useStartWorkout() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { name: string; gym_location: string }) => {
-      const { data: { user } } = await supabase.auth.getUser();
+    mutationFn: async ({
+      name,
+      gym_location,
+    }: {
+      name: string;
+      gym_location: string;
+    }) => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
       const today = new Date().toISOString().split("T")[0];
-      const { data, error } = await (supabase as any)
-        .from("workouts")
-        .insert({
-          user_id: user.id,
-          name: input.name,
-          date: today,
-          gym_location: input.gym_location,
-          status: "active",
-        })
-        .select()
-        .single();
+      const { error } = await supabase.from("workouts").insert({
+        user_id: user.id,
+        name,
+        date: today,
+        gym_location,
+        // duration_minutes omis → null → séance "active"
+      } as unknown as TablesInsert<"workouts">);
       if (error) throw error;
-      return data as ActiveWorkout;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ACTIVE_KEY });
-      qc.invalidateQueries({ queryKey: ["workouts"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
 }
 
+/** Termine la séance active : calcule la durée et la sauvegarde. */
 export function useFinishWorkout() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (workout: ActiveWorkout) => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Non authentifié");
-
-      // Backfill exercises summary from exercise_sets
-      for (const ex of workout.exercises ?? []) {
-        const sets = (ex.exercise_sets ?? []).filter(
-          (s) => s.reps != null && s.weight != null,
-        );
-        if (sets.length > 0) {
-          const maxWeight = sets.reduce(
-            (m, s) => (s.weight != null ? Math.max(m, s.weight) : m),
-            0,
-          );
-          const bestSet = sets.find((s) => s.weight === maxWeight) ?? sets[0];
-          await supabase
-            .from("exercises")
-            .update({ sets: sets.length, reps: bestSet.reps, weight: maxWeight > 0 ? maxWeight : null })
-            .eq("id", ex.id)
-            .eq("user_id", user.id);
-        }
-      }
-
-      const { error } = await (supabase as any)
+      const durationMs = Date.now() - new Date(workout.created_at).getTime();
+      const durationMin = Math.max(1, Math.round(durationMs / 60_000));
+      const { error } = await supabase
         .from("workouts")
-        .update({ status: "completed" })
-        .eq("id", workout.id)
-        .eq("user_id", user.id);
+        .update({ duration_minutes: durationMin })
+        .eq("id", workout.id);
       if (error) throw error;
     },
     onSuccess: () => {
       toast.success("Séance terminée 💪");
       qc.invalidateQueries({ queryKey: ACTIVE_KEY });
-      qc.invalidateQueries({ queryKey: ["workouts"] });
+      qc.invalidateQueries({ queryKey: WORKOUTS_KEY });
     },
     onError: (e: Error) => toast.error(e.message),
   });
 }
 
+/** Annule (supprime) la séance active et tout son contenu. */
 export function useCancelWorkout() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Non authentifié");
-      await supabase.from("exercises").delete().eq("workout_id", id).eq("user_id", user.id);
-      const { error } = await (supabase as any)
-        .from("workouts")
-        .delete()
-        .eq("id", id)
-        .eq("user_id", user.id);
+    mutationFn: async (workoutId: string) => {
+      // Récupère les exercices pour supprimer leurs séries
+      const { data: exercises } = await supabase
+        .from("exercises")
+        .select("id")
+        .eq("workout_id", workoutId);
+
+      if (exercises && exercises.length > 0) {
+        const ids = exercises.map((e) => e.id);
+        await supabase.from("exercise_sets").delete().in("exercise_id", ids);
+        await supabase.from("exercises").delete().in("id", ids);
+      }
+
+      const { error } = await supabase.from("workouts").delete().eq("id", workoutId);
       if (error) throw error;
     },
     onSuccess: () => {
       toast.success("Séance annulée");
       qc.invalidateQueries({ queryKey: ACTIVE_KEY });
-      qc.invalidateQueries({ queryKey: ["workouts"] });
+      qc.invalidateQueries({ queryKey: WORKOUTS_KEY });
     },
     onError: (e: Error) => toast.error(e.message),
   });
 }
 
+/** Ajoute un exercice (vide) à la séance active. */
 export function useAddExerciseToActiveWorkout() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({
       workoutId,
       name,
-      imagePath,
     }: {
       workoutId: string;
       name: string;
-      imagePath?: string | null;
     }) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      const { data, error } = await supabase
-        .from("exercises")
-        .insert({
-          user_id: user.id,
-          workout_id: workoutId,
-          name,
-          image_path: imagePath ?? null,
-          sets: 0,
-          reps: null,
-          weight: null,
-        })
-        .select()
-        .single();
+      const { error } = await supabase.from("exercises").insert({
+        user_id: user.id,
+        workout_id: workoutId,
+        name,
+        sets: null,
+        reps: null,
+        weight: null,
+        image_path: null,
+      });
       if (error) throw error;
-      return data;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ACTIVE_KEY });
@@ -604,6 +789,9 @@ export function useAddExerciseToActiveWorkout() {
   });
 }
 
+// ---------- Exercise set mutations ----------
+
+/** Ajoute une série à un exercice de la séance active. */
 export function useAddExerciseSet() {
   const qc = useQueryClient();
   return useMutation({
@@ -612,30 +800,25 @@ export function useAddExerciseSet() {
       setNumber,
       reps,
       weight,
-      rpe,
     }: {
       exerciseId: string;
       setNumber: number;
-      reps?: number | null;
-      weight?: number | null;
-      rpe?: number | null;
+      reps: number | null;
+      weight: number | null;
     }) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      const { data, error } = await supabase
-        .from("exercise_sets")
-        .insert({
-          exercise_id: exerciseId,
-          user_id: user.id,
-          set_number: setNumber,
-          reps: reps ?? null,
-          weight: weight ?? null,
-          rpe: rpe ?? null,
-        })
-        .select()
-        .single();
+      const { error } = await supabase.from("exercise_sets").insert({
+        user_id: user.id,
+        exercise_id: exerciseId,
+        set_number: setNumber,
+        reps,
+        weight,
+        rpe: null,
+      });
       if (error) throw error;
-      return data;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ACTIVE_KEY });
@@ -644,6 +827,7 @@ export function useAddExerciseSet() {
   });
 }
 
+/** Met à jour reps / weight / rpe d'une série. */
 export function useUpdateExerciseSet() {
   const qc = useQueryClient();
   return useMutation({
@@ -655,16 +839,11 @@ export function useUpdateExerciseSet() {
       reps?: number | null;
       weight?: number | null;
       rpe?: number | null;
-      tempo?: string | null;
-      rest_seconds?: number | null;
     }) => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Non authentifié");
       const { error } = await supabase
         .from("exercise_sets")
         .update(fields)
-        .eq("id", id)
-        .eq("user_id", user.id);
+        .eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
@@ -674,43 +853,16 @@ export function useUpdateExerciseSet() {
   });
 }
 
+/** Supprime une série par son id. */
 export function useDeleteExerciseSet() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Non authentifié");
-      const { error } = await supabase
-        .from("exercise_sets")
-        .delete()
-        .eq("id", id)
-        .eq("user_id", user.id);
+      const { error } = await supabase.from("exercise_sets").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ACTIVE_KEY });
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
-}
-
-export function useDeleteExercises() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (ids: string[]) => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Non authentifié");
-      const { error } = await supabase
-        .from("exercises")
-        .delete()
-        .in("id", ids)
-        .eq("user_id", user.id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success("Exercice supprimé");
-      qc.invalidateQueries({ queryKey: ACTIVE_KEY });
-      qc.invalidateQueries({ queryKey: ["workouts"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
