@@ -1,13 +1,19 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChefHat, ChevronDown, ChevronUp, Loader2, Scale } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
+import { ChefHat, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { useAddNutrition } from "@/hooks/use-fitness";
 import { Field, Sheet, SubmitButton } from "@/components/shared/FormComponents";
 import { FoodAutocomplete } from "@/components/FoodAutocomplete";
 import { usePantryItems, useDeductFromStock } from "@/hooks/use-pantry";
 import type { PantryItem } from "@/hooks/use-pantry";
 import type { FoodSuggestion } from "@/services/openFoodFacts";
-import { computeMacrosFor } from "@/lib/nutrition/utils";
 import type { MealPrefill } from "@/lib/nutrition/utils";
+import { PortionSelector } from "@/components/fitness/PortionSelector";
+import {
+  parseDecimal,
+  formatDecimal,
+  saveLastPortion,
+  type PortionUnit,
+} from "@/lib/nutrition/portions";
 
 // ─── PantryPicker ─────────────────────────────────────────────────────────────
 
