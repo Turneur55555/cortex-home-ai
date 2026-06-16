@@ -11,7 +11,6 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { mockWeightHistory } from "@/utils/fitness/exercise-stats";
 import { useExerciseSetHistory } from "@/hooks/useExerciseSetHistory";
 import { buildSessionStats, currentBests } from "@/lib/fitness/progression";
 import { formatTonnage } from "@/lib/fitness/strength";
@@ -49,13 +48,9 @@ export function ExerciseStatsSheet({
   const hasReal = stats.some((s) => s.setCount > 0 && s.best1RM != null);
   const bests = useMemo(() => currentBests(stats), [stats]);
 
-  const isMock = weightHistory.length < 2;
-
-  const resolvedWeight = isMock ? mockWeightHistory(exerciseName, pr) : weightHistory;
-  const resolvedVolume =
-    volumeHistory.length >= 2
-      ? volumeHistory
-      : resolvedWeight.map((p) => ({ date: p.date, volume: Math.round(p.weight * 3 * 10) }));
+  // Données réelles uniquement — aucune progression simulée.
+  const resolvedWeight = weightHistory;
+  const resolvedVolume = volumeHistory;
 
   const realSeries = useMemo(
     () =>
@@ -78,7 +73,6 @@ export function ExerciseStatsSheet({
   }));
 
   const unit = tab === "volume" ? "vol." : "kg";
-  const usingMockChart = tab !== "1rm" && isMock;
 
   const cutoff30 = subDays(new Date(), 30);
   const last30 = rawData.filter((p) => parseISO(p.date) >= cutoff30);
@@ -87,12 +81,14 @@ export function ExerciseStatsSheet({
 
   const firstVal = rawData[0]?.value ?? 0;
   const lastVal = rawData[rawData.length - 1]?.value ?? 0;
-  const progression = firstVal > 0 ? ((lastVal - firstVal) / firstVal) * 100 : 0;
+  // Progression seulement si au moins 2 séances réelles.
+  const progression =
+    rawData.length >= 2 && firstVal > 0 ? ((lastVal - firstVal) / firstVal) * 100 : null;
 
   const isCurrentPR =
     tab === "weight" &&
     pr != null &&
-    !isMock &&
+    weightHistory.length > 0 &&
     weightHistory[weightHistory.length - 1]?.weight === pr;
 
   const tabs: Tab[] = hasReal ? ["weight", "volume", "1rm"] : ["weight", "volume"];
@@ -242,24 +238,26 @@ export function ExerciseStatsSheet({
               </div>
             )}
 
-            <div className="rounded-xl bg-surface p-3 text-center">
-              <div className="mb-1 flex items-center justify-center gap-1">
-                {progression >= 0 ? (
-                  <TrendingUp className="h-3 w-3 text-green-500" />
-                ) : (
-                  <TrendingDown className="h-3 w-3 text-destructive" />
-                )}
-                <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
-                  Prog.
-                </span>
+            {progression != null && (
+              <div className="rounded-xl bg-surface p-3 text-center">
+                <div className="mb-1 flex items-center justify-center gap-1">
+                  {progression >= 0 ? (
+                    <TrendingUp className="h-3 w-3 text-green-500" />
+                  ) : (
+                    <TrendingDown className="h-3 w-3 text-destructive" />
+                  )}
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Prog.
+                  </span>
+                </div>
+                <p
+                  className={`text-sm font-bold ${progression >= 0 ? "text-green-500" : "text-destructive"}`}
+                >
+                  {progression >= 0 ? "+" : ""}
+                  {progression.toFixed(1)}%
+                </p>
               </div>
-              <p
-                className={`text-sm font-bold ${progression >= 0 ? "text-green-500" : "text-destructive"}`}
-              >
-                {progression >= 0 ? "+" : ""}
-                {progression.toFixed(1)}%
-              </p>
-            </div>
+            )}
           </div>
 
           {/* Détail des séries (données réelles exercise_sets) */}
@@ -319,11 +317,6 @@ export function ExerciseStatsSheet({
             </div>
           )}
 
-          {usingMockChart && !hasReal && (
-            <p className="mt-3 text-center text-[10px] text-muted-foreground/60">
-              Aperçu simulé — enregistre plus de séances pour voir ta vraie progression.
-            </p>
-          )}
         </div>
       </div>
     </div>
