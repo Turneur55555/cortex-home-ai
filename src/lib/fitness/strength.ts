@@ -31,13 +31,45 @@ export function setTonnage(
   return sets * reps * weight;
 }
 
+/** Une série détaillée (table `exercise_sets`). Le poids peut arriver en string (numeric). */
+type DetailedSet = { reps?: number | string | null; weight?: number | string | null };
+
+/**
+ * Tonnage d'un exercice. Si des séries détaillées (`exercise_sets`) existent,
+ * on les utilise comme source de vérité ; sinon on retombe sur les colonnes
+ * agrégées legacy (sets/reps/weight) de la ligne `exercises`.
+ */
+export function exerciseTonnage(ex: {
+  sets?: number | null;
+  reps?: number | null;
+  weight?: number | null;
+  exercise_sets?: DetailedSet[] | null;
+}): number {
+  const detailed = ex.exercise_sets ?? [];
+  if (detailed.length > 0) {
+    return detailed.reduce((acc, s) => {
+      const reps = Number(s.reps);
+      const weight = Number(s.weight);
+      if (!Number.isFinite(reps) || !Number.isFinite(weight)) return acc;
+      if (reps <= 0 || weight <= 0) return acc;
+      return acc + reps * weight;
+    }, 0);
+  }
+  return setTonnage(ex.sets, ex.reps, ex.weight);
+}
+
 /**
  * Tonnage cumulé d'une liste d'exercices.
  */
 export function workoutTonnage(
-  exercises: Array<{ sets?: number | null; reps?: number | null; weight?: number | null }>,
+  exercises: Array<{
+    sets?: number | null;
+    reps?: number | null;
+    weight?: number | null;
+    exercise_sets?: DetailedSet[] | null;
+  }>,
 ): number {
-  return exercises.reduce((acc, ex) => acc + setTonnage(ex.sets, ex.reps, ex.weight), 0);
+  return exercises.reduce((acc, ex) => acc + exerciseTonnage(ex), 0);
 }
 
 /**
