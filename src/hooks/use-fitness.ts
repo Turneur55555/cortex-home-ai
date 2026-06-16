@@ -119,7 +119,7 @@ export function useWorkouts() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("workouts")
-        .select("*, exercises(*)")
+        .select("*, exercises(*, exercise_sets(id, set_number, reps, weight, rpe))")
         .order("date", { ascending: false })
         .limit(60);
       if (error) throw error;
