@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { ChefHat, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { useAddNutrition } from "@/hooks/use-fitness";
 import { Field, Sheet, SubmitButton } from "@/components/shared/FormComponents";
@@ -173,33 +174,51 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
     const carbs    = parseDecimal(form.carbs);
     const fats     = parseDecimal(form.fats);
 
+    // Validation des bornes AVANT insert (évite l'écran d'erreur générique).
+    const outOfRange = (v: number | null, max: number) =>
+      v != null && (v < 0 || v > max);
+    if (
+      outOfRange(calories, 10000) ||
+      outOfRange(proteins, 1000) ||
+      outOfRange(carbs, 1000) ||
+      outOfRange(fats, 1000)
+    ) {
+      toast.error("Valeurs hors limites : kcal ≤ 10000, macros ≤ 1000 g, et aucune valeur négative.");
+      return;
+    }
+
     // Mémoriser la portion choisie pour cet aliment.
     if (baseFood && portion) {
       saveLastPortion(baseFood, { quantity: portion.quantity, unit: portion.unit });
     }
 
-    await add.mutateAsync({
-      date,
-      name: form.name.trim(),
-      meal: form.meal,
-      calories,
-      proteins,
-      carbs,
-      fats,
-      base_calories: calories,
-      base_proteins: proteins,
-      base_carbs: carbs,
-      base_fats: fats,
-      serving_count: 1,
-      percentage_consumed: 100,
-      ...(baseFood && portion
-        ? {
-            consumed_quantity: portion.grams || null,
-            consumed_unit: "g",
-          }
-        : {}),
-    });
-    onClose();
+    try {
+      await add.mutateAsync({
+        date,
+        name: form.name.trim(),
+        meal: form.meal,
+        calories,
+        proteins,
+        carbs,
+        fats,
+        base_calories: calories,
+        base_proteins: proteins,
+        base_carbs: carbs,
+        base_fats: fats,
+        serving_count: 1,
+        percentage_consumed: 100,
+        ...(baseFood && portion
+          ? {
+              consumed_quantity: portion.grams || null,
+              consumed_unit: "g",
+            }
+          : {}),
+      });
+      onClose();
+    } catch {
+      // L'erreur est déjà signalée par la mutation (toast). On évite
+      // l'« unhandled rejection » qui déclenchait l'écran générique.
+    }
   };
 
   const busy = add.isPending || deduct.isPending;
