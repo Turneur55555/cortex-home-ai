@@ -348,6 +348,39 @@ export function useUpdateNutrition() {
   });
 }
 
+// ---------- Copier une journée nutritionnelle ----------
+export function useCopyNutritionDay() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ from, to }: { from: string; to: string }) => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Non authentifié");
+      if (from === to) throw new Error("Choisis un autre jour à copier");
+      const { data: rows, error } = await supabase
+        .from("nutrition")
+        .select("*")
+        .eq("date", from);
+      if (error) throw error;
+      if (!rows || rows.length === 0) throw new Error("Aucun repas à copier ce jour-là");
+      const clones = rows.map((r) => {
+        const rec = r as Record<string, unknown>;
+        const { id: _id, created_at: _ca, ...rest } = rec;
+        return { ...rest, date: to, user_id: user.id } as TablesInsert<"nutrition">;
+      });
+      const { error: insErr } = await supabase.from("nutrition").insert(clones);
+      if (insErr) throw insErr;
+      return clones.length;
+    },
+    onSuccess: (n, vars) => {
+      toast.success(`${n} repas copiés`);
+      qc.invalidateQueries({ queryKey: ["nutrition", vars.to] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+}
+
 // ---------- Workout / exercise mutations ----------
 export function useUpdateWorkoutName() {
   const qc = useQueryClient();
