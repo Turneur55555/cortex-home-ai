@@ -48,10 +48,8 @@ export function ExerciseStatsSheet({
   const hasReal = stats.some((s) => s.setCount > 0 && s.best1RM != null);
   const bests = useMemo(() => currentBests(stats), [stats]);
 
-  // Données réelles uniquement — aucune progression simulée.
-  const resolvedWeight = weightHistory;
-  const resolvedVolume = volumeHistory;
-
+  // Séries réelles dérivées de exercise_sets (repli colonnes legacy si vide).
+  // Aucune donnée simulée.
   const realSeries = useMemo(
     () =>
       stats
@@ -59,12 +57,27 @@ export function ExerciseStatsSheet({
         .map((s) => ({ date: s.date, value: s.best1RM as number })),
     [stats],
   );
+  const weightSeries = useMemo(
+    () =>
+      stats
+        .filter((s) => s.topWeight != null)
+        .map((s) => ({ date: s.date, value: s.topWeight as number })),
+    [stats],
+  );
+  const volumeSeries = useMemo(
+    () => stats.filter((s) => s.tonnage > 0).map((s) => ({ date: s.date, value: s.tonnage })),
+    [stats],
+  );
 
   const rawData =
     tab === "weight"
-      ? resolvedWeight.map((p) => ({ date: p.date, value: p.weight }))
+      ? weightSeries.length > 0
+        ? weightSeries
+        : weightHistory.map((p) => ({ date: p.date, value: p.weight }))
       : tab === "volume"
-        ? resolvedVolume.map((p) => ({ date: p.date, value: p.volume }))
+        ? volumeSeries.length > 0
+          ? volumeSeries
+          : volumeHistory.map((p) => ({ date: p.date, value: p.volume }))
         : realSeries;
 
   const chartData = rawData.map((p) => ({
@@ -88,8 +101,8 @@ export function ExerciseStatsSheet({
   const isCurrentPR =
     tab === "weight" &&
     pr != null &&
-    weightHistory.length > 0 &&
-    weightHistory[weightHistory.length - 1]?.weight === pr;
+    weightSeries.length > 0 &&
+    weightSeries[weightSeries.length - 1]?.value === pr;
 
   const tabs: Tab[] = hasReal ? ["weight", "volume", "1rm"] : ["weight", "volume"];
   const tabLabel: Record<Tab, string> = {
