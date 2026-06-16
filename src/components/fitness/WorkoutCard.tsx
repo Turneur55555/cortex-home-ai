@@ -38,7 +38,7 @@ import {
   type RecentExercise,
 } from "./ExercisePickerSheet";
 import { normalize } from "@/lib/fitness/exerciseCatalog";
-import { estimate1RM, formatTonnage } from "@/lib/fitness/strength";
+import { estimate1RM, formatTonnage, workoutTonnage } from "@/lib/fitness/strength";
 
 export type WorkoutRow = NonNullable<ReturnType<typeof useWorkouts>["data"]>[number];
 type ExerciseRow = NonNullable<WorkoutRow["exercises"]>[number];
@@ -67,16 +67,39 @@ type ExerciseGroup = {
 // Convention legacy : si `weight` est NULL, la colonne `sets` contient en réalité les reps
 // et la colonne `reps` contient la charge (kg). On reste fidèle aux enregistrements bruts
 // sans inventer de séries supplémentaires.
-function rowToSerie(r: ExerciseRow, index: number): SerieView {
+// Séries détaillées éventuelles (table `exercise_sets`). Source de vérité quand présentes.
+type DetailedSetRow = {
+  id: string;
+  set_number: number | null;
+  reps: number | null;
+  weight: number | string | null;
+};
+
+function rowToSeries(r: ExerciseRow): SerieView[] {
+  const detailed =
+    ((r as unknown as { exercise_sets?: DetailedSetRow[] | null }).exercise_sets) ?? [];
+  if (detailed.length > 0) {
+    return [...detailed]
+      .sort((a, b) => (a.set_number ?? 0) - (b.set_number ?? 0))
+      .map((sset, i) => ({
+        index: i + 1,
+        reps: sset.reps,
+        weight: sset.weight == null ? null : Number(sset.weight),
+        sourceId: r.id,
+      }));
+  }
+  // Legacy : 1 ligne `exercises` = 1 série. Si `weight` est NULL, la colonne `sets`
+  // contient en réalité les reps et `reps` la charge (kg).
   const hasExplicitWeight = r.weight != null;
   const reps = hasExplicitWeight ? r.reps : (r.sets ?? r.reps);
   const weight = hasExplicitWeight ? r.weight : (r.sets != null ? r.reps : null);
-  return { index, reps, weight, sourceId: r.id };
+  return [{ index: 1, reps, weight, sourceId: r.id }];
 }
 
 function expandToSeries(rows: ExerciseRow[]): SerieView[] {
-  return rows.map((r, i) => rowToSerie(r, i + 1));
+  return rows.flatMap((r) => rowToSeries(r)).map((sset, i) => ({ ...sset, index: i + 1 }));
 }
+
 
 function buildGroups(rows: ExerciseRow[]): ExerciseGroup[] {
   const byKey = new Map<string, ExerciseRow[]>();
@@ -174,14 +197,9 @@ export function WorkoutCard({
       totalReps += g.totalReps;
     }
 
-    // Contrôle d'intégrité : recalcul indépendant depuis les lignes brutes Supabase.
-    let rawVolume = 0;
-    for (const r of w.exercises ?? []) {
-      const hasExplicitWeight = r.weight != null;
-      const reps = hasExplicitWeight ? r.reps : (r.sets ?? r.reps);
-      const weight = hasExplicitWeight ? r.weight : (r.sets != null ? r.reps : null);
-      if (weight != null && reps != null) rawVolume += reps * weight;
-    }
+    // Contrôle d'intégrité : recalcul indépendant via le domaine pur
+    // (priorise exercise_sets, fallback colonnes legacy).
+    const rawVolume = workoutTonnage(w.exercises ?? []);
     const delta = Math.abs(rawVolume - volume);
     const volumeMismatch = delta > 0.5;
     if (volumeMismatch && typeof console !== "undefined") {
