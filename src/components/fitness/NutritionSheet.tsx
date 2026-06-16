@@ -292,29 +292,26 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
         </div>
         <Field
           label={baseFood ? "Calories (kcal, auto)" : "Calories (kcal)"}
-          type="number"
+          type="text"
           value={form.calories}
           onChange={(v) => setForm({ ...form, calories: v })}
         />
         <div className="grid grid-cols-3 gap-3">
           <Field
             label="Prot. (g)"
-            type="number"
-            step="0.1"
+            type="text"
             value={form.proteins}
             onChange={(v) => setForm({ ...form, proteins: v })}
           />
           <Field
             label="Gluc. (g)"
-            type="number"
-            step="0.1"
+            type="text"
             value={form.carbs}
             onChange={(v) => setForm({ ...form, carbs: v })}
           />
           <Field
             label="Lip. (g)"
-            type="number"
-            step="0.1"
+            type="text"
             value={form.fats}
             onChange={(v) => setForm({ ...form, fats: v })}
           />
