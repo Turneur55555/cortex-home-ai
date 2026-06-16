@@ -1,13 +1,19 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { ChefHat, ChevronDown, ChevronUp, Loader2, Scale } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
+import { ChefHat, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { useAddNutrition } from "@/hooks/use-fitness";
 import { Field, Sheet, SubmitButton } from "@/components/shared/FormComponents";
 import { FoodAutocomplete } from "@/components/FoodAutocomplete";
 import { usePantryItems, useDeductFromStock } from "@/hooks/use-pantry";
 import type { PantryItem } from "@/hooks/use-pantry";
 import type { FoodSuggestion } from "@/services/openFoodFacts";
-import { computeMacrosFor } from "@/lib/nutrition/utils";
 import type { MealPrefill } from "@/lib/nutrition/utils";
+import { PortionSelector } from "@/components/fitness/PortionSelector";
+import {
+  parseDecimal,
+  formatDecimal,
+  saveLastPortion,
+  type PortionUnit,
+} from "@/lib/nutrition/portions";
 
 // ─── PantryPicker ─────────────────────────────────────────────────────────────
 
@@ -85,9 +91,14 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
   const [pantryItem, setPantryItem] = useState<PantryItem | null>(null);
   const [pantryQty, setPantryQty] = useState("1");
 
-  // Per-100g reference when a known food is selected (from autocomplete or pantry)
+  // Aliment de référence sélectionné (autocomplete / pantry).
   const [baseFood, setBaseFood] = useState<FoodSuggestion | null>(null);
-  const [gramQty, setGramQty] = useState("100");
+  // État courant de la portion (renseigné par PortionSelector).
+  const [portion, setPortion] = useState<{
+    quantity: number;
+    unit: PortionUnit;
+    grams: number;
+  } | null>(null);
 
   const [form, setForm] = useState({
     name: prefill?.name ?? "",
@@ -98,21 +109,27 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
     fats: prefill?.fats ?? "",
   });
 
-  const num = (v: string) => (v.trim() === "" ? null : Number(v));
-
-  // Auto-recompute macros whenever gram quantity changes
-  useEffect(() => {
-    if (!baseFood) return;
-    const grams = Number(gramQty) || 0;
-    if (grams <= 0) return;
-    setForm((f) => ({ ...f, ...computeMacrosFor(baseFood, grams) }));
-  }, [gramQty, baseFood]);
-
-  const selectBaseFood = useCallback((food: FoodSuggestion, grams = 100) => {
+  const selectBaseFood = useCallback((food: FoodSuggestion) => {
     setBaseFood(food);
-    setGramQty(String(grams));
-    setForm((f) => ({ ...f, name: food.name, ...computeMacrosFor(food, grams) }));
+    setForm((f) => ({ ...f, name: food.name }));
   }, []);
+
+  // Callback stable consommé par PortionSelector — met à jour le form.
+  const handlePortionChange = useCallback(
+    (r: { quantity: number; unit: PortionUnit; grams: number;
+          calories: number | null; proteins: number | null;
+          carbs: number | null; fats: number | null }) => {
+      setPortion({ quantity: r.quantity, unit: r.unit, grams: r.grams });
+      setForm((f) => ({
+        ...f,
+        calories: r.calories != null ? String(r.calories) : "",
+        proteins: r.proteins != null ? formatDecimal(r.proteins) : "",
+        carbs:    r.carbs    != null ? formatDecimal(r.carbs)    : "",
+        fats:     r.fats     != null ? formatDecimal(r.fats)     : "",
+      }));
+    },
+    [],
+  );
 
   const handlePantrySelect = (it: PantryItem) => {
     setPantryItem(it);
@@ -127,7 +144,7 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
         fats: it.fat_per_100g,
         source: "local",
       };
-      selectBaseFood(food, 100);
+      selectBaseFood(food);
     } else {
       setForm((f) => ({ ...f, name: it.name }));
     }
@@ -150,10 +167,16 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
       }
     }
 
-    const calories = num(form.calories) as number | null;
-    const proteins = num(form.proteins);
-    const carbs = num(form.carbs);
-    const fats = num(form.fats);
+    // Parsing tolérant (accepte « 33,5 » et « 33.5 »).
+    const calories = parseDecimal(form.calories);
+    const proteins = parseDecimal(form.proteins);
+    const carbs    = parseDecimal(form.carbs);
+    const fats     = parseDecimal(form.fats);
+
+    // Mémoriser la portion choisie pour cet aliment.
+    if (baseFood && portion) {
+      saveLastPortion(baseFood, { quantity: portion.quantity, unit: portion.unit });
+    }
 
     await add.mutateAsync({
       date,
@@ -169,9 +192,9 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
       base_fats: fats,
       serving_count: 1,
       percentage_consumed: 100,
-      ...(baseFood
+      ...(baseFood && portion
         ? {
-            consumed_quantity: Number(gramQty) || null,
+            consumed_quantity: portion.grams || null,
             consumed_unit: "g",
           }
         : {}),
@@ -241,26 +264,16 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
         <FoodAutocomplete
           value={form.name}
           onChange={(v) => setForm({ ...form, name: v })}
-          onSelect={(f) => selectBaseFood(f, 100)}
+          onSelect={(f) => selectBaseFood(f)}
           required
         />
 
-        {/* Gram portion stepper — shown when a food with known per-100g values is selected */}
+        {/* Sélecteur de portion intelligent (presets + grammes libres) */}
         {baseFood && (
-          <div className="flex items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 px-3 py-2">
-            <Scale className="h-4 w-4 shrink-0 text-primary" />
-            <span className="flex-1 text-xs font-semibold text-primary">Portion</span>
-            <input
-              type="number"
-              min="1"
-              step="5"
-              value={gramQty}
-              onChange={(e) => setGramQty(e.target.value)}
-              className="w-20 rounded-lg border border-border bg-card px-2 py-1.5 text-center text-sm font-semibold outline-none focus:border-primary"
-            />
-            <span className="text-xs text-muted-foreground">g</span>
-          </div>
+          <PortionSelector food={baseFood} onChange={handlePortionChange} />
         )}
+
+
 
         <div>
           <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -279,29 +292,26 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
         </div>
         <Field
           label={baseFood ? "Calories (kcal, auto)" : "Calories (kcal)"}
-          type="number"
+          type="text"
           value={form.calories}
           onChange={(v) => setForm({ ...form, calories: v })}
         />
         <div className="grid grid-cols-3 gap-3">
           <Field
             label="Prot. (g)"
-            type="number"
-            step="0.1"
+            type="text"
             value={form.proteins}
             onChange={(v) => setForm({ ...form, proteins: v })}
           />
           <Field
             label="Gluc. (g)"
-            type="number"
-            step="0.1"
+            type="text"
             value={form.carbs}
             onChange={(v) => setForm({ ...form, carbs: v })}
           />
           <Field
             label="Lip. (g)"
-            type="number"
-            step="0.1"
+            type="text"
             value={form.fats}
             onChange={(v) => setForm({ ...form, fats: v })}
           />
