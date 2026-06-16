@@ -167,10 +167,16 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
       }
     }
 
-    const calories = num(form.calories) as number | null;
-    const proteins = num(form.proteins);
-    const carbs = num(form.carbs);
-    const fats = num(form.fats);
+    // Parsing tolérant (accepte « 33,5 » et « 33.5 »).
+    const calories = parseDecimal(form.calories);
+    const proteins = parseDecimal(form.proteins);
+    const carbs    = parseDecimal(form.carbs);
+    const fats     = parseDecimal(form.fats);
+
+    // Mémoriser la portion choisie pour cet aliment.
+    if (baseFood && portion) {
+      saveLastPortion(baseFood, { quantity: portion.quantity, unit: portion.unit });
+    }
 
     await add.mutateAsync({
       date,
@@ -186,9 +192,9 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
       base_fats: fats,
       serving_count: 1,
       percentage_consumed: 100,
-      ...(baseFood
+      ...(baseFood && portion
         ? {
-            consumed_quantity: Number(gramQty) || null,
+            consumed_quantity: portion.grams || null,
             consumed_unit: "g",
           }
         : {}),
