@@ -264,26 +264,16 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
         <FoodAutocomplete
           value={form.name}
           onChange={(v) => setForm({ ...form, name: v })}
-          onSelect={(f) => selectBaseFood(f, 100)}
+          onSelect={(f) => selectBaseFood(f)}
           required
         />
 
-        {/* Gram portion stepper — shown when a food with known per-100g values is selected */}
+        {/* Sélecteur de portion intelligent (presets + grammes libres) */}
         {baseFood && (
-          <div className="flex items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 px-3 py-2">
-            <Scale className="h-4 w-4 shrink-0 text-primary" />
-            <span className="flex-1 text-xs font-semibold text-primary">Portion</span>
-            <input
-              type="number"
-              min="1"
-              step="5"
-              value={gramQty}
-              onChange={(e) => setGramQty(e.target.value)}
-              className="w-20 rounded-lg border border-border bg-card px-2 py-1.5 text-center text-sm font-semibold outline-none focus:border-primary"
-            />
-            <span className="text-xs text-muted-foreground">g</span>
-          </div>
+          <PortionSelector food={baseFood} onChange={handlePortionChange} />
         )}
+
+
 
         <div>
           <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
