@@ -3,18 +3,29 @@ import {
   Apple,
   Barcode,
   Calendar,
+  Copy,
   Loader2,
   Scale,
   Sparkles,
+  Star,
   Target,
   Trash2,
+  X,
 } from "lucide-react";
-import { format } from "date-fns";
+import { format, subDays } from "date-fns";
 import {
+  useAddNutrition,
+  useCopyNutritionDay,
   useDeleteNutrition,
   useNutrition,
   useNutritionGoals,
 } from "@/hooks/use-fitness";
+import {
+  useAddFavorite,
+  useDeleteFavorite,
+  useNutritionFavorites,
+  type NutritionFavorite,
+} from "@/hooks/use-nutrition-favorites";
 import { FabAdd } from "@/components/shared/FormComponents";
 import { BarcodeScannerSheet } from "@/components/BarcodeScannerSheet";
 import { MealScanSheet } from "@/components/fitness/MealScanSheet";
@@ -30,6 +41,15 @@ export function NutritionTab() {
   const { data, isLoading } = useNutrition(date);
   const { data: goals } = useNutritionGoals();
   const del = useDeleteNutrition();
+  const addMeal = useAddNutrition();
+  const addFav = useAddFavorite();
+  const delFav = useDeleteFavorite();
+  const copyDay = useCopyNutritionDay();
+  const { data: favorites } = useNutritionFavorites();
+  const [copyOpen, setCopyOpen] = useState(false);
+  const [copyFrom, setCopyFrom] = useState(() =>
+    format(subDays(new Date(), 1), "yyyy-MM-dd"),
+  );
   const [open, setOpen] = useState(false);
   const [goalsOpen, setGoalsOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
@@ -89,6 +109,44 @@ export function NutritionTab() {
     setOpen(true);
   };
 
+  // Ajout 1-tap depuis un favori (insère directement dans la journée courante).
+  const addFromFavorite = (fav: NutritionFavorite) => {
+    addMeal.mutate({
+      date,
+      name: fav.name,
+      meal: fav.meal ?? "collation",
+      calories: fav.calories,
+      proteins: fav.proteins,
+      carbs: fav.carbs,
+      fats: fav.fats,
+      base_calories: fav.calories,
+      base_proteins: fav.proteins,
+      base_carbs: fav.carbs,
+      base_fats: fav.fats,
+      serving_count: 1,
+      percentage_consumed: 100,
+    });
+  };
+
+  // Enregistre un repas loggé comme favori réutilisable.
+  const saveAsFavorite = (m: {
+    name: string | null;
+    meal: string | null;
+    calories: number | null;
+    proteins: number | null;
+    carbs: number | null;
+    fats: number | null;
+  }) => {
+    addFav.mutate({
+      name: m.name ?? "Repas",
+      meal: m.meal,
+      calories: m.calories,
+      proteins: m.proteins,
+      carbs: m.carbs,
+      fats: m.fats,
+    });
+  };
+
   return (
     <section className="flex flex-col gap-4">
       <div className="flex items-center gap-2">
@@ -115,7 +173,7 @@ export function NutritionTab() {
             Aujourd'hui
           </p>
           <p className="text-2xl font-bold text-primary">
-            {totals.calories}
+            {Math.round(totals.calories)}
             {goals?.calories ? (
               <span className="ml-1 text-xs font-normal text-muted-foreground">
                 / {goals.calories} kcal
@@ -126,7 +184,7 @@ export function NutritionTab() {
           </p>
         </div>
         {goals?.calories ? (
-          <ProgressBar value={totals.calories} target={goals.calories} className="mt-2" />
+          <ProgressBar value={Math.round(totals.calories)} target={goals.calories} className="mt-2" />
         ) : null}
         <div className="mt-3 grid grid-cols-3 gap-2">
           <MacroProgress
@@ -185,14 +243,87 @@ export function NutritionTab() {
         </button>
       </div>
 
-      <button
-        type="button"
-        onClick={() => setPlanOpen(true)}
-        className="flex w-full items-center justify-center gap-2 rounded-2xl border border-primary/30 bg-primary/5 py-2.5 text-sm font-semibold text-primary"
-      >
-        <Calendar className="h-4 w-4" />
-        Planning de la semaine
-      </button>
+      {favorites && favorites.length > 0 && (
+        <div>
+          <h3 className="mb-2 flex items-center gap-1.5 px-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <Star className="h-3.5 w-3.5 text-primary" />
+            Favoris — ajout rapide
+          </h3>
+          <div className="flex flex-wrap gap-1.5">
+            {favorites.map((fav) => (
+              <span
+                key={fav.id}
+                className="group inline-flex items-center gap-1 rounded-full border border-border bg-card py-1 pl-2.5 pr-1 text-xs font-medium"
+              >
+                <button
+                  type="button"
+                  onClick={() => addFromFavorite(fav)}
+                  disabled={addMeal.isPending}
+                  className="flex items-center gap-1 text-foreground hover:text-primary disabled:opacity-60"
+                  title="Ajouter à la journée"
+                >
+                  {fav.name}
+                  <span className="text-[10px] text-muted-foreground">
+                    {fav.calories ?? 0} kcal
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => delFav.mutate(fav.id)}
+                  className="flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                  aria-label="Retirer des favoris"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-3">
+        <button
+          type="button"
+          onClick={() => setPlanOpen(true)}
+          className="flex items-center justify-center gap-2 rounded-2xl border border-primary/30 bg-primary/5 py-2.5 text-sm font-semibold text-primary"
+        >
+          <Calendar className="h-4 w-4" />
+          Planning
+        </button>
+        <button
+          type="button"
+          onClick={() => setCopyOpen((o) => !o)}
+          className="flex items-center justify-center gap-2 rounded-2xl border border-border bg-surface py-2.5 text-sm font-semibold text-foreground"
+        >
+          <Copy className="h-4 w-4" />
+          Copier un jour
+        </button>
+      </div>
+
+      {copyOpen && (
+        <div className="flex items-center gap-2 rounded-2xl border border-border bg-surface p-3">
+          <input
+            type="date"
+            value={copyFrom}
+            onChange={(e) => setCopyFrom(e.target.value)}
+            className="flex-1 rounded-xl border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary"
+          />
+          <button
+            type="button"
+            disabled={copyDay.isPending}
+            onClick={() =>
+              copyDay.mutate(
+                { from: copyFrom, to: date },
+                { onSuccess: () => setCopyOpen(false) },
+              )
+            }
+            className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-gradient-primary px-3 text-xs font-semibold text-primary-foreground shadow-glow disabled:opacity-60"
+          >
+            {copyDay.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            Copier ici
+          </button>
+        </div>
+      )}
 
       {isLoading && (
         <div className="flex h-20 items-center justify-center">
@@ -236,6 +367,15 @@ export function NutritionTab() {
                       {m.calories ?? 0} kcal · P{m.proteins ?? 0} G{m.carbs ?? 0} L{m.fats ?? 0}
                     </p>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => saveAsFavorite(m)}
+                    disabled={addFav.isPending}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary disabled:opacity-60"
+                    aria-label="Ajouter aux favoris"
+                  >
+                    <Star className="h-4 w-4" />
+                  </button>
                   <button
                     type="button"
                     onClick={() => setPortionItem(m)}
