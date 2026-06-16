@@ -91,9 +91,14 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
   const [pantryItem, setPantryItem] = useState<PantryItem | null>(null);
   const [pantryQty, setPantryQty] = useState("1");
 
-  // Per-100g reference when a known food is selected (from autocomplete or pantry)
+  // Aliment de référence sélectionné (autocomplete / pantry).
   const [baseFood, setBaseFood] = useState<FoodSuggestion | null>(null);
-  const [gramQty, setGramQty] = useState("100");
+  // État courant de la portion (renseigné par PortionSelector).
+  const [portion, setPortion] = useState<{
+    quantity: number;
+    unit: PortionUnit;
+    grams: number;
+  } | null>(null);
 
   const [form, setForm] = useState({
     name: prefill?.name ?? "",
@@ -104,21 +109,27 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
     fats: prefill?.fats ?? "",
   });
 
-  const num = (v: string) => (v.trim() === "" ? null : Number(v));
-
-  // Auto-recompute macros whenever gram quantity changes
-  useEffect(() => {
-    if (!baseFood) return;
-    const grams = Number(gramQty) || 0;
-    if (grams <= 0) return;
-    setForm((f) => ({ ...f, ...computeMacrosFor(baseFood, grams) }));
-  }, [gramQty, baseFood]);
-
-  const selectBaseFood = useCallback((food: FoodSuggestion, grams = 100) => {
+  const selectBaseFood = useCallback((food: FoodSuggestion) => {
     setBaseFood(food);
-    setGramQty(String(grams));
-    setForm((f) => ({ ...f, name: food.name, ...computeMacrosFor(food, grams) }));
+    setForm((f) => ({ ...f, name: food.name }));
   }, []);
+
+  // Callback stable consommé par PortionSelector — met à jour le form.
+  const handlePortionChange = useCallback(
+    (r: { quantity: number; unit: PortionUnit; grams: number;
+          calories: number | null; proteins: number | null;
+          carbs: number | null; fats: number | null }) => {
+      setPortion({ quantity: r.quantity, unit: r.unit, grams: r.grams });
+      setForm((f) => ({
+        ...f,
+        calories: r.calories != null ? String(r.calories) : "",
+        proteins: r.proteins != null ? formatDecimal(r.proteins) : "",
+        carbs:    r.carbs    != null ? formatDecimal(r.carbs)    : "",
+        fats:     r.fats     != null ? formatDecimal(r.fats)     : "",
+      }));
+    },
+    [],
+  );
 
   const handlePantrySelect = (it: PantryItem) => {
     setPantryItem(it);
@@ -133,7 +144,7 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
         fats: it.fat_per_100g,
         source: "local",
       };
-      selectBaseFood(food, 100);
+      selectBaseFood(food);
     } else {
       setForm((f) => ({ ...f, name: it.name }));
     }
