@@ -36,10 +36,15 @@ interface Props {
  *  - dernier choix mémorisé par aliment (localStorage)
  */
 export function PortionSelector({ food, onChange }: Props) {
-  const reference: PortionReference | null = useMemo(
-    () => detectDefaultPortion(food.name),
-    [food.name],
-  );
+  const KNOWN_UNITS = ["g", "ml", "scoop", "unite", "pot", "tranche", "sachet", "cas", "cac"];
+  const reference: PortionReference | null = useMemo(() => {
+    const ds = food.default_serving;
+    if (ds && ds.grams > 0 && ds.quantity > 0 && KNOWN_UNITS.includes(ds.unit)) {
+      return { unitLabel: ds.unit as PortionUnit, gramsPerUnit: ds.grams / ds.quantity };
+    }
+    return detectDefaultPortion(food.name);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [food.name, food.default_serving]);
   const presets = useMemo(() => buildPresets(reference), [reference]);
 
   // Restaurer le dernier choix s'il existe, sinon fallback : 1 unité de la
