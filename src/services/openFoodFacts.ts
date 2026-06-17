@@ -15,6 +15,8 @@ export interface FoodSuggestion {
   carbs: number | null;
   fats: number | null;
   source?: "local" | "off" | "usda" | "icortex" | "custom";
+  quality_score?: number;
+  default_serving?: { label: string; unit: string; quantity: number; grams: number } | null;
 }
 
 function toSuggestion(r: FoodResult): FoodSuggestion {
@@ -28,6 +30,8 @@ function toSuggestion(r: FoodResult): FoodSuggestion {
     carbs: r.carbs,
     fats: r.fats,
     source: r.source,
+    quality_score: r.quality_score,
+    default_serving: r.default_serving ?? null,
   };
 }
 

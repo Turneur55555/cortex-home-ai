@@ -28,6 +28,7 @@ export interface FoodResult {
   };
   quality_score?: number;
   confidence_score?: number;
+  default_serving?: { label: string; unit: string; quantity: number; grams: number } | null;
 }
 
 interface EdgeResponse<T> {
