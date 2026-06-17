@@ -11,6 +11,7 @@ export interface UserPreferences {
   animations_enabled: boolean;
   notifications_enabled: boolean;
   ai_preferences: Record<string, unknown>;
+  height_cm: number | null;
 }
 
 const DEFAULTS: Omit<UserPreferences, "user_id"> = {
@@ -20,6 +21,7 @@ const DEFAULTS: Omit<UserPreferences, "user_id"> = {
   animations_enabled: true,
   notifications_enabled: true,
   ai_preferences: {},
+  height_cm: null,
 };
 
 export function useUserPreferences() {
