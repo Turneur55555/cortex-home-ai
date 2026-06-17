@@ -1,4 +1,4 @@
-import type { FoodSuggestion } from "@/services/openFoodFacts";
+import type { FoodSuggestion } from "@/services/foodSuggestion";
 
 // ─── Types partagés ────────────────────────────────────────────────────────────
 

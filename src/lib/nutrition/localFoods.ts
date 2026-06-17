@@ -1,4 +1,4 @@
-import type { FoodSuggestion } from "@/services/openFoodFacts";
+import type { FoodSuggestion } from "@/services/foodSuggestion";
 
 // ~50 common French / fitness foods, values per 100 g
 const LOCAL_FOODS: FoodSuggestion[] = [

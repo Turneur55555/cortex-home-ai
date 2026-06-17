@@ -2,7 +2,7 @@
 // Source de vérité pour : parsing décimal FR/EN, presets, conversion en grammes,
 // calcul des macros depuis une portion, persistance locale du dernier choix.
 
-import type { FoodSuggestion } from "@/services/openFoodFacts";
+import type { FoodSuggestion } from "@/services/foodSuggestion";
 import type { MacroValues } from "./macros";
 
 // ─── Parsing décimal tolérant (FR « 33,5 » et EN « 33.5 ») ──────────────────

@@ -1,6 +1,6 @@
 // Calculs nutritionnels purs — zéro import React
 
-/** Nutriments bruts pour 100 g/ml tels que fournis par Open Food Facts */
+/** Nutriments bruts pour 100 g/ml fournis par le catalogue (USDA/Supabase) */
 export interface ProductNutriments {
   "energy-kcal_100g"?: number;
   proteins_100g?: number;
@@ -23,7 +23,7 @@ export type MacroValues = {
 /**
  * Calcule les macros pour une quantité donnée à partir des valeurs pour 100 g/ml.
  *
- * @param nutriments - Données nutriments issues d'Open Food Facts
+ * @param nutriments - Données nutriments issues du catalogue (USDA/Supabase)
  * @param totalQty   - Quantité totale consommée (en g ou ml)
  * @returns MacroValues avec calories arrondies à l'entier, macros arrondi au dixième
  */
