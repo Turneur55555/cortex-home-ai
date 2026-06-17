@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import {
+  Activity,
   Apple,
   Barcode,
   Calendar,
@@ -33,6 +34,7 @@ import { MealScanSheet } from "@/components/fitness/MealScanSheet";
 import { NutritionSheet } from "@/components/fitness/NutritionSheet";
 import { MealPlanSheet } from "@/components/fitness/MealPlanSheet";
 import { GoalsSheet } from "@/components/fitness/GoalsSheet";
+import { NutritionAnalysisSheet } from "@/components/fitness/NutritionAnalysisSheet";
 import { PortionEditModal } from "@/components/fitness/PortionEditModal";
 import { NutritionHistorySheet } from "@/components/fitness/NutritionHistorySheet";
 import { getPortionBadge } from "@/lib/nutrition/utils";
@@ -60,6 +62,7 @@ export function NutritionTab() {
   const [barcodeOpen, setBarcodeOpen] = useState(false);
   const [prefill, setPrefill] = useState<MealPrefill | null>(null);
   const [portionItem, setPortionItem] = useState<NutritionEntry | null>(null);
+  const [analysisOpen, setAnalysisOpen] = useState(false);
 
   const totals = useMemo(() => {
     return (data ?? []).reduce(
@@ -333,6 +336,15 @@ export function NutritionTab() {
         </button>
       </div>
 
+      <button
+        type="button"
+        onClick={() => setAnalysisOpen(true)}
+        className="flex w-full items-center justify-center gap-2 rounded-2xl border border-primary/30 bg-gradient-to-r from-primary/15 via-primary/5 to-transparent py-2.5 text-sm font-semibold text-primary"
+      >
+        <Activity className="h-4 w-4" />
+        Analyse micronutriments
+      </button>
+
       {copyOpen && (
         <div className="flex items-center gap-2 rounded-2xl border border-border bg-surface p-3">
           <input
@@ -448,6 +460,7 @@ export function NutritionTab() {
       {historyOpen && <NutritionHistorySheet onClose={() => setHistoryOpen(false)} />}
       {scanOpen && <MealScanSheet onClose={() => setScanOpen(false)} onResult={handleScanResult} />}
       {barcodeOpen && <BarcodeScannerSheet onClose={() => setBarcodeOpen(false)} />}
+      {analysisOpen && <NutritionAnalysisSheet onClose={() => setAnalysisOpen(false)} />}
       {portionItem && (
         <PortionEditModal
           item={portionItem}
