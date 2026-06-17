@@ -1,7 +1,7 @@
 # Mémoire projet — cortex-home-ai
 
 ## Dernière mise à jour
-2026-06-14
+2026-06-17
 
 ## ⚠️ Règle : mettre ce fichier à jour à la fin de chaque session
 Toujours mettre à jour ce fichier avec les nouveaux composants, hooks, migrations, features découverts.
@@ -83,7 +83,7 @@ App **ICORTEX** (nom officiel dans les titres de pages) : assistant personnel mu
 ### Nutrition
 - Macros quotidiennes (NutritionSheet, PortionEditModal)
 - Scan repas IA (MealScanSheet) + Scan code-barres (BarcodeScannerSheet)
-- Recherche aliments OpenFoodFacts (useFoodSearch, FoodAutocomplete)
+- Recherche aliments via **USDA FoodData Central + catalogue Supabase** (edge `food-lookup` → `services/foodCatalog.ts`). ⚠️ Open Food Facts retiré ; `services/openFoodFacts.ts` n'est plus qu'un shim de type (ré-exporte `FoodResult` via foodCatalog). Résidus à nettoyer (commentaires, libellé visible NutritionTab L273).
 - Recettes (components/recipe/ : MacroProgress, NutritionBadge, PortionSelector, RecipeMacros)
 - Portions en BDD (migration nutrition_portions)
 - Préférences alimentaires (route dédiée)
@@ -169,3 +169,15 @@ App **ICORTEX** (nom officiel dans les titres de pages) : assistant personnel mu
 - SeancesTab.tsx : passe recoveryMap (déjà calculé) à CoachSheet.
 - Edge supabase/functions/coach-workout : déployée v7 via MCP Supabase (normalizeMuscle + buildRecoverySection à partir de body.recovery). ⚠️ La version déployée fait foi et DIVERGE du repo (le repo n'a pas _shared/ai.ts). Modifier l'edge = redéployer via MCP, pas via GitHub. Le Publish Lovable n'écrase pas le runtime edge.
 - Hébergement réel : Lovable (cortex-home-ai.lovable.app). Déploiement = Publish/Update dans le projet Lovable après commit GitHub.
+
+## Refonte Fitness UX/UI premium (en cours — 2026-06-17)
+**Décisions actées avec Nathan :**
+- Nouvelle **navigation globale** = 5 modules : Accueil · Séances · Corps · Nutrition · Profil (même ordre mobile/desktop). Les onglets internes de `/fitness` (Corps/Séances/Nutrition) deviennent des routes top-level `/seances`, `/corps`, `/nutrition`. L'ancienne page `/fitness` redirige.
+- **Maison (`/stocks`) et Rappels (`/rappels`) → sections dans Profil** (retirés du bottom-nav, features conservées).
+- **Accueil** = dashboard fitness premium (récup, objectifs, dernières séances, stats hebdo, calories in/out, poids, badges, succès, raccourci création séance).
+- **Corps** : `body_tracking` contient déjà toutes les mensurations (weight, body_fat, muscle_mass, chest, waist, hips, left/right_arm, left/right_thigh) → aucune migration, juste l'UI. IMC = poids+taille. Galerie photos avant/après **reportée**.
+- **Coach IA** conservé dans Séances.
+- **Design** : polir/uniformiser sans changement radical (glassmorphism léger déjà présent).
+- **Déploiement** : code direct GitHub poussé via Claude in Chrome (autonomie Nathan, pas de token manuel) → Publish Lovable → test live.
+- **Ordre des travaux** : Nav → Accueil → Séances → Corps → Nutrition (+nettoyage OFF) → Profil → passe design.
+- ⚠️ e2e/02-navigation.spec.ts à mettre à jour (testids nav-stocks/nav-documents supprimés du bottom-nav).
