@@ -270,7 +270,7 @@ export function NutritionTab() {
           <span className="min-w-0 flex-1">
             <span className="block text-xs font-semibold">Code-barres</span>
             <span className="block truncate text-[10px] text-muted-foreground">
-              Open Food Facts
+              Scanner un produit
             </span>
           </span>
         </button>
