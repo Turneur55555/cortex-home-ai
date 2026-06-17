@@ -23,6 +23,7 @@ import { useAddNutrition } from "@/hooks/use-fitness";
 import { Sheet } from "@/components/shared/FormComponents";
 import { format } from "date-fns";
 import { computeMacros, type ProductNutriments } from "@/lib/nutrition/macros";
+import { lookupBarcode } from "@/services/foodCatalog";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -359,16 +360,19 @@ export function BarcodeScannerSheet({ roomId = "cuisine", onClose }: { roomId?: 
     setProduct(null);
     setLoading(true);
     try {
-      const res  = await fetch(
-        `https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,brands,image_front_small_url,nutrition_grades,nutriments,nova_group,quantity,serving_size`,
-        { signal: controller.signal },
-      );
-      const data = await res.json();
-      if (data.status !== 1 || !data.product) {
+      const result = await lookupBarcode(code);
+      if (controller.signal.aborted) return;
+      if (!result) {
         setError(`Produit introuvable : ${code}`);
         toast.error("Produit introuvable");
       } else {
-        const p = { ...data.product, barcode: code } as Product;
+        const p: Product = {
+          barcode: code,
+          product_name: result.name,
+          brands: result.brand,
+          image_front_small_url: result.image_url,
+          nutriments: result.nutriments as ProductNutriments | undefined,
+        };
         setProduct(p);
         setHistory((h) => {
           const filtered = h.filter((x) => x.barcode !== code);
@@ -376,11 +380,10 @@ export function BarcodeScannerSheet({ roomId = "cuisine", onClose }: { roomId?: 
         });
       }
     } catch (e) {
-      if (e instanceof Error && e.name === "AbortError") return; // Démontage ou annulation normale
+      if (e instanceof Error && e.name === "AbortError") return;
       setError("Erreur réseau");
       toast.error("Erreur lors de la récupération du produit");
     } finally {
-      // Ne pas passer loading à false si la requête a été annulée
       if (!controller.signal.aborted) {
         setLoading(false);
       }
