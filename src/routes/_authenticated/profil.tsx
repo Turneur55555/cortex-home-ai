@@ -1,6 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { House, Bell, FileText, Apple, ChevronRight } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useProfile } from "@/hooks/useProfile";
 import { useStreak } from "@/hooks/useStreak";
@@ -18,7 +19,7 @@ export const Route = createFileRoute("/_authenticated/profil")({
   head: () => ({
     meta: [
       { title: "Profil — ICORTEX" },
-      { name: "description", content: "Votre compte, progression et préférences." },
+      { name: "description", content: "Votre compte, progression, espaces et préférences." },
     ],
   }),
   component: ProfilPage,
@@ -34,12 +35,20 @@ function ProfilPage() {
   const { data: stats } = useUserStats();
   const [editOpen, setEditOpen] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(() => {
-    try { return localStorage.getItem(AVATAR_KEY); } catch { return null; }
+    try {
+      return localStorage.getItem(AVATAR_KEY);
+    } catch {
+      return null;
+    }
   });
 
   const onAvatarChange = (url: string) => {
     setAvatarUrl(url);
-    try { localStorage.setItem(AVATAR_KEY, url); } catch { /* ignore */ }
+    try {
+      localStorage.setItem(AVATAR_KEY, url);
+    } catch {
+      /* ignore */
+    }
   };
 
   return (
@@ -54,12 +63,47 @@ function ProfilPage() {
         onAvatarChange={onAvatarChange}
       />
 
-      <GoalsManager />
-      <BadgesStrip />
-      <ActivityTimeline />
-      <PersonalizationPanel />
-      <PdfPanel />
-      <SecurityPanel />
+      {/* Objectifs fitness */}
+      <Section title="Objectifs fitness">
+        <GoalsManager />
+      </Section>
+
+      {/* Badges & succès */}
+      <Section title="Badges & succès">
+        <BadgesStrip />
+      </Section>
+
+      {/* Mes espaces — Maison & Rappels fusionnés ici */}
+      <Section title="Mes espaces">
+        <div className="grid grid-cols-2 gap-2">
+          <SpaceLink to="/rappels" icon={<Bell className="h-4 w-4" />} label="Rappels" />
+          <SpaceLink to="/stocks" icon={<House className="h-4 w-4" />} label="Maison" />
+          <SpaceLink to="/documents" icon={<FileText className="h-4 w-4" />} label="Documents" />
+          <SpaceLink
+            to="/preferences-alimentaires"
+            icon={<Apple className="h-4 w-4" />}
+            label="Préférences alim."
+          />
+        </div>
+      </Section>
+
+      {/* Habitudes & activité */}
+      <Section title="Habitudes & activité">
+        <ActivityTimeline />
+      </Section>
+
+      {/* Paramètres & notifications */}
+      <Section title="Paramètres & notifications">
+        <PersonalizationPanel />
+      </Section>
+
+      {/* Données personnelles */}
+      <Section title="Données personnelles">
+        <PdfPanel />
+        <div className="mt-4">
+          <SecurityPanel />
+        </div>
+      </Section>
 
       <EditPseudoSheet
         open={editOpen}
@@ -71,5 +115,41 @@ function ProfilPage() {
         }}
       />
     </main>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="mt-6">
+      <h2 className="mb-2 px-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        {title}
+      </h2>
+      {children}
+    </section>
+  );
+}
+
+function SpaceLink({
+  to,
+  icon,
+  label,
+}: {
+  to: string;
+  icon: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <Link
+      to={to}
+      className="flex items-center justify-between gap-2 rounded-2xl border border-white/5 bg-gradient-to-b from-card/95 to-card/70 px-3 py-3 shadow-card backdrop-blur-xl transition-colors hover:border-primary/40"
+    >
+      <span className="flex items-center gap-2">
+        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/15 text-primary">
+          {icon}
+        </span>
+        <span className="text-xs font-semibold">{label}</span>
+      </span>
+      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+    </Link>
   );
 }
