@@ -1,68 +1,118 @@
-# Refonte page Profil — Cortex Home AI
+# Migration Nutrition : Open Food Facts → USDA + Gemini + Base Icortex
 
-Refonte complète de `/profil` en page premium, sobre, orientée compte/progression/personnalisation. L'Accueil reste l'expérience immersive. **Aucune notion premium/abonnement** (conforme à la décision précédente).
+## Objectif
 
-## Nouvelles tables Supabase (migration unique)
+Remplacer Open Food Facts par une architecture hybride **USDA FoodData Central** (source officielle) + **Gemini** (intelligence) + **base Supabase propriétaire** (cache progressif), sans casser le module Nutrition pendant la migration.
+
+---
+
+## Phase 1 — Audit (préalable, sans modification)
+
+Cartographier toutes les références OFF :
+- `src/services/openFoodFacts.ts` (service principal)
+- `src/hooks/useFoodSearch.ts`, `src/components/FoodAutocomplete.tsx`, `BarcodeScannerSheet.tsx`
+- Edge Functions (`scan-meal`, `scan-fridge`, `recipe-assistant`…) qui appellent OFF
+- Composants Nutrition consommateurs : `NutritionSheet`, `MealScanSheet`, `PortionSelector`, `RecipeMacros`, `MacroProgress`
+- Hooks dérivés : `useNutritionCalculator`, `use-nutrition-favorites`, `useMealPlan`
+- Tables Supabase actuelles : `nutrition`, `nutrition_goals` (pas de table aliments → à créer)
+
+Livrable : rapport `docs/migration-nutrition.md` listant fichiers/dépendances/impacts.
+
+---
+
+## Phase 2 — Schéma Supabase (base alimentaire Icortex)
+
+Migration unique créant :
 
 ```text
-user_preferences   theme, accent_color, units (metric/imperial), animations_enabled,
-                   notifications_enabled, ai_preferences (jsonb)
-user_badges        badge_key, label, icon, unlocked_at
-user_stats         xp, level, total_actions (compteurs agrégés, 1 ligne / user)
-user_activity      type, label, metadata (jsonb), created_at  (timeline)
+foods                 — aliment canonique (nom, marque, source, macros /100g, micros JSONB)
+food_barcodes         — code-barres → food_id (lookup O(1))
+food_brands           — marques normalisées
+food_categories       — taxonomie (USDA + Icortex)
+food_synonyms         — alias FR/EN ("steack" → steak haché)
+food_servings         — portions standard (1 scoop = 30g, 1 œuf = 55g…)
+food_search_history   — historique par user (boost ranking)
+food_favorites        — favoris user
+food_custom_foods     — aliments perso user
+food_quality_scores   — quality_score + confidence_score + flags
 ```
 
-- RLS `auth.uid() = user_id` (ALL, authenticated) sur les 4 tables
-- `user_preferences` et `user_stats` : 1 ligne/user, upsert via hook
-- `user_activity` : index `(user_id, created_at desc)`, on garde les 20 derniers à l'affichage
-- Trigger `updated_at` standard
+Index trigram (`pg_trgm`) sur `foods.name` + `food_synonyms.alias` pour recherche < 300 ms.
 
-## Hooks (nouveau, src/hooks/)
+RLS :
+- `foods`, `food_barcodes`, `food_brands`, `food_categories`, `food_synonyms`, `food_servings`, `food_quality_scores` → lecture publique (`authenticated` + `anon`), écriture `service_role` uniquement (alimenté par edge functions)
+- `food_search_history`, `food_favorites`, `food_custom_foods` → scoped `auth.uid()`
 
-- `useUserPreferences` — get/upsert, React Query
-- `useUserBadges` — liste + dernier débloqué
-- `useUserStats` — xp / level / dérivés (level = floor(sqrt(xp/50)))
-- `useUserActivity` — timeline 10 derniers, realtime optionnel
+GRANTS explicites conformément aux règles Cloud.
 
-## Composants (src/components/profile/)
+---
 
-Nouveaux, tous mobile-first, glassmorphism léger, animations Framer subtiles :
+## Phase 3 — Connecteur USDA
 
-- `ProfileHeader` — avatar éditable (initiale ou photo), salutation dynamique (Bonjour/Bonsoir + prénom), email discret, badge niveau, streak compact, bouton édit
-- `ProgressionCard` — poids actuel/objectif, moyenne protéines (7j), jours de suivi, % objectifs (anneaux minimalistes, Recharts)
-- `GoalsManager` — réutilise `useGoals` existant, UI cartes compactes, create/edit/delete inline, % + date cible
-- `BadgesStrip` — 3-5 derniers badges + level/XP, lien "voir tout"
-- `ActivityTimeline` — 5 derniers items max, icône + label + relative time
-- `PersonalizationPanel` — toggles (theme, animations, notifications), select unités, color picker accent
-- `SecurityPanel` — email (read-only), changer mot de passe (Supabase auth), export données (JSON download), supprimer compte (confirm dialog), déconnexion
+Edge function `usda-lookup` :
+- Recherche par nom (`/foods/search`) et par FDC ID (`/food/{fdcId}`)
+- Récupération barcode (UPC) via `dataType=Branded`
+- Normalisation macros → /100g, micros → JSONB
+- Calcul automatique `quality_score` (kcal théoriques vs déclarées, complétude)
+- Upsert dans `foods` + `food_barcodes` + `food_quality_scores`
+- Cache : si `food` déjà présent → retour direct sans appel USDA
 
-## Page
+Secret requis : `USDA_API_KEY` (à demander à l'utilisateur — gratuit sur api.data.gov).
 
-`src/routes/_authenticated/profil.tsx` — réécriture complète, sections empilées dans cet ordre :
-Header → Progression → Objectifs → Badges → Activité → Personnalisation → Sécurité
+---
 
-Skeletons par section, error boundaries locales.
+## Phase 4 — Couche Gemini intelligente
+
+Edge function `smart-food-search` :
+- Input : requête utilisateur brute ("steack 5", "banne", "escalope")
+- Gemini → correction + expansion synonymes + intention (ne JAMAIS inventer macros)
+- Recherche FTS dans `foods` + `food_synonyms`
+- Si rien trouvé → fallback `usda-lookup` puis ré-indexation
+- Output : liste classée [favoris user > historique > base Icortex > USDA importable]
+
+Edge function `estimate-portion` (Gemini vision) : photo → unité + grammage estimé, macros prises de `foods`.
+
+Garde-fou : tout résultat Gemini sans correspondance `food_id` est marqué 🔴 et non sauvegardé.
+
+---
+
+## Phase 5 — Refactor frontend (sans toucher au design)
+
+- `src/services/usda.ts` (nouveau) — client HTTP vers edge function
+- `src/services/foodCatalog.ts` (nouveau) — façade unifiée recherche/barcode/favoris
+- `src/hooks/useFoodSearch.ts` — réécrit pour pointer sur `foodCatalog` (mêmes signatures)
+- `src/components/FoodAutocomplete.tsx`, `BarcodeScannerSheet.tsx` — branchés sur nouveau hook
+- Affichage badges qualité (🟢🟠🔴) dans la ligne résultat
+- React Query : `staleTime: 5min` sur recherches, `Infinity` sur lookup barcode
+
+---
+
+## Phase 6 — Suppression Open Food Facts
+
+Une fois la nouvelle chaîne validée (tests manuels whey/riz/œuf/scan barcode) :
+- `rm src/services/openFoodFacts.ts`
+- Retirer toutes occurrences `fetch('https://world.openfoodfacts.org')` dans edge functions
+- Nettoyer imports + `package.json` (si dépendance dédiée)
+- `rg -i "openfoodfacts|open.food.facts"` doit retourner 0 résultat
+
+---
+
+## Phase 7 — Vérification & rapport
+
+- `tsc` clean, build Vite clean
+- Test e2e manuel : recherche "whey" → ajout 33g → macros correctes
+- Test scan barcode produit connu + inconnu
+- Rapport final `docs/migration-nutrition.md` mis à jour (avant/après, dette, risques)
+
+---
 
 ## Détails techniques
 
-- Avatar : bucket Supabase Storage `avatars` (public read, write `auth.uid()::text = (storage.foldername(name))[1]`)
-- Changement mot de passe : `supabase.auth.updateUser({ password })`
-- Export données : serverFn `exportUserData` qui agrège items, nutrition, workouts, goals, preferences → JSON download
-- Suppression compte : serverFn `deleteUserAccount` (admin client) → supprime data + `auth.admin.deleteUser`
-- Thème/accent : applique sur `<html>` via classes Tailwind + CSS custom property `--primary`
-- XP/badges : pas d'attribution automatique dans cette itération (lecture seule depuis tables, alimentées plus tard depuis l'Accueil/actions)
+**Stack** : React Query, Supabase, Edge Functions Deno, Gemini via `GEMINI_API_KEY` (déjà configuré selon `MEMORY.md`), USDA via `USDA_API_KEY` (à provisionner).
 
-## Ce qui ne change pas
+**Risque principal** : volumétrie USDA (~600k aliments) — on n'importe pas en masse, on alimente à la demande via cache.
 
-- Accueil (`/`), navigation, autres routes, BodyMap, fitness, stocks, home — intouchés
-- Hooks existants (`useProfile`, `useGoals`, `useStreak`, `useProgress`) — réutilisés
-- Architecture `/src/lib/fitness/` — intouchée
-
-## Livraison
-
-1. Migration SQL (4 tables + bucket avatars + policies)
-2. 4 hooks
-3. 7 composants profile/
-4. 2 serverFn (export, delete account)
-5. Réécriture `profil.tsx`
-6. Mise à jour mémoire sécurité (nouvelles tables RLS)
+**Points qui nécessitent ta validation avant exécution** :
+1. Tu confirmes la création du secret `USDA_API_KEY` (clé gratuite, je te guiderai) ?
+2. Tu veux que je conserve **temporairement** OFF en fallback pendant la phase de validation, ou suppression directe Phase 6 ?
+3. Migration en **une seule grosse PR** ou découpée phase par phase avec validation à chaque étape (recommandé) ?
