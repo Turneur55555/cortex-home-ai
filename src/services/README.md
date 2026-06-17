@@ -39,7 +39,7 @@ export function useProfile(fallback: string) {
 
 - `homeCategories.ts`, `homeSubcategories.ts` — Maison module
 - `reminders.ts` — Rappels module
-- `openFoodFacts.ts` — external API client
+- `foodSuggestion.ts` — type partagé FoodSuggestion (catalogue USDA/Supabase, aucune API OFF)
 - `profile.ts` — user profile
 
 Hooks that still call `supabase` directly (to migrate when touched):

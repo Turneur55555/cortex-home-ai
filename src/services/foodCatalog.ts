@@ -1,5 +1,5 @@
 // Façade unifiée pour la recherche d'aliments.
-// Remplace Open Food Facts. Pipeline : edge function `food-lookup` → cache Supabase + USDA.
+// Catalogue aliments. Pipeline : edge function `food-lookup` → cache Supabase + USDA.
 
 import { supabase } from "@/integrations/supabase/client";
 
