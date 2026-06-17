@@ -1,5 +1,14 @@
 import { useMemo, useState, useCallback } from "react";
-import { Dumbbell, Loader2, Sparkles, AlertCircle } from "lucide-react";
+import {
+  Dumbbell,
+  Loader2,
+  Sparkles,
+  AlertCircle,
+  ChevronDown,
+  CalendarDays,
+  History,
+  Repeat,
+} from "lucide-react";
 import { BodyMap } from "@/components/fitness/BodyMap";
 import { WorkoutCard, type WorkoutRow } from "@/components/fitness/WorkoutCard";
 import { WorkoutSheet } from "@/components/fitness/WorkoutSheet";
@@ -15,11 +24,29 @@ import { useRecoveryMap } from "@/hooks/useRecoveryMap";
 import { useFitnessStreak } from "@/hooks/useFitnessStreak";
 import { FabAdd } from "@/components/shared/FormComponents";
 import { formatTonnage, workoutTonnage } from "@/lib/fitness/strength";
+import { exerciseToMuscles, MUSCLE_META, type MuscleId } from "@/lib/fitness/muscleMapping";
 import { CoachSheet, type WorkoutTemplate } from "./CoachSheet";
 import { computePRs } from "@/utils/fitness/exercise-stats";
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function workoutMuscleLabels(w: { exercises?: Array<{ name: string }> | null }): string[] {
+  const ids = new Set<MuscleId>();
+  for (const ex of w.exercises ?? []) {
+    for (const m of exerciseToMuscles(ex.name ?? "")) ids.add(m);
+  }
+  return [...ids].map((id) => MUSCLE_META[id]?.label).filter(Boolean) as string[];
+}
+
+function weekdayLabel(iso: string) {
+  return new Date(iso + "T00:00:00")
+    .toLocaleDateString("fr-FR", { weekday: "short" })
+    .replace(".", "");
+}
+
+// ── Composant principal ─────────────────────────────────────────────────────────
+
 export function SeancesTab() {
-  // === Données ===
   const { data, isLoading, error } = useWorkouts();
   const { data: activeWorkout, isLoading: activeLoading } = useActiveWorkout();
   const recoveryMap = useRecoveryMap(data);
@@ -35,14 +62,21 @@ export function SeancesTab() {
       .reduce((acc, w) => acc + workoutTonnage(w.exercises ?? []), 0);
   }, [data]);
 
-  // === État des modales ===
+  const weekWorkouts = useMemo(() => {
+    if (!data) return [];
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 6);
+    cutoff.setHours(0, 0, 0, 0);
+    return data.filter((w) => new Date(w.date + "T00:00:00") >= cutoff);
+  }, [data]);
+
   const [startOpen, setStartOpen] = useState(false);
   const [open, setOpen] = useState(false);
   const [template, setTemplate] = useState<WorkoutTemplate | null>(null);
   const [coachOpen, setCoachOpen] = useState(false);
   const [coachInitialMuscles, setCoachInitialMuscles] = useState<string[] | undefined>(undefined);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
-  // === Calculs ===
   const { prByName, histByName, volByName, prByGym, histByGym, topExercises } = useMemo(
     () => computePRs(data ?? []),
     [data],
@@ -55,7 +89,6 @@ export function SeancesTab() {
   const { data: listImageUrls } = useExerciseImageUrls(allImagePaths);
   const latestDate = useMemo(() => data?.[0]?.date ?? "", [data]);
 
-  // === Callbacks ===
   const openFromTemplate = useCallback((w: WorkoutRow) => {
     if (!w.id || !w.exercises) return;
     setTemplate({
@@ -82,7 +115,6 @@ export function SeancesTab() {
     setCoachOpen(true);
   }, []);
 
-  // Chargement initial combiné
   if (activeLoading && isLoading) {
     return (
       <div className="flex h-40 items-center justify-center">
@@ -92,7 +124,6 @@ export function SeancesTab() {
   }
 
   // ── VUE SÉANCE ACTIVE ──────────────────────────────────────────────────────
-  // Quand une séance est en cours, on masque tout l'historique.
   if (activeWorkout) {
     return (
       <section className="flex flex-col gap-4">
@@ -141,7 +172,6 @@ export function SeancesTab() {
         </div>
       )}
 
-      {/* Erreur */}
       {error && !isLoading && (
         <div className="rounded-2xl border border-destructive/50 bg-destructive/10 p-4">
           <div className="flex items-start gap-3">
@@ -162,12 +192,9 @@ export function SeancesTab() {
         </div>
       )}
 
+      {/* Séances de la semaine */}
       {data && !isLoading && (
-        <WorkoutProgressCharts
-          topExercises={topExercises}
-          histByName={histByName}
-          prByName={prByName}
-        />
+        <WeekSessions workouts={weekWorkouts} onRefaire={openFromTemplate} />
       )}
 
       {data && data.length === 0 && !isLoading && (
@@ -175,29 +202,61 @@ export function SeancesTab() {
           <Dumbbell className="mx-auto h-8 w-8 text-muted-foreground" />
           <p className="mt-3 text-sm font-medium">Aucune séance</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Lancez-vous, votre première séance vous attend.
+            Lance-toi, ta première séance t'attend.
           </p>
         </div>
       )}
 
-      {/* Liste séances historiques — WorkoutCard gère sa propre suppression */}
+      {/* Historique complet (repliable) */}
       {data && data.length > 0 && !isLoading && (
-        <ul className="space-y-3">
-          {data.map((w) => (
-            <WorkoutCard
-              key={w.id}
-              w={w}
-              prByName={prByName}
-              histByName={histByName}
-              volByName={volByName}
-              prByGym={prByGym}
-              histByGym={histByGym}
-              imageUrls={listImageUrls}
-              latestDate={latestDate}
-              onOpenFromTemplate={openFromTemplate}
+        <div className="overflow-hidden rounded-3xl border border-white/5 bg-gradient-to-b from-card/95 to-card/70 shadow-card backdrop-blur-xl">
+          <button
+            type="button"
+            onClick={() => setHistoryOpen((v) => !v)}
+            className="flex w-full items-center justify-between gap-2 px-5 py-4 text-left"
+            aria-expanded={historyOpen}
+          >
+            <span className="flex items-center gap-2">
+              <History className="h-4 w-4 text-primary" />
+              <span className="text-sm font-semibold">Historique complet</span>
+              <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                {data.length}
+              </span>
+            </span>
+            <ChevronDown
+              className={
+                "h-4 w-4 text-muted-foreground transition-transform " +
+                (historyOpen ? "rotate-180" : "")
+              }
             />
-          ))}
-        </ul>
+          </button>
+
+          {historyOpen && (
+            <div className="px-3 pb-4">
+              <WorkoutProgressCharts
+                topExercises={topExercises}
+                histByName={histByName}
+                prByName={prByName}
+              />
+              <ul className="mt-3 space-y-3">
+                {data.map((w) => (
+                  <WorkoutCard
+                    key={w.id}
+                    w={w}
+                    prByName={prByName}
+                    histByName={histByName}
+                    volByName={volByName}
+                    prByGym={prByGym}
+                    histByGym={histByGym}
+                    imageUrls={listImageUrls}
+                    latestDate={latestDate}
+                    onOpenFromTemplate={openFromTemplate}
+                  />
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
       )}
 
       {/* FAB → démarre une séance live */}
@@ -205,12 +264,14 @@ export function SeancesTab() {
 
       {startOpen && <StartWorkoutSheet onClose={() => setStartOpen(false)} />}
 
-      {/* WorkoutSheet = seulement pour "Refaire" / Coach */}
       {open && (
         <WorkoutSheet
           template={template}
           priorPRs={prByName}
-          onClose={() => { setOpen(false); setTemplate(null); }}
+          onClose={() => {
+            setOpen(false);
+            setTemplate(null);
+          }}
         />
       )}
 
@@ -222,6 +283,114 @@ export function SeancesTab() {
         />
       )}
     </section>
+  );
+}
+
+// ── Séances de la semaine (vue compacte + encoche détails) ───────────────────────
+
+function WeekSessions({
+  workouts,
+  onRefaire,
+}: {
+  workouts: WorkoutRow[];
+  onRefaire: (w: WorkoutRow) => void;
+}) {
+  const [detailed, setDetailed] = useState(false);
+
+  return (
+    <div className="overflow-hidden rounded-3xl border border-white/5 bg-gradient-to-b from-card/95 to-card/70 p-5 shadow-card backdrop-blur-xl">
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <CalendarDays className="h-4 w-4 text-primary" />
+          <span className="text-sm font-semibold">Séances de la semaine</span>
+          {workouts.length > 0 && (
+            <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+              {workouts.length}
+            </span>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={() => setDetailed((v) => !v)}
+          aria-pressed={detailed}
+          className={
+            "inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-semibold transition-colors " +
+            (detailed
+              ? "border-primary/40 bg-primary/10 text-primary"
+              : "border-border bg-card/50 text-muted-foreground hover:text-foreground")
+          }
+        >
+          <span
+            className={
+              "flex h-3 w-3 items-center justify-center rounded-[3px] border text-[8px] " +
+              (detailed ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/50")
+            }
+          >
+            {detailed ? "✓" : ""}
+          </span>
+          Détails
+        </button>
+      </div>
+
+      {workouts.length === 0 ? (
+        <p className="text-[11px] text-muted-foreground">
+          Aucune séance cette semaine. Lance-toi !
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {workouts.map((w) => {
+            const muscles = detailed ? workoutMuscleLabels(w) : [];
+            const volume = detailed ? Math.round(workoutTonnage(w.exercises ?? [])) : 0;
+            return (
+              <li
+                key={w.id}
+                className="rounded-xl border border-border bg-card/50 px-3 py-2.5"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className="w-9 shrink-0 text-center text-[10px] font-semibold uppercase tracking-wide text-primary">
+                      {weekdayLabel(w.date)}
+                    </span>
+                    <span className="truncate text-xs font-semibold">{w.name || "Séance"}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onRefaire(w)}
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/5 text-muted-foreground transition-all active:scale-90 hover:bg-primary/15 hover:text-primary"
+                    title="Refaire cette séance"
+                    aria-label="Refaire cette séance"
+                  >
+                    <Repeat className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+
+                {detailed && (
+                  <div className="mt-2 pl-12">
+                    <p className="text-[10px] text-muted-foreground">
+                      {w.duration_minutes ? `${w.duration_minutes} min` : "durée —"}
+                      {` · ${formatTonnage(volume)}`}
+                      {` · ${(w.exercises ?? []).length} exos`}
+                    </p>
+                    {muscles.length > 0 && (
+                      <div className="mt-1.5 flex flex-wrap gap-1">
+                        {muscles.map((m) => (
+                          <span
+                            key={m}
+                            className="rounded-full border border-white/8 bg-white/5 px-2 py-0.5 text-[9px] font-medium text-muted-foreground"
+                          >
+                            {m}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
   );
 }
 
