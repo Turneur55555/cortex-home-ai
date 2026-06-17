@@ -16,6 +16,7 @@ CREATE POLICY "Block direct insert on user_stats"
   ON public.user_stats AS RESTRICTIVE FOR INSERT TO authenticated, anon
   WITH CHECK (false);
 
+DROP POLICY IF EXISTS "Block direct update on user_stats" ON public.user_stats;
 CREATE POLICY "Block direct update on user_stats"
   ON public.user_stats AS RESTRICTIVE FOR UPDATE TO authenticated, anon
   USING (false) WITH CHECK (false);
