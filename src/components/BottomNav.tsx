@@ -1,12 +1,12 @@
 import { Link, useLocation } from "@tanstack/react-router";
-import { Home, House, Dumbbell, User, Bell } from "lucide-react";
+import { Home, Dumbbell, PersonStanding, Apple, User } from "lucide-react";
 import { motion } from "framer-motion";
 
 const tabs = [
   { to: "/", label: "Accueil", icon: Home },
-  { to: "/fitness", label: "Fitness", icon: Dumbbell },
-  { to: "/rappels", label: "Rappels", icon: Bell },
-  { to: "/stocks", label: "Maison", icon: House },
+  { to: "/seances", label: "Séances", icon: Dumbbell },
+  { to: "/corps", label: "Corps", icon: PersonStanding },
+  { to: "/nutrition", label: "Nutrition", icon: Apple },
   { to: "/profil", label: "Profil", icon: User },
 ] as const;
 
