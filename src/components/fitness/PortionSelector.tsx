@@ -12,7 +12,7 @@ import {
   type PortionReference,
   type PortionUnit,
 } from "@/lib/nutrition/portions";
-import type { FoodSuggestion } from "@/services/openFoodFacts";
+import type { FoodSuggestion } from "@/services/foodSuggestion";
 
 interface Props {
   food: FoodSuggestion;

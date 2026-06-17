@@ -6,7 +6,7 @@ import { Field, Sheet, SubmitButton } from "@/components/shared/FormComponents";
 import { FoodAutocomplete } from "@/components/FoodAutocomplete";
 import { usePantryItems, useDeductFromStock } from "@/hooks/use-pantry";
 import type { PantryItem } from "@/hooks/use-pantry";
-import type { FoodSuggestion } from "@/services/openFoodFacts";
+import type { FoodSuggestion } from "@/services/foodSuggestion";
 import type { MealPrefill } from "@/lib/nutrition/utils";
 import { PortionSelector } from "@/components/fitness/PortionSelector";
 import {
