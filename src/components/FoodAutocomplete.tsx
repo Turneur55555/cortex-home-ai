@@ -104,6 +104,12 @@ export function FoodAutocomplete({ value, onChange, onSelect, placeholder, requi
   );
 }
 
+function qColor(score: number): string {
+  if (score >= 75) return "#22c55e";
+  if (score >= 50) return "#f59e0b";
+  return "#ef4444";
+}
+
 function SuggestionRow({
   food,
   onPick,
@@ -132,8 +138,18 @@ function SuggestionRow({
           {food.brand ? `${food.brand} · ` : ""}
           {food.calories ?? "?"} kcal · P{food.proteins ?? "?"} G{food.carbs ?? "?"} L
           {food.fats ?? "?"} /100g
+          {food.default_serving ? ` \u00b7 ${food.default_serving.label} (${food.default_serving.grams} g)` : ""}
         </p>
       </div>
+      {typeof food.quality_score === "number" && (
+        <span
+          title={`Qualit\u00e9 ${food.quality_score}/100`}
+          className="flex shrink-0 items-center gap-1 text-[10px] font-semibold text-muted-foreground"
+        >
+          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: qColor(food.quality_score) }} />
+          {food.quality_score}
+        </span>
+      )}
     </button>
   );
 }
