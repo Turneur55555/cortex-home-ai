@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Apple, Loader2, Search, X } from "lucide-react";
 import { useFoodSearch, getRecentFoods, pushRecentFood } from "@/hooks/useFoodSearch";
-import type { FoodSuggestion } from "@/services/openFoodFacts";
+import type { FoodSuggestion } from "@/services/foodSuggestion";
 
 interface Props {
   value: string;
