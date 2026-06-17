@@ -6,15 +6,15 @@ test.describe("Navigation principale", () => {
     await ensureLoggedIn(page);
   });
 
-  test("navigue entre les modules via la bottom nav", async ({ page }) => {
-    await page.getByTestId("nav-stocks").click();
-    await expect(page).toHaveURL(/\/stocks/);
+  test("navigue entre les 5 modules via la bottom nav", async ({ page }) => {
+    await page.getByTestId("nav-seances").click();
+    await expect(page).toHaveURL(/\/seances/);
 
-    await page.getByTestId("nav-fitness").click();
-    await expect(page).toHaveURL(/\/fitness/);
+    await page.getByTestId("nav-corps").click();
+    await expect(page).toHaveURL(/\/corps/);
 
-    await page.getByTestId("nav-documents").click();
-    await expect(page).toHaveURL(/\/documents/);
+    await page.getByTestId("nav-nutrition").click();
+    await expect(page).toHaveURL(/\/nutrition/);
 
     await page.getByTestId("nav-profil").click();
     await expect(page).toHaveURL(/\/profil/);
