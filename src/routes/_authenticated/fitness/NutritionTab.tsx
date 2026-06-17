@@ -10,6 +10,7 @@ import {
   Star,
   Target,
   Trash2,
+  TrendingUp,
   X,
 } from "lucide-react";
 import { format, subDays } from "date-fns";
@@ -33,6 +34,7 @@ import { NutritionSheet } from "@/components/fitness/NutritionSheet";
 import { MealPlanSheet } from "@/components/fitness/MealPlanSheet";
 import { GoalsSheet } from "@/components/fitness/GoalsSheet";
 import { PortionEditModal } from "@/components/fitness/PortionEditModal";
+import { NutritionHistorySheet } from "@/components/fitness/NutritionHistorySheet";
 import { getPortionBadge } from "@/lib/nutrition/utils";
 import type { MealPrefill, NutritionEntry } from "@/lib/nutrition/utils";
 
@@ -50,6 +52,7 @@ export function NutritionTab() {
   const [copyFrom, setCopyFrom] = useState(() =>
     format(subDays(new Date(), 1), "yyyy-MM-dd"),
   );
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [open, setOpen] = useState(false);
   const [goalsOpen, setGoalsOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
@@ -69,6 +72,19 @@ export function NutritionTab() {
       { calories: 0, proteins: 0, carbs: 0, fats: 0 },
     );
   }, [data]);
+
+  // Macros restantes vs objectifs (amélioration premium).
+  const remaining = useMemo(() => {
+    if (!goals) return null;
+    const r = (g: number | null | undefined, v: number) =>
+      g != null ? Math.round(g - v) : null;
+    return {
+      calories: r(goals.calories, totals.calories),
+      proteins: r(goals.proteins, totals.proteins),
+      carbs: r(goals.carbs, totals.carbs),
+      fats: r(goals.fats, totals.fats),
+    };
+  }, [goals, totals]);
 
   const grouped = useMemo(() => {
     type Meal = NonNullable<typeof data>[number];
@@ -209,6 +225,23 @@ export function NutritionTab() {
             barColor="bg-destructive"
           />
         </div>
+        {remaining && remaining.calories != null && (
+          <div className="mt-3 rounded-xl bg-surface px-3 py-2 text-center text-[11px]">
+            {remaining.calories >= 0 ? (
+              <span className="text-muted-foreground">
+                Restant aujourd'hui :{" "}
+                <span className="font-bold text-primary">{remaining.calories}</span> kcal
+                {remaining.proteins != null && (
+                  <> · P{remaining.proteins} G{remaining.carbs} L{remaining.fats}</>
+                )}
+              </span>
+            ) : (
+              <span className="font-semibold text-destructive">
+                Objectif dépassé de {Math.abs(remaining.calories)} kcal
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-3">
@@ -325,6 +358,15 @@ export function NutritionTab() {
         </div>
       )}
 
+      <button
+        type="button"
+        onClick={() => setHistoryOpen(true)}
+        className="flex w-full items-center justify-center gap-2 rounded-2xl border border-border bg-surface py-2.5 text-sm font-semibold text-foreground"
+      >
+        <TrendingUp className="h-4 w-4 text-primary" />
+        Historique nutritionnel
+      </button>
+
       {isLoading && (
         <div className="flex h-20 items-center justify-center">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -403,6 +445,7 @@ export function NutritionTab() {
       {open && <NutritionSheet date={date} prefill={prefill} onClose={() => setOpen(false)} />}
       {goalsOpen && <GoalsSheet current={goals ?? null} onClose={() => setGoalsOpen(false)} />}
       {planOpen && <MealPlanSheet onClose={() => setPlanOpen(false)} />}
+      {historyOpen && <NutritionHistorySheet onClose={() => setHistoryOpen(false)} />}
       {scanOpen && <MealScanSheet onClose={() => setScanOpen(false)} onResult={handleScanResult} />}
       {barcodeOpen && <BarcodeScannerSheet onClose={() => setBarcodeOpen(false)} />}
       {portionItem && (
