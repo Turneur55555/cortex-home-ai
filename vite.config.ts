@@ -23,7 +23,7 @@ export default defineConfig({
         manifest: {
           name: "ICORTEX",
           short_name: "ICORTEX",
-          description: "ICORTEX Home AI — gestion intelligente de la maison et de la santé",
+          description: "ICORTEX — gestion intelligente de la nutrition et de la santé",
           theme_color: "#0d0d14",
           background_color: "#0d0d14",
           display: "standalone",

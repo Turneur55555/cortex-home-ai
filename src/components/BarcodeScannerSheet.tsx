@@ -18,7 +18,7 @@ import {
 import { BrowserMultiFormatReader } from "@zxing/browser";
 import type { Result } from "@zxing/library";
 import { toast } from "sonner";
-import { useAddStockItem } from "@/hooks/use-stocks";
+// useAddStockItem removed: Maison/stocks module deleted.
 import { useAddNutrition } from "@/hooks/use-fitness";
 import { Sheet } from "@/components/shared/FormComponents";
 import { format } from "date-fns";
@@ -300,7 +300,7 @@ function PortionModal({
 
 // ─── Main component ────────────────────────────────────────────────────────────
 
-export function BarcodeScannerSheet({ roomId = "cuisine", onClose }: { roomId?: string; onClose: () => void }) {
+export function BarcodeScannerSheet({ onClose }: { onClose: () => void }) {
   const videoRef      = useRef<HTMLVideoElement>(null);
   const readerRef     = useRef<BrowserMultiFormatReader | null>(null);
   const controlsRef   = useRef<{ stop: () => void } | null>(null);
@@ -320,7 +320,6 @@ export function BarcodeScannerSheet({ roomId = "cuisine", onClose }: { roomId?: 
   const [portionUnit,  setPortionUnit]  = useState<Unit>("g");
   const [portionCount, setPortionCount] = useState(1);
 
-  const addStock     = useAddStockItem();
   const addNutrition = useAddNutrition();
 
   // Computed macros based on current portion
@@ -434,29 +433,8 @@ export function BarcodeScannerSheet({ roomId = "cuisine", onClose }: { roomId?: 
     };
   }, [stopCamera]);
 
-  const handleAddToStock = async () => {
-    if (!product || !macros) return;
-    try {
-      const n = product.nutriments;
-      await addStock.mutateAsync({
-        room:     roomId,
-        name:     product.product_name || "Produit inconnu",
-        quantity: portionCount,
-        unit:     portionUnit === "g" || portionUnit === "ml"
-          ? `${portionQty} ${portionUnit}`
-          : portionUnit,
-        notes:             `Code-barres: ${product.barcode}`,
-        calories_per_100g: n?.["energy-kcal_100g"] ?? null,
-        protein_per_100g:  n?.proteins_100g ?? null,
-        carbs_per_100g:    n?.carbohydrates_100g ?? null,
-        fat_per_100g:      n?.fat_100g ?? null,
-      });
-      toast.success("Ajouté aux stocks");
-      onClose();
-    } catch {
-      // error handled via toast in mutateAsync
-    }
-  };
+  // handleAddToStock removed: Maison/stocks module deleted.
+
 
   const handleAddToNutrition = async () => {
     if (!product || !macros) return;
@@ -690,22 +668,14 @@ export function BarcodeScannerSheet({ roomId = "cuisine", onClose }: { roomId?: 
             </div>
 
             {/* Actions */}
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={handleAddToStock}
-                disabled={addStock.isPending}
-                className="flex items-center justify-center gap-2 rounded-xl border border-border bg-surface-elevated py-3 text-xs font-bold hover:bg-muted disabled:opacity-60 transition-colors"
-              >
-                {addStock.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Package className="h-4 w-4 text-primary" />}
-                + Stocks
-              </button>
+            <div>
               <button
                 onClick={handleAddToNutrition}
                 disabled={addNutrition.isPending}
-                className="flex items-center justify-center gap-2 rounded-xl bg-gradient-primary py-3 text-xs font-bold text-primary-foreground shadow-glow disabled:opacity-60"
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-primary py-3 text-xs font-bold text-primary-foreground shadow-glow disabled:opacity-60"
               >
                 {addNutrition.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Apple className="h-4 w-4" />}
-                + Nutrition
+                + Ajouter à la nutrition
               </button>
             </div>
           </div>

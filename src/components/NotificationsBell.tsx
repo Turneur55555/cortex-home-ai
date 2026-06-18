@@ -1,102 +1,43 @@
-import { useEffect, useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
 import { Bell, X, AlertTriangle, Clock } from "lucide-react";
-import { differenceInDays, parseISO, format } from "date-fns";
-import { fr } from "date-fns/locale";
 import { Link } from "@tanstack/react-router";
-import { supabase } from "@/integrations/supabase/client";
-import { getRoomById } from "@/lib/maison/rooms";
-import { useHomeCategories } from "@/hooks/useHomeCategories";
+import { format } from "date-fns";
+import { fr } from "date-fns/locale";
+import { useReminders } from "@/hooks/useReminders";
 
-const DISMISSED_KEY = "cortex_dismissed_alerts_v1";
-
-function getDismissed(): Record<string, string> {
-  if (typeof window === "undefined") return {};
-  try {
-    return JSON.parse(localStorage.getItem(DISMISSED_KEY) ?? "{}");
-  } catch {
-    return {};
-  }
-}
-
-function setDismissedKey(id: string, expISO: string | null) {
-  const map = getDismissed();
-  map[id] = expISO ?? "none";
-  localStorage.setItem(DISMISSED_KEY, JSON.stringify(map));
-}
-
+/**
+ * Cloche de notifications — surface les rappels en retard ou prévus
+ * aujourd'hui. Les anciennes alertes de stock ont été retirées avec le
+ * module Maison.
+ */
 export function NotificationsBell() {
   const [open, setOpen] = useState(false);
-  const [dismissed, setDismissed] = useState<Record<string, string>>({});
-  const qc = useQueryClient();
-  const { data: dynCategories = [] } = useHomeCategories();
+  const { data: reminders = [] } = useReminders();
 
-  useEffect(() => {
-    setDismissed(getDismissed());
-  }, [open]);
-
-  useEffect(() => {
-    const channel = supabase
-      .channel("items_alerts_realtime")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "items" },
-        () => {
-          qc.invalidateQueries({ queryKey: ["alerts_items"] });
-        },
-      )
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [qc]);
-
-  const { data: items = [] } = useQuery({
-    queryKey: ["alerts_items"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("items")
-        .select("id, name, room, expiration_date, alert_days_before, location, quantity")
-        .not("expiration_date", "is", null)
-        .gt("quantity", 0)
-        .order("expiration_date", { ascending: true })
-        .limit(500);
-      if (error) throw error;
-      return data ?? [];
-    },
-    refetchInterval: 60_000,
-  });
-
-  const alerts = useMemo(() => {
-    const today = new Date();
-    return items
-      .map((it) => {
-        const exp = it.expiration_date as unknown as string;
-        const days = differenceInDays(parseISO(exp), today);
-        const threshold = it.alert_days_before ?? 7;
-        return { ...it, days, threshold };
+  const { overdue, today } = useMemo(() => {
+    const now = new Date();
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
+    const open = reminders.filter((r) => r.status !== "done" && r.due_at);
+    const overdueList = open
+      .filter((r) => new Date(r.due_at as string) < now)
+      .sort(
+        (a, b) =>
+          new Date(a.due_at as string).getTime() - new Date(b.due_at as string).getTime(),
+      );
+    const todayList = open
+      .filter((r) => {
+        const d = new Date(r.due_at as string);
+        return d >= now && d <= endOfDay;
       })
-      .filter((it) => it.days <= 0)
-      .filter((it) => {
-        const d = dismissed[it.id];
-        return d !== ((it.expiration_date as unknown as string) ?? "none");
-      })
-      .sort((a, b) => a.days - b.days);
-  }, [items, dismissed]);
+      .sort(
+        (a, b) =>
+          new Date(a.due_at as string).getTime() - new Date(b.due_at as string).getTime(),
+      );
+    return { overdue: overdueList, today: todayList };
+  }, [reminders]);
 
-  const count = alerts.length;
-
-  const dismissOne = (id: string, exp: string | null) => {
-    setDismissedKey(id, exp);
-    setDismissed(getDismissed());
-  };
-
-  const dismissAll = () => {
-    alerts.forEach((a) =>
-      setDismissedKey(a.id, (a.expiration_date as unknown as string) ?? null),
-    );
-    setDismissed(getDismissed());
-  };
+  const count = overdue.length + today.length;
 
   return (
     <>
@@ -124,105 +65,82 @@ export function NotificationsBell() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-base font-bold">Alertes ({count})</h2>
-              <div className="flex items-center gap-2">
-                {count > 0 && (
-                  <button
-                    type="button"
-                    onClick={dismissAll}
-                    className="text-xs font-medium text-muted-foreground hover:text-foreground"
-                  >
-                    Tout marquer lu
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setOpen(false)}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-surface"
-                  aria-label="Fermer"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
+              <h2 className="text-base font-bold">Rappels ({count})</h2>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-surface"
+                aria-label="Fermer"
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
 
             {count === 0 ? (
               <div className="py-10 text-center text-sm text-muted-foreground">
-                Aucune alerte. Tout est sous contrôle ✨
+                Aucun rappel en attente. ✨
               </div>
             ) : (
               <ul className="max-h-[60vh] space-y-2 overflow-y-auto">
-                {alerts.map((a) => {
-                  const exp = a.expiration_date as unknown as string;
-                  const expired = a.days < 0;
-                  return (
-                    <li
-                      key={a.id}
-                      className={`rounded-xl border p-3 ${
-                        expired
-                          ? "border-destructive/40 bg-destructive/10"
-                          : "border-amber-500/30 bg-amber-500/10"
-                      }`}
-                    >
-                      <div className="flex items-start gap-2">
-                        {expired ? (
-                          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
-                        ) : (
-                          <Clock className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-                        )}
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="truncate text-sm font-semibold">{a.name}</p>
-                            <button
-                              type="button"
-                              onClick={() => dismissOne(a.id, exp)}
-                              className="shrink-0 text-[11px] text-muted-foreground hover:text-foreground"
-                            >
-                              Marquer lu
-                            </button>
-                          </div>
-                          <p className="text-[11px] text-muted-foreground">
-                            {(() => {
-                              const roomSlug = (a as { room?: string | null }).room ?? "";
-                              const name =
-                                dynCategories.find((c) => c.slug === roomSlug)?.name ??
-                                getRoomById(roomSlug)?.name ??
-                                roomSlug;
-                              return name || "Maison";
-                            })()}
-                            {a.location ? ` • ${a.location}` : ""}
-                          </p>
-                          <p
-                            className={`mt-1 text-xs font-medium ${
-                              expired ? "text-destructive" : "text-amber-700 dark:text-amber-400"
-                            }`}
-                          >
-                            {expired
-                              ? `Expiré depuis ${Math.abs(a.days)} j`
-                              : a.days === 0
-                              ? "Expire aujourd'hui"
-                              : `Expire dans ${a.days} j`}
-                            {" • "}
-                            {format(parseISO(exp), "d MMM yyyy", { locale: fr })}
-                          </p>
-                        </div>
-                      </div>
-                    </li>
-                  );
-                })}
+                {overdue.map((r) => (
+                  <ReminderRow key={r.id} title={r.title} dueAt={r.due_at as string} overdue />
+                ))}
+                {today.map((r) => (
+                  <ReminderRow key={r.id} title={r.title} dueAt={r.due_at as string} />
+                ))}
               </ul>
             )}
 
             <Link
-              to="/stocks"
+              to="/rappels"
               onClick={() => setOpen(false)}
               className="mt-3 block w-full rounded-xl bg-gradient-primary py-2.5 text-center text-xs font-semibold text-primary-foreground"
             >
-              Ouvrir les stocks
+              Ouvrir les rappels
             </Link>
           </div>
         </div>
       )}
     </>
+  );
+}
+
+function ReminderRow({
+  title,
+  dueAt,
+  overdue,
+}: {
+  title: string;
+  dueAt: string;
+  overdue?: boolean;
+}) {
+  const d = new Date(dueAt);
+  return (
+    <li
+      className={`rounded-xl border p-3 ${
+        overdue
+          ? "border-destructive/40 bg-destructive/10"
+          : "border-amber-500/30 bg-amber-500/10"
+      }`}
+    >
+      <div className="flex items-start gap-2">
+        {overdue ? (
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+        ) : (
+          <Clock className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+        )}
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold">{title}</p>
+          <p
+            className={`mt-0.5 text-[11px] ${
+              overdue ? "text-destructive" : "text-amber-700 dark:text-amber-400"
+            }`}
+          >
+            {overdue ? "En retard · " : "Aujourd'hui · "}
+            {format(d, "d MMM HH:mm", { locale: fr })}
+          </p>
+        </div>
+      </div>
+    </li>
   );
 }

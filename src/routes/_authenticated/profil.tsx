@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { House, Bell, FileText, Apple, ChevronRight } from "lucide-react";
+import { Bell, FileText, Apple, ChevronRight } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useProfile } from "@/hooks/useProfile";
 import { useStreak } from "@/hooks/useStreak";
@@ -73,11 +73,10 @@ function ProfilPage() {
         <BadgesStrip />
       </Section>
 
-      {/* Mes espaces — Maison & Rappels fusionnés ici */}
+      {/* Mes espaces */}
       <Section title="Mes espaces">
         <div className="grid grid-cols-2 gap-2">
           <SpaceLink to="/rappels" icon={<Bell className="h-4 w-4" />} label="Rappels" />
-          <SpaceLink to="/stocks" icon={<House className="h-4 w-4" />} label="Maison" />
           <SpaceLink to="/documents" icon={<FileText className="h-4 w-4" />} label="Documents" />
           <SpaceLink
             to="/preferences-alimentaires"

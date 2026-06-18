@@ -148,12 +148,8 @@ export function useGenerateShoppingList(startDate: string | null | undefined, en
         }
       }
 
-      // 4. Stock courant (items).
-      const { data: items, error: sErr } = await db.from("items").select("id, name, quantity, unit");
-      if (sErr) throw sErr;
-      const stock: StockLevel[] = ((items ?? []) as Array<{ id: string; name: string; quantity: number | null; unit: string | null }>).map(
-        (it) => ({ itemId: it.id, name: it.name, unit: it.unit, quantity: it.quantity }),
-      );
+      // 4. Stock courant — module Maison supprimé, on calcule sans déduction.
+      const stock: StockLevel[] = [];
 
       return buildShoppingList(planned, stock);
     },

@@ -1,11 +1,8 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { toast } from "sonner";
-import { ChefHat, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { useAddNutrition } from "@/hooks/use-fitness";
 import { Field, Sheet, SubmitButton } from "@/components/shared/FormComponents";
 import { FoodAutocomplete } from "@/components/FoodAutocomplete";
-import { usePantryItems, useDeductFromStock } from "@/hooks/use-pantry";
-import type { PantryItem } from "@/hooks/use-pantry";
 import type { FoodSuggestion } from "@/services/foodSuggestion";
 import type { MealPrefill } from "@/lib/nutrition/utils";
 import { PortionSelector } from "@/components/fitness/PortionSelector";
@@ -16,66 +13,8 @@ import {
   type PortionUnit,
 } from "@/lib/nutrition/portions";
 
-// ─── PantryPicker ─────────────────────────────────────────────────────────────
+// PantryPicker removed: Maison/stocks module deleted.
 
-interface PantryPickerProps {
-  selected: PantryItem | null;
-  onSelect: (item: PantryItem) => void;
-  onClear: () => void;
-}
-
-function PantryPicker({ selected, onSelect, onClear }: PantryPickerProps) {
-  const { data: items, isLoading } = usePantryItems();
-  const [q, setQ] = useState("");
-
-  const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    if (!needle) return (items ?? []).slice(0, 12);
-    return (items ?? []).filter((it) => it.name.toLowerCase().includes(needle)).slice(0, 12);
-  }, [items, q]);
-
-  return (
-    <div className="space-y-2">
-      <input
-        type="text"
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        placeholder="Rechercher dans ma cuisine…"
-        className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary"
-      />
-      {isLoading && (
-        <div className="flex justify-center py-2">
-          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-        </div>
-      )}
-      {!isLoading && filtered.length === 0 && (
-        <p className="py-2 text-center text-xs text-muted-foreground">
-          Aucun aliment dans la cuisine
-        </p>
-      )}
-      <div className="flex flex-wrap gap-1.5">
-        {filtered.map((it) => (
-          <button
-            key={it.id}
-            type="button"
-            onClick={() => (selected?.id === it.id ? onClear() : onSelect(it))}
-            className={
-              "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors " +
-              (selected?.id === it.id
-                ? "border-primary bg-primary/15 text-primary"
-                : "border-border bg-card text-foreground hover:border-primary/50")
-            }
-          >
-            {it.name}
-            <span className="text-[10px] text-muted-foreground">
-              {it.quantity}{it.unit ? ` ${it.unit}` : ""}
-            </span>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 // ─── NutritionSheet ───────────────────────────────────────────────────────────
 
@@ -87,12 +26,8 @@ interface NutritionSheetProps {
 
 export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) {
   const add = useAddNutrition();
-  const deduct = useDeductFromStock();
-  const [pantryOpen, setPantryOpen] = useState(false);
-  const [pantryItem, setPantryItem] = useState<PantryItem | null>(null);
-  const [pantryQty, setPantryQty] = useState("1");
 
-  // Aliment de référence sélectionné (autocomplete / pantry).
+  // Aliment de référence sélectionné (autocomplete).
   const [baseFood, setBaseFood] = useState<FoodSuggestion | null>(null);
   // État courant de la portion (renseigné par PortionSelector).
   const [portion, setPortion] = useState<{
@@ -132,41 +67,12 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
     [],
   );
 
-  const handlePantrySelect = (it: PantryItem) => {
-    setPantryItem(it);
-    setPantryQty("1");
-    if (it.calories_per_100g != null) {
-      const food: FoodSuggestion = {
-        id: it.id,
-        name: it.name,
-        calories: it.calories_per_100g,
-        proteins: it.protein_per_100g,
-        carbs: it.carbs_per_100g,
-        fats: it.fat_per_100g,
-        source: "local",
-      };
-      selectBaseFood(food);
-    } else {
-      setForm((f) => ({ ...f, name: it.name }));
-    }
-  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim()) return;
 
-    if (pantryItem) {
-      const qty = Number(pantryQty) || 1;
-      try {
-        await deduct.mutateAsync({
-          itemId: pantryItem.id,
-          quantityUsed: qty,
-          mealName: form.name.trim(),
-        });
-      } catch {
-        return;
-      }
-    }
+
 
     // Parsing tolérant (accepte « 33,5 » et « 33.5 »).
     const calories = parseDecimal(form.calories);
@@ -221,64 +127,11 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
     }
   };
 
-  const busy = add.isPending || deduct.isPending;
+  const busy = add.isPending;
 
   return (
     <Sheet title={prefill ? "Confirmer le repas" : "Nouveau repas"} onClose={onClose}>
       <form onSubmit={submit} className="space-y-4">
-
-        {/* Pantry picker section */}
-        <div className="rounded-2xl border border-border bg-surface overflow-hidden">
-          <button
-            type="button"
-            onClick={() => setPantryOpen((o) => !o)}
-            className="flex w-full items-center justify-between px-3 py-2.5 text-xs font-semibold"
-          >
-            <span className="flex items-center gap-2 text-primary">
-              <ChefHat className="h-3.5 w-3.5" />
-              Depuis ma cuisine
-              {pantryItem && (
-                <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] text-primary">
-                  {pantryItem.name}
-                </span>
-              )}
-            </span>
-            {pantryOpen ? (
-              <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
-            ) : (
-              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-            )}
-          </button>
-
-          {pantryOpen && (
-            <div className="border-t border-border px-3 pb-3 pt-2">
-              <PantryPicker
-                selected={pantryItem}
-                onSelect={handlePantrySelect}
-                onClear={() => { setPantryItem(null); setBaseFood(null); }}
-              />
-              {pantryItem && (
-                <div className="mt-2 flex items-center gap-2">
-                  <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                    Qté utilisée
-                  </label>
-                  <input
-                    type="number"
-                    step="0.5"
-                    min="0.5"
-                    max={pantryItem.quantity}
-                    value={pantryQty}
-                    onChange={(e) => setPantryQty(e.target.value)}
-                    className="w-20 rounded-lg border border-border bg-card px-2 py-1.5 text-center text-sm outline-none focus:border-primary"
-                  />
-                  <span className="text-xs text-muted-foreground">
-                    / {pantryItem.quantity} {pantryItem.unit ?? ""}
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
 
         <FoodAutocomplete
           value={form.name}
@@ -286,6 +139,7 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
           onSelect={(f) => selectBaseFood(f)}
           required
         />
+
 
         {/* Sélecteur de portion intelligent (presets + grammes libres) */}
         {baseFood && (
