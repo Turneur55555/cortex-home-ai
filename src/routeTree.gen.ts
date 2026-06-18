@@ -14,12 +14,14 @@ import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
-import { Route as AuthenticatedStocksRouteImport } from './routes/_authenticated/stocks'
+import { Route as AuthenticatedSeancesRouteImport } from './routes/_authenticated/seances'
 import { Route as AuthenticatedRlsStatusRouteImport } from './routes/_authenticated/rls-status'
 import { Route as AuthenticatedRappelsRouteImport } from './routes/_authenticated/rappels'
 import { Route as AuthenticatedProfilRouteImport } from './routes/_authenticated/profil'
 import { Route as AuthenticatedPreferencesAlimentairesRouteImport } from './routes/_authenticated/preferences-alimentaires'
+import { Route as AuthenticatedNutritionRouteImport } from './routes/_authenticated/nutrition'
 import { Route as AuthenticatedDocumentsRouteImport } from './routes/_authenticated/documents'
+import { Route as AuthenticatedCorpsRouteImport } from './routes/_authenticated/corps'
 import { Route as AuthenticatedFitnessIndexRouteImport } from './routes/_authenticated/fitness/index'
 import { Route as ApiPublicCalendarTokenDoticsRouteImport } from './routes/api/public/calendar.$token[.]ics'
 
@@ -47,9 +49,9 @@ const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
-const AuthenticatedStocksRoute = AuthenticatedStocksRouteImport.update({
-  id: '/stocks',
-  path: '/stocks',
+const AuthenticatedSeancesRoute = AuthenticatedSeancesRouteImport.update({
+  id: '/seances',
+  path: '/seances',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedRlsStatusRoute = AuthenticatedRlsStatusRouteImport.update({
@@ -73,9 +75,19 @@ const AuthenticatedPreferencesAlimentairesRoute =
     path: '/preferences-alimentaires',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedNutritionRoute = AuthenticatedNutritionRouteImport.update({
+  id: '/nutrition',
+  path: '/nutrition',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedDocumentsRoute = AuthenticatedDocumentsRouteImport.update({
   id: '/documents',
   path: '/documents',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedCorpsRoute = AuthenticatedCorpsRouteImport.update({
+  id: '/corps',
+  path: '/corps',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedFitnessIndexRoute =
@@ -96,12 +108,14 @@ export interface FileRoutesByFullPath {
   '/index': typeof Char91indexChar93Route
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/corps': typeof AuthenticatedCorpsRoute
   '/documents': typeof AuthenticatedDocumentsRoute
+  '/nutrition': typeof AuthenticatedNutritionRoute
   '/preferences-alimentaires': typeof AuthenticatedPreferencesAlimentairesRoute
   '/profil': typeof AuthenticatedProfilRoute
   '/rappels': typeof AuthenticatedRappelsRoute
   '/rls-status': typeof AuthenticatedRlsStatusRoute
-  '/stocks': typeof AuthenticatedStocksRoute
+  '/seances': typeof AuthenticatedSeancesRoute
   '/fitness/': typeof AuthenticatedFitnessIndexRoute
   '/api/public/calendar/$token.ics': typeof ApiPublicCalendarTokenDoticsRoute
 }
@@ -109,12 +123,14 @@ export interface FileRoutesByTo {
   '/index': typeof Char91indexChar93Route
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/corps': typeof AuthenticatedCorpsRoute
   '/documents': typeof AuthenticatedDocumentsRoute
+  '/nutrition': typeof AuthenticatedNutritionRoute
   '/preferences-alimentaires': typeof AuthenticatedPreferencesAlimentairesRoute
   '/profil': typeof AuthenticatedProfilRoute
   '/rappels': typeof AuthenticatedRappelsRoute
   '/rls-status': typeof AuthenticatedRlsStatusRoute
-  '/stocks': typeof AuthenticatedStocksRoute
+  '/seances': typeof AuthenticatedSeancesRoute
   '/': typeof AuthenticatedIndexRoute
   '/fitness': typeof AuthenticatedFitnessIndexRoute
   '/api/public/calendar/$token.ics': typeof ApiPublicCalendarTokenDoticsRoute
@@ -125,12 +141,14 @@ export interface FileRoutesById {
   '/index': typeof Char91indexChar93Route
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/_authenticated/corps': typeof AuthenticatedCorpsRoute
   '/_authenticated/documents': typeof AuthenticatedDocumentsRoute
+  '/_authenticated/nutrition': typeof AuthenticatedNutritionRoute
   '/_authenticated/preferences-alimentaires': typeof AuthenticatedPreferencesAlimentairesRoute
   '/_authenticated/profil': typeof AuthenticatedProfilRoute
   '/_authenticated/rappels': typeof AuthenticatedRappelsRoute
   '/_authenticated/rls-status': typeof AuthenticatedRlsStatusRoute
-  '/_authenticated/stocks': typeof AuthenticatedStocksRoute
+  '/_authenticated/seances': typeof AuthenticatedSeancesRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/fitness/': typeof AuthenticatedFitnessIndexRoute
   '/api/public/calendar/$token.ics': typeof ApiPublicCalendarTokenDoticsRoute
@@ -142,12 +160,14 @@ export interface FileRouteTypes {
     | '/index'
     | '/login'
     | '/reset-password'
+    | '/corps'
     | '/documents'
+    | '/nutrition'
     | '/preferences-alimentaires'
     | '/profil'
     | '/rappels'
     | '/rls-status'
-    | '/stocks'
+    | '/seances'
     | '/fitness/'
     | '/api/public/calendar/$token.ics'
   fileRoutesByTo: FileRoutesByTo
@@ -155,12 +175,14 @@ export interface FileRouteTypes {
     | '/index'
     | '/login'
     | '/reset-password'
+    | '/corps'
     | '/documents'
+    | '/nutrition'
     | '/preferences-alimentaires'
     | '/profil'
     | '/rappels'
     | '/rls-status'
-    | '/stocks'
+    | '/seances'
     | '/'
     | '/fitness'
     | '/api/public/calendar/$token.ics'
@@ -170,12 +192,14 @@ export interface FileRouteTypes {
     | '/index'
     | '/login'
     | '/reset-password'
+    | '/_authenticated/corps'
     | '/_authenticated/documents'
+    | '/_authenticated/nutrition'
     | '/_authenticated/preferences-alimentaires'
     | '/_authenticated/profil'
     | '/_authenticated/rappels'
     | '/_authenticated/rls-status'
-    | '/_authenticated/stocks'
+    | '/_authenticated/seances'
     | '/_authenticated/'
     | '/_authenticated/fitness/'
     | '/api/public/calendar/$token.ics'
@@ -226,11 +250,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    '/_authenticated/stocks': {
-      id: '/_authenticated/stocks'
-      path: '/stocks'
-      fullPath: '/stocks'
-      preLoaderRoute: typeof AuthenticatedStocksRouteImport
+    '/_authenticated/seances': {
+      id: '/_authenticated/seances'
+      path: '/seances'
+      fullPath: '/seances'
+      preLoaderRoute: typeof AuthenticatedSeancesRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/rls-status': {
@@ -261,11 +285,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedPreferencesAlimentairesRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/nutrition': {
+      id: '/_authenticated/nutrition'
+      path: '/nutrition'
+      fullPath: '/nutrition'
+      preLoaderRoute: typeof AuthenticatedNutritionRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/documents': {
       id: '/_authenticated/documents'
       path: '/documents'
       fullPath: '/documents'
       preLoaderRoute: typeof AuthenticatedDocumentsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/corps': {
+      id: '/_authenticated/corps'
+      path: '/corps'
+      fullPath: '/corps'
+      preLoaderRoute: typeof AuthenticatedCorpsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/fitness/': {
@@ -286,24 +324,28 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedRouteChildren {
+  AuthenticatedCorpsRoute: typeof AuthenticatedCorpsRoute
   AuthenticatedDocumentsRoute: typeof AuthenticatedDocumentsRoute
+  AuthenticatedNutritionRoute: typeof AuthenticatedNutritionRoute
   AuthenticatedPreferencesAlimentairesRoute: typeof AuthenticatedPreferencesAlimentairesRoute
   AuthenticatedProfilRoute: typeof AuthenticatedProfilRoute
   AuthenticatedRappelsRoute: typeof AuthenticatedRappelsRoute
   AuthenticatedRlsStatusRoute: typeof AuthenticatedRlsStatusRoute
-  AuthenticatedStocksRoute: typeof AuthenticatedStocksRoute
+  AuthenticatedSeancesRoute: typeof AuthenticatedSeancesRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedFitnessIndexRoute: typeof AuthenticatedFitnessIndexRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
+  AuthenticatedCorpsRoute: AuthenticatedCorpsRoute,
   AuthenticatedDocumentsRoute: AuthenticatedDocumentsRoute,
+  AuthenticatedNutritionRoute: AuthenticatedNutritionRoute,
   AuthenticatedPreferencesAlimentairesRoute:
     AuthenticatedPreferencesAlimentairesRoute,
   AuthenticatedProfilRoute: AuthenticatedProfilRoute,
   AuthenticatedRappelsRoute: AuthenticatedRappelsRoute,
   AuthenticatedRlsStatusRoute: AuthenticatedRlsStatusRoute,
-  AuthenticatedStocksRoute: AuthenticatedStocksRoute,
+  AuthenticatedSeancesRoute: AuthenticatedSeancesRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedFitnessIndexRoute: AuthenticatedFitnessIndexRoute,
 }

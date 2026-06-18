@@ -1,27 +1,18 @@
 import { useMemo } from "react";
 import { Link } from "@tanstack/react-router";
 import { format } from "date-fns";
-import {
-  Bell,
-  ChevronRight,
-  House,
-  Loader2,
-  UtensilsCrossed,
-} from "lucide-react";
+import { Bell, Loader2, UtensilsCrossed } from "lucide-react";
 import { useNutrition, useNutritionGoals } from "@/hooks/use-fitness";
-import { useAllStockStats } from "@/hooks/use-stocks";
 import { useReminders } from "@/hooks/useReminders";
 
 /**
- * Widgets cross-domaine du tableau de bord d'accueil (V2) :
- * Nutrition du jour, Maison (stocks / péremptions), Rappels du jour.
- * Chaque widget se branche sur les hooks existants et gère son état vide.
+ * Widgets cross-domaine du tableau de bord d'accueil :
+ * Nutrition du jour + Rappels du jour.
  */
 export function HomeDashboard() {
   return (
     <>
       <NutritionTodayCard />
-      <MaisonCard />
       <RappelsTodayCard />
     </>
   );
@@ -105,72 +96,6 @@ function NutritionTodayCard() {
   );
 }
 
-// ─── Maison (stocks) ──────────────────────────────────────────────────────────
-
-function MaisonCard() {
-  const { data: items, isLoading } = useAllStockStats();
-
-  const stats = useMemo(() => {
-    const list = items ?? [];
-    const now = new Date();
-    const in7 = new Date();
-    in7.setDate(now.getDate() + 7);
-    let low = 0;
-    let expiring = 0;
-    for (const it of list) {
-      if (
-        it.quantity != null &&
-        it.low_stock_threshold != null &&
-        it.quantity <= it.low_stock_threshold
-      ) {
-        low += 1;
-      }
-      if (it.expiration_date) {
-        const exp = new Date(it.expiration_date + "T00:00:00");
-        if (exp <= in7) expiring += 1;
-      }
-    }
-    return { total: list.length, low, expiring };
-  }, [items]);
-
-  return (
-    <Link
-      to="/stocks"
-      className="mt-4 block overflow-hidden rounded-3xl border border-border bg-gradient-surface p-5 shadow-elevated transition-all hover:border-primary/30 hover:shadow-elevated"
-    >
-      <div className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 shadow-glow">
-            <House className="h-4 w-4 text-white" />
-          </span>
-          <span className="text-sm font-semibold">Maison</span>
-        </div>
-        <ChevronRight className="h-4 w-4 text-muted-foreground" />
-      </div>
-
-      {isLoading ? (
-        <div className="flex h-12 items-center justify-center">
-          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-        </div>
-      ) : (
-        <div className="grid grid-cols-3 gap-2">
-          <MiniStat label="Articles" value={String(stats.total)} />
-          <MiniStat
-            label="Stock bas"
-            value={String(stats.low)}
-            tone={stats.low > 0 ? "warn" : "muted"}
-          />
-          <MiniStat
-            label="Périment < 7j"
-            value={String(stats.expiring)}
-            tone={stats.expiring > 0 ? "danger" : "muted"}
-          />
-        </div>
-      )}
-    </Link>
-  );
-}
-
 // ─── Rappels du jour ──────────────────────────────────────────────────────────
 
 function RappelsTodayCard() {
@@ -246,30 +171,5 @@ function RappelsTodayCard() {
         </>
       )}
     </section>
-  );
-}
-
-// ─── Sous-composant ───────────────────────────────────────────────────────────
-
-function MiniStat({
-  label,
-  value,
-  tone = "muted",
-}: {
-  label: string;
-  value: string;
-  tone?: "muted" | "warn" | "danger";
-}) {
-  const color =
-    tone === "danger"
-      ? "text-red-400"
-      : tone === "warn"
-        ? "text-amber-400"
-        : "text-foreground";
-  return (
-    <div className="rounded-xl border border-border bg-card/50 px-2 py-3 text-center">
-      <div className={`text-xl font-bold ${color}`}>{value}</div>
-      <p className="mt-0.5 text-[10px] leading-tight text-muted-foreground">{label}</p>
-    </div>
   );
 }
