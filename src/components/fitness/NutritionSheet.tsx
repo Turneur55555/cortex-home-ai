@@ -1,11 +1,8 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { toast } from "sonner";
-import { ChefHat, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { useAddNutrition } from "@/hooks/use-fitness";
 import { Field, Sheet, SubmitButton } from "@/components/shared/FormComponents";
 import { FoodAutocomplete } from "@/components/FoodAutocomplete";
-import { usePantryItems, useDeductFromStock } from "@/hooks/use-pantry";
-import type { PantryItem } from "@/hooks/use-pantry";
 import type { FoodSuggestion } from "@/services/foodSuggestion";
 import type { MealPrefill } from "@/lib/nutrition/utils";
 import { PortionSelector } from "@/components/fitness/PortionSelector";
@@ -16,66 +13,8 @@ import {
   type PortionUnit,
 } from "@/lib/nutrition/portions";
 
-// ─── PantryPicker ─────────────────────────────────────────────────────────────
+// PantryPicker removed: Maison/stocks module deleted.
 
-interface PantryPickerProps {
-  selected: PantryItem | null;
-  onSelect: (item: PantryItem) => void;
-  onClear: () => void;
-}
-
-function PantryPicker({ selected, onSelect, onClear }: PantryPickerProps) {
-  const { data: items, isLoading } = usePantryItems();
-  const [q, setQ] = useState("");
-
-  const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    if (!needle) return (items ?? []).slice(0, 12);
-    return (items ?? []).filter((it) => it.name.toLowerCase().includes(needle)).slice(0, 12);
-  }, [items, q]);
-
-  return (
-    <div className="space-y-2">
-      <input
-        type="text"
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        placeholder="Rechercher dans ma cuisine…"
-        className="w-full rounded-xl border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary"
-      />
-      {isLoading && (
-        <div className="flex justify-center py-2">
-          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-        </div>
-      )}
-      {!isLoading && filtered.length === 0 && (
-        <p className="py-2 text-center text-xs text-muted-foreground">
-          Aucun aliment dans la cuisine
-        </p>
-      )}
-      <div className="flex flex-wrap gap-1.5">
-        {filtered.map((it) => (
-          <button
-            key={it.id}
-            type="button"
-            onClick={() => (selected?.id === it.id ? onClear() : onSelect(it))}
-            className={
-              "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors " +
-              (selected?.id === it.id
-                ? "border-primary bg-primary/15 text-primary"
-                : "border-border bg-card text-foreground hover:border-primary/50")
-            }
-          >
-            {it.name}
-            <span className="text-[10px] text-muted-foreground">
-              {it.quantity}{it.unit ? ` ${it.unit}` : ""}
-            </span>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 // ─── NutritionSheet ───────────────────────────────────────────────────────────
 
