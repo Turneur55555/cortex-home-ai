@@ -3,6 +3,7 @@ import {
   Activity,
   Apple,
   Barcode,
+  BookmarkPlus,
   Calendar,
   Copy,
   Loader2,
@@ -39,6 +40,7 @@ import { NutritionAnalysisSheet } from "@/components/fitness/NutritionAnalysisSh
 import { PortionEditModal } from "@/components/fitness/PortionEditModal";
 import { NutritionHistorySheet } from "@/components/fitness/NutritionHistorySheet";
 import { SavedMealsSheet } from "@/components/fitness/SavedMealsSheet";
+import { useCreateSavedMeal } from "@/hooks/use-saved-meals";
 import { getPortionBadge } from "@/lib/nutrition/utils";
 import type { MealPrefill, NutritionEntry } from "@/lib/nutrition/utils";
 
@@ -66,6 +68,9 @@ export function NutritionTab() {
   const [portionItem, setPortionItem] = useState<NutritionEntry | null>(null);
   const [analysisOpen, setAnalysisOpen] = useState(false);
   const [savedOpen, setSavedOpen] = useState(false);
+  const createSavedMeal = useCreateSavedMeal();
+  const [saveGroupKey, setSaveGroupKey] = useState<string | null>(null);
+  const [saveGroupName, setSaveGroupName] = useState("");
 
   const totals = useMemo(() => {
     return (data ?? []).reduce(
@@ -167,6 +172,39 @@ export function NutritionTab() {
       carbs: m.carbs,
       fats: m.fats,
     });
+  };
+
+  // Enregistre tout un repas du journal (groupe) comme modèle réutilisable.
+  const MEAL_SLUGS = ["petit-dej", "dejeuner", "diner", "collation"];
+  const saveGroupAsMeal = (g: (typeof grouped)[number]) => {
+    const mealSlug = MEAL_SLUGS.includes(g.key) ? g.key : null;
+    createSavedMeal.mutate(
+      {
+        name: saveGroupName.trim() || g.label,
+        meal: mealSlug,
+        items: g.items.map((m) => ({
+          food_id: null,
+          name: m.name ?? "Aliment",
+          calories: m.calories,
+          proteins: m.proteins ?? null,
+          carbs: m.carbs ?? null,
+          fats: m.fats ?? null,
+          base_calories: m.base_calories ?? m.calories,
+          base_proteins: m.base_proteins ?? m.proteins ?? null,
+          base_carbs: m.base_carbs ?? m.carbs ?? null,
+          base_fats: m.base_fats ?? m.fats ?? null,
+          serving_count: m.serving_count ?? 1,
+          consumed_quantity: m.consumed_quantity ?? null,
+          consumed_unit: m.consumed_unit ?? null,
+        })),
+      },
+      {
+        onSuccess: () => {
+          setSaveGroupKey(null);
+          setSaveGroupName("");
+        },
+      },
+    );
   };
 
   return (
@@ -409,9 +447,45 @@ export function NutritionTab() {
 
       {grouped.map((g) => (
         <div key={g.key}>
-          <h3 className="mb-2 px-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            {g.label}
-          </h3>
+          <div className="mb-2 flex items-center justify-between px-1">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              {g.label}
+            </h3>
+            <button
+              type="button"
+              onClick={() => {
+                setSaveGroupName(g.label);
+                setSaveGroupKey((k) => (k === g.key ? null : g.key));
+              }}
+              className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold text-muted-foreground hover:bg-primary/10 hover:text-primary"
+              title="Enregistrer ce repas comme modèle"
+            >
+              <BookmarkPlus className="h-3.5 w-3.5" />
+              Enregistrer
+            </button>
+          </div>
+          {saveGroupKey === g.key && (
+            <div className="mb-2 flex items-center gap-2 rounded-xl border border-border bg-surface p-2">
+              <input
+                type="text"
+                value={saveGroupName}
+                onChange={(e) => setSaveGroupName(e.target.value)}
+                placeholder="Nom du repas"
+                className="min-w-0 flex-1 rounded-lg border border-border bg-card px-2.5 py-1.5 text-sm outline-none focus:border-primary"
+              />
+              <button
+                type="button"
+                disabled={createSavedMeal.isPending}
+                onClick={() => saveGroupAsMeal(g)}
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-gradient-primary px-3 text-xs font-semibold text-primary-foreground shadow-glow disabled:opacity-60"
+              >
+                {createSavedMeal.isPending && (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                )}
+                Enregistrer
+              </button>
+            </div>
+          )}
           <ul className="space-y-2">
             {g.items.map((m) => {
               const badge = getPortionBadge(m.percentage_consumed, m.serving_count);
