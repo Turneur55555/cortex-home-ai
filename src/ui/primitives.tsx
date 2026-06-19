@@ -1,6 +1,6 @@
 /**
  * Shared UI primitives — extracted from duplicated patterns across the app.
- * and home modules. Single source of truth for visual coherence.
+ * Single source of truth for visual coherence.
  *
  * NOT a replacement for shadcn/ui — these are project-specific composites built
  * on top of the design tokens defined in src/styles.css.
