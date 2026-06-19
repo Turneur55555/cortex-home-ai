@@ -12,6 +12,7 @@ import {
   Target,
   Trash2,
   TrendingUp,
+  Utensils,
   X,
 } from "lucide-react";
 import { format, subDays } from "date-fns";
@@ -37,6 +38,7 @@ import { GoalsSheet } from "@/components/fitness/GoalsSheet";
 import { NutritionAnalysisSheet } from "@/components/fitness/NutritionAnalysisSheet";
 import { PortionEditModal } from "@/components/fitness/PortionEditModal";
 import { NutritionHistorySheet } from "@/components/fitness/NutritionHistorySheet";
+import { SavedMealsSheet } from "@/components/fitness/SavedMealsSheet";
 import { getPortionBadge } from "@/lib/nutrition/utils";
 import type { MealPrefill, NutritionEntry } from "@/lib/nutrition/utils";
 
@@ -63,6 +65,7 @@ export function NutritionTab() {
   const [prefill, setPrefill] = useState<MealPrefill | null>(null);
   const [portionItem, setPortionItem] = useState<NutritionEntry | null>(null);
   const [analysisOpen, setAnalysisOpen] = useState(false);
+  const [savedOpen, setSavedOpen] = useState(false);
 
   const totals = useMemo(() => {
     return (data ?? []).reduce(
@@ -317,6 +320,15 @@ export function NutritionTab() {
         </div>
       )}
 
+      <button
+        type="button"
+        onClick={() => setSavedOpen(true)}
+        className="flex w-full items-center justify-center gap-2 rounded-2xl border border-primary/30 bg-gradient-to-r from-primary/15 via-primary/5 to-transparent py-2.5 text-sm font-semibold text-primary"
+      >
+        <Utensils className="h-4 w-4" />
+        Mes repas enregistrés
+      </button>
+
       <div className="grid grid-cols-2 gap-3">
         <button
           type="button"
@@ -461,6 +473,7 @@ export function NutritionTab() {
       {scanOpen && <MealScanSheet onClose={() => setScanOpen(false)} onResult={handleScanResult} />}
       {barcodeOpen && <BarcodeScannerSheet onClose={() => setBarcodeOpen(false)} />}
       {analysisOpen && <NutritionAnalysisSheet onClose={() => setAnalysisOpen(false)} />}
+      {savedOpen && <SavedMealsSheet date={date} onClose={() => setSavedOpen(false)} />}
       {portionItem && (
         <PortionEditModal
           item={portionItem}
