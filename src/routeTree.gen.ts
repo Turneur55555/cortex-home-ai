@@ -17,14 +17,12 @@ import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedSeancesRouteImport } from './routes/_authenticated/seances'
 import { Route as AuthenticatedRlsStatusRouteImport } from './routes/_authenticated/rls-status'
-import { Route as AuthenticatedRappelsRouteImport } from './routes/_authenticated/rappels'
 import { Route as AuthenticatedProfilRouteImport } from './routes/_authenticated/profil'
 import { Route as AuthenticatedPreferencesAlimentairesRouteImport } from './routes/_authenticated/preferences-alimentaires'
 import { Route as AuthenticatedNutritionRouteImport } from './routes/_authenticated/nutrition'
 import { Route as AuthenticatedDocumentsRouteImport } from './routes/_authenticated/documents'
 import { Route as AuthenticatedCorpsRouteImport } from './routes/_authenticated/corps'
 import { Route as AuthenticatedFitnessIndexRouteImport } from './routes/_authenticated/fitness/index'
-import { Route as ApiPublicCalendarTokenDoticsRouteImport } from './routes/api/public/calendar.$token[.]ics'
 
 const Char91indexChar93Route = Char91indexChar93RouteImport.update({
   id: '/index',
@@ -65,11 +63,6 @@ const AuthenticatedRlsStatusRoute = AuthenticatedRlsStatusRouteImport.update({
   path: '/rls-status',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
-const AuthenticatedRappelsRoute = AuthenticatedRappelsRouteImport.update({
-  id: '/rappels',
-  path: '/rappels',
-  getParentRoute: () => AuthenticatedRoute,
-} as any)
 const AuthenticatedProfilRoute = AuthenticatedProfilRouteImport.update({
   id: '/profil',
   path: '/profil',
@@ -102,12 +95,6 @@ const AuthenticatedFitnessIndexRoute =
     path: '/fitness/',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
-const ApiPublicCalendarTokenDoticsRoute =
-  ApiPublicCalendarTokenDoticsRouteImport.update({
-    id: '/api/public/calendar/$token.ics',
-    path: '/api/public/calendar/$token.ics',
-    getParentRoute: () => rootRouteImport,
-  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -120,11 +107,9 @@ export interface FileRoutesByFullPath {
   '/nutrition': typeof AuthenticatedNutritionRoute
   '/preferences-alimentaires': typeof AuthenticatedPreferencesAlimentairesRoute
   '/profil': typeof AuthenticatedProfilRoute
-  '/rappels': typeof AuthenticatedRappelsRoute
   '/rls-status': typeof AuthenticatedRlsStatusRoute
   '/seances': typeof AuthenticatedSeancesRoute
   '/fitness/': typeof AuthenticatedFitnessIndexRoute
-  '/api/public/calendar/$token.ics': typeof ApiPublicCalendarTokenDoticsRoute
 }
 export interface FileRoutesByTo {
   '/confidentialite': typeof ConfidentialiteRoute
@@ -136,12 +121,10 @@ export interface FileRoutesByTo {
   '/nutrition': typeof AuthenticatedNutritionRoute
   '/preferences-alimentaires': typeof AuthenticatedPreferencesAlimentairesRoute
   '/profil': typeof AuthenticatedProfilRoute
-  '/rappels': typeof AuthenticatedRappelsRoute
   '/rls-status': typeof AuthenticatedRlsStatusRoute
   '/seances': typeof AuthenticatedSeancesRoute
   '/': typeof AuthenticatedIndexRoute
   '/fitness': typeof AuthenticatedFitnessIndexRoute
-  '/api/public/calendar/$token.ics': typeof ApiPublicCalendarTokenDoticsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -155,12 +138,10 @@ export interface FileRoutesById {
   '/_authenticated/nutrition': typeof AuthenticatedNutritionRoute
   '/_authenticated/preferences-alimentaires': typeof AuthenticatedPreferencesAlimentairesRoute
   '/_authenticated/profil': typeof AuthenticatedProfilRoute
-  '/_authenticated/rappels': typeof AuthenticatedRappelsRoute
   '/_authenticated/rls-status': typeof AuthenticatedRlsStatusRoute
   '/_authenticated/seances': typeof AuthenticatedSeancesRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/fitness/': typeof AuthenticatedFitnessIndexRoute
-  '/api/public/calendar/$token.ics': typeof ApiPublicCalendarTokenDoticsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -175,11 +156,9 @@ export interface FileRouteTypes {
     | '/nutrition'
     | '/preferences-alimentaires'
     | '/profil'
-    | '/rappels'
     | '/rls-status'
     | '/seances'
     | '/fitness/'
-    | '/api/public/calendar/$token.ics'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/confidentialite'
@@ -191,12 +170,10 @@ export interface FileRouteTypes {
     | '/nutrition'
     | '/preferences-alimentaires'
     | '/profil'
-    | '/rappels'
     | '/rls-status'
     | '/seances'
     | '/'
     | '/fitness'
-    | '/api/public/calendar/$token.ics'
   id:
     | '__root__'
     | '/_authenticated'
@@ -209,12 +186,10 @@ export interface FileRouteTypes {
     | '/_authenticated/nutrition'
     | '/_authenticated/preferences-alimentaires'
     | '/_authenticated/profil'
-    | '/_authenticated/rappels'
     | '/_authenticated/rls-status'
     | '/_authenticated/seances'
     | '/_authenticated/'
     | '/_authenticated/fitness/'
-    | '/api/public/calendar/$token.ics'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -223,7 +198,6 @@ export interface RootRouteChildren {
   Char91indexChar93Route: typeof Char91indexChar93Route
   LoginRoute: typeof LoginRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
-  ApiPublicCalendarTokenDoticsRoute: typeof ApiPublicCalendarTokenDoticsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -284,13 +258,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedRlsStatusRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    '/_authenticated/rappels': {
-      id: '/_authenticated/rappels'
-      path: '/rappels'
-      fullPath: '/rappels'
-      preLoaderRoute: typeof AuthenticatedRappelsRouteImport
-      parentRoute: typeof AuthenticatedRoute
-    }
     '/_authenticated/profil': {
       id: '/_authenticated/profil'
       path: '/profil'
@@ -333,13 +300,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedFitnessIndexRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    '/api/public/calendar/$token.ics': {
-      id: '/api/public/calendar/$token.ics'
-      path: '/api/public/calendar/$token.ics'
-      fullPath: '/api/public/calendar/$token.ics'
-      preLoaderRoute: typeof ApiPublicCalendarTokenDoticsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
   }
 }
 
@@ -349,7 +309,6 @@ interface AuthenticatedRouteChildren {
   AuthenticatedNutritionRoute: typeof AuthenticatedNutritionRoute
   AuthenticatedPreferencesAlimentairesRoute: typeof AuthenticatedPreferencesAlimentairesRoute
   AuthenticatedProfilRoute: typeof AuthenticatedProfilRoute
-  AuthenticatedRappelsRoute: typeof AuthenticatedRappelsRoute
   AuthenticatedRlsStatusRoute: typeof AuthenticatedRlsStatusRoute
   AuthenticatedSeancesRoute: typeof AuthenticatedSeancesRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
@@ -363,7 +322,6 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedPreferencesAlimentairesRoute:
     AuthenticatedPreferencesAlimentairesRoute,
   AuthenticatedProfilRoute: AuthenticatedProfilRoute,
-  AuthenticatedRappelsRoute: AuthenticatedRappelsRoute,
   AuthenticatedRlsStatusRoute: AuthenticatedRlsStatusRoute,
   AuthenticatedSeancesRoute: AuthenticatedSeancesRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
@@ -380,18 +338,7 @@ const rootRouteChildren: RootRouteChildren = {
   Char91indexChar93Route: Char91indexChar93Route,
   LoginRoute: LoginRoute,
   ResetPasswordRoute: ResetPasswordRoute,
-  ApiPublicCalendarTokenDoticsRoute: ApiPublicCalendarTokenDoticsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
