@@ -239,7 +239,28 @@ Deno.serve(async (req) => {
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const SUPABASE_ANON =
+      Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY")!;
     const USDA_KEY = Deno.env.get("USDA_API_KEY");
+
+    // ─── Auth check: require a valid Supabase user JWT ───────────────────
+    const authHeader = req.headers.get("Authorization") ?? "";
+    if (!authHeader) {
+      return Response.json(
+        { ok: false, error: "Non authentifié" },
+        { status: 401, headers: cors },
+      );
+    }
+    const userSupa = createClient(SUPABASE_URL, SUPABASE_ANON, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: userData, error: userErr } = await userSupa.auth.getUser();
+    if (userErr || !userData.user) {
+      return Response.json(
+        { ok: false, error: "Non authentifié" },
+        { status: 401, headers: cors },
+      );
+    }
 
     if (!USDA_KEY) {
       return Response.json(
