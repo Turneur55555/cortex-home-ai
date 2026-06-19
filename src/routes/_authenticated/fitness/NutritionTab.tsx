@@ -325,11 +325,11 @@ export function NutritionTab() {
             />
           </button>
           {favOpen && (
-            <div className="mt-2.5 flex flex-wrap gap-1.5">
+            <div className="mt-2.5 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {favorites.map((fav) => (
                 <span
                   key={fav.id}
-                  className="group inline-flex items-center gap-1 rounded-full border border-border bg-card py-1 pl-3 pr-1 text-xs font-medium"
+                  className="group inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-border bg-card py-1 pl-3 pr-1 text-xs font-medium"
                 >
                   <button
                     type="button"
