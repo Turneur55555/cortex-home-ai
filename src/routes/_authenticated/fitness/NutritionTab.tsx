@@ -5,6 +5,8 @@ import {
   Barcode,
   BookmarkPlus,
   Calendar,
+  ChevronDown,
+  ChevronRight,
   Copy,
   Loader2,
   Scale,
@@ -68,6 +70,7 @@ export function NutritionTab() {
   const [portionItem, setPortionItem] = useState<NutritionEntry | null>(null);
   const [analysisOpen, setAnalysisOpen] = useState(false);
   const [savedOpen, setSavedOpen] = useState(false);
+  const [favOpen, setFavOpen] = useState(false);
   const createSavedMeal = useCreateSavedMeal();
   const [saveGroupKey, setSaveGroupKey] = useState<string | null>(null);
   const [saveGroupName, setSaveGroupName] = useState("");
@@ -84,7 +87,7 @@ export function NutritionTab() {
     );
   }, [data]);
 
-  // Macros restantes vs objectifs (amélioration premium).
+  // Macros restantes vs objectifs.
   const remaining = useMemo(() => {
     if (!goals) return null;
     const r = (g: number | null | undefined, v: number) =>
@@ -208,200 +211,232 @@ export function NutritionTab() {
   };
 
   return (
-    <section className="flex flex-col gap-4">
+    <section className="flex flex-col gap-5">
+      {/* Date + objectifs */}
       <div className="flex items-center gap-2">
-        <Calendar className="h-4 w-4 text-muted-foreground" />
-        <input
-          type="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-          className="flex-1 rounded-xl border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary"
-        />
+        <div className="relative flex-1">
+          <Calendar className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="w-full rounded-xl border border-border bg-transparent py-2.5 pl-9 pr-3 text-sm outline-none transition-colors focus:border-foreground/30"
+          />
+        </div>
         <button
           type="button"
           onClick={() => setGoalsOpen(true)}
-          className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-border bg-surface px-3 text-xs font-semibold text-muted-foreground hover:text-foreground"
+          className="inline-flex h-10 items-center gap-1.5 rounded-xl border border-border px-3 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
         >
           <Target className="h-3.5 w-3.5" />
           Objectifs
         </button>
       </div>
 
-      <div className="rounded-2xl border border-border bg-gradient-surface p-4 shadow-elevated">
-        <div className="flex items-baseline justify-between">
-          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Aujourd'hui
-          </p>
-          <p className="text-2xl font-bold text-primary">
-            {Math.round(totals.calories)}
-            {goals?.calories ? (
-              <span className="ml-1 text-xs font-normal text-muted-foreground">
-                / {goals.calories} kcal
+      {/* Hero macros */}
+      <div className="rounded-3xl border border-border bg-card p-5">
+        <div className="flex items-end justify-between">
+          <div>
+            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+              Aujourd'hui
+            </p>
+            <p className="mt-1.5 text-4xl font-semibold tracking-tight text-foreground">
+              {Math.round(totals.calories)}
+              <span className="ml-1.5 text-sm font-normal text-muted-foreground">
+                {goals?.calories ? `/ ${goals.calories} ` : ""}kcal
               </span>
-            ) : (
-              <span className="ml-1 text-xs font-normal text-muted-foreground">kcal</span>
-            )}
-          </p>
+            </p>
+          </div>
+          {remaining && remaining.calories != null && (
+            <div className="text-right">
+              {remaining.calories >= 0 ? (
+                <>
+                  <p className="text-lg font-semibold text-foreground">
+                    {remaining.calories}
+                  </p>
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                    restant
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-lg font-semibold text-destructive">
+                    +{Math.abs(remaining.calories)}
+                  </p>
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                    dépassé
+                  </p>
+                </>
+              )}
+            </div>
+          )}
         </div>
         {goals?.calories ? (
-          <ProgressBar value={Math.round(totals.calories)} target={goals.calories} className="mt-2" />
+          <ProgressBar
+            value={Math.round(totals.calories)}
+            target={goals.calories}
+            className="mt-4"
+          />
         ) : null}
-        <div className="mt-3 grid grid-cols-3 gap-2">
-          <MacroProgress
-            label="Protéines"
-            value={totals.proteins}
-            target={goals?.proteins}
-            color="text-accent"
-            barColor="bg-accent"
-          />
-          <MacroProgress
-            label="Glucides"
-            value={totals.carbs}
-            target={goals?.carbs}
-            color="text-warning"
-            barColor="bg-warning"
-          />
-          <MacroProgress
-            label="Lipides"
-            value={totals.fats}
-            target={goals?.fats}
-            color="text-destructive"
-            barColor="bg-destructive"
-          />
+        <div className="mt-5 grid grid-cols-3 gap-4">
+          <MacroProgress label="Protéines" value={totals.proteins} target={goals?.proteins} barColor="bg-accent" />
+          <MacroProgress label="Glucides" value={totals.carbs} target={goals?.carbs} barColor="bg-warning" />
+          <MacroProgress label="Lipides" value={totals.fats} target={goals?.fats} barColor="bg-destructive" />
         </div>
-        {remaining && remaining.calories != null && (
-          <div className="mt-3 rounded-xl bg-surface px-3 py-2 text-center text-[11px]">
-            {remaining.calories >= 0 ? (
-              <span className="text-muted-foreground">
-                Restant aujourd'hui :{" "}
-                <span className="font-bold text-primary">{remaining.calories}</span> kcal
-                {remaining.proteins != null && (
-                  <> · P{remaining.proteins} G{remaining.carbs} L{remaining.fats}</>
-                )}
-              </span>
-            ) : (
-              <span className="font-semibold text-destructive">
-                Objectif dépassé de {Math.abs(remaining.calories)} kcal
-              </span>
-            )}
-          </div>
-        )}
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <button
-          type="button"
-          onClick={() => setScanOpen(true)}
-          className="flex items-center gap-3 rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/15 to-transparent p-3 text-left shadow-card transition-all active:scale-[0.98]"
-        >
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-primary text-primary-foreground shadow-glow">
-            <Sparkles className="h-5 w-5" />
+      {/* Scan repas */}
+      <button
+        type="button"
+        onClick={() => setScanOpen(true)}
+        className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card p-3.5 text-left transition-colors hover:border-foreground/30"
+      >
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          <Sparkles className="h-5 w-5" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-medium">Scan repas</span>
+          <span className="block truncate text-xs text-muted-foreground">
+            Une photo, l'IA détecte
           </span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-xs font-semibold">Scan Repas</span>
-            <span className="block truncate text-[10px] text-muted-foreground">Photo → IA</span>
-          </span>
-        </button>
+        </span>
+        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+      </button>
 
-        <button
-          type="button"
-          onClick={() => setBarcodeOpen(true)}
-          className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-3 text-left shadow-card transition-all active:scale-[0.98]"
-        >
-          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary text-secondary-foreground">
-            <Barcode className="h-5 w-5" />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block text-xs font-semibold">Code-barres</span>
-            <span className="block truncate text-[10px] text-muted-foreground">
-              Scanner un produit
-            </span>
-          </span>
-        </button>
-      </div>
-
+      {/* Favoris — repliés derrière un bouton, entre Scan et Code-barres */}
       {favorites && favorites.length > 0 && (
         <div>
-          <h3 className="mb-2 flex items-center gap-1.5 px-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            <Star className="h-3.5 w-3.5 text-primary" />
-            Favoris — ajout rapide
-          </h3>
-          <div className="flex flex-wrap gap-1.5">
-            {favorites.map((fav) => (
-              <span
-                key={fav.id}
-                className="group inline-flex items-center gap-1 rounded-full border border-border bg-card py-1 pl-2.5 pr-1 text-xs font-medium"
-              >
-                <button
-                  type="button"
-                  onClick={() => addFromFavorite(fav)}
-                  disabled={addMeal.isPending}
-                  className="flex items-center gap-1 text-foreground hover:text-primary disabled:opacity-60"
-                  title="Ajouter à la journée"
-                >
-                  {fav.name}
-                  <span className="text-[10px] text-muted-foreground">
-                    {fav.calories ?? 0} kcal
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => delFav.mutate(fav.id)}
-                  className="flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                  aria-label="Retirer des favoris"
-                >
-                  <X className="h-3 w-3" />
-                </button>
+          <button
+            type="button"
+            onClick={() => setFavOpen((o) => !o)}
+            className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card p-3.5 text-left transition-colors hover:border-foreground/30"
+          >
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <Star className="h-5 w-5" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-medium">Favoris — ajout rapide</span>
+              <span className="block truncate text-xs text-muted-foreground">
+                {favorites.length} aliment{favorites.length > 1 ? "s" : ""}
               </span>
-            ))}
-          </div>
+            </span>
+            <ChevronDown
+              className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${favOpen ? "rotate-180" : ""}`}
+            />
+          </button>
+          {favOpen && (
+            <div className="mt-2.5 flex flex-wrap gap-1.5">
+              {favorites.map((fav) => (
+                <span
+                  key={fav.id}
+                  className="group inline-flex items-center gap-1 rounded-full border border-border bg-card py-1 pl-3 pr-1 text-xs font-medium"
+                >
+                  <button
+                    type="button"
+                    onClick={() => addFromFavorite(fav)}
+                    disabled={addMeal.isPending}
+                    className="flex items-center gap-1 text-foreground hover:text-primary disabled:opacity-60"
+                    title="Ajouter à la journée"
+                  >
+                    {fav.name}
+                    <span className="text-[10px] text-muted-foreground">
+                      {fav.calories ?? 0} kcal
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => delFav.mutate(fav.id)}
+                    className="flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                    aria-label="Retirer des favoris"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
+      {/* Code-barres */}
+      <button
+        type="button"
+        onClick={() => setBarcodeOpen(true)}
+        className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card p-3.5 text-left transition-colors hover:border-foreground/30"
+      >
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary text-secondary-foreground">
+          <Barcode className="h-5 w-5" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-medium">Code-barres</span>
+          <span className="block truncate text-xs text-muted-foreground">
+            Scanner un produit
+          </span>
+        </span>
+        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+      </button>
+
+      {/* Mes repas enregistrés */}
       <button
         type="button"
         onClick={() => setSavedOpen(true)}
-        className="flex w-full items-center justify-center gap-2 rounded-2xl border border-primary/30 bg-gradient-to-r from-primary/15 via-primary/5 to-transparent py-2.5 text-sm font-semibold text-primary"
+        className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card p-3.5 text-left transition-colors hover:border-foreground/30"
       >
-        <Utensils className="h-4 w-4" />
-        Mes repas enregistrés
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          <Utensils className="h-5 w-5" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-medium">Mes repas enregistrés</span>
+          <span className="block truncate text-xs text-muted-foreground">
+            Composer ou ajouter en 1 tap
+          </span>
+        </span>
+        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
       </button>
 
-      <div className="grid grid-cols-2 gap-3">
+      {/* Outils */}
+      <div className="grid grid-cols-2 gap-2.5">
         <button
           type="button"
           onClick={() => setPlanOpen(true)}
-          className="flex items-center justify-center gap-2 rounded-2xl border border-primary/30 bg-primary/5 py-2.5 text-sm font-semibold text-primary"
+          className="flex items-center justify-center gap-2 rounded-xl border border-border py-2.5 text-sm font-medium text-foreground transition-colors hover:border-foreground/30"
         >
-          <Calendar className="h-4 w-4" />
+          <Calendar className="h-4 w-4 text-muted-foreground" />
           Planning
         </button>
         <button
           type="button"
           onClick={() => setCopyOpen((o) => !o)}
-          className="flex items-center justify-center gap-2 rounded-2xl border border-border bg-surface py-2.5 text-sm font-semibold text-foreground"
+          className="flex items-center justify-center gap-2 rounded-xl border border-border py-2.5 text-sm font-medium text-foreground transition-colors hover:border-foreground/30"
         >
-          <Copy className="h-4 w-4" />
+          <Copy className="h-4 w-4 text-muted-foreground" />
           Copier un jour
+        </button>
+        <button
+          type="button"
+          onClick={() => setAnalysisOpen(true)}
+          className="flex items-center justify-center gap-2 rounded-xl border border-border py-2.5 text-sm font-medium text-foreground transition-colors hover:border-foreground/30"
+        >
+          <Activity className="h-4 w-4 text-muted-foreground" />
+          Analyse micro
+        </button>
+        <button
+          type="button"
+          onClick={() => setHistoryOpen(true)}
+          className="flex items-center justify-center gap-2 rounded-xl border border-border py-2.5 text-sm font-medium text-foreground transition-colors hover:border-foreground/30"
+        >
+          <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          Historique
         </button>
       </div>
 
-      <button
-        type="button"
-        onClick={() => setAnalysisOpen(true)}
-        className="flex w-full items-center justify-center gap-2 rounded-2xl border border-primary/30 bg-gradient-to-r from-primary/15 via-primary/5 to-transparent py-2.5 text-sm font-semibold text-primary"
-      >
-        <Activity className="h-4 w-4" />
-        Analyse micronutriments
-      </button>
-
       {copyOpen && (
-        <div className="flex items-center gap-2 rounded-2xl border border-border bg-surface p-3">
+        <div className="flex items-center gap-2 rounded-2xl border border-border bg-card p-3">
           <input
             type="date"
             value={copyFrom}
             onChange={(e) => setCopyFrom(e.target.value)}
-            className="flex-1 rounded-xl border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary"
+            className="flex-1 rounded-xl border border-border bg-transparent px-3 py-2 text-sm outline-none focus:border-foreground/30"
           />
           <button
             type="button"
@@ -412,22 +447,13 @@ export function NutritionTab() {
                 { onSuccess: () => setCopyOpen(false) },
               )
             }
-            className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-gradient-primary px-3 text-xs font-semibold text-primary-foreground shadow-glow disabled:opacity-60"
+            className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-foreground px-3 text-xs font-semibold text-background disabled:opacity-60"
           >
             {copyDay.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             Copier ici
           </button>
         </div>
       )}
-
-      <button
-        type="button"
-        onClick={() => setHistoryOpen(true)}
-        className="flex w-full items-center justify-center gap-2 rounded-2xl border border-border bg-surface py-2.5 text-sm font-semibold text-foreground"
-      >
-        <TrendingUp className="h-4 w-4 text-primary" />
-        Historique nutritionnel
-      </button>
 
       {isLoading && (
         <div className="flex h-20 items-center justify-center">
@@ -436,19 +462,19 @@ export function NutritionTab() {
       )}
 
       {!isLoading && grouped.length === 0 && (
-        <div className="rounded-2xl border border-border bg-card p-8 text-center">
+        <div className="rounded-2xl border border-dashed border-border p-8 text-center">
           <Apple className="mx-auto h-8 w-8 text-muted-foreground" />
-          <p className="mt-3 text-sm font-medium">Pas de repas enregistré</p>
+          <p className="mt-3 text-sm font-medium">Aucun repas aujourd'hui</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Suivez votre alimentation pour atteindre vos objectifs.
+            Ajoute un repas pour suivre tes macros.
           </p>
         </div>
       )}
 
       {grouped.map((g) => (
         <div key={g.key}>
-          <div className="mb-2 flex items-center justify-between px-1">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          <div className="mb-2.5 flex items-center justify-between px-0.5">
+            <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
               {g.label}
             </h3>
             <button
@@ -457,7 +483,7 @@ export function NutritionTab() {
                 setSaveGroupName(g.label);
                 setSaveGroupKey((k) => (k === g.key ? null : g.key));
               }}
-              className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold text-muted-foreground hover:bg-primary/10 hover:text-primary"
+              className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground"
               title="Enregistrer ce repas comme modèle"
             >
               <BookmarkPlus className="h-3.5 w-3.5" />
@@ -465,19 +491,19 @@ export function NutritionTab() {
             </button>
           </div>
           {saveGroupKey === g.key && (
-            <div className="mb-2 flex items-center gap-2 rounded-xl border border-border bg-surface p-2">
+            <div className="mb-2.5 flex items-center gap-2 rounded-xl border border-border bg-card p-2">
               <input
                 type="text"
                 value={saveGroupName}
                 onChange={(e) => setSaveGroupName(e.target.value)}
                 placeholder="Nom du repas"
-                className="min-w-0 flex-1 rounded-lg border border-border bg-card px-2.5 py-1.5 text-sm outline-none focus:border-primary"
+                className="min-w-0 flex-1 rounded-lg border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none focus:border-foreground/30"
               />
               <button
                 type="button"
                 disabled={createSavedMeal.isPending}
                 onClick={() => saveGroupAsMeal(g)}
-                className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-gradient-primary px-3 text-xs font-semibold text-primary-foreground shadow-glow disabled:opacity-60"
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-foreground px-3 text-xs font-semibold text-background disabled:opacity-60"
               >
                 {createSavedMeal.isPending && (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -492,18 +518,18 @@ export function NutritionTab() {
               return (
                 <li
                   key={m.id}
-                  className="flex items-center gap-2 rounded-xl border border-border bg-card p-3 shadow-card"
+                  className="flex items-center gap-2 rounded-2xl border border-border bg-card p-3.5"
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
-                      <p className="text-sm font-medium">{m.name}</p>
+                      <p className="truncate text-sm font-medium">{m.name}</p>
                       {badge && (
-                        <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-bold text-primary">
+                        <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
                           {badge}
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="mt-0.5 text-xs text-muted-foreground">
                       {m.calories ?? 0} kcal · P{m.proteins ?? 0} G{m.carbs ?? 0} L{m.fats ?? 0}
                     </p>
                   </div>
@@ -511,7 +537,7 @@ export function NutritionTab() {
                     type="button"
                     onClick={() => saveAsFavorite(m)}
                     disabled={addFav.isPending}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary disabled:opacity-60"
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-foreground disabled:opacity-60"
                     aria-label="Ajouter aux favoris"
                   >
                     <Star className="h-4 w-4" />
@@ -519,7 +545,7 @@ export function NutritionTab() {
                   <button
                     type="button"
                     onClick={() => setPortionItem(m)}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-primary/10 hover:text-primary"
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-foreground"
                     aria-label="Modifier la portion"
                   >
                     <Scale className="h-4 w-4" />
@@ -527,7 +553,7 @@ export function NutritionTab() {
                   <button
                     type="button"
                     onClick={() => del.mutate(m.id)}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-destructive"
                     aria-label="Supprimer"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -560,37 +586,36 @@ export function NutritionTab() {
 }
 
 // ─── Composants UI locaux ─────────────────────────────────────────────────
-// MacroProgress et ProgressBar restent ici car ils sont exclusivement utilisés
-// dans NutritionTab et ne justifient pas un fichier séparé.
 
 function MacroProgress({
   label,
   value,
   target,
-  color,
   barColor,
 }: {
   label: string;
   value: number;
   target: number | null | undefined;
-  color: string;
   barColor: string;
 }) {
   const pct = target && target > 0 ? Math.min(100, (value / target) * 100) : 0;
   return (
-    <div className="rounded-xl bg-surface p-2">
-      <p className={`text-base font-bold ${color}`}>
+    <div>
+      <p className="text-lg font-semibold tracking-tight text-foreground">
         {Math.round(value)}
         <span className="text-[10px] font-normal text-muted-foreground">
           {target ? ` / ${Math.round(target)}g` : "g"}
         </span>
       </p>
-      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
-      {target ? (
-        <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-border">
-          <div className={`h-full ${barColor} transition-all`} style={{ width: `${pct}%` }} />
-        </div>
-      ) : null}
+      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+        {label}
+      </p>
+      <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-border">
+        <div
+          className={`h-full ${barColor} transition-all`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
     </div>
   );
 }
@@ -609,7 +634,7 @@ function ProgressBar({
   return (
     <div className={`h-1.5 w-full overflow-hidden rounded-full bg-border ${className}`}>
       <div
-        className={`h-full transition-all ${over ? "bg-destructive" : "bg-gradient-primary"}`}
+        className={`h-full transition-all ${over ? "bg-destructive" : "bg-foreground"}`}
         style={{ width: `${pct}%` }}
       />
     </div>
