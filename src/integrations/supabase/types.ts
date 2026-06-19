@@ -110,27 +110,6 @@ export type Database = {
         }
         Relationships: []
       }
-      calendar_tokens: {
-        Row: {
-          created_at: string
-          id: string
-          token: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          token: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          token?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
       documents: {
         Row: {
           alerts: Json | null
@@ -988,63 +967,6 @@ export type Database = {
           id?: string
           user_id?: string
           window_start?: string
-        }
-        Relationships: []
-      }
-      reminders: {
-        Row: {
-          all_day: boolean
-          category: string | null
-          completed_at: string | null
-          created_at: string
-          description: string | null
-          due_at: string | null
-          favorite: boolean
-          id: string
-          notify_before_minutes: number
-          priority: Database["public"]["Enums"]["reminder_priority"]
-          recurrence: Database["public"]["Enums"]["reminder_recurrence"]
-          recurrence_until: string | null
-          status: Database["public"]["Enums"]["reminder_status"]
-          title: string
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          all_day?: boolean
-          category?: string | null
-          completed_at?: string | null
-          created_at?: string
-          description?: string | null
-          due_at?: string | null
-          favorite?: boolean
-          id?: string
-          notify_before_minutes?: number
-          priority?: Database["public"]["Enums"]["reminder_priority"]
-          recurrence?: Database["public"]["Enums"]["reminder_recurrence"]
-          recurrence_until?: string | null
-          status?: Database["public"]["Enums"]["reminder_status"]
-          title: string
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          all_day?: boolean
-          category?: string | null
-          completed_at?: string | null
-          created_at?: string
-          description?: string | null
-          due_at?: string | null
-          favorite?: boolean
-          id?: string
-          notify_before_minutes?: number
-          priority?: Database["public"]["Enums"]["reminder_priority"]
-          recurrence?: Database["public"]["Enums"]["reminder_recurrence"]
-          recurrence_until?: string | null
-          status?: Database["public"]["Enums"]["reminder_status"]
-          title?: string
-          updated_at?: string
-          user_id?: string
         }
         Relationships: []
       }
