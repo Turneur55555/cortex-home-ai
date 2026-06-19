@@ -38,7 +38,6 @@ export function useProfile(fallback: string) {
 ## Existing services
 
 - `homeCategories.ts`, `homeSubcategories.ts` — Maison module
-- `reminders.ts` — Rappels module
 - `foodSuggestion.ts` — type partagé FoodSuggestion (catalogue USDA/Supabase, aucune API OFF)
 - `profile.ts` — user profile
 

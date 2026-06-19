@@ -2,7 +2,6 @@ import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { AppShell } from "@/components/AppShell";
 import { BottomNav } from "@/components/BottomNav";
-import { GlobalReminderNotifier } from "@/components/reminders/GlobalReminderNotifier";
 import { Loader2 } from "lucide-react";
 import { logAuthEvent, summarizeSession } from "@/lib/authDiagnostics";
 import { restoreAuthSession } from "@/lib/authSession";
@@ -38,8 +37,7 @@ function AuthGate() {
   }
   if (!user) return null; // beforeLoad will redirect
   return (
-    <AppShell showBell>
-      <GlobalReminderNotifier />
+    <AppShell>
       <div className="flex flex-1 flex-col pb-2">
         <Outlet />
       </div>

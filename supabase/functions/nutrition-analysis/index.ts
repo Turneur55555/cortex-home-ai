@@ -250,18 +250,9 @@ Deno.serve(async (req) => {
       }
     }
 
-    const { data: reminders } = await admin
-      .from("reminders").select("title, description, category").eq("user_id", user.id).eq("category", "Suppléments");
+    // Reminders module removed — supplements are no longer tracked.
     const supplementsConsidered: Array<{ name: string; nutrient: string; daily: number; unit: string }> = [];
     const supDaily: Record<string, number> = {};
-    for (const r of reminders ?? []) {
-      const key = supplementNutrient(String(r.title ?? ""));
-      if (!key || !RDA[key]) continue;
-      const dose = parseDose(String(r.description ?? ""), RDA[key].unit);
-      if (dose == null) continue;
-      supDaily[key] = (supDaily[key] ?? 0) + dose;
-      supplementsConsidered.push({ name: String(r.title), nutrient: RDA[key].label, daily: dose, unit: RDA[key].unit });
-    }
 
     const coverage = mealList.length ? covered / mealList.length : 0;
     const nutrients = Object.entries(RDA).map(([key, meta]) => {
