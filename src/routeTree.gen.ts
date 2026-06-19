@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as Char91indexChar93RouteImport } from './routes/[index]'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as ConfidentialiteRouteImport } from './routes/confidentialite'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedSeancesRouteImport } from './routes/_authenticated/seances'
@@ -38,6 +39,11 @@ const ResetPasswordRoute = ResetPasswordRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ConfidentialiteRoute = ConfidentialiteRouteImport.update({
+  id: '/confidentialite',
+  path: '/confidentialite',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedRoute = AuthenticatedRouteImport.update({
@@ -105,6 +111,7 @@ const ApiPublicCalendarTokenDoticsRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
+  '/confidentialite': typeof ConfidentialiteRoute
   '/index': typeof Char91indexChar93Route
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
@@ -120,6 +127,7 @@ export interface FileRoutesByFullPath {
   '/api/public/calendar/$token.ics': typeof ApiPublicCalendarTokenDoticsRoute
 }
 export interface FileRoutesByTo {
+  '/confidentialite': typeof ConfidentialiteRoute
   '/index': typeof Char91indexChar93Route
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
@@ -138,6 +146,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authenticated': typeof AuthenticatedRouteWithChildren
+  '/confidentialite': typeof ConfidentialiteRoute
   '/index': typeof Char91indexChar93Route
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
@@ -157,6 +166,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/confidentialite'
     | '/index'
     | '/login'
     | '/reset-password'
@@ -172,6 +182,7 @@ export interface FileRouteTypes {
     | '/api/public/calendar/$token.ics'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/confidentialite'
     | '/index'
     | '/login'
     | '/reset-password'
@@ -189,6 +200,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/_authenticated'
+    | '/confidentialite'
     | '/index'
     | '/login'
     | '/reset-password'
@@ -207,6 +219,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
+  ConfidentialiteRoute: typeof ConfidentialiteRoute
   Char91indexChar93Route: typeof Char91indexChar93Route
   LoginRoute: typeof LoginRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
@@ -234,6 +247,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/confidentialite': {
+      id: '/confidentialite'
+      path: '/confidentialite'
+      fullPath: '/confidentialite'
+      preLoaderRoute: typeof ConfidentialiteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated': {
@@ -356,6 +376,7 @@ const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
 
 const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
+  ConfidentialiteRoute: ConfidentialiteRoute,
   Char91indexChar93Route: Char91indexChar93Route,
   LoginRoute: LoginRoute,
   ResetPasswordRoute: ResetPasswordRoute,
