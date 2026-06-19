@@ -6,7 +6,6 @@ import {
   BookmarkPlus,
   Calendar,
   ChevronDown,
-  ChevronRight,
   Copy,
   Loader2,
   Scale,
@@ -285,114 +284,80 @@ export function NutritionTab() {
         </div>
       </div>
 
-      {/* Scan repas */}
-      <button
-        type="button"
-        onClick={() => setScanOpen(true)}
-        className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card p-3.5 text-left transition-colors hover:border-foreground/30"
-      >
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-          <Sparkles className="h-5 w-5" />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-sm font-medium">Scan repas</span>
-          <span className="block truncate text-xs text-muted-foreground">
-            Une photo, l'IA détecte
-          </span>
-        </span>
-        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-      </button>
-
-      {/* Favoris — repliés derrière un bouton, entre Scan et Code-barres */}
-      {favorites && favorites.length > 0 && (
-        <div>
+      {/* Actions rapides — une seule ligne */}
+      <div>
+        <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <button
             type="button"
-            onClick={() => setFavOpen((o) => !o)}
-            className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card p-3.5 text-left transition-colors hover:border-foreground/30"
+            onClick={() => setScanOpen(true)}
+            className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:border-foreground/30"
           >
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <Star className="h-5 w-5" />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-sm font-medium">Favoris — ajout rapide</span>
-              <span className="block truncate text-xs text-muted-foreground">
-                {favorites.length} aliment{favorites.length > 1 ? "s" : ""}
-              </span>
-            </span>
-            <ChevronDown
-              className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${favOpen ? "rotate-180" : ""}`}
-            />
+            <Sparkles className="h-4 w-4 text-primary" />
+            Scan repas
           </button>
-          {favOpen && (
-            <div className="mt-2.5 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {favorites.map((fav) => (
-                <span
-                  key={fav.id}
-                  className="group inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-border bg-card py-1 pl-3 pr-1 text-xs font-medium"
-                >
-                  <button
-                    type="button"
-                    onClick={() => addFromFavorite(fav)}
-                    disabled={addMeal.isPending}
-                    className="flex items-center gap-1 text-foreground hover:text-primary disabled:opacity-60"
-                    title="Ajouter à la journée"
-                  >
-                    {fav.name}
-                    <span className="text-[10px] text-muted-foreground">
-                      {fav.calories ?? 0} kcal
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => delFav.mutate(fav.id)}
-                    className="flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                    aria-label="Retirer des favoris"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </span>
-              ))}
-            </div>
+          {favorites && favorites.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setFavOpen((o) => !o)}
+              className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:border-foreground/30"
+            >
+              <Star className="h-4 w-4 text-primary" />
+              Favoris
+              <ChevronDown
+                className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${favOpen ? "rotate-180" : ""}`}
+              />
+            </button>
           )}
+          <button
+            type="button"
+            onClick={() => setBarcodeOpen(true)}
+            className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:border-foreground/30"
+          >
+            <Barcode className="h-4 w-4 text-muted-foreground" />
+            Code-barres
+          </button>
+          <button
+            type="button"
+            onClick={() => setSavedOpen(true)}
+            className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:border-foreground/30"
+          >
+            <Utensils className="h-4 w-4 text-primary" />
+            Mes repas
+          </button>
         </div>
-      )}
 
-      {/* Code-barres */}
-      <button
-        type="button"
-        onClick={() => setBarcodeOpen(true)}
-        className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card p-3.5 text-left transition-colors hover:border-foreground/30"
-      >
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary text-secondary-foreground">
-          <Barcode className="h-5 w-5" />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-sm font-medium">Code-barres</span>
-          <span className="block truncate text-xs text-muted-foreground">
-            Scanner un produit
-          </span>
-        </span>
-        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-      </button>
-
-      {/* Mes repas enregistrés */}
-      <button
-        type="button"
-        onClick={() => setSavedOpen(true)}
-        className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card p-3.5 text-left transition-colors hover:border-foreground/30"
-      >
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-          <Utensils className="h-5 w-5" />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-sm font-medium">Mes repas enregistrés</span>
-          <span className="block truncate text-xs text-muted-foreground">
-            Composer ou ajouter en 1 tap
-          </span>
-        </span>
-        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-      </button>
+        {favorites && favorites.length > 0 && favOpen && (
+          <div className="mt-2.5 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {favorites.map((fav) => (
+              <span
+                key={fav.id}
+                className="group inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-border bg-card py-1 pl-3 pr-1 text-xs font-medium"
+              >
+                <button
+                  type="button"
+                  onClick={() => addFromFavorite(fav)}
+                  disabled={addMeal.isPending}
+                  className="flex items-center gap-1 text-foreground hover:text-primary disabled:opacity-60"
+                  title="Ajouter à la journée"
+                >
+                  {fav.name}
+                  <span className="text-[10px] text-muted-foreground">
+                    {fav.calories ?? 0} kcal
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => delFav.mutate(fav.id)}
+                  className="flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                  aria-label="Retirer des favoris"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Outils */}
       <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
