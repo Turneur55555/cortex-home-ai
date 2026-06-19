@@ -21,6 +21,7 @@ CREATE POLICY "Block direct update on user_stats"
   ON public.user_stats AS RESTRICTIVE FOR UPDATE TO authenticated, anon
   USING (false) WITH CHECK (false);
 
+DROP POLICY IF EXISTS "Block direct delete on user_stats" ON public.user_stats;
 CREATE POLICY "Block direct delete on user_stats"
   ON public.user_stats AS RESTRICTIVE FOR DELETE TO authenticated, anon
   USING (false);

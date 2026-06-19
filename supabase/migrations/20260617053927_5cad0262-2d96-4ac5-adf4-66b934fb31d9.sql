@@ -50,6 +50,7 @@ CREATE INDEX IF NOT EXISTS food_barcodes_food_idx ON public.food_barcodes (food_
 GRANT SELECT ON public.food_barcodes TO authenticated;
 GRANT ALL ON public.food_barcodes TO service_role;
 ALTER TABLE public.food_barcodes ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "barcodes readable by authenticated" ON public.food_barcodes;
 CREATE POLICY "barcodes readable by authenticated" ON public.food_barcodes
   FOR SELECT TO authenticated USING (true);
 
@@ -172,6 +173,7 @@ CREATE TRIGGER foods_touch_updated_at
   BEFORE UPDATE ON public.foods
   FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();
 
+DROP TRIGGER IF EXISTS food_custom_foods_touch_updated_at ON public.food_custom_foods;
 CREATE TRIGGER food_custom_foods_touch_updated_at
   BEFORE UPDATE ON public.food_custom_foods
   FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();
