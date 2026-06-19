@@ -395,11 +395,11 @@ export function NutritionTab() {
       </button>
 
       {/* Outils */}
-      <div className="grid grid-cols-2 gap-2.5">
+      <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <button
           type="button"
           onClick={() => setPlanOpen(true)}
-          className="flex items-center justify-center gap-2 rounded-xl border border-border py-2.5 text-sm font-medium text-foreground transition-colors hover:border-foreground/30"
+          className="flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:border-foreground/30"
         >
           <Calendar className="h-4 w-4 text-muted-foreground" />
           Planning
@@ -407,7 +407,7 @@ export function NutritionTab() {
         <button
           type="button"
           onClick={() => setCopyOpen((o) => !o)}
-          className="flex items-center justify-center gap-2 rounded-xl border border-border py-2.5 text-sm font-medium text-foreground transition-colors hover:border-foreground/30"
+          className="flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:border-foreground/30"
         >
           <Copy className="h-4 w-4 text-muted-foreground" />
           Copier un jour
@@ -415,7 +415,7 @@ export function NutritionTab() {
         <button
           type="button"
           onClick={() => setAnalysisOpen(true)}
-          className="flex items-center justify-center gap-2 rounded-xl border border-border py-2.5 text-sm font-medium text-foreground transition-colors hover:border-foreground/30"
+          className="flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:border-foreground/30"
         >
           <Activity className="h-4 w-4 text-muted-foreground" />
           Analyse micro
@@ -423,7 +423,7 @@ export function NutritionTab() {
         <button
           type="button"
           onClick={() => setHistoryOpen(true)}
-          className="flex items-center justify-center gap-2 rounded-xl border border-border py-2.5 text-sm font-medium text-foreground transition-colors hover:border-foreground/30"
+          className="flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:border-foreground/30"
         >
           <TrendingUp className="h-4 w-4 text-muted-foreground" />
           Historique
