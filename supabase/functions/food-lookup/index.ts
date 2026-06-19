@@ -1,6 +1,7 @@
-// Food lookup edge function — replaces Open Food Facts.
-// Pipeline: Supabase cache (foods/food_barcodes) → USDA FoodData Central → cache write-back.
-// Always returns HTTP 200 with { ok, data?, error? }.
+// Food lookup edge function — catalogue propriétaire (foods : ciqual/usda/icortex/custom).
+// Pipeline : synonymes FR/EN → cache DB (normalized_name) → Gemini (fautes + FR→EN) → USDA → write-back.
+// Sortie inchangée pour le front (proteins/carbs/fats). Colonnes DB = schéma propriétaire (protein_g, normalized_name…).
+// IA : GEMINI_API_KEY (API Google directe, gemini-2.5-flash). Toujours HTTP 200 { ok, data?, error? }.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -19,36 +20,26 @@ function buildCors(req: Request) {
   };
 }
 
-// ─── Types exposés (compatibles OFF pour transition douce) ────────────────────
-
+interface ServingInfo { label: string; unit: string; quantity: number; grams: number }
 interface FoodResult {
-  id: string;                 // food.id (uuid) ou usda fdc id préfixé
-  source: "icortex" | "usda" | "custom";
+  id: string;
+  source: "icortex" | "usda" | "custom" | "ciqual";
   source_id?: string;
   name: string;
   brand?: string;
   category?: string;
   image_url?: string;
-  // /100g
   calories: number | null;
   proteins: number | null;
   carbs: number | null;
   fats: number | null;
   fiber?: number | null;
-  // pour compat OFF côté BarcodeScannerSheet
-  nutriments?: {
-    "energy-kcal_100g"?: number;
-    proteins_100g?: number;
-    carbohydrates_100g?: number;
-    fat_100g?: number;
-    fiber_100g?: number;
-  };
+  nutriments?: Record<string, number | undefined>;
   barcode?: string;
   quality_score?: number;
   confidence_score?: number;
+  default_serving?: ServingInfo | null;
 }
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const round = (v: unknown, d = 1): number | null => {
   const n = typeof v === "number" ? v : v != null ? Number(v) : NaN;
@@ -60,7 +51,7 @@ const normalize = (s: string) =>
   s
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[̀-ͯ]/g, "")
     .replace(/œ/g, "oe")
     .replace(/æ/g, "ae")
     .replace(/[^a-z0-9\s]/g, " ")
@@ -69,9 +60,10 @@ const normalize = (s: string) =>
 
 function toResult(row: Record<string, unknown>, barcode?: string): FoodResult {
   const calories = row.calories as number | null;
-  const proteins = row.proteins as number | null;
-  const carbs = row.carbs as number | null;
-  const fats = row.fats as number | null;
+  const proteins = row.protein_g as number | null;
+  const carbs = row.carbs_g as number | null;
+  const fats = row.fat_g as number | null;
+  const fiber = (row.fiber_g as number | null) ?? null;
   return {
     id: String(row.id),
     source: (row.source as FoodResult["source"]) ?? "icortex",
@@ -80,18 +72,14 @@ function toResult(row: Record<string, unknown>, barcode?: string): FoodResult {
     brand: (row.brand as string) ?? undefined,
     category: (row.category as string) ?? undefined,
     image_url: (row.image_url as string) ?? undefined,
-    calories,
-    proteins,
-    carbs,
-    fats,
-    fiber: (row.fiber as number | null) ?? null,
+    calories, proteins, carbs, fats, fiber,
     barcode,
     nutriments: {
       "energy-kcal_100g": calories ?? undefined,
       proteins_100g: proteins ?? undefined,
       carbohydrates_100g: carbs ?? undefined,
       fat_100g: fats ?? undefined,
-      fiber_100g: (row.fiber as number | undefined) ?? undefined,
+      fiber_100g: fiber ?? undefined,
     },
   };
 }
@@ -110,91 +98,114 @@ function computeQuality(calories: number | null, p: number | null, c: number | n
   return {
     quality_score: Math.max(0, Math.min(100, Math.round(quality))),
     confidence_score: Math.max(0, Math.min(100, Math.round(100 - delta))),
-    kcal_theoretical: round(theoretical),
-    kcal_declared: calories,
-    kcal_delta_pct: round(delta),
-    flags,
+    kcal_theoretical: round(theoretical), kcal_declared: calories, kcal_delta_pct: round(delta), flags,
   };
 }
 
-// ─── USDA client ──────────────────────────────────────────────────────────────
+type Admin = ReturnType<typeof createClient>;
+async function enrich(admin: Admin, results: FoodResult[]): Promise<FoodResult[]> {
+  const ids = results.map((r) => r.id).filter((id) => /^[0-9a-f-]{36}$/i.test(id));
+  if (ids.length === 0) return results;
+  const [q, sv] = await Promise.all([
+    admin.from("food_quality_scores").select("food_id, quality_score, confidence_score").in("food_id", ids),
+    admin.from("food_servings").select("food_id, label, unit, quantity, grams, is_default").in("food_id", ids),
+  ]);
+  const qMap = new Map<string, { quality_score: number; confidence_score: number }>();
+  for (const row of q.data ?? []) qMap.set(String((row as Record<string, unknown>).food_id), row as never);
+  const svMap = new Map<string, ServingInfo>();
+  for (const row of sv.data ?? []) {
+    const r = row as Record<string, unknown>;
+    if (r.is_default && !svMap.has(String(r.food_id))) {
+      svMap.set(String(r.food_id), { label: String(r.label), unit: String(r.unit), quantity: Number(r.quantity), grams: Number(r.grams) });
+    }
+  }
+  return results.map((r) => ({
+    ...r,
+    quality_score: qMap.get(r.id)?.quality_score,
+    confidence_score: qMap.get(r.id)?.confidence_score,
+    default_serving: svMap.get(r.id) ?? null,
+  }));
+}
+
+async function expandSynonyms(admin: Admin, norm: string): Promise<string[]> {
+  const { data } = await admin
+    .from("food_synonyms")
+    .select("canonical_term, alias_normalized")
+    .ilike("alias_normalized", `%${norm}%`)
+    .limit(5);
+  const terms = new Set<string>();
+  for (const row of data ?? []) {
+    const ct = (row as Record<string, unknown>).canonical_term as string | null;
+    if (ct) terms.add(normalize(ct));
+  }
+  return [...terms];
+}
+
+async function geminiNormalize(apiKey: string, query: string): Promise<string | null> {
+  try {
+    const res = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: "gemini-2.5-flash",
+        messages: [
+          { role: "system", content: "Tu corriges et traduis des noms d'aliments pour une recherche dans la base USDA (anglais). Réponds UNIQUEMENT par le nom de l'aliment en anglais, en minuscules, sans ponctuation ni phrase. Exemple: 'steack haché' -> 'ground beef'." },
+          { role: "user", content: query },
+        ],
+        temperature: 0,
+        max_tokens: 20,
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const txt = data?.choices?.[0]?.message?.content?.trim();
+    return txt ? String(txt).split("\n")[0].slice(0, 60) : null;
+  } catch (_) {
+    return null;
+  }
+}
 
 const USDA_BASE = "https://api.nal.usda.gov/fdc/v1";
-
-interface UsdaNutrient {
-  nutrientNumber?: string;
-  nutrientName?: string;
-  value?: number;
-}
-interface UsdaFood {
-  fdcId: number;
-  description: string;
-  brandName?: string;
-  brandOwner?: string;
-  gtinUpc?: string;
-  foodCategory?: string;
-  dataType?: string;
-  foodNutrients?: UsdaNutrient[];
-}
-
+interface UsdaNutrient { nutrientNumber?: string; value?: number }
+interface UsdaFood { fdcId: number; description: string; brandName?: string; brandOwner?: string; gtinUpc?: string; foodCategory?: string; foodNutrients?: UsdaNutrient[] }
 function pickNutrient(food: UsdaFood, numbers: string[]): number | null {
   for (const n of food.foodNutrients ?? []) {
-    if (n.nutrientNumber && numbers.includes(n.nutrientNumber) && n.value != null) {
-      return n.value;
-    }
+    if (n.nutrientNumber && numbers.includes(n.nutrientNumber) && n.value != null) return n.value;
   }
   return null;
 }
-
 function usdaToFood(food: UsdaFood) {
-  const calories = pickNutrient(food, ["208"]);
-  const proteins = pickNutrient(food, ["203"]);
-  const carbs = pickNutrient(food, ["205"]);
-  const fats = pickNutrient(food, ["204"]);
-  const fiber = pickNutrient(food, ["291"]);
-  const sugar = pickNutrient(food, ["269"]);
-  const sat = pickNutrient(food, ["606"]);
-  const sodium = pickNutrient(food, ["307"]);
   return {
     source: "usda" as const,
     source_id: String(food.fdcId),
     name: food.description,
-    name_normalized: normalize(food.description),
+    normalized_name: normalize(food.description),
     brand: food.brandName ?? food.brandOwner ?? null,
     category: food.foodCategory ?? null,
-    calories: round(calories, 0),
-    proteins: round(proteins),
-    carbs: round(carbs),
-    fats: round(fats),
-    fiber: round(fiber),
-    sugar: round(sugar),
-    saturated_fat: round(sat),
-    sodium: round(sodium),
+    serving_type: "100g",
+    calories: round(pickNutrient(food, ["208"]), 0),
+    protein_g: round(pickNutrient(food, ["203"])),
+    carbs_g: round(pickNutrient(food, ["205"])),
+    fat_g: round(pickNutrient(food, ["204"])),
+    fiber_g: round(pickNutrient(food, ["291"])),
+    sugars_g: round(pickNutrient(food, ["269"])),
+    saturated_fat_g: round(pickNutrient(food, ["606"])),
+    sodium_mg: round(pickNutrient(food, ["307"])),
     gtinUpc: food.gtinUpc ?? null,
   };
 }
-
 async function usdaSearch(apiKey: string, query: string, pageSize = 10): Promise<UsdaFood[]> {
-  const url = `${USDA_BASE}/foods/search?api_key=${apiKey}`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      query,
-      pageSize,
-      dataType: ["Foundation", "SR Legacy", "Branded"],
-    }),
+  const res = await fetch(`${USDA_BASE}/foods/search?api_key=${apiKey}`, {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ query, pageSize, dataType: ["Foundation", "SR Legacy", "Branded"] }),
   });
   if (!res.ok) return [];
   const data = await res.json();
   return (data.foods ?? []) as UsdaFood[];
 }
-
 async function usdaByBarcode(apiKey: string, code: string): Promise<UsdaFood | null> {
-  const url = `${USDA_BASE}/foods/search?api_key=${apiKey}`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
+  const res = await fetch(`${USDA_BASE}/foods/search?api_key=${apiKey}`, {
+    method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ query: code, dataType: ["Branded"], pageSize: 5 }),
   });
   if (!res.ok) return null;
@@ -202,142 +213,93 @@ async function usdaByBarcode(apiKey: string, code: string): Promise<UsdaFood | n
   const list = (data.foods ?? []) as UsdaFood[];
   return list.find((f) => f.gtinUpc?.replace(/^0+/, "") === code.replace(/^0+/, "")) ?? list[0] ?? null;
 }
-
-// ─── Persistance Supabase ─────────────────────────────────────────────────────
-
-async function upsertFood(admin: ReturnType<typeof createClient>, payload: ReturnType<typeof usdaToFood>) {
+async function upsertFood(admin: Admin, payload: ReturnType<typeof usdaToFood>) {
   const { gtinUpc, ...row } = payload;
-  const { data, error } = await admin
-    .from("foods")
-    .upsert(row, { onConflict: "source,source_id" })
-    .select()
-    .single();
+  const { data, error } = await admin.from("foods").upsert(row, { onConflict: "source,source_id" }).select().single();
   if (error || !data) throw error ?? new Error("upsert food failed");
-
-  // Score qualité
-  const q = computeQuality(
-    data.calories as number | null,
-    data.proteins as number | null,
-    data.carbs as number | null,
-    data.fats as number | null,
-  );
+  const q = computeQuality(data.calories as number | null, data.protein_g as number | null, data.carbs_g as number | null, data.fat_g as number | null);
   await admin.from("food_quality_scores").upsert({ food_id: data.id, ...q });
-
-  // Barcode
-  if (gtinUpc) {
-    await admin.from("food_barcodes").upsert({ barcode: gtinUpc, food_id: data.id });
-  }
+  if (gtinUpc) await admin.from("food_barcodes").upsert({ barcode: gtinUpc, food_id: data.id });
   return data;
 }
 
-// ─── Handler ──────────────────────────────────────────────────────────────────
+async function dbSearch(admin: Admin, terms: string[]): Promise<FoodResult[]> {
+  const uniq = [...new Set(terms.filter((t) => t && t.length >= 2))];
+  if (uniq.length === 0) return [];
+  const or = uniq.map((t) => `normalized_name.ilike.%${t}%`).join(",");
+  const { data } = await admin.from("foods").select("*").or(or).limit(20);
+  return (data ?? []).map((r) => toResult(r as Record<string, unknown>));
+}
+
+function dedupe(results: FoodResult[]): FoodResult[] {
+  const seen = new Set<string>();
+  return results.filter((r) => (seen.has(r.id) ? false : (seen.add(r.id), true)));
+}
 
 Deno.serve(async (req) => {
   const cors = buildCors(req);
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
-
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const SUPABASE_ANON =
-      Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY")!;
     const USDA_KEY = Deno.env.get("USDA_API_KEY");
-
-    // ─── Auth check: require a valid Supabase user JWT ───────────────────
-    const authHeader = req.headers.get("Authorization") ?? "";
-    if (!authHeader) {
-      return Response.json(
-        { ok: false, error: "Non authentifié" },
-        { status: 401, headers: cors },
-      );
-    }
-    const userSupa = createClient(SUPABASE_URL, SUPABASE_ANON, {
-      global: { headers: { Authorization: authHeader } },
-    });
-    const { data: userData, error: userErr } = await userSupa.auth.getUser();
-    if (userErr || !userData.user) {
-      return Response.json(
-        { ok: false, error: "Non authentifié" },
-        { status: 401, headers: cors },
-      );
-    }
-
-    if (!USDA_KEY) {
-      return Response.json(
-        { ok: false, error: "USDA_API_KEY missing" },
-        { status: 200, headers: cors },
-      );
-    }
-
+    const GEMINI_KEY = Deno.env.get("GEMINI_API_KEY");
     const admin = createClient(SUPABASE_URL, SERVICE_KEY);
     const body = await req.json().catch(() => ({}));
     const type = body.type as "search" | "barcode" | undefined;
 
-    // ─── BARCODE ──────────────────────────────────────────────────────────
     if (type === "barcode") {
       const code = String(body.code ?? "").trim();
       if (!code) return Response.json({ ok: false, error: "empty code" }, { headers: cors });
-
-      // 1. Cache
-      const cached = await admin
-        .from("food_barcodes")
-        .select("barcode, foods(*)")
-        .eq("barcode", code)
-        .maybeSingle();
+      const cached = await admin.from("food_barcodes").select("barcode, foods(*)").eq("barcode", code).maybeSingle();
       if (cached.data?.foods) {
-        const row = cached.data.foods as Record<string, unknown>;
-        return Response.json({ ok: true, data: toResult(row, code) }, { headers: cors });
+        const enriched = await enrich(admin, [toResult(cached.data.foods as Record<string, unknown>, code)]);
+        return Response.json({ ok: true, data: enriched[0] }, { headers: cors });
       }
-
-      // 2. USDA
+      if (!USDA_KEY) return Response.json({ ok: false, error: "not_found", code }, { headers: cors });
       const usda = await usdaByBarcode(USDA_KEY, code);
-      if (!usda) {
-        return Response.json({ ok: false, error: "not_found", code }, { headers: cors });
-      }
-      const payload = usdaToFood(usda);
-      payload.gtinUpc = payload.gtinUpc ?? code;
+      if (!usda) return Response.json({ ok: false, error: "not_found", code }, { headers: cors });
+      const payload = usdaToFood(usda); payload.gtinUpc = payload.gtinUpc ?? code;
       const saved = await upsertFood(admin, payload);
-      return Response.json({ ok: true, data: toResult(saved as Record<string, unknown>, code) }, { headers: cors });
+      const enriched = await enrich(admin, [toResult(saved as Record<string, unknown>, code)]);
+      return Response.json({ ok: true, data: enriched[0] }, { headers: cors });
     }
 
-    // ─── SEARCH ──────────────────────────────────────────────────────────
     if (type === "search") {
       const query = String(body.query ?? "").trim();
       if (query.length < 2) return Response.json({ ok: true, data: [] }, { headers: cors });
       const norm = normalize(query);
 
-      // 1. DB trigram
-      const local = await admin
-        .from("foods")
-        .select("*")
-        .ilike("name_normalized", `%${norm}%`)
-        .limit(20);
-      let results: FoodResult[] = (local.data ?? []).map((r) => toResult(r as Record<string, unknown>));
+      const synTerms = await expandSynonyms(admin, norm);
+      let results = await dbSearch(admin, [norm, ...synTerms]);
 
-      // 2. USDA fallback si pauvre
-      if (results.length < 5) {
-        const usdaList = await usdaSearch(USDA_KEY, query, 10);
+      let englishTerm: string | null = null;
+      if (results.length < 3 && GEMINI_KEY) {
+        englishTerm = await geminiNormalize(GEMINI_KEY, query);
+        if (englishTerm) {
+          const more = await dbSearch(admin, [normalize(englishTerm)]);
+          results = dedupe([...results, ...more]);
+        }
+      }
+
+      if (results.length < 5 && USDA_KEY) {
+        const usdaList = await usdaSearch(USDA_KEY, englishTerm ?? query, 10);
         for (const f of usdaList) {
           try {
-            const payload = usdaToFood(f);
-            const saved = await upsertFood(admin, payload);
+            const saved = await upsertFood(admin, usdaToFood(f));
             results.push(toResult(saved as Record<string, unknown>));
           } catch (_) { /* skip */ }
         }
-        // dédoublonner par id
-        const seen = new Set<string>();
-        results = results.filter((r) => (seen.has(r.id) ? false : (seen.add(r.id), true)));
+        results = dedupe(results);
       }
 
-      return Response.json({ ok: true, data: results.slice(0, 15) }, { headers: cors });
+      const enriched = await enrich(admin, results.slice(0, 15));
+      return Response.json({ ok: true, data: enriched }, { headers: cors });
     }
 
     return Response.json({ ok: false, error: "unknown type" }, { headers: cors });
   } catch (e) {
     console.error("food-lookup error", e);
-    return Response.json(
-      { ok: false, error: (e as Error)?.message ?? "internal" },
-      { status: 200, headers: cors },
-    );
+    return Response.json({ ok: false, error: (e as Error)?.message ?? "internal" }, { status: 200, headers: cors });
   }
 });
