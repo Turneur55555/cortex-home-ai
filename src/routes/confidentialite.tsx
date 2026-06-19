@@ -64,7 +64,7 @@ function TrustPage() {
       </Section>
 
       <Section title="Contrôles d'accès & isolation des données">
-        Vos données nutritionnelles, séances, rappels, photos et documents sont
+        Vos données nutritionnelles, séances, photos et documents sont
         rattachés à votre identifiant utilisateur et protégés par des règles
         d'accès au niveau de la base de données : seul votre compte peut lire
         et modifier vos enregistrements.
@@ -72,8 +72,8 @@ function TrustPage() {
 
       <Section title="Données collectées">
         Nous traitons uniquement les données nécessaires au fonctionnement :
-        profil (pseudo, objectifs), nutrition, séances, mensurations, rappels
-        et fichiers que vous choisissez d'importer. Aucune revente à des tiers.
+        profil (pseudo, objectifs), nutrition, séances, mensurations et
+        fichiers que vous choisissez d'importer. Aucune revente à des tiers.
       </Section>
 
       <Section title="Sous-traitants & intégrations">
