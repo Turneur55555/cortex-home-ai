@@ -7,6 +7,7 @@ import {
   useDeleteExerciseSet,
   useDeleteExercises,
 } from "@/hooks/use-fitness";
+import { restTimer } from "@/hooks/useRestTimer";
 
 // ─── Single set row (inline edit) ────────────────────────────────────────────
 
@@ -163,10 +164,14 @@ export function ActiveExerciseCard({
       reps: last?.reps ?? null,
       weight: last?.weight ?? null,
     });
+    restTimer.startForExercise(exercise.id);
   };
 
   const handleUpdate = (set: ActiveSet, field: "reps" | "weight" | "rpe", value: number | null) => {
     updateSet.mutate({ id: set.id, [field]: value });
+    if (field !== "rpe" && value != null) {
+      restTimer.startForExercise(exercise.id);
+    }
   };
 
   const handleDeleteSet = (id: string) => {

@@ -16,6 +16,7 @@ import {
   type RecentExercise,
 } from "./ExercisePickerSheet";
 import { normalize } from "@/lib/fitness/exerciseCatalog";
+import { RestTimerBar } from "./RestTimerBar";
 
 // ─── Timer ───────────────────────────────────────────────────────────────────
 
@@ -315,6 +316,9 @@ export function ActiveWorkoutView({ workout }: { workout: ActiveWorkout }) {
           onClose={() => setPickerOpen(false)}
         />
       )}
+
+      {/* Floating rest timer (above bottom nav) */}
+      <RestTimerBar />
     </div>
   );
 }
