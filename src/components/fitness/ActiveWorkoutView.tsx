@@ -16,6 +16,7 @@ import {
   type RecentExercise,
 } from "./ExercisePickerSheet";
 import { normalize } from "@/lib/fitness/exerciseCatalog";
+import { RestTimerBar } from "./RestTimerBar";
 
 // ─── Timer ───────────────────────────────────────────────────────────────────
 
