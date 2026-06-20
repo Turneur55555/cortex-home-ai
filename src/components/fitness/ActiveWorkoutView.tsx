@@ -316,6 +316,9 @@ export function ActiveWorkoutView({ workout }: { workout: ActiveWorkout }) {
           onClose={() => setPickerOpen(false)}
         />
       )}
+
+      {/* Floating rest timer (above bottom nav) */}
+      <RestTimerBar />
     </div>
   );
 }
