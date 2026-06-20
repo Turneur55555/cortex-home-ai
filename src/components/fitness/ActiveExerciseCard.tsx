@@ -7,6 +7,7 @@ import {
   useDeleteExerciseSet,
   useDeleteExercises,
 } from "@/hooks/use-fitness";
+import { restTimer } from "@/hooks/useRestTimer";
 
 // ─── Single set row (inline edit) ────────────────────────────────────────────
 
