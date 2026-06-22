@@ -286,6 +286,7 @@ export function ActiveWorkoutView({ workout }: { workout: ActiveWorkout }) {
             <ActiveExerciseCard
               key={ex.id}
               exercise={ex}
+              workoutId={workout.id}
               imageUrl={ex.image_path ? (imageUrls?.get(ex.image_path) ?? null) : null}
               pr={prByName.get(ex.name.trim().toLowerCase()) ?? null}
             />
