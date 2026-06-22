@@ -39,6 +39,8 @@ import {
 } from "./ExercisePickerSheet";
 import { normalize } from "@/lib/fitness/exerciseCatalog";
 import { estimate1RM, formatTonnage, workoutTonnage } from "@/lib/fitness/strength";
+import { estimateWorkoutCalories } from "@/lib/fitness/calories";
+import { useLatestBodyWeight } from "@/hooks/useLatestBodyWeight";
 
 export type WorkoutRow = NonNullable<ReturnType<typeof useWorkouts>["data"]>[number];
 type ExerciseRow = NonNullable<WorkoutRow["exercises"]>[number];
@@ -168,6 +170,7 @@ export function WorkoutCard({
   const updateEx = useUpdateExercise();
   const deleteExBatch = useDeleteExercises();
   const deleteWorkout = useDeleteWorkout();
+  const { data: bodyWeightKg } = useLatestBodyWeight();
 
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -214,19 +217,23 @@ export function WorkoutCard({
     const safeVolume = volumeMismatch ? rawVolume : volume;
 
     const duration = w.duration_minutes ?? 0;
-    const caloriesFromVolume = Math.round(safeVolume * 0.05);
-    const caloriesFromDuration = duration > 0 ? duration * 5 : 0;
-    const calories = caloriesFromVolume + caloriesFromDuration;
+    // Estimation calorique réaliste basée sur la formule MET × poids × durée
+    // (cf. src/lib/fitness/calories.ts). Conserve null si la durée est nulle.
+    const calories = estimateWorkoutCalories({
+      durationMinutes: duration,
+      volumeKg: safeVolume,
+      bodyWeightKg: bodyWeightKg ?? null,
+    });
     return {
       volume: Math.round(safeVolume),
       volumeMismatch,
       duration,
-      calories: calories > 0 ? calories : null,
+      calories,
       exoCount: groups.length,
       totalSeries,
       totalReps,
     };
-  }, [groups, w.duration_minutes, w.exercises, w.id]);
+  }, [groups, w.duration_minutes, w.exercises, w.id, bodyWeightKg]);
 
 
   const handlePhotoUpload = async (exId: string, file: File) => {
