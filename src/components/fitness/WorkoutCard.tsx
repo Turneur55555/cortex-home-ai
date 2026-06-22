@@ -39,6 +39,8 @@ import {
 } from "./ExercisePickerSheet";
 import { normalize } from "@/lib/fitness/exerciseCatalog";
 import { estimate1RM, formatTonnage, workoutTonnage } from "@/lib/fitness/strength";
+import { estimateWorkoutCalories } from "@/lib/fitness/calories";
+import { useLatestBodyWeight } from "@/hooks/useLatestBodyWeight";
 
 export type WorkoutRow = NonNullable<ReturnType<typeof useWorkouts>["data"]>[number];
 type ExerciseRow = NonNullable<WorkoutRow["exercises"]>[number];
