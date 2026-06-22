@@ -217,19 +217,23 @@ export function WorkoutCard({
     const safeVolume = volumeMismatch ? rawVolume : volume;
 
     const duration = w.duration_minutes ?? 0;
-    const caloriesFromVolume = Math.round(safeVolume * 0.05);
-    const caloriesFromDuration = duration > 0 ? duration * 5 : 0;
-    const calories = caloriesFromVolume + caloriesFromDuration;
+    // Estimation calorique réaliste basée sur la formule MET × poids × durée
+    // (cf. src/lib/fitness/calories.ts). Conserve null si la durée est nulle.
+    const calories = estimateWorkoutCalories({
+      durationMinutes: duration,
+      volumeKg: safeVolume,
+      bodyWeightKg: bodyWeightKg ?? null,
+    });
     return {
       volume: Math.round(safeVolume),
       volumeMismatch,
       duration,
-      calories: calories > 0 ? calories : null,
+      calories,
       exoCount: groups.length,
       totalSeries,
       totalReps,
     };
-  }, [groups, w.duration_minutes, w.exercises, w.id]);
+  }, [groups, w.duration_minutes, w.exercises, w.id, bodyWeightKg]);
 
 
   const handlePhotoUpload = async (exId: string, file: File) => {
