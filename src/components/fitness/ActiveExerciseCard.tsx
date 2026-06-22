@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Dumbbell, Plus, Trash2, Trophy } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ArrowDown, ArrowUp, Dumbbell, History, Minus, Plus, RotateCcw, Trash2, Trophy } from "lucide-react";
 import type { ActiveExercise, ActiveSet } from "@/hooks/use-fitness";
 import {
   useAddExerciseSet,
@@ -8,6 +8,36 @@ import {
   useDeleteExercises,
 } from "@/hooks/use-fitness";
 import { restTimer } from "@/hooks/useRestTimer";
+import { useLastExerciseSession, type LastSessionSet } from "@/hooks/useLastExerciseSession";
+
+// ─── Comparaison série courante vs dernière séance ──────────────────────────
+
+function compareToLast(
+  current: { reps: number | null; weight: number | null },
+  last: LastSessionSet | undefined,
+): "up" | "down" | "equal" | null {
+  if (!last) return null;
+  if (current.weight == null && current.reps == null) return null;
+  // Compare en priorité sur le poids, puis sur les reps si poids identique.
+  const cw = current.weight ?? 0;
+  const lw = last.weight ?? 0;
+  if (cw > lw) return "up";
+  if (cw < lw) return "down";
+  const cr = current.reps ?? 0;
+  const lr = last.reps ?? 0;
+  if (cr > lr) return "up";
+  if (cr < lr) return "down";
+  return "equal";
+}
+
+function TrendIcon({ trend }: { trend: "up" | "down" | "equal" | null }) {
+  if (!trend) return null;
+  if (trend === "up")
+    return <ArrowUp className="h-3 w-3 text-success" aria-label="Progression" />;
+  if (trend === "down")
+    return <ArrowDown className="h-3 w-3 text-destructive" aria-label="Régression" />;
+  return <Minus className="h-3 w-3 text-muted-foreground/60" aria-label="Identique" />;
+}
 
 // ─── Single set row (inline edit) ────────────────────────────────────────────
 
@@ -15,12 +45,14 @@ function SetRow({
   set,
   index,
   isMax,
+  lastSet,
   onDelete,
   onUpdate,
 }: {
   set: ActiveSet;
   index: number;
   isMax: boolean;
+  lastSet: LastSessionSet | undefined;
   onDelete: () => void;
   onUpdate: (field: "reps" | "weight" | "rpe", value: number | null) => void;
 }) {
@@ -33,6 +65,8 @@ function SetRow({
 
   const inputCls =
     "w-full bg-transparent py-2 text-center text-sm font-semibold tabular-nums outline-none focus:text-primary transition-colors placeholder:text-muted-foreground/30";
+
+  const trend = compareToLast({ reps: set.reps, weight: set.weight }, lastSet);
 
   if (confirmDel) {
     return (
@@ -59,15 +93,20 @@ function SetRow({
     );
   }
 
+  // Placeholder textuel (poids ou reps précédent) si la cellule est vide.
+  const repsPh = lastSet?.reps != null ? String(lastSet.reps) : "—";
+  const weightPh = lastSet?.weight != null ? String(lastSet.weight) : "—";
+
   return (
     <li
       className={`grid grid-cols-[36px_1fr_1fr_1fr_32px] items-center divide-x divide-white/5 transition-colors ${isMax ? "bg-warning/5" : ""}`}
     >
-      {/* # */}
-      <div className="flex items-center justify-center py-2">
+      {/* # + trend */}
+      <div className="flex items-center justify-center gap-0.5 py-2">
         <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">
           {index}
         </span>
+        <TrendIcon trend={trend} />
       </div>
 
       {/* Reps */}
@@ -75,7 +114,7 @@ function SetRow({
         type="number"
         inputMode="numeric"
         value={reps}
-        placeholder="—"
+        placeholder={repsPh}
         onChange={(e) => setReps(e.target.value)}
         onBlur={(e) => onUpdate("reps", parse(e.target.value))}
         className={inputCls}
@@ -87,7 +126,7 @@ function SetRow({
         inputMode="decimal"
         step="0.5"
         value={weight}
-        placeholder="—"
+        placeholder={weightPh}
         onChange={(e) => setWeight(e.target.value)}
         onBlur={(e) => onUpdate("weight", parse(e.target.value))}
         className={inputCls}
@@ -124,10 +163,12 @@ function SetRow({
 
 export function ActiveExerciseCard({
   exercise,
+  workoutId,
   imageUrl,
   pr,
 }: {
   exercise: ActiveExercise;
+  workoutId: string;
   imageUrl: string | null;
   pr: number | null;
 }) {
@@ -136,11 +177,19 @@ export function ActiveExerciseCard({
   const deleteSet = useDeleteExerciseSet();
   const deleteExercises = useDeleteExercises();
 
+  const { data: lastSession } = useLastExerciseSession(exercise.name, workoutId);
+
   const [confirmDeleteEx, setConfirmDeleteEx] = useState(false);
 
   const sortedSets = [...(exercise.exercise_sets ?? [])].sort(
     (a, b) => a.set_number - b.set_number,
   );
+
+  const lastSetsByNumber = useMemo(() => {
+    const m = new Map<number, LastSessionSet>();
+    for (const s of lastSession?.sets ?? []) m.set(s.set_number, s);
+    return m;
+  }, [lastSession]);
 
   const maxWeight =
     sortedSets.reduce<number | null>(
@@ -156,15 +205,52 @@ export function ActiveExerciseCard({
   const isPR = maxWeight != null && pr != null && maxWeight >= pr;
   const isNewPR = maxWeight != null && pr != null && maxWeight > pr;
 
+  // Résumé "dernière séance" : 1ʳᵉ série (ou plus lourd) du dernier passage.
+  const lastSummary = useMemo(() => {
+    const sets = lastSession?.sets ?? [];
+    if (sets.length === 0) return null;
+    const heaviest = sets.reduce<LastSessionSet>(
+      (best, cur) => ((cur.weight ?? 0) > (best.weight ?? 0) ? cur : best),
+      sets[0],
+    );
+    return heaviest;
+  }, [lastSession]);
+
   const handleAddSet = async () => {
     const last = sortedSets[sortedSets.length - 1];
+    const nextIndex = sortedSets.length + 1;
+    const fallback = lastSetsByNumber.get(nextIndex) ?? lastSession?.sets[0];
     await addSet.mutateAsync({
       exerciseId: exercise.id,
-      setNumber: sortedSets.length + 1,
-      reps: last?.reps ?? null,
-      weight: last?.weight ?? null,
+      setNumber: nextIndex,
+      reps: last?.reps ?? fallback?.reps ?? null,
+      weight: last?.weight ?? fallback?.weight ?? null,
     });
     restTimer.startForExercise(exercise.id);
+  };
+
+  // Réapplique les charges & reps de la dernière séance sur les séries
+  // existantes (vides ou non) et crée les séries manquantes.
+  const handleRestoreLastSession = async () => {
+    const lastSets = lastSession?.sets ?? [];
+    if (lastSets.length === 0) return;
+    // Mise à jour des séries existantes
+    for (const s of sortedSets) {
+      const ref = lastSetsByNumber.get(s.set_number);
+      if (!ref) continue;
+      updateSet.mutate({ id: s.id, reps: ref.reps, weight: ref.weight });
+    }
+    // Ajout des séries manquantes
+    const existingNumbers = new Set(sortedSets.map((s) => s.set_number));
+    const toCreate = lastSets.filter((s) => !existingNumbers.has(s.set_number));
+    for (const ref of toCreate) {
+      await addSet.mutateAsync({
+        exerciseId: exercise.id,
+        setNumber: ref.set_number,
+        reps: ref.reps,
+        weight: ref.weight,
+      });
+    }
   };
 
   const handleUpdate = (set: ActiveSet, field: "reps" | "weight" | "rpe", value: number | null) => {
@@ -204,7 +290,6 @@ export function ActiveExerciseCard({
 
         {/* Name + stats */}
         <div className="min-w-0 flex-1">
-          {/* Full name — no truncation */}
           <h3 className="text-[15px] font-bold leading-tight">{exercise.name}</h3>
 
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
@@ -218,6 +303,15 @@ export function ActiveExerciseCard({
               </span>
             )}
           </div>
+
+          {/* Dernière séance badge */}
+          {lastSummary && (
+            <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+              <History className="h-3 w-3" />
+              Dernière séance : {lastSummary.weight ?? "—"} kg ×{" "}
+              {lastSummary.reps ?? "—"}
+            </span>
+          )}
 
           {/* PR badge */}
           {isPR && (
@@ -272,6 +366,21 @@ export function ActiveExerciseCard({
         </div>
       )}
 
+      {/* ── Bouton "Reprendre les charges précédentes" ── */}
+      {lastSession && lastSession.sets.length > 0 && (
+        <div className="mx-4 mb-2">
+          <button
+            type="button"
+            onClick={handleRestoreLastSession}
+            disabled={addSet.isPending || updateSet.isPending}
+            className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-primary/20 bg-primary/5 py-2 text-[11px] font-semibold text-primary transition-colors hover:bg-primary/10 disabled:opacity-50"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            Reprendre les charges précédentes
+          </button>
+        </div>
+      )}
+
       {/* ── Sets table ── */}
       <div className="mx-4 mb-4 overflow-hidden rounded-xl border border-white/5 bg-black/20">
         {/* Table header */}
@@ -296,6 +405,7 @@ export function ActiveExerciseCard({
                 set={s}
                 index={idx + 1}
                 isMax={s.weight != null && s.weight === maxWeight && maxWeight != null}
+                lastSet={lastSetsByNumber.get(s.set_number) ?? lastSession?.sets[idx]}
                 onUpdate={(field, value) => handleUpdate(s, field, value)}
                 onDelete={() => handleDeleteSet(s.id)}
               />
