@@ -170,6 +170,7 @@ export function WorkoutCard({
   const updateEx = useUpdateExercise();
   const deleteExBatch = useDeleteExercises();
   const deleteWorkout = useDeleteWorkout();
+  const { data: bodyWeightKg } = useLatestBodyWeight();
 
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
