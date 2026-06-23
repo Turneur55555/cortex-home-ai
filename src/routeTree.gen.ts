@@ -22,7 +22,9 @@ import { Route as AuthenticatedPreferencesAlimentairesRouteImport } from './rout
 import { Route as AuthenticatedNutritionRouteImport } from './routes/_authenticated/nutrition'
 import { Route as AuthenticatedDocumentsRouteImport } from './routes/_authenticated/documents'
 import { Route as AuthenticatedCorpsRouteImport } from './routes/_authenticated/corps'
+import { Route as AuthenticatedRapportsIndexRouteImport } from './routes/_authenticated/rapports/index'
 import { Route as AuthenticatedFitnessIndexRouteImport } from './routes/_authenticated/fitness/index'
+import { Route as AuthenticatedRapportsIdRouteImport } from './routes/_authenticated/rapports/$id'
 
 const Char91indexChar93Route = Char91indexChar93RouteImport.update({
   id: '/index',
@@ -89,12 +91,23 @@ const AuthenticatedCorpsRoute = AuthenticatedCorpsRouteImport.update({
   path: '/corps',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedRapportsIndexRoute =
+  AuthenticatedRapportsIndexRouteImport.update({
+    id: '/rapports/',
+    path: '/rapports/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedFitnessIndexRoute =
   AuthenticatedFitnessIndexRouteImport.update({
     id: '/fitness/',
     path: '/fitness/',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedRapportsIdRoute = AuthenticatedRapportsIdRouteImport.update({
+  id: '/rapports/$id',
+  path: '/rapports/$id',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -109,7 +122,9 @@ export interface FileRoutesByFullPath {
   '/profil': typeof AuthenticatedProfilRoute
   '/rls-status': typeof AuthenticatedRlsStatusRoute
   '/seances': typeof AuthenticatedSeancesRoute
+  '/rapports/$id': typeof AuthenticatedRapportsIdRoute
   '/fitness/': typeof AuthenticatedFitnessIndexRoute
+  '/rapports/': typeof AuthenticatedRapportsIndexRoute
 }
 export interface FileRoutesByTo {
   '/confidentialite': typeof ConfidentialiteRoute
@@ -124,7 +139,9 @@ export interface FileRoutesByTo {
   '/rls-status': typeof AuthenticatedRlsStatusRoute
   '/seances': typeof AuthenticatedSeancesRoute
   '/': typeof AuthenticatedIndexRoute
+  '/rapports/$id': typeof AuthenticatedRapportsIdRoute
   '/fitness': typeof AuthenticatedFitnessIndexRoute
+  '/rapports': typeof AuthenticatedRapportsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -141,7 +158,9 @@ export interface FileRoutesById {
   '/_authenticated/rls-status': typeof AuthenticatedRlsStatusRoute
   '/_authenticated/seances': typeof AuthenticatedSeancesRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
+  '/_authenticated/rapports/$id': typeof AuthenticatedRapportsIdRoute
   '/_authenticated/fitness/': typeof AuthenticatedFitnessIndexRoute
+  '/_authenticated/rapports/': typeof AuthenticatedRapportsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -158,7 +177,9 @@ export interface FileRouteTypes {
     | '/profil'
     | '/rls-status'
     | '/seances'
+    | '/rapports/$id'
     | '/fitness/'
+    | '/rapports/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/confidentialite'
@@ -173,7 +194,9 @@ export interface FileRouteTypes {
     | '/rls-status'
     | '/seances'
     | '/'
+    | '/rapports/$id'
     | '/fitness'
+    | '/rapports'
   id:
     | '__root__'
     | '/_authenticated'
@@ -189,7 +212,9 @@ export interface FileRouteTypes {
     | '/_authenticated/rls-status'
     | '/_authenticated/seances'
     | '/_authenticated/'
+    | '/_authenticated/rapports/$id'
     | '/_authenticated/fitness/'
+    | '/_authenticated/rapports/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -293,11 +318,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCorpsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/rapports/': {
+      id: '/_authenticated/rapports/'
+      path: '/rapports'
+      fullPath: '/rapports/'
+      preLoaderRoute: typeof AuthenticatedRapportsIndexRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/fitness/': {
       id: '/_authenticated/fitness/'
       path: '/fitness'
       fullPath: '/fitness/'
       preLoaderRoute: typeof AuthenticatedFitnessIndexRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/rapports/$id': {
+      id: '/_authenticated/rapports/$id'
+      path: '/rapports/$id'
+      fullPath: '/rapports/$id'
+      preLoaderRoute: typeof AuthenticatedRapportsIdRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
   }
@@ -312,7 +351,9 @@ interface AuthenticatedRouteChildren {
   AuthenticatedRlsStatusRoute: typeof AuthenticatedRlsStatusRoute
   AuthenticatedSeancesRoute: typeof AuthenticatedSeancesRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
+  AuthenticatedRapportsIdRoute: typeof AuthenticatedRapportsIdRoute
   AuthenticatedFitnessIndexRoute: typeof AuthenticatedFitnessIndexRoute
+  AuthenticatedRapportsIndexRoute: typeof AuthenticatedRapportsIndexRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
@@ -325,7 +366,9 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedRlsStatusRoute: AuthenticatedRlsStatusRoute,
   AuthenticatedSeancesRoute: AuthenticatedSeancesRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
+  AuthenticatedRapportsIdRoute: AuthenticatedRapportsIdRoute,
   AuthenticatedFitnessIndexRoute: AuthenticatedFitnessIndexRoute,
+  AuthenticatedRapportsIndexRoute: AuthenticatedRapportsIndexRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(

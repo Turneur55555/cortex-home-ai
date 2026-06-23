@@ -1141,6 +1141,51 @@ export type Database = {
         }
         Relationships: []
       }
+      weekly_reports: {
+        Row: {
+          ai_analysis: Json
+          body_data: Json
+          created_at: string | null
+          fitness_data: Json
+          id: string
+          nutrition_data: Json
+          pdf_url: string | null
+          status: string | null
+          summary: Json
+          user_id: string
+          week_end: string
+          week_start: string
+        }
+        Insert: {
+          ai_analysis?: Json
+          body_data?: Json
+          created_at?: string | null
+          fitness_data?: Json
+          id?: string
+          nutrition_data?: Json
+          pdf_url?: string | null
+          status?: string | null
+          summary?: Json
+          user_id: string
+          week_end: string
+          week_start: string
+        }
+        Update: {
+          ai_analysis?: Json
+          body_data?: Json
+          created_at?: string | null
+          fitness_data?: Json
+          id?: string
+          nutrition_data?: Json
+          pdf_url?: string | null
+          status?: string | null
+          summary?: Json
+          user_id?: string
+          week_end?: string
+          week_start?: string
+        }
+        Relationships: []
+      }
       workouts: {
         Row: {
           created_at: string

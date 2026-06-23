@@ -16,6 +16,7 @@ import {
 import { useAuth } from "@/hooks/use-auth";
 import { useProfile } from "@/hooks/useProfile";
 import { ChatBot } from "@/components/ChatBot";
+import { ReportSummaryWidget } from "@/components/reports/ReportSummaryWidget";
 import { getContextualQuote } from "@/lib/quotes";
 import { useWorkouts, useNutrition, useNutritionGoals } from "@/hooks/use-fitness";
 import { useRecoveryMap } from "@/hooks/useRecoveryMap";
@@ -197,6 +198,9 @@ function HomePage() {
 
       {/* ── Badges & succès ── */}
       {badges && badges.length > 0 && <BadgesCard badges={badges} />}
+
+      {/* ── Rapport hebdo IA ── */}
+      <ReportSummaryWidget />
 
       {/* ── Cross-domaine (catégories) ── */}
       <div className="mt-6">

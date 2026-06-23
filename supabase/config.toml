@@ -1,1 +1,7 @@
 project_id = "bcwfvpwxzlmkxobvbtzp"
+
+[functions.generate-weekly-report]
+verify_jwt = true
+
+[functions.scheduled-weekly-report]
+verify_jwt = false
