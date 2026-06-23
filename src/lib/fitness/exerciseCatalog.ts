@@ -3,6 +3,41 @@ export type CatalogExercise = {
   group: string;
 };
 
+export function normalize(s: string): string {
+  return (s ?? "")
+    .toString()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+export function searchExercises(
+  query: string,
+  catalog: CatalogExercise[],
+): CatalogExercise[] {
+  const q = normalize(query);
+  if (!q) return catalog;
+  return catalog.filter((e) => normalize(e.name).includes(q));
+}
+
+export const CATALOG_GROUPS: string[] = [
+  "Pectoraux",
+  "Dos",
+  "Épaules",
+  "Biceps",
+  "Triceps",
+  "Jambes",
+  "Fessiers",
+  "Abdominaux",
+  "Mollets",
+  "Polyarticulaire",
+  "Cardio",
+];
+
+
+
 export const EXERCISE_CATALOG: CatalogExercise[] = [
   // Pectoraux
   { name: "Développé couché barre", group: "Pectoraux" },
