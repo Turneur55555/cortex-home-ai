@@ -65,6 +65,18 @@ export default defineConfig({
           ],
         },
       }),
+      ...(ANALYZE
+        ? [
+            visualizer({
+              filename: "dist/bundle-report.html",
+              template: "treemap",
+              gzipSize: true,
+              brotliSize: true,
+              open: false,
+              title: "ICORTEX — Bundle Analysis",
+            }),
+          ]
+        : []),
     ],
     build: {
       // Seuil d'alerte pour les chunks (en Ko)
