@@ -242,8 +242,23 @@ Deno.serve(async (req) => {
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
     const USDA_KEY = Deno.env.get("USDA_API_KEY");
     const GEMINI_KEY = Deno.env.get("GEMINI_API_KEY");
+
+    // Require a valid Supabase JWT before doing any work (catalog writes use service role).
+    const authHeader = req.headers.get("Authorization") ?? "";
+    if (!authHeader.toLowerCase().startsWith("bearer ")) {
+      return Response.json({ ok: false, error: "unauthorized" }, { status: 401, headers: cors });
+    }
+    const userSupa = createClient(SUPABASE_URL, ANON_KEY, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: userData, error: userErr } = await userSupa.auth.getUser();
+    if (userErr || !userData?.user) {
+      return Response.json({ ok: false, error: "unauthorized" }, { status: 401, headers: cors });
+    }
+
     const admin = createClient(SUPABASE_URL, SERVICE_KEY);
     const body = await req.json().catch(() => ({}));
     const type = body.type as "search" | "barcode" | undefined;
