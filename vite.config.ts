@@ -6,6 +6,11 @@
 // You can pass additional config via defineConfig({ vite: { ... } }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 import { VitePWA } from "vite-plugin-pwa";
+import { visualizer } from "rollup-plugin-visualizer";
+
+// Activer le rapport d'analyse de bundle avec ANALYZE=true bun run build
+// Génère dist/bundle-report.html (treemap interactif + gzip/brotli sizes)
+const ANALYZE = process.env.ANALYZE === "true";
 
 // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
 // @cloudflare/vite-plugin builds from this — wrangler.jsonc main alone is insufficient.
@@ -60,6 +65,18 @@ export default defineConfig({
           ],
         },
       }),
+      ...(ANALYZE
+        ? [
+            visualizer({
+              filename: "dist/bundle-report.html",
+              template: "treemap",
+              gzipSize: true,
+              brotliSize: true,
+              open: false,
+              title: "ICORTEX — Bundle Analysis",
+            }),
+          ]
+        : []),
     ],
     build: {
       // Seuil d'alerte pour les chunks (en Ko)
