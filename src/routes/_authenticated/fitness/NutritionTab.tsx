@@ -290,18 +290,18 @@ export function NutritionTab() {
           <button
             type="button"
             onClick={() => setScanOpen(true)}
-            className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:border-foreground/30"
+            className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-border px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-foreground/30"
           >
-            <Sparkles className="h-4 w-4 text-primary" />
-            Scan repas
+            <Sparkles className="h-3.5 w-3.5 text-primary" />
+            Scan
           </button>
           {favorites && favorites.length > 0 && (
             <button
               type="button"
               onClick={() => setFavOpen((o) => !o)}
-              className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:border-foreground/30"
+              className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-border px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-foreground/30"
             >
-              <Star className="h-4 w-4 text-primary" />
+              <Star className="h-3.5 w-3.5 text-primary" />
               Favoris
               <ChevronDown
                 className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${favOpen ? "rotate-180" : ""}`}
@@ -311,18 +311,18 @@ export function NutritionTab() {
           <button
             type="button"
             onClick={() => setBarcodeOpen(true)}
-            className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:border-foreground/30"
+            className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-border px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-foreground/30"
           >
-            <Barcode className="h-4 w-4 text-muted-foreground" />
+            <Barcode className="h-3.5 w-3.5 text-muted-foreground" />
             Code-barres
           </button>
           <button
             type="button"
             onClick={() => setSavedOpen(true)}
-            className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:border-foreground/30"
+            className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-border px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-foreground/30"
           >
-            <Utensils className="h-4 w-4 text-primary" />
-            Mes repas
+            <Utensils className="h-3.5 w-3.5 text-primary" />
+            Repas
           </button>
         </div>
 
@@ -364,33 +364,33 @@ export function NutritionTab() {
         <button
           type="button"
           onClick={() => setPlanOpen(true)}
-          className="flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:border-foreground/30"
+          className="flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-border px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-foreground/30"
         >
-          <Calendar className="h-4 w-4 text-muted-foreground" />
+          <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
           Planning
         </button>
         <button
           type="button"
           onClick={() => setCopyOpen((o) => !o)}
-          className="flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:border-foreground/30"
+          className="flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-border px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-foreground/30"
         >
-          <Copy className="h-4 w-4 text-muted-foreground" />
-          Copier un jour
+          <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+          Copier
         </button>
         <button
           type="button"
           onClick={() => setAnalysisOpen(true)}
-          className="flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:border-foreground/30"
+          className="flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-border px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-foreground/30"
         >
-          <Activity className="h-4 w-4 text-muted-foreground" />
-          Analyse micro
+          <Activity className="h-3.5 w-3.5 text-muted-foreground" />
+          Analyse
         </button>
         <button
           type="button"
           onClick={() => setHistoryOpen(true)}
-          className="flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-foreground transition-colors hover:border-foreground/30"
+          className="flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-border px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-foreground/30"
         >
-          <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
           Historique
         </button>
       </div>
