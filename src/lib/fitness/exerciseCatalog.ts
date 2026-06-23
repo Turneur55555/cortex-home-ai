@@ -104,54 +104,26 @@ export const EXERCISE_CATALOG: CatalogExercise[] = [
   { name: "Burpees", group: "Cardio" },
 
   // Illustrations planches (ajout 23/06/2026)
-  { name: "Développé couché incliné haltères", group: "Pectoraux" },
-  { name: "Tirage horizontal poulie basse", group: "Dos" },
-  { name: "Tirage horizontal câble assis", group: "Dos" },
-  { name: "Tirage vertical nuque", group: "Dos" },
-  { name: "Leg press incliné", group: "Jambes" },
-  { name: "Squat avant barre", group: "Jambes" },
-  { name: "Hip thrust barre sol", group: "Fessiers" },
-  { name: "Good morning barre", group: "Fessiers" },
-  { name: "Fente marchée haltères", group: "Jambes" },
-  { name: "Extension mollets machine", group: "Mollets" },
-  { name: "Crunch câble à genoux", group: "Abdominaux" },
-  { name: "Crunch machine", group: "Abdominaux" },
-  { name: "Relevé de jambes chaise romaine", group: "Abdominaux" },
-  { name: "Planche latérale", group: "Abdominaux" },
-  { name: "Rotation câble assis", group: "Abdominaux" },
+  { name: "Adducteur machine", group: "Fessiers" },
   { name: "Crunch câble debout", group: "Abdominaux" },
-  { name: "Hyperextension banc", group: "Abdominaux" },
+  { name: "Crunch câble à genoux", group: "Abdominaux" },
   { name: "Crunch inversé banc", group: "Abdominaux" },
-  { name: "Rotation câble debout", group: "Abdominaux" },
-  { name: "Développé militaire haltères assis", group: "Épaules" },
+  { name: "Crunch machine", group: "Abdominaux" },
   { name: "Curl haltères", group: "Biceps" },
-  { name: "Curl câble barre", group: "Biceps" },
   { name: "Curl pupitre barre EZ", group: "Biceps" },
-  { name: "Curl pupitre câble", group: "Biceps" },
-  { name: "Extension triceps haltère nuque", group: "Triceps" },
   { name: "Dips barres parallèles", group: "Triceps" },
-  { name: "Dips machine", group: "Triceps" },
-  { name: "Curl pupitre", group: "Biceps" },
+  { name: "Développé militaire haltères assis", group: "Épaules" },
+  { name: "Extension triceps haltère nuque", group: "Triceps" },
+  { name: "Extension triceps poulie haute", group: "Triceps" },
+  { name: "Hyperextension banc", group: "Abdominaux" },
+  { name: "Leg press incliné", group: "Jambes" },
+  { name: "Planche latérale", group: "Abdominaux" },
+  { name: "Relevé de jambes chaise romaine", group: "Abdominaux" },
+  { name: "Rotation câble assis", group: "Abdominaux" },
+  { name: "Rotation câble debout", group: "Abdominaux" },
+  { name: "Soulevé de terre roumain barre", group: "Jambes" },
+  { name: "Soulevé de terre roumain haltères", group: "Jambes" },
+  { name: "Squat avant barre", group: "Jambes" },
+  { name: "Tirage horizontal assis poitrine", group: "Dos" },
+  { name: "Écarté incliné haltères", group: "Pectoraux" },
 ];
-
-export const CATALOG_GROUPS = Array.from(
-  new Set(EXERCISE_CATALOG.map((e) => e.group)),
-);
-
-export function normalize(s: string): string {
-  return s
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-export function searchExercises(
-  query: string,
-  exercises: CatalogExercise[],
-): CatalogExercise[] {
-  const nq = normalize(query);
-  if (!nq) return exercises;
-  return exercises.filter((e) => normalize(e.name).includes(nq));
-}
