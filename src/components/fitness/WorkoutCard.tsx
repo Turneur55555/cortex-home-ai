@@ -379,7 +379,7 @@ export function WorkoutCard({
       {groups.length > 0 && (
         <ul className="space-y-3 px-4 pb-3">
           {groups.map((g) => {
-            const imgUrl = (g.imagePath ? (imageUrls?.get(g.imagePath) ?? null) : null) ?? exerciseIllustration(g.name);
+            const imgUrl = (g.imagePath ? imageUrls?.get(g.imagePath) : null) ?? exerciseIllustration(g.name);
             const gymPR = prByGym.get(gymLocation)?.get(g.key) ?? null;
             const isPR =
               g.maxWeight != null &&
