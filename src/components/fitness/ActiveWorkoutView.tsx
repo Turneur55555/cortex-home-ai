@@ -288,7 +288,7 @@ export function ActiveWorkoutView({ workout }: { workout: ActiveWorkout }) {
               key={ex.id}
               exercise={ex}
               workoutId={workout.id}
-              imageUrl={(ex.image_path ? (imageUrls?.get(ex.image_path) ?? null) : null) ?? exerciseIllustration(ex.name)}
+              imageUrl={(ex.image_path ? imageUrls?.get(ex.image_path) : null) ?? exerciseIllustration(ex.name)}
               pr={prByName.get(ex.name.trim().toLowerCase()) ?? null}
             />
           ))}
