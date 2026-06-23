@@ -69,6 +69,7 @@ CREATE INDEX IF NOT EXISTS food_synonyms_alias_trgm_idx ON public.food_synonyms 
 GRANT SELECT ON public.food_synonyms TO authenticated;
 GRANT ALL ON public.food_synonyms TO service_role;
 ALTER TABLE public.food_synonyms ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "synonyms readable by authenticated" ON public.food_synonyms;
 CREATE POLICY "synonyms readable by authenticated" ON public.food_synonyms
   FOR SELECT TO authenticated USING (true);
 
