@@ -9,6 +9,7 @@ import {
   useWorkouts,
 } from "@/hooks/use-fitness";
 import { ActiveExerciseCard } from "./ActiveExerciseCard";
+import { exerciseIllustration } from "@/lib/fitness/exerciseIllustrations";
 import { computePRs } from "@/utils/fitness/exercise-stats";
 import {
   ExercisePickerSheet,
@@ -287,7 +288,7 @@ export function ActiveWorkoutView({ workout }: { workout: ActiveWorkout }) {
               key={ex.id}
               exercise={ex}
               workoutId={workout.id}
-              imageUrl={ex.image_path ? (imageUrls?.get(ex.image_path) ?? null) : null}
+              imageUrl={(ex.image_path ? (imageUrls?.get(ex.image_path) ?? null) : null) ?? exerciseIllustration(ex.name)}
               pr={prByName.get(ex.name.trim().toLowerCase()) ?? null}
             />
           ))}

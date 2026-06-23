@@ -7,6 +7,7 @@ import {
   searchExercises,
 } from "@/lib/fitness/exerciseCatalog";
 import { supabase } from "@/integrations/supabase/client";
+import { exerciseIllustration } from "@/lib/fitness/exerciseIllustrations";
 import { toast } from "sonner";
 
 export type RecentExercise = {
@@ -376,9 +377,17 @@ export function ExercisePickerSheet({
                         <button
                           type="button"
                           onClick={() => pick(ex.name)}
-                          className="w-full rounded-xl px-3 py-2.5 text-left text-sm transition-colors hover:bg-white/[0.04] active:bg-white/[0.07]"
+                          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-colors hover:bg-white/[0.04] active:bg-white/[0.07]"
                         >
-                          {ex.name}
+                          {exerciseIllustration(ex.name) ? (
+                            <img
+                              src={exerciseIllustration(ex.name)!}
+                              alt={ex.name}
+                              loading="lazy"
+                              className="h-10 w-10 shrink-0 rounded-lg object-cover ring-1 ring-white/10"
+                            />
+                          ) : null}
+                          <span className="min-w-0 flex-1">{ex.name}</span>
                         </button>
                       </li>
                     ))}
