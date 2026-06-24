@@ -1,3 +1,9 @@
+export interface ScoreBreakdown {
+  frequence: number
+  nutrition: number
+  engagement: number
+}
+
 export interface WeeklyReportSummary {
   sessions_count: number
   total_training_time: number
@@ -7,6 +13,12 @@ export interface WeeklyReportSummary {
   current_weight: number | null
   weight_evolution: number | null
   goals_respect_pct: number
+  /** Note hebdomadaire 0-100 (optionnel : rapports anciens ne l'ont pas) */
+  week_score?: number
+  /** Grade A-E dérivé du week_score */
+  week_grade?: string
+  /** Détail du score par axe */
+  score_breakdown?: ScoreBreakdown
 }
 
 export interface FitnessData {

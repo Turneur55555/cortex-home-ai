@@ -25,16 +25,16 @@ import {
   LayoutDashboard,
 } from "lucide-react";
 import { useWeeklyReport } from "@/hooks/useWeeklyReports";
-import type { WeeklyReport } from "@/types/weekly-report";
+import type { WeeklyReport, WeeklyReportSummary } from "@/types/weekly-report";
 
 type Tab = "resume" | "fitness" | "nutrition" | "corps" | "ia";
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
+  { id: "ia", label: "Analyse IA", icon: <Sparkles className="h-3.5 w-3.5" /> },
   { id: "resume", label: "Résumé", icon: <LayoutDashboard className="h-3.5 w-3.5" /> },
   { id: "fitness", label: "Fitness", icon: <Dumbbell className="h-3.5 w-3.5" /> },
   { id: "nutrition", label: "Nutrition", icon: <Apple className="h-3.5 w-3.5" /> },
   { id: "corps", label: "Corps", icon: <Scale className="h-3.5 w-3.5" /> },
-  { id: "ia", label: "Analyse IA", icon: <Sparkles className="h-3.5 w-3.5" /> },
 ];
 
 function formatWeekRange(weekStart: string, weekEnd: string) {
@@ -45,7 +45,7 @@ function formatWeekRange(weekStart: string, weekEnd: string) {
 
 export function ReportDetail({ id }: { id: string }) {
   const { data: report, isLoading, error } = useWeeklyReport(id);
-  const [activeTab, setActiveTab] = useState<Tab>("resume");
+  const [activeTab, setActiveTab] = useState<Tab>("ia");
   const contentRef = useRef<HTMLDivElement>(null);
 
   const handleExportPdf = async () => {
@@ -155,12 +155,99 @@ export function ReportDetail({ id }: { id: string }) {
   );
 }
 
+// ── Score Card (note de la semaine) ────────────────────────────────────────────
+
+function scoreLabel(score: number): string {
+  if (score >= 85) return "Excellente semaine";
+  if (score >= 70) return "Très bonne semaine";
+  if (score >= 55) return "Semaine correcte";
+  if (score >= 40) return "Peut mieux faire";
+  return "Semaine difficile";
+}
+
+function ScoreBar({ label, value, max }: { label: string; value: number; max: number }) {
+  const pct = max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 0;
+  return (
+    <div>
+      <div className="mb-0.5 flex items-center justify-between">
+        <span className="text-[10px] text-muted-foreground">{label}</span>
+        <span className="text-[10px] font-semibold text-foreground/70">
+          {value}/{max}
+        </span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-white/8">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-primary to-cyan-400"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ScoreCard({ summary }: { summary: WeeklyReportSummary }) {
+  const score = Math.max(0, Math.min(100, summary.week_score ?? 0));
+  const grade = summary.week_grade ?? "—";
+  const bd = summary.score_breakdown;
+  const color =
+    score >= 85
+      ? "text-emerald-400"
+      : score >= 70
+      ? "text-cyan-400"
+      : score >= 55
+      ? "text-amber-400"
+      : score >= 40
+      ? "text-orange-400"
+      : "text-red-400";
+  const C = 2 * Math.PI * 34;
+  return (
+    <div className="overflow-hidden rounded-2xl border border-border bg-gradient-to-b from-card to-card/70 p-5">
+      <div className="flex items-center gap-4">
+        <div className="relative flex h-[88px] w-[88px] shrink-0 items-center justify-center">
+          <svg className="h-full w-full -rotate-90" viewBox="0 0 80 80">
+            <circle cx="40" cy="40" r="34" fill="none" strokeWidth="6" className="stroke-white/8" />
+            <circle
+              cx="40"
+              cy="40"
+              r="34"
+              fill="none"
+              strokeWidth="6"
+              strokeLinecap="round"
+              stroke="currentColor"
+              className={color}
+              strokeDasharray={`${(score / 100) * C} ${C}`}
+            />
+          </svg>
+          <div className="absolute text-center">
+            <p className={`text-2xl font-extrabold leading-none ${color}`}>{grade}</p>
+            <p className="text-[10px] text-muted-foreground">{score}/100</p>
+          </div>
+        </div>
+        <div className="flex-1">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Note de la semaine
+          </p>
+          <p className="mt-0.5 text-sm font-bold">{scoreLabel(score)}</p>
+          {bd && (
+            <div className="mt-2.5 space-y-1.5">
+              <ScoreBar label="Fréquence" value={bd.frequence} max={35} />
+              <ScoreBar label="Nutrition" value={bd.nutrition} max={40} />
+              <ScoreBar label="Engagement" value={bd.engagement} max={25} />
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Résumé Tab ────────────────────────────────────────────────────────────────
 
 function ResumeTab({ report }: { report: WeeklyReport }) {
   const s = report.summary;
   return (
     <div className="space-y-4">
+      {s.week_score != null && <ScoreCard summary={s} />}
       <div className="grid grid-cols-2 gap-3">
         <KpiCard label="Séances" value={String(s.sessions_count ?? 0)} sub="cette semaine" />
         <KpiCard label="Temps total" value={`${s.total_training_time ?? 0} min`} sub="d'entraînement" />

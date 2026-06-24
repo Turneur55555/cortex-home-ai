@@ -70,7 +70,7 @@ Deno.serve(async (req) => {
     // ── Workouts ─────────────────────────────────────────────────────────────
     const workoutsResult = await supa
       .from("workouts")
-      .select("id, name, date, duration_minutes, exercises(name, sets, reps, weight)")
+      .select("id, name, date, duration_minutes, exercises(name, sets, reps, weight, exercise_sets(reps, weight))")
       .eq("user_id", userId)
       .gte("date", weekStart)
       .lte("date", weekEnd);
@@ -110,15 +110,42 @@ Deno.serve(async (req) => {
     const sessionsCount = workouts.length;
     const totalTrainingTime = workouts.reduce((s, w) => s + (w.duration_minutes ?? 0), 0);
 
+    // Volume réel via exercise_sets (somme reps*weight par série) ;
+    // fallback sur les colonnes agrégées legacy si aucune série détaillée.
+    // deno-lint-ignore no-explicit-any
+    const exerciseVolume = (ex: any): number => {
+      const detailed = (ex.exercise_sets ?? []) as any[];
+      if (detailed.length > 0) {
+        return detailed.reduce((acc, set) => {
+          const reps = Number(set.reps);
+          const weight = Number(set.weight);
+          if (!Number.isFinite(reps) || !Number.isFinite(weight) || reps <= 0 || weight <= 0) return acc;
+          return acc + reps * weight;
+        }, 0);
+      }
+      const sets = ex.sets ?? 0;
+      const reps = ex.reps ?? 0;
+      const weight = ex.weight ?? 0;
+      if (sets <= 0 || reps <= 0 || weight <= 0) return 0;
+      return sets * reps * weight;
+    };
+
     // deno-lint-ignore no-explicit-any
     const exerciseMap: Record<string, { sets: number; reps: number; totalWeight: number; count: number }> = {};
     for (const w of workouts) {
       for (const ex of (w.exercises ?? []) as any[]) {
         const name: string = ex.name ?? "Inconnu";
         if (!exerciseMap[name]) exerciseMap[name] = { sets: 0, reps: 0, totalWeight: 0, count: 0 };
-        exerciseMap[name].sets += ex.sets ?? 0;
-        exerciseMap[name].reps += ex.reps ?? 0;
-        exerciseMap[name].totalWeight += (ex.sets ?? 0) * (ex.reps ?? 0) * (ex.weight ?? 0);
+        const detailed = (ex.exercise_sets ?? []) as any[];
+        if (detailed.length > 0) {
+          const repsSum = detailed.reduce((a, set) => a + (Number(set.reps) || 0), 0);
+          exerciseMap[name].sets += detailed.length;
+          exerciseMap[name].reps += Math.round(repsSum / detailed.length);
+        } else {
+          exerciseMap[name].sets += ex.sets ?? 0;
+          exerciseMap[name].reps += ex.reps ?? 0;
+        }
+        exerciseMap[name].totalWeight += exerciseVolume(ex);
         exerciseMap[name].count += 1;
       }
     }
@@ -189,6 +216,21 @@ Deno.serve(async (req) => {
         : "Aucune donnée de poids cette semaine";
 
     // ── AI Analysis ───────────────────────────────────────────────────────────
+    // ── Note hebdomadaire (0-100) ─────────────────────────────────────────────
+    const freqScore = Math.min(sessionsCount / 4, 1) * 35;
+    const calProximity = goalsCalories > 0 ? Math.max(0, 100 - Math.abs(100 - caloriesPct)) : 0;
+    const protScore = Math.min(proteinsPct, 100);
+    const nutritionScore = (((calProximity * 0.4) + (protScore * 0.6)) / 100) * 40;
+    const engagementScore = totalVolume > 0 ? 25 : sessionsCount > 0 ? 12 : 0;
+    const weekScore = Math.max(0, Math.min(100, Math.round(freqScore + nutritionScore + engagementScore)));
+    const weekGrade =
+      weekScore >= 85 ? "A" : weekScore >= 70 ? "B" : weekScore >= 55 ? "C" : weekScore >= 40 ? "D" : "E";
+    const scoreBreakdown = {
+      frequence: Math.round(freqScore),
+      nutrition: Math.round(nutritionScore),
+      engagement: Math.round(engagementScore),
+    };
+
     let aiAnalysis = { strengths: [] as string[], weaknesses: [] as string[], risks: [] as string[], recommendations: [] as string[] };
 
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -201,7 +243,7 @@ Deno.serve(async (req) => {
 - Calories moyennes/jour: ${avgCalories} (objectif: ${goalsCalories})
 - Protéines moyennes/jour: ${avgProteins}g (objectif: ${goalsProtein}g)
 - Respect des objectifs nutritionnels: ${goalsRespectPct}%
-- Évolution du poids: ${physicalProgressEstimate}`;
+- Évolution du poids: ${physicalProgressEstimate}\n- Note globale de la semaine: ${weekScore}/100 (grade ${weekGrade})`;
 
         const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
           method: "POST",
@@ -285,6 +327,9 @@ Deno.serve(async (req) => {
             current_weight: weightEnd,
             weight_evolution: weightDelta,
             goals_respect_pct: goalsRespectPct,
+            week_score: weekScore,
+            week_grade: weekGrade,
+            score_breakdown: scoreBreakdown,
           },
           fitness_data: {
             top_exercises: topExercises,
