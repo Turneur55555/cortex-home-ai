@@ -371,19 +371,34 @@ export function NutritionTab() {
         </div>
       )}
 
-      {grouped.map((g) => (
+      {grouped.map((g) => {
+        const gTotals = g.items.reduce(
+          (acc, m) => ({
+            calories: acc.calories + (m.calories ?? 0),
+            proteins: acc.proteins + (m.proteins ?? 0),
+            carbs: acc.carbs + (m.carbs ?? 0),
+            fats: acc.fats + (m.fats ?? 0),
+          }),
+          { calories: 0, proteins: 0, carbs: 0, fats: 0 },
+        );
+        return (
         <div key={g.key}>
-          <div className="mb-2.5 flex items-center justify-between px-0.5">
-            <h3 className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-              {g.label}
-            </h3>
+          <div className="mb-2.5 flex items-center justify-between gap-2 px-0.5">
+            <div className="flex min-w-0 flex-1 items-baseline gap-2">
+              <h3 className="shrink-0 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                {g.label}
+              </h3>
+              <span className="truncate text-[11px] text-muted-foreground">
+                {Math.round(gTotals.calories)} kcal · P{Math.round(gTotals.proteins)} G{Math.round(gTotals.carbs)} L{Math.round(gTotals.fats)}
+              </span>
+            </div>
             <button
               type="button"
               onClick={() => {
                 setSaveGroupName(g.label);
                 setSaveGroupKey((k) => (k === g.key ? null : g.key));
               }}
-              className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+              className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground"
               title="Enregistrer ce repas comme modèle"
             >
               <BookmarkPlus className="h-3.5 w-3.5" />
@@ -463,7 +478,8 @@ export function NutritionTab() {
             })}
           </ul>
         </div>
-      ))}
+        );
+      })}
 
       <FabAdd onClick={openManual} label="Ajouter un repas" />
       {open && <NutritionSheet date={date} prefill={prefill} onClose={() => setOpen(false)} />}
