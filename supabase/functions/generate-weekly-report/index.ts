@@ -233,8 +233,8 @@ Deno.serve(async (req) => {
 
     let aiAnalysis = { strengths: [] as string[], weaknesses: [] as string[], risks: [] as string[], recommendations: [] as string[] };
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (LOVABLE_API_KEY && (sessionsCount + nutritionLogs.length) > 0) {
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    if (GEMINI_API_KEY && (sessionsCount + nutritionLogs.length) > 0) {
       try {
         const prompt = `Analyse ces données fitness hebdomadaires et génère une analyse en FRANÇAIS.
 - Séances d'entraînement: ${sessionsCount}, durée totale: ${totalTrainingTime} min
@@ -245,12 +245,12 @@ Deno.serve(async (req) => {
 - Respect des objectifs nutritionnels: ${goalsRespectPct}%
 - Évolution du poids: ${physicalProgressEstimate}\n- Note globale de la semaine: ${weekScore}/100 (grade ${weekGrade})`;
 
-        const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        const aiRes = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
           method: "POST",
-          headers: { "Lovable-API-Key": LOVABLE_API_KEY, "Content-Type": "application/json" },
+          headers: { "Authorization": `Bearer ${GEMINI_API_KEY}`, "Content-Type": "application/json" },
           signal: AbortSignal.timeout(30_000),
           body: JSON.stringify({
-            model: "google/gemini-2.5-flash",
+            model: "gemini-2.5-flash",
             messages: [{ role: "user", content: prompt }],
             tools: [{
               type: "function",
