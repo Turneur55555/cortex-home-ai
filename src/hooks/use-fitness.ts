@@ -876,9 +876,10 @@ export function useUpdateExerciseSet() {
       rpe?: number | null;
       completed?: boolean;
     }) => {
+      const { completed: _completed, ...updateFields } = fields;
       const { error } = await supabase
         .from("exercise_sets")
-        .update(fields)
+        .update(updateFields)
         .eq("id", id);
       if (error) throw error;
     },

@@ -300,6 +300,6 @@ Deno.serve(async (req) => {
     }, { headers: cors });
   } catch (e) {
     console.error("nutrition-analysis error", e);
-    return Response.json({ ok: false, error: (e as Error)?.message ?? "internal" }, { status: 200, headers: cors });
+    return Response.json({ ok: false, error: "Erreur interne. Réessaie plus tard." }, { status: 200, headers: cors });
   }
 });

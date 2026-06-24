@@ -202,7 +202,6 @@ export type Database = {
       }
       exercise_sets: {
         Row: {
-          completed: boolean
           created_at: string
           exercise_id: string
           id: string
@@ -214,7 +213,6 @@ export type Database = {
           weight: number | null
         }
         Insert: {
-          completed?: boolean
           created_at?: string
           exercise_id: string
           id?: string
@@ -226,7 +224,6 @@ export type Database = {
           weight?: number | null
         }
         Update: {
-          completed?: boolean
           created_at?: string
           exercise_id?: string
           id?: string
