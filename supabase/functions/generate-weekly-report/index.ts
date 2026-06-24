@@ -245,39 +245,67 @@ Deno.serve(async (req) => {
 - Respect des objectifs nutritionnels: ${goalsRespectPct}%
 - Évolution du poids: ${physicalProgressEstimate}\n- Note globale de la semaine: ${weekScore}/100 (grade ${weekGrade})`;
 
-        const aiRes = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
-          method: "POST",
-          headers: { "Authorization": `Bearer ${GEMINI_API_KEY}`, "Content-Type": "application/json" },
-          signal: AbortSignal.timeout(30_000),
-          body: JSON.stringify({
-            model: "gemini-2.5-flash",
-            messages: [{ role: "user", content: prompt }],
-            tools: [{
-              type: "function",
-              function: {
-                name: "save_analysis",
-                description: "Sauvegarder l'analyse hebdomadaire structurée",
-                parameters: {
-                  type: "object",
-                  properties: {
-                    strengths: { type: "array", items: { type: "string" }, description: "3 points forts de la semaine" },
-                    weaknesses: { type: "array", items: { type: "string" }, description: "3 axes d'amélioration" },
-                    risks: { type: "array", items: { type: "string" }, description: "Risques détectés (surmenage, carences, etc.)" },
-                    recommendations: { type: "array", items: { type: "string" }, description: "3 à 5 recommandations pour la semaine suivante" },
-                  },
-                  required: ["strengths", "weaknesses", "risks", "recommendations"],
-                  additionalProperties: false,
-                },
+        const tool = {
+          type: "function",
+          function: {
+            name: "save_analysis",
+            description: "Sauvegarder l'analyse hebdomadaire structurée",
+            parameters: {
+              type: "object",
+              properties: {
+                strengths: { type: "array", items: { type: "string" }, description: "3 points forts de la semaine" },
+                weaknesses: { type: "array", items: { type: "string" }, description: "3 axes d'amélioration" },
+                risks: { type: "array", items: { type: "string" }, description: "Risques détectés (surmenage, carences, etc.)" },
+                recommendations: { type: "array", items: { type: "string" }, description: "3 à 5 recommandations pour la semaine suivante" },
               },
-            }],
-            tool_choice: { type: "function", function: { name: "save_analysis" } },
-          }),
-        });
+              required: ["strengths", "weaknesses", "risks", "recommendations"],
+              additionalProperties: false,
+            },
+          },
+        };
 
-        if (aiRes.ok) {
-          const aiJson = await aiRes.json();
-          const call = aiJson.choices?.[0]?.message?.tool_calls?.[0];
-          if (call) aiAnalysis = JSON.parse(call.function.arguments);
+        // Modèles essayés dans l'ordre ; on retombe sur le suivant si surcharge (503/429).
+        const models = ["gemini-2.5-flash", "gemini-2.0-flash"];
+        const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+        outer:
+        for (const model of models) {
+          for (let attempt = 0; attempt < 3; attempt++) {
+            const aiRes = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
+              method: "POST",
+              headers: { "Authorization": `Bearer ${GEMINI_API_KEY}`, "Content-Type": "application/json" },
+              signal: AbortSignal.timeout(30_000),
+              body: JSON.stringify({
+                model,
+                messages: [{ role: "user", content: prompt }],
+                tools: [tool],
+                tool_choice: { type: "function", function: { name: "save_analysis" } },
+              }),
+            });
+
+            if (aiRes.ok) {
+              const aiJson = await aiRes.json();
+              const call = aiJson.choices?.[0]?.message?.tool_calls?.[0];
+              if (call) {
+                aiAnalysis = JSON.parse(call.function.arguments);
+                break outer;
+              }
+              break; // réponse OK mais sans tool_call : on passe au modèle suivant
+            }
+
+            // 503 (surcharge) ou 429 (quota) : on réessaie avec un backoff, sinon on abandonne ce modèle.
+            if (aiRes.status === 503 || aiRes.status === 429) {
+              if (attempt < 2) {
+                await sleep(700 * (attempt + 1));
+                continue;
+              }
+              break; // épuisé les essais pour ce modèle → modèle suivant
+            }
+
+            // Autre erreur (4xx) : inutile de réessayer.
+            console.error("[generate-weekly-report] AI error:", aiRes.status, (await aiRes.text()).slice(0, 300));
+            break outer;
+          }
         }
       } catch (e) {
         console.error("[generate-weekly-report] AI error:", e);
