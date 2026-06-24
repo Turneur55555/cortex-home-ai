@@ -23,7 +23,7 @@ export function useWeeklyReport(id: string) {
   return useQuery({
     queryKey: ['weekly_reports', id],
     queryFn: async (): Promise<WeeklyReport | null> => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('weekly_reports')
         .select('*')
         .eq('id', id)
