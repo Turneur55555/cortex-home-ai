@@ -7,7 +7,7 @@ export function useWeeklyReports() {
   return useQuery({
     queryKey: ['weekly_reports'],
     queryFn: async (): Promise<WeeklyReport[]> => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('weekly_reports')
         .select('*')
         .order('week_start', { ascending: false })
