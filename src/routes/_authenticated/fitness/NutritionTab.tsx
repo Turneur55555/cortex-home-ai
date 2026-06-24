@@ -478,7 +478,8 @@ export function NutritionTab() {
             })}
           </ul>
         </div>
-      ))}
+        );
+      })}
 
       <FabAdd onClick={openManual} label="Ajouter un repas" />
       {open && <NutritionSheet date={date} prefill={prefill} onClose={() => setOpen(false)} />}
