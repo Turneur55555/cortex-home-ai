@@ -5,8 +5,8 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 // timer survives navigation, app close, reload.
 
 const STATE_KEY = "rest-timer:state:v1";
-const DEFAULTS_KEY = "rest-timer:per-exercise:v1";
-const SETTINGS_KEY = "rest-timer:settings:v1";
+const DEFAULTS_KEY = "rest-timer:per-exercise:v2";
+const SETTINGS_KEY = "rest-timer:settings:v2";
 
 export type RestTimerState = {
   endAt: number | null;        // ms epoch when timer ends (null = idle)
@@ -31,7 +31,7 @@ const defaultState: RestTimerState = {
 
 const defaultSettings: Settings = {
   soundEnabled: true,
-  defaultDuration: 90,
+  defaultDuration: 60,
 };
 
 // ─── Storage helpers ─────────────────────────────────────────────────────────

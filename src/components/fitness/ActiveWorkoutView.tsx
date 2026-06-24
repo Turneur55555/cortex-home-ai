@@ -62,7 +62,9 @@ export function ActiveWorkoutView({ workout }: { workout: ActiveWorkout }) {
   );
 
   // Fiche détaillée d'un exercice (au tap sur la carte)
-  const [statsKey, setStatsKey] = useState<string | null>(null);
+  const [statsTarget, setStatsTarget] = useState<
+    { key: string; imageUrl: string | null } | null
+  >(null);
 
   // Image URLs for all exercises in this workout
   const allImagePaths = (workout.exercises ?? []).map((ex) => ex.image_path);
@@ -287,16 +289,26 @@ export function ActiveWorkoutView({ workout }: { workout: ActiveWorkout }) {
         </div>
       ) : (
         <div className="flex flex-col gap-3">
-          {(workout.exercises ?? []).map((ex) => (
-            <ActiveExerciseCard
-              key={ex.id}
-              exercise={ex}
-              workoutId={workout.id}
-              imageUrl={(ex.image_path ? imageUrls?.get(ex.image_path) : null) ?? exerciseIllustration(ex.name)}
-              pr={prByName.get(ex.name.trim().toLowerCase()) ?? null}
-              onOpenStats={() => setStatsKey(ex.name.trim().toLowerCase())}
-            />
-          ))}
+          {(workout.exercises ?? []).map((ex) => {
+            const exImage =
+              (ex.image_path ? imageUrls?.get(ex.image_path) : null) ??
+              exerciseIllustration(ex.name);
+            return (
+              <ActiveExerciseCard
+                key={ex.id}
+                exercise={ex}
+                workoutId={workout.id}
+                imageUrl={exImage}
+                pr={prByName.get(ex.name.trim().toLowerCase()) ?? null}
+                onOpenStats={() =>
+                  setStatsTarget({
+                    key: ex.name.trim().toLowerCase(),
+                    imageUrl: exImage,
+                  })
+                }
+              />
+            );
+          })}
         </div>
       )}
 
@@ -325,13 +337,14 @@ export function ActiveWorkoutView({ workout }: { workout: ActiveWorkout }) {
       )}
 
       {/* Fiche détaillée exercice */}
-      {statsKey && (
+      {statsTarget && (
         <ExerciseStatsSheet
-          exerciseName={statsKey}
-          weightHistory={histByName.get(statsKey) ?? []}
-          volumeHistory={volByName.get(statsKey) ?? []}
-          pr={prByName.get(statsKey)}
-          onClose={() => setStatsKey(null)}
+          exerciseName={statsTarget.key}
+          weightHistory={histByName.get(statsTarget.key) ?? []}
+          volumeHistory={volByName.get(statsTarget.key) ?? []}
+          pr={prByName.get(statsTarget.key)}
+          imageUrl={statsTarget.imageUrl}
+          onClose={() => setStatsTarget(null)}
         />
       )}
 

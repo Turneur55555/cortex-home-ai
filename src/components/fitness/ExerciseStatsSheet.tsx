@@ -22,12 +22,14 @@ export function ExerciseStatsSheet({
   weightHistory,
   volumeHistory,
   pr,
+  imageUrl,
   onClose,
 }: {
   exerciseName: string;
   weightHistory: Array<{ date: string; weight: number }>;
   volumeHistory: Array<{ date: string; volume: number }>;
   pr: number | undefined;
+  imageUrl?: string | null;
   onClose: () => void;
 }) {
   const [tab, setTab] = useState<Tab>("weight");
@@ -140,6 +142,18 @@ export function ExerciseStatsSheet({
         </div>
 
         <div className="-mx-1 overflow-y-auto px-1">
+          {/* Photo de l'exercice */}
+          {imageUrl && (
+            <div className="mb-4 flex items-center justify-center overflow-hidden rounded-2xl bg-black/30 ring-1 ring-white/5">
+              <img
+                src={imageUrl}
+                alt={exerciseName}
+                className="max-h-56 w-full object-contain"
+                loading="lazy"
+              />
+            </div>
+          )}
+
           {/* Toggle poids / volume / 1RM */}
           <div className="mb-4 flex gap-1 rounded-xl bg-surface p-1">
             {tabs.map((t) => (
