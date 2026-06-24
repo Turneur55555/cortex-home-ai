@@ -271,13 +271,66 @@ Deno.serve(async (req) => {
         const enriched = await enrich(admin, [toResult(cached.data.foods as Record<string, unknown>, code)]);
         return Response.json({ ok: true, data: enriched[0] }, { headers: cors });
       }
-      if (!USDA_KEY) return Response.json({ ok: false, error: "not_found", code }, { headers: cors });
-      const usda = await usdaByBarcode(USDA_KEY, code);
-      if (!usda) return Response.json({ ok: false, error: "not_found", code }, { headers: cors });
-      const payload = usdaToFood(usda); payload.gtinUpc = payload.gtinUpc ?? code;
-      const saved = await upsertFood(admin, payload);
-      const enriched = await enrich(admin, [toResult(saved as Record<string, unknown>, code)]);
-      return Response.json({ ok: true, data: enriched[0] }, { headers: cors });
+
+      // 1) Open Food Facts — couvre la majorité des codes-barres européens
+      try {
+        const offRes = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json`, {
+          headers: { "user-agent": "cortex-home-ai/1.0 (lovable)" },
+        });
+        if (offRes.ok) {
+          const offData = await offRes.json();
+          if (offData?.status === 1 && offData?.product) {
+            const p = offData.product;
+            const n = p.nutriments ?? {};
+            const name = p.product_name_fr || p.product_name || p.generic_name_fr || p.generic_name;
+            const calories = round(n["energy-kcal_100g"] ?? (n["energy_100g"] ? n["energy_100g"] / 4.184 : null), 0);
+            const protein = round(n.proteins_100g);
+            const carbs = round(n.carbohydrates_100g);
+            const fat = round(n.fat_100g);
+            const fiber = round(n.fiber_100g);
+            if (name && (calories != null || protein != null || carbs != null || fat != null)) {
+              const payload = {
+                source: "icortex" as const,
+                source_id: `off:${code}`,
+                name,
+                normalized_name: normalize(name),
+                brand: p.brands ?? null,
+                category: p.categories ?? null,
+                image_url: p.image_front_small_url ?? p.image_small_url ?? p.image_url ?? null,
+                serving_type: "100g",
+                calories, protein_g: protein, carbs_g: carbs, fat_g: fat, fiber_g: fiber,
+                sugars_g: round(n.sugars_100g),
+                saturated_fat_g: round(n["saturated-fat_100g"]),
+                sodium_mg: round(n.sodium_100g != null ? n.sodium_100g * 1000 : null),
+              };
+              const { data: saved, error: upErr } = await admin
+                .from("foods")
+                .upsert(payload, { onConflict: "source,source_id" })
+                .select()
+                .single();
+              if (!upErr && saved) {
+                const q = computeQuality(calories, protein, carbs, fat);
+                await admin.from("food_quality_scores").upsert({ food_id: saved.id, ...q });
+                await admin.from("food_barcodes").upsert({ barcode: code, food_id: saved.id });
+                const enriched = await enrich(admin, [toResult(saved as Record<string, unknown>, code)]);
+                return Response.json({ ok: true, data: enriched[0] }, { headers: cors });
+              }
+            }
+          }
+        }
+      } catch (_) { /* fallback to USDA */ }
+
+      // 2) USDA fallback (principalement produits US)
+      if (USDA_KEY) {
+        const usda = await usdaByBarcode(USDA_KEY, code);
+        if (usda) {
+          const payload = usdaToFood(usda); payload.gtinUpc = payload.gtinUpc ?? code;
+          const saved = await upsertFood(admin, payload);
+          const enriched = await enrich(admin, [toResult(saved as Record<string, unknown>, code)]);
+          return Response.json({ ok: true, data: enriched[0] }, { headers: cors });
+        }
+      }
+      return Response.json({ ok: false, error: "not_found", code }, { headers: cors });
     }
 
     if (type === "search") {
