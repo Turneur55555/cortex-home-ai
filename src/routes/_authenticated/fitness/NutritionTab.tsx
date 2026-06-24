@@ -5,7 +5,6 @@ import {
   Barcode,
   BookmarkPlus,
   Calendar,
-  ChevronDown,
   Copy,
   Loader2,
   Scale,
@@ -15,22 +14,15 @@ import {
   Trash2,
   TrendingUp,
   Utensils,
-  X,
 } from "lucide-react";
 import { format, subDays } from "date-fns";
 import {
-  useAddNutrition,
   useCopyNutritionDay,
   useDeleteNutrition,
   useNutrition,
   useNutritionGoals,
 } from "@/hooks/use-fitness";
-import {
-  useAddFavorite,
-  useDeleteFavorite,
-  useNutritionFavorites,
-  type NutritionFavorite,
-} from "@/hooks/use-nutrition-favorites";
+import { useAddFavorite } from "@/hooks/use-nutrition-favorites";
 import { FabAdd } from "@/components/shared/FormComponents";
 import { BarcodeScannerSheet } from "@/components/BarcodeScannerSheet";
 import { MealScanSheet } from "@/components/fitness/MealScanSheet";
@@ -41,6 +33,7 @@ import { NutritionAnalysisSheet } from "@/components/fitness/NutritionAnalysisSh
 import { PortionEditModal } from "@/components/fitness/PortionEditModal";
 import { NutritionHistorySheet } from "@/components/fitness/NutritionHistorySheet";
 import { SavedMealsSheet } from "@/components/fitness/SavedMealsSheet";
+import { FavoritesSheet } from "@/components/fitness/FavoritesSheet";
 import { useCreateSavedMeal } from "@/hooks/use-saved-meals";
 import { getPortionBadge } from "@/lib/nutrition/utils";
 import type { MealPrefill, NutritionEntry } from "@/lib/nutrition/utils";
@@ -50,11 +43,8 @@ export function NutritionTab() {
   const { data, isLoading } = useNutrition(date);
   const { data: goals } = useNutritionGoals();
   const del = useDeleteNutrition();
-  const addMeal = useAddNutrition();
   const addFav = useAddFavorite();
-  const delFav = useDeleteFavorite();
   const copyDay = useCopyNutritionDay();
-  const { data: favorites } = useNutritionFavorites();
   const [copyOpen, setCopyOpen] = useState(false);
   const [copyFrom, setCopyFrom] = useState(() =>
     format(subDays(new Date(), 1), "yyyy-MM-dd"),
@@ -69,7 +59,7 @@ export function NutritionTab() {
   const [portionItem, setPortionItem] = useState<NutritionEntry | null>(null);
   const [analysisOpen, setAnalysisOpen] = useState(false);
   const [savedOpen, setSavedOpen] = useState(false);
-  const [favOpen, setFavOpen] = useState(false);
+  const [favSheetOpen, setFavSheetOpen] = useState(false);
   const createSavedMeal = useCreateSavedMeal();
   const [saveGroupKey, setSaveGroupKey] = useState<string | null>(null);
   const [saveGroupName, setSaveGroupName] = useState("");
@@ -136,25 +126,6 @@ export function NutritionTab() {
     setScanOpen(false);
     setPrefill(p);
     setOpen(true);
-  };
-
-  // Ajout 1-tap depuis un favori (insère directement dans la journée courante).
-  const addFromFavorite = (fav: NutritionFavorite) => {
-    addMeal.mutate({
-      date,
-      name: fav.name,
-      meal: fav.meal ?? "collation",
-      calories: fav.calories,
-      proteins: fav.proteins,
-      carbs: fav.carbs,
-      fats: fav.fats,
-      base_calories: fav.calories,
-      base_proteins: fav.proteins,
-      base_carbs: fav.carbs,
-      base_fats: fav.fats,
-      serving_count: 1,
-      percentage_consumed: 100,
-    });
   };
 
   // Enregistre un repas loggé comme favori réutilisable.
@@ -295,19 +266,14 @@ export function NutritionTab() {
             <Sparkles className="h-3.5 w-3.5 text-primary" />
             Scan
           </button>
-          {favorites && favorites.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setFavOpen((o) => !o)}
-              className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-border px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-foreground/30"
-            >
-              <Star className="h-3.5 w-3.5 text-primary" />
-              Favoris
-              <ChevronDown
-                className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${favOpen ? "rotate-180" : ""}`}
-              />
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => setFavSheetOpen(true)}
+            className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-border px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-foreground/30"
+          >
+            <Star className="h-3.5 w-3.5 text-primary" />
+            Favoris
+          </button>
           <button
             type="button"
             onClick={() => setBarcodeOpen(true)}
@@ -326,37 +292,6 @@ export function NutritionTab() {
           </button>
         </div>
 
-        {favorites && favorites.length > 0 && favOpen && (
-          <div className="mt-2.5 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {favorites.map((fav) => (
-              <span
-                key={fav.id}
-                className="group inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-border bg-card py-1 pl-3 pr-1 text-xs font-medium"
-              >
-                <button
-                  type="button"
-                  onClick={() => addFromFavorite(fav)}
-                  disabled={addMeal.isPending}
-                  className="flex items-center gap-1 text-foreground hover:text-primary disabled:opacity-60"
-                  title="Ajouter à la journée"
-                >
-                  {fav.name}
-                  <span className="text-[10px] text-muted-foreground">
-                    {fav.calories ?? 0} kcal
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => delFav.mutate(fav.id)}
-                  className="flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                  aria-label="Retirer des favoris"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* Outils */}
@@ -539,6 +474,7 @@ export function NutritionTab() {
       {barcodeOpen && <BarcodeScannerSheet onClose={() => setBarcodeOpen(false)} />}
       {analysisOpen && <NutritionAnalysisSheet onClose={() => setAnalysisOpen(false)} />}
       {savedOpen && <SavedMealsSheet date={date} onClose={() => setSavedOpen(false)} />}
+      {favSheetOpen && <FavoritesSheet date={date} onClose={() => setFavSheetOpen(false)} />}
       {portionItem && (
         <PortionEditModal
           item={portionItem}
