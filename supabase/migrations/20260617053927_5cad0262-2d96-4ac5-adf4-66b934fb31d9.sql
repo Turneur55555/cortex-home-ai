@@ -89,6 +89,7 @@ CREATE INDEX IF NOT EXISTS food_servings_food_idx ON public.food_servings (food_
 GRANT SELECT ON public.food_servings TO authenticated;
 GRANT ALL ON public.food_servings TO service_role;
 ALTER TABLE public.food_servings ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "servings readable by authenticated" ON public.food_servings;
 CREATE POLICY "servings readable by authenticated" ON public.food_servings
   FOR SELECT TO authenticated USING (true);
 
