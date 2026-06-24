@@ -1,5 +1,17 @@
 import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, Dumbbell, History, Minus, Plus, RotateCcw, Trash2, Trophy } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  BarChart3,
+  Check,
+  Dumbbell,
+  History,
+  Minus,
+  Plus,
+  RotateCcw,
+  Trash2,
+  Trophy,
+} from "lucide-react";
 import type { ActiveExercise, ActiveSet } from "@/hooks/use-fitness";
 import {
   useAddExerciseSet,
@@ -18,7 +30,6 @@ function compareToLast(
 ): "up" | "down" | "equal" | null {
   if (!last) return null;
   if (current.weight == null && current.reps == null) return null;
-  // Compare en priorité sur le poids, puis sur les reps si poids identique.
   const cw = current.weight ?? 0;
   const lw = last.weight ?? 0;
   if (cw > lw) return "up";
@@ -36,10 +47,50 @@ function TrendIcon({ trend }: { trend: "up" | "down" | "equal" | null }) {
     return <ArrowUp className="h-3 w-3 text-success" aria-label="Progression" />;
   if (trend === "down")
     return <ArrowDown className="h-3 w-3 text-destructive" aria-label="Régression" />;
-  return <Minus className="h-3 w-3 text-muted-foreground/60" aria-label="Identique" />;
+  return <Minus className="h-3 w-3 text-muted-foreground/50" aria-label="Identique" />;
 }
 
-// ─── Single set row (inline edit) ────────────────────────────────────────────
+// ─── Champ numérique tactile (kg / reps / rpe) ──────────────────────────────
+
+function StatField({
+  value,
+  onChange,
+  onCommit,
+  placeholder,
+  unit,
+  step,
+  width,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onCommit: (v: string) => void;
+  placeholder: string;
+  unit: string;
+  step?: string;
+  width?: string;
+}) {
+  return (
+    <label
+      className={`flex h-12 flex-col items-center justify-center rounded-[14px] bg-white/[0.05] transition-all focus-within:bg-primary/10 focus-within:ring-1 focus-within:ring-primary/40 ${width ?? "flex-1"}`}
+    >
+      <input
+        type="number"
+        inputMode="decimal"
+        step={step}
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={(e) => onCommit(e.target.value)}
+        className="w-full bg-transparent text-center text-[15px] font-bold leading-none tabular-nums outline-none placeholder:font-semibold placeholder:text-muted-foreground/25"
+      />
+      <span className="mt-0.5 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground/45">
+        {unit}
+      </span>
+    </label>
+  );
+}
+
+// ─── Ligne de série ──────────────────────────────────────────────────────────
 
 function SetRow({
   set,
@@ -48,6 +99,7 @@ function SetRow({
   lastSet,
   onDelete,
   onUpdate,
+  onToggleDone,
 }: {
   set: ActiveSet;
   index: number;
@@ -55,6 +107,7 @@ function SetRow({
   lastSet: LastSessionSet | undefined;
   onDelete: () => void;
   onUpdate: (field: "reps" | "weight" | "rpe", value: number | null) => void;
+  onToggleDone: (done: boolean) => void;
 }) {
   const [reps, setReps] = useState(set.reps != null ? String(set.reps) : "");
   const [weight, setWeight] = useState(set.weight != null ? String(set.weight) : "");
@@ -62,29 +115,27 @@ function SetRow({
   const [confirmDel, setConfirmDel] = useState(false);
 
   const parse = (v: string) => (v.trim() === "" ? null : Number(v));
-
-  const inputCls =
-    "w-full bg-transparent py-2 text-center text-sm font-semibold tabular-nums outline-none focus:text-primary transition-colors placeholder:text-muted-foreground/30";
-
   const trend = compareToLast({ reps: set.reps, weight: set.weight }, lastSet);
+  const done = set.completed;
 
   if (confirmDel) {
     return (
-      <li className="grid grid-cols-[36px_1fr_32px] items-center gap-2 px-2 py-1.5 bg-destructive/5">
-        <span className="text-center text-[11px] text-muted-foreground">{index}</span>
-        <span className="text-xs text-muted-foreground text-center">Supprimer la série {index} ?</span>
-        <div className="flex gap-1">
+      <li className="flex items-center justify-between gap-2 rounded-2xl bg-destructive/10 px-4 py-3 animate-in fade-in zoom-in-95 duration-150">
+        <span className="text-xs font-medium text-muted-foreground">
+          Supprimer la série {index} ?
+        </span>
+        <div className="flex gap-2">
           <button
             type="button"
             onClick={() => setConfirmDel(false)}
-            className="text-[10px] text-muted-foreground hover:text-foreground px-1"
+            className="rounded-lg px-2.5 py-1 text-xs font-medium text-muted-foreground"
           >
             Non
           </button>
           <button
             type="button"
             onClick={onDelete}
-            className="text-[10px] text-destructive font-semibold px-1"
+            className="rounded-lg bg-destructive/20 px-2.5 py-1 text-xs font-bold text-destructive"
           >
             Oui
           </button>
@@ -93,84 +144,105 @@ function SetRow({
     );
   }
 
-  // Placeholder textuel (poids ou reps précédent) si la cellule est vide.
   const repsPh = lastSet?.reps != null ? String(lastSet.reps) : "—";
   const weightPh = lastSet?.weight != null ? String(lastSet.weight) : "—";
 
   return (
     <li
-      className={`grid grid-cols-[36px_1fr_1fr_1fr_32px] items-center divide-x divide-white/5 transition-colors ${isMax ? "bg-warning/5" : ""}`}
+      className={`group flex items-center gap-1.5 rounded-2xl py-1 pl-1 pr-1 transition-colors ${
+        done ? "bg-success/[0.07]" : isMax ? "bg-warning/[0.06]" : ""
+      }`}
     >
-      {/* # + trend */}
-      <div className="flex items-center justify-center gap-0.5 py-2">
-        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">
+      {/* Numéro (capsule) + tendance */}
+      <div className="relative flex h-12 w-10 shrink-0 items-center justify-center rounded-xl bg-white/[0.06]">
+        <span
+          className={`text-sm font-extrabold tabular-nums ${
+            isMax ? "text-warning" : done ? "text-success" : "text-foreground"
+          }`}
+        >
           {index}
         </span>
-        <TrendIcon trend={trend} />
+        {trend && (
+          <span className="absolute -right-1 -top-1 rounded-full bg-background p-px">
+            <TrendIcon trend={trend} />
+          </span>
+        )}
       </div>
 
-      {/* Reps */}
-      <input
-        type="number"
-        inputMode="numeric"
-        value={reps}
-        placeholder={repsPh}
-        onChange={(e) => setReps(e.target.value)}
-        onBlur={(e) => onUpdate("reps", parse(e.target.value))}
-        className={inputCls}
+      {/* Poids */}
+      <StatField
+        value={weight}
+        onChange={setWeight}
+        onCommit={(v) => onUpdate("weight", parse(v))}
+        placeholder={weightPh}
+        unit="kg"
+        step="0.5"
       />
 
-      {/* Kg */}
-      <input
-        type="number"
-        inputMode="decimal"
-        step="0.5"
-        value={weight}
-        placeholder={weightPh}
-        onChange={(e) => setWeight(e.target.value)}
-        onBlur={(e) => onUpdate("weight", parse(e.target.value))}
-        className={inputCls}
+      {/* Reps */}
+      <StatField
+        value={reps}
+        onChange={setReps}
+        onCommit={(v) => onUpdate("reps", parse(v))}
+        placeholder={repsPh}
+        unit="reps"
       />
 
       {/* RPE */}
-      <input
-        type="number"
-        inputMode="decimal"
-        step="0.5"
-        min="1"
-        max="10"
+      <StatField
         value={rpe}
+        onChange={setRpe}
+        onCommit={(v) => onUpdate("rpe", parse(v))}
         placeholder="—"
-        onChange={(e) => setRpe(e.target.value)}
-        onBlur={(e) => onUpdate("rpe", parse(e.target.value))}
-        className={inputCls}
+        unit="rpe"
+        step="0.5"
+        width="w-[52px]"
       />
 
-      {/* Delete */}
+      {/* Validation */}
+      <button
+        type="button"
+        onClick={() => onToggleDone(!done)}
+        aria-label={done ? "Série validée" : "Valider la série"}
+        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full transition-all duration-200 active:scale-90 ${
+          done
+            ? "bg-success text-success-foreground shadow-[0_0_0_4px_rgba(34,197,94,0.12)]"
+            : "bg-white/[0.06] text-muted-foreground/40 hover:text-muted-foreground"
+        }`}
+      >
+        <Check
+          className={`h-5 w-5 transition-transform duration-200 ${done ? "scale-100" : "scale-90"}`}
+          strokeWidth={done ? 3 : 2.5}
+        />
+      </button>
+
+      {/* Suppression */}
       <button
         type="button"
         onClick={() => setConfirmDel(true)}
-        className="flex h-full items-center justify-center text-muted-foreground/40 transition-colors hover:text-destructive"
+        className="flex h-11 w-5 shrink-0 items-center justify-center text-muted-foreground/25 transition-colors hover:text-destructive"
         aria-label="Supprimer la série"
       >
-        <Trash2 className="h-3 w-3" />
+        <Trash2 className="h-3.5 w-3.5" />
       </button>
     </li>
   );
 }
 
-// ─── Exercise card ────────────────────────────────────────────────────────────
+// ─── Carte exercice ───────────────────────────────────────────────────────────
 
 export function ActiveExerciseCard({
   exercise,
   workoutId,
   imageUrl,
   pr,
+  onOpenStats,
 }: {
   exercise: ActiveExercise;
   workoutId: string;
   imageUrl: string | null;
   pr: number | null;
+  onOpenStats?: () => void;
 }) {
   const addSet = useAddExerciseSet();
   const updateSet = useUpdateExerciseSet();
@@ -191,11 +263,10 @@ export function ActiveExerciseCard({
     return m;
   }, [lastSession]);
 
-  const maxWeight =
-    sortedSets.reduce<number | null>(
-      (m, s) => (s.weight != null ? (m == null ? s.weight : Math.max(m, s.weight)) : m),
-      null,
-    );
+  const maxWeight = sortedSets.reduce<number | null>(
+    (m, s) => (s.weight != null ? (m == null ? s.weight : Math.max(m, s.weight)) : m),
+    null,
+  );
 
   const volume = sortedSets.reduce(
     (acc, s) => acc + (s.reps ?? 0) * (s.weight ?? 0),
@@ -205,16 +276,17 @@ export function ActiveExerciseCard({
   const isPR = maxWeight != null && pr != null && maxWeight >= pr;
   const isNewPR = maxWeight != null && pr != null && maxWeight > pr;
 
-  // Résumé "dernière séance" : 1ʳᵉ série (ou plus lourd) du dernier passage.
   const lastSummary = useMemo(() => {
     const sets = lastSession?.sets ?? [];
     if (sets.length === 0) return null;
-    const heaviest = sets.reduce<LastSessionSet>(
+    return sets.reduce<LastSessionSet>(
       (best, cur) => ((cur.weight ?? 0) > (best.weight ?? 0) ? cur : best),
       sets[0],
     );
-    return heaviest;
   }, [lastSession]);
+
+  const volLabel =
+    volume >= 1000 ? `${(volume / 1000).toFixed(1)}k` : `${volume}`;
 
   const handleAddSet = async () => {
     const last = sortedSets[sortedSets.length - 1];
@@ -226,21 +298,16 @@ export function ActiveExerciseCard({
       reps: last?.reps ?? fallback?.reps ?? null,
       weight: last?.weight ?? fallback?.weight ?? null,
     });
-    restTimer.startForExercise(exercise.id);
   };
 
-  // Réapplique les charges & reps de la dernière séance sur les séries
-  // existantes (vides ou non) et crée les séries manquantes.
   const handleRestoreLastSession = async () => {
     const lastSets = lastSession?.sets ?? [];
     if (lastSets.length === 0) return;
-    // Mise à jour des séries existantes
     for (const s of sortedSets) {
       const ref = lastSetsByNumber.get(s.set_number);
       if (!ref) continue;
       updateSet.mutate({ id: s.id, reps: ref.reps, weight: ref.weight });
     }
-    // Ajout des séries manquantes
     const existingNumbers = new Set(sortedSets.map((s) => s.set_number));
     const toCreate = lastSets.filter((s) => !existingNumbers.has(s.set_number));
     for (const ref of toCreate) {
@@ -253,94 +320,112 @@ export function ActiveExerciseCard({
     }
   };
 
-  const handleUpdate = (set: ActiveSet, field: "reps" | "weight" | "rpe", value: number | null) => {
+  const handleUpdate = (
+    set: ActiveSet,
+    field: "reps" | "weight" | "rpe",
+    value: number | null,
+  ) => {
     updateSet.mutate({ id: set.id, [field]: value });
-    if (field !== "rpe" && value != null) {
-      restTimer.startForExercise(exercise.id);
-    }
   };
 
-  const handleDeleteSet = (id: string) => {
-    deleteSet.mutate(id);
+  const handleToggleDone = (set: ActiveSet, done: boolean) => {
+    updateSet.mutate({ id: set.id, completed: done });
+    if (done) restTimer.startForExercise(exercise.id);
   };
 
-  const handleDeleteExercise = () => {
-    deleteExercises.mutate([exercise.id]);
-  };
+  const handleDeleteSet = (id: string) => deleteSet.mutate(id);
+  const handleDeleteExercise = () => deleteExercises.mutate([exercise.id]);
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-white/8 bg-white/[0.03] shadow-sm">
-      {/* ── Exercise header ── */}
-      <div className="flex items-start gap-3 px-4 pt-4 pb-3">
-        {/* Image */}
-        {imageUrl ? (
-          <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl ring-1 ring-white/10">
-            <img
-              src={imageUrl}
-              alt={exercise.name}
-              className="h-full w-full object-cover"
-              loading="lazy"
-            />
-          </div>
-        ) : (
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/15 to-primary/5 text-primary/70">
-            <Dumbbell className="h-5 w-5" />
-          </div>
-        )}
-
-        {/* Name + stats */}
-        <div className="min-w-0 flex-1">
-          <h3 className="text-[15px] font-bold leading-tight">{exercise.name}</h3>
-
-          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
-            <span>
-              {sortedSets.length} série{sortedSets.length > 1 ? "s" : ""}
-            </span>
-            {maxWeight != null && <span>· max {maxWeight} kg</span>}
-            {volume > 0 && (
-              <span className="text-muted-foreground/50">
-                · vol {volume >= 1000 ? `${(volume / 1000).toFixed(1)}k` : volume} kg
-              </span>
-            )}
-          </div>
-
-          {/* Dernière séance badge */}
-          {lastSummary && (
-            <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-              <History className="h-3 w-3" />
-              Dernière séance : {lastSummary.weight ?? "—"} kg ×{" "}
-              {lastSummary.reps ?? "—"}
-            </span>
-          )}
-
-          {/* PR badge */}
-          {isPR && (
-            <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-bold text-warning">
-              <Trophy className="h-3 w-3" />
-              {isNewPR ? "Nouveau PR !" : `PR — ${pr} kg`}
-            </span>
-          )}
-          {pr != null && !isPR && (
-            <span className="mt-1 block text-[10px] text-muted-foreground/60">
-              PR actuel : {pr} kg
-            </span>
-          )}
-        </div>
-
-        {/* Delete exercise */}
+    <div className="overflow-hidden rounded-[24px] border border-white/5 bg-surface/80 p-4 shadow-[0_4px_24px_-12px_rgba(0,0,0,0.5)] animate-in fade-in slide-in-from-bottom-2 duration-300">
+      {/* ── En-tête ── */}
+      <div className="flex items-start gap-3">
+        {/* Zone tactile : photo + nom + stats → fiche détaillée */}
         <button
           type="button"
-          onClick={() => setConfirmDeleteEx(true)}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/5 text-muted-foreground transition-all active:scale-90 hover:bg-destructive/10 hover:text-destructive"
-          aria-label="Supprimer l'exercice"
+          onClick={onOpenStats}
+          className="flex min-w-0 flex-1 items-start gap-3 text-left transition-opacity active:opacity-70"
         >
-          <Trash2 className="h-4 w-4" />
+          {imageUrl ? (
+            <div className="h-[72px] w-[72px] shrink-0 overflow-hidden rounded-2xl ring-1 ring-white/10">
+              <img
+                src={imageUrl}
+                alt={exercise.name}
+                className="h-full w-full object-cover"
+                loading="lazy"
+              />
+            </div>
+          ) : (
+            <div className="flex h-[72px] w-[72px] shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/15 to-primary/5 text-primary/70">
+              <Dumbbell className="h-7 w-7" />
+            </div>
+          )}
+
+          <div className="min-w-0 flex-1 pt-0.5">
+            <h3 className="line-clamp-2 text-[17px] font-semibold leading-tight tracking-tight">
+              {exercise.name}
+            </h3>
+
+            <div className="mt-1.5 flex items-center gap-1.5 text-[12px] text-muted-foreground">
+              <span className="tabular-nums">
+                {sortedSets.length} série{sortedSets.length > 1 ? "s" : ""}
+              </span>
+              {maxWeight != null && (
+                <>
+                  <span className="text-muted-foreground/30">•</span>
+                  <span className="tabular-nums">{maxWeight} kg max</span>
+                </>
+              )}
+              {volume > 0 && (
+                <>
+                  <span className="text-muted-foreground/30">•</span>
+                  <span className="tabular-nums text-muted-foreground/70">{volLabel} kg</span>
+                </>
+              )}
+            </div>
+
+            {/* Badges */}
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              {isPR && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-bold text-warning">
+                  <Trophy className="h-3 w-3" />
+                  {isNewPR ? "Nouveau record" : `Record ${pr} kg`}
+                </span>
+              )}
+              {lastSummary && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                  <History className="h-3 w-3" />
+                  {lastSummary.weight ?? "—"} kg × {lastSummary.reps ?? "—"}
+                </span>
+              )}
+            </div>
+          </div>
         </button>
+
+        {/* Actions */}
+        <div className="flex shrink-0 flex-col gap-1.5">
+          <button
+            type="button"
+            onClick={onOpenStats}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-white/5 text-muted-foreground transition-all active:scale-90 hover:bg-primary/10 hover:text-primary"
+            aria-label="Statistiques de l'exercice"
+          >
+            <BarChart3 className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfirmDeleteEx(true)}
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-white/5 text-muted-foreground transition-all active:scale-90 hover:bg-destructive/10 hover:text-destructive"
+            aria-label="Supprimer l'exercice"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       {/* ── Confirmation suppression exercice ── */}
       {confirmDeleteEx && (
-        <div className="mx-4 mb-3 rounded-xl border border-destructive/30 bg-destructive/10 p-3">
+        <div className="mt-3 rounded-2xl border border-destructive/30 bg-destructive/10 p-3 animate-in fade-in zoom-in-95 duration-150">
           <p className="text-sm font-semibold text-destructive">
             Supprimer « {exercise.name} » ?
           </p>
@@ -351,14 +436,14 @@ export function ActiveExerciseCard({
             <button
               type="button"
               onClick={() => setConfirmDeleteEx(false)}
-              className="flex-1 rounded-lg border border-border py-1.5 text-xs font-medium"
+              className="flex-1 rounded-xl border border-border py-2 text-xs font-medium"
             >
               Annuler
             </button>
             <button
               type="button"
               onClick={handleDeleteExercise}
-              className="flex-1 rounded-lg bg-destructive py-1.5 text-xs font-semibold text-destructive-foreground"
+              className="flex-1 rounded-xl bg-destructive py-2 text-xs font-semibold text-destructive-foreground"
             >
               Supprimer
             </button>
@@ -366,39 +451,27 @@ export function ActiveExerciseCard({
         </div>
       )}
 
-      {/* ── Bouton "Reprendre les charges précédentes" ── */}
+      {/* ── Reprendre les charges précédentes ── */}
       {lastSession && lastSession.sets.length > 0 && (
-        <div className="mx-4 mb-2">
-          <button
-            type="button"
-            onClick={handleRestoreLastSession}
-            disabled={addSet.isPending || updateSet.isPending}
-            className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-primary/20 bg-primary/5 py-2 text-[11px] font-semibold text-primary transition-colors hover:bg-primary/10 disabled:opacity-50"
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-            Reprendre les charges précédentes
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={handleRestoreLastSession}
+          disabled={addSet.isPending || updateSet.isPending}
+          className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl bg-primary/[0.07] py-2.5 text-[12px] font-semibold text-primary transition-colors hover:bg-primary/[0.12] disabled:opacity-50"
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+          Reprendre les charges précédentes
+        </button>
       )}
 
-      {/* ── Sets table ── */}
-      <div className="mx-4 mb-4 overflow-hidden rounded-xl border border-white/5 bg-black/20">
-        {/* Table header */}
-        <div className="grid grid-cols-[36px_1fr_1fr_1fr_32px] border-b border-white/5 bg-white/[0.02] py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-          <div className="text-center">#</div>
-          <div className="text-center">Reps</div>
-          <div className="text-center">Kg</div>
-          <div className="text-center">RPE</div>
-          <div />
-        </div>
-
-        {/* Set rows */}
+      {/* ── Séries ── */}
+      <div className="mt-3">
         {sortedSets.length === 0 ? (
-          <p className="py-4 text-center text-xs text-muted-foreground/50">
-            Aucune série — utilisez le bouton ci-dessous
+          <p className="rounded-2xl bg-white/[0.02] py-5 text-center text-xs text-muted-foreground/50">
+            Aucune série — ajoutez-en une ci-dessous
           </p>
         ) : (
-          <ul className="divide-y divide-white/5">
+          <ul className="flex flex-col gap-2">
             {sortedSets.map((s, idx) => (
               <SetRow
                 key={s.id}
@@ -407,20 +480,21 @@ export function ActiveExerciseCard({
                 isMax={s.weight != null && s.weight === maxWeight && maxWeight != null}
                 lastSet={lastSetsByNumber.get(s.set_number) ?? lastSession?.sets[idx]}
                 onUpdate={(field, value) => handleUpdate(s, field, value)}
+                onToggleDone={(done) => handleToggleDone(s, done)}
                 onDelete={() => handleDeleteSet(s.id)}
               />
             ))}
           </ul>
         )}
 
-        {/* Add set */}
+        {/* Ajouter une série */}
         <button
           type="button"
           onClick={handleAddSet}
           disabled={addSet.isPending}
-          className="flex w-full items-center justify-center gap-1.5 border-t border-white/5 py-3 text-xs font-semibold text-primary transition-colors hover:bg-primary/5 disabled:opacity-50"
+          className="mt-2 flex h-12 w-full items-center justify-center gap-1.5 rounded-2xl bg-white/[0.05] text-[13px] font-semibold text-primary transition-all active:scale-[0.99] hover:bg-primary/10 disabled:opacity-50"
         >
-          <Plus className="h-3.5 w-3.5" />
+          <Plus className="h-4 w-4" />
           Ajouter une série
         </button>
       </div>

@@ -18,6 +18,7 @@ import {
 } from "./ExercisePickerSheet";
 import { normalize } from "@/lib/fitness/exerciseCatalog";
 import { RestTimerBar } from "./RestTimerBar";
+import { ExerciseStatsSheet } from "./ExerciseStatsSheet";
 
 // ─── Timer ───────────────────────────────────────────────────────────────────
 
@@ -55,10 +56,13 @@ export function ActiveWorkoutView({ workout }: { workout: ActiveWorkout }) {
   const [pickerOpen, setPickerOpen] = useState(false);
 
   // PRs from history (excluding the active workout itself)
-  const { prByName } = useMemo(
+  const { prByName, histByName, volByName } = useMemo(
     () => computePRs((allWorkouts ?? []).filter((w) => w.id !== workout.id)),
     [allWorkouts, workout.id],
   );
+
+  // Fiche détaillée d'un exercice (au tap sur la carte)
+  const [statsKey, setStatsKey] = useState<string | null>(null);
 
   // Image URLs for all exercises in this workout
   const allImagePaths = (workout.exercises ?? []).map((ex) => ex.image_path);
@@ -290,6 +294,7 @@ export function ActiveWorkoutView({ workout }: { workout: ActiveWorkout }) {
               workoutId={workout.id}
               imageUrl={(ex.image_path ? imageUrls?.get(ex.image_path) : null) ?? exerciseIllustration(ex.name)}
               pr={prByName.get(ex.name.trim().toLowerCase()) ?? null}
+              onOpenStats={() => setStatsKey(ex.name.trim().toLowerCase())}
             />
           ))}
         </div>
@@ -316,6 +321,17 @@ export function ActiveWorkoutView({ workout }: { workout: ActiveWorkout }) {
           recentExercises={recentExercises}
           onSelect={handlePickExercise}
           onClose={() => setPickerOpen(false)}
+        />
+      )}
+
+      {/* Fiche détaillée exercice */}
+      {statsKey && (
+        <ExerciseStatsSheet
+          exerciseName={statsKey}
+          weightHistory={histByName.get(statsKey) ?? []}
+          volumeHistory={volByName.get(statsKey) ?? []}
+          pr={prByName.get(statsKey)}
+          onClose={() => setStatsKey(null)}
         />
       )}
 

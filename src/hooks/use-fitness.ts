@@ -632,6 +632,7 @@ export type ActiveSet = {
   reps: number | null;
   weight: number | null;
   rpe: number | null;
+  completed: boolean;
 };
 
 export type ActiveExercise = {
@@ -669,7 +670,7 @@ export function useActiveWorkout() {
       const { data, error } = await (supabase as any)
         .from("workouts")
         .select(
-          "id, name, gym_location, created_at, exercises(id, name, image_path, sets, reps, weight, exercise_sets(id, set_number, reps, weight, rpe))",
+          "id, name, gym_location, created_at, exercises(id, name, image_path, sets, reps, weight, exercise_sets(id, set_number, reps, weight, rpe, completed))",
         )
         .eq("user_id", user.id)
         .is("duration_minutes", null)
@@ -699,6 +700,7 @@ export function useActiveWorkout() {
             reps: s.reps ?? null,
             weight: s.weight ?? null,
             rpe: s.rpe ?? null,
+            completed: s.completed ?? false,
           })),
         })),
       };
@@ -872,6 +874,7 @@ export function useUpdateExerciseSet() {
       reps?: number | null;
       weight?: number | null;
       rpe?: number | null;
+      completed?: boolean;
     }) => {
       const { error } = await supabase
         .from("exercise_sets")
