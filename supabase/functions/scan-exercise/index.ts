@@ -219,6 +219,6 @@ Deno.serve(async (req) => {
     });
   } catch (e) {
     console.error("[scan-exercise] unhandled:", e);
-    return json200({ error: e instanceof Error ? e.message : "Erreur inattendue." });
+    return json200({ error: "Erreur interne. Réessaie plus tard." });
   }
 });
