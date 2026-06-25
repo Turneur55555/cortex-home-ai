@@ -179,12 +179,6 @@ export function CorpsTab() {
         )}
       </div>
 
-      <ImcCard
-        imc={imc}
-        height={prefs.height_cm}
-        onSaveHeight={(h) => updatePrefs({ height_cm: h })}
-      />
-
       <MeasurementsCard
         latest={latest}
         previous={previous}
