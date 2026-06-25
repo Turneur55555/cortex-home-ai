@@ -286,7 +286,7 @@ export function SeancesTab() {
   );
 }
 
-// ── Séances de la semaine (vue compacte + encoche détails) ───────────────────────
+// ── Séances de la semaine (repliable + encoche détails) ───────────────────────
 
 function WeekSessions({
   workouts,
@@ -296,11 +296,17 @@ function WeekSessions({
   onRefaire: (w: WorkoutRow) => void;
 }) {
   const [detailed, setDetailed] = useState(false);
+  const [weekOpen, setWeekOpen] = useState(true);
 
   return (
-    <div className="overflow-hidden rounded-3xl border border-white/5 bg-gradient-to-b from-card/95 to-card/70 p-5 shadow-card backdrop-blur-xl">
-      <div className="mb-4 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
+    <div className="overflow-hidden rounded-3xl border border-white/5 bg-gradient-to-b from-card/95 to-card/70 shadow-card backdrop-blur-xl">
+      <button
+        type="button"
+        onClick={() => setWeekOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-2 px-5 py-4 text-left"
+        aria-expanded={weekOpen}
+      >
+        <span className="flex items-center gap-2">
           <CalendarDays className="h-4 w-4 text-primary" />
           <span className="text-sm font-semibold">Séances de la semaine</span>
           {workouts.length > 0 && (
@@ -308,87 +314,102 @@ function WeekSessions({
               {workouts.length}
             </span>
           )}
-        </div>
-        <button
-          type="button"
-          onClick={() => setDetailed((v) => !v)}
-          aria-pressed={detailed}
-          className={
-            "inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-semibold transition-colors " +
-            (detailed
-              ? "border-primary/40 bg-primary/10 text-primary"
-              : "border-border bg-card/50 text-muted-foreground hover:text-foreground")
-          }
-        >
-          <span
+        </span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setDetailed((v) => !v);
+            }}
+            aria-pressed={detailed}
             className={
-              "flex h-3 w-3 items-center justify-center rounded-[3px] border text-[8px] " +
-              (detailed ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/50")
+              "inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[10px] font-semibold transition-colors " +
+              (detailed
+                ? "border-primary/40 bg-primary/10 text-primary"
+                : "border-border bg-card/50 text-muted-foreground hover:text-foreground")
             }
           >
-            {detailed ? "✓" : ""}
-          </span>
-          Détails
-        </button>
-      </div>
+            <span
+              className={
+                "flex h-3 w-3 items-center justify-center rounded-[3px] border text-[8px] " +
+                (detailed ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/50")
+              }
+            >
+              {detailed ? "✓" : ""}
+            </span>
+            Détails
+          </button>
+          <ChevronDown
+            className={
+              "h-4 w-4 text-muted-foreground transition-transform " +
+              (weekOpen ? "rotate-180" : "")
+            }
+          />
+        </div>
+      </button>
 
-      {workouts.length === 0 ? (
-        <p className="text-[11px] text-muted-foreground">
-          Aucune séance cette semaine. Lance-toi !
-        </p>
-      ) : (
-        <ul className="space-y-2">
-          {workouts.map((w) => {
-            const muscles = detailed ? workoutMuscleLabels(w) : [];
-            const volume = detailed ? Math.round(workoutTonnage(w.exercises ?? [])) : 0;
-            return (
-              <li
-                key={w.id}
-                className="rounded-xl border border-border bg-card/50 px-3 py-2.5"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <span className="w-9 shrink-0 text-center text-[10px] font-semibold uppercase tracking-wide text-primary">
-                      {weekdayLabel(w.date)}
-                    </span>
-                    <span className="truncate text-xs font-semibold">{w.name || "Séance"}</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => onRefaire(w)}
-                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/5 text-muted-foreground transition-all active:scale-90 hover:bg-primary/15 hover:text-primary"
-                    title="Refaire cette séance"
-                    aria-label="Refaire cette séance"
+      {weekOpen && (
+        <div className="px-5 pb-5">
+          {workouts.length === 0 ? (
+            <p className="text-[11px] text-muted-foreground">
+              Aucune séance cette semaine. Lance-toi !
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {workouts.map((w) => {
+                const muscles = detailed ? workoutMuscleLabels(w) : [];
+                const volume = detailed ? Math.round(workoutTonnage(w.exercises ?? [])) : 0;
+                return (
+                  <li
+                    key={w.id}
+                    className="rounded-xl border border-border bg-card/50 px-3 py-2.5"
                   >
-                    <Repeat className="h-3.5 w-3.5" />
-                  </button>
-                </div>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span className="w-9 shrink-0 text-center text-[10px] font-semibold uppercase tracking-wide text-primary">
+                          {weekdayLabel(w.date)}
+                        </span>
+                        <span className="truncate text-xs font-semibold">{w.name || "Séance"}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => onRefaire(w)}
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/5 text-muted-foreground transition-all active:scale-90 hover:bg-primary/15 hover:text-primary"
+                        title="Refaire cette séance"
+                        aria-label="Refaire cette séance"
+                      >
+                        <Repeat className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
 
-                {detailed && (
-                  <div className="mt-2 pl-12">
-                    <p className="text-[10px] text-muted-foreground">
-                      {w.duration_minutes ? `${w.duration_minutes} min` : "durée —"}
-                      {` · ${formatTonnage(volume)}`}
-                      {` · ${(w.exercises ?? []).length} exos`}
-                    </p>
-                    {muscles.length > 0 && (
-                      <div className="mt-1.5 flex flex-wrap gap-1">
-                        {muscles.map((m) => (
-                          <span
-                            key={m}
-                            className="rounded-full border border-white/8 bg-white/5 px-2 py-0.5 text-[9px] font-medium text-muted-foreground"
-                          >
-                            {m}
-                          </span>
-                        ))}
+                    {detailed && (
+                      <div className="mt-2 pl-12">
+                        <p className="text-[10px] text-muted-foreground">
+                          {w.duration_minutes ? `${w.duration_minutes} min` : "durée —"}
+                          {` · ${formatTonnage(volume)}`}
+                          {` · ${(w.exercises ?? []).length} exos`}
+                        </p>
+                        {muscles.length > 0 && (
+                          <div className="mt-1.5 flex flex-wrap gap-1">
+                            {muscles.map((m) => (
+                              <span
+                                key={m}
+                                className="rounded-full border border-white/8 bg-white/5 px-2 py-0.5 text-[9px] font-medium text-muted-foreground"
+                              >
+                                {m}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
-                  </div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
       )}
     </div>
   );
