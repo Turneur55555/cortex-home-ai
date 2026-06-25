@@ -39,7 +39,6 @@ export function CorpsTab() {
   const [focusField, setFocusField] = useState<MeasurementField | null>(null);
   const [quickField, setQuickField] = useState<{ key: keyof BodyRow; label: string } | null>(null);
   const del = useDeleteBodyMeasurement();
-  const { prefs, update: updatePrefs } = useUserPreferences();
   const [period, setPeriod] = useState<"semaine" | "mois" | "trimestre">("trimestre");
 
   const openWithFocus = (f: MeasurementField | null) => {
@@ -77,14 +76,6 @@ export function CorpsTab() {
 
   const latest = data?.[0];
   const previous = data?.[1];
-
-  const imc = useMemo(() => {
-    const w = latest?.weight;
-    const h = prefs.height_cm;
-    if (w == null || !h) return null;
-    const m = h / 100;
-    return Math.round((w / (m * m)) * 10) / 10;
-  }, [latest, prefs.height_cm]);
 
   return (
     <section className="flex flex-col gap-5">
