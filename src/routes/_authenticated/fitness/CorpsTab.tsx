@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Minus, Ruler, Scale, TrendingDown, TrendingUp } from "lucide-react";
+import { Loader2, Minus, Ruler, TrendingDown, TrendingUp } from "lucide-react";
 import {
   Area,
   AreaChart,
@@ -16,7 +16,6 @@ import {
   useBodyMeasurements,
   useDeleteBodyMeasurement,
 } from "@/hooks/use-fitness";
-import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { FabAdd, Field, FormGroup, Sheet, SubmitButton } from "@/components/shared/FormComponents";
 import type { MeasurementField } from "@/components/fitness/BodyMap";
 
