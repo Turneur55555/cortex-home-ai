@@ -8,6 +8,10 @@ Toujours mettre à jour ce fichier avec les nouveaux composants, hooks, migratio
 
 ## Mise à jour du jour
 - SéancesTab : bloc "Séances de la semaine" rendu repliable (comme l'Historique complet), avec le bouton "Détails" conservé et le chevron d'expansion.
+- CorpsTab : suppression totale de la carte IMC, du calcul BMI et des imports liés (`Scale`, `useUserPreferences`, `height_cm`).
+- BDD : migration ajoutant la colonne `completed` sur `exercise_sets` pour la validation set-by-set.
+- Hook `use-fitness.ts` : cast temporaire `as any` sur le payload de `useUpdateExerciseSet` le temps de régénérer les types Supabase.
+- Build production OK.
 
 ---
 
