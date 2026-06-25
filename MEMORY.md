@@ -1,10 +1,13 @@
 # Mémoire projet — cortex-home-ai
 
 ## Dernière mise à jour
-2026-06-17
+2026-06-25
 
 ## ⚠️ Règle : mettre ce fichier à jour à la fin de chaque session
 Toujours mettre à jour ce fichier avec les nouveaux composants, hooks, migrations, features découverts.
+
+## Mise à jour du jour
+- SéancesTab : bloc "Séances de la semaine" rendu repliable (comme l'Historique complet), avec le bouton "Détails" conservé et le chevron d'expansion.
 
 ---
 
