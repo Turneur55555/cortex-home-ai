@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Minus, Ruler, Scale, TrendingDown, TrendingUp } from "lucide-react";
+import { Loader2, Minus, Ruler, TrendingDown, TrendingUp } from "lucide-react";
 import {
   Area,
   AreaChart,
@@ -16,7 +16,6 @@ import {
   useBodyMeasurements,
   useDeleteBodyMeasurement,
 } from "@/hooks/use-fitness";
-import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { FabAdd, Field, FormGroup, Sheet, SubmitButton } from "@/components/shared/FormComponents";
 import type { MeasurementField } from "@/components/fitness/BodyMap";
 
@@ -40,7 +39,6 @@ export function CorpsTab() {
   const [focusField, setFocusField] = useState<MeasurementField | null>(null);
   const [quickField, setQuickField] = useState<{ key: keyof BodyRow; label: string } | null>(null);
   const del = useDeleteBodyMeasurement();
-  const { prefs, update: updatePrefs } = useUserPreferences();
   const [period, setPeriod] = useState<"semaine" | "mois" | "trimestre">("trimestre");
 
   const openWithFocus = (f: MeasurementField | null) => {
@@ -78,14 +76,6 @@ export function CorpsTab() {
 
   const latest = data?.[0];
   const previous = data?.[1];
-
-  const imc = useMemo(() => {
-    const w = latest?.weight;
-    const h = prefs.height_cm;
-    if (w == null || !h) return null;
-    const m = h / 100;
-    return Math.round((w / (m * m)) * 10) / 10;
-  }, [latest, prefs.height_cm]);
 
   return (
     <section className="flex flex-col gap-5">
@@ -188,12 +178,6 @@ export function CorpsTab() {
           </ResponsiveContainer>
         )}
       </div>
-
-      <ImcCard
-        imc={imc}
-        height={prefs.height_cm}
-        onSaveHeight={(h) => updatePrefs({ height_cm: h })}
-      />
 
       <MeasurementsCard
         latest={latest}
@@ -665,85 +649,3 @@ function QuickMeasurementSheet({
   );
 }
 
-function imcClass(imc: number) {
-  if (imc < 18.5) return { label: "Maigreur", color: "text-amber-400" };
-  if (imc < 25) return { label: "Corpulence normale", color: "text-success" };
-  if (imc < 30) return { label: "Surpoids", color: "text-amber-400" };
-  return { label: "Obésité", color: "text-destructive" };
-}
-
-function ImcCard({
-  imc,
-  height,
-  onSaveHeight,
-}: {
-  imc: number | null;
-  height: number | null;
-  onSaveHeight: (h: number) => void;
-}) {
-  const [editing, setEditing] = useState(height == null);
-  const [val, setVal] = useState(height != null ? String(height) : "");
-  const cls = imc != null ? imcClass(imc) : null;
-
-  return (
-    <div className="rounded-2xl border border-border bg-card p-4 shadow-card">
-      <div className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/15 text-primary">
-            <Scale className="h-3.5 w-3.5" />
-          </span>
-          <h3 className="text-sm font-semibold">IMC</h3>
-        </div>
-        {height != null && !editing && (
-          <button
-            type="button"
-            onClick={() => setEditing(true)}
-            className="text-[10px] font-medium text-primary"
-          >
-            Taille : {height} cm
-          </button>
-        )}
-      </div>
-
-      {editing ? (
-        <div className="flex items-end gap-2">
-          <div className="flex-1">
-            <label className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-              Ta taille (cm)
-            </label>
-            <input
-              type="number"
-              inputMode="decimal"
-              value={val}
-              onChange={(e) => setVal(e.target.value)}
-              placeholder="ex. 178"
-              className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm"
-            />
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              const h = Number(val);
-              if (h > 0) {
-                onSaveHeight(h);
-                setEditing(false);
-              }
-            }}
-            className="rounded-xl bg-gradient-primary px-4 py-2 text-xs font-semibold text-primary-foreground shadow-glow"
-          >
-            OK
-          </button>
-        </div>
-      ) : imc != null && cls ? (
-        <div className="flex items-baseline gap-2">
-          <span className="text-3xl font-bold tabular-nums">{imc}</span>
-          <span className={"text-xs font-semibold " + cls.color}>{cls.label}</span>
-        </div>
-      ) : (
-        <p className="text-xs text-muted-foreground">
-          Renseigne ta taille et ton poids pour calculer ton IMC.
-        </p>
-      )}
-    </div>
-  );
-}
