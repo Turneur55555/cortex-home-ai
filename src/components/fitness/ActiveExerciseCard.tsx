@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
@@ -21,7 +21,7 @@ import {
   useDeleteExercises,
 } from "@/hooks/use-fitness";
 import { restTimer } from "@/hooks/useRestTimer";
-import { useLastExerciseSession, type LastSessionSet } from "@/hooks/useLastExerciseSession";
+import type { LastSession, LastSessionSet } from "@/hooks/useLastExerciseSession";
 
 // ─── Comparaison série courante vs dernière séance ──────────────────────────
 
@@ -109,6 +109,15 @@ function SetRow({
   const [reps, setReps] = useState(set.reps != null ? String(set.reps) : "");
   const [weight, setWeight] = useState(set.weight != null ? String(set.weight) : "");
   const [confirmDel, setConfirmDel] = useState(false);
+
+  // #4 : resynchronise l'affichage si la donnée change hors saisie
+  // (ex. "Reprendre les charges précédentes" met à jour reps/weight).
+  useEffect(() => {
+    setReps(set.reps != null ? String(set.reps) : "");
+  }, [set.reps]);
+  useEffect(() => {
+    setWeight(set.weight != null ? String(set.weight) : "");
+  }, [set.weight]);
 
   const parse = (v: string) => (v.trim() === "" ? null : Number(v));
   const trend = compareToLast({ reps: set.reps, weight: set.weight }, lastSet);
@@ -218,14 +227,14 @@ function SetRow({
 
 export function ActiveExerciseCard({
   exercise,
-  workoutId,
   imageUrl,
+  lastSession,
   pr,
   onOpenStats,
 }: {
   exercise: ActiveExercise;
-  workoutId: string;
   imageUrl: string | null;
+  lastSession: LastSession | null;
   pr: number | null;
   onOpenStats?: () => void;
 }) {
@@ -233,8 +242,6 @@ export function ActiveExerciseCard({
   const updateSet = useUpdateExerciseSet();
   const deleteSet = useDeleteExerciseSet();
   const deleteExercises = useDeleteExercises();
-
-  const { data: lastSession } = useLastExerciseSession(exercise.name, workoutId);
 
   const [confirmDeleteEx, setConfirmDeleteEx] = useState(false);
   const [collapsed, setCollapsed] = useState(false);

@@ -244,7 +244,7 @@ export function useDeleteWorkout() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      await supabase.from("exercises").delete().eq("workout_id", id).eq("user_id", user.id);
+      // Les exercices et leurs séries sont supprimés par cascade FK (ON DELETE CASCADE).
       const { error } = await supabase
         .from("workouts")
         .delete()
@@ -767,18 +767,7 @@ export function useCancelWorkout() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (workoutId: string) => {
-      // Récupère les exercices pour supprimer leurs séries
-      const { data: exercises } = await supabase
-        .from("exercises")
-        .select("id")
-        .eq("workout_id", workoutId);
-
-      if (exercises && exercises.length > 0) {
-        const ids = exercises.map((e) => e.id);
-        await supabase.from("exercise_sets").delete().in("exercise_id", ids);
-        await supabase.from("exercises").delete().in("id", ids);
-      }
-
+      // Exercices + séries supprimés par cascade FK (ON DELETE CASCADE).
       const { error } = await supabase.from("workouts").delete().eq("id", workoutId);
       if (error) throw error;
     },
@@ -826,6 +815,17 @@ export function useAddExerciseToActiveWorkout() {
 
 // ---------- Exercise set mutations ----------
 
+/** Patch optimiste du cache de la séance active. Retourne l'état précédent. */
+function patchActiveCache(
+  qc: ReturnType<typeof useQueryClient>,
+  updater: (w: ActiveWorkout) => ActiveWorkout,
+) {
+  const prev = qc.getQueryData<ActiveWorkout | null>(ACTIVE_KEY);
+  if (!prev) return prev;
+  qc.setQueryData<ActiveWorkout | null>(ACTIVE_KEY, updater(prev));
+  return prev;
+}
+
 /** Ajoute une série à un exercice de la séance active. */
 export function useAddExerciseSet() {
   const qc = useQueryClient();
@@ -855,14 +855,42 @@ export function useAddExerciseSet() {
       });
       if (error) throw error;
     },
-    onSuccess: () => {
+    onMutate: async ({ exerciseId, setNumber, reps, weight }) => {
+      await qc.cancelQueries({ queryKey: ACTIVE_KEY });
+      const prev = patchActiveCache(qc, (w) => ({
+        ...w,
+        exercises: w.exercises.map((ex) =>
+          ex.id === exerciseId
+            ? {
+                ...ex,
+                exercise_sets: [
+                  ...ex.exercise_sets,
+                  {
+                    id: `tmp-${Date.now()}`,
+                    set_number: setNumber,
+                    reps,
+                    weight,
+                    rpe: null,
+                    completed: false,
+                  },
+                ],
+              }
+            : ex,
+        ),
+      }));
+      return { prev };
+    },
+    onError: (e: Error, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(ACTIVE_KEY, ctx.prev);
+      toast.error(e.message);
+    },
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: ACTIVE_KEY });
     },
-    onError: (e: Error) => toast.error(e.message),
   });
 }
 
-/** Met à jour reps / weight / rpe d'une série. */
+/** Met à jour reps / weight / rpe / completed d'une série. */
 export function useUpdateExerciseSet() {
   const qc = useQueryClient();
   return useMutation({
@@ -876,17 +904,35 @@ export function useUpdateExerciseSet() {
       rpe?: number | null;
       completed?: boolean;
     }) => {
-      const { completed: _completed, ...updateFields } = fields;
+      // #1 : `completed` ne doit PAS être retiré — sinon la validation des séries
+      // n'est jamais enregistrée. On écrit tous les champs fournis.
+      if (Object.keys(fields).length === 0) return;
       const { error } = await supabase
         .from("exercise_sets")
-        .update(updateFields)
+        .update(fields)
         .eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onMutate: async ({ id, ...fields }) => {
+      await qc.cancelQueries({ queryKey: ACTIVE_KEY });
+      const prev = patchActiveCache(qc, (w) => ({
+        ...w,
+        exercises: w.exercises.map((ex) => ({
+          ...ex,
+          exercise_sets: ex.exercise_sets.map((set) =>
+            set.id === id ? { ...set, ...fields } : set,
+          ),
+        })),
+      }));
+      return { prev };
+    },
+    onError: (e: Error, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(ACTIVE_KEY, ctx.prev);
+      toast.error(e.message);
+    },
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: ACTIVE_KEY });
     },
-    onError: (e: Error) => toast.error(e.message),
   });
 }
 
@@ -898,10 +944,24 @@ export function useDeleteExerciseSet() {
       const { error } = await supabase.from("exercise_sets").delete().eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onMutate: async (id: string) => {
+      await qc.cancelQueries({ queryKey: ACTIVE_KEY });
+      const prev = patchActiveCache(qc, (w) => ({
+        ...w,
+        exercises: w.exercises.map((ex) => ({
+          ...ex,
+          exercise_sets: ex.exercise_sets.filter((set) => set.id !== id),
+        })),
+      }));
+      return { prev };
+    },
+    onError: (e: Error, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(ACTIVE_KEY, ctx.prev);
+      toast.error(e.message);
+    },
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: ACTIVE_KEY });
     },
-    onError: (e: Error) => toast.error(e.message),
   });
 }
 

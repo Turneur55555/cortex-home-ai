@@ -16,7 +16,6 @@ import {
   Trophy,
   TrendingUp,
   AlertTriangle,
-  X,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
@@ -24,7 +23,6 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   useDeleteExercises,
   useDeleteWorkout,
-  useAddExerciseToWorkout,
   useUpdateExercise,
   useUpdateWorkoutName,
   useWorkouts,
@@ -33,11 +31,8 @@ import { EditableText } from "./EditableText";
 import { PhotoModal } from "./PhotoModal";
 import { WorkoutDeleteDialog } from "./WorkoutDeleteDialog";
 import { ExerciseStatsSheet } from "./ExerciseStatsSheet";
-import {
-  ExercisePickerSheet,
-  type PickedExercise,
-  type RecentExercise,
-} from "./ExercisePickerSheet";
+import { StatTile } from "./StatTile";
+import { AddExerciseModal } from "./AddExerciseModal";
 import { normalize } from "@/lib/fitness/exerciseCatalog";
 import { estimate1RM, formatTonnage, workoutTonnage } from "@/lib/fitness/strength";
 import { estimateWorkoutCalories } from "@/lib/fitness/calories";
@@ -107,7 +102,7 @@ function expandToSeries(rows: ExerciseRow[]): SerieView[] {
 function buildGroups(rows: ExerciseRow[]): ExerciseGroup[] {
   const byKey = new Map<string, ExerciseRow[]>();
   for (const r of rows) {
-    const key = r.name.trim().toLowerCase();
+    const key = normalize(r.name);
     if (!key) continue;
     if (!byKey.has(key)) byKey.set(key, []);
     byKey.get(key)!.push(r);
@@ -176,7 +171,7 @@ export function WorkoutCard({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmDeleteGroup, setConfirmDeleteGroup] = useState<ExerciseGroup | null>(null);
-  const [statsKey, setStatsKey] = useState<string | null>(null);
+  const [statsTarget, setStatsTarget] = useState<{ key: string; name: string } | null>(null);
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
   const [photoModal, setPhotoModal] = useState<{ url: string; exId: string } | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -465,7 +460,7 @@ export function WorkoutCard({
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setStatsKey(g.key);
+                      setStatsTarget({ key: g.key, name: g.name });
                     }}
                     className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary transition-all active:scale-90"
                     aria-label="Statistiques"
@@ -588,13 +583,13 @@ export function WorkoutCard({
         />
       )}
 
-      {statsKey && (
+      {statsTarget && (
         <ExerciseStatsSheet
-          exerciseName={statsKey}
-          weightHistory={histByName.get(statsKey) ?? []}
-          volumeHistory={volByName.get(statsKey) ?? []}
-          pr={prByName.get(statsKey)}
-          onClose={() => setStatsKey(null)}
+          exerciseName={statsTarget.name}
+          weightHistory={histByName.get(statsTarget.key) ?? []}
+          volumeHistory={volByName.get(statsTarget.key) ?? []}
+          pr={prByName.get(statsTarget.key)}
+          onClose={() => setStatsTarget(null)}
         />
       )}
 
@@ -654,185 +649,5 @@ export function WorkoutCard({
         </div>
       )}
     </li>
-  );
-}
-
-function StatTile({
-  icon,
-  label,
-  value,
-  unit,
-  title,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  unit?: string;
-  title?: string;
-}) {
-  return (
-    <div
-      title={title}
-      className="flex flex-col items-center justify-center gap-0.5 rounded-2xl bg-white/[0.04] px-2 py-2.5 ring-1 ring-white/5"
-    >
-      <span className="text-muted-foreground/70">{icon}</span>
-      <span className="mt-0.5 flex items-baseline gap-0.5">
-        <span className="text-base font-bold leading-none tracking-tight">{value}</span>
-        {unit && <span className="text-[9px] font-medium text-muted-foreground">{unit}</span>}
-      </span>
-      <span className="text-[9px] font-medium uppercase tracking-wider text-muted-foreground/70">
-        {label}
-      </span>
-    </div>
-  );
-}
-
-// ─── 2-step modal: picker → form ──────────────────────────────────────────────
-
-function AddExerciseModal({
-  workoutId,
-  onClose,
-}: {
-  workoutId: string;
-  onClose: () => void;
-}) {
-  const { data: workouts } = useWorkouts();
-  const addEx = useAddExerciseToWorkout();
-  const [step, setStep] = useState<"pick" | "fill">("pick");
-  const [picked, setPicked] = useState<PickedExercise | null>(null);
-  const [form, setForm] = useState({ sets: "", reps: "", weight: "" });
-
-  const recentExercises = useMemo<RecentExercise[]>(() => {
-    if (!workouts) return [];
-    const seen = new Map<string, RecentExercise>();
-    for (const w of workouts) {
-      for (const ex of w.exercises ?? []) {
-        if (!ex.name.trim()) continue;
-        const key = normalize(ex.name);
-        if (!seen.has(key)) {
-          seen.set(key, {
-            name: ex.name,
-            lastSets: ex.sets ?? null,
-            lastReps: ex.reps ?? null,
-            lastWeight: ex.weight ?? null,
-          });
-        }
-      }
-    }
-    return Array.from(seen.values()).slice(0, 25);
-  }, [workouts]);
-
-  const handlePick = (ex: PickedExercise) => {
-    setPicked(ex);
-    setForm({ sets: ex.sets, reps: ex.reps, weight: ex.weight });
-    setStep("fill");
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!picked) return;
-    const num = (v: string) => (v.trim() === "" ? null : Number(v));
-    await addEx.mutateAsync({
-      workoutId,
-      exercise: {
-        name: picked.name,
-        sets: num(form.sets),
-        reps: num(form.reps),
-        weight: num(form.weight),
-      },
-    });
-    onClose();
-  };
-
-  if (step === "pick") {
-    return (
-      <ExercisePickerSheet
-        recentExercises={recentExercises}
-        onSelect={handlePick}
-        onClose={onClose}
-      />
-    );
-  }
-
-  const inputCls =
-    "w-full rounded-xl border border-border bg-surface px-2 py-3 text-center text-sm font-medium outline-none focus:border-primary";
-
-  return (
-    <div
-      className="fixed inset-0 z-[60] flex items-end justify-center"
-      onClick={onClose}
-    >
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-      <form
-        className="relative w-full max-w-[430px] rounded-t-3xl border-t border-border bg-card p-5 shadow-elevated"
-        onClick={(e) => e.stopPropagation()}
-        onSubmit={handleSubmit}
-      >
-        <div className="mb-4 flex justify-center">
-          <div className="h-1 w-10 rounded-full bg-white/20" />
-        </div>
-
-        <div className="mb-5 flex items-start justify-between">
-          <div>
-            <p className="text-[11px] text-muted-foreground">Ajouter à la séance</p>
-            <h3 className="text-base font-bold leading-tight">{picked?.name}</h3>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-surface text-muted-foreground"
-            aria-label="Fermer"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        <div className="mb-5 grid grid-cols-3 gap-3">
-          {(
-            [
-              { key: "sets", label: "Séries" },
-              { key: "reps", label: "Reps" },
-              { key: "weight", label: "Poids (kg)", step: "0.5" },
-            ] as const
-          ).map((item) => {
-            const { key, label } = item;
-            const step = "step" in item ? item.step : undefined;
-            return (
-              <div key={key} className="flex flex-col gap-1.5">
-                <label className="text-center text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  {label}
-                </label>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  step={step}
-                  value={form[key]}
-                  onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-                  placeholder="—"
-                  className={inputCls}
-                />
-              </div>
-            );
-          })}
-        </div>
-
-        <button
-          type="submit"
-          disabled={addEx.isPending}
-          className="mb-3 inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-primary text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-60"
-        >
-          {addEx.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-          Ajouter l'exercice
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setStep("pick")}
-          className="w-full text-center text-xs font-medium text-muted-foreground hover:text-foreground"
-        >
-          ← Changer d'exercice
-        </button>
-      </form>
-    </div>
   );
 }

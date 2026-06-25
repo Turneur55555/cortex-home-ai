@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { normalize } from "@/lib/fitness/exerciseCatalog";
 
 /**
  * Historique des séries détaillées (exercise_sets) d'un exercice, agrégé par séance.
@@ -24,7 +25,7 @@ export interface ExerciseSession {
 }
 
 export function useExerciseSetHistory(exerciseName: string | null | undefined) {
-  const key = exerciseName?.trim().toLowerCase() ?? "";
+  const key = normalize(exerciseName ?? "");
   return useQuery({
     queryKey: ["exercise_set_history", key],
     enabled: key.length > 0,
@@ -34,14 +35,15 @@ export function useExerciseSetHistory(exerciseName: string | null | undefined) {
       } = await supabase.auth.getUser();
       if (!user || !exerciseName) return [];
 
-      // 1. Instances de l'exercice (par nom, insensible à la casse)
-      const { data: exs, error: e1 } = await supabase
+      // 1. Instances de l'exercice (identité accent-insensible via normalize)
+      const target = normalize(exerciseName);
+      const { data: allExs, error: e1 } = await supabase
         .from("exercises")
-        .select("id, workout_id")
-        .eq("user_id", user.id)
-        .ilike("name", exerciseName.trim());
+        .select("id, workout_id, name")
+        .eq("user_id", user.id);
       if (e1) throw e1;
-      if (!exs || exs.length === 0) return [];
+      const exs = (allExs ?? []).filter((e) => normalize(e.name) === target);
+      if (exs.length === 0) return [];
 
       const exIds = exs.map((e) => e.id);
       const exToWorkout = new Map(exs.map((e) => [e.id, e.workout_id]));

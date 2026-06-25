@@ -17,6 +17,7 @@ import {
   type RecentExercise,
 } from "./ExercisePickerSheet";
 import { normalize } from "@/lib/fitness/exerciseCatalog";
+import { useLastExerciseSessions } from "@/hooks/useLastExerciseSession";
 import { RestTimerBar } from "./RestTimerBar";
 import { ExerciseStatsSheet } from "./ExerciseStatsSheet";
 
@@ -61,9 +62,15 @@ export function ActiveWorkoutView({ workout }: { workout: ActiveWorkout }) {
     [allWorkouts, workout.id],
   );
 
+  // Dernières séances de TOUS les exercices (groupé : fin du N+1).
+  const lastSessions = useLastExerciseSessions(
+    (workout.exercises ?? []).map((e) => e.name),
+    workout.id,
+  );
+
   // Fiche détaillée d'un exercice (au tap sur la carte)
   const [statsTarget, setStatsTarget] = useState<
-    { key: string; imageUrl: string | null } | null
+    { key: string; name: string; imageUrl: string | null } | null
   >(null);
 
   // Image URLs for all exercises in this workout
@@ -297,12 +304,13 @@ export function ActiveWorkoutView({ workout }: { workout: ActiveWorkout }) {
               <ActiveExerciseCard
                 key={ex.id}
                 exercise={ex}
-                workoutId={workout.id}
                 imageUrl={exImage}
-                pr={prByName.get(ex.name.trim().toLowerCase()) ?? null}
+                lastSession={lastSessions.get(normalize(ex.name)) ?? null}
+                pr={prByName.get(normalize(ex.name)) ?? null}
                 onOpenStats={() =>
                   setStatsTarget({
-                    key: ex.name.trim().toLowerCase(),
+                    key: normalize(ex.name),
+                    name: ex.name,
                     imageUrl: exImage,
                   })
                 }
@@ -339,7 +347,7 @@ export function ActiveWorkoutView({ workout }: { workout: ActiveWorkout }) {
       {/* Fiche détaillée exercice */}
       {statsTarget && (
         <ExerciseStatsSheet
-          exerciseName={statsTarget.key}
+          exerciseName={statsTarget.name}
           weightHistory={histByName.get(statsTarget.key) ?? []}
           volumeHistory={volByName.get(statsTarget.key) ?? []}
           pr={prByName.get(statsTarget.key)}

@@ -77,14 +77,19 @@ export function SeancesTab() {
   const [coachInitialMuscles, setCoachInitialMuscles] = useState<string[] | undefined>(undefined);
   const [historyOpen, setHistoryOpen] = useState(false);
 
-  const { prByName, histByName, volByName, prByGym, histByGym, topExercises } = useMemo(
+  const { prByName, histByName, volByName, prByGym, histByGym, nameByKey, topExercises } = useMemo(
     () => computePRs(data ?? []),
     [data],
   );
 
+  // #7 : ne signer les URLs d'images que lorsque l'historique est ouvert
+  // (les vignettes ne sont rendues que là). Évite N signatures au chargement.
   const allImagePaths = useMemo(
-    () => (data ?? []).flatMap((w) => (w.exercises ?? []).map((ex) => ex.image_path)),
-    [data],
+    () =>
+      historyOpen
+        ? (data ?? []).flatMap((w) => (w.exercises ?? []).map((ex) => ex.image_path))
+        : [],
+    [data, historyOpen],
   );
   const { data: listImageUrls } = useExerciseImageUrls(allImagePaths);
   const latestDate = useMemo(() => data?.[0]?.date ?? "", [data]);
@@ -237,6 +242,7 @@ export function SeancesTab() {
                 topExercises={topExercises}
                 histByName={histByName}
                 prByName={prByName}
+                nameByKey={nameByKey}
               />
               <ul className="mt-3 space-y-3">
                 {data.map((w) => (

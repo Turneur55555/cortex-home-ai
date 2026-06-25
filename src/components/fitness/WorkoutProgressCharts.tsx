@@ -15,10 +15,12 @@ export function WorkoutProgressCharts({
   topExercises,
   histByName,
   prByName,
+  nameByKey,
 }: {
   topExercises: string[];
   histByName: Map<string, Array<{ date: string; weight: number }>>;
   prByName: Map<string, number>;
+  nameByKey?: Map<string, string>;
 }) {
   if (topExercises.length === 0) return null;
 
@@ -39,7 +41,7 @@ export function WorkoutProgressCharts({
           return (
             <div key={key}>
               <div className="mb-1 flex items-center justify-between">
-                <p className="text-xs font-semibold capitalize">{key}</p>
+                <p className="text-xs font-semibold capitalize">{nameByKey?.get(key) ?? key}</p>
                 <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-warning">
                   <Trophy className="h-3 w-3" />
                   PR {pr} kg

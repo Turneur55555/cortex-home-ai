@@ -1,5 +1,4 @@
-import { format } from "date-fns";
-import { simpleHash } from "./hashing";
+import { normalize } from "@/lib/fitness/exerciseCatalog";
 
 type WorkoutWithExercises = {
   id: string;
@@ -26,6 +25,7 @@ export function computePRs(workouts: WorkoutWithExercises[] | null | undefined) 
     Map<string, Array<{ date: string; weight: number }>>
   >();
   const freq = new Map<string, number>();
+  const nameByKey = new Map<string, string>();
 
   if (!workouts)
     return {
@@ -34,6 +34,7 @@ export function computePRs(workouts: WorkoutWithExercises[] | null | undefined) 
       volByName,
       prByGym,
       histByGym,
+      nameByKey,
       topExercises: [] as string[],
     };
 
@@ -43,8 +44,9 @@ export function computePRs(workouts: WorkoutWithExercises[] | null | undefined) 
     const gym = (w.gym_location ?? "Salle inconnue") || "Salle inconnue";
 
     for (const ex of w.exercises ?? []) {
-      const key = ex.name.trim().toLowerCase();
+      const key = normalize(ex.name);
       if (!key) continue;
+      if (!nameByKey.has(key)) nameByKey.set(key, ex.name.trim());
       freq.set(key, (freq.get(key) ?? 0) + 1);
       const hasExplicitWeight = ex.weight != null;
       const reps = hasExplicitWeight ? ex.reps : (ex.sets ?? ex.reps);
@@ -89,24 +91,5 @@ export function computePRs(workouts: WorkoutWithExercises[] | null | undefined) 
     .slice(0, 3)
     .map(([k]) => k);
 
-  return { prByName, histByName, volByName, prByGym, histByGym, topExercises };
-}
-
-export function mockWeightHistory(
-  exerciseName: string,
-  pr?: number,
-): Array<{ date: string; weight: number }> {
-  const seed = simpleHash(exerciseName);
-  const base = pr ?? (30 + (seed % 60));
-  const today = new Date();
-  return Array.from({ length: 8 }, (_, i) => {
-    const d = new Date(today);
-    d.setDate(d.getDate() - (7 - i) * 7);
-    const ratio = 0.82 + (i / 7) * 0.18;
-    const noise = (((seed >> i) & 7) / 50) - 0.07;
-    return {
-      date: format(d, "yyyy-MM-dd"),
-      weight: Math.max(5, Math.round((base * (ratio + noise)) * 2) / 2),
-    };
-  });
+  return { prByName, histByName, volByName, prByGym, histByGym, nameByKey, topExercises };
 }
