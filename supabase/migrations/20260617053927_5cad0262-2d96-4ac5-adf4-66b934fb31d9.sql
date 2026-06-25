@@ -108,6 +108,7 @@ CREATE TABLE IF NOT EXISTS public.food_quality_scores (
 GRANT SELECT ON public.food_quality_scores TO authenticated;
 GRANT ALL ON public.food_quality_scores TO service_role;
 ALTER TABLE public.food_quality_scores ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "quality readable by authenticated" ON public.food_quality_scores;
 CREATE POLICY "quality readable by authenticated" ON public.food_quality_scores
   FOR SELECT TO authenticated USING (true);
 
