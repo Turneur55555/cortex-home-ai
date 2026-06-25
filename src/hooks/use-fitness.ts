@@ -906,10 +906,11 @@ export function useUpdateExerciseSet() {
     }) => {
       // #1 : `completed` ne doit PAS être retiré — sinon la validation des séries
       // n'est jamais enregistrée. On écrit tous les champs fournis.
+      // Cast temporaire le temps que les types Supabase soient régénérés.
       if (Object.keys(fields).length === 0) return;
       const { error } = await supabase
         .from("exercise_sets")
-        .update(fields)
+        .update(fields as any)
         .eq("id", id);
       if (error) throw error;
     },
