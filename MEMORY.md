@@ -1,7 +1,7 @@
 # Mémoire projet — cortex-home-ai
 
 ## Dernière mise à jour
-2026-06-17
+2026-06-25
 
 ## ⚠️ Règle : mettre ce fichier à jour à la fin de chaque session
 Toujours mettre à jour ce fichier avec les nouveaux composants, hooks, migrations, features découverts.
