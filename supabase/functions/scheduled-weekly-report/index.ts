@@ -21,6 +21,16 @@ function getWeekBounds(): { weekStart: string; weekEnd: string } {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 200 });
 
+  // Require CRON_SECRET bearer token — function is only called by Supabase cron.
+  const provided = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "");
+  const cronSecret = Deno.env.get("CRON_SECRET");
+  if (!cronSecret || provided !== cronSecret) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
