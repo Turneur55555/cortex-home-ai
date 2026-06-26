@@ -1,5 +1,5 @@
 // nutrition-analysis edge — analyse micronutriments / signaux de carence.
-// Lit les micros depuis les COLONNES de foods (schéma propriétaire) avec repli jsonb micros / USDA / IA.
+// Lit les micros depuis les COLONNES de foods (source unique), enrichissement à la volée USDA puis IA.
 // IMPORTANT : tendances indicatives, PAS un diagnostic. Toujours HTTP 200. IA = GEMINI_API_KEY (API Google directe).
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -88,15 +88,13 @@ function parseDose(desc: string, unit: string): number | null {
   return unit === "µg" ? inMg * 1000 : inMg;
 }
 
-// Construit le dict micros (clés RDA) depuis les colonnes foods, repli sur jsonb micros.
 function microsFromFood(food: Record<string, unknown>): Record<string, number> {
+  // Source de vérité unique = colonnes foods (iron_mg, calcium_mg…). Le jsonb `micros`
+  // n'est plus lu : son contenu legacy a été migré vers les colonnes (26/06/2026).
   const out: Record<string, number> = {};
-  const jsonb = (food.micros ?? {}) as Record<string, number>;
   for (const key of Object.keys(RDA)) {
-    const col = MICRO_COL[key];
-    const v = food[col];
+    const v = food[MICRO_COL[key]];
     if (v != null && Number.isFinite(Number(v))) out[key] = Number(v);
-    else if (jsonb[key] != null && Number.isFinite(Number(jsonb[key]))) out[key] = Number(jsonb[key]);
   }
   return out;
 }
@@ -182,7 +180,7 @@ Deno.serve(async (req) => {
     const mealList = meals ?? [];
 
     const { data: foods } = await admin
-      .from("foods").select("id, normalized_name, source, source_id, calories, micros, iron_mg, calcium_mg, magnesium_mg, zinc_mg, potassium_mg, vitamin_c_mg, vitamin_d_ug, vitamin_b12_ug, vitamin_b9_ug, vitamin_a_ug, vitamin_b6_mg, vitamin_e_mg");
+      .from("foods").select("id, normalized_name, source, source_id, calories, iron_mg, calcium_mg, magnesium_mg, zinc_mg, potassium_mg, vitamin_c_mg, vitamin_d_ug, vitamin_b12_ug, vitamin_b9_ug, vitamin_a_ug, vitamin_b6_mg, vitamin_e_mg");
     const foodList = (foods ?? []) as Array<Record<string, unknown>>;
 
     function matchFood(name: string) {
@@ -213,7 +211,15 @@ Deno.serve(async (req) => {
           const sid = String(food.source_id);
           if (!enrichCache[sid]) {
             enrichCache[sid] = await fetchUsdaMicros(USDA_KEY, sid);
-            if (Object.keys(enrichCache[sid]).length > 0) await admin.from("foods").update({ micros: enrichCache[sid] }).eq("id", food.id);
+            if (Object.keys(enrichCache[sid]).length > 0) {
+              // Cache vers les COLONNES (source unique), plus le jsonb micros.
+              const colUpdate: Record<string, number> = {};
+              for (const [k, v] of Object.entries(enrichCache[sid])) {
+                const col = MICRO_COL[k];
+                if (col && v != null && Number.isFinite(Number(v))) colUpdate[col] = Number(v);
+              }
+              if (Object.keys(colUpdate).length > 0) await admin.from("foods").update(colUpdate).eq("id", food.id);
+            }
           }
           micros = enrichCache[sid];
         }
@@ -250,9 +256,19 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Reminders module removed — supplements are no longer tracked.
+    // Compléments : lus depuis les rappels catégorie « Suppléments » (toujours actifs en prod).
+    const { data: reminders } = await admin
+      .from("reminders").select("title, description, category").eq("user_id", user.id).eq("category", "Suppléments");
     const supplementsConsidered: Array<{ name: string; nutrient: string; daily: number; unit: string }> = [];
     const supDaily: Record<string, number> = {};
+    for (const r of reminders ?? []) {
+      const key = supplementNutrient(String(r.title ?? ""));
+      if (!key || !RDA[key]) continue;
+      const dose = parseDose(String(r.description ?? ""), RDA[key].unit);
+      if (dose == null) continue;
+      supDaily[key] = (supDaily[key] ?? 0) + dose;
+      supplementsConsidered.push({ name: String(r.title), nutrient: RDA[key].label, daily: dose, unit: RDA[key].unit });
+    }
 
     const coverage = mealList.length ? covered / mealList.length : 0;
     const nutrients = Object.entries(RDA).map(([key, meta]) => {

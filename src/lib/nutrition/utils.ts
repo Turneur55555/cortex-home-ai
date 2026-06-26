@@ -1,4 +1,3 @@
-import type { FoodSuggestion } from "@/services/foodSuggestion";
 
 // ─── Types partagés ────────────────────────────────────────────────────────────
 
@@ -89,17 +88,4 @@ export async function fileToBase64Compressed(file: File): Promise<{ b64: string;
       mime: mimeMatch?.[1] ?? "image/jpeg",
     };
   }
-}
-
-export function computeMacrosFor(food: FoodSuggestion, grams: number) {
-  const r1 = (v: number | null) =>
-    v != null ? String(Math.round((v * grams) / 100)) : "";
-  const r1d = (v: number | null) =>
-    v != null ? String(Math.round((v * grams) / 100 * 10) / 10) : "";
-  return {
-    calories: r1(food.calories),
-    proteins: r1d(food.proteins),
-    carbs: r1d(food.carbs),
-    fats: r1d(food.fats),
-  };
 }
