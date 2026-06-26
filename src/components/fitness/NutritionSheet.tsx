@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { toast } from "sonner";
 import { useAddNutrition } from "@/hooks/use-fitness";
+import { supabase } from "@/integrations/supabase/client";
 import { Field, Sheet, SubmitButton } from "@/components/shared/FormComponents";
 import { FoodAutocomplete } from "@/components/FoodAutocomplete";
 import type { FoodSuggestion } from "@/services/foodSuggestion";
@@ -12,6 +13,52 @@ import {
   saveLastPortion,
   type PortionUnit,
 } from "@/lib/nutrition/portions";
+
+// Normalisation identique au catalogue (food-lookup) pour que l'aliment soit retrouvable.
+const normalizeFoodName = (name: string): string =>
+  name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\u0153/g, "oe")
+    .replace(/\u00e6/g, "ae")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+// Enregistre un aliment perso dans le catalogue `foods` (RLS: user_id = auth.uid()).
+// Best-effort : ne bloque jamais le log du repas.
+async function saveCustomFood(
+  name: string,
+  per100: { calories: number | null; proteins: number | null; carbs: number | null; fats: number | null },
+) {
+  try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+    const normalized = normalizeFoodName(name);
+    if (normalized.length < 2) return;
+    await supabase.from("foods").upsert(
+      {
+        source: "custom",
+        source_id: `user:${user.id}:${normalized}`,
+        name,
+        normalized_name: normalized,
+        calories: per100.calories,
+        protein_g: per100.proteins,
+        carbs_g: per100.carbs,
+        fat_g: per100.fats,
+        language: "fr",
+        serving_type: "100g",
+        user_id: user.id,
+      },
+      { onConflict: "source,source_id" },
+    );
+  } catch {
+    /* best-effort */
+  }
+}
 
 // PantryPicker removed: Maison/stocks module deleted.
 
@@ -45,6 +92,8 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
     carbs: prefill?.carbs ?? "",
     fats: prefill?.fats ?? "",
   });
+  // Poids total optionnel pour une saisie manuelle (permet d'enregistrer l'aliment /100 g).
+  const [manualGrams, setManualGrams] = useState("");
 
   const selectBaseFood = useCallback((food: FoodSuggestion) => {
     setBaseFood(food);
@@ -99,6 +148,18 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
       saveLastPortion(baseFood, { quantity: portion.quantity, unit: portion.unit });
     }
 
+    // Saisie manuelle AVEC poids → on dérive les valeurs /100 g (stockage gramme + enrichit le catalogue).
+    const mGrams = parseDecimal(manualGrams);
+    const manualWithGrams = !baseFood && mGrams != null && mGrams > 0;
+    const per100 = manualWithGrams
+      ? {
+          calories: calories != null ? Math.round((calories / mGrams!) * 100) : null,
+          proteins: proteins != null ? Math.round((proteins / mGrams!) * 1000) / 10 : null,
+          carbs: carbs != null ? Math.round((carbs / mGrams!) * 1000) / 10 : null,
+          fats: fats != null ? Math.round((fats / mGrams!) * 1000) / 10 : null,
+        }
+      : null;
+
     try {
       const isFood = !!(baseFood && portion);
       await add.mutateAsync({
@@ -109,18 +170,20 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
         proteins,
         carbs,
         fats,
-        // base_* = référence pour 100 g (aliment du catalogue) ou totaux saisis (repas manuel/scan)
-        base_calories: isFood ? baseFood!.calories : calories,
-        base_proteins: isFood ? baseFood!.proteins : proteins,
-        base_carbs: isFood ? baseFood!.carbs : carbs,
-        base_fats: isFood ? baseFood!.fats : fats,
+        // base_* = référence /100 g (catalogue, ou dérivée du poids manuel) sinon totaux saisis
+        base_calories: isFood ? baseFood!.calories : per100 ? per100.calories : calories,
+        base_proteins: isFood ? baseFood!.proteins : per100 ? per100.proteins : proteins,
+        base_carbs: isFood ? baseFood!.carbs : per100 ? per100.carbs : carbs,
+        base_fats: isFood ? baseFood!.fats : per100 ? per100.fats : fats,
         serving_count: 1,
         percentage_consumed: 100,
         // Source de vérité unique : quantité + unité réelles (plus de "g" forcé).
-        consumed_quantity: isFood ? portion!.quantity : 1,
-        consumed_unit: isFood ? portion!.unit : "portion",
-        consumed_grams_per_unit: isFood ? (portion!.gramsPerUnit ?? null) : null,
+        consumed_quantity: isFood ? portion!.quantity : manualWithGrams ? mGrams! : 1,
+        consumed_unit: isFood ? portion!.unit : manualWithGrams ? "g" : "portion",
+        consumed_grams_per_unit: isFood ? (portion!.gramsPerUnit ?? null) : manualWithGrams ? 1 : null,
       });
+      // Enregistre l'aliment perso pour le retrouver à la recherche (best-effort).
+      if (manualWithGrams && per100) void saveCustomFood(form.name.trim(), per100);
       onClose();
     } catch {
       // L'erreur est déjà signalée par la mutation (toast). On évite
@@ -131,7 +194,7 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
   const busy = add.isPending;
 
   return (
-    <Sheet title={prefill ? "Confirmer le repas" : "Nouveau repas"} onClose={onClose}>
+    <Sheet title={prefill ? "Confirmer l'aliment" : "Nouvel aliment"} onClose={onClose}>
       <form onSubmit={submit} className="space-y-4">
 
         <FoodAutocomplete
@@ -164,6 +227,14 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
             <option value="collation">Collation</option>
           </select>
         </div>
+        {!baseFood && (
+          <Field
+            label="Poids total (g) — optionnel, pour enregistrer l'aliment"
+            type="text"
+            value={manualGrams}
+            onChange={(v) => setManualGrams(v)}
+          />
+        )}
         <Field
           label={baseFood ? "Calories (kcal, auto)" : "Calories (kcal)"}
           type="text"
@@ -190,7 +261,7 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
             onChange={(v) => setForm({ ...form, fats: v })}
           />
         </div>
-        <SubmitButton pending={busy}>Ajouter le repas</SubmitButton>
+        <SubmitButton pending={busy}>Ajouter l'aliment</SubmitButton>
       </form>
     </Sheet>
   );

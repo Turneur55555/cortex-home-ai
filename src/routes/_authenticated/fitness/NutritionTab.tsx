@@ -366,7 +366,7 @@ export function NutritionTab() {
           <Apple className="mx-auto h-8 w-8 text-muted-foreground" />
           <p className="mt-3 text-sm font-medium">Aucun repas aujourd'hui</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Ajoute un repas pour suivre tes macros.
+            Ajoute un aliment pour suivre tes macros.
           </p>
         </div>
       )}
@@ -481,7 +481,7 @@ export function NutritionTab() {
         );
       })}
 
-      <FabAdd onClick={openManual} label="Ajouter un repas" />
+      <FabAdd onClick={openManual} label="Ajouter un aliment" />
       {open && <NutritionSheet date={date} prefill={prefill} onClose={() => setOpen(false)} />}
       {goalsOpen && <GoalsSheet current={goals ?? null} onClose={() => setGoalsOpen(false)} />}
       {planOpen && <MealPlanSheet onClose={() => setPlanOpen(false)} />}

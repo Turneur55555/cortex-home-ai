@@ -49,6 +49,8 @@ export function SavedMealsSheet({
   const del = useDeleteSavedMeal();
 
   const [mode, setMode] = useState<"list" | "build">("list");
+  // Moment de journée choisi par repas, au moment de l'ajout au journal.
+  const [mealByMeal, setMealByMeal] = useState<Record<string, string>>({});
 
   // État du builder
   const [name, setName] = useState("");
@@ -190,20 +192,41 @@ export function SavedMealsSheet({
                   </div>
                   <button
                     type="button"
-                    onClick={() => logMeal.mutate({ id: m.id, date, meal: m.meal })}
-                    disabled={logMeal.isPending}
-                    className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-gradient-primary px-3 text-xs font-semibold text-primary-foreground shadow-glow disabled:opacity-60"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Ajouter
-                  </button>
-                  <button
-                    type="button"
                     onClick={() => del.mutate(m.id)}
                     className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                     aria-label="Supprimer le repas"
                   >
                     <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="mt-2 flex items-center gap-2">
+                  <select
+                    value={mealByMeal[m.id] ?? m.meal ?? "dejeuner"}
+                    onChange={(e) =>
+                      setMealByMeal((prev) => ({ ...prev, [m.id]: e.target.value }))
+                    }
+                    className="min-w-0 flex-1 rounded-lg border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none focus:border-primary"
+                  >
+                    {Object.entries(MEAL_LABELS).map(([slug, label]) => (
+                      <option key={slug} value={slug}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      logMeal.mutate({
+                        id: m.id,
+                        date,
+                        meal: mealByMeal[m.id] ?? m.meal ?? "dejeuner",
+                      })
+                    }
+                    disabled={logMeal.isPending}
+                    className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl bg-gradient-primary px-3 text-xs font-semibold text-primary-foreground shadow-glow disabled:opacity-60"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Ajouter
                   </button>
                 </div>
               </li>
