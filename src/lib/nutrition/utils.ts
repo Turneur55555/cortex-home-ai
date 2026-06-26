@@ -23,21 +23,24 @@ export interface NutritionEntry {
   proteins: number | null;
   carbs: number | null;
   fats: number | null;
+  consumed_quantity: number | null;
+  consumed_unit: string | null;
+  consumed_grams_per_unit: number | null;
 }
 
 // ─── Fonctions pures ───────────────────────────────────────────────────────────
 
-export function getPortionBadge(pct: number | null, count: number | null): string | null {
-  const p = pct ?? 100;
-  const c = count ?? 1;
-  if (p === 100 && c === 1) return null;
-  if (p === 50 && c === 1) return "½";
-  if (p === 25 && c === 1) return "¼";
-  if (p === 75 && c === 1) return "¾";
-  if (p === 150 && c === 1) return "1½";
-  if (p === 200 && c === 1) return "×2";
-  if (p === 100 && c !== 1) return `×${c}`;
-  return `${p}%`;
+export function getPortionBadge(
+  entry: { consumed_quantity?: number | null; consumed_unit?: string | null },
+): string | null {
+  const q = entry.consumed_quantity;
+  const u = entry.consumed_unit;
+  if (q == null || !u) return null;
+  const n = Math.round(q * 10) / 10;
+  if (u === "g" || u === "ml") return `${n} ${u}`;
+  if (u === "portion") return n === 1 ? null : `×${n}`;
+  // unité comptable (scoop, œuf, pot, tranche…)
+  return `${n} ${u}${n > 1 ? "s" : ""}`;
 }
 
 export async function fileToBase64Compressed(file: File): Promise<{ b64: string; mime: string }> {

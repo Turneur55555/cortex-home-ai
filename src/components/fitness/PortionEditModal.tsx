@@ -1,8 +1,11 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { useUpdateNutrition } from "@/hooks/use-fitness";
 import { Sheet } from "@/components/shared/FormComponents";
 import type { NutritionEntry } from "@/lib/nutrition/utils";
+import { PortionSelector, type PortionChange } from "@/components/fitness/PortionSelector";
+import type { PortionUnit } from "@/lib/nutrition/portions";
+import type { FoodSuggestion } from "@/services/foodSuggestion";
 
 interface PortionEditModalProps {
   item: NutritionEntry;
@@ -13,43 +16,92 @@ interface PortionEditModalProps {
 export function PortionEditModal({ item, date, onClose }: PortionEditModalProps) {
   const update = useUpdateNutrition();
 
-  const baseCal = item.base_calories ?? item.calories ?? 0;
-  const basePro = item.base_proteins ?? item.proteins ?? 0;
-  const baseCar = item.base_carbs ?? item.carbs ?? 0;
-  const baseFat = item.base_fats ?? item.fats ?? 0;
+  // Modèle "grammes/unité" si une unité réelle est stockée ; sinon "portion" (legacy/manuel).
+  const unit = (item.consumed_unit ?? "portion") as PortionUnit | "portion";
+  const gramBased = unit !== "portion";
 
-  const [pct, setPct] = useState(item.percentage_consumed ?? 100);
-  const [count, setCount] = useState(item.serving_count ?? 1);
-
-  const PRESETS = [25, 50, 75, 100, 150, 200];
-
-  const preview = useMemo(
+  // ─── Mode grammes / unité : on réutilise le même sélecteur qu'à l'ajout ──────
+  const pseudoFood: FoodSuggestion = useMemo(
     () => ({
-      calories: Math.round((baseCal * pct * count) / 100),
-      proteins: Math.round(((basePro * pct * count) / 100) * 10) / 10,
-      carbs: Math.round(((baseCar * pct * count) / 100) * 10) / 10,
-      fats: Math.round(((baseFat * pct * count) / 100) * 10) / 10,
+      id: item.id,
+      name: item.name ?? "Aliment",
+      calories: item.base_calories, // base_* = valeurs pour 100 g
+      proteins: item.base_proteins,
+      carbs: item.base_carbs,
+      fats: item.base_fats,
+      source: "custom",
+      default_serving:
+        item.consumed_grams_per_unit && unit !== "g" && unit !== "ml"
+          ? { unit, grams: item.consumed_grams_per_unit, quantity: 1, label: `1 ${unit}` }
+          : null,
     }),
-    [baseCal, basePro, baseCar, baseFat, pct, count],
+    [item, unit],
   );
 
+  const [calc, setCalc] = useState<PortionChange | null>(null);
+  const onPortionChange = useCallback((c: PortionChange) => setCalc(c), []);
+
+  // ─── Mode portion : multiplicateur simple sur base_* (par portion) ───────────
+  const basePer = {
+    calories: item.base_calories ?? item.calories ?? 0,
+    proteins: item.base_proteins ?? item.proteins ?? 0,
+    carbs: item.base_carbs ?? item.carbs ?? 0,
+    fats: item.base_fats ?? item.fats ?? 0,
+  };
+  const [count, setCount] = useState<number>(item.consumed_quantity ?? 1);
+  const portionPreview = useMemo(
+    () => ({
+      calories: Math.round(basePer.calories * count),
+      proteins: Math.round(basePer.proteins * count * 10) / 10,
+      carbs: Math.round(basePer.carbs * count * 10) / 10,
+      fats: Math.round(basePer.fats * count * 10) / 10,
+    }),
+    [basePer.calories, basePer.proteins, basePer.carbs, basePer.fats, count],
+  );
+
+  const preview = gramBased
+    ? {
+        calories: calc?.calories ?? item.calories ?? 0,
+        proteins: calc?.proteins ?? item.proteins ?? 0,
+        carbs: calc?.carbs ?? item.carbs ?? 0,
+        fats: calc?.fats ?? item.fats ?? 0,
+      }
+    : portionPreview;
+
   const submit = async () => {
-    await update.mutateAsync({
-      id: item.id,
-      date,
-      patch: {
-        percentage_consumed: pct,
-        serving_count: count,
-        calories: preview.calories,
-        proteins: preview.proteins,
-        carbs: preview.carbs,
-        fats: preview.fats,
-        base_calories: baseCal,
-        base_proteins: basePro,
-        base_carbs: baseCar,
-        base_fats: baseFat,
-      },
-    });
+    const patch = gramBased
+      ? {
+          calories: calc?.calories ?? item.calories,
+          proteins: calc?.proteins ?? item.proteins,
+          carbs: calc?.carbs ?? item.carbs,
+          fats: calc?.fats ?? item.fats,
+          consumed_quantity: calc?.quantity ?? item.consumed_quantity,
+          consumed_unit: calc?.unit ?? item.consumed_unit,
+          consumed_grams_per_unit: calc?.gramsPerUnit ?? item.consumed_grams_per_unit,
+          serving_count: 1,
+          percentage_consumed: 100,
+          // base_* (per 100 g) inchangé
+          base_calories: item.base_calories,
+          base_proteins: item.base_proteins,
+          base_carbs: item.base_carbs,
+          base_fats: item.base_fats,
+        }
+      : {
+          calories: portionPreview.calories,
+          proteins: portionPreview.proteins,
+          carbs: portionPreview.carbs,
+          fats: portionPreview.fats,
+          consumed_quantity: count,
+          consumed_unit: "portion",
+          consumed_grams_per_unit: null,
+          serving_count: 1,
+          percentage_consumed: 100,
+          base_calories: basePer.calories,
+          base_proteins: basePer.proteins,
+          base_carbs: basePer.carbs,
+          base_fats: basePer.fats,
+        };
+    await update.mutateAsync({ id: item.id, date, patch });
     onClose();
   };
 
@@ -58,62 +110,56 @@ export function PortionEditModal({ item, date, onClose }: PortionEditModalProps)
       <div className="space-y-5">
         <p className="truncate text-sm font-semibold">{item.name}</p>
 
-        {/* Presets pourcentage */}
-        <div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Portion consommée
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {PRESETS.map((p) => (
-              <button
-                key={p}
-                type="button"
-                onClick={() => setPct(p)}
-                className={`rounded-xl px-3 py-2 text-xs font-bold transition-all ${
-                  pct === p
-                    ? "bg-primary text-primary-foreground shadow-glow"
-                    : "border border-border bg-surface text-foreground hover:border-primary/50"
-                }`}
-              >
-                {p}%
-              </button>
-            ))}
-          </div>
-          <input
-            type="range"
-            min="10"
-            max="200"
-            step="5"
-            value={pct}
-            onChange={(e) => setPct(Number(e.target.value))}
-            className="mt-3 w-full accent-primary"
+        {gramBased ? (
+          <PortionSelector
+            food={pseudoFood}
+            initial={{
+              quantity: item.consumed_quantity ?? 1,
+              unit: unit as PortionUnit,
+              gramsPerUnit: item.consumed_grams_per_unit,
+            }}
+            onChange={onPortionChange}
           />
-          <p className="mt-1 text-center text-lg font-bold text-primary">{pct}%</p>
-        </div>
-
-        {/* Stepper nombre de portions */}
-        <div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Nombre de portions
-          </p>
-          <div className="flex items-center justify-center gap-4">
-            <button
-              type="button"
-              onClick={() => setCount((c) => Math.max(0.5, Math.round((c - 0.5) * 10) / 10))}
-              className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-surface text-xl font-bold hover:bg-muted"
-            >
-              −
-            </button>
-            <span className="w-16 text-center text-xl font-bold tabular-nums">{count}</span>
-            <button
-              type="button"
-              onClick={() => setCount((c) => Math.round((c + 0.5) * 10) / 10)}
-              className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-surface text-xl font-bold hover:bg-muted"
-            >
-              +
-            </button>
+        ) : (
+          <div>
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Nombre de portions
+            </p>
+            <div className="flex items-center justify-center gap-4">
+              <button
+                type="button"
+                onClick={() => setCount((c) => Math.max(0.5, Math.round((c - 0.5) * 10) / 10))}
+                className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-surface text-xl font-bold hover:bg-muted"
+              >
+                −
+              </button>
+              <span className="w-16 text-center text-xl font-bold tabular-nums">{count}</span>
+              <button
+                type="button"
+                onClick={() => setCount((c) => Math.round((c + 0.5) * 10) / 10)}
+                className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-surface text-xl font-bold hover:bg-muted"
+              >
+                +
+              </button>
+            </div>
+            <div className="mt-3 flex justify-center gap-1.5">
+              {[
+                { label: "½", f: 0.5 },
+                { label: "¾", f: 0.75 },
+                { label: "×2", f: 2 },
+              ].map((s) => (
+                <button
+                  key={s.label}
+                  type="button"
+                  onClick={() => setCount((c) => Math.max(0.5, Math.round(c * s.f * 10) / 10))}
+                  className="rounded-full border border-border bg-card px-2.5 py-1 text-xs font-medium text-muted-foreground hover:border-primary/50 hover:text-foreground"
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Aperçu macros */}
         <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
@@ -128,7 +174,7 @@ export function PortionEditModal({ item, date, onClose }: PortionEditModalProps)
               { label: "Lip.", val: preview.fats, color: "text-destructive" },
             ].map((m) => (
               <div key={m.label}>
-                <p className={`text-lg font-bold tabular-nums ${m.color}`}>{m.val}</p>
+                <p className={`text-lg font-bold tabular-nums ${m.color}`}>{m.val ?? 0}</p>
                 <p className="text-[10px] text-muted-foreground">{m.label}</p>
               </div>
             ))}

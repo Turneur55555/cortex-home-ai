@@ -34,6 +34,7 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
     quantity: number;
     unit: PortionUnit;
     grams: number;
+    gramsPerUnit: number | null;
   } | null>(null);
 
   const [form, setForm] = useState({
@@ -52,10 +53,10 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
 
   // Callback stable consommé par PortionSelector — met à jour le form.
   const handlePortionChange = useCallback(
-    (r: { quantity: number; unit: PortionUnit; grams: number;
+    (r: { quantity: number; unit: PortionUnit; grams: number; gramsPerUnit: number | null;
           calories: number | null; proteins: number | null;
           carbs: number | null; fats: number | null }) => {
-      setPortion({ quantity: r.quantity, unit: r.unit, grams: r.grams });
+      setPortion({ quantity: r.quantity, unit: r.unit, grams: r.grams, gramsPerUnit: r.gramsPerUnit });
       setForm((f) => ({
         ...f,
         calories: r.calories != null ? String(r.calories) : "",
@@ -99,6 +100,7 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
     }
 
     try {
+      const isFood = !!(baseFood && portion);
       await add.mutateAsync({
         date,
         name: form.name.trim(),
@@ -107,18 +109,17 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
         proteins,
         carbs,
         fats,
-        base_calories: calories,
-        base_proteins: proteins,
-        base_carbs: carbs,
-        base_fats: fats,
+        // base_* = référence pour 100 g (aliment du catalogue) ou totaux saisis (repas manuel/scan)
+        base_calories: isFood ? baseFood!.calories : calories,
+        base_proteins: isFood ? baseFood!.proteins : proteins,
+        base_carbs: isFood ? baseFood!.carbs : carbs,
+        base_fats: isFood ? baseFood!.fats : fats,
         serving_count: 1,
         percentage_consumed: 100,
-        ...(baseFood && portion
-          ? {
-              consumed_quantity: portion.grams || null,
-              consumed_unit: "g",
-            }
-          : {}),
+        // Source de vérité unique : quantité + unité réelles (plus de "g" forcé).
+        consumed_quantity: isFood ? portion!.quantity : 1,
+        consumed_unit: isFood ? portion!.unit : "portion",
+        consumed_grams_per_unit: isFood ? (portion!.gramsPerUnit ?? null) : null,
       });
       onClose();
     } catch {

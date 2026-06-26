@@ -14,52 +14,66 @@ import {
 } from "@/lib/nutrition/portions";
 import type { FoodSuggestion } from "@/services/foodSuggestion";
 
+export interface PortionChange {
+  quantity: number;
+  unit: PortionUnit;
+  grams: number;
+  /** Grammes pour 1 unité (1 pour g/ml, sinon la référence). */
+  gramsPerUnit: number | null;
+  calories: number | null;
+  proteins: number | null;
+  carbs: number | null;
+  fats: number | null;
+}
+
 interface Props {
   food: FoodSuggestion;
   /** Notifie le parent du résultat (macros + portion choisie). */
-  onChange: (result: {
-    quantity: number;
-    unit: PortionUnit;
-    grams: number;
-    calories: number | null;
-    proteins: number | null;
-    carbs: number | null;
-    fats: number | null;
-  }) => void;
+  onChange: (result: PortionChange) => void;
+  /** Portion initiale imposée (édition d'un repas déjà loggé). Prioritaire sur localStorage. */
+  initial?: { quantity: number; unit: PortionUnit; gramsPerUnit?: number | null } | null;
+  /** Afficher les raccourcis ½ / ¾ / ×2 (défaut : true). */
+  quickScale?: boolean;
 }
 
 /**
- * Sélecteur de portion intelligent :
+ * Sélecteur de portion intelligent — source de vérité unique = quantité + unité.
  *  - presets (½, 1, 2 scoops, ou 50/100/150 g par défaut)
- *  - saisie libre en grammes (virgule ou point)
- *  - macros recalculés en direct
- *  - dernier choix mémorisé par aliment (localStorage)
+ *  - saisie libre (virgule ou point)
+ *  - raccourcis ½ / ¾ / ×2 qui ajustent la quantité
+ *  - macros recalculés en direct via calculateNutritionFromPortion
  */
-export function PortionSelector({ food, onChange }: Props) {
+export function PortionSelector({ food, onChange, initial, quickScale = true }: Props) {
   const KNOWN_UNITS = ["g", "ml", "scoop", "unite", "pot", "tranche", "sachet", "cas", "cac"];
+
   const reference: PortionReference | null = useMemo(() => {
+    // Édition : si une référence (grammes/unité) est fournie, elle prime.
+    if (initial?.gramsPerUnit && initial.unit !== "g" && initial.unit !== "ml") {
+      return { unitLabel: initial.unit, gramsPerUnit: initial.gramsPerUnit };
+    }
     const ds = food.default_serving;
     if (ds && ds.grams > 0 && ds.quantity > 0 && KNOWN_UNITS.includes(ds.unit)) {
       return { unitLabel: ds.unit as PortionUnit, gramsPerUnit: ds.grams / ds.quantity };
     }
     return detectDefaultPortion(food.name);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [food.name, food.default_serving]);
+  }, [food.name, food.default_serving, initial]);
+
   const presets = useMemo(() => buildPresets(reference), [reference]);
 
-  // Restaurer le dernier choix s'il existe, sinon fallback : 1 unité de la
-  // référence ou 100 g.
-  const initial = useMemo(() => {
+  // Portion initiale : imposée (édition) > dernier choix mémorisé > 1 unité réf > 100 g.
+  const init = useMemo(() => {
+    if (initial) return { quantity: initial.quantity, unit: initial.unit };
     const saved = loadSavedPortion(food);
-    if (saved) {
-      return { quantity: saved.quantity, unit: saved.unit };
-    }
+    if (saved) return { quantity: saved.quantity, unit: saved.unit };
     if (reference) return { quantity: 1, unit: reference.unitLabel };
     return { quantity: 100, unit: "g" as PortionUnit };
-  }, [food, reference]);
+  }, [food, reference, initial]);
 
-  const [unit, setUnit] = useState<PortionUnit>(initial.unit);
-  const [qtyInput, setQtyInput] = useState<string>(formatDecimal(initial.quantity));
+  const [unit, setUnit] = useState<PortionUnit>(init.unit);
+  const [qtyInput, setQtyInput] = useState<string>(formatDecimal(init.quantity));
+
+  const gramsPerUnit = unit === "g" || unit === "ml" ? 1 : reference?.gramsPerUnit ?? null;
 
   // Recalcule et propage au parent à chaque changement.
   useEffect(() => {
@@ -74,12 +88,13 @@ export function PortionSelector({ food, onChange }: Props) {
       quantity: parseDecimal(qtyInput) ?? 0,
       unit,
       grams: calc.totalGrams,
+      gramsPerUnit,
       calories: calc.calories,
       proteins: calc.proteins,
       carbs: calc.carbs,
       fats: calc.fats,
     });
-  }, [qtyInput, unit, reference, food, onChange]);
+  }, [qtyInput, unit, reference, food, onChange, gramsPerUnit]);
 
   const parsed = parseDecimal(qtyInput);
   const errorMsg =
@@ -103,6 +118,12 @@ export function PortionSelector({ food, onChange }: Props) {
     setQtyInput(formatDecimal(p.quantity));
   };
 
+  const scaleBy = (factor: number) => {
+    const cur = parseDecimal(qtyInput);
+    if (cur == null || cur <= 0) return;
+    setQtyInput(formatDecimal(Math.round(cur * factor * 100) / 100));
+  };
+
   return (
     <div className="space-y-2 rounded-xl border border-primary/30 bg-primary/5 p-3">
       <div className="flex items-center gap-2">
@@ -112,7 +133,7 @@ export function PortionSelector({ food, onChange }: Props) {
         </span>
         {reference && (
           <span className="ml-auto text-[10px] text-muted-foreground">
-            1 {reference.unitLabel} ≈ {reference.gramsPerUnit} g
+            1 {reference.unitLabel} ≈ {Math.round(reference.gramsPerUnit)} g
           </span>
         )}
       </div>
@@ -170,6 +191,26 @@ export function PortionSelector({ food, onChange }: Props) {
           </span>
         )}
       </div>
+
+      {/* Raccourcis d'ajustement */}
+      {quickScale && (
+        <div className="flex flex-wrap gap-1.5">
+          {[
+            { label: "½", f: 0.5 },
+            { label: "¾", f: 0.75 },
+            { label: "×2", f: 2 },
+          ].map((s) => (
+            <button
+              key={s.label}
+              type="button"
+              onClick={() => scaleBy(s.f)}
+              className="rounded-full border border-border bg-card px-2.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/50 hover:text-foreground"
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {errorMsg && (
         <p role="alert" className="text-[11px] text-destructive">

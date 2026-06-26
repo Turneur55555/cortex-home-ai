@@ -429,7 +429,7 @@ export function NutritionTab() {
           )}
           <ul className="space-y-2">
             {g.items.map((m) => {
-              const badge = getPortionBadge(m.percentage_consumed, m.serving_count);
+              const badge = getPortionBadge(m);
               return (
                 <li
                   key={m.id}
