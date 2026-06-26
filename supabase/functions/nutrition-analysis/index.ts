@@ -183,15 +183,20 @@ Deno.serve(async (req) => {
       .from("foods").select("id, normalized_name, source, source_id, calories, iron_mg, calcium_mg, magnesium_mg, zinc_mg, potassium_mg, vitamin_c_mg, vitamin_d_ug, vitamin_b12_ug, vitamin_b9_ug, vitamin_a_ug, vitamin_b6_mg, vitamin_e_mg");
     const foodList = (foods ?? []) as Array<Record<string, unknown>>;
 
+    // Match strict : exact, sinon le nom loggé doit apparaître comme séquence de
+    // MOTS ENTIERS dans le nom catalogue. On NE matche plus un sous-aliment d'un
+    // repas composé (ex. « Riz poulet edamame » ne doit plus matcher « riz ») :
+    // ces repas partent en estimation IA, bien plus juste que les micros d'un seul
+    // ingrédient extrapolés sur toutes les calories du plat.
     function matchFood(name: string) {
       const n = normalize(name);
-      if (!n) return null;
+      if (n.length < 3) return null;
       let best: Record<string, unknown> | null = null;
       for (const f of foodList) {
         const fn = String(f.normalized_name ?? "");
         if (!fn) continue;
         if (fn === n) return f;
-        if ((n.includes(fn) || fn.includes(n)) && (!best || fn.length < String(best.normalized_name).length)) best = f;
+        if ((" " + fn + " ").includes(" " + n + " ") && (!best || fn.length < String(best.normalized_name).length)) best = f;
       }
       return best;
     }
