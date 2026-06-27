@@ -519,14 +519,13 @@ function BodyMeasurementSheet({
 }
 
 function MeasurementsCard({
-  latest,
-  previous,
+  rows,
   onChipClick,
 }: {
-  latest: BodyRow | undefined;
-  previous: BodyRow | undefined;
+  rows: ReadonlyArray<BodyRow & { id: string }> | undefined;
   onChipClick?: (key: keyof BodyRow, label: string) => void;
 }) {
+  const latest = rows?.[0];
   const groups: Array<{
     title: string;
     accent: string;
@@ -593,8 +592,11 @@ function MeasurementsCard({
                   <MeasurementChip
                     key={it.key}
                     label={it.label}
+                    field={it.key as BodyField}
                     value={latest?.[it.key] ?? null}
-                    previous={previous?.[it.key] ?? null}
+                    // Dernière valeur **non nulle** pour ce champ précis,
+                    // pas la ligne d'index 1 (corrige le delta absent / faux).
+                    previous={findPreviousValue(rows, it.key as keyof BodyRow)}
                     accent={g.accent}
                     onClick={() => onChipClick?.(it.key, it.label)}
                   />
@@ -610,12 +612,14 @@ function MeasurementsCard({
 
 function MeasurementChip({
   label,
+  field,
   value,
   previous,
   accent,
   onClick,
 }: {
   label: string;
+  field: BodyField;
   value: number | null;
   previous: number | null;
   accent: string;
@@ -623,8 +627,10 @@ function MeasurementChip({
 }) {
   const delta =
     value != null && previous != null ? Math.round((value - previous) * 10) / 10 : null;
-  const trend =
-    delta == null || delta === 0 ? "flat" : delta > 0 ? "up" : "down";
+  // Couleur contextuelle: taille/hanches ↓ = vert, bras/cuisses ↑ = vert,
+  // poitrine = neutre (peut être musculaire ou graisseux).
+  const direction: "good" | "bad" | "neutral" =
+    delta == null ? "neutral" : directionForField(field, delta);
 
   return (
     <button
@@ -647,16 +653,16 @@ function MeasurementChip({
         <div
           className={
             "mt-1 inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums " +
-            (trend === "up"
+            (direction === "good"
               ? "bg-success/15 text-success"
-              : trend === "down"
+              : direction === "bad"
                 ? "bg-destructive/15 text-destructive"
                 : "bg-muted text-muted-foreground")
           }
         >
-          {trend === "up" ? (
+          {delta > 0 ? (
             <TrendingUp className="h-2.5 w-2.5" />
-          ) : trend === "down" ? (
+          ) : delta < 0 ? (
             <TrendingDown className="h-2.5 w-2.5" />
           ) : (
             <Minus className="h-2.5 w-2.5" />
@@ -668,6 +674,7 @@ function MeasurementChip({
     </button>
   );
 }
+
 
 function QuickMeasurementSheet({
   field,
