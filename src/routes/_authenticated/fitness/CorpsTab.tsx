@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Minus, Ruler, TrendingDown, TrendingUp } from "lucide-react";
+import { Loader2, Minus, Ruler, Sparkles, TrendingDown, TrendingUp } from "lucide-react";
 import {
   Area,
   AreaChart,
   CartesianGrid,
+  Line,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -14,10 +15,17 @@ import { fr } from "date-fns/locale";
 import {
   useAddBodyMeasurement,
   useBodyMeasurements,
-  useDeleteBodyMeasurement,
 } from "@/hooks/use-fitness";
 import { FabAdd, Field, FormGroup, Sheet, SubmitButton } from "@/components/shared/FormComponents";
 import type { MeasurementField } from "@/components/fitness/BodyMap";
+import {
+  computeFormScore,
+  detectPlateau,
+  directionForField,
+  findPreviousValue,
+  movingAverage,
+  type BodyField,
+} from "@/lib/fitness/body";
 
 // Re-export so existing code referencing this path still compiles
 export type { MeasurementField };
@@ -38,7 +46,6 @@ export function CorpsTab() {
   const [open, setOpen] = useState(false);
   const [focusField, setFocusField] = useState<MeasurementField | null>(null);
   const [quickField, setQuickField] = useState<{ key: keyof BodyRow; label: string } | null>(null);
-  const del = useDeleteBodyMeasurement();
   const [period, setPeriod] = useState<"semaine" | "mois" | "trimestre">("trimestre");
 
   const openWithFocus = (f: MeasurementField | null) => {
@@ -57,14 +64,15 @@ export function CorpsTab() {
       .reverse();
   }, [data, periodDays]);
 
-  const chartData = useMemo(
-    () =>
-      periodRows.map((d) => ({
-        date: format(parseISO(d.date), "d MMM", { locale: fr }),
-        weight: d.weight,
-      })),
-    [periodRows],
-  );
+  // Série + moyenne mobile 7 jours (lissage des variations quotidiennes).
+  const chartData = useMemo(() => {
+    const series = periodRows.map((d) => ({ date: d.date, value: d.weight ?? null }));
+    return movingAverage(series, 7).map((p) => ({
+      date: format(parseISO(p.date), "d MMM", { locale: fr }),
+      weight: p.value,
+      avg: p.avg,
+    }));
+  }, [periodRows]);
 
   const periodDelta = useMemo(() => {
     if (periodRows.length < 2) return null;
@@ -74,8 +82,36 @@ export function CorpsTab() {
     return Math.round((last - first) * 10) / 10;
   }, [periodRows]);
 
+  // Détection de plateau (poids stable sur 21j).
+  const plateau = useMemo(
+    () =>
+      data
+        ? detectPlateau(
+            data.map((d) => ({ date: d.date, weight: d.weight })),
+            21,
+            0.3,
+          )
+        : false,
+    [data],
+  );
+
+  // Score forme global (0-100).
+  const formScore = useMemo(
+    () =>
+      data
+        ? computeFormScore(
+            data.map((d) => ({
+              date: d.date,
+              weight: d.weight,
+              body_fat: d.body_fat,
+              muscle_mass: d.muscle_mass,
+            })),
+          )
+        : { score: 0, consistency: 0, bodyFat: 0, muscle: 0 },
+    [data],
+  );
+
   const latest = data?.[0];
-  const previous = data?.[1];
 
   return (
     <section className="flex flex-col gap-5">
@@ -84,6 +120,8 @@ export function CorpsTab() {
         <Stat label="Masse gr." value={latest?.muscle_mass} unit="kg" />
         <Stat label="MG" value={latest?.body_fat} unit="%" />
       </div>
+
+      <FormScoreCard score={formScore.score} plateau={plateau} count={data?.length ?? 0} />
 
       <div className="rounded-2xl border border-border bg-card p-4 shadow-card">
         <div className="mb-3 flex items-center justify-between gap-2">
@@ -133,102 +171,72 @@ export function CorpsTab() {
             Pas encore de mesures. Ajoutez votre première ↓
           </p>
         ) : (
-          <ResponsiveContainer width="100%" height={180}>
-            <AreaChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-              <defs>
-                <linearGradient id="weightGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--color-primary)" stopOpacity={0.5} />
-                  <stop offset="100%" stopColor="var(--color-primary)" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid
-                stroke="var(--color-border)"
-                strokeDasharray="3 3"
-                vertical={false}
-              />
-              <XAxis
-                dataKey="date"
-                tick={{ fontSize: 10, fill: "var(--color-muted-foreground)" }}
-                axisLine={false}
-                tickLine={false}
-              />
-              <YAxis
-                tick={{ fontSize: 10, fill: "var(--color-muted-foreground)" }}
-                axisLine={false}
-                tickLine={false}
-                domain={["dataMin - 2", "dataMax + 2"]}
-              />
-              <Tooltip
-                contentStyle={{
-                  background: "var(--color-popover)",
-                  border: "1px solid var(--color-border)",
-                  borderRadius: 12,
-                  fontSize: 12,
-                }}
-                labelStyle={{ color: "var(--color-muted-foreground)" }}
-              />
-              <Area
-                type="monotone"
-                dataKey="weight"
-                stroke="var(--color-primary)"
-                strokeWidth={2}
-                fill="url(#weightGrad)"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
+          <>
+            <ResponsiveContainer width="100%" height={180}>
+              <AreaChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="weightGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="var(--color-primary)" stopOpacity={0.5} />
+                    <stop offset="100%" stopColor="var(--color-primary)" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid
+                  stroke="var(--color-border)"
+                  strokeDasharray="3 3"
+                  vertical={false}
+                />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 10, fill: "var(--color-muted-foreground)" }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <YAxis
+                  tick={{ fontSize: 10, fill: "var(--color-muted-foreground)" }}
+                  axisLine={false}
+                  tickLine={false}
+                  domain={["dataMin - 2", "dataMax + 2"]}
+                />
+                <Tooltip
+                  contentStyle={{
+                    background: "var(--color-popover)",
+                    border: "1px solid var(--color-border)",
+                    borderRadius: 12,
+                    fontSize: 12,
+                  }}
+                  labelStyle={{ color: "var(--color-muted-foreground)" }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="weight"
+                  name="Poids"
+                  stroke="var(--color-primary)"
+                  strokeWidth={2}
+                  fill="url(#weightGrad)"
+                />
+                <Line
+                  type="monotone"
+                  dataKey="avg"
+                  name="Moy. 7j"
+                  stroke="var(--color-amber-400, #fbbf24)"
+                  strokeWidth={1.5}
+                  strokeDasharray="4 3"
+                  dot={false}
+                  isAnimationActive={false}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+            <p className="mt-1 px-1 text-[10px] text-muted-foreground">
+              Ligne pleine : poids brut · pointillé : moyenne mobile 7j
+            </p>
+          </>
         )}
       </div>
 
       <MeasurementsCard
-        latest={latest}
-        previous={previous}
+        rows={data}
         onChipClick={(key, label) => setQuickField({ key, label })}
       />
-
-      <div>
-        <h3 className="mb-2 px-1 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-          Historique
-        </h3>
-        {data && data.length > 0 ? (
-          <ul className="space-y-2">
-            {data.slice(0, 20).map((m) => (
-              <li
-                key={m.id}
-                className="flex items-center justify-between rounded-xl border border-border bg-card p-3 shadow-card"
-              >
-                <div>
-                  <p className="text-sm font-medium">
-                    {format(parseISO(m.date), "d MMM yyyy", { locale: fr })}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {[
-                      m.weight != null && `${m.weight} kg`,
-                      m.muscle_mass != null && `MM ${m.muscle_mass}`,
-                      m.body_fat != null && `${m.body_fat}% MG`,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => del.mutate(m.id)}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                  aria-label="Supprimer"
-                >
-                  <Minus className="h-4 w-4" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          !isLoading && (
-            <p className="rounded-xl border border-border bg-card p-4 text-center text-xs text-muted-foreground">
-              Aucune mesure pour le moment.
-            </p>
-          )
-        )}
-      </div>
 
       <FabAdd onClick={() => openWithFocus(null)} label="Ajouter mesure" />
       {open && (
@@ -251,6 +259,61 @@ export function CorpsTab() {
   );
 }
 
+function FormScoreCard({
+  score,
+  plateau,
+  count,
+}: {
+  score: number;
+  plateau: boolean;
+  count: number;
+}) {
+  const tone =
+    score >= 75
+      ? "text-success"
+      : score >= 50
+        ? "text-amber-400"
+        : count === 0
+          ? "text-muted-foreground"
+          : "text-destructive";
+  const label =
+    count === 0
+      ? "Ajoutez vos premières mesures"
+      : score >= 75
+        ? "Excellente dynamique"
+        : score >= 50
+          ? "Bonne régularité"
+          : "À relancer";
+
+  return (
+    <div className="rounded-2xl border border-border bg-card p-4 shadow-card">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/15 text-primary">
+            <Sparkles className="h-3.5 w-3.5" />
+          </span>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Score forme
+            </p>
+            <p className={"text-sm font-semibold " + tone}>{label}</p>
+          </div>
+        </div>
+        <div className="text-right">
+          <p className={"text-2xl font-bold tabular-nums " + tone}>
+            {count === 0 ? "—" : score}
+            {count > 0 && <span className="ml-0.5 text-xs font-medium text-muted-foreground">/100</span>}
+          </p>
+        </div>
+      </div>
+      {plateau && (
+        <p className="mt-3 rounded-lg border border-amber-400/30 bg-amber-400/10 px-2.5 py-1.5 text-[11px] font-medium text-amber-300">
+          ⚠️ Plateau détecté — variation &lt; 0.3 kg sur 21 jours.
+        </p>
+      )}
+    </div>
+  );
+}
 function Stat({
   label,
   value,
@@ -456,14 +519,13 @@ function BodyMeasurementSheet({
 }
 
 function MeasurementsCard({
-  latest,
-  previous,
+  rows,
   onChipClick,
 }: {
-  latest: BodyRow | undefined;
-  previous: BodyRow | undefined;
+  rows: ReadonlyArray<BodyRow & { id: string }> | undefined;
   onChipClick?: (key: keyof BodyRow, label: string) => void;
 }) {
+  const latest = rows?.[0];
   const groups: Array<{
     title: string;
     accent: string;
@@ -530,8 +592,11 @@ function MeasurementsCard({
                   <MeasurementChip
                     key={it.key}
                     label={it.label}
+                    field={it.key as BodyField}
                     value={latest?.[it.key] ?? null}
-                    previous={previous?.[it.key] ?? null}
+                    // Dernière valeur **non nulle** pour ce champ précis,
+                    // pas la ligne d'index 1 (corrige le delta absent / faux).
+                    previous={findPreviousValue(rows, it.key as keyof BodyRow)}
                     accent={g.accent}
                     onClick={() => onChipClick?.(it.key, it.label)}
                   />
@@ -547,12 +612,14 @@ function MeasurementsCard({
 
 function MeasurementChip({
   label,
+  field,
   value,
   previous,
   accent,
   onClick,
 }: {
   label: string;
+  field: BodyField;
   value: number | null;
   previous: number | null;
   accent: string;
@@ -560,8 +627,10 @@ function MeasurementChip({
 }) {
   const delta =
     value != null && previous != null ? Math.round((value - previous) * 10) / 10 : null;
-  const trend =
-    delta == null || delta === 0 ? "flat" : delta > 0 ? "up" : "down";
+  // Couleur contextuelle: taille/hanches ↓ = vert, bras/cuisses ↑ = vert,
+  // poitrine = neutre (peut être musculaire ou graisseux).
+  const direction: "good" | "bad" | "neutral" =
+    delta == null ? "neutral" : directionForField(field, delta);
 
   return (
     <button
@@ -584,16 +653,16 @@ function MeasurementChip({
         <div
           className={
             "mt-1 inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums " +
-            (trend === "up"
+            (direction === "good"
               ? "bg-success/15 text-success"
-              : trend === "down"
+              : direction === "bad"
                 ? "bg-destructive/15 text-destructive"
                 : "bg-muted text-muted-foreground")
           }
         >
-          {trend === "up" ? (
+          {delta > 0 ? (
             <TrendingUp className="h-2.5 w-2.5" />
-          ) : trend === "down" ? (
+          ) : delta < 0 ? (
             <TrendingDown className="h-2.5 w-2.5" />
           ) : (
             <Minus className="h-2.5 w-2.5" />
@@ -605,6 +674,7 @@ function MeasurementChip({
     </button>
   );
 }
+
 
 function QuickMeasurementSheet({
   field,

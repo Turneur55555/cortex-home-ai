@@ -10,6 +10,7 @@ import { ProfileHeader } from "@/components/profile/ProfileHeader";
 import { GoalsManager } from "@/components/profile/GoalsManager";
 import { BadgesStrip } from "@/components/profile/BadgesStrip";
 import { ActivityTimeline } from "@/components/profile/ActivityTimeline";
+import { BodyMeasurementsHistory } from "@/components/profile/BodyMeasurementsHistory";
 import { PersonalizationPanel } from "@/components/profile/PersonalizationPanel";
 import { PdfPanel } from "@/components/profile/PdfPanel";
 import { SecurityPanel } from "@/components/profile/SecurityPanel";
@@ -88,6 +89,7 @@ function ProfilPage() {
       {/* Habitudes & activité */}
       <Section title="Habitudes & activité">
         <ActivityTimeline />
+        <BodyMeasurementsHistory />
       </Section>
 
       {/* Paramètres & notifications */}
