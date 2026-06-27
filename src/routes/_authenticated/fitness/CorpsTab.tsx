@@ -314,8 +314,7 @@ function FormScoreCard({
     </div>
   );
 }
-
-
+function Stat({
   label,
   value,
   unit,
