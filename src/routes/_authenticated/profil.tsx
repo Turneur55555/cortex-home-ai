@@ -89,6 +89,7 @@ function ProfilPage() {
       {/* Habitudes & activité */}
       <Section title="Habitudes & activité">
         <ActivityTimeline />
+        <BodyMeasurementsHistory />
       </Section>
 
       {/* Paramètres & notifications */}
