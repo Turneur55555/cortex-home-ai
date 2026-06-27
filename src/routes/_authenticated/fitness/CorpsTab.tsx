@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Minus, Ruler, TrendingDown, TrendingUp } from "lucide-react";
+import { Loader2, Minus, Ruler, Sparkles, TrendingDown, TrendingUp } from "lucide-react";
 import {
   Area,
   AreaChart,
   CartesianGrid,
+  Line,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -14,10 +15,17 @@ import { fr } from "date-fns/locale";
 import {
   useAddBodyMeasurement,
   useBodyMeasurements,
-  useDeleteBodyMeasurement,
 } from "@/hooks/use-fitness";
 import { FabAdd, Field, FormGroup, Sheet, SubmitButton } from "@/components/shared/FormComponents";
 import type { MeasurementField } from "@/components/fitness/BodyMap";
+import {
+  computeFormScore,
+  detectPlateau,
+  directionForField,
+  findPreviousValue,
+  movingAverage,
+  type BodyField,
+} from "@/lib/fitness/body";
 
 // Re-export so existing code referencing this path still compiles
 export type { MeasurementField };
