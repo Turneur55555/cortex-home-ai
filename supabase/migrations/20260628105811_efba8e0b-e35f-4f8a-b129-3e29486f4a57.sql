@@ -1,0 +1,1 @@
+ALTER TABLE public.nutrition ADD COLUMN IF NOT EXISTS consumed_grams_per_unit numeric;
