@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import {
   Activity,
+  AlertTriangle,
   Apple,
   Barcode,
   BookmarkPlus,
@@ -20,7 +21,6 @@ import {
   Utensils,
 } from "lucide-react";
 import { toast } from "sonner";
-import { Cell, Pie, PieChart, Tooltip as PieTooltip } from "recharts";
 import { addDays, format, subDays } from "date-fns";
 import {
   useAddNutrition,
@@ -56,7 +56,6 @@ export function NutritionTab() {
   const readd = useAddNutrition();
   const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(new Set());
   const deleteTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
-  const [showDonut, setShowDonut] = useState(false);
   const [swipedId, setSwipedId] = useState<string | null>(null);
   const swipeRef = useRef<{ startX: number; id: string } | null>(null);
   const addFav = useAddFavorite();
@@ -213,11 +212,6 @@ export function NutritionTab() {
     });
   };
 
-  const donutData = [
-    { name: "Protéines", value: Math.round(totals.proteins * 4), color: "hsl(142 76% 36%)" },
-    { name: "Glucides",  value: Math.round(totals.carbs * 4),    color: "hsl(38 92% 50%)"  },
-    { name: "Lipides",   value: Math.round(totals.fats * 9),     color: "hsl(0 84% 60%)"   },
-  ].filter((d) => d.value > 0);
 
   return (
     <section className="flex flex-col gap-5">
@@ -283,38 +277,9 @@ export function NutritionTab() {
               </span>
             </p>
           </div>
-          <div className="flex flex-col items-end gap-2">
-            <button
-              type="button"
-              onClick={() => setShowDonut((v) => !v)}
-              className="rounded-full border border-border px-2 py-0.5 text-[10px] font-semibold text-muted-foreground hover:text-foreground"
-            >
-              {showDonut ? "Barres" : "Donut"}
-            </button>
-            {remaining && remaining.calories != null && (
-              <div className="text-right">
-                {remaining.calories >= 0 ? (
-                  <>
-                    <p className="text-lg font-semibold text-foreground">
-                      {remaining.calories}
-                    </p>
-                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                      restant
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-lg font-semibold text-destructive">
-                      +{Math.abs(remaining.calories)}
-                    </p>
-                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                      dépassé
-                    </p>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
+          {goals?.calories ? (
+            <CaloriesRing consumed={Math.round(totals.calories)} target={goals.calories} />
+          ) : null}
         </div>
         {goals?.calories ? (
           <ProgressBar
@@ -323,45 +288,24 @@ export function NutritionTab() {
             className="mt-4"
           />
         ) : null}
-        {showDonut && donutData.length > 0 ? (
-          <div className="mt-4 flex items-center justify-center gap-4">
-            <PieChart width={110} height={110}>
-              <Pie
-                data={donutData}
-                cx={50}
-                cy={50}
-                innerRadius={30}
-                outerRadius={50}
-                dataKey="value"
-                strokeWidth={0}
-              >
-                {donutData.map((entry, i) => (
-                  <Cell key={i} fill={entry.color} />
-                ))}
-              </Pie>
-              <PieTooltip
-                contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 11 }}
-                formatter={(v: number, name: string) => [`${v} kcal`, name]}
-              />
-            </PieChart>
-            <div className="space-y-1.5">
-              {donutData.map((d) => (
-                <div key={d.name} className="flex items-center gap-2 text-[11px]">
-                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: d.color }} />
-                  <span className="text-muted-foreground">{d.name}</span>
-                  <span className="font-semibold">{d.value} kcal</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <div className="mt-5 grid grid-cols-3 gap-4">
-            <MacroProgress label="Protéines" value={totals.proteins} target={goals?.proteins} barColor="bg-accent" />
-            <MacroProgress label="Glucides" value={totals.carbs} target={goals?.carbs} barColor="bg-warning" />
-            <MacroProgress label="Lipides" value={totals.fats} target={goals?.fats} barColor="bg-destructive" />
+        <div className="mt-5 grid grid-cols-3 gap-4">
+          <MacroProgress label="Protéines" value={totals.proteins} target={goals?.proteins} barColor="bg-accent" />
+          <MacroProgress label="Glucides" value={totals.carbs} target={goals?.carbs} barColor="bg-warning" />
+          <MacroProgress label="Lipides" value={totals.fats} target={goals?.fats} barColor="bg-destructive" />
+        </div>
+      </div>
+
+      {/* N2 — alerte dépassement calorique >10% */}
+      {remaining?.calories != null &&
+        goals?.calories != null &&
+        remaining.calories < -(goals.calories * 0.1) && (
+          <div className="flex items-center gap-3 rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" />
+            <p className="text-sm font-medium text-destructive">
+              Objectif dépassé de {Math.abs(remaining.calories)} kcal
+            </p>
           </div>
         )}
-      </div>
 
       {/* Actions — rangée unique scrollable, ordre par fréquence d'usage */}
       <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -684,6 +628,39 @@ export function NutritionTab() {
 }
 
 // ─── Composants UI locaux ─────────────────────────────────────────────────
+
+function CaloriesRing({ consumed, target }: { consumed: number; target: number }) {
+  const R = 32;
+  const CIRC = 2 * Math.PI * R;
+  const pct = target > 0 ? consumed / target : 0;
+  const over = consumed > target;
+  const remaining = Math.round(target - consumed);
+  const offset = CIRC * (1 - Math.min(1, pct));
+  return (
+    <div className="relative h-20 w-20 shrink-0">
+      <svg viewBox="0 0 80 80" className="h-full w-full -rotate-90">
+        <circle cx="40" cy="40" r={R} fill="none" stroke="currentColor" strokeWidth="6" className="text-border" />
+        <circle
+          cx="40" cy="40" r={R} fill="none"
+          stroke="currentColor"
+          strokeWidth="6"
+          strokeLinecap="round"
+          strokeDasharray={`${CIRC}`}
+          strokeDashoffset={`${offset}`}
+          className={`transition-all duration-700 ${over ? "text-destructive" : "text-primary"}`}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className={`text-xs font-bold tabular-nums leading-none ${over ? "text-destructive" : "text-foreground"}`}>
+          {over ? `+${Math.abs(remaining)}` : remaining}
+        </span>
+        <span className="mt-0.5 text-[9px] leading-none text-muted-foreground">
+          {over ? "dépassé" : "restant"}
+        </span>
+      </div>
+    </div>
+  );
+}
 
 function MacroProgress({
   label,

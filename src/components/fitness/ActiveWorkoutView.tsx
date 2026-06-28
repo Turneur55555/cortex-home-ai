@@ -12,6 +12,7 @@ import type { MuscleId } from "@/lib/fitness/muscleMapping";
 import type { MuscleRecovery } from "@/lib/fitness/recovery";
 import { useFitnessStreak } from "@/hooks/useFitnessStreak";
 import { WorkoutTimer } from "./WorkoutTimer";
+import { WorkoutSummaryOverlay } from "./WorkoutSummaryOverlay";
 import { ActiveExerciseCard } from "./ActiveExerciseCard";
 import { exerciseIllustration } from "@/lib/fitness/exerciseIllustrations";
 import { computePRs } from "@/utils/fitness/exercise-stats";
@@ -42,7 +43,7 @@ export function ActiveWorkoutView({
   const streak = useFitnessStreak(allWorkouts);
 
   const [menuOpen, setMenuOpen] = useState(false);
-  const [confirmFinish, setConfirmFinish] = useState(false);
+  const [showSummary, setShowSummary] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
 
@@ -97,7 +98,7 @@ export function ActiveWorkoutView({
   };
 
   const handleFinish = async () => {
-    setConfirmFinish(false);
+    setShowSummary(false);
     await finish.mutateAsync(workout);
   };
 
@@ -188,7 +189,7 @@ export function ActiveWorkoutView({
                 type="button"
                 onClick={() => {
                   setMenuOpen(false);
-                  setConfirmFinish(true);
+                  setShowSummary(true);
                 }}
                 className="flex w-full items-center gap-3 px-4 py-3 text-sm font-medium transition-colors hover:bg-primary/10"
               >
@@ -214,7 +215,7 @@ export function ActiveWorkoutView({
         <div className="px-5 pb-5">
           <button
             type="button"
-            onClick={() => setConfirmFinish(true)}
+            onClick={() => setShowSummary(true)}
             disabled={finish.isPending}
             className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-primary text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-50"
           >
@@ -228,32 +229,14 @@ export function ActiveWorkoutView({
         </div>
       </div>
 
-      {/* ── Confirm finish ── */}
-      {confirmFinish && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-          <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-lg">
-            <h3 className="text-lg font-bold">Terminer la séance ?</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              La séance sera enregistrée dans ton historique.
-            </p>
-            <div className="mt-4 flex gap-2">
-              <button
-                type="button"
-                onClick={() => setConfirmFinish(false)}
-                className="flex-1 rounded-xl border border-border py-2.5 text-sm font-medium"
-              >
-                Continuer
-              </button>
-              <button
-                type="button"
-                onClick={handleFinish}
-                className="flex-1 rounded-xl bg-gradient-primary py-2.5 text-sm font-semibold text-primary-foreground"
-              >
-                Terminer 💪
-              </button>
-            </div>
-          </div>
-        </div>
+      {/* ── Résumé post-séance ── */}
+      {showSummary && (
+        <WorkoutSummaryOverlay
+          workout={workout}
+          onConfirm={handleFinish}
+          onCancel={() => setShowSummary(false)}
+          isPending={finish.isPending}
+        />
       )}
 
       {/* ── Confirm cancel ── */}

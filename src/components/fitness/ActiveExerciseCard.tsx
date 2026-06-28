@@ -27,6 +27,7 @@ import type { MuscleId } from "@/lib/fitness/muscleMapping";
 import { exerciseToMuscles } from "@/lib/fitness/muscleMapping";
 import type { MuscleRecovery } from "@/lib/fitness/recovery";
 import { recommendLoad } from "@/lib/fitness/loadRecommendation";
+import { estimate1RM } from "@/lib/fitness/strength";
 
 // ─── Comparaison série courante vs dernière séance ──────────────────────────
 
@@ -128,6 +129,13 @@ function SetRow({
   const trend = compareToLast({ reps: set.reps, weight: set.weight }, lastSet);
   const done = set.completed;
 
+  const liveE1RM = useMemo(() => {
+    const w = parseFloat(weight);
+    const r = parseFloat(reps);
+    if (!isFinite(w) || !isFinite(r) || w <= 0 || r <= 0) return null;
+    return estimate1RM(w, r);
+  }, [weight, reps]);
+
   if (confirmDel) {
     return (
       <li className="flex items-center justify-between gap-2 rounded-2xl bg-destructive/10 px-4 py-3 animate-in fade-in zoom-in-95 duration-150">
@@ -163,15 +171,20 @@ function SetRow({
         done ? "bg-success/[0.07]" : isMax ? "bg-warning/[0.06]" : ""
       }`}
     >
-      {/* Numéro (capsule) + tendance */}
-      <div className="relative flex h-12 w-10 shrink-0 items-center justify-center rounded-xl bg-white/[0.06]">
+      {/* Numéro (capsule) + 1RM live + tendance */}
+      <div className="relative flex h-12 w-10 shrink-0 flex-col items-center justify-center gap-0.5 rounded-xl bg-white/[0.06]">
         <span
-          className={`text-sm font-extrabold tabular-nums ${
+          className={`text-sm font-extrabold tabular-nums leading-none ${
             isMax ? "text-warning" : done ? "text-success" : "text-foreground"
           }`}
         >
           {index}
         </span>
+        {liveE1RM != null && (
+          <span className="text-[8px] font-medium leading-none tabular-nums text-primary/60">
+            {Math.round(liveE1RM)}¹
+          </span>
+        )}
         {trend && (
           <span className="absolute -right-1 -top-1 rounded-full bg-background p-px">
             <TrendIcon trend={trend} />
