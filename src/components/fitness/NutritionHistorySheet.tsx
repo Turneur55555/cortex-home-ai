@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Loader2, TrendingUp } from "lucide-react";
 import {
   Bar,
@@ -18,6 +18,15 @@ import {
   averageOverTrackedDays,
   useNutritionHistory,
 } from "@/hooks/use-nutrition-history";
+
+type Metric = "kcal" | "proteins" | "carbs" | "fats";
+
+const METRICS: { key: Metric; label: string; color: string; unit: string }[] = [
+  { key: "kcal",     label: "Calories", color: "hsl(var(--primary))",    unit: "kcal" },
+  { key: "proteins", label: "Protéines", color: "hsl(142 76% 36%)",      unit: "g" },
+  { key: "carbs",    label: "Glucides",  color: "hsl(38 92% 50%)",       unit: "g" },
+  { key: "fats",     label: "Lipides",   color: "hsl(0 84% 60%)",        unit: "g" },
+];
 
 interface Props {
   onClose: () => void;
@@ -57,6 +66,7 @@ function AvgCard({
 export function NutritionHistorySheet({ onClose }: Props) {
   const { data: series, isLoading } = useNutritionHistory(30);
   const { data: goals } = useNutritionGoals();
+  const [metric, setMetric] = useState<Metric>("kcal");
 
   const avg7 = useMemo(() => averageOverTrackedDays(series ?? [], 7), [series]);
   const avg30 = useMemo(() => averageOverTrackedDays(series ?? [], 30), [series]);
@@ -67,11 +77,15 @@ export function NutritionHistorySheet({ onClose }: Props) {
         date: d.date,
         label: format(parseISO(d.date), "dd/MM", { locale: fr }),
         kcal: Math.round(d.calories),
+        proteins: Math.round(d.proteins * 10) / 10,
+        carbs: Math.round(d.carbs * 10) / 10,
+        fats: Math.round(d.fats * 10) / 10,
       })),
     [series],
   );
 
   const hasData = (series ?? []).some((d) => d.calories > 0);
+  const activeMetric = METRICS.find((m) => m.key === metric)!;
 
   return (
     <Sheet title="Historique nutritionnel" onClose={onClose}>
@@ -100,10 +114,28 @@ export function NutritionHistorySheet({ onClose }: Props) {
             </div>
 
             <div>
-              <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                <TrendingUp className="h-3.5 w-3.5 text-primary" />
-                Calories par jour (30 j)
-              </p>
+              <div className="mb-2 flex items-center justify-between">
+                <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  <TrendingUp className="h-3.5 w-3.5 text-primary" />
+                  30 jours
+                </p>
+                <div className="flex gap-1">
+                  {METRICS.map((m) => (
+                    <button
+                      key={m.key}
+                      type="button"
+                      onClick={() => setMetric(m.key)}
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold transition-colors ${
+                        metric === m.key
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-surface text-muted-foreground hover:bg-muted"
+                      }`}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className="h-48 w-full rounded-2xl border border-border bg-surface p-2">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={chartData} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
@@ -129,20 +161,20 @@ export function NutritionHistorySheet({ onClose }: Props) {
                         fontSize: 12,
                       }}
                       labelFormatter={(l) => `Le ${l}`}
-                      formatter={(v: number) => [`${v} kcal`, "Calories"]}
+                      formatter={(v: number) => [`${v} ${activeMetric.unit}`, activeMetric.label]}
                     />
-                    {goals?.calories ? (
+                    {metric === "kcal" && goals?.calories ? (
                       <ReferenceLine
                         y={goals.calories}
                         stroke="hsl(var(--primary))"
                         strokeDasharray="4 4"
                       />
                     ) : null}
-                    <Bar dataKey="kcal" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
+                    <Bar dataKey={metric} fill={activeMetric.color} radius={[3, 3, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-              {goals?.calories ? (
+              {metric === "kcal" && goals?.calories ? (
                 <p className="mt-1 text-center text-[10px] text-muted-foreground">
                   Ligne pointillée = objectif ({goals.calories} kcal)
                 </p>

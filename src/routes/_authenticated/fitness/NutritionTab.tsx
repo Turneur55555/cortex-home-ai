@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   Activity,
   Apple,
@@ -18,6 +18,8 @@ import {
   TrendingUp,
   Utensils,
 } from "lucide-react";
+import { toast } from "sonner";
+import { Cell, Pie, PieChart, Tooltip as PieTooltip } from "recharts";
 import { addDays, format, subDays } from "date-fns";
 import {
   useAddNutrition,
@@ -38,16 +40,21 @@ import { PortionEditModal } from "@/components/fitness/PortionEditModal";
 import { NutritionHistorySheet } from "@/components/fitness/NutritionHistorySheet";
 import { SavedMealsSheet } from "@/components/fitness/SavedMealsSheet";
 import { FavoritesSheet } from "@/components/fitness/FavoritesSheet";
+import { RecipeLogSheet } from "@/components/fitness/RecipeLogSheet";
 import { useCreateSavedMeal } from "@/hooks/use-saved-meals";
 import { getPortionBadge } from "@/lib/nutrition/utils";
 import type { MealPrefill, NutritionEntry } from "@/lib/nutrition/utils";
 
 export function NutritionTab() {
-  const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const today = format(new Date(), "yyyy-MM-dd");
+  const [date, setDate] = useState(today);
   const { data, isLoading } = useNutrition(date);
   const { data: goals } = useNutritionGoals();
   const del = useDeleteNutrition();
   const readd = useAddNutrition();
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(new Set());
+  const deleteTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const [showDonut, setShowDonut] = useState(false);
   const addFav = useAddFavorite();
   const copyDay = useCopyNutritionDay();
   const [copyOpen, setCopyOpen] = useState(false);
@@ -65,6 +72,7 @@ export function NutritionTab() {
   const [analysisOpen, setAnalysisOpen] = useState(false);
   const [savedOpen, setSavedOpen] = useState(false);
   const [favSheetOpen, setFavSheetOpen] = useState(false);
+  const [recipeLogOpen, setRecipeLogOpen] = useState(false);
   const createSavedMeal = useCreateSavedMeal();
   const [saveGroupKey, setSaveGroupKey] = useState<string | null>(null);
   const [saveGroupName, setSaveGroupName] = useState("");
@@ -179,6 +187,33 @@ export function NutritionTab() {
     );
   };
 
+  const handleDelete = (id: string) => {
+    setPendingDeleteIds((prev) => new Set([...prev, id]));
+    const timer = setTimeout(() => {
+      del.mutate(id);
+      setPendingDeleteIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
+      deleteTimers.current.delete(id);
+    }, 4000);
+    deleteTimers.current.set(id, timer);
+    toast("Aliment supprimé", {
+      action: {
+        label: "Annuler",
+        onClick: () => {
+          clearTimeout(deleteTimers.current.get(id));
+          deleteTimers.current.delete(id);
+          setPendingDeleteIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
+        },
+      },
+      duration: 4000,
+    });
+  };
+
+  const donutData = [
+    { name: "Protéines", value: Math.round(totals.proteins * 4), color: "hsl(142 76% 36%)" },
+    { name: "Glucides",  value: Math.round(totals.carbs * 4),    color: "hsl(38 92% 50%)"  },
+    { name: "Lipides",   value: Math.round(totals.fats * 9),     color: "hsl(0 84% 60%)"   },
+  ].filter((d) => d.value > 0);
+
   return (
     <section className="flex flex-col gap-5">
       {/* Date + navigation J-1/J+1 + objectifs */}
@@ -217,13 +252,24 @@ export function NutritionTab() {
           Objectifs
         </button>
       </div>
+      {date !== today && (
+        <div className="flex justify-center">
+          <button
+            type="button"
+            onClick={() => setDate(today)}
+            className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary"
+          >
+            ← Aujourd'hui
+          </button>
+        </div>
+      )}
 
       {/* Hero macros */}
       <div className="rounded-3xl border border-border bg-card p-5">
         <div className="flex items-end justify-between">
           <div>
             <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-              Aujourd'hui
+              {date === today ? "Aujourd'hui" : date}
             </p>
             <p className="mt-1.5 text-4xl font-semibold tracking-tight text-foreground">
               {Math.round(totals.calories)}
@@ -232,29 +278,38 @@ export function NutritionTab() {
               </span>
             </p>
           </div>
-          {remaining && remaining.calories != null && (
-            <div className="text-right">
-              {remaining.calories >= 0 ? (
-                <>
-                  <p className="text-lg font-semibold text-foreground">
-                    {remaining.calories}
-                  </p>
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                    restant
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p className="text-lg font-semibold text-destructive">
-                    +{Math.abs(remaining.calories)}
-                  </p>
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                    dépassé
-                  </p>
-                </>
-              )}
-            </div>
-          )}
+          <div className="flex flex-col items-end gap-2">
+            <button
+              type="button"
+              onClick={() => setShowDonut((v) => !v)}
+              className="rounded-full border border-border px-2 py-0.5 text-[10px] font-semibold text-muted-foreground hover:text-foreground"
+            >
+              {showDonut ? "Barres" : "Donut"}
+            </button>
+            {remaining && remaining.calories != null && (
+              <div className="text-right">
+                {remaining.calories >= 0 ? (
+                  <>
+                    <p className="text-lg font-semibold text-foreground">
+                      {remaining.calories}
+                    </p>
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                      restant
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-lg font-semibold text-destructive">
+                      +{Math.abs(remaining.calories)}
+                    </p>
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                      dépassé
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
         </div>
         {goals?.calories ? (
           <ProgressBar
@@ -263,11 +318,44 @@ export function NutritionTab() {
             className="mt-4"
           />
         ) : null}
-        <div className="mt-5 grid grid-cols-3 gap-4">
-          <MacroProgress label="Protéines" value={totals.proteins} target={goals?.proteins} barColor="bg-accent" />
-          <MacroProgress label="Glucides" value={totals.carbs} target={goals?.carbs} barColor="bg-warning" />
-          <MacroProgress label="Lipides" value={totals.fats} target={goals?.fats} barColor="bg-destructive" />
-        </div>
+        {showDonut && donutData.length > 0 ? (
+          <div className="mt-4 flex items-center justify-center gap-4">
+            <PieChart width={110} height={110}>
+              <Pie
+                data={donutData}
+                cx={50}
+                cy={50}
+                innerRadius={30}
+                outerRadius={50}
+                dataKey="value"
+                strokeWidth={0}
+              >
+                {donutData.map((entry, i) => (
+                  <Cell key={i} fill={entry.color} />
+                ))}
+              </Pie>
+              <PieTooltip
+                contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 8, fontSize: 11 }}
+                formatter={(v: number, name: string) => [`${v} kcal`, name]}
+              />
+            </PieChart>
+            <div className="space-y-1.5">
+              {donutData.map((d) => (
+                <div key={d.name} className="flex items-center gap-2 text-[11px]">
+                  <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: d.color }} />
+                  <span className="text-muted-foreground">{d.name}</span>
+                  <span className="font-semibold">{d.value} kcal</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="mt-5 grid grid-cols-3 gap-4">
+            <MacroProgress label="Protéines" value={totals.proteins} target={goals?.proteins} barColor="bg-accent" />
+            <MacroProgress label="Glucides" value={totals.carbs} target={goals?.carbs} barColor="bg-warning" />
+            <MacroProgress label="Lipides" value={totals.fats} target={goals?.fats} barColor="bg-destructive" />
+          </div>
+        )}
       </div>
 
       {/* Actions — rangée unique scrollable, ordre par fréquence d'usage */}
@@ -295,6 +383,14 @@ export function NutritionTab() {
         >
           <Utensils className="h-3.5 w-3.5 text-primary" />
           Repas
+        </button>
+        <button
+          type="button"
+          onClick={() => setRecipeLogOpen(true)}
+          className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-border px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-foreground/30"
+        >
+          <Utensils className="h-3.5 w-3.5 text-primary" />
+          Recettes
         </button>
         <button
           type="button"
@@ -451,7 +547,7 @@ export function NutritionTab() {
             </div>
           )}
           <ul className="space-y-2">
-            {g.items.map((m) => {
+            {g.items.filter((m) => !pendingDeleteIds.has(m.id)).map((m) => {
               const badge = getPortionBadge(m);
               return (
                 <li
@@ -516,7 +612,7 @@ export function NutritionTab() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => del.mutate(m.id)}
+                    onClick={() => handleDelete(m.id)}
                     className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-destructive"
                     aria-label="Supprimer"
                   >
@@ -540,6 +636,7 @@ export function NutritionTab() {
       {analysisOpen && <NutritionAnalysisSheet onClose={() => setAnalysisOpen(false)} />}
       {savedOpen && <SavedMealsSheet date={date} onClose={() => setSavedOpen(false)} />}
       {favSheetOpen && <FavoritesSheet date={date} onClose={() => setFavSheetOpen(false)} />}
+      {recipeLogOpen && <RecipeLogSheet date={date} onClose={() => setRecipeLogOpen(false)} />}
       {portionItem && (
         <PortionEditModal
           item={portionItem}

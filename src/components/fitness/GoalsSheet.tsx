@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Calculator, ChevronDown, ChevronUp } from "lucide-react";
 import { useUpsertNutritionGoals, type NutritionGoals } from "@/hooks/use-fitness";
 import { Field, Sheet, SubmitButton } from "@/components/shared/FormComponents";
 
@@ -6,6 +7,14 @@ interface GoalsSheetProps {
   current: NutritionGoals | null;
   onClose: () => void;
 }
+
+const ACTIVITY_LEVELS = [
+  { value: "1.2",   label: "Sédentaire (peu ou pas d'exercice)" },
+  { value: "1.375", label: "Légèrement actif (1-3 j/sem)" },
+  { value: "1.55",  label: "Modérément actif (3-5 j/sem)" },
+  { value: "1.725", label: "Très actif (6-7 j/sem)" },
+  { value: "1.9",   label: "Extrêmement actif (sport + travail physique)" },
+];
 
 export function GoalsSheet({ current, onClose }: GoalsSheetProps) {
   const upsert = useUpsertNutritionGoals();
@@ -15,6 +24,38 @@ export function GoalsSheet({ current, onClose }: GoalsSheetProps) {
     carbs: current?.carbs != null ? String(current.carbs) : "",
     fats: current?.fats != null ? String(current.fats) : "",
   });
+
+  const [showCalc, setShowCalc] = useState(false);
+  const [calc, setCalc] = useState({ sex: "homme", age: "", weight: "", height: "", activity: "1.55" });
+  const [tdeeResult, setTdeeResult] = useState<{ tdee: number; proteins: number; carbs: number; fats: number } | null>(null);
+
+  const computeTDEE = () => {
+    const age = Number(calc.age);
+    const w = Number(calc.weight);
+    const h = Number(calc.height);
+    const act = Number(calc.activity);
+    if (!age || !w || !h || age <= 0 || w <= 0 || h <= 0) return;
+    const bmr = calc.sex === "homme"
+      ? 10 * w + 6.25 * h - 5 * age + 5
+      : 10 * w + 6.25 * h - 5 * age - 161;
+    const tdee = Math.round(bmr * act);
+    const proteins = Math.round(w * 1.8);
+    const fats = Math.round(w * 1.0);
+    const carbs = Math.max(0, Math.round((tdee - proteins * 4 - fats * 9) / 4));
+    setTdeeResult({ tdee, proteins, carbs, fats });
+  };
+
+  const applyTDEE = () => {
+    if (!tdeeResult) return;
+    setForm({
+      calories: String(tdeeResult.tdee),
+      proteins: String(tdeeResult.proteins),
+      carbs: String(tdeeResult.carbs),
+      fats: String(tdeeResult.fats),
+    });
+    setShowCalc(false);
+    setTdeeResult(null);
+  };
 
   const num = (v: string) => (v.trim() === "" ? null : Number(v));
   const numInt = (v: string) => (v.trim() === "" ? null : Math.round(Number(v)));
@@ -36,6 +77,88 @@ export function GoalsSheet({ current, onClose }: GoalsSheetProps) {
         <p className="text-xs text-muted-foreground">
           Définis tes cibles. Laisse vide pour ne pas afficher de barre de progression.
         </p>
+
+        {/* Calculateur TDEE */}
+        <div className="rounded-xl border border-border bg-surface">
+          <button
+            type="button"
+            onClick={() => setShowCalc((s) => !s)}
+            className="flex w-full items-center justify-between px-3 py-2.5 text-xs font-semibold text-muted-foreground"
+          >
+            <span className="flex items-center gap-1.5">
+              <Calculator className="h-3.5 w-3.5 text-primary" />
+              Calculer mes besoins (TDEE)
+            </span>
+            {showCalc ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+          </button>
+
+          {showCalc && (
+            <div className="space-y-3 border-t border-border px-3 pb-3 pt-2.5">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Sexe</label>
+                  <select value={calc.sex} onChange={(e) => setCalc({ ...calc, sex: e.target.value })}
+                    className="w-full rounded-lg border border-border bg-card px-2.5 py-2 text-sm outline-none focus:border-primary">
+                    <option value="homme">Homme</option>
+                    <option value="femme">Femme</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Âge</label>
+                  <input type="number" min={10} max={100} value={calc.age}
+                    onChange={(e) => setCalc({ ...calc, age: e.target.value })}
+                    placeholder="ans" className="w-full rounded-lg border border-border bg-card px-2.5 py-2 text-sm outline-none focus:border-primary" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Poids (kg)</label>
+                  <input type="number" min={20} max={300} value={calc.weight}
+                    onChange={(e) => setCalc({ ...calc, weight: e.target.value })}
+                    placeholder="kg" className="w-full rounded-lg border border-border bg-card px-2.5 py-2 text-sm outline-none focus:border-primary" />
+                </div>
+                <div>
+                  <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Taille (cm)</label>
+                  <input type="number" min={100} max={250} value={calc.height}
+                    onChange={(e) => setCalc({ ...calc, height: e.target.value })}
+                    placeholder="cm" className="w-full rounded-lg border border-border bg-card px-2.5 py-2 text-sm outline-none focus:border-primary" />
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Niveau d'activité</label>
+                <select value={calc.activity} onChange={(e) => setCalc({ ...calc, activity: e.target.value })}
+                  className="w-full rounded-lg border border-border bg-card px-2.5 py-2 text-sm outline-none focus:border-primary">
+                  {ACTIVITY_LEVELS.map((a) => (
+                    <option key={a.value} value={a.value}>{a.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {tdeeResult && (
+                <div className="rounded-xl bg-primary/10 px-3 py-2 text-center text-xs">
+                  <p className="font-bold text-primary text-sm">{tdeeResult.tdee} kcal/j</p>
+                  <p className="text-muted-foreground mt-0.5">
+                    P{tdeeResult.proteins}g · G{tdeeResult.carbs}g · L{tdeeResult.fats}g
+                  </p>
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <button type="button" onClick={computeTDEE}
+                  className="flex-1 rounded-xl border border-border bg-card py-2 text-xs font-semibold text-foreground">
+                  Calculer
+                </button>
+                {tdeeResult && (
+                  <button type="button" onClick={applyTDEE}
+                    className="flex-1 rounded-xl bg-gradient-primary py-2 text-xs font-semibold text-primary-foreground shadow-glow">
+                    Appliquer
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
         <Field
           label="Calories (kcal)"
           type="number"

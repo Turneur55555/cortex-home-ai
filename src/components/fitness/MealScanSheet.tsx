@@ -43,6 +43,7 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
   const [scanResult, setScanResult] = useState<ScanResponse | null>(null);
   const [items, setItems] = useState<ScanItem[]>([]);
   const [meal, setMeal] = useState("dejeuner");
+  const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const addBatch = useAddNutritionBatch();
 
   const scan = useMutation({
@@ -87,8 +88,13 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
     scan.mutate(f);
   };
 
-  const removeItem = (idx: number) =>
+  const removeItem = (idx: number) => {
     setItems((prev) => prev.filter((_, i) => i !== idx));
+    if (editingIdx === idx) setEditingIdx(null);
+  };
+
+  const updateItem = (idx: number, patch: Partial<ScanItem>) =>
+    setItems((prev) => prev.map((item, i) => (i === idx ? { ...item, ...patch } : item)));
 
   const confirm = () => {
     if (items.length === 0) return;
@@ -155,33 +161,88 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
         {/* Review panel — detected items */}
         {scanResult && !scan.isPending && items.length > 0 && (
           <>
-            {scanResult.details && (
-              <p className="text-[11px] italic text-muted-foreground">{scanResult.details}</p>
-            )}
+            <div className="flex items-center gap-2">
+              {scanResult.details && (
+                <p className="flex-1 text-[11px] italic text-muted-foreground">{scanResult.details}</p>
+              )}
+              {scanResult.confidence != null && (
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                  scanResult.confidence >= 0.75
+                    ? "bg-green-500/15 text-green-600"
+                    : scanResult.confidence >= 0.5
+                    ? "bg-yellow-500/15 text-yellow-600"
+                    : "bg-red-500/15 text-red-600"
+                }`}>
+                  {Math.round(scanResult.confidence * 100)}% confiance
+                </span>
+              )}
+            </div>
 
             <ul className="space-y-2">
               {items.map((item, idx) => (
-                <li
-                  key={idx}
-                  className="flex items-center gap-2 rounded-xl border border-border bg-card p-3"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{item.name}</p>
-                    <p className="text-[11px] text-muted-foreground">
-                      {Math.round(item.calories)} kcal · P
-                      {Math.round(item.proteins * 10) / 10} G
-                      {Math.round(item.carbs * 10) / 10} L
-                      {Math.round(item.fats * 10) / 10}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => removeItem(idx)}
-                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                    aria-label="Retirer"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
+                <li key={idx} className="rounded-xl border border-border bg-card">
+                  {editingIdx === idx ? (
+                    <div className="space-y-2 p-3">
+                      <input
+                        type="text"
+                        value={item.name}
+                        onChange={(e) => updateItem(idx, { name: e.target.value })}
+                        className="w-full rounded-lg border border-border bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-primary"
+                      />
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {(["calories", "proteins", "carbs", "fats"] as const).map((field) => (
+                          <div key={field}>
+                            <label className="mb-0.5 block text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+                              {field === "calories" ? "kcal" : field === "proteins" ? "prot" : field === "carbs" ? "gluc" : "lip"}
+                            </label>
+                            <input
+                              type="number"
+                              min={0}
+                              step={field === "calories" ? 1 : 0.1}
+                              value={item[field]}
+                              onChange={(e) => updateItem(idx, { [field]: Number(e.target.value) })}
+                              className="w-full rounded-lg border border-border bg-surface px-2 py-1 text-xs outline-none focus:border-primary"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setEditingIdx(null)}
+                        className="w-full rounded-lg bg-primary/10 py-1.5 text-xs font-semibold text-primary"
+                      >
+                        Valider
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 p-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{item.name}</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {Math.round(item.calories)} kcal · P
+                          {Math.round(item.proteins * 10) / 10} G
+                          {Math.round(item.carbs * 10) / 10} L
+                          {Math.round(item.fats * 10) / 10}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setEditingIdx(idx)}
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
+                        aria-label="Modifier"
+                      >
+                        <span className="text-xs">✎</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeItem(idx)}
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                        aria-label="Retirer"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>

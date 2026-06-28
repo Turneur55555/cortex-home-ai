@@ -8,11 +8,12 @@ interface Props {
   value: string;
   onChange: (v: string) => void;
   onSelect: (f: FoodSuggestion) => void;
+  onCreateCustom?: (name: string) => void;
   placeholder?: string;
   required?: boolean;
 }
 
-export function FoodAutocomplete({ value, onChange, onSelect, placeholder, required }: Props) {
+export function FoodAutocomplete({ value, onChange, onSelect, onCreateCustom, placeholder, required }: Props) {
   const [open, setOpen] = useState(false);
   const [recent, setRecent] = useState<FoodSuggestion[]>([]);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -115,7 +116,18 @@ export function FoodAutocomplete({ value, onChange, onSelect, placeholder, requi
                 <p className="px-3 py-3 text-xs text-destructive">{error}</p>
               )}
               {!loading && !error && results.length === 0 && (
-                <p className="px-3 py-3 text-xs text-muted-foreground">Aucun aliment trouvé</p>
+                <>
+                  <p className="px-3 py-3 text-xs text-muted-foreground">Aucun aliment trouvé</p>
+                  {onCreateCustom && value.trim().length >= 2 && (
+                    <button
+                      type="button"
+                      onClick={() => { onCreateCustom(value.trim()); setOpen(false); }}
+                      className="flex w-full items-center gap-2 border-t border-border/50 px-3 py-2.5 text-left text-sm font-medium text-primary hover:bg-muted/50"
+                    >
+                      + Créer « {value.trim()} »
+                    </button>
+                  )}
+                </>
               )}
               {!loading &&
                 results.map((f) => <SuggestionRow key={f.id} food={f} onPick={pick} />)}

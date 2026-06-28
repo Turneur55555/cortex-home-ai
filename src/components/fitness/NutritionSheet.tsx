@@ -220,6 +220,10 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
           value={form.name}
           onChange={(v) => setForm({ ...form, name: v })}
           onSelect={(f) => selectBaseFood(f)}
+          onCreateCustom={(name) => {
+            setBaseFood(null);
+            setForm((f) => ({ ...f, name }));
+          }}
           required
         />
 
