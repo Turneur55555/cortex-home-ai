@@ -65,6 +65,14 @@ function ProfilPage() {
         onAvatarChange={onAvatarChange}
       />
 
+      {/* Profil complété */}
+      <Section title="Progression du profil">
+        <ProfileCompletionCard
+          hasAvatar={!!avatarUrl}
+          hasCustomPseudo={pseudo !== fallback}
+        />
+      </Section>
+
       {/* Objectifs fitness */}
       <Section title="Objectifs fitness">
         <GoalsManager />
@@ -83,6 +91,11 @@ function ProfilPage() {
             to="/preferences-alimentaires"
             icon={<Apple className="h-4 w-4" />}
             label="Préférences alim."
+          />
+          <SpaceLink
+            to="/rapports"
+            icon={<BarChart3 className="h-4 w-4" />}
+            label="Rapports hebdo"
           />
         </div>
       </Section>
