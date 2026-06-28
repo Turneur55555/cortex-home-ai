@@ -132,7 +132,7 @@ export function SeancesTab() {
   if (activeWorkout) {
     return (
       <section className="flex flex-col gap-4">
-        <ActiveWorkoutView workout={activeWorkout} />
+        <ActiveWorkoutView workout={activeWorkout} recoveryMap={recoveryMap} />
       </section>
     );
   }

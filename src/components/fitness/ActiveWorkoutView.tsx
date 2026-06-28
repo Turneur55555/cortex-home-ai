@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Loader2, MoreVertical, Plus, XCircle } from "lucide-react";
+import { useMemo, useState } from "react";
+import { CheckCircle2, Flame, Loader2, MoreVertical, Plus, XCircle } from "lucide-react";
 import type { ActiveWorkout } from "@/hooks/use-fitness";
 import {
   useAddExerciseToActiveWorkout,
@@ -8,6 +8,10 @@ import {
   useFinishWorkout,
   useWorkouts,
 } from "@/hooks/use-fitness";
+import type { MuscleId } from "@/lib/fitness/muscleMapping";
+import type { MuscleRecovery } from "@/lib/fitness/recovery";
+import { useFitnessStreak } from "@/hooks/useFitnessStreak";
+import { WorkoutTimer } from "./WorkoutTimer";
 import { ActiveExerciseCard } from "./ActiveExerciseCard";
 import { exerciseIllustration } from "@/lib/fitness/exerciseIllustrations";
 import { computePRs } from "@/utils/fitness/exercise-stats";
@@ -21,35 +25,21 @@ import { useLastExerciseSessions } from "@/hooks/useLastExerciseSession";
 import { RestTimerBar } from "./RestTimerBar";
 import { ExerciseStatsSheet } from "./ExerciseStatsSheet";
 
-// ─── Timer ───────────────────────────────────────────────────────────────────
-
-function useElapsed(createdAt: string) {
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setTick((t) => t + 1), 1000);
-    return () => clearInterval(id);
-  }, []);
-  const sec = Math.max(
-    0,
-    Math.floor((Date.now() - new Date(createdAt).getTime()) / 1000),
-  );
-  const h = Math.floor(sec / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  const s = sec % 60;
-  return h > 0
-    ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
-    : `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-}
-
 // ─── Main view ───────────────────────────────────────────────────────────────
 
-export function ActiveWorkoutView({ workout }: { workout: ActiveWorkout }) {
+export function ActiveWorkoutView({
+  workout,
+  recoveryMap,
+}: {
+  workout: ActiveWorkout;
+  recoveryMap?: Map<MuscleId, MuscleRecovery>;
+}) {
   const finish = useFinishWorkout();
   const cancel = useCancelWorkout();
   const addExercise = useAddExerciseToActiveWorkout();
   const { data: allWorkouts } = useWorkouts();
 
-  const timer = useElapsed(workout.created_at);
+  const streak = useFitnessStreak(allWorkouts);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmFinish, setConfirmFinish] = useState(false);
@@ -143,6 +133,13 @@ export function ActiveWorkoutView({ workout }: { workout: ActiveWorkout }) {
                 <span className="text-[11px] font-semibold uppercase tracking-wider text-green-400">
                   Séance en cours
                 </span>
+                {/* Streak badge motivationnel */}
+                {streak.current > 0 && (
+                  <span className="inline-flex items-center gap-0.5 rounded-full bg-orange-500/15 px-2 py-0.5 text-[10px] font-bold text-orange-400">
+                    <Flame className="h-3 w-3" />
+                    {streak.current} sem.
+                  </span>
+                )}
               </div>
               <h2 className="mt-1 text-xl font-bold leading-tight tracking-tight">
                 {workout.name}
@@ -156,9 +153,7 @@ export function ActiveWorkoutView({ workout }: { workout: ActiveWorkout }) {
 
             {/* Timer + menu */}
             <div className="flex shrink-0 items-center gap-2">
-              <div className="rounded-xl border border-border bg-white/5 px-4 py-2 text-2xl font-bold tabular-nums leading-none">
-                {timer}
-              </div>
+              <WorkoutTimer createdAt={workout.created_at} />
               <button
                 type="button"
                 onClick={() => setMenuOpen((v) => !v)}
@@ -309,6 +304,7 @@ export function ActiveWorkoutView({ workout }: { workout: ActiveWorkout }) {
                 imageUrl={exImage}
                 lastSession={lastSessions.get(normalize(ex.name)) ?? null}
                 pr={prByName.get(normalize(ex.name)) ?? null}
+                recoveryMap={recoveryMap}
                 onOpenStats={() =>
                   setStatsTarget({
                     key: normalize(ex.name),

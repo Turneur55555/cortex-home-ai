@@ -12,6 +12,7 @@ import {
   RotateCcw,
   Trash2,
   Trophy,
+  Zap,
 } from "lucide-react";
 import type { ActiveExercise, ActiveSet } from "@/hooks/use-fitness";
 import {
@@ -22,6 +23,10 @@ import {
 } from "@/hooks/use-fitness";
 import { restTimer } from "@/hooks/useRestTimer";
 import type { LastSession, LastSessionSet } from "@/hooks/useLastExerciseSession";
+import type { MuscleId } from "@/lib/fitness/muscleMapping";
+import { exerciseToMuscles } from "@/lib/fitness/muscleMapping";
+import type { MuscleRecovery } from "@/lib/fitness/recovery";
+import { recommendLoad } from "@/lib/fitness/loadRecommendation";
 
 // ─── Comparaison série courante vs dernière séance ──────────────────────────
 
@@ -230,12 +235,14 @@ export function ActiveExerciseCard({
   imageUrl,
   lastSession,
   pr,
+  recoveryMap,
   onOpenStats,
 }: {
   exercise: ActiveExercise;
   imageUrl: string | null;
   lastSession: LastSession | null;
   pr: number | null;
+  recoveryMap?: Map<MuscleId, MuscleRecovery>;
   onOpenStats?: () => void;
 }) {
   const addSet = useAddExerciseSet();
@@ -281,6 +288,36 @@ export function ActiveExerciseCard({
   }, [lastSession]);
 
   const volLabel = volume >= 1000 ? `${(volume / 1000).toFixed(1)}k` : `${volume}`;
+
+  // Muscles fatigués (status "fatigued") pour cet exercice
+  const fatigued = useMemo(() => {
+    if (!recoveryMap) return [];
+    return exerciseToMuscles(exercise.name)
+      .map((id) => recoveryMap.get(id))
+      .filter((rec): rec is MuscleRecovery => rec != null && rec.status === "fatigued");
+  }, [exercise.name, recoveryMap]);
+
+  // Charge recommandée via RPE auto-régulation (Epley inverse)
+  const suggestion = useMemo(() => {
+    if (!lastSummary?.weight || !lastSummary?.reps) return null;
+    let minFraction: number | null = null;
+    if (recoveryMap) {
+      for (const id of exerciseToMuscles(exercise.name)) {
+        const rec = recoveryMap.get(id);
+        if (rec?.hoursRemaining != null) {
+          const f = Math.max(0, 1 - Math.max(0, rec.hoursRemaining) / rec.recoveryWindowHours);
+          if (minFraction == null || f < minFraction) minFraction = f;
+        }
+      }
+    }
+    const result = recommendLoad({
+      last: { weight: lastSummary.weight, reps: lastSummary.reps, rpe: null },
+      targetReps: lastSummary.reps,
+      targetRpe: 7,
+      recoveryFraction: minFraction,
+    });
+    return result.weight;
+  }, [lastSummary, recoveryMap, exercise.name]);
 
   const handleAddSet = async () => {
     const last = sortedSets[sortedSets.length - 1];
@@ -408,6 +445,15 @@ export function ActiveExerciseCard({
                 {lastSummary.weight ?? "—"} kg × {lastSummary.reps ?? "—"}
               </span>
             )}
+            {fatigued.map((rec) => (
+              <span
+                key={rec.id}
+                className="inline-flex items-center gap-1 rounded-full bg-orange-500/15 px-2 py-0.5 text-[10px] font-bold text-orange-400"
+                title={`${rec.label} peu récupéré — ${rec.hoursRemaining != null ? Math.round(rec.hoursRemaining) + "h restantes" : ""}`}
+              >
+                ⚠ {rec.label}
+              </span>
+            ))}
           </div>
         </button>
 
@@ -474,6 +520,16 @@ export function ActiveExerciseCard({
               <RotateCcw className="h-3.5 w-3.5" />
               Reprendre les charges précédentes
             </button>
+          )}
+
+          {/* Charge recommandée (RPE auto-régulation) */}
+          {suggestion != null && (
+            <div className="mt-2 flex items-center gap-2 rounded-xl bg-primary/[0.07] px-3 py-2 text-[12px]">
+              <Zap className="h-3.5 w-3.5 shrink-0 text-primary" />
+              <span className="text-muted-foreground">Suggéré :</span>
+              <span className="font-bold text-primary">{suggestion} kg</span>
+              <span className="text-muted-foreground/60">× {lastSummary?.reps} reps · RPE 7</span>
+            </div>
           )}
 
           {/* Séries */}

@@ -6,6 +6,20 @@
 ## ⚠️ Règle : mettre ce fichier à jour à la fin de chaque session
 Toujours mettre à jour ce fichier avec les nouveaux composants, hooks, migrations, features découverts.
 
+## Mise à jour du jour (2026-06-28) — Différentiateurs + Refactor God Hook
+
+### Différentiateurs Séances
+- `WorkoutTimer.tsx` (NOUVEAU) : composant isolé avec son propre `setInterval`. Seul lui re-render chaque seconde, plus l'arbre entier de `ActiveWorkoutView` (perf 🔴 corrigé).
+- `ActiveWorkoutView.tsx` : streak badge 🔥 dans le header via `useFitnessStreak`. Prop `recoveryMap` ajoutée et passée à chaque `ActiveExerciseCard`.
+- `ActiveExerciseCard.tsx` : badges ⚠ "muscle fatigué" (status="fatigued" via recoveryMap + `exerciseToMuscles`). Chip "Suggéré : X kg × N reps · RPE 7" via `recommendLoad()` (Epley inverse modulé récupération).
+- `SeancesTab.tsx` : `recoveryMap` transmis à `ActiveWorkoutView`.
+
+### Refactor God Hook use-fitness.ts (🔴 corrigé)
+- `hooks/useNutritionGoals.ts` (NOUVEAU) : `NutritionGoals` type + 2 hooks
+- `hooks/useBodyTracking.ts` (NOUVEAU) : 3 hooks body tracking
+- `hooks/useNutritionData.ts` (NOUVEAU) : 6 hooks nutrition journalière
+- `use-fitness.ts` : re-exports rétro-compat, réduit ~1013 → ~650 lignes, zéro import cassé
+
 ## Mise à jour du jour (2026-06-28) — 10 quick wins Séances
 - `src/lib/fitness/config.ts` : **nouveau fichier**, constante `GYMS` partagée (`["Keep Cool", "On Air"]`). Import dans StartWorkoutSheet + WorkoutSheet.
 - `seances.tsx` (route) : suppression du doublon bouton Coach IA + `ProgramSheet` (le Coach IA est déjà dans `SeancesTab.tsx`).
