@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAddNutrition } from "@/hooks/use-fitness";
 import { supabase } from "@/integrations/supabase/client";
@@ -13,6 +14,15 @@ import {
   saveLastPortion,
   type PortionUnit,
 } from "@/lib/nutrition/portions";
+
+// Détecte le repas selon l'heure courante pour pré-remplir le sélecteur.
+function detectMealFromHour(): string {
+  const h = new Date().getHours();
+  if (h >= 6 && h < 11) return "petit-dej";
+  if (h >= 11 && h < 15) return "dejeuner";
+  if (h >= 18 && h < 23) return "diner";
+  return "collation";
+}
 
 // Normalisation identique au catalogue (food-lookup) pour que l'aliment soit retrouvable.
 const normalizeFoodName = (name: string): string =>
@@ -86,7 +96,7 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
 
   const [form, setForm] = useState({
     name: prefill?.name ?? "",
-    meal: prefill?.meal ?? "petit-dej",
+    meal: prefill?.meal ?? detectMealFromHour(),
     calories: prefill?.calories ?? "",
     proteins: prefill?.proteins ?? "",
     carbs: prefill?.carbs ?? "",
@@ -118,19 +128,15 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
   );
 
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.name.trim()) return;
+  // Logique d'insertion pure — retourne true si l'ajout a réussi.
+  const doAdd = async (): Promise<boolean> => {
+    if (!form.name.trim()) return false;
 
-
-
-    // Parsing tolérant (accepte « 33,5 » et « 33.5 »).
     const calories = parseDecimal(form.calories);
     const proteins = parseDecimal(form.proteins);
     const carbs    = parseDecimal(form.carbs);
     const fats     = parseDecimal(form.fats);
 
-    // Validation des bornes AVANT insert (évite l'écran d'erreur générique).
     const outOfRange = (v: number | null, max: number) =>
       v != null && (v < 0 || v > max);
     if (
@@ -140,15 +146,13 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
       outOfRange(fats, 1000)
     ) {
       toast.error("Valeurs hors limites : kcal ≤ 10000, macros ≤ 1000 g, et aucune valeur négative.");
-      return;
+      return false;
     }
 
-    // Mémoriser la portion choisie pour cet aliment.
     if (baseFood && portion) {
       saveLastPortion(baseFood, { quantity: portion.quantity, unit: portion.unit });
     }
 
-    // Saisie manuelle AVEC poids → on dérive les valeurs /100 g (stockage gramme + enrichit le catalogue).
     const mGrams = parseDecimal(manualGrams);
     const manualWithGrams = !baseFood && mGrams != null && mGrams > 0;
     const per100 = manualWithGrams
@@ -170,24 +174,39 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
         proteins,
         carbs,
         fats,
-        // base_* = référence /100 g (catalogue, ou dérivée du poids manuel) sinon totaux saisis
         base_calories: isFood ? baseFood!.calories : per100 ? per100.calories : calories,
         base_proteins: isFood ? baseFood!.proteins : per100 ? per100.proteins : proteins,
         base_carbs: isFood ? baseFood!.carbs : per100 ? per100.carbs : carbs,
         base_fats: isFood ? baseFood!.fats : per100 ? per100.fats : fats,
         serving_count: 1,
         percentage_consumed: 100,
-        // Source de vérité unique : quantité + unité réelles (plus de "g" forcé).
         consumed_quantity: isFood ? portion!.quantity : manualWithGrams ? mGrams! : 1,
         consumed_unit: isFood ? portion!.unit : manualWithGrams ? "g" : "portion",
         consumed_grams_per_unit: isFood ? (portion!.gramsPerUnit ?? null) : manualWithGrams ? 1 : null,
       });
-      // Enregistre l'aliment perso pour le retrouver à la recherche (best-effort).
       if (manualWithGrams && per100) void saveCustomFood(form.name.trim(), per100);
-      onClose();
+      return true;
     } catch {
-      // L'erreur est déjà signalée par la mutation (toast). On évite
-      // l'« unhandled rejection » qui déclenchait l'écran générique.
+      return false;
+    }
+  };
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const ok = await doAdd();
+    if (ok) onClose();
+  };
+
+  // Ajoute l'aliment et réinitialise le formulaire pour en saisir un autre
+  // sans fermer la sheet (utile pour les repas multi-aliments).
+  const submitAndContinue = async () => {
+    const currentMeal = form.meal;
+    const ok = await doAdd();
+    if (ok) {
+      setBaseFood(null);
+      setPortion(null);
+      setManualGrams("");
+      setForm({ name: "", meal: currentMeal, calories: "", proteins: "", carbs: "", fats: "" });
     }
   };
 
@@ -261,7 +280,18 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
             onChange={(v) => setForm({ ...form, fats: v })}
           />
         </div>
-        <SubmitButton pending={busy}>Ajouter l'aliment</SubmitButton>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={submitAndContinue}
+            disabled={busy}
+            className="inline-flex h-12 flex-1 items-center justify-center gap-1.5 rounded-xl border border-border text-sm font-semibold transition-opacity disabled:opacity-60"
+          >
+            {busy && <Loader2 className="h-4 w-4 animate-spin" />}
+            + Continuer
+          </button>
+          <SubmitButton pending={busy}>Ajouter</SubmitButton>
+        </div>
       </form>
     </Sheet>
   );

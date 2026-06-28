@@ -5,8 +5,11 @@ import {
   Barcode,
   BookmarkPlus,
   Calendar,
+  ChevronLeft,
+  ChevronRight,
   Copy,
   Loader2,
+  Plus,
   Scale,
   Sparkles,
   Star,
@@ -15,8 +18,9 @@ import {
   TrendingUp,
   Utensils,
 } from "lucide-react";
-import { format, subDays } from "date-fns";
+import { addDays, format, subDays } from "date-fns";
 import {
+  useAddNutrition,
   useCopyNutritionDay,
   useDeleteNutrition,
   useNutrition,
@@ -43,6 +47,7 @@ export function NutritionTab() {
   const { data, isLoading } = useNutrition(date);
   const { data: goals } = useNutritionGoals();
   const del = useDeleteNutrition();
+  const readd = useAddNutrition();
   const addFav = useAddFavorite();
   const copyDay = useCopyNutritionDay();
   const [copyOpen, setCopyOpen] = useState(false);
@@ -182,8 +187,16 @@ export function NutritionTab() {
 
   return (
     <section className="flex flex-col gap-5">
-      {/* Date + objectifs */}
+      {/* Date + navigation J-1/J+1 + objectifs */}
       <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setDate(format(subDays(new Date(date), 1), "yyyy-MM-dd"))}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border text-muted-foreground transition-colors hover:text-foreground"
+          aria-label="Jour précédent"
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </button>
         <div className="relative flex-1">
           <Calendar className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <input
@@ -193,6 +206,14 @@ export function NutritionTab() {
             className="w-full rounded-xl border border-border bg-transparent py-2.5 pl-9 pr-3 text-sm outline-none transition-colors focus:border-foreground/30"
           />
         </div>
+        <button
+          type="button"
+          onClick={() => setDate(format(addDays(new Date(date), 1), "yyyy-MM-dd"))}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border text-muted-foreground transition-colors hover:text-foreground"
+          aria-label="Jour suivant"
+        >
+          <ChevronRight className="h-4 w-4" />
+        </button>
         <button
           type="button"
           onClick={() => setGoalsOpen(true)}
@@ -448,6 +469,32 @@ export function NutritionTab() {
                       {m.calories ?? 0} kcal · P{m.proteins ?? 0} G{m.carbs ?? 0} L{m.fats ?? 0}
                     </p>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => readd.mutate({
+                      date,
+                      name: m.name ?? "",
+                      meal: m.meal ?? "collation",
+                      calories: m.calories,
+                      proteins: m.proteins,
+                      carbs: m.carbs,
+                      fats: m.fats,
+                      base_calories: m.base_calories ?? m.calories,
+                      base_proteins: m.base_proteins ?? m.proteins ?? null,
+                      base_carbs: m.base_carbs ?? m.carbs ?? null,
+                      base_fats: m.base_fats ?? m.fats ?? null,
+                      serving_count: m.serving_count ?? 1,
+                      percentage_consumed: 100,
+                      consumed_quantity: m.consumed_quantity ?? null,
+                      consumed_unit: m.consumed_unit ?? null,
+                      consumed_grams_per_unit: m.consumed_grams_per_unit ?? null,
+                    })}
+                    disabled={readd.isPending}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-foreground disabled:opacity-60"
+                    aria-label="Re-ajouter"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
                   <button
                     type="button"
                     onClick={() => saveAsFavorite(m)}
