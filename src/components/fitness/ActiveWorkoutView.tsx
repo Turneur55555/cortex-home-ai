@@ -147,14 +147,16 @@ export function ActiveWorkoutView({ workout }: { workout: ActiveWorkout }) {
               <h2 className="mt-1 text-xl font-bold leading-tight tracking-tight">
                 {workout.name}
               </h2>
-              <p className="mt-0.5 text-sm text-muted-foreground">
-                {workout.gym_location}
-              </p>
+              {workout.gym_location && workout.gym_location !== "Salle inconnue" && (
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  {workout.gym_location}
+                </p>
+              )}
             </div>
 
             {/* Timer + menu */}
             <div className="flex shrink-0 items-center gap-2">
-              <div className="rounded-xl border border-border bg-white/5 px-3 py-1.5 text-sm font-bold tabular-nums">
+              <div className="rounded-xl border border-border bg-white/5 px-4 py-2 text-2xl font-bold tabular-nums leading-none">
                 {timer}
               </div>
               <button

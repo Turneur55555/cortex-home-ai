@@ -7,7 +7,6 @@ import {
   Minus,
   Plus,
   SlidersHorizontal,
-  Timer,
   X,
 } from "lucide-react";
 import { format } from "date-fns";
@@ -23,7 +22,7 @@ import {
 import { normalize } from "@/lib/fitness/exerciseCatalog";
 import { summarizeSets, type WorkingSet } from "@/lib/fitness/sets";
 import { formatTonnage } from "@/lib/fitness/strength";
-import { RestTimer } from "./RestTimer";
+import { GYMS } from "@/lib/fitness/config";
 
 type SetRow = { reps: string; weight: string; rpe: string };
 
@@ -85,7 +84,6 @@ export function WorkoutSheet({
 
   const [uploading, setUploading] = useState<number | null>(null);
   const [pickerIndex, setPickerIndex] = useState<number | null>(null);
-  const [restTimerOpen, setRestTimerOpen] = useState(false);
 
   // Derive recent exercises from cached workouts (most recent first, deduplicated)
   const recentExercises = useMemo<RecentExercise[]>(() => {
@@ -338,7 +336,7 @@ export function WorkoutSheet({
               Salle
             </label>
             <div className="grid grid-cols-2 gap-2">
-              {(["Keep Cool", "On Air"] as const).map((gym) => {
+              {GYMS.map((gym) => {
                 const selected = form.gym_location === gym;
                 return (
                   <button
@@ -621,15 +619,6 @@ export function WorkoutSheet({
                       {ex.detailed ? "Mode simple" : "Détailler les séries (RPE)"}
                     </button>
 
-                    {/* Rest Timer trigger */}
-                    <button
-                      type="button"
-                      onClick={() => setRestTimerOpen(true)}
-                      className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-xl border border-border bg-surface/50 py-2 text-xs font-semibold text-muted-foreground transition-all active:scale-[0.99] hover:border-primary/40 hover:text-primary"
-                    >
-                      <Timer className="h-3.5 w-3.5" />
-                      Démarrer le repos
-                    </button>
                   </div>
                 );
               })}
@@ -655,7 +644,6 @@ export function WorkoutSheet({
         />
       )}
 
-      {restTimerOpen && <RestTimer onClose={() => setRestTimerOpen(false)} />}
     </>
   );
 }

@@ -149,8 +149,8 @@ function SetRow({
     );
   }
 
-  const repsPh = lastSet?.reps != null ? String(lastSet.reps) : "—";
-  const weightPh = lastSet?.weight != null ? String(lastSet.weight) : "—";
+  const repsPh = lastSet?.reps != null ? String(lastSet.reps) : "";
+  const weightPh = lastSet?.weight != null ? String(lastSet.weight) : "";
 
   return (
     <li
@@ -214,7 +214,7 @@ function SetRow({
       <button
         type="button"
         onClick={() => setConfirmDel(true)}
-        className="flex h-11 w-5 shrink-0 items-center justify-center text-muted-foreground/25 transition-colors hover:text-destructive"
+        className="flex h-11 w-11 shrink-0 items-center justify-center text-muted-foreground/25 transition-colors hover:text-destructive"
         aria-label="Supprimer la série"
       >
         <Trash2 className="h-3.5 w-3.5" />
@@ -324,7 +324,10 @@ export function ActiveExerciseCard({
 
   const handleToggleDone = (set: ActiveSet, done: boolean) => {
     updateSet.mutate({ id: set.id, completed: done });
-    if (done) restTimer.startForExercise(exercise.id);
+    if (done) {
+      restTimer.startForExercise(exercise.id);
+      try { navigator.vibrate?.(50); } catch {}
+    }
   };
 
   const handleDeleteSet = (id: string) => deleteSet.mutate(id);
