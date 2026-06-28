@@ -295,6 +295,30 @@ export function useAddNutrition() {
   });
 }
 
+export function useAddNutritionBatch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (inputs: Array<Omit<TablesInsert<"nutrition">, "user_id">>) => {
+      if (inputs.length === 0) return;
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Non authentifié");
+      const { error } = await supabase
+        .from("nutrition")
+        .insert(inputs.map((input) => ({ ...input, user_id: user.id })));
+      if (error) throw error;
+    },
+    onSuccess: (_d, vars) => {
+      const n = vars.length;
+      toast.success(`${n} aliment${n > 1 ? "s" : ""} ajouté${n > 1 ? "s" : ""}`);
+      const date = vars[0]?.date as string | undefined;
+      if (date) qc.invalidateQueries({ queryKey: ["nutrition", date] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+}
+
 export function useDeleteNutrition() {
   const qc = useQueryClient();
   return useMutation({

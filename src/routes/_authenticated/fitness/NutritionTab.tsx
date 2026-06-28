@@ -127,12 +127,6 @@ export function NutritionTab() {
     setOpen(true);
   };
 
-  const handleScanResult = (p: MealPrefill) => {
-    setScanOpen(false);
-    setPrefill(p);
-    setOpen(true);
-  };
-
   // Enregistre un repas loggé comme favori réutilisable.
   const saveAsFavorite = (m: {
     name: string | null;
@@ -541,7 +535,7 @@ export function NutritionTab() {
       {goalsOpen && <GoalsSheet current={goals ?? null} onClose={() => setGoalsOpen(false)} />}
       {planOpen && <MealPlanSheet onClose={() => setPlanOpen(false)} />}
       {historyOpen && <NutritionHistorySheet onClose={() => setHistoryOpen(false)} />}
-      {scanOpen && <MealScanSheet onClose={() => setScanOpen(false)} onResult={handleScanResult} />}
+      {scanOpen && <MealScanSheet onClose={() => setScanOpen(false)} date={date} />}
       {barcodeOpen && <BarcodeScannerSheet onClose={() => setBarcodeOpen(false)} />}
       {analysisOpen && <NutritionAnalysisSheet onClose={() => setAnalysisOpen(false)} />}
       {savedOpen && <SavedMealsSheet date={date} onClose={() => setSavedOpen(false)} />}
