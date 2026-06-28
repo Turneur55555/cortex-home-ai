@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Copy,
   Loader2,
+  Mic,
   Plus,
   Scale,
   Sparkles,
@@ -41,6 +42,7 @@ import { NutritionHistorySheet } from "@/components/fitness/NutritionHistoryShee
 import { SavedMealsSheet } from "@/components/fitness/SavedMealsSheet";
 import { FavoritesSheet } from "@/components/fitness/FavoritesSheet";
 import { RecipeLogSheet } from "@/components/fitness/RecipeLogSheet";
+import { VoiceLogSheet } from "@/components/fitness/VoiceLogSheet";
 import { useCreateSavedMeal } from "@/hooks/use-saved-meals";
 import { getPortionBadge } from "@/lib/nutrition/utils";
 import type { MealPrefill, NutritionEntry } from "@/lib/nutrition/utils";
@@ -75,6 +77,7 @@ export function NutritionTab() {
   const [savedOpen, setSavedOpen] = useState(false);
   const [favSheetOpen, setFavSheetOpen] = useState(false);
   const [recipeLogOpen, setRecipeLogOpen] = useState(false);
+  const [voiceOpen, setVoiceOpen] = useState(false);
   const createSavedMeal = useCreateSavedMeal();
   const [saveGroupKey, setSaveGroupKey] = useState<string | null>(null);
   const [saveGroupName, setSaveGroupName] = useState("");
@@ -372,6 +375,14 @@ export function NutritionTab() {
         </button>
         <button
           type="button"
+          onClick={() => setVoiceOpen(true)}
+          className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-border px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-foreground/30"
+        >
+          <Mic className="h-3.5 w-3.5 text-primary" />
+          Vocal
+        </button>
+        <button
+          type="button"
           onClick={() => setFavSheetOpen(true)}
           className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-border px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-foreground/30"
         >
@@ -660,6 +671,7 @@ export function NutritionTab() {
       {savedOpen && <SavedMealsSheet date={date} onClose={() => setSavedOpen(false)} />}
       {favSheetOpen && <FavoritesSheet date={date} onClose={() => setFavSheetOpen(false)} />}
       {recipeLogOpen && <RecipeLogSheet date={date} onClose={() => setRecipeLogOpen(false)} />}
+      {voiceOpen && <VoiceLogSheet date={date} onClose={() => setVoiceOpen(false)} />}
       {portionItem && (
         <PortionEditModal
           item={portionItem}
