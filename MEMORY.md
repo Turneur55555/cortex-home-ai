@@ -196,3 +196,20 @@ App **ICORTEX** (nom officiel dans les titres de pages) : assistant personnel mu
 - **Déploiement** : code direct GitHub poussé via Claude in Chrome (autonomie Nathan, pas de token manuel) → Publish Lovable → test live.
 - **Ordre des travaux** : Nav → Accueil → Séances → Corps → Nutrition (+nettoyage OFF) → Profil → passe design.
 - ⚠️ e2e/02-navigation.spec.ts à mettre à jour (testids nav-stocks/nav-documents supprimés du bottom-nav).
+
+## Nutrition — Saisie vocale (2026-06-28)
+- **Edge function `supabase/functions/parse-meal-text/index.ts`** (déployée ACTIVE sur projet `bcwfvpwxzlmkxobvbtzp`)
+  - Reçoit `{ text: string }` (3–2000 chars), parse via Gemini 2.5 Flash (tool calling `save_meal`)
+  - Retourne `{ items[], meal?, confidence?, details? }` — un item par aliment identifié avec kcal/P/G/L
+  - Rate limit : 30 appels/heure (action `parse_meal_text`) via `_shared/rate-limit.ts`
+  - Toujours HTTP 200, erreurs dans `{ error: "..." }`
+- **Composant `src/components/fitness/VoiceLogSheet.tsx`** (nouveau)
+  - Push-to-talk via `onPointerDown`/`onPointerUp`/`onPointerCancel` (iOS-safe)
+  - `SpeechRecognition` / `webkitSpeechRecognition`, lang `fr-FR`, continuous: false
+  - Guard `hasSpeechRecognition` — masque le micro si API indisponible
+  - Auto-parse au résultat final de speech
+  - Textarea fallback toujours visible (séparateur "ou tape")
+  - Panel de révision : modifier inline (name + 4 macros), supprimer, totaux, sélecteur repas
+  - Confirmation via `useAddNutritionBatch` (batch insert)
+  - Imports : `Loader2, Mic, MicOff, Plus, Sparkles, Trash2` from lucide-react
+- **`NutritionTab.tsx`** : bouton « Vocal » (icône Mic) ajouté dans la rangée d'actions, `voiceOpen` state, render conditionnel `<VoiceLogSheet>`
