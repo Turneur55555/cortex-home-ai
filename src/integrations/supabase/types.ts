@@ -864,6 +864,7 @@ export type Database = {
           base_proteins: number | null
           calories: number | null
           carbs: number | null
+          consumed_grams_per_unit: number | null
           consumed_quantity: number | null
           consumed_unit: string | null
           created_at: string
@@ -884,6 +885,7 @@ export type Database = {
           base_proteins?: number | null
           calories?: number | null
           carbs?: number | null
+          consumed_grams_per_unit?: number | null
           consumed_quantity?: number | null
           consumed_unit?: string | null
           created_at?: string
@@ -904,6 +906,7 @@ export type Database = {
           base_proteins?: number | null
           calories?: number | null
           carbs?: number | null
+          consumed_grams_per_unit?: number | null
           consumed_quantity?: number | null
           consumed_unit?: string | null
           created_at?: string
