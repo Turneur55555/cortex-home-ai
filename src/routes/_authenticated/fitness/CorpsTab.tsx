@@ -40,12 +40,14 @@ type BodyRow = {
   right_thigh: number | null;
 };
 
+type AllBodyField = keyof BodyRow | "weight" | "muscle_mass" | "body_fat";
+
 
 export function CorpsTab() {
   const { data, isLoading } = useBodyMeasurements();
   const [open, setOpen] = useState(false);
   const [focusField, setFocusField] = useState<MeasurementField | null>(null);
-  const [quickField, setQuickField] = useState<{ key: keyof BodyRow; label: string } | null>(null);
+  const [quickField, setQuickField] = useState<{ key: AllBodyField; label: string; unit: string } | null>(null);
   const [period, setPeriod] = useState<"semaine" | "mois" | "trimestre">("trimestre");
 
   const openWithFocus = (f: MeasurementField | null) => {
@@ -116,9 +118,24 @@ export function CorpsTab() {
   return (
     <section className="flex flex-col gap-5">
       <div className="grid grid-cols-3 gap-3">
-        <Stat label="Poids" value={latest?.weight} unit="kg" />
-        <Stat label="Masse gr." value={latest?.muscle_mass} unit="kg" />
-        <Stat label="MG" value={latest?.body_fat} unit="%" />
+        <Stat
+          label="Poids"
+          value={latest?.weight}
+          unit="kg"
+          onClick={() => setQuickField({ key: "weight", label: "Poids", unit: "kg" })}
+        />
+        <Stat
+          label="Masse gr."
+          value={latest?.muscle_mass}
+          unit="kg"
+          onClick={() => setQuickField({ key: "muscle_mass", label: "Masse grasse", unit: "kg" })}
+        />
+        <Stat
+          label="MG"
+          value={latest?.body_fat}
+          unit="%"
+          onClick={() => setQuickField({ key: "body_fat", label: "Masse grasse %", unit: "%" })}
+        />
       </div>
 
       <FormScoreCard score={formScore.score} plateau={plateau} count={data?.length ?? 0} />
@@ -151,7 +168,7 @@ export function CorpsTab() {
                 type="button"
                 onClick={() => setPeriod(p)}
                 className={
-                  "rounded-md px-2 py-1 text-[10px] font-semibold capitalize transition-colors " +
+                  "min-h-[36px] rounded-md px-2.5 py-2 text-[10px] font-semibold capitalize transition-colors active:scale-95 " +
                   (period === p
                     ? "bg-gradient-primary text-primary-foreground"
                     : "text-muted-foreground hover:text-foreground")
@@ -235,7 +252,7 @@ export function CorpsTab() {
 
       <MeasurementsCard
         rows={data}
-        onChipClick={(key, label) => setQuickField({ key, label })}
+        onChipClick={(key, label) => setQuickField({ key, label, unit: "cm" })}
       />
 
       <FabAdd onClick={() => openWithFocus(null)} label="Ajouter mesure" />
@@ -252,6 +269,7 @@ export function CorpsTab() {
         <QuickMeasurementSheet
           field={quickField.key}
           label={quickField.label}
+          unit={quickField.unit}
           onClose={() => setQuickField(null)}
         />
       )}
@@ -318,13 +336,20 @@ function Stat({
   label,
   value,
   unit,
+  onClick,
 }: {
   label: string;
   value: number | null | undefined;
   unit: string;
+  onClick?: () => void;
 }) {
   return (
-    <div className="rounded-2xl border border-border bg-card p-3 shadow-card">
+    <button
+      type="button"
+      onClick={() => { navigator.vibrate?.(30); onClick?.(); }}
+      disabled={!onClick}
+      className="rounded-2xl border border-border bg-card p-3 shadow-card text-left active:opacity-70 disabled:cursor-default w-full"
+    >
       <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
         {label}
       </p>
@@ -334,7 +359,10 @@ function Stat({
           <span className="ml-1 text-xs font-normal text-muted-foreground">{unit}</span>
         )}
       </p>
-    </div>
+      {onClick && (
+        <p className="mt-0.5 text-[9px] text-primary/70">Tap pour modifier</p>
+      )}
+    </button>
   );
 }
 
@@ -635,7 +663,7 @@ function MeasurementChip({
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={() => { navigator.vibrate?.(30); onClick?.(); }}
       className={`relative w-full overflow-hidden rounded-xl border border-border bg-gradient-to-br ${accent} p-2.5 text-left active:opacity-70`}
     >
       <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
@@ -679,10 +707,12 @@ function MeasurementChip({
 function QuickMeasurementSheet({
   field,
   label,
+  unit,
   onClose,
 }: {
-  field: keyof BodyRow;
+  field: AllBodyField;
   label: string;
+  unit: string;
   onClose: () => void;
 }) {
   const add = useAddBodyMeasurement();
@@ -707,7 +737,7 @@ function QuickMeasurementSheet({
           required
         />
         <Field
-          label={`${label} (cm)`}
+          label={`${label} (${unit})`}
           type="number"
           step="0.1"
           value={value}
