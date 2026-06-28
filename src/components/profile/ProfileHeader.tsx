@@ -101,6 +101,11 @@ export function ProfileHeader({ pseudo, email, streak, level, avatarUrl, onEdit,
             </button>
           </div>
           {email && <p className="truncate text-[11px] text-muted-foreground">{email}</p>}
+          {user?.created_at && (
+            <p className="mt-0.5 text-[10px] text-muted-foreground/80">
+              Membre depuis {new Date(user.created_at).toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}
+            </p>
+          )}
           <div className="mt-2 flex items-center gap-2">
             <span className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-semibold">
               <Trophy className="h-3 w-3 text-amber-400" />

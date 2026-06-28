@@ -1,7 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { FileText, Apple, ChevronRight } from "lucide-react";
+import { FileText, Apple, ChevronRight, BarChart3 } from "lucide-react";
+import { ProfileCompletionCard } from "@/components/profile/ProfileCompletionCard";
 import { useAuth } from "@/hooks/use-auth";
 import { useProfile } from "@/hooks/useProfile";
 import { useStreak } from "@/hooks/useStreak";
