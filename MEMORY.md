@@ -1,12 +1,20 @@
 # Mémoire projet — cortex-home-ai
 
 ## Dernière mise à jour
-2026-06-25
+2026-06-28
 
 ## ⚠️ Règle : mettre ce fichier à jour à la fin de chaque session
 Toujours mettre à jour ce fichier avec les nouveaux composants, hooks, migrations, features découverts.
 
-## Mise à jour du jour
+## Mise à jour du jour (2026-06-28) — 10 quick wins Séances
+- `src/lib/fitness/config.ts` : **nouveau fichier**, constante `GYMS` partagée (`["Keep Cool", "On Air"]`). Import dans StartWorkoutSheet + WorkoutSheet.
+- `seances.tsx` (route) : suppression du doublon bouton Coach IA + `ProgramSheet` (le Coach IA est déjà dans `SeancesTab.tsx`).
+- `StartWorkoutSheet.tsx` : nom de séance auto-rempli (`getDefaultName()` → "Séance du Lundi soir"). Import GYMS depuis config.
+- `WorkoutSheet.tsx` : suppression du `RestTimer` (inutile dans le flux rétroactif). Import GYMS depuis config. Suppression `restTimerOpen` state et import `Timer`.
+- `ActiveExerciseCard.tsx` : haptic feedback `navigator.vibrate(50)` à la validation de série. Placeholder numériques remplis avec valeurs réelles (plus de "—" incompatible avec type=number). Zone de tap Trash élargie `w-5 → w-11`.
+- `ActiveWorkoutView.tsx` : chronomètre séance `text-sm → text-2xl font-bold`. "Salle inconnue" cachée en UI.
+
+## Mise à jour précédente (2026-06-25)
 - SéancesTab : bloc "Séances de la semaine" rendu repliable (comme l'Historique complet), avec le bouton "Détails" conservé et le chevron d'expansion.
 - CorpsTab : suppression totale de la carte IMC, du calcul BMI et des imports liés (`Scale`, `useUserPreferences`, `height_cm`).
 - BDD : migration ajoutant la colonne `completed` sur `exercise_sets` pour la validation set-by-set.
