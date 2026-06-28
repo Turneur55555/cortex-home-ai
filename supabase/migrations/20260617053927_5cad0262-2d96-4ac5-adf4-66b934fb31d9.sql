@@ -128,6 +128,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS food_search_history_user_food_idx ON public.fo
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.food_search_history TO authenticated;
 GRANT ALL ON public.food_search_history TO service_role;
 ALTER TABLE public.food_search_history ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "users manage own search history" ON public.food_search_history;
 CREATE POLICY "users manage own search history" ON public.food_search_history
   FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
