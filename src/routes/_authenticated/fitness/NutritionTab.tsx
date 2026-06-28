@@ -276,67 +276,75 @@ export function NutritionTab() {
         </div>
       </div>
 
-      {/* Actions rapides — une seule ligne */}
-      <div>
-        <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <button
-            type="button"
-            onClick={() => setScanOpen(true)}
-            className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-border px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-foreground/30"
-          >
-            <Sparkles className="h-3.5 w-3.5 text-primary" />
-            Scan
-          </button>
-          <button
-            type="button"
-            onClick={() => setFavSheetOpen(true)}
-            className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-border px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-foreground/30"
-          >
-            <Star className="h-3.5 w-3.5 text-primary" />
-            Favoris
-          </button>
-          <button
-            type="button"
-            onClick={() => setBarcodeOpen(true)}
-            className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-border px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-foreground/30"
-          >
-            <Barcode className="h-3.5 w-3.5 text-muted-foreground" />
-            Code-barres
-          </button>
-          <button
-            type="button"
-            onClick={() => setSavedOpen(true)}
-            className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-border px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-foreground/30"
-          >
-            <Utensils className="h-3.5 w-3.5 text-primary" />
-            Repas
-          </button>
-        </div>
-
-      </div>
-
-      {/* Outils */}
+      {/* Actions — rangée unique scrollable, ordre par fréquence d'usage */}
       <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <button
           type="button"
+          onClick={() => setScanOpen(true)}
+          className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-border px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-foreground/30"
+        >
+          <Sparkles className="h-3.5 w-3.5 text-primary" />
+          Scan
+        </button>
+        <button
+          type="button"
+          onClick={() => setFavSheetOpen(true)}
+          className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-border px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-foreground/30"
+        >
+          <Star className="h-3.5 w-3.5 text-primary" />
+          Favoris
+        </button>
+        <button
+          type="button"
+          onClick={() => setSavedOpen(true)}
+          className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-border px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-foreground/30"
+        >
+          <Utensils className="h-3.5 w-3.5 text-primary" />
+          Repas
+        </button>
+        <button
+          type="button"
+          onClick={() => setBarcodeOpen(true)}
+          className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-border px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-foreground/30"
+        >
+          <Barcode className="h-3.5 w-3.5 text-muted-foreground" />
+          Code-barres
+        </button>
+        <button
+          type="button"
+          disabled={copyDay.isPending}
+          onClick={() =>
+            copyDay.mutate({ from: format(subDays(new Date(), 1), "yyyy-MM-dd"), to: date })
+          }
+          className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-border px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-foreground/30 disabled:opacity-60"
+        >
+          {copyDay.isPending ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+          )}
+          Copier d'hier
+        </button>
+        <button
+          type="button"
+          onClick={() => setCopyOpen((o) => !o)}
+          className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-border px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-foreground/30"
+        >
+          <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+          Copier…
+        </button>
+        <button
+          type="button"
           onClick={() => setPlanOpen(true)}
-          className="flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-border px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-foreground/30"
+          className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-border px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-foreground/30"
         >
           <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
           Planning
         </button>
         <button
           type="button"
-          onClick={() => setCopyOpen((o) => !o)}
-          className="flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-border px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-foreground/30"
-        >
-          <Copy className="h-3.5 w-3.5 text-muted-foreground" />
-          Copier
-        </button>
-        <button
-          type="button"
           onClick={() => setAnalysisOpen(true)}
-          className="flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-border px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-foreground/30"
+          className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-border px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-foreground/30"
         >
           <Activity className="h-3.5 w-3.5 text-muted-foreground" />
           Analyse
@@ -344,7 +352,7 @@ export function NutritionTab() {
         <button
           type="button"
           onClick={() => setHistoryOpen(true)}
-          className="flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-xl border border-border px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-foreground/30"
+          className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl border border-border px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-foreground/30"
         >
           <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
           Historique

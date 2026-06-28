@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ChevronLeft, Loader2, Plus, Trash2, Utensils, X } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronUp, Loader2, Plus, Trash2, Utensils, X } from "lucide-react";
 import { Sheet, Field, SubmitButton } from "@/components/shared/FormComponents";
 import { FoodAutocomplete } from "@/components/FoodAutocomplete";
 import type { FoodSuggestion } from "@/services/foodSuggestion";
@@ -49,6 +49,7 @@ export function SavedMealsSheet({
   const del = useDeleteSavedMeal();
 
   const [mode, setMode] = useState<"list" | "build">("list");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   // Moment de journée choisi par repas, au moment de l'ajout au journal.
   const [mealByMeal, setMealByMeal] = useState<Record<string, string>>({});
 
@@ -181,7 +182,11 @@ export function SavedMealsSheet({
                 className="rounded-xl border border-border bg-card p-3 shadow-card"
               >
                 <div className="flex items-center gap-2">
-                  <div className="min-w-0 flex-1">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedId((id) => (id === m.id ? null : m.id))}
+                    className="min-w-0 flex-1 text-left"
+                  >
                     <p className="truncate text-sm font-semibold">{m.name}</p>
                     <p className="text-xs text-muted-foreground">
                       {m.meal ? `${MEAL_LABELS[m.meal] ?? m.meal} · ` : ""}
@@ -189,7 +194,19 @@ export function SavedMealsSheet({
                       {m.saved_meal_items.length > 1 ? "s" : ""} ·{" "}
                       {Math.round(mealTotal(m))} kcal
                     </p>
-                  </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setExpandedId((id) => (id === m.id ? null : m.id))}
+                    className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground"
+                    aria-label="Voir les ingrédients"
+                  >
+                    {expandedId === m.id ? (
+                      <ChevronUp className="h-3.5 w-3.5" />
+                    ) : (
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    )}
+                  </button>
                   <button
                     type="button"
                     onClick={() => del.mutate(m.id)}
@@ -199,6 +216,20 @@ export function SavedMealsSheet({
                     <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
+                {expandedId === m.id && m.saved_meal_items.length > 0 && (
+                  <ul className="mt-2 space-y-1 border-t border-border pt-2">
+                    {m.saved_meal_items
+                      .sort((a, b) => a.sort_order - b.sort_order)
+                      .map((item) => (
+                        <li key={item.id} className="flex items-center justify-between text-xs">
+                          <span className="truncate text-foreground/80">{item.name}</span>
+                          <span className="ml-2 shrink-0 text-muted-foreground">
+                            {item.calories ?? 0} kcal
+                          </span>
+                        </li>
+                      ))}
+                  </ul>
+                )}
                 <div className="mt-2 flex items-center gap-2">
                   <select
                     value={mealByMeal[m.id] ?? m.meal ?? "dejeuner"}

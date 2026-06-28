@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { Apple, Loader2, Search, X } from "lucide-react";
+import { Apple, Flame, Loader2, Search, X } from "lucide-react";
 import { useFoodSearch, getRecentFoods, pushRecentFood } from "@/hooks/useFoodSearch";
+import { useFrequentFoods } from "@/hooks/useFrequentFoods";
 import type { FoodSuggestion } from "@/services/foodSuggestion";
 
 interface Props {
@@ -16,6 +17,7 @@ export function FoodAutocomplete({ value, onChange, onSelect, placeholder, requi
   const [recent, setRecent] = useState<FoodSuggestion[]>([]);
   const wrapRef = useRef<HTMLDivElement>(null);
   const { results, loading, error } = useFoodSearch(value, open);
+  const { data: frequent } = useFrequentFoods(6);
 
   useEffect(() => {
     setRecent(getRecentFoods());
@@ -35,8 +37,14 @@ export function FoodAutocomplete({ value, onChange, onSelect, placeholder, requi
     setOpen(false);
   };
 
-  const showRecent = value.trim().length < 2 && recent.length > 0;
-  const showResults = value.trim().length >= 2;
+  const isEmpty = value.trim().length < 2;
+  const showResults = !isEmpty;
+  // Fréquents filtrés : exclure ce qui est déjà dans les récents (par nom) pour éviter les doublons.
+  const recentNames = new Set(recent.map((f) => f.name.toLowerCase()));
+  const frequentFiltered = (frequent ?? []).filter(
+    (f) => !recentNames.has(f.name.toLowerCase()),
+  );
+  const showSuggestions = isEmpty && (recent.length > 0 || frequentFiltered.length > 0);
 
   return (
     <div ref={wrapRef} className="relative">
@@ -69,16 +77,31 @@ export function FoodAutocomplete({ value, onChange, onSelect, placeholder, requi
         )}
       </div>
 
-      {open && (showRecent || showResults) && (
+      {open && (showSuggestions || showResults) && (
         <div className="absolute left-0 right-0 z-30 mt-1 max-h-72 overflow-y-auto rounded-xl border border-border bg-popover shadow-elevated">
-          {showRecent && (
+          {showSuggestions && (
             <>
-              <p className="px-3 pt-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                Récents
-              </p>
-              {recent.map((f) => (
-                <SuggestionRow key={`r-${f.id}`} food={f} onPick={pick} />
-              ))}
+              {frequentFiltered.length > 0 && (
+                <>
+                  <p className="flex items-center gap-1 px-3 pt-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                    <Flame className="h-3 w-3 text-primary" />
+                    Fréquents
+                  </p>
+                  {frequentFiltered.map((f) => (
+                    <SuggestionRow key={`freq-${f.id}`} food={f} onPick={pick} />
+                  ))}
+                </>
+              )}
+              {recent.length > 0 && (
+                <>
+                  <p className="px-3 pt-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+                    Récents
+                  </p>
+                  {recent.map((f) => (
+                    <SuggestionRow key={`r-${f.id}`} food={f} onPick={pick} />
+                  ))}
+                </>
+              )}
             </>
           )}
           {showResults && (

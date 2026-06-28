@@ -124,6 +124,15 @@ export function PortionSelector({ food, onChange, initial, quickScale = true }: 
     setQtyInput(formatDecimal(Math.round(cur * factor * 100) / 100));
   };
 
+  // Pas du stepper : 10g pour g/ml, 0.5 unité sinon.
+  const stepSize = unit === "g" || unit === "ml" ? 10 : 0.5;
+
+  const adjustBy = (delta: number) => {
+    const cur = parseDecimal(qtyInput) ?? 0;
+    const next = Math.max(stepSize, Math.round((cur + delta) * 100) / 100);
+    setQtyInput(formatDecimal(next));
+  };
+
   return (
     <div className="space-y-2 rounded-xl border border-primary/30 bg-primary/5 p-3">
       <div className="flex items-center gap-2">
@@ -160,8 +169,16 @@ export function PortionSelector({ food, onChange, initial, quickScale = true }: 
         })}
       </div>
 
-      {/* Saisie libre */}
+      {/* Saisie libre + stepper ±*/}
       <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => adjustBy(-stepSize)}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-sm font-bold text-foreground transition-colors hover:border-primary/50"
+          aria-label={`Diminuer de ${stepSize}`}
+        >
+          −
+        </button>
         <input
           type="text"
           inputMode="decimal"
@@ -170,10 +187,18 @@ export function PortionSelector({ food, onChange, initial, quickScale = true }: 
           onChange={(e) => setQtyInput(e.target.value)}
           placeholder="ex. 33"
           className={
-            "w-24 rounded-lg border bg-card px-2 py-1.5 text-center text-sm font-semibold outline-none focus:border-primary " +
+            "w-20 rounded-lg border bg-card px-2 py-1.5 text-center text-sm font-semibold outline-none focus:border-primary " +
             (errorMsg ? "border-destructive" : "border-border")
           }
         />
+        <button
+          type="button"
+          onClick={() => adjustBy(+stepSize)}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-sm font-bold text-foreground transition-colors hover:border-primary/50"
+          aria-label={`Augmenter de ${stepSize}`}
+        >
+          +
+        </button>
         <select
           value={unit}
           onChange={(e) => setUnit(e.target.value as PortionUnit)}
