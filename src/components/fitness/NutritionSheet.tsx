@@ -39,7 +39,7 @@ async function saveCustomFood(
     if (!user) return;
     const normalized = normalizeFoodName(name);
     if (normalized.length < 2) return;
-    await supabase.from("foods").upsert(
+    await (supabase.from("foods") as any).upsert(
       {
         source: "custom",
         source_id: `user:${user.id}:${normalized}`,
