@@ -109,7 +109,7 @@ export function FavoritesSheet({
               <button
                 type="button"
                 onClick={resetAdd}
-                className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground"
+                className="flex h-11 w-11 items-center justify-center rounded-lg text-muted-foreground active:bg-muted"
                 aria-label="Annuler"
               >
                 <X className="h-4 w-4" />
@@ -199,7 +199,7 @@ export function FavoritesSheet({
                 <button
                   type="button"
                   onClick={() => delFav.mutate(fav.id)}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-destructive"
+                  className="flex h-11 w-11 items-center justify-center rounded-lg text-muted-foreground active:text-destructive"
                   aria-label="Supprimer le favori"
                 >
                   <Trash2 className="h-4 w-4" />

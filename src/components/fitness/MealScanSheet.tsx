@@ -39,6 +39,7 @@ interface MealScanSheetProps {
 export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
   const camRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const lastFileRef = useRef<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [scanResult, setScanResult] = useState<ScanResponse | null>(null);
   const [items, setItems] = useState<ScanItem[]>([]);
@@ -83,8 +84,10 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
 
   const onPick = (f: File | null | undefined) => {
     if (!f) return;
+    lastFileRef.current = f;
     setScanResult(null);
     setItems([]);
+    setEditingIdx(null);
     scan.mutate(f);
   };
 
@@ -146,6 +149,22 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
           </div>
         )}
 
+        {/* Erreur + retry */}
+        {scan.isError && !scan.isPending && (
+          <div className="flex flex-col items-center gap-3 rounded-2xl border border-destructive/30 bg-destructive/5 p-4 text-center">
+            <p className="text-sm text-destructive">{(scan.error as Error).message}</p>
+            {lastFileRef.current && (
+              <button
+                type="button"
+                onClick={() => { if (lastFileRef.current) scan.mutate(lastFileRef.current); }}
+                className="inline-flex h-11 items-center gap-2 rounded-xl bg-destructive/10 px-4 text-sm font-semibold text-destructive active:scale-95"
+              >
+                Réessayer
+              </button>
+            )}
+          </div>
+        )}
+
         {/* Initial state — no preview yet */}
         {!preview && !scan.isPending && (
           <div className="flex flex-col items-center gap-3 py-4 text-center">
@@ -187,7 +206,8 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
                         type="text"
                         value={item.name}
                         onChange={(e) => updateItem(idx, { name: e.target.value })}
-                        className="w-full rounded-lg border border-border bg-surface px-2.5 py-1.5 text-sm outline-none focus:border-primary"
+                        autoComplete="off"
+                        className="w-full rounded-lg border border-border bg-surface px-2.5 py-2 text-base outline-none focus:border-primary"
                       />
                       <div className="grid grid-cols-4 gap-1.5">
                         {(["calories", "proteins", "carbs", "fats"] as const).map((field) => (
@@ -196,12 +216,12 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
                               {field === "calories" ? "kcal" : field === "proteins" ? "prot" : field === "carbs" ? "gluc" : "lip"}
                             </label>
                             <input
-                              type="number"
-                              min={0}
-                              step={field === "calories" ? 1 : 0.1}
+                              type="text"
+                              inputMode="decimal"
                               value={item[field]}
                               onChange={(e) => updateItem(idx, { [field]: Number(e.target.value) })}
-                              className="w-full rounded-lg border border-border bg-surface px-2 py-1 text-xs outline-none focus:border-primary"
+                              autoComplete="off"
+                              className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-base outline-none focus:border-primary"
                             />
                           </div>
                         ))}
@@ -209,7 +229,7 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
                       <button
                         type="button"
                         onClick={() => setEditingIdx(null)}
-                        className="w-full rounded-lg bg-primary/10 py-1.5 text-xs font-semibold text-primary"
+                        className="w-full rounded-lg bg-primary/10 py-3 text-sm font-semibold text-primary active:scale-[0.98]"
                       >
                         Valider
                       </button>
@@ -228,18 +248,18 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
                       <button
                         type="button"
                         onClick={() => setEditingIdx(idx)}
-                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
+                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground active:bg-muted"
                         aria-label="Modifier"
                       >
-                        <span className="text-xs">✎</span>
+                        <span className="text-sm">✎</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => removeItem(idx)}
-                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground active:bg-destructive/10 active:text-destructive"
                         aria-label="Retirer"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
                   )}

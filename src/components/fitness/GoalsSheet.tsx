@@ -98,36 +98,36 @@ export function GoalsSheet({ current, onClose }: GoalsSheetProps) {
                 <div>
                   <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Sexe</label>
                   <select value={calc.sex} onChange={(e) => setCalc({ ...calc, sex: e.target.value })}
-                    className="w-full rounded-lg border border-border bg-card px-2.5 py-2 text-sm outline-none focus:border-primary">
+                    className="w-full rounded-lg border border-border bg-card px-2.5 py-2 text-base outline-none focus:border-primary">
                     <option value="homme">Homme</option>
                     <option value="femme">Femme</option>
                   </select>
                 </div>
                 <div>
                   <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Âge</label>
-                  <input type="number" min={10} max={100} value={calc.age}
+                  <input type="text" inputMode="numeric" value={calc.age}
                     onChange={(e) => setCalc({ ...calc, age: e.target.value })}
-                    placeholder="ans" className="w-full rounded-lg border border-border bg-card px-2.5 py-2 text-sm outline-none focus:border-primary" />
+                    autoComplete="off" placeholder="ans" className="w-full rounded-lg border border-border bg-card px-2.5 py-2 text-base outline-none focus:border-primary" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Poids (kg)</label>
-                  <input type="number" min={20} max={300} value={calc.weight}
+                  <input type="text" inputMode="decimal" value={calc.weight}
                     onChange={(e) => setCalc({ ...calc, weight: e.target.value })}
-                    placeholder="kg" className="w-full rounded-lg border border-border bg-card px-2.5 py-2 text-sm outline-none focus:border-primary" />
+                    autoComplete="off" placeholder="kg" className="w-full rounded-lg border border-border bg-card px-2.5 py-2 text-base outline-none focus:border-primary" />
                 </div>
                 <div>
                   <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Taille (cm)</label>
-                  <input type="number" min={100} max={250} value={calc.height}
+                  <input type="text" inputMode="numeric" value={calc.height}
                     onChange={(e) => setCalc({ ...calc, height: e.target.value })}
-                    placeholder="cm" className="w-full rounded-lg border border-border bg-card px-2.5 py-2 text-sm outline-none focus:border-primary" />
+                    autoComplete="off" placeholder="cm" className="w-full rounded-lg border border-border bg-card px-2.5 py-2 text-base outline-none focus:border-primary" />
                 </div>
               </div>
               <div>
                 <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Niveau d'activité</label>
                 <select value={calc.activity} onChange={(e) => setCalc({ ...calc, activity: e.target.value })}
-                  className="w-full rounded-lg border border-border bg-card px-2.5 py-2 text-sm outline-none focus:border-primary">
+                  className="w-full rounded-lg border border-border bg-card px-2.5 py-2 text-base outline-none focus:border-primary">
                   {ACTIVITY_LEVELS.map((a) => (
                     <option key={a.value} value={a.value}>{a.label}</option>
                   ))}

@@ -174,7 +174,7 @@ export function PortionSelector({ food, onChange, initial, quickScale = true }: 
         <button
           type="button"
           onClick={() => adjustBy(-stepSize)}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-sm font-bold text-foreground transition-colors hover:border-primary/50"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-lg font-bold text-foreground active:scale-95 active:bg-muted"
           aria-label={`Diminuer de ${stepSize}`}
         >
           −
@@ -185,16 +185,17 @@ export function PortionSelector({ food, onChange, initial, quickScale = true }: 
           aria-label="Quantité"
           value={qtyInput}
           onChange={(e) => setQtyInput(e.target.value)}
+          autoComplete="off"
           placeholder="ex. 33"
           className={
-            "w-20 rounded-lg border bg-card px-2 py-1.5 text-center text-sm font-semibold outline-none focus:border-primary " +
+            "w-20 rounded-lg border bg-card px-2 py-2 text-center text-base font-semibold outline-none focus:border-primary " +
             (errorMsg ? "border-destructive" : "border-border")
           }
         />
         <button
           type="button"
           onClick={() => adjustBy(+stepSize)}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-sm font-bold text-foreground transition-colors hover:border-primary/50"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-lg font-bold text-foreground active:scale-95 active:bg-muted"
           aria-label={`Augmenter de ${stepSize}`}
         >
           +

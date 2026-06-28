@@ -198,7 +198,7 @@ export function SavedMealsSheet({
                   <button
                     type="button"
                     onClick={() => setExpandedId((id) => (id === m.id ? null : m.id))}
-                    className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground"
+                    className="flex h-11 w-11 items-center justify-center rounded-lg text-muted-foreground active:bg-muted"
                     aria-label="Voir les ingrédients"
                   >
                     {expandedId === m.id ? (
@@ -330,7 +330,7 @@ export function SavedMealsSheet({
                     <button
                       type="button"
                       onClick={() => removeItem(it.key)}
-                      className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                      className="flex h-11 w-11 items-center justify-center rounded-lg text-muted-foreground active:bg-destructive/10 active:text-destructive"
                       aria-label="Retirer l'aliment"
                     >
                       <X className="h-3.5 w-3.5" />

@@ -35,6 +35,7 @@ export function Sheet({
     >
       <div
         className="max-h-[92vh] w-full max-w-[430px] overflow-y-auto rounded-t-3xl border-t border-border bg-card p-5 shadow-elevated"
+        style={{ paddingBottom: "calc(1.25rem + env(safe-area-inset-bottom))" }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center justify-between">
@@ -42,7 +43,7 @@ export function Sheet({
           <button
             type="button"
             onClick={onClose}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-surface text-muted-foreground"
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-surface text-muted-foreground active:scale-95"
             aria-label="Fermer"
           >
             <X className="h-4 w-4" />
@@ -75,8 +76,10 @@ export function Field({
   required?: boolean;
   textarea?: boolean;
 }) {
+  // font-size >= 16px prevents iOS auto-zoom on focus
   const cls =
-    "w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary";
+    "w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-base outline-none focus:border-primary";
+  const isNumeric = type === "number" || step != null;
   return (
     <div>
       <label
@@ -92,6 +95,7 @@ export function Field({
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
           rows={2}
+          autoComplete="off"
           className={cls}
         />
       ) : (
@@ -99,10 +103,12 @@ export function Field({
           id={id}
           type={type}
           step={step}
+          inputMode={isNumeric ? "decimal" : undefined}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
           required={required}
+          autoComplete="off"
           className={cls}
         />
       )}
