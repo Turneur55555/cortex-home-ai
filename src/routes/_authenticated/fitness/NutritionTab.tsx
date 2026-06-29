@@ -12,7 +12,6 @@ import {
   Loader2,
   Mic,
   Plus,
-  Scale,
   Sparkles,
   Star,
   Target,
