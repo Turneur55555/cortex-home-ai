@@ -14,7 +14,7 @@ export type MuscleRecovery = {
 
 export type Workout = {
   date: string;
-  exercises: Array<{ name: string }> | null;
+  exercises: Array<{ name: string; muscle_groups?: string[] | null }> | null;
 };
 
 export function computeRecovery(
@@ -26,7 +26,14 @@ export function computeRecovery(
   for (const w of workouts) {
     const wDate = new Date(w.date + "T12:00:00");
     for (const ex of w.exercises ?? []) {
-      const muscles = exerciseToMuscles(ex.name);
+      // Prefer regex mapping; fall back to AI-resolved muscle_groups for custom exercises
+      const regexMuscles = exerciseToMuscles(ex.name);
+      const muscles: MuscleId[] =
+        regexMuscles.length > 0
+          ? regexMuscles
+          : (ex.muscle_groups ?? []).filter(
+              (m): m is MuscleId => m in MUSCLE_META,
+            );
       for (const m of muscles) {
         const prev = lastTrainedMap.get(m);
         if (!prev || wDate > prev) {

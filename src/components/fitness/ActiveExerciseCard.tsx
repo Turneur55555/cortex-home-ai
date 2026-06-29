@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
   BarChart3,
+  Camera,
   Check,
   ChevronDown,
   Dumbbell,
   History,
+  Loader2,
   Minus,
   Plus,
   RotateCcw,
@@ -21,6 +23,7 @@ import {
   useDeleteExerciseSet,
   useDeleteExercises,
 } from "@/hooks/use-fitness";
+import { useUpsertExercisePhoto } from "@/hooks/useUserExercisePhotos";
 import { restTimer } from "@/hooks/useRestTimer";
 import type { LastSession, LastSessionSet } from "@/hooks/useLastExerciseSession";
 import type { MuscleId } from "@/lib/fitness/muscleMapping";
@@ -262,9 +265,22 @@ export function ActiveExerciseCard({
   const updateSet = useUpdateExerciseSet();
   const deleteSet = useDeleteExerciseSet();
   const deleteExercises = useDeleteExercises();
+  const upsertPhoto = useUpsertExercisePhoto();
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const [confirmDeleteEx, setConfirmDeleteEx] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+
+  const handlePhotoFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    await upsertPhoto.mutateAsync({
+      exerciseName: exercise.name,
+      file,
+      exerciseId: exercise.id,
+    });
+  };
 
   const sortedSets = [...(exercise.exercise_sets ?? [])].sort(
     (a, b) => a.set_number - b.set_number,
@@ -387,24 +403,48 @@ export function ActiveExerciseCard({
     <div className="overflow-hidden rounded-[24px] border border-white/5 bg-surface/80 p-4 shadow-[0_4px_24px_-12px_rgba(0,0,0,0.5)] animate-in fade-in slide-in-from-bottom-2 duration-300">
       {/* ── En-tête ── */}
       <div className="flex items-start gap-3">
-        {/* Photo → fiche détaillée (image entière) */}
-        <button
-          type="button"
-          onClick={onOpenStats}
-          aria-label="Voir la photo et les détails"
-          className="flex h-[72px] w-[72px] shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-black/25 ring-1 ring-white/10 transition-opacity active:opacity-70"
-        >
-          {imageUrl ? (
-            <img
-              src={imageUrl}
-              alt={exercise.name}
-              className="h-full w-full object-contain"
-              loading="lazy"
-            />
-          ) : (
-            <Dumbbell className="h-7 w-7 text-primary/70" />
-          )}
-        </button>
+        {/* Photo + bouton caméra overlay */}
+        <div className="relative h-[72px] w-[72px] shrink-0">
+          <button
+            type="button"
+            onClick={onOpenStats}
+            aria-label="Voir la photo et les détails"
+            className="flex h-full w-full items-center justify-center overflow-hidden rounded-2xl bg-black/25 ring-1 ring-white/10 transition-opacity active:opacity-70"
+          >
+            {imageUrl ? (
+              <img
+                src={imageUrl}
+                alt={exercise.name}
+                className="h-full w-full object-contain"
+                loading="lazy"
+              />
+            ) : (
+              <Dumbbell className="h-7 w-7 text-primary/70" />
+            )}
+          </button>
+          {/* Bouton ajout photo */}
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            disabled={upsertPhoto.isPending}
+            aria-label="Ajouter une photo"
+            className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-card border border-border shadow-sm text-primary transition-colors hover:bg-primary/10 disabled:opacity-50"
+          >
+            {upsertPhoto.isPending ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Camera className="h-3 w-3" />
+            )}
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={handlePhotoFile}
+          />
+        </div>
 
         {/* Nom + stats → repli/dépli */}
         <button
