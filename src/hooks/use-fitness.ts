@@ -202,6 +202,7 @@ type WorkoutsCache = Array<{
     reps: number | null;
     weight: number | null;
     image_path: string | null;
+    muscle_groups: string[] | null;
   }> | null;
   [k: string]: unknown;
 }>;
@@ -217,6 +218,23 @@ function patchWorkoutsCache(
   if (!prev) return prev;
   qc.setQueryData<WorkoutsCache>(WORKOUTS_KEY, updater(prev));
   return prev;
+}
+
+/** Met à jour les muscle_groups d'un exercice (résolution IA exercice personnalisé). */
+export function useUpdateExerciseMuscles() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, muscle_groups }: { id: string; muscle_groups: string[] }) => {
+      const { error } = await supabase
+        .from("exercises")
+        .update({ muscle_groups })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: WORKOUTS_KEY });
+    },
+  });
 }
 
 export function useUpdateExercise() {

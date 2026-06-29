@@ -4,7 +4,7 @@ import type { MuscleId } from "@/lib/fitness/muscleMapping";
 
 type WorkoutInput = {
   date: string;
-  exercises?: Array<{ name: string }> | null;
+  exercises?: Array<{ name: string; muscle_groups?: string[] | null }> | null;
 };
 
 export function useRecoveryMap(workouts: WorkoutInput[] | null | undefined): Map<MuscleId, MuscleRecovery> {
@@ -13,7 +13,11 @@ export function useRecoveryMap(workouts: WorkoutInput[] | null | undefined): Map
     return computeRecovery(
       workouts.map((w) => ({
         date: w.date,
-        exercises: w.exercises?.map((ex) => ({ name: ex.name })) ?? null,
+        exercises:
+          w.exercises?.map((ex) => ({
+            name: ex.name,
+            muscle_groups: ex.muscle_groups ?? null,
+          })) ?? null,
       })),
     );
   }, [workouts]);

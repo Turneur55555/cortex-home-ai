@@ -13,6 +13,7 @@ import type { MuscleRecovery } from "@/lib/fitness/recovery";
 import { useFitnessStreak } from "@/hooks/useFitnessStreak";
 import { WorkoutTimer } from "./WorkoutTimer";
 import { WorkoutSummaryOverlay } from "./WorkoutSummaryOverlay";
+import { PostWorkoutAnalysisSheet } from "./PostWorkoutAnalysisSheet";
 import { ActiveExerciseCard } from "./ActiveExerciseCard";
 import { exerciseIllustration } from "@/lib/fitness/exerciseIllustrations";
 import { computePRs } from "@/utils/fitness/exercise-stats";
@@ -25,6 +26,7 @@ import { normalize } from "@/lib/fitness/exerciseCatalog";
 import { useLastExerciseSessions } from "@/hooks/useLastExerciseSession";
 import { RestTimerBar } from "./RestTimerBar";
 import { ExerciseStatsSheet } from "./ExerciseStatsSheet";
+import { useUserExercisePhotos, resolveCustomExerciseMuscles } from "@/hooks/useUserExercisePhotos";
 
 // ─── Main view ───────────────────────────────────────────────────────────────
 
@@ -42,10 +44,14 @@ export function ActiveWorkoutView({
 
   const streak = useFitnessStreak(allWorkouts);
 
+  const { data: userPhotos } = useUserExercisePhotos();
+
   const [menuOpen, setMenuOpen] = useState(false);
   const [showSummary, setShowSummary] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [analysisOpen, setAnalysisOpen] = useState(false);
+  const [finishedWorkoutSnapshot, setFinishedWorkoutSnapshot] = useState<ActiveWorkout | null>(null);
 
   // PRs from history (excluding the active workout itself)
   const { prByName, histByName, volByName } = useMemo(
@@ -99,7 +105,19 @@ export function ActiveWorkoutView({
 
   const handleFinish = async () => {
     setShowSummary(false);
+    // Capture snapshot before invalidation
+    const snapshot = workout;
     await finish.mutateAsync(workout);
+    // Analyse muscles des exercices personnalisés en arrière-plan (silent)
+    const toResolve = (snapshot.exercises ?? []).map((ex) => ({
+      id: ex.id,
+      name: ex.name,
+      muscle_groups: null as string[] | null,
+    }));
+    resolveCustomExerciseMuscles(toResolve).catch(() => {});
+    // Affiche l'analyse IA post-séance
+    setFinishedWorkoutSnapshot(snapshot);
+    setAnalysisOpen(true);
   };
 
   const handleCancel = async () => {
@@ -239,6 +257,20 @@ export function ActiveWorkoutView({
         />
       )}
 
+      {/* ── Analyse IA post-séance ── */}
+      {analysisOpen && finishedWorkoutSnapshot && (
+        <PostWorkoutAnalysisSheet
+          workout={finishedWorkoutSnapshot}
+          workoutId={finishedWorkoutSnapshot.id}
+          previousWorkouts={allWorkouts ?? []}
+          recoveryMap={recoveryMap}
+          onClose={() => {
+            setAnalysisOpen(false);
+            setFinishedWorkoutSnapshot(null);
+          }}
+        />
+      )}
+
       {/* ── Confirm cancel ── */}
       {confirmCancel && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
@@ -279,6 +311,7 @@ export function ActiveWorkoutView({
           {(workout.exercises ?? []).map((ex) => {
             const exImage =
               (ex.image_path ? imageUrls?.get(ex.image_path) : null) ??
+              userPhotos?.get(normalize(ex.name)) ??
               exerciseIllustration(ex.name);
             return (
               <ActiveExerciseCard
