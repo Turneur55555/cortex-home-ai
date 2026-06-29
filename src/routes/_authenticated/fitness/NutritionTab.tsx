@@ -506,27 +506,13 @@ export function NutritionTab() {
           <ul className="space-y-2">
             {g.items.filter((m) => !pendingDeleteIds.has(m.id)).map((m) => {
               const badge = getPortionBadge(m);
-              const isSwiped = swipedId === m.id;
               return (
-                <li
+                <SwipeableNutritionItem
                   key={m.id}
-                  className="relative overflow-hidden rounded-2xl border border-border bg-card"
-                  onTouchStart={(e) => {
-                    swipeRef.current = { startX: e.touches[0].clientX, id: m.id };
-                    if (swipedId !== m.id) setSwipedId(null);
-                  }}
-                  onTouchEnd={(e) => {
-                    if (!swipeRef.current || swipeRef.current.id !== m.id) return;
-                    const dx = e.changedTouches[0].clientX - swipeRef.current.startX;
-                    if (dx < -64) setSwipedId(m.id);
-                    else if (dx > 16) setSwipedId(null);
-                    swipeRef.current = null;
-                  }}
+                  onDelete={() => handleDelete(m.id)}
+                  onTap={() => setPortionItem(m)}
                 >
-                  {/* Contenu principal — glisse à gauche lors du swipe */}
-                  <div
-                    className={`flex items-center gap-1 p-3.5 transition-transform duration-200 ${isSwiped ? "-translate-x-[88px]" : "translate-x-0"}`}
-                  >
+                  <div className="flex items-center gap-1 p-3.5">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
                         <p className="truncate text-sm font-medium">{m.name}</p>
@@ -542,24 +528,27 @@ export function NutritionTab() {
                     </div>
                     <button
                       type="button"
-                      onClick={() => readd.mutate({
-                        date,
-                        name: m.name ?? "",
-                        meal: m.meal ?? "collation",
-                        calories: m.calories,
-                        proteins: m.proteins,
-                        carbs: m.carbs,
-                        fats: m.fats,
-                        base_calories: m.base_calories ?? m.calories,
-                        base_proteins: m.base_proteins ?? m.proteins ?? null,
-                        base_carbs: m.base_carbs ?? m.carbs ?? null,
-                        base_fats: m.base_fats ?? m.fats ?? null,
-                        serving_count: m.serving_count ?? 1,
-                        percentage_consumed: 100,
-                        consumed_quantity: m.consumed_quantity ?? null,
-                        consumed_unit: m.consumed_unit ?? null,
-                        consumed_grams_per_unit: m.consumed_grams_per_unit ?? null,
-                      })}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        readd.mutate({
+                          date,
+                          name: m.name ?? "",
+                          meal: m.meal ?? "collation",
+                          calories: m.calories,
+                          proteins: m.proteins,
+                          carbs: m.carbs,
+                          fats: m.fats,
+                          base_calories: m.base_calories ?? m.calories,
+                          base_proteins: m.base_proteins ?? m.proteins ?? null,
+                          base_carbs: m.base_carbs ?? m.carbs ?? null,
+                          base_fats: m.base_fats ?? m.fats ?? null,
+                          serving_count: m.serving_count ?? 1,
+                          percentage_consumed: 100,
+                          consumed_quantity: m.consumed_quantity ?? null,
+                          consumed_unit: m.consumed_unit ?? null,
+                          consumed_grams_per_unit: m.consumed_grams_per_unit ?? null,
+                        });
+                      }}
                       disabled={readd.isPending}
                       className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground active:bg-muted active:text-foreground disabled:opacity-60"
                       aria-label="Re-ajouter"
@@ -568,35 +557,18 @@ export function NutritionTab() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => saveAsFavorite(m)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        saveAsFavorite(m);
+                      }}
                       disabled={addFav.isPending}
                       className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground active:bg-muted active:text-foreground disabled:opacity-60"
                       aria-label="Ajouter aux favoris"
                     >
                       <Star className="h-4 w-4" />
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setPortionItem(m)}
-                      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground active:bg-muted active:text-foreground"
-                      aria-label="Modifier la portion"
-                    >
-                      <Scale className="h-4 w-4" />
-                    </button>
                   </div>
-                  {/* Zone de suppression révélée par swipe left */}
-                  <div className="absolute inset-y-0 right-0 flex w-[88px] items-center justify-center bg-destructive">
-                    <button
-                      type="button"
-                      onClick={() => { setSwipedId(null); handleDelete(m.id); }}
-                      className="flex h-full w-full flex-col items-center justify-center gap-1 text-white active:opacity-80"
-                      aria-label="Supprimer"
-                    >
-                      <Trash2 className="h-5 w-5" />
-                      <span className="text-[10px] font-semibold">Supprimer</span>
-                    </button>
-                  </div>
-                </li>
+                </SwipeableNutritionItem>
               );
             })}
           </ul>
