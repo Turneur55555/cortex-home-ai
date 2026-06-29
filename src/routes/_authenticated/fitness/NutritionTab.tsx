@@ -56,8 +56,6 @@ export function NutritionTab() {
   const readd = useAddNutrition();
   const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(new Set());
   const deleteTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
-  const [swipedId, setSwipedId] = useState<string | null>(null);
-  const swipeRef = useRef<{ startX: number; id: string } | null>(null);
   const addFav = useAddFavorite();
   const copyDay = useCopyNutritionDay();
   const [copyOpen, setCopyOpen] = useState(false);
