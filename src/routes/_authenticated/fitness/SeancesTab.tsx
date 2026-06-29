@@ -1,5 +1,6 @@
 import { useMemo, useState, useCallback } from "react";
 import {
+  BookOpen,
   Dumbbell,
   Loader2,
   Sparkles,
@@ -15,6 +16,7 @@ import { WorkoutSheet } from "@/components/fitness/WorkoutSheet";
 import { WorkoutProgressCharts } from "@/components/fitness/WorkoutProgressCharts";
 import { StartWorkoutSheet } from "@/components/fitness/StartWorkoutSheet";
 import { ActiveWorkoutView } from "@/components/fitness/ActiveWorkoutView";
+import { ExerciseCatalogSheet } from "@/components/fitness/ExerciseCatalogSheet";
 import {
   useExerciseImageUrls,
   useWorkouts,
@@ -76,14 +78,13 @@ export function SeancesTab() {
   const [coachOpen, setCoachOpen] = useState(false);
   const [coachInitialMuscles, setCoachInitialMuscles] = useState<string[] | undefined>(undefined);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [catalogOpen, setCatalogOpen] = useState(false);
 
   const { prByName, histByName, volByName, prByGym, histByGym, nameByKey, topExercises } = useMemo(
     () => computePRs(data ?? []),
     [data],
   );
 
-  // #7 : ne signer les URLs d'images que lorsque l'historique est ouvert
-  // (les vignettes ne sont rendues que là). Évite N signatures au chargement.
   const allImagePaths = useMemo(
     () =>
       historyOpen
@@ -156,6 +157,24 @@ export function SeancesTab() {
           <span className="block text-sm font-semibold">Coach IA — Génère ma séance</span>
           <span className="block text-[11px] text-muted-foreground">
             Choisis muscles, durée, niveau. L'IA crée ta séance.
+          </span>
+        </span>
+      </button>
+
+      {/* Catalogue d'exercices */}
+      <button
+        type="button"
+        onClick={() => setCatalogOpen(true)}
+        className="flex items-center gap-3 rounded-2xl border border-border bg-card/50 p-4 text-left shadow-card transition-all active:scale-[0.99]"
+        aria-label="Voir le catalogue d'exercices"
+      >
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/5 text-muted-foreground">
+          <BookOpen className="h-5 w-5" />
+        </span>
+        <span className="flex-1">
+          <span className="block text-sm font-semibold">Exercices</span>
+          <span className="block text-[11px] text-muted-foreground">
+            Voir et modifier le catalogue complet
           </span>
         </span>
       </button>
@@ -287,6 +306,10 @@ export function SeancesTab() {
           onResult={handleCoachResult}
           initialMuscles={coachInitialMuscles}
         />
+      )}
+
+      {catalogOpen && (
+        <ExerciseCatalogSheet onClose={() => setCatalogOpen(false)} />
       )}
     </section>
   );
