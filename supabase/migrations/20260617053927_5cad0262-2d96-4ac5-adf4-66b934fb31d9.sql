@@ -145,6 +145,7 @@ CREATE INDEX IF NOT EXISTS food_favorites_user_idx ON public.food_favorites (use
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.food_favorites TO authenticated;
 GRANT ALL ON public.food_favorites TO service_role;
 ALTER TABLE public.food_favorites ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "users manage own favorites" ON public.food_favorites;
 CREATE POLICY "users manage own favorites" ON public.food_favorites
   FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 

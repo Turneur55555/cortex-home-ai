@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS public.user_exercise_illustrations (
 
 ALTER TABLE public.user_exercise_illustrations ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users manage own exercise illustrations" ON public.user_exercise_illustrations;
 CREATE POLICY "Users manage own exercise illustrations" ON public.user_exercise_illustrations
   FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
