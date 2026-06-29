@@ -42,6 +42,7 @@ import { SavedMealsSheet } from "@/components/fitness/SavedMealsSheet";
 import { FavoritesSheet } from "@/components/fitness/FavoritesSheet";
 import { RecipeLogSheet } from "@/components/fitness/RecipeLogSheet";
 import { VoiceLogSheet } from "@/components/fitness/VoiceLogSheet";
+import { SwipeableNutritionItem } from "@/components/fitness/SwipeableNutritionItem";
 import { useCreateSavedMeal } from "@/hooks/use-saved-meals";
 import { getPortionBadge } from "@/lib/nutrition/utils";
 import type { MealPrefill, NutritionEntry } from "@/lib/nutrition/utils";
