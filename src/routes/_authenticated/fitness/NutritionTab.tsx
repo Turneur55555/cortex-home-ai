@@ -16,7 +16,7 @@ import {
   Sparkles,
   Star,
   Target,
-  Trash2,
+  
   TrendingUp,
   Utensils,
 } from "lucide-react";
