@@ -18,7 +18,7 @@ export function useExerciseCatalog() {
   return useQuery({
     queryKey: CACHE_KEY,
     queryFn: async (): Promise<DbCatalogRow[]> => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("exercise_catalog")
         .select("*")
         .order("group_name")
@@ -37,13 +37,13 @@ export function useFullExerciseCatalog() {
     queryKey: FULL_CACHE_KEY,
     queryFn: async (): Promise<DbCatalogRow[]> => {
       const [catalogResult, customResult] = await Promise.all([
-        supabase
+        (supabase as any)
           .from("exercise_catalog")
           .select("*")
           .order("group_name")
           .order("sort_order")
           .order("name"),
-        supabase
+        (supabase as any)
           .from("exercises")
           .select("name")
           .order("name"),
@@ -86,7 +86,7 @@ export function useAddExercise() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ name, group_name }: { name: string; group_name: string }) => {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from("exercise_catalog")
         .insert({ name: name.trim(), group_name });
       if (error) throw error;
@@ -102,7 +102,7 @@ export function useDeleteExercise() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from("exercise_catalog")
         .delete()
         .eq("id", id);
@@ -127,7 +127,7 @@ export function useUpdateExercise() {
       name: string;
       group_name: string;
     }) => {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from("exercise_catalog")
         .update({ name: name.trim(), group_name })
         .eq("id", id);
@@ -145,7 +145,7 @@ export function usePromoteExercise() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ name, group_name }: { name: string; group_name: string }) => {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from("exercise_catalog")
         .insert({ name: name.trim(), group_name });
       if (error && !error.message.includes("duplicate")) throw error;
