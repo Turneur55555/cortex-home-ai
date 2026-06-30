@@ -251,7 +251,6 @@ export type Database = {
         Row: {
           id: string
           image_path: string | null
-          muscle_groups: string[] | null
           name: string
           notes: string | null
           reps: number | null
@@ -263,7 +262,6 @@ export type Database = {
         Insert: {
           id?: string
           image_path?: string | null
-          muscle_groups?: string[] | null
           name: string
           notes?: string | null
           reps?: number | null
@@ -275,7 +273,6 @@ export type Database = {
         Update: {
           id?: string
           image_path?: string | null
-          muscle_groups?: string[] | null
           name?: string
           notes?: string | null
           reps?: number | null
@@ -1147,54 +1144,6 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           id?: string
-        }
-        Relationships: []
-      }
-      user_exercise_illustrations: {
-        Row: {
-          id: string
-          user_id: string
-          exercise_name: string
-          storage_path: string
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          exercise_name: string
-          storage_path: string
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          exercise_name?: string
-          storage_path?: string
-          created_at?: string
-        }
-        Relationships: []
-      }
-      workout_analyses: {
-        Row: {
-          id: string
-          user_id: string
-          workout_id: string
-          summary: Json
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          workout_id: string
-          summary: Json
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          workout_id?: string
-          summary?: Json
-          created_at?: string
         }
         Relationships: []
       }
