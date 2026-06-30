@@ -26,7 +26,7 @@ export function useUserExercisePhotos() {
 
       if (!data || data.length === 0) return new Map<string, string>();
 
-      const paths = data.map((r) => r.storage_path);
+      const paths = (data as Array<{ storage_path: string; exercise_name: string }>).map((r) => r.storage_path);
       const { data: signed, error: signErr } = await supabase.storage
         .from("exercise-images")
         .createSignedUrls(paths, 60 * 60);
