@@ -10,29 +10,37 @@ import {
   Search,
   Trash2,
   X,
+  Star,
 } from "lucide-react";
 import { CATALOG_GROUPS } from "@/lib/fitness/exerciseCatalog";
+import { exerciseIllustration } from "@/lib/fitness/exerciseIllustrations";
 import { toast } from "sonner";
 import {
-  useExerciseCatalog,
+  useFullExerciseCatalog,
   useAddExercise,
   useDeleteExercise,
   useUpdateExercise,
+  usePromoteExercise,
 } from "@/hooks/useExerciseCatalog";
+import { useUserExercisePhotos } from "@/hooks/useUserExercisePhotos";
 
 interface Props {
   onClose: () => void;
 }
 
+const ALL_GROUPS = [...CATALOG_GROUPS, "Mes exercices"];
+
 export function ExerciseCatalogSheet({ onClose }: Props) {
-  const { data: catalog, isLoading } = useExerciseCatalog();
+  const { data: catalog, isLoading } = useFullExerciseCatalog();
+  const { data: userPhotos } = useUserExercisePhotos();
   const addExercise = useAddExercise();
   const deleteExercise = useDeleteExercise();
   const updateExercise = useUpdateExercise();
+  const promoteExercise = usePromoteExercise();
 
   const [query, setQuery] = useState("");
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
-    new Set(CATALOG_GROUPS),
+    new Set(ALL_GROUPS),
   );
   const [showAdd, setShowAdd] = useState(false);
   const [newName, setNewName] = useState("");
@@ -40,6 +48,8 @@ export function ExerciseCatalogSheet({ onClose }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editGroup, setEditGroup] = useState("");
+  const [promotingId, setPromotingId] = useState<string | null>(null);
+  const [promoteGroup, setPromoteGroup] = useState(CATALOG_GROUPS[0]);
 
   const normQuery = (s: string) =>
     s
@@ -68,8 +78,8 @@ export function ExerciseCatalogSheet({ onClose }: Props) {
   }, [filtered]);
 
   const allDisplayGroups = [
-    ...CATALOG_GROUPS.filter((g) => byGroup.has(g)),
-    ...[...byGroup.keys()].filter((g) => !CATALOG_GROUPS.includes(g)),
+    ...ALL_GROUPS.filter((g) => byGroup.has(g)),
+    ...[...byGroup.keys()].filter((g) => !ALL_GROUPS.includes(g)),
   ];
 
   const toggleGroup = (g: string) =>
@@ -79,6 +89,16 @@ export function ExerciseCatalogSheet({ onClose }: Props) {
       else next.add(g);
       return next;
     });
+
+  const getPhoto = (name: string) => {
+    if (userPhotos) {
+      const userUrl = userPhotos.get(normQuery(name));
+      if (userUrl) return userUrl;
+    }
+    return exerciseIllustration(name);
+  };
+
+  const isCustom = (id: string) => id.startsWith("custom__");
 
   const handleAdd = async () => {
     if (!newName.trim()) return;
@@ -93,13 +113,15 @@ export function ExerciseCatalogSheet({ onClose }: Props) {
   };
 
   const handleDelete = async (id: string, name: string) => {
+    if (isCustom(id)) {
+      toast.error("Exercice hors catalogue — supprime-le depuis tes séances.");
+      return;
+    }
     try {
       await deleteExercise.mutateAsync(id);
       toast.success(`"${name}" supprimé`);
     } catch (e) {
-      toast.error(
-        e instanceof Error ? e.message : "Erreur lors de la suppression",
-      );
+      toast.error(e instanceof Error ? e.message : "Erreur");
     }
   };
 
@@ -114,9 +136,17 @@ export function ExerciseCatalogSheet({ onClose }: Props) {
       toast.success("Exercice modifié");
       setEditingId(null);
     } catch (e) {
-      toast.error(
-        e instanceof Error ? e.message : "Erreur lors de la modification",
-      );
+      toast.error(e instanceof Error ? e.message : "Erreur");
+    }
+  };
+
+  const handlePromote = async (name: string) => {
+    try {
+      await promoteExercise.mutateAsync({ name, group_name: promoteGroup });
+      toast.success(`"${name}" ajouté au catalogue`);
+      setPromotingId(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erreur");
     }
   };
 
@@ -252,15 +282,14 @@ export function ExerciseCatalogSheet({ onClose }: Props) {
 
           {!isLoading && allDisplayGroups.length === 0 && (
             <p className="mt-8 text-center text-sm text-muted-foreground">
-              {query
-                ? "Aucun résultat."
-                : "Catalogue vide — ajoutez des exercices."}
+              {query ? "Aucun résultat." : "Catalogue vide — ajoutez des exercices."}
             </p>
           )}
 
           {allDisplayGroups.map((group) => {
             const exercises = byGroup.get(group) ?? [];
             const isExpanded = expandedGroups.has(group);
+            const isCustomGroup = group === "Mes exercices";
 
             return (
               <div key={group} className="mb-3">
@@ -274,101 +303,188 @@ export function ExerciseCatalogSheet({ onClose }: Props) {
                   ) : (
                     <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                   )}
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  <span
+                    className={`text-[11px] font-semibold uppercase tracking-wider ${
+                      isCustomGroup ? "text-primary" : "text-muted-foreground"
+                    }`}
+                  >
                     {group}
                   </span>
                   <span className="rounded-full bg-white/5 px-1.5 py-0.5 text-[10px] text-muted-foreground">
                     {exercises.length}
                   </span>
+                  {isCustomGroup && (
+                    <span className="ml-1 text-[9px] text-muted-foreground">
+                      (non dans le catalogue)
+                    </span>
+                  )}
                 </button>
 
                 {isExpanded && (
-                  <ul className="space-y-0.5 pl-6">
-                    {exercises.map((ex) =>
-                      editingId === ex.id ? (
-                        <li key={ex.id} className="rounded-xl border border-primary/40 bg-primary/5 p-2">
-                          <input
-                            autoFocus
-                            type="text"
-                            value={editName}
-                            onChange={(e) => setEditName(e.target.value)}
-                            onKeyDown={(e) =>
-                              e.key === "Enter" && handleEditSave()
-                            }
-                            className="mb-2 w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-sm outline-none focus:border-primary"
-                          />
-                          <div className="mb-2 flex flex-wrap gap-1">
-                            {CATALOG_GROUPS.map((g) => (
+                  <ul className="space-y-0.5 pl-2">
+                    {exercises.map((ex) => {
+                      const photo = getPhoto(ex.name);
+                      const isCustomEx = isCustom(ex.id);
+
+                      if (editingId === ex.id) {
+                        return (
+                          <li key={ex.id} className="rounded-xl border border-primary/40 bg-primary/5 p-2">
+                            <input
+                              autoFocus
+                              type="text"
+                              value={editName}
+                              onChange={(e) => setEditName(e.target.value)}
+                              onKeyDown={(e) => e.key === "Enter" && handleEditSave()}
+                              className="mb-2 w-full rounded-lg border border-border bg-surface px-3 py-1.5 text-sm outline-none focus:border-primary"
+                            />
+                            <div className="mb-2 flex flex-wrap gap-1">
+                              {CATALOG_GROUPS.map((g) => (
+                                <button
+                                  key={g}
+                                  type="button"
+                                  onClick={() => setEditGroup(g)}
+                                  className={`rounded-md border px-2 py-0.5 text-[10px] font-semibold transition-colors ${
+                                    editGroup === g
+                                      ? "border-primary bg-primary/20 text-primary"
+                                      : "border-border text-muted-foreground"
+                                  }`}
+                                >
+                                  {g}
+                                </button>
+                              ))}
+                            </div>
+                            <div className="flex gap-2">
                               <button
-                                key={g}
                                 type="button"
-                                onClick={() => setEditGroup(g)}
-                                className={`rounded-md border px-2 py-0.5 text-[10px] font-semibold transition-colors ${
-                                  editGroup === g
-                                    ? "border-primary bg-primary/20 text-primary"
-                                    : "border-border text-muted-foreground"
-                                }`}
+                                onClick={() => setEditingId(null)}
+                                className="flex-1 rounded-lg border border-border py-1.5 text-xs font-semibold text-muted-foreground"
                               >
-                                {g}
+                                Annuler
                               </button>
-                            ))}
-                          </div>
-                          <div className="flex gap-2">
-                            <button
-                              type="button"
-                              onClick={() => setEditingId(null)}
-                              className="flex-1 rounded-lg border border-border py-1.5 text-xs font-semibold text-muted-foreground"
-                            >
-                              Annuler
-                            </button>
-                            <button
-                              type="button"
-                              onClick={handleEditSave}
-                              disabled={updateExercise.isPending}
-                              className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-primary py-1.5 text-xs font-semibold text-primary-foreground disabled:opacity-50"
-                            >
-                              {updateExercise.isPending ? (
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                              ) : (
-                                <Check className="h-3 w-3" />
-                              )}
-                              Sauvegarder
-                            </button>
-                          </div>
-                        </li>
-                      ) : (
+                              <button
+                                type="button"
+                                onClick={handleEditSave}
+                                disabled={updateExercise.isPending}
+                                className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-primary py-1.5 text-xs font-semibold text-primary-foreground disabled:opacity-50"
+                              >
+                                {updateExercise.isPending ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <Check className="h-3 w-3" />
+                                )}
+                                Sauvegarder
+                              </button>
+                            </div>
+                          </li>
+                        );
+                      }
+
+                      if (promotingId === ex.id) {
+                        return (
+                          <li key={ex.id} className="rounded-xl border border-primary/40 bg-primary/5 p-2">
+                            <p className="mb-2 text-[11px] font-semibold text-primary">
+                              Ajouter "{ex.name}" au catalogue
+                            </p>
+                            <div className="mb-2 flex flex-wrap gap-1">
+                              {CATALOG_GROUPS.map((g) => (
+                                <button
+                                  key={g}
+                                  type="button"
+                                  onClick={() => setPromoteGroup(g)}
+                                  className={`rounded-md border px-2 py-0.5 text-[10px] font-semibold transition-colors ${
+                                    promoteGroup === g
+                                      ? "border-primary bg-primary/20 text-primary"
+                                      : "border-border text-muted-foreground"
+                                  }`}
+                                >
+                                  {g}
+                                </button>
+                              ))}
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setPromotingId(null)}
+                                className="flex-1 rounded-lg border border-border py-1.5 text-xs font-semibold text-muted-foreground"
+                              >
+                                Annuler
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handlePromote(ex.name)}
+                                disabled={promoteExercise.isPending}
+                                className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-primary py-1.5 text-xs font-semibold text-primary-foreground disabled:opacity-50"
+                              >
+                                {promoteExercise.isPending ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <Star className="h-3 w-3" />
+                                )}
+                                Ajouter
+                              </button>
+                            </div>
+                          </li>
+                        );
+                      }
+
+                      return (
                         <li key={ex.id}>
-                          <div className="group flex items-center justify-between gap-2 rounded-xl px-3 py-2 hover:bg-white/[0.04]">
-                            <span className="flex-1 truncate text-sm">
-                              {ex.name}
-                            </span>
+                          <div className="group flex items-center gap-3 rounded-xl px-2 py-2 hover:bg-white/[0.04]">
+                            {photo ? (
+                              <img
+                                src={photo}
+                                alt={ex.name}
+                                loading="lazy"
+                                className="h-10 w-10 shrink-0 rounded-lg object-cover ring-1 ring-white/10"
+                              />
+                            ) : (
+                              <div className="h-10 w-10 shrink-0 rounded-lg bg-white/5" />
+                            )}
+                            <span className="flex-1 truncate text-sm">{ex.name}</span>
                             <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setEditingId(ex.id);
-                                  setEditName(ex.name);
-                                  setEditGroup(ex.group_name);
-                                }}
-                                className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/5 text-muted-foreground hover:bg-primary/20 hover:text-primary"
-                                aria-label={`Modifier ${ex.name}`}
-                              >
-                                <Pencil className="h-3 w-3" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDelete(ex.id, ex.name)}
-                                disabled={deleteExercise.isPending}
-                                className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/5 text-muted-foreground hover:bg-destructive/20 hover:text-destructive disabled:opacity-50"
-                                aria-label={`Supprimer ${ex.name}`}
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </button>
+                              {isCustomEx ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setPromotingId(ex.id);
+                                    setPromoteGroup(CATALOG_GROUPS[0]);
+                                  }}
+                                  className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/5 text-muted-foreground hover:bg-primary/20 hover:text-primary"
+                                  aria-label={`Ajouter ${ex.name} au catalogue`}
+                                  title="Ajouter au catalogue"
+                                >
+                                  <Star className="h-3 w-3" />
+                                </button>
+                              ) : (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingId(ex.id);
+                                      setEditName(ex.name);
+                                      setEditGroup(ex.group_name);
+                                    }}
+                                    className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/5 text-muted-foreground hover:bg-primary/20 hover:text-primary"
+                                    aria-label={`Modifier ${ex.name}`}
+                                  >
+                                    <Pencil className="h-3 w-3" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDelete(ex.id, ex.name)}
+                                    disabled={deleteExercise.isPending}
+                                    className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/5 text-muted-foreground hover:bg-destructive/20 hover:text-destructive disabled:opacity-50"
+                                    aria-label={`Supprimer ${ex.name}`}
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </button>
+                                </>
+                              )}
                             </div>
                           </div>
                         </li>
-                      ),
-                    )}
+                      );
+                    })}
                   </ul>
                 )}
               </div>
