@@ -225,7 +225,7 @@ export function useUpdateExerciseMuscles() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, muscle_groups }: { id: string; muscle_groups: string[] }) => {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from("exercises")
         .update({ muscle_groups })
         .eq("id", id);
