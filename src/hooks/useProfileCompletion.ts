@@ -34,7 +34,7 @@ export function useProfileCompletion({ hasAvatar, hasCustomPseudo }: Params) {
       const items = [
         { key: "pseudo", label: "Pseudo personnalisé", done: hasCustomPseudo },
         { key: "avatar", label: "Avatar ajouté", done: hasAvatar },
-        { key: "height", label: "Taille renseignée", done: !!prefs.data?.height_cm },
+        { key: "height", label: "Taille renseignée", done: !!heightCm },
         { key: "body", label: "1ère mensuration", done: (body.count ?? 0) > 0 },
         { key: "goals", label: "1 objectif défini", done: (goals.count ?? 0) > 0 },
         { key: "nutrition", label: "Objectifs nutrition", done: !!nut.data },
