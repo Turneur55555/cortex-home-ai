@@ -409,6 +409,7 @@ export function useAddExerciseToWorkout() {
                     reps: exercise.reps ?? null,
                     weight: exercise.weight ?? null,
                     image_path: null,
+                    muscle_groups: null,
                   },
                 ],
               }
