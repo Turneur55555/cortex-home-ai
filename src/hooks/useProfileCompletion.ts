@@ -23,10 +23,10 @@ export function useProfileCompletion({ hasAvatar, hasCustomPseudo }: Params) {
     queryFn: async (): Promise<ProfileCompletion> => {
       const uid = user!.id;
       const [body, goals, prefs, nut] = await Promise.all([
-        (supabase as any).from("body_tracking").select("id", { count: "exact", head: true }).eq("user_id", uid),
-        (supabase as any).from("goals").select("id", { count: "exact", head: true }).eq("user_id", uid),
-        (supabase as any).from("user_preferences").select("height_cm").eq("user_id", uid).maybeSingle(),
-        (supabase as any).from("nutrition_goals").select("user_id").eq("user_id", uid).maybeSingle(),
+        supabase.from("body_tracking").select("id", { count: "exact", head: true }).eq("user_id", uid),
+        supabase.from("goals").select("id", { count: "exact", head: true }).eq("user_id", uid),
+        supabase.from("user_preferences").select("height_cm").eq("user_id", uid).maybeSingle(),
+        supabase.from("nutrition_goals").select("user_id").eq("user_id", uid).maybeSingle(),
       ]);
 
       const items = [
