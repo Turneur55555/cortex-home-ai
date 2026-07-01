@@ -15,6 +15,7 @@ import { BodyMeasurementsHistory } from "@/components/profile/BodyMeasurementsHi
 import { PersonalizationPanel } from "@/components/profile/PersonalizationPanel";
 import { PdfPanel } from "@/components/profile/PdfPanel";
 import { SecurityPanel } from "@/components/profile/SecurityPanel";
+import { HealthDataPanel } from "@/components/profile/HealthDataPanel";
 import { EditPseudoSheet } from "@/components/profile/EditPseudoSheet";
 
 export const Route = createFileRoute("/_authenticated/profil")({
