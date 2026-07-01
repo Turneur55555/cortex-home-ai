@@ -114,6 +114,7 @@ function ProfilPage() {
 
       {/* Données personnelles */}
       <Section title="Données personnelles">
+        <HealthDataPanel />
         <PdfPanel />
         <div className="mt-4">
           <SecurityPanel />
