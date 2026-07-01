@@ -21,11 +21,16 @@ const TABLES = [
 
 async function fetchAll(userId: string): Promise<Record<string, Row[]>> {
   const out: Record<string, Row[]> = {};
+  const client = supabase as unknown as {
+    from: (t: string) => {
+      select: (c: string) => {
+        eq: (col: string, val: string) => Promise<{ data: Row[] | null; error: unknown }>;
+      };
+    };
+  };
   for (const t of TABLES) {
-    // @ts-expect-error dynamic table
-    const { data, error } = await supabase.from(t).select("*").eq("user_id", userId);
-    if (!error) out[t] = (data ?? []) as Row[];
-    else out[t] = [];
+    const { data, error } = await client.from(t).select("*").eq("user_id", userId);
+    out[t] = !error && data ? data : [];
   }
   return out;
 }
