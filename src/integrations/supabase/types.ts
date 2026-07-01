@@ -110,6 +110,51 @@ export type Database = {
         }
         Relationships: []
       }
+      daily_activity: {
+        Row: {
+          active_calories: number | null
+          avg_hr: number | null
+          created_at: string
+          date: string
+          distance_m: number | null
+          id: string
+          max_hr: number | null
+          resting_hr: number | null
+          source: string
+          steps: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          active_calories?: number | null
+          avg_hr?: number | null
+          created_at?: string
+          date: string
+          distance_m?: number | null
+          id?: string
+          max_hr?: number | null
+          resting_hr?: number | null
+          source?: string
+          steps?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          active_calories?: number | null
+          avg_hr?: number | null
+          created_at?: string
+          date?: string
+          distance_m?: number | null
+          id?: string
+          max_hr?: number | null
+          resting_hr?: number | null
+          source?: string
+          steps?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       documents: {
         Row: {
           alerts: Json | null
