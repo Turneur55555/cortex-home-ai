@@ -1,4 +1,4 @@
-CREATE TABLE public.daily_activity (
+CREATE TABLE IF NOT EXISTS public.daily_activity (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   date date NOT NULL,
@@ -14,16 +14,18 @@ CREATE TABLE public.daily_activity (
   UNIQUE (user_id, date, source)
 );
 
-CREATE INDEX idx_daily_activity_user_date ON public.daily_activity (user_id, date DESC);
+CREATE INDEX IF NOT EXISTS idx_daily_activity_user_date ON public.daily_activity (user_id, date DESC);
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.daily_activity TO authenticated;
 GRANT ALL ON public.daily_activity TO service_role;
 
 ALTER TABLE public.daily_activity ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "own daily_activity" ON public.daily_activity;
 CREATE POLICY "own daily_activity" ON public.daily_activity
   FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
+DROP TRIGGER IF EXISTS daily_activity_touch ON public.daily_activity;
 CREATE TRIGGER daily_activity_touch
   BEFORE UPDATE ON public.daily_activity
   FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();

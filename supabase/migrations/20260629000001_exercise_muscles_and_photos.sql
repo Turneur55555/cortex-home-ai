@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS public.workout_analyses (
 
 ALTER TABLE public.workout_analyses ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users manage own workout analyses" ON public.workout_analyses;
 CREATE POLICY "Users manage own workout analyses" ON public.workout_analyses
   FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 

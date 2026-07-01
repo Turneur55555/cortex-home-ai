@@ -169,6 +169,7 @@ CREATE INDEX IF NOT EXISTS food_custom_foods_user_idx ON public.food_custom_food
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.food_custom_foods TO authenticated;
 GRANT ALL ON public.food_custom_foods TO service_role;
 ALTER TABLE public.food_custom_foods ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "users manage own custom foods" ON public.food_custom_foods;
 CREATE POLICY "users manage own custom foods" ON public.food_custom_foods
   FOR ALL TO authenticated USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
