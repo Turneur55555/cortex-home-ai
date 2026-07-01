@@ -34,21 +34,24 @@ export async function importAppleHealth(
 ): Promise<ImportSummary> {
   const today = new Date().toISOString().slice(0, 10);
 
+  // body_tracking n'a pas de contrainte unique (user_id, date) : on filtre côté client les dates déjà présentes
+  const { data: existingBody } = await supabase
+    .from("body_tracking")
+    .select("date")
+    .eq("user_id", userId);
+  const bodyExisting = new Set((existingBody ?? []).map((r) => r.date));
+
   const bodyRows = parsed.body
-    .filter((b) => b.date <= today)
+    .filter((b) => b.date <= today && !bodyExisting.has(b.date))
     .map((b) => ({ user_id: userId, ...b }));
 
-  // upsert par (user_id, date) — pas de contrainte unique dédiée, on fait insert et on ignore les doublons via .upsert avec ignoreDuplicates
   let bodyInserted = 0;
   const bodyErrors: string[] = [];
   for (let i = 0; i < bodyRows.length; i += CHUNK) {
     const slice = bodyRows.slice(i, i + CHUNK);
-    const { error, data } = await supabase
-      .from("body_tracking")
-      .upsert(slice, { onConflict: "user_id,date", ignoreDuplicates: true })
-      .select("id");
+    const { error, data } = await supabase.from("body_tracking").insert(slice).select("id");
     if (error) bodyErrors.push(`body[${i}]: ${error.message}`);
-    else bodyInserted += data?.length ?? slice.length;
+    else bodyInserted += data?.length ?? 0;
   }
 
   const workoutRows = parsed.workouts
