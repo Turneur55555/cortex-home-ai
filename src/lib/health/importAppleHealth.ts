@@ -4,6 +4,15 @@ import type { ParseResult } from "./appleHealth";
 
 const CHUNK = 500;
 
+type AnyFrom = {
+  from: (t: string) => {
+    insert: (rows: unknown[]) => { select: (c: string) => Promise<{ data: unknown[] | null; error: { message: string } | null }> };
+    upsert: (rows: unknown[], opts: { onConflict: string }) => Promise<{ error: { message: string } | null }>;
+    select: (c: string) => { eq: (col: string, val: string) => Promise<{ data: { date: string }[] | null }> };
+  };
+};
+const sb = supabase as unknown as AnyFrom;
+
 async function upsertChunks<T>(
   table: string,
   rows: T[],
@@ -13,8 +22,7 @@ async function upsertChunks<T>(
   const errors: string[] = [];
   for (let i = 0; i < rows.length; i += CHUNK) {
     const slice = rows.slice(i, i + CHUNK);
-    // @ts-expect-error dynamic table
-    const { error } = await supabase.from(table).upsert(slice, { onConflict });
+    const { error } = await sb.from(table).upsert(slice, { onConflict });
     if (error) errors.push(`${table}[${i}]: ${error.message}`);
     else inserted += slice.length;
   }
