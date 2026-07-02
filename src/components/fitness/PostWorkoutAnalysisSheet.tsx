@@ -34,7 +34,7 @@ type WorkoutAnalysis = {
   };
   performance: {
     prs?: Array<{ exercise: string; detail: string }>;
-    rpe_comment: string;
+    intensity_comment: string;
     progression_comment?: string;
   };
   recovery: {
@@ -134,7 +134,6 @@ export function PostWorkoutAnalysisSheet({
             sets: (ex.exercise_sets ?? []).map((s) => ({
               reps: s.reps,
               weight: s.weight,
-              rpe: s.rpe,
               completed: s.completed,
             })),
           };
@@ -292,7 +291,7 @@ export function PostWorkoutAnalysisSheet({
                     ))}
                   </div>
                 )}
-                <p className="text-xs text-muted-foreground">{analysis.performance.rpe_comment}</p>
+                <p className="text-xs text-muted-foreground">{analysis.performance.intensity_comment}</p>
                 {analysis.performance.progression_comment && (
                   <p className="mt-1.5 text-xs text-muted-foreground">
                     {analysis.performance.progression_comment}

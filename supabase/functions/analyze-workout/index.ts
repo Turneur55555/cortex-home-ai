@@ -54,7 +54,7 @@ Deno.serve(async (req) => {
       exercises: Array<{
         name: string;
         muscles: string[];
-        sets: Array<{ reps: number | null; weight: number | null; rpe: number | null; completed: boolean }>;
+        sets: Array<{ reps: number | null; weight: number | null; completed: boolean }>;
       }>;
     };
 
@@ -95,10 +95,7 @@ Deno.serve(async (req) => {
       .map((ex) => {
         const completedSetsForEx = ex.sets.filter((s) => s.completed);
         const topWeight = Math.max(0, ...ex.sets.map((s) => s.weight ?? 0));
-        const avgRpe = ex.sets.filter((s) => s.rpe != null).length > 0
-          ? (ex.sets.reduce((sum, s) => sum + (s.rpe ?? 0), 0) / ex.sets.filter((s) => s.rpe != null).length).toFixed(1)
-          : null;
-        return `- ${ex.name} (${ex.muscles.join(", ")}): ${completedSetsForEx.length} séries validées, charge max ${topWeight} kg${avgRpe ? `, RPE moyen ${avgRpe}` : ""}`;
+        return `- ${ex.name} (${ex.muscles.join(", ")}): ${completedSetsForEx.length} séries validées, charge max ${topWeight} kg`;
       })
       .join("\n");
 
@@ -167,10 +164,10 @@ Génère un rapport structuré via tool calling. Sois précis, encourageant mais
                   },
                   description: "Records ou performances notables",
                 },
-                rpe_comment: { type: "string", description: "Évaluation de l'intensité perçue globale" },
+                intensity_comment: { type: "string", description: "Évaluation de l'intensité globale de la séance (tonnage, densité, charges vs historique)" },
                 progression_comment: { type: "string", description: "Tendance de progression vs séances précédentes" },
               },
-              required: ["rpe_comment"],
+              required: ["intensity_comment"],
               additionalProperties: false,
             },
             recovery: {

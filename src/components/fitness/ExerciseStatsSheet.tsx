@@ -42,7 +42,7 @@ export function ExerciseStatsSheet({
         (history ?? []).map((h) => ({
           date: h.date,
           workoutId: h.workoutId,
-          sets: h.sets.map((s) => ({ reps: s.reps, weight: s.weight, rpe: s.rpe })),
+          sets: h.sets.map((s) => ({ reps: s.reps, weight: s.weight })),
         })),
       ),
     [history],
@@ -327,15 +327,11 @@ export function ExerciseStatsSheet({
                           >
                             {row.reps ?? "—"}×{row.weight ?? "—"}
                             <span className="text-muted-foreground/70"> kg</span>
-                            {row.rpe != null && (
-                              <span className="ml-1 text-primary">@{row.rpe}</span>
-                            )}
                           </span>
                         ))}
                       </div>
                       <div className="mt-1.5 text-[9px] uppercase tracking-wider text-muted-foreground/60">
                         Tonnage {formatTonnage(s.tonnage)}
-                        {s.avgRpe != null ? ` · RPE moy. ${s.avgRpe}` : ""}
                       </div>
                     </div>
                   );

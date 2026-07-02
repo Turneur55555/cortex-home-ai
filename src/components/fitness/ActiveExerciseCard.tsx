@@ -326,7 +326,7 @@ export function ActiveExerciseCard({
       .filter((rec): rec is MuscleRecovery => rec != null && rec.status === "fatigued");
   }, [exercise.name, recoveryMap]);
 
-  // Charge recommandée via RPE auto-régulation (Epley inverse)
+  // Charge recommandée : dernière perf, modulée par la récupération musculaire.
   const suggestion = useMemo(() => {
     if (!lastSummary?.weight || !lastSummary?.reps) return null;
     let minFraction: number | null = null;
@@ -339,22 +339,26 @@ export function ActiveExerciseCard({
         }
       }
     }
+    // N'affiche la suggestion que si elle diffère de la dernière charge
+    // (sinon le badge « Dernière séance » suffit).
     const result = recommendLoad({
-      last: { weight: lastSummary.weight, reps: lastSummary.reps, rpe: null },
-      targetReps: lastSummary.reps,
-      targetRpe: 7,
+      last: { weight: lastSummary.weight, reps: lastSummary.reps },
       recoveryFraction: minFraction,
     });
+    if (result.weight == null || !result.recoveryLimited) return null;
     return result.weight;
   }, [lastSummary, recoveryMap, exercise.name]);
 
   const handleAddSet = async () => {
     const last = sortedSets[sortedSets.length - 1];
-    const nextIndex = sortedSets.length + 1;
-    const fallback = lastSetsByNumber.get(nextIndex) ?? lastSession?.sets[0];
+    // C1 : max(set_number)+1 — `length+1` provoquait une violation UNIQUE
+    // après suppression d'une série intermédiaire.
+    const nextNumber =
+      sortedSets.reduce((m, st) => Math.max(m, st.set_number), 0) + 1;
+    const fallback = lastSetsByNumber.get(sortedSets.length + 1) ?? lastSession?.sets[0];
     await addSet.mutateAsync({
       exerciseId: exercise.id,
-      setNumber: nextIndex,
+      setNumber: nextNumber,
       reps: last?.reps ?? fallback?.reps ?? null,
       weight: last?.weight ?? fallback?.weight ?? null,
     });
@@ -575,13 +579,13 @@ export function ActiveExerciseCard({
             </button>
           )}
 
-          {/* Charge recommandée (RPE auto-régulation) */}
+          {/* Charge recommandée (modulation récupération) */}
           {suggestion != null && (
             <div className="mt-2 flex items-center gap-2 rounded-xl bg-primary/[0.07] px-3 py-2 text-[12px]">
               <Zap className="h-3.5 w-3.5 shrink-0 text-primary" />
               <span className="text-muted-foreground">Suggéré :</span>
               <span className="font-bold text-primary">{suggestion} kg</span>
-              <span className="text-muted-foreground/60">× {lastSummary?.reps} reps · RPE 7</span>
+              <span className="text-muted-foreground/60">× {lastSummary?.reps} reps · récup. incomplète</span>
             </div>
           )}
 

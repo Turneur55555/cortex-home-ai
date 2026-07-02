@@ -17,10 +17,13 @@ import { WorkoutProgressCharts } from "@/components/fitness/WorkoutProgressChart
 import { StartWorkoutSheet } from "@/components/fitness/StartWorkoutSheet";
 import { ActiveWorkoutView } from "@/components/fitness/ActiveWorkoutView";
 import { ExerciseCatalogSheet } from "@/components/fitness/ExerciseCatalogSheet";
+import { PostWorkoutAnalysisSheet } from "@/components/fitness/PostWorkoutAnalysisSheet";
 import {
   useExerciseImageUrls,
   useWorkouts,
   useActiveWorkout,
+  useStartWorkoutFromTemplate,
+  type ActiveWorkout,
 } from "@/hooks/use-fitness";
 import { useRecoveryMap } from "@/hooks/useRecoveryMap";
 import { useFitnessStreak } from "@/hooks/useFitnessStreak";
@@ -74,6 +77,9 @@ export function SeancesTab() {
 
   const [startOpen, setStartOpen] = useState(false);
   const [open, setOpen] = useState(false);
+  // C2 : le snapshot de la séance clôturée vit ici pour que la fiche d'analyse
+  // IA survive au démontage d'ActiveWorkoutView.
+  const [finishedSnapshot, setFinishedSnapshot] = useState<ActiveWorkout | null>(null);
   const [template, setTemplate] = useState<WorkoutTemplate | null>(null);
   const [coachOpen, setCoachOpen] = useState(false);
   const [coachInitialMuscles, setCoachInitialMuscles] = useState<string[] | undefined>(undefined);
@@ -95,6 +101,21 @@ export function SeancesTab() {
   const { data: listImageUrls } = useExerciseImageUrls(allImagePaths);
   const latestDate = useMemo(() => data?.[0]?.date ?? "", [data]);
 
+  // H1 : « Refaire » démarre une séance LIVE pré-remplie.
+  const startFromTemplate = useStartWorkoutFromTemplate();
+  const repeatLive = useCallback(
+    (w: WorkoutRow) => {
+      if (startFromTemplate.isPending) return;
+      startFromTemplate.mutate({
+        name: w.name,
+        gym_location: (w as { gym_location?: string | null }).gym_location ?? null,
+        exercises: w.exercises ?? [],
+      });
+    },
+    [startFromTemplate],
+  );
+
+  // Saisie rétroactive (ancien « Refaire ») — accessible via le menu ⋮ d'une séance.
   const openFromTemplate = useCallback((w: WorkoutRow) => {
     if (!w.id || !w.exercises) return;
     setTemplate({
@@ -133,7 +154,20 @@ export function SeancesTab() {
   if (activeWorkout) {
     return (
       <section className="flex flex-col gap-4">
-        <ActiveWorkoutView workout={activeWorkout} recoveryMap={recoveryMap} />
+        <ActiveWorkoutView
+          workout={activeWorkout}
+          recoveryMap={recoveryMap}
+          onFinished={setFinishedSnapshot}
+        />
+        {finishedSnapshot && (
+          <PostWorkoutAnalysisSheet
+            workout={finishedSnapshot}
+            workoutId={finishedSnapshot.id}
+            previousWorkouts={data ?? []}
+            recoveryMap={recoveryMap}
+            onClose={() => setFinishedSnapshot(null)}
+          />
+        )}
       </section>
     );
   }
@@ -218,7 +252,7 @@ export function SeancesTab() {
 
       {/* Séances de la semaine */}
       {data && !isLoading && (
-        <WeekSessions workouts={weekWorkouts} onRefaire={openFromTemplate} />
+        <WeekSessions workouts={weekWorkouts} onRefaire={repeatLive} />
       )}
 
       {data && data.length === 0 && !isLoading && (
@@ -275,6 +309,7 @@ export function SeancesTab() {
                     histByGym={histByGym}
                     imageUrls={listImageUrls}
                     latestDate={latestDate}
+                    onRepeatLive={repeatLive}
                     onOpenFromTemplate={openFromTemplate}
                   />
                 ))}
@@ -310,6 +345,17 @@ export function SeancesTab() {
 
       {catalogOpen && (
         <ExerciseCatalogSheet onClose={() => setCatalogOpen(false)} />
+      )}
+
+      {/* C2 : fiche d'analyse IA — rendue aussi hors séance active */}
+      {finishedSnapshot && (
+        <PostWorkoutAnalysisSheet
+          workout={finishedSnapshot}
+          workoutId={finishedSnapshot.id}
+          previousWorkouts={data ?? []}
+          recoveryMap={recoveryMap}
+          onClose={() => setFinishedSnapshot(null)}
+        />
       )}
     </section>
   );

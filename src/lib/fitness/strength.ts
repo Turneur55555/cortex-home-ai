@@ -32,7 +32,12 @@ export function setTonnage(
 }
 
 /** Une série détaillée (table `exercise_sets`). Le poids peut arriver en string (numeric). */
-type DetailedSet = { reps?: number | string | null; weight?: number | string | null };
+type DetailedSet = {
+  reps?: number | string | null;
+  weight?: number | string | null;
+  /** H3 : false = série non validée → exclue du tonnage. Absent = comptée (rétro-compat). */
+  completed?: boolean | null;
+};
 
 /**
  * Tonnage d'un exercice. Si des séries détaillées (`exercise_sets`) existent,
@@ -48,6 +53,7 @@ export function exerciseTonnage(ex: {
   const detailed = ex.exercise_sets ?? [];
   if (detailed.length > 0) {
     return detailed.reduce((acc, s) => {
+      if (s.completed === false) return acc;
       const reps = Number(s.reps);
       const weight = Number(s.weight);
       if (!Number.isFinite(reps) || !Number.isFinite(weight)) return acc;

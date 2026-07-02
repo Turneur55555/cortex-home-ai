@@ -71,13 +71,16 @@ type DetailedSetRow = {
   set_number: number | null;
   reps: number | null;
   weight: number | string | null;
+  completed?: boolean | null;
 };
 
 function rowToSeries(r: ExerciseRow): SerieView[] {
   const detailed =
     ((r as unknown as { exercise_sets?: DetailedSetRow[] | null }).exercise_sets) ?? [];
   if (detailed.length > 0) {
+    // H3 : les séries explicitement non validées ne font pas partie de la séance.
     return [...detailed]
+      .filter((sset) => sset.completed !== false)
       .sort((a, b) => (a.set_number ?? 0) - (b.set_number ?? 0))
       .map((sset, i) => ({
         index: i + 1,
@@ -150,6 +153,7 @@ export function WorkoutCard({
   histByGym,
   imageUrls,
   latestDate,
+  onRepeatLive,
   onOpenFromTemplate,
 }: {
   w: WorkoutRow;
@@ -160,6 +164,9 @@ export function WorkoutCard({
   histByGym: Map<string, Map<string, Array<{ date: string; weight: number }>>>;
   imageUrls: Map<string, string> | undefined;
   latestDate: string;
+  /** H1 : relance la séance en LIVE (pré-remplie). */
+  onRepeatLive: (w: WorkoutRow) => void;
+  /** Saisie rétroactive (ancien comportement), via le menu ⋮. */
   onOpenFromTemplate: (w: WorkoutRow) => void;
 }) {
   const updateName = useUpdateWorkoutName();
@@ -293,10 +300,10 @@ export function WorkoutCard({
           <div className="relative flex shrink-0 items-center gap-1.5">
             <button
               type="button"
-              onClick={() => onOpenFromTemplate(w)}
+              onClick={() => onRepeatLive(w)}
               className="flex h-9 w-9 items-center justify-center rounded-full bg-white/5 text-muted-foreground transition-all active:scale-90 hover:bg-primary/15 hover:text-primary"
-              title="Refaire cette séance"
-              aria-label="Refaire cette séance"
+              title="Refaire cette séance (live)"
+              aria-label="Refaire cette séance (live)"
             >
               <Repeat className="h-4 w-4" />
             </button>
@@ -313,11 +320,19 @@ export function WorkoutCard({
               <div className="absolute right-0 top-10 z-20 min-w-[180px] overflow-hidden rounded-2xl border border-border bg-card shadow-elevated">
                 <button
                   type="button"
-                  onClick={() => { setMenuOpen(false); onOpenFromTemplate(w); }}
+                  onClick={() => { setMenuOpen(false); onRepeatLive(w); }}
                   className="flex w-full items-center gap-3 px-4 py-3 text-sm font-medium transition-colors hover:bg-white/5"
                 >
                   <Repeat className="h-4 w-4 text-muted-foreground" />
-                  Refaire cette séance
+                  Refaire en live
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setMenuOpen(false); onOpenFromTemplate(w); }}
+                  className="flex w-full items-center gap-3 border-t border-border px-4 py-3 text-sm font-medium transition-colors hover:bg-white/5"
+                >
+                  <Plus className="h-4 w-4 text-muted-foreground" />
+                  Enregistrer comme séance passée
                 </button>
                 <button
                   type="button"

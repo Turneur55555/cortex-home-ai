@@ -13,7 +13,6 @@ import type { MuscleRecovery } from "@/lib/fitness/recovery";
 import { useFitnessStreak } from "@/hooks/useFitnessStreak";
 import { WorkoutTimer } from "./WorkoutTimer";
 import { WorkoutSummaryOverlay } from "./WorkoutSummaryOverlay";
-import { PostWorkoutAnalysisSheet } from "./PostWorkoutAnalysisSheet";
 import { ActiveExerciseCard } from "./ActiveExerciseCard";
 import { exerciseIllustration } from "@/lib/fitness/exerciseIllustrations";
 import { computePRs } from "@/utils/fitness/exercise-stats";
@@ -33,9 +32,13 @@ import { useUserExercisePhotos, resolveCustomExerciseMuscles } from "@/hooks/use
 export function ActiveWorkoutView({
   workout,
   recoveryMap,
+  onFinished,
 }: {
   workout: ActiveWorkout;
   recoveryMap?: Map<MuscleId, MuscleRecovery>;
+  /** C2 : remonte le snapshot au parent — la fiche d'analyse IA doit survivre
+   *  au démontage de cette vue (déclenché par le refetch post-clôture). */
+  onFinished: (finished: ActiveWorkout) => void;
 }) {
   const finish = useFinishWorkout();
   const cancel = useCancelWorkout();
@@ -50,8 +53,6 @@ export function ActiveWorkoutView({
   const [showSummary, setShowSummary] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [analysisOpen, setAnalysisOpen] = useState(false);
-  const [finishedWorkoutSnapshot, setFinishedWorkoutSnapshot] = useState<ActiveWorkout | null>(null);
 
   // PRs from history (excluding the active workout itself)
   const { prByName, histByName, volByName } = useMemo(
@@ -115,9 +116,8 @@ export function ActiveWorkoutView({
       muscle_groups: null as string[] | null,
     }));
     resolveCustomExerciseMuscles(toResolve).catch(() => {});
-    // Affiche l'analyse IA post-séance
-    setFinishedWorkoutSnapshot(snapshot);
-    setAnalysisOpen(true);
+    // C2 : l'analyse IA est affichée par SeancesTab (survit au démontage).
+    onFinished(snapshot);
   };
 
   const handleCancel = async () => {
@@ -254,20 +254,6 @@ export function ActiveWorkoutView({
           onConfirm={handleFinish}
           onCancel={() => setShowSummary(false)}
           isPending={finish.isPending}
-        />
-      )}
-
-      {/* ── Analyse IA post-séance ── */}
-      {analysisOpen && finishedWorkoutSnapshot && (
-        <PostWorkoutAnalysisSheet
-          workout={finishedWorkoutSnapshot}
-          workoutId={finishedWorkoutSnapshot.id}
-          previousWorkouts={allWorkouts ?? []}
-          recoveryMap={recoveryMap}
-          onClose={() => {
-            setAnalysisOpen(false);
-            setFinishedWorkoutSnapshot(null);
-          }}
         />
       )}
 

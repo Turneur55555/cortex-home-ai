@@ -1,7 +1,7 @@
 /**
  * Progression dans le temps à partir des séries détaillées (domaine pur, zéro React).
  * S'appuie sur les primitives de sets.ts pour calculer, par séance, le 1RM estimé,
- * le tonnage, le top set et le RPE moyen — puis détecte les records (PR).
+ * le tonnage et le top set — puis détecte les records (PR).
  */
 
 import { summarizeSets, topSet, type WorkingSet } from "./sets";
@@ -20,7 +20,6 @@ export interface SessionStat {
   setCount: number;
   tonnage: number;
   best1RM: number | null;
-  avgRpe: number | null;
   topWeight: number | null;
   /** Nouveau record de 1RM estimé par rapport aux séances précédentes. */
   isPR1RM: boolean;
@@ -58,7 +57,6 @@ export function buildSessionStats(
       setCount: sum.setCount,
       tonnage: sum.tonnage,
       best1RM: sum.best1RM,
-      avgRpe: sum.avgRpe,
       topWeight: tw,
       isPR1RM,
       isPRWeight,

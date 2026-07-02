@@ -24,7 +24,7 @@ import { summarizeSets, type WorkingSet } from "@/lib/fitness/sets";
 import { formatTonnage } from "@/lib/fitness/strength";
 import { GYMS } from "@/lib/fitness/config";
 
-type SetRow = { reps: string; weight: string; rpe: string };
+type SetRow = { reps: string; weight: string };
 
 type ExerciseDraft = {
   name: string;
@@ -36,7 +36,7 @@ type ExerciseDraft = {
   setRows: SetRow[];
 };
 
-const emptySetRow = (): SetRow => ({ reps: "", weight: "", rpe: "" });
+const emptySetRow = (): SetRow => ({ reps: "", weight: "" });
 
 const emptyExercise = (): ExerciseDraft => ({
   name: "",
@@ -126,7 +126,7 @@ export function WorkoutSheet({
         // les valeurs simples si elles existent.
         const setRows =
           detailed && e.setRows.length === 1 && !e.setRows[0].reps && !e.setRows[0].weight
-            ? [{ reps: e.reps, weight: e.weight, rpe: "" }]
+            ? [{ reps: e.reps, weight: e.weight }]
             : e.setRows;
         return { ...e, detailed, setRows };
       }),
@@ -220,7 +220,7 @@ export function WorkoutSheet({
 
   // Convertit les séries détaillées d'un exercice en WorkingSet[] pour le résumé.
   const toWorkingSets = (rows: SetRow[]): WorkingSet[] =>
-    rows.map((r) => ({ reps: num(r.reps), weight: num(r.weight), rpe: num(r.rpe) }));
+    rows.map((r) => ({ reps: num(r.reps), weight: num(r.weight) }));
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -231,7 +231,7 @@ export function WorkoutSheet({
         const setDetails = ex.detailed
           ? toWorkingSets(ex.setRows)
               .filter((s) => s.reps != null && s.weight != null)
-              .map((s) => ({ reps: s.reps ?? null, weight: s.weight ?? null, rpe: s.rpe ?? null }))
+              .map((s) => ({ reps: s.reps ?? null, weight: s.weight ?? null }))
           : null;
         return {
           name: ex.name.trim(),
@@ -289,7 +289,9 @@ export function WorkoutSheet({
     if (priorPRs) {
       for (const ex of payloadExercises) {
         if (ex.weight == null) continue;
-        const key = ex.name.toLowerCase();
+        // H5 : même normalisation que computePRs (accents/ponctuation), sinon
+        // le PR précédent n'est jamais trouvé → faux « Nouveau PR » systématique.
+        const key = normalize(ex.name);
         const prev = priorPRs.get(key) ?? null;
         if (prev == null || ex.weight > prev) {
           toast.success(
@@ -509,20 +511,19 @@ export function WorkoutSheet({
                       </div>
                     )}
 
-                    {/* Mode détaillé : une ligne par série (reps / kg / RPE) */}
+                    {/* Mode détaillé : une ligne par série (reps / kg) */}
                     {ex.detailed && (
                       <div className="mt-2.5 space-y-2">
-                        <div className="grid grid-cols-[1.5rem_1fr_1fr_1fr_1.75rem] items-center gap-1.5 px-0.5 text-[9px] uppercase tracking-wider text-muted-foreground/60">
+                        <div className="grid grid-cols-[1.5rem_1fr_1fr_1.75rem] items-center gap-1.5 px-0.5 text-[9px] uppercase tracking-wider text-muted-foreground/60">
                           <span className="text-center">#</span>
                           <span className="text-center">reps</span>
                           <span className="text-center">kg</span>
-                          <span className="text-center">RPE</span>
                           <span />
                         </div>
                         {ex.setRows.map((row, j) => (
                           <div
                             key={j}
-                            className="grid grid-cols-[1.5rem_1fr_1fr_1fr_1.75rem] items-center gap-1.5"
+                            className="grid grid-cols-[1.5rem_1fr_1fr_1.75rem] items-center gap-1.5"
                           >
                             <span className="text-center text-xs font-semibold text-muted-foreground">
                               {j + 1}
@@ -541,17 +542,6 @@ export function WorkoutSheet({
                               step="0.5"
                               value={row.weight}
                               onChange={(e) => updateSetRow(i, j, "weight", e.target.value)}
-                              placeholder="—"
-                              className="rounded-lg border border-border bg-card px-1.5 py-2 text-center text-sm outline-none focus:border-primary"
-                            />
-                            <input
-                              type="number"
-                              inputMode="decimal"
-                              step="0.5"
-                              min="0"
-                              max="10"
-                              value={row.rpe}
-                              onChange={(e) => updateSetRow(i, j, "rpe", e.target.value)}
                               placeholder="—"
                               className="rounded-lg border border-border bg-card px-1.5 py-2 text-center text-sm outline-none focus:border-primary"
                             />
@@ -592,14 +582,6 @@ export function WorkoutSheet({
                                 </span>
                               </span>
                             )}
-                            {summary.avgRpe != null && (
-                              <span>
-                                RPE moy.{" "}
-                                <span className="font-semibold text-foreground/80">
-                                  {summary.avgRpe}
-                                </span>
-                              </span>
-                            )}
                           </div>
                         )}
                       </div>
@@ -616,7 +598,7 @@ export function WorkoutSheet({
                       }`}
                     >
                       <SlidersHorizontal className="h-3.5 w-3.5" />
-                      {ex.detailed ? "Mode simple" : "Détailler les séries (RPE)"}
+                      {ex.detailed ? "Mode simple" : "Détailler les séries"}
                     </button>
 
                   </div>

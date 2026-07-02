@@ -15,7 +15,7 @@ export function useWorkouts() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("workouts")
-        .select("*, exercises(*, exercise_sets(id, set_number, reps, weight, rpe))")
+        .select("*, exercises(*, exercise_sets(id, set_number, reps, weight, completed))")
         .order("date", { ascending: false })
         .limit(60);
       if (error) throw error;
@@ -39,11 +39,10 @@ export function useAddWorkout() {
         reps?: number | null;
         weight?: number | null;
         image_path?: string | null;
-        // Séries détaillées optionnelles (set-by-set + RPE).
+        // Séries détaillées optionnelles (set-by-set).
         setDetails?: Array<{
           reps: number | null;
           weight: number | null;
-          rpe?: number | null;
         }> | null;
       }>;
     }) => {
@@ -97,7 +96,7 @@ export function useAddWorkout() {
           .select("id");
         if (exErr) throw exErr;
 
-        // Insertion des séries détaillées (set-by-set + RPE) pour les exercices
+        // Insertion des séries détaillées (set-by-set) pour les exercices
         // qui en fournissent. L'ordre renvoyé suit l'ordre d'insertion.
         if (insertedExercises) {
           const setRows = input.exercises.flatMap((e, i) => {
@@ -112,7 +111,7 @@ export function useAddWorkout() {
               set_number: j + 1,
               reps: d.reps,
               weight: d.weight,
-              rpe: d.rpe ?? null,
+              completed: true,
             }));
           });
           if (setRows.length > 0) {
@@ -435,7 +434,6 @@ export type ActiveSet = {
   set_number: number;
   reps: number | null;
   weight: number | null;
-  rpe: number | null;
   completed: boolean;
 };
 
@@ -468,17 +466,17 @@ export function useActiveWorkout() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return null;
-      // Fenêtre glissante de 24h pour couvrir les séances tardives
-      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      // C3 : la séance active est identifiée par status='active' (colonne dédiée),
+      // plus par duration_minutes NULL — une saisie rétro sans durée ne bascule
+      // donc plus l'UI en mode live.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase as any)
         .from("workouts")
         .select(
-          "id, name, gym_location, created_at, exercises(id, name, image_path, sets, reps, weight, exercise_sets(id, set_number, reps, weight, rpe, completed))",
+          "id, name, gym_location, created_at, exercises(id, name, image_path, sets, reps, weight, exercise_sets(id, set_number, reps, weight, completed))",
         )
         .eq("user_id", user.id)
-        .is("duration_minutes", null)
-        .gte("created_at", since)
+        .eq("status", "active")
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -503,7 +501,6 @@ export function useActiveWorkout() {
             set_number: s.set_number,
             reps: s.reps ?? null,
             weight: s.weight ?? null,
-            rpe: s.rpe ?? null,
             completed: s.completed ?? false,
           })),
         })),
@@ -533,7 +530,7 @@ export function useStartWorkout() {
         name,
         date: today,
         gym_location,
-        // duration_minutes omis → null → séance "active"
+        status: "active",
       } as unknown as TablesInsert<"workouts">);
       if (error) throw error;
     },
@@ -550,12 +547,36 @@ export function useFinishWorkout() {
   return useMutation({
     mutationFn: async (workout: ActiveWorkout) => {
       const durationMs = Date.now() - new Date(workout.created_at).getTime();
-      const durationMin = Math.max(1, Math.round(durationMs / 60_000));
+      const durationMin = Math.min(600, Math.max(1, Math.round(durationMs / 60_000)));
       const { error } = await supabase
         .from("workouts")
-        .update({ duration_minutes: durationMin })
+        .update({ duration_minutes: durationMin, status: "completed" } as unknown as TablesUpdate<"workouts">)
         .eq("id", workout.id);
       if (error) throw error;
+
+      // H2 : synchronise les colonnes résumé `exercises.sets/reps/weight` depuis
+      // les séries réelles (validées en priorité) pour que « Exercices récents »
+      // et « Refaire » affichent les dernières perfs des séances live.
+      for (const ex of workout.exercises ?? []) {
+        const filled = (ex.exercise_sets ?? []).filter(
+          (st) => st.reps != null && st.weight != null && st.reps > 0 && st.weight > 0,
+        );
+        const done = filled.filter((st) => st.completed);
+        const source = done.length > 0 ? done : filled;
+        if (source.length === 0) continue;
+        const top = source.reduce((best, st) =>
+          (st.weight as number) > (best.weight as number) ||
+          ((st.weight as number) === (best.weight as number) &&
+            (st.reps as number) > (best.reps as number))
+            ? st
+            : best,
+        );
+        const { error: sumErr } = await supabase
+          .from("exercises")
+          .update({ sets: source.length, reps: top.reps, weight: top.weight })
+          .eq("id", ex.id);
+        if (sumErr) console.warn("[finishWorkout] sync résumé échoué", ex.name, sumErr.message);
+      }
     },
     onSuccess: () => {
       toast.success("Séance terminée 💪");
@@ -579,6 +600,139 @@ export function useCancelWorkout() {
       toast.success("Séance annulée");
       qc.invalidateQueries({ queryKey: ACTIVE_KEY });
       qc.invalidateQueries({ queryKey: WORKOUTS_KEY });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+}
+
+/** Source pour « Refaire en live » : une séance passée avec ses exercices/séries. */
+export type RepeatSourceWorkout = {
+  name: string | null;
+  gym_location?: string | null;
+  exercises?: Array<{
+    name: string;
+    image_path?: string | null;
+    sets?: number | null;
+    reps?: number | null;
+    weight?: number | null;
+    exercise_sets?: Array<{
+      set_number: number | null;
+      reps: number | null;
+      weight: number | null;
+    }> | null;
+  }> | null;
+};
+
+/**
+ * H1 — « Refaire en live » : crée une séance ACTIVE pré-remplie depuis une
+ * séance passée (exercices + séries copiées, non validées). Convention legacy
+ * gérée : si un exercice n'a pas de séries détaillées, on dérive depuis les
+ * colonnes résumé (weight NULL → `sets` = reps et `reps` = charge).
+ */
+export function useStartWorkoutFromTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (source: RepeatSourceWorkout) => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Non authentifié");
+
+      // Garde : une seule séance active à la fois.
+      const { data: existing } = await (supabase as any)
+        .from("workouts")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("status", "active")
+        .limit(1)
+        .maybeSingle();
+      if (existing) throw new Error("Une séance est déjà en cours.");
+
+      const today = new Date().toISOString().split("T")[0];
+      const { data: workout, error } = await supabase
+        .from("workouts")
+        .insert({
+          user_id: user.id,
+          name: source.name || "Séance",
+          date: today,
+          gym_location: source.gym_location ?? "Salle inconnue",
+          status: "active",
+        } as unknown as TablesInsert<"workouts">)
+        .select("id")
+        .single();
+      if (error) throw error;
+
+      // Déduplique les exercices par nom (les séances legacy ont 1 ligne/série).
+      const groups = new Map<
+        string,
+        {
+          name: string;
+          image_path: string | null;
+          setRows: Array<{ reps: number | null; weight: number | null }>;
+        }
+      >();
+      for (const ex of source.exercises ?? []) {
+        const key = ex.name.trim().toLowerCase();
+        if (!key) continue;
+        if (!groups.has(key)) {
+          groups.set(key, { name: ex.name, image_path: ex.image_path ?? null, setRows: [] });
+        }
+        const g = groups.get(key)!;
+        if (!g.image_path && ex.image_path) g.image_path = ex.image_path;
+        const detailed = [...(ex.exercise_sets ?? [])].sort(
+          (a, b) => (a.set_number ?? 0) - (b.set_number ?? 0),
+        );
+        if (detailed.length > 0) {
+          for (const d of detailed) g.setRows.push({ reps: d.reps, weight: d.weight });
+        } else if (ex.weight != null) {
+          // Résumé moderne : sets × (reps, weight)
+          const n = Math.max(1, ex.sets ?? 1);
+          for (let i = 0; i < n; i++) g.setRows.push({ reps: ex.reps ?? null, weight: ex.weight });
+        } else if (ex.sets != null || ex.reps != null) {
+          // Convention legacy : weight NULL → sets = reps, reps = charge.
+          g.setRows.push({ reps: ex.sets ?? null, weight: ex.reps ?? null });
+        }
+      }
+
+      const groupList = Array.from(groups.values());
+      if (groupList.length > 0) {
+        const { data: insertedExs, error: exErr } = await supabase
+          .from("exercises")
+          .insert(
+            groupList.map((g) => ({
+              user_id: user.id,
+              workout_id: workout.id,
+              name: g.name,
+              sets: null,
+              reps: null,
+              weight: null,
+              image_path: g.image_path,
+            })),
+          )
+          .select("id");
+        if (exErr) throw exErr;
+
+        const setRows = groupList.flatMap((g, i) => {
+          const exerciseId = insertedExs?.[i]?.id;
+          if (!exerciseId) return [];
+          return g.setRows.map((r, j) => ({
+            exercise_id: exerciseId,
+            user_id: user.id,
+            set_number: j + 1,
+            reps: r.reps,
+            weight: r.weight,
+            completed: false,
+          }));
+        });
+        if (setRows.length > 0) {
+          const { error: setErr } = await supabase.from("exercise_sets").insert(setRows);
+          if (setErr) throw setErr;
+        }
+      }
+    },
+    onSuccess: () => {
+      toast.success("Séance relancée — bonnes séries 💪");
+      qc.invalidateQueries({ queryKey: ACTIVE_KEY });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -655,7 +809,6 @@ export function useAddExerciseSet() {
         set_number: setNumber,
         reps,
         weight,
-        rpe: null,
       });
       if (error) throw error;
     },
@@ -674,7 +827,6 @@ export function useAddExerciseSet() {
                     set_number: setNumber,
                     reps,
                     weight,
-                    rpe: null,
                     completed: false,
                   },
                 ],
@@ -694,7 +846,7 @@ export function useAddExerciseSet() {
   });
 }
 
-/** Met à jour reps / weight / rpe / completed d'une série. */
+/** Met à jour reps / weight / completed d'une série. */
 export function useUpdateExerciseSet() {
   const qc = useQueryClient();
   return useMutation({
@@ -705,11 +857,12 @@ export function useUpdateExerciseSet() {
       id: string;
       reps?: number | null;
       weight?: number | null;
-      rpe?: number | null;
       completed?: boolean;
     }) => {
       // #1 : `completed` ne doit PAS être retiré — sinon la validation des séries n'est jamais enregistrée.
       if (Object.keys(fields).length === 0) return;
+      // Garde : série optimiste pas encore confirmée par le serveur.
+      if (id.startsWith("tmp-")) return;
       const { error } = await supabase
         .from("exercise_sets")
         .update(fields)
@@ -744,6 +897,7 @@ export function useDeleteExerciseSet() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
+      if (id.startsWith("tmp-")) return;
       const { error } = await supabase.from("exercise_sets").delete().eq("id", id);
       if (error) throw error;
     },

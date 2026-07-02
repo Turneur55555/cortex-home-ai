@@ -15,7 +15,6 @@ export interface ExerciseSessionSet {
   set_number: number;
   reps: number | null;
   weight: number | null;
-  rpe: number | null;
 }
 
 export interface ExerciseSession {
@@ -50,10 +49,12 @@ export function useExerciseSetHistory(exerciseName: string | null | undefined) {
       const workoutIds = Array.from(new Set(exs.map((e) => e.workout_id)));
 
       // 2. Séries de ces exercices
+      // H3 : seules les séries validées comptent dans l'historique.
       const { data: sets, error: e2 } = await supabase
         .from("exercise_sets")
-        .select("exercise_id, set_number, reps, weight, rpe")
+        .select("exercise_id, set_number, reps, weight")
         .in("exercise_id", exIds)
+        .eq("completed", true)
         .order("set_number", { ascending: true });
       if (e2) throw e2;
       if (!sets || sets.length === 0) return [];
@@ -76,7 +77,6 @@ export function useExerciseSetHistory(exerciseName: string | null | undefined) {
           set_number: s.set_number,
           reps: s.reps,
           weight: s.weight,
-          rpe: s.rpe,
         });
         byWorkout.set(wid, list);
       }

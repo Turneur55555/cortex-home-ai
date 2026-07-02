@@ -69,10 +69,12 @@ export function useLastExerciseSessions(
 
       // 3. Toutes les séries de ces exercices en une seule requête
       const exIds = exs.map((e) => e.id);
+      // H3 : seules les séries validées servent de référence.
       const { data: sets, error: e3 } = await supabase
         .from("exercise_sets")
         .select("exercise_id, set_number, reps, weight")
         .in("exercise_id", exIds)
+        .eq("completed", true)
         .order("set_number", { ascending: true });
       if (e3) throw e3;
 

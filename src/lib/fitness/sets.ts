@@ -1,5 +1,5 @@
 import { estimate1RM } from "./strength";
-export interface WorkingSet { reps: number | null | undefined; weight: number | null | undefined; rpe?: number | null | undefined; }
+export interface WorkingSet { reps: number | null | undefined; weight: number | null | undefined; }
 export function isValidSet(s: WorkingSet | null | undefined): boolean {
   if (!s) return false; const { reps, weight } = s;
   return reps != null && weight != null && Number.isFinite(reps) && Number.isFinite(weight) && reps > 0 && weight > 0;
@@ -23,15 +23,8 @@ export function totalReps(sets: ReadonlyArray<WorkingSet> | null | undefined): n
   if (!sets || sets.length === 0) return 0;
   return sets.reduce((acc, s) => isValidSet(s) ? acc + (s.reps as number) : acc, 0);
 }
-export function averageRpe(sets: ReadonlyArray<WorkingSet> | null | undefined): number | null {
-  if (!sets || sets.length === 0) return null; let weightedSum = 0; let repCount = 0;
-  for (const s of sets) { if (!isValidSet(s)) continue; const rpe = s.rpe;
-    if (rpe == null || !Number.isFinite(rpe) || rpe <= 0 || rpe > 10) continue;
-    weightedSum += rpe * (s.reps as number); repCount += s.reps as number; }
-  if (repCount === 0) return null; return Math.round((weightedSum / repCount) * 10) / 10;
-}
-export interface SetsSummary { setCount: number; tonnage: number; best1RM: number | null; avgRpe: number | null; totalReps: number; }
+export interface SetsSummary { setCount: number; tonnage: number; best1RM: number | null; totalReps: number; }
 export function summarizeSets(sets: ReadonlyArray<WorkingSet> | null | undefined): SetsSummary {
   const valid = (sets ?? []).filter(isValidSet);
-  return { setCount: valid.length, tonnage: setsTonnage(sets), best1RM: bestEstimated1RM(sets), avgRpe: averageRpe(sets), totalReps: totalReps(sets) };
+  return { setCount: valid.length, tonnage: setsTonnage(sets), best1RM: bestEstimated1RM(sets), totalReps: totalReps(sets) };
 }
