@@ -1,62 +1,38 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   Dumbbell,
   Flame,
   Apple,
-  Target,
-  Trophy,
   TrendingDown,
   TrendingUp,
   Minus,
-  ChevronRight,
+  Quote as QuoteIcon,
   Loader2,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useProfile } from "@/hooks/useProfile";
 import { ChatBot } from "@/components/ChatBot";
-import { ReportSummaryWidget } from "@/components/reports/ReportSummaryWidget";
 import { getContextualQuote } from "@/lib/quotes";
 import { useWorkouts, useNutrition, useNutritionGoals } from "@/hooks/use-fitness";
 import { useRecoveryMap } from "@/hooks/useRecoveryMap";
 import { useStreak } from "@/hooks/useStreak";
-import { useGoalsWithProgress } from "@/hooks/useGoalsWithProgress";
-import { useUserBadges } from "@/hooks/useUserBadges";
-import { RECOVERY_COLORS } from "@/lib/fitness/recovery";
+import { useNutritionHistory } from "@/hooks/use-nutrition-history";
 import { workoutTonnage } from "@/lib/fitness/strength";
 import { supabase } from "@/integrations/supabase/client";
-import { HomeDashboard } from "@/components/home/HomeDashboard";
 
 export const Route = createFileRoute("/_authenticated/")({
   head: () => ({
     meta: [
       { title: "ICORTEX — Accueil" },
-      { name: "description", content: "Votre tableau de bord fitness." },
+      { name: "description", content: "Ton tableau de bord nutrition & muscu." },
     ],
   }),
   component: HomePage,
 });
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
-
-function useLatestBody() {
-  return useQuery({
-    queryKey: ["body_tracking_latest"],
-    staleTime: 5 * 60 * 1000,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("body_tracking")
-        .select("date, weight, body_fat, muscle_mass")
-        .or("weight.not.is.null,body_fat.not.is.null,muscle_mass.not.is.null")
-        .order("date", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
-  });
-}
 
 function useWeightHistory() {
   return useQuery({
@@ -84,14 +60,11 @@ function HomePage() {
   const { data: workouts, isLoading: fitnessLoading } = useWorkouts();
   const recoveryMap = useRecoveryMap(workouts);
   const streak = useStreak();
-  const { data: latestBody } = useLatestBody();
   const today = useMemo(() => new Date().toISOString().split("T")[0], []);
   const { data: meals } = useNutrition(today);
   const { data: nutritionGoal } = useNutritionGoals();
-  const { goals } = useGoalsWithProgress();
-  const { data: badges } = useUserBadges(6);
   const { data: weightHistory } = useWeightHistory();
-  const quote = useMemo(() => getContextualQuote(), []);
+  const { data: nutritionHistory } = useNutritionHistory(7);
   const greeting = getGreeting();
 
   const weeklyCount = useMemo(() => {
@@ -113,117 +86,273 @@ function HomePage() {
     return Math.round((sum / trained.length) * 100);
   }, [recoveryMap]);
 
-  const caloriesIn = useMemo(
-    () => (meals ?? []).reduce((a, m) => a + (m.calories ?? 0), 0),
-    [meals],
+  const todayTotals = useMemo(() => {
+    const acc = { calories: 0, proteins: 0 };
+    for (const m of meals ?? []) {
+      acc.calories += m.calories ?? 0;
+      acc.proteins += m.proteins ?? 0;
+    }
+    return { calories: Math.round(acc.calories), proteins: Math.round(acc.proteins) };
+  }, [meals]);
+
+  const lastWorkout = useMemo(() => (workouts ?? [])[0] ?? null, [workouts]);
+
+  const weightPoints = useMemo(
+    () =>
+      (weightHistory ?? [])
+        .map((d) => d.weight)
+        .filter((v): v is number => v != null)
+        .slice(-14),
+    [weightHistory],
   );
 
-  const caloriesOut = useMemo(() => {
-    if (!workouts) return 0;
-    return workouts
-      .filter((w) => w.date === today)
-      .reduce((a, w) => {
-        const dur = w.duration_minutes ?? 0;
-        const ton = workoutTonnage(w.exercises ?? []);
-        return a + dur * 5 + Math.round(ton * 0.05);
-      }, 0);
-  }, [workouts, today]);
+  const tonnage7d = useMemo(() => {
+    if (!workouts) return [] as number[];
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - 6);
+    cutoff.setHours(0, 0, 0, 0);
+    const byDay = new Map<string, number>();
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      byDay.set(d.toISOString().split("T")[0], 0);
+    }
+    for (const w of workouts) {
+      if (byDay.has(w.date)) {
+        byDay.set(w.date, (byDay.get(w.date) ?? 0) + workoutTonnage(w.exercises ?? []));
+      }
+    }
+    return [...byDay.values()];
+  }, [workouts]);
 
-  const goalCalories = nutritionGoal?.calories ?? null;
-
-  const activeGoals = useMemo(
-    () => (goals ?? []).filter((g) => g.status !== "done").slice(0, 3),
-    [goals],
+  const proteins7d = useMemo(
+    () => (nutritionHistory ?? []).map((d) => d.proteins),
+    [nutritionHistory],
   );
-
-  const lastWorkouts = useMemo(() => (workouts ?? []).slice(0, 3), [workouts]);
-
-  const weightTrend = useMemo(() => {
-    const ws = (weightHistory ?? []).filter((d) => d.weight != null) as {
-      weight: number;
-      date: string;
-    }[];
-    if (!ws.length) return null;
-    const latest = ws[ws.length - 1].weight;
-    const prev = ws.length >= 2 ? ws[ws.length - 2].weight : null;
-    return {
-      latest,
-      delta: prev != null ? Math.round((latest - prev) * 10) / 10 : null,
-      points: ws.slice(-14).map((d) => d.weight),
-    };
-  }, [weightHistory]);
 
   return (
     <main className="flex flex-1 flex-col px-5 pb-6 pt-12">
-      {/* ── Header ── */}
-      <header className="mb-4">
-        <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
-          Tableau de bord
-        </p>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight">
-          {greeting}, <span className="text-primary">{name}</span>
-        </h1>
-      </header>
+      {/* 1 ── Header compact ── */}
+      <HeaderCompact greeting={greeting} name={name} streak={streak.current} />
 
-      {/* ── Quote ── */}
-      <blockquote className="mb-5 border-l-2 border-primary/40 pl-3">
-        <p className="text-[12px] italic leading-relaxed text-muted-foreground">"{quote.text}"</p>
-        <footer className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50">
-          — {quote.author}
-        </footer>
-      </blockquote>
+      {/* 2 ── Nutrition du jour (ring double) ── */}
+      <TodayRingCard
+        calories={todayTotals.calories}
+        proteins={todayTotals.proteins}
+        goalKcal={nutritionGoal?.calories ?? null}
+        goalProt={nutritionGoal?.proteins ?? null}
+      />
 
-      {/* ── Performance / récupération ── */}
-      <FitnessHero
+      {/* 3 ── Muscu : récup + séances + dernière + CTA ── */}
+      <MuscuCard
         loading={fitnessLoading}
         recoveryScore={recoveryScore}
         weeklyCount={weeklyCount}
-        streak={streak.current}
+        lastWorkout={lastWorkout}
       />
 
-      {/* ── Calories du jour ── */}
-      <CaloriesCard caloriesIn={caloriesIn} caloriesOut={caloriesOut} goal={goalCalories} />
-
-      {/* ── Objectifs actifs ── */}
-      {activeGoals.length > 0 && <GoalsCard goals={activeGoals} />}
-
-      {/* ── Progression du poids ── */}
-      {weightTrend && <WeightTrendCard trend={weightTrend} />}
-
-      {/* ── Dernières séances ── */}
-      <LastSessionsCard loading={fitnessLoading} workouts={lastWorkouts} />
-
-      {/* ── Corps ── */}
-      <BodySummaryCard loading={fitnessLoading} latestBody={latestBody} recoveryMap={recoveryMap} />
-
-      {/* ── Badges & succès ── */}
-      {badges && badges.length > 0 && <BadgesCard badges={badges} />}
-
-      {/* ── Rapport hebdo IA ── */}
-      <ReportSummaryWidget />
-
-      {/* ── Cross-domaine (catégories) ── */}
-      <div className="mt-6">
-        <HomeDashboard />
-      </div>
+      {/* 4 ── Progression (tabs) ── */}
+      <ProgressionCard
+        weight={weightPoints}
+        tonnage={tonnage7d}
+        proteins={proteins7d}
+      />
 
       <ChatBot />
     </main>
   );
 }
 
-// ─── Performance card ─────────────────────────────────────────────────────────
+// ─── 1. Header ────────────────────────────────────────────────────────────────
 
-function FitnessHero({
+function HeaderCompact({
+  greeting,
+  name,
+  streak,
+}: {
+  greeting: string;
+  name: string;
+  streak: number;
+}) {
+  const [showQuote, setShowQuote] = useState(false);
+  const quote = useMemo(() => getContextualQuote(), []);
+
+  return (
+    <header className="mb-5">
+      <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
+        Tableau de bord
+      </p>
+      <div className="mt-1 flex items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold tracking-tight">
+          {greeting}, <span className="text-primary">{name}</span>
+        </h1>
+        {streak > 0 && (
+          <span className="inline-flex items-center gap-1 rounded-full border border-orange-400/20 bg-orange-400/10 px-2.5 py-1 text-[11px] font-semibold text-orange-300">
+            <Flame className="h-3 w-3" />
+            {streak}j
+          </span>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={() => setShowQuote((v) => !v)}
+        className="mt-2 inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70 transition-colors hover:text-primary"
+      >
+        <QuoteIcon className="h-2.5 w-2.5" />
+        {showQuote ? "Masquer" : "Citation du jour"}
+      </button>
+      {showQuote && (
+        <blockquote className="mt-2 border-l-2 border-primary/40 pl-3">
+          <p className="text-[12px] italic leading-relaxed text-muted-foreground">
+            "{quote.text}"
+          </p>
+          <footer className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50">
+            — {quote.author}
+          </footer>
+        </blockquote>
+      )}
+    </header>
+  );
+}
+
+// ─── 2. Today Ring (nutrition) ────────────────────────────────────────────────
+
+function TodayRingCard({
+  calories,
+  proteins,
+  goalKcal,
+  goalProt,
+}: {
+  calories: number;
+  proteins: number;
+  goalKcal: number | null;
+  goalProt: number | null;
+}) {
+  const kcalPct = goalKcal && goalKcal > 0 ? Math.min(100, (calories / goalKcal) * 100) : 0;
+  const protPct = goalProt && goalProt > 0 ? Math.min(100, (proteins / goalProt) * 100) : 0;
+  const hasGoals = goalKcal != null || goalProt != null;
+
+  return (
+    <section className="overflow-hidden rounded-3xl border border-white/5 bg-gradient-to-b from-card/95 to-card/70 p-5 shadow-elevated backdrop-blur-xl">
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Apple className="h-4 w-4 text-emerald-400" />
+          <span className="text-sm font-semibold">Nutrition du jour</span>
+        </div>
+        <Link
+          to="/nutrition"
+          className="text-[11px] font-medium text-primary transition-opacity hover:opacity-80"
+        >
+          Détails →
+        </Link>
+      </div>
+
+      <div className="flex items-center gap-4">
+        <DualRing kcalPct={kcalPct} protPct={protPct} />
+        <div className="min-w-0 flex-1 space-y-2">
+          <MacroLine
+            color="text-emerald-400"
+            label="Calories"
+            value={calories}
+            unit="kcal"
+            goal={goalKcal}
+          />
+          <MacroLine
+            color="text-blue-400"
+            label="Protéines"
+            value={proteins}
+            unit="g"
+            goal={goalProt}
+          />
+          {!hasGoals && (
+            <p className="text-[10px] text-muted-foreground">
+              Définis tes objectifs dans <Link to="/profil" className="text-primary">Profil</Link>.
+            </p>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function DualRing({ kcalPct, protPct }: { kcalPct: number; protPct: number }) {
+  const size = 96;
+  const cx = size / 2;
+  const cy = size / 2;
+  const r1 = 40;
+  const r2 = 30;
+  const c1 = 2 * Math.PI * r1;
+  const c2 = 2 * Math.PI * r2;
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="shrink-0 -rotate-90">
+      <circle cx={cx} cy={cy} r={r1} fill="none" strokeWidth="6" className="stroke-white/8" />
+      <circle
+        cx={cx}
+        cy={cy}
+        r={r1}
+        fill="none"
+        strokeWidth="6"
+        strokeLinecap="round"
+        strokeDasharray={c1}
+        strokeDashoffset={c1 * (1 - kcalPct / 100)}
+        className="stroke-emerald-400 transition-all duration-700"
+      />
+      <circle cx={cx} cy={cy} r={r2} fill="none" strokeWidth="6" className="stroke-white/8" />
+      <circle
+        cx={cx}
+        cy={cy}
+        r={r2}
+        fill="none"
+        strokeWidth="6"
+        strokeLinecap="round"
+        strokeDasharray={c2}
+        strokeDashoffset={c2 * (1 - protPct / 100)}
+        className="stroke-blue-400 transition-all duration-700"
+      />
+    </svg>
+  );
+}
+
+function MacroLine({
+  color,
+  label,
+  value,
+  unit,
+  goal,
+}: {
+  color: string;
+  label: string;
+  value: number;
+  unit: string;
+  goal: number | null;
+}) {
+  return (
+    <div className="flex items-baseline justify-between gap-2">
+      <span className="text-[11px] text-muted-foreground">{label}</span>
+      <span className="text-sm font-bold">
+        <span className={color}>{value}</span>
+        <span className="text-[10px] font-normal text-muted-foreground">
+          {goal != null ? ` / ${goal}` : ""} {unit}
+        </span>
+      </span>
+    </div>
+  );
+}
+
+// ─── 3. Muscu ─────────────────────────────────────────────────────────────────
+
+function MuscuCard({
   loading,
   recoveryScore,
   weeklyCount,
-  streak,
+  lastWorkout,
 }: {
   loading: boolean;
   recoveryScore: number | null;
   weeklyCount: number;
-  streak: number;
+  lastWorkout:
+    | { id: string; name: string; date: string; duration_minutes: number | null }
+    | null;
 }) {
   const scoreColor =
     recoveryScore == null
@@ -235,17 +364,17 @@ function FitnessHero({
           : "text-red-400";
 
   return (
-    <section className="overflow-hidden rounded-3xl border border-white/5 bg-gradient-to-b from-card/95 to-card/70 p-5 shadow-elevated backdrop-blur-xl">
+    <section className="mt-4 overflow-hidden rounded-3xl border border-white/5 bg-gradient-to-b from-card/95 to-card/70 p-5 shadow-elevated backdrop-blur-xl">
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Flame className="h-4 w-4 text-orange-400" />
-          <span className="text-sm font-semibold">Performance</span>
+          <Dumbbell className="h-4 w-4 text-primary" />
+          <span className="text-sm font-semibold">Muscu</span>
         </div>
         <Link
           to="/seances"
           className="text-[11px] font-medium text-primary transition-opacity hover:opacity-80"
         >
-          Voir tout →
+          Historique →
         </Link>
       </div>
 
@@ -255,437 +384,163 @@ function FitnessHero({
         </div>
       ) : (
         <>
-          <div className="mb-4 grid grid-cols-3 gap-2">
-            <KpiCard
-              label="Récupération"
-              value={recoveryScore != null ? `${recoveryScore}%` : "—"}
-              valueClass={scoreColor}
-            />
-            <KpiCard label="Séances / sem." value={String(weeklyCount)} />
-            <KpiCard
-              label="Streak"
-              value={`${streak}j`}
-              icon={<Flame className="h-3 w-3 text-orange-400" />}
-            />
+          <div className="mb-4 grid grid-cols-2 gap-2">
+            <div className="rounded-xl border border-border bg-card/50 px-3 py-3 text-center">
+              <div className={`text-xl font-bold ${scoreColor}`}>
+                {recoveryScore != null ? `${recoveryScore}%` : "—"}
+              </div>
+              <p className="mt-0.5 text-[10px] text-muted-foreground">Récupération</p>
+            </div>
+            <div className="rounded-xl border border-border bg-card/50 px-3 py-3 text-center">
+              <div className="text-xl font-bold">{weeklyCount}</div>
+              <p className="mt-0.5 text-[10px] text-muted-foreground">Séances / sem.</p>
+            </div>
           </div>
 
-          {recoveryScore != null && (
-            <div className="mb-4">
-              <div className="h-1.5 overflow-hidden rounded-full bg-white/8">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-400 transition-all duration-700"
-                  style={{ width: `${recoveryScore}%` }}
-                />
-              </div>
-              <p className="mt-1.5 text-[10px] text-muted-foreground">
-                {recoveryScore >= 70
-                  ? "Muscles prêts à l'entraînement"
-                  : recoveryScore >= 40
-                    ? "Récupération en cours"
-                    : "Repos recommandé aujourd'hui"}
-              </p>
-            </div>
+          {lastWorkout && (
+            <p className="mb-3 text-[11px] text-muted-foreground">
+              Dernière :{" "}
+              <span className="font-medium text-foreground">
+                {lastWorkout.name || "Séance"}
+              </span>{" "}
+              · {formatRelative(lastWorkout.date)}
+              {lastWorkout.duration_minutes ? ` · ${lastWorkout.duration_minutes} min` : ""}
+            </p>
           )}
 
-          <div className="flex gap-2">
-            <Link
-              to="/seances"
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-border bg-surface py-2.5 text-xs font-semibold transition-colors hover:border-primary/40"
-            >
-              <Dumbbell className="h-3.5 w-3.5" />
-              Mes séances
-            </Link>
-            <Link
-              to="/seances"
-              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-primary py-2.5 text-xs font-semibold text-primary-foreground shadow-glow"
-            >
-              + Nouvelle séance
-            </Link>
-          </div>
+          <Link
+            to="/seances"
+            className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-primary py-2.5 text-xs font-semibold text-primary-foreground shadow-glow"
+          >
+            + Nouvelle séance
+          </Link>
         </>
       )}
     </section>
   );
 }
 
-// ─── Calories card ────────────────────────────────────────────────────────────
+// ─── 4. Progression (tabs) ────────────────────────────────────────────────────
 
-function CaloriesCard({
-  caloriesIn,
-  caloriesOut,
-  goal,
+type Tab = "weight" | "tonnage" | "proteins";
+
+function ProgressionCard({
+  weight,
+  tonnage,
+  proteins,
 }: {
-  caloriesIn: number;
-  caloriesOut: number;
-  goal: number | null;
+  weight: number[];
+  tonnage: number[];
+  proteins: number[];
 }) {
-  const net = caloriesIn - caloriesOut;
-  const goalPct = goal && goal > 0 ? Math.min(100, Math.round((caloriesIn / goal) * 100)) : null;
+  const [tab, setTab] = useState<Tab>("weight");
+
+  const config: Record<
+    Tab,
+    { label: string; points: number[]; unit: string; color: string; to: "/corps" | "/seances" | "/nutrition" }
+  > = {
+    weight: { label: "Poids", points: weight, unit: "kg", color: "text-primary", to: "/corps" },
+    tonnage: { label: "Tonnage 7j", points: tonnage, unit: "kg", color: "text-orange-400", to: "/seances" },
+    proteins: { label: "Protéines 7j", points: proteins, unit: "g", color: "text-blue-400", to: "/nutrition" },
+  };
+
+  const cur = config[tab];
+  const last = cur.points.length ? cur.points[cur.points.length - 1] : null;
+  const prev = cur.points.length >= 2 ? cur.points[cur.points.length - 2] : null;
+  const delta = last != null && prev != null ? Math.round((last - prev) * 10) / 10 : null;
+  const TrendIcon = delta == null ? Minus : delta < 0 ? TrendingDown : delta > 0 ? TrendingUp : Minus;
+  const trendColor =
+    delta == null
+      ? "text-muted-foreground"
+      : (tab === "weight" ? delta < 0 : delta > 0)
+        ? "text-emerald-400"
+        : delta === 0
+          ? "text-muted-foreground"
+          : "text-amber-400";
+
   return (
     <section className="mt-4 overflow-hidden rounded-3xl border border-white/5 bg-gradient-to-b from-card/95 to-card/70 p-5 shadow-elevated backdrop-blur-xl">
       <div className="mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Apple className="h-4 w-4 text-emerald-400" />
-          <span className="text-sm font-semibold">Calories du jour</span>
-        </div>
+        <span className="text-sm font-semibold">Progression</span>
         <Link
-          to="/nutrition"
+          to={cur.to}
           className="text-[11px] font-medium text-primary transition-opacity hover:opacity-80"
         >
-          Nutrition →
+          Voir →
         </Link>
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
-        <KpiCard label="Consommées" value={`${Math.round(caloriesIn)}`} />
-        <KpiCard label="Brûlées" value={`${Math.round(caloriesOut)}`} valueClass="text-orange-400" />
-        <KpiCard
-          label="Bilan"
-          value={`${net >= 0 ? "+" : ""}${Math.round(net)}`}
-          valueClass={net >= 0 ? "text-foreground" : "text-emerald-400"}
-        />
+      <div className="mb-4 flex gap-1 rounded-xl border border-border bg-card/40 p-1">
+        {(Object.keys(config) as Tab[]).map((k) => (
+          <button
+            key={k}
+            type="button"
+            onClick={() => setTab(k)}
+            className={
+              "flex-1 rounded-lg py-1.5 text-[11px] font-semibold transition-colors " +
+              (tab === k
+                ? "bg-primary/15 text-primary"
+                : "text-muted-foreground hover:text-foreground")
+            }
+          >
+            {config[k].label}
+          </button>
+        ))}
       </div>
 
-      {goalPct != null && (
-        <div className="mt-4">
-          <div className="h-1.5 overflow-hidden rounded-full bg-white/8">
-            <div
-              className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-400 transition-all duration-700"
-              style={{ width: `${goalPct}%` }}
-            />
+      {cur.points.filter((p) => p > 0).length < 2 ? (
+        <p className="py-4 text-center text-[11px] text-muted-foreground">
+          Pas assez de données pour tracer la tendance.
+        </p>
+      ) : (
+        <div className="flex items-end justify-between gap-4">
+          <div>
+            <p className={`text-2xl font-bold leading-none ${cur.color}`}>
+              {last != null ? Math.round(last) : "—"}
+              <span className="ml-1 text-xs font-normal text-muted-foreground">{cur.unit}</span>
+            </p>
+            <p className={`mt-1.5 flex items-center gap-1 text-[11px] font-medium ${trendColor}`}>
+              <TrendIcon className="h-3.5 w-3.5" />
+              {delta == null
+                ? "—"
+                : `${delta > 0 ? "+" : ""}${delta} ${cur.unit}`}
+            </p>
           </div>
-          <p className="mt-1.5 text-[10px] text-muted-foreground">
-            {goalPct}% de ton objectif ({goal} kcal)
-          </p>
+          <Sparkline points={cur.points} colorClass={cur.color} />
         </div>
       )}
     </section>
   );
 }
 
-// ─── Goals card ───────────────────────────────────────────────────────────────
-
-function GoalsCard({
-  goals,
-}: {
-  goals: {
-    id: string;
-    title: string;
-    progress: number;
-    current_value: number;
-    target_value: number | null;
-    status: string;
-  }[];
-}) {
-  return (
-    <section className="mt-4 overflow-hidden rounded-3xl border border-white/5 bg-gradient-to-b from-card/95 to-card/70 p-5 shadow-elevated backdrop-blur-xl">
-      <div className="mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Target className="h-4 w-4 text-primary" />
-          <span className="text-sm font-semibold">Objectifs actifs</span>
-        </div>
-        <Link
-          to="/profil"
-          className="text-[11px] font-medium text-primary transition-opacity hover:opacity-80"
-        >
-          Gérer →
-        </Link>
-      </div>
-
-      <ul className="space-y-3">
-        {goals.map((g) => (
-          <li key={g.id}>
-            <div className="mb-1 flex items-center justify-between gap-2">
-              <span className="truncate text-xs font-medium">{g.title}</span>
-              <span className="shrink-0 text-[10px] text-muted-foreground">
-                {g.current_value}
-                {g.target_value != null ? ` / ${g.target_value}` : ""}
-              </span>
-            </div>
-            <div className="h-1.5 overflow-hidden rounded-full bg-white/8">
-              <div
-                className={
-                  "h-full rounded-full transition-all duration-700 " +
-                  (g.status === "late"
-                    ? "bg-red-400/80"
-                    : g.progress >= 75
-                      ? "bg-gradient-to-r from-emerald-500 to-cyan-400"
-                      : "bg-gradient-primary")
-                }
-                style={{ width: `${Math.max(4, g.progress)}%` }}
-              />
-            </div>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-// ─── Weight trend card ────────────────────────────────────────────────────────
-
-function WeightTrendCard({
-  trend,
-}: {
-  trend: { latest: number; delta: number | null; points: number[] };
-}) {
-  const TrendIcon =
-    trend.delta == null ? Minus : trend.delta < 0 ? TrendingDown : trend.delta > 0 ? TrendingUp : Minus;
-  const trendColor =
-    trend.delta == null
-      ? "text-muted-foreground"
-      : trend.delta < 0
-        ? "text-emerald-400"
-        : trend.delta > 0
-          ? "text-amber-400"
-          : "text-muted-foreground";
-
-  return (
-    <section className="mt-4 overflow-hidden rounded-3xl border border-white/5 bg-gradient-to-b from-card/95 to-card/70 p-5 shadow-elevated backdrop-blur-xl">
-      <div className="mb-3 flex items-center justify-between">
-        <span className="text-sm font-semibold">Progression du poids</span>
-        <Link
-          to="/corps"
-          className="text-[11px] font-medium text-primary transition-opacity hover:opacity-80"
-        >
-          Corps →
-        </Link>
-      </div>
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <p className="text-2xl font-bold leading-none">{trend.latest} kg</p>
-          <p className={`mt-1.5 flex items-center gap-1 text-[11px] font-medium ${trendColor}`}>
-            <TrendIcon className="h-3.5 w-3.5" />
-            {trend.delta == null
-              ? "Première mesure"
-              : `${trend.delta > 0 ? "+" : ""}${trend.delta} kg`}
-          </p>
-        </div>
-        <Sparkline points={trend.points} />
-      </div>
-    </section>
-  );
-}
-
-function Sparkline({ points }: { points: number[] }) {
+function Sparkline({ points, colorClass }: { points: number[]; colorClass: string }) {
   if (points.length < 2) return null;
-  const w = 120;
-  const h = 40;
+  const w = 140;
+  const h = 44;
   const min = Math.min(...points);
   const max = Math.max(...points);
   const span = max - min || 1;
   const step = w / (points.length - 1);
   const coords = points.map((p, i) => [i * step, h - ((p - min) / span) * h]);
-  const d = coords.map(([x, y], i) => `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+  const d = coords
+    .map(([x, y], i) => `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`)
+    .join(" ");
   return (
     <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="shrink-0">
-      <path d={d} fill="none" stroke="currentColor" strokeWidth="2" className="text-primary" strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d={d}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        className={colorClass}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   );
 }
 
-// ─── Last sessions card ───────────────────────────────────────────────────────
-
-function LastSessionsCard({
-  loading,
-  workouts,
-}: {
-  loading: boolean;
-  workouts: {
-    id: string;
-    name: string;
-    date: string;
-    duration_minutes: number | null;
-    exercises: unknown[] | null;
-  }[];
-}) {
-  return (
-    <section className="mt-4 overflow-hidden rounded-3xl border border-white/5 bg-gradient-to-b from-card/95 to-card/70 p-5 shadow-elevated backdrop-blur-xl">
-      <div className="mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Dumbbell className="h-4 w-4 text-primary" />
-          <span className="text-sm font-semibold">Dernières séances</span>
-        </div>
-        <Link
-          to="/seances"
-          className="text-[11px] font-medium text-primary transition-opacity hover:opacity-80"
-        >
-          Tout →
-        </Link>
-      </div>
-
-      {loading ? (
-        <div className="flex h-16 items-center justify-center">
-          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-        </div>
-      ) : workouts.length === 0 ? (
-        <p className="text-[11px] text-muted-foreground">Aucune séance. Lance-toi !</p>
-      ) : (
-        <ul className="space-y-2">
-          {workouts.map((w) => (
-            <li key={w.id}>
-              <Link
-                to="/seances"
-                className="flex items-center justify-between gap-3 rounded-xl border border-border bg-card/50 px-3 py-2.5 transition-colors hover:border-primary/40"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-xs font-semibold">{w.name || "Séance"}</p>
-                  <p className="text-[10px] text-muted-foreground">
-                    {formatDate(w.date)}
-                    {w.duration_minutes ? ` · ${w.duration_minutes} min` : ""}
-                    {w.exercises ? ` · ${w.exercises.length} exos` : ""}
-                  </p>
-                </div>
-                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
-  );
-}
-
-// ─── Body summary card ────────────────────────────────────────────────────────
-
-function BodySummaryCard({
-  loading,
-  latestBody,
-  recoveryMap,
-}: {
-  loading: boolean;
-  latestBody:
-    | { weight: number | null; body_fat: number | null; muscle_mass: number | null }
-    | null
-    | undefined;
-  recoveryMap: ReturnType<typeof useRecoveryMap>;
-}) {
-  const leanMass = useMemo(() => {
-    const { weight, body_fat } = latestBody ?? {};
-    if (weight == null || body_fat == null) return null;
-    return Math.round(weight * (1 - body_fat / 100) * 10) / 10;
-  }, [latestBody]);
-
-  const trainedMuscles = useMemo(
-    () => [...recoveryMap.values()].filter((m) => m.status !== "unknown"),
-    [recoveryMap],
-  );
-
-  const hasBodyData = latestBody?.weight != null || latestBody?.body_fat != null;
-
-  return (
-    <section className="mt-4 overflow-hidden rounded-3xl border border-white/5 bg-gradient-to-b from-card/95 to-card/70 p-5 shadow-elevated backdrop-blur-xl">
-      <div className="mb-4 flex items-center justify-between">
-        <span className="text-sm font-semibold">Corps</span>
-        <Link
-          to="/corps"
-          className="text-[11px] font-medium text-primary transition-opacity hover:opacity-80"
-        >
-          Mesures →
-        </Link>
-      </div>
-
-      {loading ? (
-        <div className="flex h-16 items-center justify-center">
-          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-        </div>
-      ) : (
-        <>
-          {hasBodyData ? (
-            <div className="mb-4 grid grid-cols-3 gap-2">
-              {latestBody?.weight != null && <KpiCard label="Poids" value={`${latestBody.weight} kg`} />}
-              {latestBody?.body_fat != null && (
-                <KpiCard label="Masse grasse" value={`${latestBody.body_fat}%`} />
-              )}
-              {leanMass != null && <KpiCard label="Masse maigre" value={`${leanMass} kg`} />}
-            </div>
-          ) : (
-            <p className="mb-4 text-[11px] text-muted-foreground">
-              Aucune mesure enregistrée. Ajoute ta première.
-            </p>
-          )}
-
-          {trainedMuscles.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {trainedMuscles.map((m) => (
-                <span
-                  key={m.id}
-                  className="inline-flex items-center gap-1 rounded-full border border-white/8 bg-white/5 px-2.5 py-0.5 text-[10px] font-medium"
-                >
-                  <span
-                    className="h-1.5 w-1.5 rounded-full"
-                    style={{ backgroundColor: RECOVERY_COLORS[m.status].stroke }}
-                  />
-                  {m.label}
-                </span>
-              ))}
-            </div>
-          )}
-        </>
-      )}
-    </section>
-  );
-}
-
-// ─── Badges card ──────────────────────────────────────────────────────────────
-
-function BadgesCard({
-  badges,
-}: {
-  badges: { id: string; label: string; icon: string; unlocked_at: string }[];
-}) {
-  return (
-    <section className="mt-4 overflow-hidden rounded-3xl border border-white/5 bg-gradient-to-b from-card/95 to-card/70 p-5 shadow-elevated backdrop-blur-xl">
-      <div className="mb-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Trophy className="h-4 w-4 text-amber-400" />
-          <span className="text-sm font-semibold">Badges & succès</span>
-        </div>
-        <Link
-          to="/profil"
-          className="text-[11px] font-medium text-primary transition-opacity hover:opacity-80"
-        >
-          Tout →
-        </Link>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {badges.map((b) => (
-          <span
-            key={b.id}
-            className="inline-flex items-center gap-1.5 rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1 text-[11px] font-medium"
-          >
-            <span className="text-sm leading-none">{b.icon || "🏅"}</span>
-            {b.label}
-          </span>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-// ─── Shared ───────────────────────────────────────────────────────────────────
-
-function KpiCard({
-  label,
-  value,
-  valueClass = "text-foreground",
-  icon,
-}: {
-  label: string;
-  value: string;
-  valueClass?: string;
-  icon?: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-xl border border-border bg-card/50 px-2 py-3 text-center">
-      <div className={`flex items-center justify-center gap-1 text-xl font-bold ${valueClass}`}>
-        {icon}
-        {value}
-      </div>
-      <p className="mt-0.5 text-[10px] leading-tight text-muted-foreground">{label}</p>
-    </div>
-  );
-}
+// ─── Utils ────────────────────────────────────────────────────────────────────
 
 function getGreeting() {
   const h = new Date().getHours();
@@ -695,7 +550,13 @@ function getGreeting() {
   return "Bonsoir";
 }
 
-function formatDate(iso: string) {
+function formatRelative(iso: string) {
   const d = new Date(iso + "T00:00:00");
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diff = Math.round((today.getTime() - d.getTime()) / 86400000);
+  if (diff <= 0) return "aujourd'hui";
+  if (diff === 1) return "hier";
+  if (diff < 7) return `il y a ${diff}j`;
   return d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
 }
