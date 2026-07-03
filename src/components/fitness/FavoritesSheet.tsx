@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Loader2, Plus, Star, Trash2, X } from "lucide-react";
 import { Sheet, Field } from "@/components/shared/FormComponents";
 import { FoodAutocomplete } from "@/components/FoodAutocomplete";
+import { MEAL_LABELS, MEAL_SLUGS, scalePer100 } from "@/lib/nutrition/meals";
+import { parseDecimal } from "@/lib/nutrition/portions";
 import type { FoodSuggestion } from "@/services/foodSuggestion";
 import {
   useNutritionFavorites,
@@ -11,15 +13,12 @@ import {
 } from "@/hooks/use-nutrition-favorites";
 import { useAddNutrition } from "@/hooks/use-fitness";
 
-const MEALS: Array<{ slug: string; label: string }> = [
-  { slug: "petit-dej", label: "Petit-déjeuner" },
-  { slug: "dejeuner", label: "Déjeuner" },
-  { slug: "diner", label: "Dîner" },
-  { slug: "collation", label: "Collation" },
-];
+const MEALS: Array<{ slug: string; label: string }> = MEAL_SLUGS.map((slug) => ({
+  slug,
+  label: MEAL_LABELS[slug],
+}));
 
-const scale = (v: number | null, grams: number): number | null =>
-  v == null ? null : Math.round(((v * grams) / 100) * 10) / 10;
+const scale = scalePer100;
 
 export function FavoritesSheet({
   date,
@@ -43,7 +42,8 @@ export function FavoritesSheet({
   const [grams, setGrams] = useState("100");
   const [newMeal, setNewMeal] = useState("collation");
 
-  const g = Number(grams) || 100;
+  // parseDecimal accepte « 12,5 » ; quantité invalide => 0 (bouton désactivé).
+  const g = parseDecimal(grams) ?? 0;
 
   const logFavorite = (fav: NutritionFavorite) => {
     const meal = mealByFav[fav.id] ?? fav.meal ?? "collation";
@@ -73,7 +73,7 @@ export function FavoritesSheet({
   };
 
   const saveNewFavorite = () => {
-    if (!picked) return;
+    if (!picked || g <= 0) return;
     const kcal = scale(picked.calories, g);
     addFav.mutate(
       {
@@ -155,7 +155,7 @@ export function FavoritesSheet({
                 <button
                   type="button"
                   onClick={saveNewFavorite}
-                  disabled={addFav.isPending}
+                  disabled={addFav.isPending || g <= 0}
                   className="flex w-full items-center justify-center gap-2 rounded-xl bg-foreground py-2.5 text-sm font-semibold text-background disabled:opacity-60"
                 >
                   {addFav.isPending && <Loader2 className="h-4 w-4 animate-spin" />}

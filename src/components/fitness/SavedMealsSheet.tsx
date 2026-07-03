@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { ChevronDown, ChevronLeft, ChevronUp, Loader2, Plus, Trash2, Utensils, X } from "lucide-react";
 import { Sheet, Field, SubmitButton } from "@/components/shared/FormComponents";
 import { FoodAutocomplete } from "@/components/FoodAutocomplete";
+import { MEAL_LABELS, scalePer100 } from "@/lib/nutrition/meals";
 import type { FoodSuggestion } from "@/services/foodSuggestion";
 import {
   useSavedMeals,
@@ -10,13 +11,6 @@ import {
   useDeleteSavedMeal,
   type SavedMeal,
 } from "@/hooks/use-saved-meals";
-
-const MEAL_LABELS: Record<string, string> = {
-  "petit-dej": "Petit-déjeuner",
-  dejeuner: "Déjeuner",
-  diner: "Dîner",
-  collation: "Collation",
-};
 
 type BuilderItem = {
   key: string;
@@ -31,8 +25,7 @@ type BuilderItem = {
   };
 };
 
-const scale = (v: number | null, grams: number): number | null =>
-  v == null ? null : Math.round(((v * grams) / 100) * 10) / 10;
+const scale = scalePer100;
 
 const isUuid = (v: string) => /^[0-9a-f-]{36}$/i.test(v);
 
@@ -121,13 +114,15 @@ export function SavedMealsSheet({
             proteins: scale(it.per100.proteins, it.grams),
             carbs: scale(it.per100.carbs, it.grams),
             fats: scale(it.per100.fats, it.grams),
-            base_calories: kcalInt,
-            base_proteins: scale(it.per100.proteins, it.grams),
-            base_carbs: scale(it.per100.carbs, it.grams),
-            base_fats: scale(it.per100.fats, it.grams),
+            // Convention : base_* = valeurs pour 100 g (bug B1 corrigé).
+            base_calories: it.per100.calories,
+            base_proteins: it.per100.proteins,
+            base_carbs: it.per100.carbs,
+            base_fats: it.per100.fats,
             serving_count: 1,
             consumed_quantity: it.grams,
             consumed_unit: "g",
+            consumed_grams_per_unit: 1,
           };
         }),
       },
@@ -189,7 +184,7 @@ export function SavedMealsSheet({
                   >
                     <p className="truncate text-sm font-semibold">{m.name}</p>
                     <p className="text-xs text-muted-foreground">
-                      {m.meal ? `${MEAL_LABELS[m.meal] ?? m.meal} · ` : ""}
+                      {m.meal ? `${(MEAL_LABELS as Record<string, string>)[m.meal] ?? m.meal} · ` : ""}
                       {m.saved_meal_items.length} aliment
                       {m.saved_meal_items.length > 1 ? "s" : ""} ·{" "}
                       {Math.round(mealTotal(m))} kcal

@@ -8,6 +8,12 @@ interface GoalsSheetProps {
   onClose: () => void;
 }
 
+const GOAL_DELTAS = [
+  { value: "seche", label: "Sèche (−300 kcal)", delta: -300 },
+  { value: "maintien", label: "Maintien", delta: 0 },
+  { value: "prise", label: "Prise de masse (+300 kcal)", delta: 300 },
+];
+
 const ACTIVITY_LEVELS = [
   { value: "1.2",   label: "Sédentaire (peu ou pas d'exercice)" },
   { value: "1.375", label: "Légèrement actif (1-3 j/sem)" },
@@ -26,7 +32,7 @@ export function GoalsSheet({ current, onClose }: GoalsSheetProps) {
   });
 
   const [showCalc, setShowCalc] = useState(false);
-  const [calc, setCalc] = useState({ sex: "homme", age: "", weight: "", height: "", activity: "1.55" });
+  const [calc, setCalc] = useState({ sex: "homme", age: "", weight: "", height: "", activity: "1.55", goal: "maintien" });
   const [tdeeResult, setTdeeResult] = useState<{ tdee: number; proteins: number; carbs: number; fats: number } | null>(null);
 
   const computeTDEE = () => {
@@ -38,7 +44,8 @@ export function GoalsSheet({ current, onClose }: GoalsSheetProps) {
     const bmr = calc.sex === "homme"
       ? 10 * w + 6.25 * h - 5 * age + 5
       : 10 * w + 6.25 * h - 5 * age - 161;
-    const tdee = Math.round(bmr * act);
+    const delta = GOAL_DELTAS.find((g) => g.value === calc.goal)?.delta ?? 0;
+    const tdee = Math.max(1200, Math.round(bmr * act) + delta);
     const proteins = Math.round(w * 1.8);
     const fats = Math.round(w * 1.0);
     const carbs = Math.max(0, Math.round((tdee - proteins * 4 - fats * 9) / 4));
@@ -123,6 +130,15 @@ export function GoalsSheet({ current, onClose }: GoalsSheetProps) {
                     onChange={(e) => setCalc({ ...calc, height: e.target.value })}
                     autoComplete="off" placeholder="cm" className="w-full rounded-lg border border-border bg-card px-2.5 py-2 text-base outline-none focus:border-primary" />
                 </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Objectif</label>
+                <select value={calc.goal} onChange={(e) => setCalc({ ...calc, goal: e.target.value })}
+                  className="w-full rounded-lg border border-border bg-card px-2.5 py-2 text-base outline-none focus:border-primary">
+                  {GOAL_DELTAS.map((g) => (
+                    <option key={g.value} value={g.value}>{g.label}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Niveau d'activité</label>

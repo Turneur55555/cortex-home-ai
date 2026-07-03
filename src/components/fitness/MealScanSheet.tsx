@@ -5,6 +5,8 @@ import { Camera, ImageIcon, Loader2, Sparkles, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Sheet } from "@/components/shared/FormComponents";
 import { fileToBase64Compressed } from "@/lib/nutrition/utils";
+import { MEAL_LABELS, clampMacroSet, isMealSlug } from "@/lib/nutrition/meals";
+import { formatDecimal, parseDecimal } from "@/lib/nutrition/portions";
 import { useAddNutritionBatch } from "@/hooks/use-fitness";
 
 interface ScanItem {
@@ -21,15 +23,6 @@ interface ScanResponse {
   confidence?: number;
   details?: string;
 }
-
-const MEAL_LABELS: Record<string, string> = {
-  "petit-dej": "Petit-déjeuner",
-  dejeuner: "Déjeuner",
-  diner: "Dîner",
-  collation: "Collation",
-};
-
-const VALID_MEALS = ["petit-dej", "dejeuner", "diner", "collation"] as const;
 
 interface MealScanSheetProps {
   onClose: () => void;
@@ -74,7 +67,7 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
       setScanResult(d);
       setItems(d.items ?? []);
       const detectedMeal = d.meal ?? "";
-      setMeal(VALID_MEALS.includes(detectedMeal as (typeof VALID_MEALS)[number]) ? detectedMeal : "dejeuner");
+      setMeal(isMealSlug(detectedMeal) ? detectedMeal : "dejeuner");
       const n = (d.items ?? []).length;
       const conf = d.confidence != null ? ` (${Math.round(d.confidence * 100)}%)` : "";
       toast.success(`${n} aliment${n > 1 ? "s" : ""} détecté${n > 1 ? "s" : ""}${conf}`);
@@ -93,30 +86,67 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
 
   const removeItem = (idx: number) => {
     setItems((prev) => prev.filter((_, i) => i !== idx));
-    if (editingIdx === idx) setEditingIdx(null);
+    if (editingIdx === idx) { setEditingIdx(null); setEditDraft(null); }
   };
 
   const updateItem = (idx: number, patch: Partial<ScanItem>) =>
     setItems((prev) => prev.map((item, i) => (i === idx ? { ...item, ...patch } : item)));
 
+  // Brouillon d'édition en chaînes : accepte « 12,5 » (parseDecimal) et
+  // n'écrase l'item qu'à la validation, bornes DB appliquées (bugs B4/B9).
+  const [editDraft, setEditDraft] = useState<{
+    name: string; calories: string; proteins: string; carbs: string; fats: string;
+  } | null>(null);
+
+  const startEdit = (idx: number) => {
+    const it = items[idx];
+    if (!it) return;
+    setEditingIdx(idx);
+    setEditDraft({
+      name: it.name,
+      calories: formatDecimal(it.calories),
+      proteins: formatDecimal(it.proteins),
+      carbs: formatDecimal(it.carbs),
+      fats: formatDecimal(it.fats),
+    });
+  };
+
+  const commitEdit = (idx: number) => {
+    if (editDraft) {
+      const macros = clampMacroSet({
+        calories: parseDecimal(editDraft.calories) ?? 0,
+        proteins: parseDecimal(editDraft.proteins) ?? 0,
+        carbs: parseDecimal(editDraft.carbs) ?? 0,
+        fats: parseDecimal(editDraft.fats) ?? 0,
+      });
+      updateItem(idx, { name: editDraft.name.trim() || "Aliment", ...macros });
+    }
+    setEditingIdx(null);
+    setEditDraft(null);
+  };
+
   const confirm = () => {
     if (items.length === 0) return;
     addBatch.mutate(
-      items.map((item) => ({
-        date,
-        meal,
-        name: item.name,
-        calories: Math.round(item.calories),
-        proteins: Math.round(item.proteins * 10) / 10,
-        carbs: Math.round(item.carbs * 10) / 10,
-        fats: Math.round(item.fats * 10) / 10,
-        base_calories: Math.round(item.calories),
-        base_proteins: Math.round(item.proteins * 10) / 10,
-        base_carbs: Math.round(item.carbs * 10) / 10,
-        base_fats: Math.round(item.fats * 10) / 10,
-        serving_count: 1,
-        percentage_consumed: 100,
-      })),
+      items.map((item) => {
+        // B9 : borne aux contraintes DB avant insertion (l'IA peut halluciner).
+        const m = clampMacroSet(item);
+        return {
+          date,
+          meal,
+          name: item.name,
+          calories: Math.round(m.calories),
+          proteins: Math.round(m.proteins * 10) / 10,
+          carbs: Math.round(m.carbs * 10) / 10,
+          fats: Math.round(m.fats * 10) / 10,
+          base_calories: Math.round(m.calories),
+          base_proteins: Math.round(m.proteins * 10) / 10,
+          base_carbs: Math.round(m.carbs * 10) / 10,
+          base_fats: Math.round(m.fats * 10) / 10,
+          serving_count: 1,
+          percentage_consumed: 100,
+        };
+      }),
       { onSuccess: () => onClose() },
     );
   };
@@ -204,8 +234,8 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
                     <div className="space-y-2 p-3">
                       <input
                         type="text"
-                        value={item.name}
-                        onChange={(e) => updateItem(idx, { name: e.target.value })}
+                        value={editDraft?.name ?? item.name}
+                        onChange={(e) => setEditDraft((d) => (d ? { ...d, name: e.target.value } : d))}
                         autoComplete="off"
                         className="w-full rounded-lg border border-border bg-surface px-2.5 py-2 text-base outline-none focus:border-primary"
                       />
@@ -218,8 +248,8 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
                             <input
                               type="text"
                               inputMode="decimal"
-                              value={item[field]}
-                              onChange={(e) => updateItem(idx, { [field]: Number(e.target.value) })}
+                              value={editDraft?.[field] ?? ""}
+                              onChange={(e) => setEditDraft((d) => (d ? { ...d, [field]: e.target.value } : d))}
                               autoComplete="off"
                               className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-base outline-none focus:border-primary"
                             />
@@ -228,7 +258,7 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
                       </div>
                       <button
                         type="button"
-                        onClick={() => setEditingIdx(null)}
+                        onClick={() => commitEdit(idx)}
                         className="w-full rounded-lg bg-primary/10 py-3 text-sm font-semibold text-primary active:scale-[0.98]"
                       >
                         Valider
@@ -247,7 +277,7 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
                       </div>
                       <button
                         type="button"
-                        onClick={() => setEditingIdx(idx)}
+                        onClick={() => startEdit(idx)}
                         className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground active:bg-muted"
                         aria-label="Modifier"
                       >

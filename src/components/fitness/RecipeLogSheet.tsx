@@ -1,16 +1,10 @@
 import { useState } from "react";
 import { Loader2, Utensils } from "lucide-react";
 import { Sheet } from "@/components/shared/FormComponents";
+import { MEAL_LABELS } from "@/lib/nutrition/meals";
 import { useRecipes, useRecipe } from "@/hooks/useRecipes";
 import { useAddNutritionBatch } from "@/hooks/use-fitness";
 import { scaleServings } from "@/lib/nutrition/recipes";
-
-const MEAL_LABELS: Record<string, string> = {
-  "petit-dej": "Petit-déjeuner",
-  dejeuner: "Déjeuner",
-  diner: "Dîner",
-  collation: "Collation",
-};
 
 interface Props {
   date: string;
@@ -46,6 +40,10 @@ export function RecipeLogSheet({ date, onClose }: Props) {
           base_fats: Math.round(perS!.fat * 10) / 10,
           serving_count: servings,
           percentage_consumed: 100,
+          // B3 : sans ces champs, l'édition de portion retombait sur 1 portion
+          // et écrasait les macros réelles (÷N).
+          consumed_quantity: servings,
+          consumed_unit: "portion",
         },
       ],
       { onSuccess: () => onClose() },
