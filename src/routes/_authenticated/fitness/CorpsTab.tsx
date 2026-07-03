@@ -558,7 +558,7 @@ function MeasurementsCard({
   rows: ReadonlyArray<BodyRow & { id: string }> | undefined;
   onChipClick?: (key: keyof BodyRow, label: string) => void;
 }) {
-  const latest = rows?.[0];
+  // (unused) `latest` a été remplacé par findLatestValue par champ.
   const groups: Array<{
     title: string;
     accent: string;
