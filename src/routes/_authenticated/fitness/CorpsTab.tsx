@@ -558,7 +558,16 @@ function MeasurementsCard({
   rows: ReadonlyArray<BodyRow & { id: string }> | undefined;
   onChipClick?: (key: keyof BodyRow, label: string) => void;
 }) {
-  // (unused) `latest` a été remplacé par findLatestValue par champ.
+  // Merge des dernières valeurs non-nulles par champ.
+  const latest = {
+    chest: findLatestValue(rows, "chest"),
+    waist: findLatestValue(rows, "waist"),
+    hips: findLatestValue(rows, "hips"),
+    left_arm: findLatestValue(rows, "left_arm"),
+    right_arm: findLatestValue(rows, "right_arm"),
+    left_thigh: findLatestValue(rows, "left_thigh"),
+    right_thigh: findLatestValue(rows, "right_thigh"),
+  } as Record<keyof BodyRow, number | null>;
   const groups: Array<{
     title: string;
     accent: string;
