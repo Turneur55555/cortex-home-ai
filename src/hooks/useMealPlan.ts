@@ -11,8 +11,9 @@ import {
 /**
  * Planning de repas Nutrition V2 + génération de liste de courses depuis le stock.
  * Tables : meal_plans, recipe_ingredients, items, shopping_list.
+ * Client typé : ces tables figurent dans supabase/types.ts.
  */
-const db = supabase as any;
+const db = supabase;
 
 export interface MealPlanEntry {
   id: string;
@@ -44,7 +45,7 @@ export function useMealPlan(startDate: string | null | undefined, endDate: strin
         .order("date", { ascending: true })
         .order("sort_order", { ascending: true });
       if (error) throw error;
-      return (data ?? []) as MealPlanEntry[];
+      return (data ?? []) as unknown as MealPlanEntry[];
     },
   });
 }
@@ -114,7 +115,7 @@ export function useGenerateShoppingList(startDate: string | null | undefined, en
         .lte("date", endDate)
         .not("recipe_id", "is", null);
       if (mErr) throw mErr;
-      const plans = (meals ?? []) as Array<{ recipe_id: string; servings: number | null }>;
+      const plans = (meals ?? []) as unknown as Array<{ recipe_id: string; servings: number | null }>;
       if (plans.length === 0) return [];
 
       // 2. Ingrédients de toutes les recettes concernées.
@@ -124,7 +125,7 @@ export function useGenerateShoppingList(startDate: string | null | undefined, en
         .select("recipe_id, item_id, name, quantity, unit")
         .in("recipe_id", recipeIds);
       if (iErr) throw iErr;
-      const ingredients = (ings ?? []) as Array<{
+      const ingredients = (ings ?? []) as unknown as Array<{
         recipe_id: string;
         item_id: string | null;
         name: string;

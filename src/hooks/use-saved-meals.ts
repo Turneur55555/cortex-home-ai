@@ -1,12 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 
 // Repas enregistrés — modèles multi-aliments réutilisables en 1 tap.
-// Les tables `saved_meals`/`saved_meal_items` et les RPC ne figurent pas dans
-// les types générés : on utilise un client faiblement typé localisé à ce hook
-// (même approche que use-nutrition-favorites), pour éviter de régénérer
-// supabase/types.ts.
+// Client typé : `saved_meals`/`saved_meal_items` et les RPC figurent dans
+// supabase/types.ts (plus de client « loose »).
 
 export type SavedMealItem = {
   id: string;
@@ -40,38 +39,22 @@ export type NewSavedMealItem = {
   serving_count?: number;
   consumed_quantity?: number | null;
   consumed_unit?: string | null;
+  consumed_grams_per_unit?: number | null;
 };
-
-type LooseClient = {
-  from: (t: string) => {
-    select: (cols: string) => {
-      order: (
-        col: string,
-        opts: { ascending: boolean },
-      ) => Promise<{ data: unknown; error: unknown }>;
-    };
-    delete: () => { eq: (col: string, val: string) => Promise<{ error: unknown }> };
-  };
-  rpc: (
-    fn: string,
-    args: Record<string, unknown>,
-  ) => Promise<{ data: unknown; error: unknown }>;
-};
-const loose = (): LooseClient => supabase as unknown as LooseClient;
 
 export function useSavedMeals() {
   return useQuery({
     queryKey: ["saved_meals"],
     staleTime: 60_000,
     queryFn: async (): Promise<SavedMeal[]> => {
-      const { data, error } = await loose()
+      const { data, error } = await supabase
         .from("saved_meals")
         .select(
           "id, name, meal, saved_meal_items(id, name, calories, proteins, carbs, fats, serving_count, sort_order)",
         )
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []) as SavedMeal[];
+      return data ?? [];
     },
   });
 }
@@ -84,10 +67,10 @@ export function useCreateSavedMeal() {
       meal: string | null;
       items: NewSavedMealItem[];
     }) => {
-      const { error } = await loose().rpc("create_saved_meal", {
+      const { error } = await supabase.rpc("create_saved_meal", {
         p_name: input.name,
         p_meal: input.meal,
-        p_items: input.items,
+        p_items: input.items as unknown as Json,
       });
       if (error) throw error;
     },
@@ -103,7 +86,7 @@ export function useLogSavedMeal() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (input: { id: string; date: string; meal?: string | null }) => {
-      const { error } = await loose().rpc("log_saved_meal", {
+      const { error } = await supabase.rpc("log_saved_meal", {
         p_meal_id: input.id,
         p_date: input.date,
         p_meal: input.meal ?? null,
@@ -122,7 +105,7 @@ export function useDeleteSavedMeal() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await loose().from("saved_meals").delete().eq("id", id);
+      const { error } = await supabase.from("saved_meals").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {

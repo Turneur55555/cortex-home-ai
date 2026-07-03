@@ -6,6 +6,7 @@ import type { TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 export function useNutrition(date: string) {
   return useQuery({
     queryKey: ["nutrition", date],
+    staleTime: 30_000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("nutrition")
@@ -77,7 +78,7 @@ export function useDeleteNutrition() {
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("Supprimé");
+      // Pas de toast ici : l'appelant affiche le toast avec action « Annuler ».
       qc.invalidateQueries({ queryKey: ["nutrition"] });
     },
     onError: (e: Error) => toast.error(e.message),

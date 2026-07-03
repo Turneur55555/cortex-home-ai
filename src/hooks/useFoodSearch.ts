@@ -42,6 +42,9 @@ export function useFoodSearch(query: string, enabled = true) {
 
       searchFoods(q, ctrl.signal)
         .then((off) => {
+          // Requête annulée (frappe rapide) : ne pas polluer le cache ni
+          // écraser les résultats de la requête courante (bug B2).
+          if (ctrl.signal.aborted) return;
           const tagged = off.map((f) => ({ ...f, source: "usda" as const }));
           foodCache.set(q, tagged);
           setResults(mergeResults(local, tagged));

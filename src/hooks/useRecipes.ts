@@ -7,12 +7,13 @@ import { ingredientMacros, recipeMacros, perServing, type MacroTotals } from "@/
  * CRUD typé des recettes Nutrition V2 (react-query).
  * Tables : recipes, recipe_ingredients. Les macros sont dérivées via le domaine
  * pur (lib/nutrition/recipes), à partir des champs *_per_100g de items.
+ * Client typé : ces tables figurent dans supabase/types.ts.
  */
-const db = supabase as any;
+const db = supabase;
 
 export interface Recipe {
   id: string;
-  user_id: string;
+  user_id: string | null;
   name: string;
   servings: number;
   prep_minutes: number | null;
@@ -66,7 +67,7 @@ export function useRecipes() {
     queryFn: async (): Promise<Recipe[]> => {
       const { data, error } = await db.from("recipes").select("*").order("name", { ascending: true });
       if (error) throw error;
-      return (data ?? []) as Recipe[];
+      return (data ?? []) as unknown as Recipe[];
     },
   });
 }
@@ -86,7 +87,7 @@ export function useRecipe(id: string | null | undefined) {
         .eq("recipe_id", id)
         .order("sort_order", { ascending: true });
       if (ingErr) throw ingErr;
-      const ingredients = (ings ?? []) as RecipeIngredient[];
+      const ingredients = (ings ?? []) as unknown as RecipeIngredient[];
       const total = recipeMacros(ingredients.map(toMacroInput));
       return {
         ...(recipe as Recipe),
@@ -153,7 +154,7 @@ export function useCreateRecipe() {
         const { error: ingErr } = await db.from("recipe_ingredients").insert(rows);
         if (ingErr) throw ingErr;
       }
-      return { id: recipe.id as string };
+      return { id: recipe.id };
     },
     onSuccess: ({ id }: { id: string }) => {
       qc.invalidateQueries({ queryKey: RECIPES_KEY });

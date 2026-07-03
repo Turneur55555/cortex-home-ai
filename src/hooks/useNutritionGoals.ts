@@ -12,6 +12,7 @@ export type NutritionGoals = {
 export function useNutritionGoals() {
   return useQuery({
     queryKey: ["nutrition_goals"],
+    staleTime: 5 * 60_000,
     queryFn: async (): Promise<NutritionGoals | null> => {
       const {
         data: { user },
