@@ -227,3 +227,15 @@ App **ICORTEX** (nom officiel dans les titres de pages) : assistant personnel mu
   - Confirmation via `useAddNutritionBatch` (batch insert)
   - Imports : `Loader2, Mic, MicOff, Plus, Sparkles, Trash2` from lucide-react
 - **`NutritionTab.tsx`** : bouton « Vocal » (icône Mic) ajouté dans la rangée d'actions, `voiceOpen` state, render conditionnel `<VoiceLogSheet>`
+
+## Nutrition — Audit complet + corrections (2026-07-03, session Claude Cowork)
+Rapport : `AUDIT_NUTRITION.md` (dossier Drive). Note avant : 64/100.
+- **Bug B1 corrigé (corruption)** : `SavedMealsSheet` stockait `base_*` scalés au lieu de /100 g → réédition faussait les macros. Convention documentée : `base_*` = valeurs /100 g quand `consumed_unit` = g/ml, sinon « par portion ». 6 lignes corrompues réparées en prod (whey ×5 nutrition + 1 saved_meal_item).
+- **Autres fixes** : B2 cache recherche empoisonné (useFoodSearch guard abort), B3 recette ×N (consumed_quantity), B4 virgule FR (parseDecimal + editDraft dans MealScan/Voice/Favorites), B5/B6 parseISO, B7 suppression immédiate + undo par ré-insertion, B8 consumed_grams_per_unit dans saved_meal_items + RPCs, B9 clampMacroSet avant insert IA.
+- **Nouveau module** : `src/lib/nutrition/meals.ts` (MEAL_SLUGS/LABELS/isMealSlug/scalePer100/clampMacroSet) — utilisé par 7 fichiers, plus de duplication.
+- **Hooks typés** : types.ts complété à la main (7 tables V2 + 3 RPC) ; use-saved-meals, use-nutrition-favorites, useMealPlan, useRecipes, useFrequentFoods sans `as any`/loose client.
+- **Perf** : RPC `frequent_foods` (remplace 300 lignes client), staleTime useNutrition 30s / goals 5min, edge `food-lookup` v5 (upserts USDA parallèles + rate-limit 150/h) → recherche froide ~4s → ~2,3s (vérifié logs).
+- **DB (4 migrations, appliquées prod + repo)** : 20260702202410 rattrapage saved_meals/saved_meal_items/nutrition_favorites+policies, ...202431 grams_per_unit+RPCs, ...202446 frequent_foods, ...202452 drop index dupliqués (foods, nutrition_goals) + policies recipes par action.
+- **GoalsSheet** : TDEE avec objectif sèche(−300)/maintien/prise(+300), plancher 1200 kcal.
+- Push : 7 commits via GitHub web upload (36c7da6→596bf5b). ⚠️ tsc a ~100 erreurs préexistantes (framer-motion types, auth wrapper Lovable) non liées.
+- Reste à faire (audit) : fibres persistées, courbe poids/calories, préférences alimentaires → recipe-assistant, leaked password protection (dashboard), refactor NutritionTab (687 l.).
