@@ -114,26 +114,30 @@ export function CorpsTab() {
     [data],
   );
 
-  const latest = data?.[0];
+  // Latest non-null value per field (une nouvelle mesure sur un seul champ
+  // ne doit pas masquer les valeurs précédentes des autres champs).
+  const latestWeight = findLatestValue(data, "weight");
+  const latestMuscle = findLatestValue(data, "muscle_mass");
+  const latestBodyFat = findLatestValue(data, "body_fat");
 
   return (
     <section className="flex flex-col gap-5">
       <div className="grid grid-cols-3 gap-3">
         <Stat
           label="Poids"
-          value={latest?.weight}
+          value={latestWeight}
           unit="kg"
           onClick={() => setQuickField({ key: "weight", label: "Poids", unit: "kg" })}
         />
         <Stat
           label="Masse gr."
-          value={latest?.muscle_mass}
+          value={latestMuscle}
           unit="kg"
           onClick={() => setQuickField({ key: "muscle_mass", label: "Masse grasse", unit: "kg" })}
         />
         <Stat
           label="MG"
-          value={latest?.body_fat}
+          value={latestBodyFat}
           unit="%"
           onClick={() => setQuickField({ key: "body_fat", label: "Masse grasse %", unit: "%" })}
         />
