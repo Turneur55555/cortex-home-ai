@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase as supabaseTyped } from "@/integrations/supabase/client";
+const supabase = supabaseTyped as any;
 
 // Favoris nutritionnels — aliments/repas réutilisables en 1 tap.
 // Client typé : la table `nutrition_favorites` figure dans supabase/types.ts.
