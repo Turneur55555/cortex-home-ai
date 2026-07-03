@@ -5,7 +5,7 @@ import { FileText, Apple, ChevronRight, BarChart3 } from "lucide-react";
 import { ProfileCompletionCard } from "@/components/profile/ProfileCompletionCard";
 import { useAuth } from "@/hooks/use-auth";
 import { useProfile } from "@/hooks/useProfile";
-import { useStreak } from "@/hooks/useStreak";
+import { useActivityStreak } from "@/hooks/useActivityStreak";
 import { useUserStats } from "@/hooks/useUserStats";
 import { ProfileHeader } from "@/components/profile/ProfileHeader";
 import { GoalsManager } from "@/components/profile/GoalsManager";
@@ -28,31 +28,13 @@ export const Route = createFileRoute("/_authenticated/profil")({
   component: ProfilPage,
 });
 
-const AVATAR_KEY = "icortex.avatar_url";
-
 function ProfilPage() {
   const { user } = useAuth();
   const fallback = useMemo(() => user?.email?.split("@")[0] ?? "Utilisateur", [user?.email]);
-  const { pseudo, updatePseudo } = useProfile(fallback);
-  const { current: streak } = useStreak();
+  const { pseudo, avatarUrl, updatePseudo, updateAvatar } = useProfile(fallback);
+  const { current: streak } = useActivityStreak();
   const { data: stats } = useUserStats();
   const [editOpen, setEditOpen] = useState(false);
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(() => {
-    try {
-      return localStorage.getItem(AVATAR_KEY);
-    } catch {
-      return null;
-    }
-  });
-
-  const onAvatarChange = (url: string) => {
-    setAvatarUrl(url);
-    try {
-      localStorage.setItem(AVATAR_KEY, url);
-    } catch {
-      /* ignore */
-    }
-  };
 
   return (
     <main className="relative flex flex-1 flex-col overflow-hidden px-5 pb-32 pt-[max(2.5rem,env(safe-area-inset-top))]">
@@ -63,7 +45,7 @@ function ProfilPage() {
         level={stats?.level ?? 1}
         avatarUrl={avatarUrl}
         onEdit={() => setEditOpen(true)}
-        onAvatarChange={onAvatarChange}
+        onAvatarChange={updateAvatar}
       />
 
       {/* Profil complété */}

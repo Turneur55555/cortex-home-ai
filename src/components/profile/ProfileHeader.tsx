@@ -12,7 +12,7 @@ interface Props {
   level: number;
   avatarUrl?: string | null;
   onEdit: () => void;
-  onAvatarChange: (url: string) => void;
+  onAvatarChange: (url: string) => Promise<void>;
 }
 
 function greeting() {
@@ -20,6 +20,37 @@ function greeting() {
   if (h < 6) return "Bonsoir";
   if (h < 18) return "Bonjour";
   return "Bonsoir";
+}
+
+
+async function compressAvatar(file: File): Promise<Blob> {
+  const dataUrl = await new Promise<string>((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result as string);
+    r.onerror = () => rej(new Error("Lecture du fichier échouée"));
+    r.readAsDataURL(file);
+  });
+  const img = await new Promise<HTMLImageElement>((res, rej) => {
+    const i = new Image();
+    i.onload = () => res(i);
+    i.onerror = () => rej(new Error("Image invalide ou format non supporté"));
+    i.src = dataUrl;
+  });
+  const MAX = 512;
+  const ratio = Math.min(1, MAX / Math.max(img.width, img.height));
+  const w = Math.round(img.width * ratio);
+  const h = Math.round(img.height * ratio);
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
+  return new Promise<Blob>((res, rej) => {
+    canvas.toBlob(
+      (blob) => (blob ? res(blob) : rej(new Error("Compression échouée"))),
+      "image/jpeg",
+      0.85,
+    );
+  });
 }
 
 export function ProfileHeader({ pseudo, email, streak, level, avatarUrl, onEdit, onAvatarChange }: Props) {
@@ -30,14 +61,32 @@ export function ProfileHeader({ pseudo, email, streak, level, avatarUrl, onEdit,
 
   const handleFile = async (file: File) => {
     if (!user) return;
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("Image trop volumineuse (max 10 Mo)");
+      return;
+    }
     setUploading(true);
     try {
-      const ext = file.name.split(".").pop() || "jpg";
-      const path = `${user.id}/avatar-${Date.now()}.${ext}`;
-      const { error } = await supabase.storage.from("avatars").upload(path, file, { upsert: true });
+      const compressed = await compressAvatar(file);
+      const path = `${user.id}/avatar-${Date.now()}.jpg`;
+      const { error } = await supabase.storage
+        .from("avatars")
+        .upload(path, compressed, { upsert: true, contentType: "image/jpeg" });
       if (error) throw error;
       const { data } = supabase.storage.from("avatars").getPublicUrl(path);
-      onAvatarChange(data.publicUrl);
+      await onAvatarChange(data.publicUrl);
+
+      // Nettoyage : supprime les anciens avatars (fire-and-forget)
+      void supabase.storage
+        .from("avatars")
+        .list(user.id)
+        .then(({ data: files }) => {
+          const old = (files ?? [])
+            .filter((f) => `${user.id}/${f.name}` !== path)
+            .map((f) => `${user.id}/${f.name}`);
+          if (old.length) void supabase.storage.from("avatars").remove(old);
+        });
+
       toast.success("Avatar mis à jour");
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Erreur upload";

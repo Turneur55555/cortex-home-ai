@@ -2,21 +2,13 @@ import { useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
-import { useStreak } from "@/hooks/useStreak";
+import { useActivityStreak } from "@/hooks/useActivityStreak";
+import { localWeekStartYMD } from "@/lib/dates";
 import {
   computeBadgeProgress,
   type BadgeCatalogEntry,
   type FitnessStats,
 } from "@/lib/fitness/badges";
-
-function getWeekStart(): string {
-  const d = new Date();
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  d.setDate(diff);
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString().split("T")[0];
-}
 
 export interface UnlockedBadge {
   badge_key: string;
@@ -35,7 +27,7 @@ export interface BadgeWithProgress {
 
 export function useBadgeSystem() {
   const { user } = useAuth();
-  const { current: streakDays } = useStreak();
+  const { current: streakDays } = useActivityStreak();
   const qc = useQueryClient();
   const unlockingRef = useRef(new Set<string>());
 
@@ -44,7 +36,7 @@ export function useBadgeSystem() {
     queryKey: ["badges_catalog"],
     staleTime: 300_000,
     queryFn: async (): Promise<BadgeCatalogEntry[]> => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("badges_catalog")
         .select("*")
         .order("sort_order", { ascending: true });
@@ -59,7 +51,7 @@ export function useBadgeSystem() {
     enabled: !!user,
     staleTime: 30_000,
     queryFn: async (): Promise<UnlockedBadge[]> => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("user_badges")
         .select("badge_key, unlocked_at, rarity, xp_reward, description")
         .eq("user_id", user!.id);
@@ -70,27 +62,29 @@ export function useBadgeSystem() {
 
   // Fitness stats for progress calculation
   const { data: totalWorkouts = 0 } = useQuery({
-    queryKey: ["workouts_total_count"],
+    queryKey: ["workouts_total_count", user?.id],
     enabled: !!user,
     staleTime: 60_000,
     queryFn: async () => {
       const { count, error } = await supabase
         .from("workouts")
-        .select("id", { count: "exact", head: true });
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user!.id);
       if (error) throw error;
       return count ?? 0;
     },
   });
 
-  const weekStart = getWeekStart();
+  const weekStart = localWeekStartYMD();
   const { data: weeklyWorkouts = 0 } = useQuery({
-    queryKey: ["workouts_weekly_count", weekStart],
+    queryKey: ["workouts_weekly_count", user?.id, weekStart],
     enabled: !!user,
     staleTime: 60_000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("workouts")
         .select("id")
+        .eq("user_id", user!.id)
         .gte("date", weekStart);
       if (error) throw error;
       return data?.length ?? 0;
@@ -102,7 +96,7 @@ export function useBadgeSystem() {
     enabled: !!user,
     staleTime: 60_000,
     queryFn: async () => {
-      const { count, error } = await (supabase as any)
+      const { count, error } = await supabase
         .from("goals")
         .select("id", { count: "exact", head: true })
         .eq("user_id", user!.id)
@@ -113,20 +107,21 @@ export function useBadgeSystem() {
   });
 
   const { data: bodyMeasurements = 0 } = useQuery({
-    queryKey: ["body_measurements_count"],
+    queryKey: ["body_measurements_count", user?.id],
     enabled: !!user,
     staleTime: 120_000,
     queryFn: async () => {
       const { count, error } = await supabase
         .from("body_tracking")
-        .select("id", { count: "exact", head: true });
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user!.id);
       if (error) throw error;
       return count ?? 0;
     },
   });
 
   const { data: proteinDays = 0 } = useQuery({
-    queryKey: ["protein_days_count"],
+    queryKey: ["protein_days_count", user?.id],
     enabled: !!user,
     staleTime: 300_000,
     queryFn: async () => {
@@ -145,6 +140,7 @@ export function useBadgeSystem() {
       const { data: rows } = await supabase
         .from("nutrition")
         .select("date, proteins")
+        .eq("user_id", user.id)
         .gte("date", dateFrom);
       if (!rows) return 0;
 
@@ -191,7 +187,7 @@ export function useBadgeSystem() {
   const unlockMutation = useMutation({
     mutationFn: async (badge: BadgeCatalogEntry) => {
       if (!user) return;
-      const { error } = await (supabase as any).rpc("unlock_user_badge", {
+      const { error } = await supabase.rpc("unlock_user_badge", {
         _badge_key: badge.badge_key,
       });
       if (error) throw error;

@@ -1,4 +1,4 @@
-import { Activity, ScanLine, Target, Utensils, Package } from "lucide-react";
+import { Activity, Dumbbell, Ruler, ScanLine, Target, Utensils, Package } from "lucide-react";
 import { useUserActivity } from "@/hooks/useUserActivity";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -7,6 +7,8 @@ const ICONS: Record<string, typeof Activity> = {
   scan: ScanLine,
   stock: Package,
   goal: Target,
+  workout: Dumbbell,
+  body: Ruler,
 };
 
 function relative(date: string) {

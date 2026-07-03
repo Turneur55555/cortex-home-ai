@@ -1,7 +1,12 @@
 import { useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
-import { fetchProfile, upsertDisplayName, type ProfileRow } from "@/services/profile";
+import {
+  fetchProfile,
+  upsertAvatarUrl,
+  upsertDisplayName,
+  type ProfileRow,
+} from "@/services/profile";
 
 // Clé incluant l'uid pour que chaque utilisateur ait son propre cache.
 // L'export de base sert à vider toutes les entrées profile au logout.
@@ -23,6 +28,7 @@ export function useProfile(fallback: string) {
   // Source unique : users_profiles.display_name
   // Fallback contrôlé : email-prefix uniquement si null
   const pseudo = row?.display_name?.trim() || fallback;
+  const avatarUrl = row?.avatar_url ?? null;
 
   const mutation = useMutation({
     mutationFn: (next: string) => upsertDisplayName(user!.id, next),
@@ -30,8 +36,29 @@ export function useProfile(fallback: string) {
       await qc.cancelQueries({ queryKey: qk });
       const prev = qc.getQueryData<ProfileRow | null>(qk);
       qc.setQueryData<ProfileRow | null>(qk, (old) => ({
-        ...(old ?? { display_name: null }),
+        ...(old ?? { display_name: null, avatar_url: null }),
         display_name: next.trim(),
+      }));
+      return { prev };
+    },
+    onError: (_err, _next, ctx) => {
+      if (ctx !== undefined) {
+        qc.setQueryData<ProfileRow | null>(qk, ctx.prev ?? null);
+      }
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: qk });
+    },
+  });
+
+  const avatarMutation = useMutation({
+    mutationFn: (url: string) => upsertAvatarUrl(user!.id, url),
+    onMutate: async (url) => {
+      await qc.cancelQueries({ queryKey: qk });
+      const prev = qc.getQueryData<ProfileRow | null>(qk);
+      qc.setQueryData<ProfileRow | null>(qk, (old) => ({
+        ...(old ?? { display_name: null, avatar_url: null }),
+        avatar_url: url,
       }));
       return { prev };
     },
@@ -50,5 +77,10 @@ export function useProfile(fallback: string) {
     [mutation],
   );
 
-  return { pseudo, updatePseudo, isPending: mutation.isPending };
+  const updateAvatar = useCallback(
+    (url: string) => avatarMutation.mutateAsync(url),
+    [avatarMutation],
+  );
+
+  return { pseudo, avatarUrl, updatePseudo, updateAvatar, isPending: mutation.isPending };
 }

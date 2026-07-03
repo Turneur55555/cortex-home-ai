@@ -17,7 +17,7 @@ export function useUserActivity(limit = 5) {
     enabled: !!user,
     staleTime: 30_000,
     queryFn: async (): Promise<ActivityItem[]> => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("user_activity")
         .select("id, type, label, metadata, created_at")
         .eq("user_id", user!.id)

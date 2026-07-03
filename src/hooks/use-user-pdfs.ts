@@ -18,7 +18,7 @@ export function useUserPdfs() {
   return useQuery({
     queryKey: QK,
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("user_pdfs")
         .select("*")
         .order("created_at", { ascending: false });
@@ -47,7 +47,7 @@ export function useUploadPdf() {
         .upload(path, file, { contentType: "application/pdf", upsert: false });
       if (upErr) throw new Error(upErr.message);
 
-      const { data, error: insErr } = await (supabase as any)
+      const { data, error: insErr } = await supabase
         .from("user_pdfs")
         .insert({ user_id: user.id, file_name: file.name, file_path: path, file_size: file.size })
         .select()
@@ -74,7 +74,7 @@ export function useDeletePdf() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
       await supabase.storage.from("pdfs").remove([pdf.file_path]);
-      const { error } = await (supabase as any)
+      const { error } = await supabase
         .from("user_pdfs")
         .delete()
         .eq("id", pdf.id)

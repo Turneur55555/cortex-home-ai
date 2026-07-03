@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { logActivity } from "@/lib/activity";
 import type { TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 
 export function useNutrition(date: string) {
@@ -32,7 +33,10 @@ export function useAddNutrition() {
     },
     onSuccess: (_d, vars) => {
       toast.success("Repas ajouté");
+      logActivity("meal", `Repas ajouté : ${vars.name ?? "aliment"}`, { date: vars.date });
       qc.invalidateQueries({ queryKey: ["nutrition", vars.date] });
+      qc.invalidateQueries({ queryKey: ["user_activity"] });
+      qc.invalidateQueries({ queryKey: ["activity_streak"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });

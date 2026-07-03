@@ -15,7 +15,7 @@ export function useUserStats() {
     enabled: !!user,
     staleTime: 30_000,
     queryFn: async (): Promise<UserStats> => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("user_stats")
         .select("xp, level, total_actions")
         .eq("user_id", user!.id)

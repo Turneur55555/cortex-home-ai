@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { logActivity } from "@/lib/activity";
 import type { TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 
 // ---------- Domaines extraits (re-exports pour rétro-compat) ----------
@@ -578,10 +579,13 @@ export function useFinishWorkout() {
         if (sumErr) console.warn("[finishWorkout] sync résumé échoué", ex.name, sumErr.message);
       }
     },
-    onSuccess: () => {
+    onSuccess: (_d, workout) => {
       toast.success("Séance terminée 💪");
+      logActivity("workout", `Séance terminée : ${workout.name}`, { workout_id: workout.id });
       qc.invalidateQueries({ queryKey: ACTIVE_KEY });
       qc.invalidateQueries({ queryKey: WORKOUTS_KEY });
+      qc.invalidateQueries({ queryKey: ["user_activity"] });
+      qc.invalidateQueries({ queryKey: ["activity_streak"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });

@@ -1,6 +1,7 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { AppShell } from "@/components/AppShell";
+import { PreferencesEffects } from "@/components/PreferencesEffects";
 import { BottomNav } from "@/components/BottomNav";
 import { Loader2 } from "lucide-react";
 import { logAuthEvent, summarizeSession } from "@/lib/authDiagnostics";
@@ -37,11 +38,13 @@ function AuthGate() {
   }
   if (!user) return null; // beforeLoad will redirect
   return (
-    <AppShell>
-      <div className="flex flex-1 flex-col pb-2">
-        <Outlet />
-      </div>
-      <BottomNav />
-    </AppShell>
+    <PreferencesEffects>
+      <AppShell>
+        <div className="flex flex-1 flex-col pb-2">
+          <Outlet />
+        </div>
+        <BottomNav />
+      </AppShell>
+    </PreferencesEffects>
   );
 }

@@ -17,7 +17,7 @@ import { ChatBot } from "@/components/ChatBot";
 import { getContextualQuote } from "@/lib/quotes";
 import { useWorkouts, useNutrition, useNutritionGoals } from "@/hooks/use-fitness";
 import { useRecoveryMap } from "@/hooks/useRecoveryMap";
-import { useStreak } from "@/hooks/useStreak";
+import { useActivityStreak } from "@/hooks/useActivityStreak";
 import { useNutritionHistory } from "@/hooks/use-nutrition-history";
 import { workoutTonnage } from "@/lib/fitness/strength";
 import { supabase } from "@/integrations/supabase/client";
@@ -59,7 +59,7 @@ function HomePage() {
   const { pseudo: name } = useProfile(fallback);
   const { data: workouts, isLoading: fitnessLoading } = useWorkouts();
   const recoveryMap = useRecoveryMap(workouts);
-  const streak = useStreak();
+  const streak = useActivityStreak();
   const today = useMemo(() => new Date().toISOString().split("T")[0], []);
   const { data: meals } = useNutrition(today);
   const { data: nutritionGoal } = useNutritionGoals();

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { logActivity } from "@/lib/activity";
 import type { TablesInsert } from "@/integrations/supabase/types";
 
 export function useBodyMeasurements() {
@@ -32,9 +33,12 @@ export function useAddBodyMeasurement() {
       const { error } = await supabase.from("body_tracking").insert({ ...input, user_id: user.id });
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_d, vars) => {
       toast.success("Mesure ajoutée");
+      logActivity("body", vars.weight != null ? `Pesée : ${vars.weight} kg` : "Mensuration ajoutée", { date: vars.date });
       qc.invalidateQueries({ queryKey: ["body_tracking"] });
+      qc.invalidateQueries({ queryKey: ["user_activity"] });
+      qc.invalidateQueries({ queryKey: ["activity_streak"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });

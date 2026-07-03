@@ -1,7 +1,6 @@
 import { useState } from "react";
-import { Download, KeyRound, LogOut, Mail, Trash2 } from "lucide-react";
+import { KeyRound, LogOut, Mail } from "lucide-react";
 import { toast } from "sonner";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
@@ -22,6 +21,7 @@ export function SecurityPanel() {
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [pwd, setPwd] = useState("");
+  const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
 
   const changePassword = async () => {
@@ -40,42 +40,24 @@ export function SecurityPanel() {
     }
   };
 
-  const exportData = async () => {
-    if (!user) return;
+  const changeEmail = async () => {
+    const next = email.trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(next)) {
+      toast.error("Adresse email invalide");
+      return;
+    }
+    if (next === user?.email) {
+      toast.error("C'est déjà votre adresse actuelle");
+      return;
+    }
     setBusy(true);
-    try {
-      const tables = [
-        "items",
-        "nutrition",
-        "workouts",
-        "exercises",
-        "body_tracking",
-        "food_preferences",
-        "documents",
-      ] as const;
-      const payload: Record<string, unknown> = {
-        exported_at: new Date().toISOString(),
-        user_id: user.id,
-      };
-      for (const t of tables) {
-        const { data } = await (supabase as unknown as SupabaseClient)
-          .from(t)
-          .select("*")
-          .eq("user_id", user.id);
-        payload[t] = data ?? [];
-      }
-      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `cortex-home-export-${Date.now()}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-      toast.success("Export téléchargé");
-    } catch (e: unknown) {
-      toast.error(e instanceof Error ? e.message : "Erreur export");
-    } finally {
-      setBusy(false);
+    const { error } = await supabase.auth.updateUser({ email: next });
+    setBusy(false);
+    if (error) {
+      toast.error("Impossible de changer l'email : " + error.message);
+    } else {
+      toast.success("Emails de confirmation envoyés aux deux adresses");
+      setEmail("");
     }
   };
 
@@ -93,12 +75,47 @@ export function SecurityPanel() {
         Sécurité
       </h2>
       <div className="divide-y divide-white/5 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur-xl">
-        <div className="flex items-center gap-3 px-4 py-3">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/5 text-muted-foreground">
-            <Mail className="h-3.5 w-3.5" />
-          </span>
-          <span className="flex-1 truncate text-sm">{user?.email}</span>
-        </div>
+        <Dialog>
+          <DialogTrigger asChild>
+            <button
+              type="button"
+              className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-white/[0.03]"
+            >
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/5 text-muted-foreground">
+                <Mail className="h-3.5 w-3.5" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm">Changer l'email</span>
+                <span className="block truncate text-xs text-muted-foreground">{user?.email}</span>
+              </span>
+            </button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Nouvelle adresse email</DialogTitle>
+              <DialogDescription>
+                Un lien de confirmation sera envoyé à l'ancienne ET à la nouvelle adresse. Le
+                changement prend effet après validation.
+              </DialogDescription>
+            </DialogHeader>
+            <Input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="nouvelle@adresse.fr"
+            />
+            <DialogFooter>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={changeEmail}
+                className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+              >
+                Envoyer la confirmation
+              </button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <Dialog>
           <DialogTrigger asChild>
@@ -133,41 +150,6 @@ export function SecurityPanel() {
                 Enregistrer
               </button>
             </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        <button
-          type="button"
-          disabled={busy}
-          onClick={exportData}
-          className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-white/[0.03] disabled:opacity-50"
-        >
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/5 text-muted-foreground">
-            <Download className="h-3.5 w-3.5" />
-          </span>
-          <span className="flex-1 text-sm">Exporter mes données (JSON)</span>
-        </button>
-
-        <Dialog>
-          <DialogTrigger asChild>
-            <button
-              type="button"
-              className="flex w-full items-center gap-3 px-4 py-3 text-left text-destructive hover:bg-destructive/5"
-            >
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-destructive/10">
-                <Trash2 className="h-3.5 w-3.5" />
-              </span>
-              <span className="flex-1 text-sm">Supprimer mon compte</span>
-            </button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Supprimer le compte ?</DialogTitle>
-              <DialogDescription>
-                Cette action est irréversible. Contactez le support pour finaliser la suppression de
-                votre compte et de toutes vos données.
-              </DialogDescription>
-            </DialogHeader>
           </DialogContent>
         </Dialog>
 

@@ -2,25 +2,17 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
+import { DEFAULT_ACCENT } from "@/lib/accent";
 
 export interface UserPreferences {
-  user_id: string;
-  theme: "dark" | "light";
   accent_color: string;
-  units: "metric" | "imperial";
   animations_enabled: boolean;
-  notifications_enabled: boolean;
-  ai_preferences: Record<string, unknown>;
   height_cm: number | null;
 }
 
-const DEFAULTS: Omit<UserPreferences, "user_id"> = {
-  theme: "dark",
-  accent_color: "#6c63ff",
-  units: "metric",
+const DEFAULTS: UserPreferences = {
+  accent_color: DEFAULT_ACCENT,
   animations_enabled: true,
-  notifications_enabled: true,
-  ai_preferences: {},
   height_cm: null,
 };
 
@@ -34,20 +26,20 @@ export function useUserPreferences() {
     enabled: !!user,
     staleTime: 60_000,
     queryFn: async (): Promise<UserPreferences> => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("user_preferences")
-        .select("*")
+        .select("accent_color, animations_enabled, height_cm")
         .eq("user_id", user!.id)
         .maybeSingle();
       if (error) throw error;
-      return data ?? { user_id: user!.id, ...DEFAULTS };
+      return data ?? DEFAULTS;
     },
   });
 
   const update = useMutation({
-    mutationFn: async (patch: Partial<Omit<UserPreferences, "user_id">>) => {
-      const next = { ...(query.data ?? { user_id: user!.id, ...DEFAULTS }), ...patch };
-      const { error } = await (supabase as any)
+    mutationFn: async (patch: Partial<UserPreferences>) => {
+      const next = { ...(query.data ?? DEFAULTS), ...patch };
+      const { error } = await supabase
         .from("user_preferences")
         .upsert({ ...next, user_id: user!.id }, { onConflict: "user_id" });
       if (error) throw error;
@@ -57,8 +49,12 @@ export function useUserPreferences() {
     onError: () => toast.error("Impossible de mettre à jour les préférences"),
   });
 
-  const safeUpdate = (patch: Partial<Omit<UserPreferences, "user_id">>) =>
+  const safeUpdate = (patch: Partial<UserPreferences>) =>
     update.mutateAsync(patch).catch(() => { /* handled by onError */ });
 
-  return { prefs: query.data ?? { user_id: user?.id ?? "", ...DEFAULTS }, isLoading: query.isLoading, update: safeUpdate };
+  return {
+    prefs: query.data ?? DEFAULTS,
+    isLoading: query.isLoading,
+    update: safeUpdate,
+  };
 }

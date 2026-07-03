@@ -3,6 +3,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
+import { logActivity } from "@/lib/activity";
+import { localDateYMD, localWeekStartYMD } from "@/lib/dates";
 
 export type GoalType = "workouts_weekly" | "protein_daily" | "weight_loss" | "custom";
 export type GoalStatus = "active" | "almost" | "done" | "late";
@@ -12,6 +14,7 @@ export interface Goal {
   title: string;
   goal_type: GoalType;
   target_value: number | null;
+  start_value: number | null;
   target_date: string;
   xp_reward: number;
   is_completed: boolean;
@@ -24,19 +27,6 @@ export interface GoalWithProgress extends Goal {
   status: GoalStatus;
   current_value: number;
   icon: string;
-}
-
-function getWeekStart(): string {
-  const d = new Date();
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  d.setDate(diff);
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString().split("T")[0];
-}
-
-function getToday(): string {
-  return new Date().toISOString().split("T")[0];
 }
 
 function computeStatus(progress: number, target_date: string, is_completed: boolean): GoalStatus {
@@ -60,15 +50,16 @@ function goalIcon(type: GoalType): string {
 
 function useWeeklyWorkoutCount() {
   const { user } = useAuth();
-  const weekStart = getWeekStart();
+  const weekStart = localWeekStartYMD();
   return useQuery({
-    queryKey: ["workouts_weekly_count", weekStart],
+    queryKey: ["workouts_weekly_count", user?.id, weekStart],
     enabled: !!user,
     staleTime: 60_000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("workouts")
         .select("id")
+        .eq("user_id", user!.id)
         .gte("date", weekStart);
       if (error) throw error;
       return data?.length ?? 0;
@@ -78,15 +69,16 @@ function useWeeklyWorkoutCount() {
 
 function useTodayProtein() {
   const { user } = useAuth();
-  const today = getToday();
+  const today = localDateYMD();
   return useQuery({
-    queryKey: ["nutrition_protein_today", today],
+    queryKey: ["nutrition_protein_today", user?.id, today],
     enabled: !!user,
     staleTime: 60_000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("nutrition")
         .select("proteins")
+        .eq("user_id", user!.id)
         .eq("date", today);
       if (error) throw error;
       return data?.reduce((sum, row) => sum + (row.proteins ?? 0), 0) ?? 0;
@@ -115,13 +107,14 @@ function useProteinTarget() {
 function useBodyWeightHistory() {
   const { user } = useAuth();
   return useQuery({
-    queryKey: ["body_weight_history"],
+    queryKey: ["body_weight_history", user?.id],
     enabled: !!user,
     staleTime: 120_000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("body_tracking")
         .select("weight, date")
+        .eq("user_id", user!.id)
         .not("weight", "is", null)
         .order("date", { ascending: true });
       if (error) throw error;
@@ -139,9 +132,9 @@ export function useGoals() {
     enabled: !!user,
     staleTime: 30_000,
     queryFn: async (): Promise<Goal[]> => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("goals")
-        .select("id, title, goal_type, target_value, target_date, xp_reward, is_completed, completed_at, created_at")
+        .select("id, title, goal_type, target_value, start_value, target_date, xp_reward, is_completed, completed_at, created_at")
         .eq("user_id", user!.id)
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -162,9 +155,24 @@ export function useAddGoal() {
       xp_reward?: number;
     }) => {
       if (!user) throw new Error("Non authentifié");
-      const { error } = await (supabase as any)
+
+      // Baseline perte de poids : fige le dernier poids connu à la création
+      let start_value: number | null = null;
+      if (input.goal_type === "weight_loss") {
+        const { data: lastWeight } = await supabase
+          .from("body_tracking")
+          .select("weight")
+          .eq("user_id", user.id)
+          .not("weight", "is", null)
+          .order("date", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        start_value = lastWeight?.weight ?? null;
+      }
+
+      const { error } = await supabase
         .from("goals")
-        .insert({ ...input, user_id: user.id, xp_reward: input.xp_reward ?? 100 });
+        .insert({ ...input, user_id: user.id, xp_reward: input.xp_reward ?? 100, start_value });
       if (error) throw error;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["goals", user?.id] }),
@@ -186,7 +194,7 @@ export function useUpdateGoal() {
       target_date?: string;
     }) => {
       if (!user) throw new Error("Non authentifié");
-      const { error } = await (supabase as any)
+      const { error } = await supabase
         .from("goals")
         .update(patch)
         .eq("id", id)
@@ -204,16 +212,21 @@ export function useCompleteGoal() {
   return useMutation({
     mutationFn: async ({ id, done }: { id: string; done: boolean }) => {
       if (!user) throw new Error("Non authentifié");
-      const { error } = await (supabase as any)
+      const { error } = await supabase
         .from("goals")
         .update({ is_completed: done, completed_at: done ? new Date().toISOString() : null })
         .eq("id", id)
         .eq("user_id", user.id);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_d, vars) => {
+      if (vars.done) logActivity("goal", "Objectif complété 🎯", { goal_id: vars.id });
       qc.invalidateQueries({ queryKey: ["goals", user?.id] });
       qc.invalidateQueries({ queryKey: ["goals_completed_count", user?.id] });
+      // L'XP est versé par le trigger DB goals_award_xp
+      qc.invalidateQueries({ queryKey: ["user_stats", user?.id] });
+      qc.invalidateQueries({ queryKey: ["user_badges", user?.id] });
+      qc.invalidateQueries({ queryKey: ["user_activity"] });
     },
     onError: () => toast.error("Impossible de mettre à jour l'objectif"),
   });
@@ -226,7 +239,7 @@ export function useRemoveGoal() {
   return useMutation({
     mutationFn: async (id: string) => {
       if (!user) throw new Error("Non authentifié");
-      const { error } = await (supabase as any)
+      const { error } = await supabase
         .from("goals")
         .delete()
         .eq("id", id)
@@ -274,8 +287,8 @@ export function useGoalsWithProgress(): { goals: GoalWithProgress[]; isLoading: 
             break;
           }
           case "weight_loss": {
-            if (bodyWeights.length >= 2 && g.target_value) {
-              const start = bodyWeights[0].weight ?? 0;
+            if (bodyWeights.length >= 1 && g.target_value) {
+              const start = g.start_value ?? bodyWeights[0].weight ?? 0;
               const current = bodyWeights[bodyWeights.length - 1].weight ?? 0;
               const lost = start - current;
               current_value = Math.round(lost * 10) / 10;
