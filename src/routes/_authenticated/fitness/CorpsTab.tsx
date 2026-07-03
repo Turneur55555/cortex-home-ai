@@ -22,6 +22,7 @@ import {
   computeFormScore,
   detectPlateau,
   directionForField,
+  findLatestValue,
   findPreviousValue,
   movingAverage,
   type BodyField,
