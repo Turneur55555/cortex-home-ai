@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -20,7 +20,7 @@ import {
   Utensils,
 } from "lucide-react";
 import { toast } from "sonner";
-import { addDays, format, subDays } from "date-fns";
+import { addDays, format, parseISO, subDays } from "date-fns";
 import {
   useAddNutrition,
   useCopyNutritionDay,
@@ -45,6 +45,7 @@ import { VoiceLogSheet } from "@/components/fitness/VoiceLogSheet";
 import { SwipeableNutritionItem } from "@/components/fitness/SwipeableNutritionItem";
 import { useCreateSavedMeal } from "@/hooks/use-saved-meals";
 import { getPortionBadge } from "@/lib/nutrition/utils";
+import { MEAL_LABELS, MEAL_SLUGS, isMealSlug } from "@/lib/nutrition/meals";
 import type { MealPrefill, NutritionEntry } from "@/lib/nutrition/utils";
 
 export function NutritionTab() {
@@ -54,8 +55,6 @@ export function NutritionTab() {
   const { data: goals } = useNutritionGoals();
   const del = useDeleteNutrition();
   const readd = useAddNutrition();
-  const [pendingDeleteIds, setPendingDeleteIds] = useState<Set<string>>(new Set());
-  const deleteTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const addFav = useAddFavorite();
   const copyDay = useCopyNutritionDay();
   const [copyOpen, setCopyOpen] = useState(false);
@@ -106,13 +105,8 @@ export function NutritionTab() {
 
   const grouped = useMemo(() => {
     type Meal = NonNullable<typeof data>[number];
-    const order = ["petit-dej", "dejeuner", "diner", "collation"] as const;
-    const labels: Record<string, string> = {
-      "petit-dej": "Petit-déjeuner",
-      dejeuner: "Déjeuner",
-      diner: "Dîner",
-      collation: "Collation",
-    };
+    const order = MEAL_SLUGS;
+    const labels: Record<string, string> = MEAL_LABELS;
     const map = new Map<string, Meal[]>();
     (data ?? []).forEach((m) => {
       const k = m.meal ?? "autre";
@@ -157,9 +151,8 @@ export function NutritionTab() {
   };
 
   // Enregistre tout un repas du journal (groupe) comme modèle réutilisable.
-  const MEAL_SLUGS = ["petit-dej", "dejeuner", "diner", "collation"];
   const saveGroupAsMeal = (g: (typeof grouped)[number]) => {
-    const mealSlug = MEAL_SLUGS.includes(g.key) ? g.key : null;
+    const mealSlug = isMealSlug(g.key) ? g.key : null;
     createSavedMeal.mutate(
       {
         name: saveGroupName.trim() || g.label,
@@ -178,6 +171,7 @@ export function NutritionTab() {
           serving_count: m.serving_count ?? 1,
           consumed_quantity: m.consumed_quantity ?? null,
           consumed_unit: m.consumed_unit ?? null,
+          consumed_grams_per_unit: m.consumed_grams_per_unit ?? null,
         })),
       },
       {
@@ -189,24 +183,37 @@ export function NutritionTab() {
     );
   };
 
-  const handleDelete = (id: string) => {
-    setPendingDeleteIds((prev) => new Set([...prev, id]));
-    const timer = setTimeout(() => {
-      del.mutate(id);
-      setPendingDeleteIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
-      deleteTimers.current.delete(id);
-    }, 4000);
-    deleteTimers.current.set(id, timer);
-    toast("Aliment supprimé", {
-      action: {
-        label: "Annuler",
-        onClick: () => {
-          clearTimeout(deleteTimers.current.get(id));
-          deleteTimers.current.delete(id);
-          setPendingDeleteIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
-        },
+  // B7 : suppression immédiate en base (fiable même si l'app se ferme) ;
+  // « Annuler » ré-insère l'aliment à l'identique.
+  const handleDelete = (m: NonNullable<typeof data>[number]) => {
+    del.mutate(m.id, {
+      onSuccess: () => {
+        toast("Aliment supprimé", {
+          action: {
+            label: "Annuler",
+            onClick: () =>
+              readd.mutate({
+                date: m.date,
+                name: m.name ?? "",
+                meal: m.meal ?? "collation",
+                calories: m.calories,
+                proteins: m.proteins,
+                carbs: m.carbs,
+                fats: m.fats,
+                base_calories: m.base_calories ?? m.calories,
+                base_proteins: m.base_proteins ?? m.proteins ?? null,
+                base_carbs: m.base_carbs ?? m.carbs ?? null,
+                base_fats: m.base_fats ?? m.fats ?? null,
+                serving_count: m.serving_count ?? 1,
+                percentage_consumed: m.percentage_consumed ?? 100,
+                consumed_quantity: m.consumed_quantity ?? null,
+                consumed_unit: m.consumed_unit ?? null,
+                consumed_grams_per_unit: m.consumed_grams_per_unit ?? null,
+              }),
+          },
+          duration: 6000,
+        });
       },
-      duration: 4000,
     });
   };
 
@@ -217,7 +224,7 @@ export function NutritionTab() {
       <div className="flex items-center gap-2">
         <button
           type="button"
-          onClick={() => setDate(format(subDays(new Date(date), 1), "yyyy-MM-dd"))}
+          onClick={() => setDate(format(subDays(parseISO(date), 1), "yyyy-MM-dd"))}
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border text-muted-foreground transition-colors hover:text-foreground"
           aria-label="Jour précédent"
         >
@@ -234,7 +241,7 @@ export function NutritionTab() {
         </div>
         <button
           type="button"
-          onClick={() => setDate(format(addDays(new Date(date), 1), "yyyy-MM-dd"))}
+          onClick={() => setDate(format(addDays(parseISO(date), 1), "yyyy-MM-dd"))}
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border text-muted-foreground transition-colors hover:text-foreground"
           aria-label="Jour suivant"
         >
@@ -502,12 +509,12 @@ export function NutritionTab() {
             </div>
           )}
           <ul className="space-y-2">
-            {g.items.filter((m) => !pendingDeleteIds.has(m.id)).map((m) => {
+            {g.items.map((m) => {
               const badge = getPortionBadge(m);
               return (
                 <SwipeableNutritionItem
                   key={m.id}
-                  onDelete={() => handleDelete(m.id)}
+                  onDelete={() => handleDelete(m)}
                   onTap={() => setPortionItem(m)}
                 >
                   <div className="flex items-center gap-1 p-3.5">
