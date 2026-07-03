@@ -40,7 +40,9 @@ export function directionForField(
 }
 
 /**
- * Find the most recent non-null value for `field` strictly older than the latest row.
+ * Second most recent non-null value for `field` — i.e. the value before the
+ * currently displayed "latest" value. Enables correct deltas even when the
+ * newest row only fills one field and leaves the others null.
  * Rows are expected sorted by date DESC (as returned by useBodyMeasurements).
  */
 export function findPreviousValue<T extends Record<string, unknown>>(
@@ -48,9 +50,16 @@ export function findPreviousValue<T extends Record<string, unknown>>(
   field: keyof T,
 ): number | null {
   if (!rows || rows.length < 2) return null;
-  for (let i = 1; i < rows.length; i++) {
-    const v = rows[i][field];
-    if (typeof v === "number" && Number.isFinite(v)) return v;
+  let seenLatest = false;
+  for (const r of rows) {
+    const v = r[field];
+    if (typeof v === "number" && Number.isFinite(v)) {
+      if (!seenLatest) {
+        seenLatest = true;
+        continue;
+      }
+      return v;
+    }
   }
   return null;
 }
