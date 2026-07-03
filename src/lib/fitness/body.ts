@@ -56,6 +56,23 @@ export function findPreviousValue<T extends Record<string, unknown>>(
 }
 
 /**
+ * Latest non-null value for `field` across all rows (sorted DESC by date).
+ * Ensures that adding a measurement for one field doesn't hide the previous
+ * values of other fields.
+ */
+export function findLatestValue<T extends Record<string, unknown>>(
+  rows: ReadonlyArray<T> | undefined,
+  field: keyof T,
+): number | null {
+  if (!rows || rows.length === 0) return null;
+  for (let i = 0; i < rows.length; i++) {
+    const v = rows[i][field];
+    if (typeof v === "number" && Number.isFinite(v)) return v;
+  }
+  return null;
+}
+
+/**
  * 7-day centered/trailing moving average over a series of {date, value}.
  * Trailing window (last N points incl. current) — adapté au mobile.
  */
