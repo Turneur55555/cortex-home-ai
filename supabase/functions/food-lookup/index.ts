@@ -4,6 +4,7 @@
 // IA : GEMINI_API_KEY (API Google directe, gemini-2.5-flash). Toujours HTTP 200 { ok, data?, error? }.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { checkRateLimit, recordRateLimit } from "../_shared/rate-limit.ts";
 
 function buildCors(req: Request) {
   const origin = req.headers.get("origin") ?? "";
@@ -259,6 +260,17 @@ Deno.serve(async (req) => {
       return Response.json({ ok: false, error: "unauthorized" }, { status: 401, headers: cors });
     }
 
+    // Rate limit : la recherche déclenche Gemini + USDA + écritures service-role.
+    // 150/h laisse large pour un usage normal (frappe débouncée côté client).
+    const rl = await checkRateLimit(userSupa as Parameters<typeof checkRateLimit>[0], userData.user.id, "food_lookup", 150);
+    if (!rl.ok) {
+      return Response.json(
+        { ok: false, error: "Limite de recherche atteinte. Réessaie dans quelques minutes." },
+        { headers: cors },
+      );
+    }
+    void recordRateLimit(userSupa as Parameters<typeof recordRateLimit>[0], userData.user.id, "food_lookup");
+
     const admin = createClient(SUPABASE_URL, SERVICE_KEY);
     const body = await req.json().catch(() => ({}));
     const type = body.type as "search" | "barcode" | undefined;
@@ -352,11 +364,18 @@ Deno.serve(async (req) => {
 
       if (results.length < 5 && USDA_KEY) {
         const usdaList = await usdaSearch(USDA_KEY, englishTerm ?? query, 10);
-        for (const f of usdaList) {
-          try {
-            const saved = await upsertFood(admin, usdaToFood(f));
-            results.push(toResult(saved as Record<string, unknown>));
-          } catch (_) { /* skip */ }
+        // Upserts en parallèle (perf P1 : ~30 requêtes séquentielles avant).
+        const saved = await Promise.all(
+          usdaList.map(async (f) => {
+            try {
+              return await upsertFood(admin, usdaToFood(f));
+            } catch (_) {
+              return null;
+            }
+          }),
+        );
+        for (const s of saved) {
+          if (s) results.push(toResult(s as Record<string, unknown>));
         }
         results = dedupe(results);
       }
