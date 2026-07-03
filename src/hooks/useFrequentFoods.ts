@@ -18,7 +18,7 @@ export function useFrequentFoods(limit = 6) {
         p_limit: limit,
       });
       if (error) throw error;
-      return (data ?? []).map((r) => ({
+      return (data ?? []).map((r: any) => ({
         id: `freq:${r.name.toLowerCase().trim()}`,
         name: r.name,
         calories: r.calories,
