@@ -712,12 +712,10 @@ export type Database = {
           id: string
           is_completed: boolean
           target_date: string
-          start_value: number | null
           target_value: number | null
           title: string
           updated_at: string
           user_id: string
-          xp_awarded: boolean
           xp_reward: number
         }
         Insert: {
@@ -727,12 +725,10 @@ export type Database = {
           id?: string
           is_completed?: boolean
           target_date: string
-          start_value?: number | null
           target_value?: number | null
           title: string
           updated_at?: string
           user_id: string
-          xp_awarded?: boolean
           xp_reward?: number
         }
         Update: {
@@ -742,12 +738,10 @@ export type Database = {
           id?: string
           is_completed?: boolean
           target_date?: string
-          start_value?: number | null
           target_value?: number | null
           title?: string
           updated_at?: string
           user_id?: string
-          xp_awarded?: boolean
           xp_reward?: number
         }
         Relationships: []
@@ -1123,7 +1117,6 @@ export type Database = {
           ai_preferences: Json
           animations_enabled: boolean
           created_at: string
-          height_cm: number | null
           notifications_enabled: boolean
           theme: string
           units: string
@@ -1135,7 +1128,6 @@ export type Database = {
           ai_preferences?: Json
           animations_enabled?: boolean
           created_at?: string
-          height_cm?: number | null
           notifications_enabled?: boolean
           theme?: string
           units?: string
@@ -1147,7 +1139,6 @@ export type Database = {
           ai_preferences?: Json
           animations_enabled?: boolean
           created_at?: string
-          height_cm?: number | null
           notifications_enabled?: boolean
           theme?: string
           units?: string
@@ -1185,19 +1176,16 @@ export type Database = {
       }
       users_profiles: {
         Row: {
-          avatar_url: string | null
           created_at: string
           display_name: string | null
           id: string
         }
         Insert: {
-          avatar_url?: string | null
           created_at?: string
           display_name?: string | null
           id: string
         }
         Update: {
-          avatar_url?: string | null
           created_at?: string
           display_name?: string | null
           id?: string
@@ -1246,9 +1234,26 @@ export type Database = {
       ensure_home_categories_for_me: { Args: never; Returns: undefined }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
-      compute_fitness_stats: { Args: { _uid: string }; Returns: Json }
-      get_user_streak_days: { Args: never; Returns: number }
-      unlock_user_badge: { Args: { _badge_key: string }; Returns: undefined }
+      unlock_user_badge: {
+        Args: { _badge_key: string }
+        Returns: {
+          badge_key: string
+          description: string
+          icon: string
+          id: string
+          label: string
+          rarity: string
+          unlocked_at: string
+          user_id: string
+          xp_reward: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "user_badges"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
     }
     Enums: {
       goal_type: "workouts_weekly" | "protein_daily" | "weight_loss" | "custom"
