@@ -26,20 +26,20 @@ export function useUserPreferences() {
     enabled: !!user,
     staleTime: 60_000,
     queryFn: async (): Promise<UserPreferences> => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("user_preferences")
         .select("accent_color, animations_enabled, height_cm")
         .eq("user_id", user!.id)
         .maybeSingle();
       if (error) throw error;
-      return data ?? DEFAULTS;
+      return (data as UserPreferences | null) ?? DEFAULTS;
     },
   });
 
   const update = useMutation({
     mutationFn: async (patch: Partial<UserPreferences>) => {
       const next = { ...(query.data ?? DEFAULTS), ...patch };
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from("user_preferences")
         .upsert({ ...next, user_id: user!.id }, { onConflict: "user_id" });
       if (error) throw error;

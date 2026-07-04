@@ -17,40 +17,52 @@ export type Database = {
       badges_catalog: {
         Row: {
           badge_key: string
+          category: string | null
           created_at: string
           description: string
           icon: string
           id: string
+          is_coming_soon: boolean
+          is_secret: boolean
           label: string
           rarity: string
           requirement_type: string
           requirement_value: number
+          secret_hint: string | null
           sort_order: number
           xp_reward: number
         }
         Insert: {
           badge_key: string
+          category?: string | null
           created_at?: string
           description: string
           icon?: string
           id?: string
+          is_coming_soon?: boolean
+          is_secret?: boolean
           label: string
           rarity?: string
           requirement_type: string
           requirement_value: number
+          secret_hint?: string | null
           sort_order?: number
           xp_reward?: number
         }
         Update: {
           badge_key?: string
+          category?: string | null
           created_at?: string
           description?: string
           icon?: string
           id?: string
+          is_coming_soon?: boolean
+          is_secret?: boolean
           label?: string
           rarity?: string
           requirement_type?: string
           requirement_value?: number
+          secret_hint?: string | null
           sort_order?: number
           xp_reward?: number
         }
