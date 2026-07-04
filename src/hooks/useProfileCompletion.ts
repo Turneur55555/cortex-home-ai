@@ -36,14 +36,14 @@ export function useProfileCompletion({ hasAvatar, hasCustomPseudo }: Params) {
       const [body, goals, prefs, nut] = await Promise.all([
         supabase.from("body_tracking").select("id", { count: "exact", head: true }).eq("user_id", uid),
         supabase.from("goals").select("id", { count: "exact", head: true }).eq("user_id", uid),
-        supabase.from("user_preferences").select("height_cm").eq("user_id", uid).maybeSingle(),
+        (supabase as any).from("user_preferences").select("height_cm").eq("user_id", uid).maybeSingle(),
         supabase.from("nutrition_goals").select("user_id").eq("user_id", uid).maybeSingle(),
       ]);
 
       return {
         hasBody: (body.count ?? 0) > 0,
         hasGoal: (goals.count ?? 0) > 0,
-        hasHeight: prefs.data?.height_cm != null,
+        hasHeight: (prefs.data as any)?.height_cm != null,
         hasNutritionGoals: !!nut.data,
       };
     },

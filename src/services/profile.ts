@@ -6,13 +6,13 @@ export interface ProfileRow {
 }
 
 export async function fetchProfile(userId: string): Promise<ProfileRow | null> {
-  const { data, error } = await supabase
+  const { data, error } = await (supabase as any)
     .from("users_profiles")
     .select("display_name, avatar_url")
     .eq("id", userId)
     .maybeSingle();
   if (error) throw error;
-  return data;
+  return (data as ProfileRow | null) ?? null;
 }
 
 export async function upsertDisplayName(userId: string, displayName: string): Promise<string> {
@@ -21,7 +21,7 @@ export async function upsertDisplayName(userId: string, displayName: string): Pr
     throw new Error("Le pseudo doit faire entre 3 et 20 caractères.");
   }
 
-  const { error } = await supabase
+  const { error } = await (supabase as any)
     .from("users_profiles")
     .upsert({ id: userId, display_name: trimmed }, { onConflict: "id" });
   if (error) throw error;
@@ -34,7 +34,7 @@ export async function upsertDisplayName(userId: string, displayName: string): Pr
 
 /** Persiste l'URL de l'avatar en base (multi-appareils, survit au cache navigateur). */
 export async function upsertAvatarUrl(userId: string, avatarUrl: string): Promise<void> {
-  const { error } = await supabase
+  const { error } = await (supabase as any)
     .from("users_profiles")
     .upsert({ id: userId, avatar_url: avatarUrl }, { onConflict: "id" });
   if (error) throw error;
