@@ -36,7 +36,7 @@ export function useBadgeSystem() {
     queryKey: ["badges_catalog"],
     staleTime: 300_000,
     queryFn: async (): Promise<BadgeCatalogEntry[]> => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("badges_catalog")
         .select("*")
         .order("sort_order", { ascending: true });
