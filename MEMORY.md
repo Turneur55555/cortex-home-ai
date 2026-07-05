@@ -3,6 +3,33 @@
 ## Dernière mise à jour
 2026-07-05
 
+## Moteur d'analyse par exercice (2026-07-05) — NOUVELLE FEATURE
+Transforme chaque exercice de l'historique en fiche d'analyse intelligente. Décisions actées avec Nathan : (1) IA rédactionnelle **hybride à la demande** — moteur déterministe par défaut + bouton « Analyse IA approfondie » optionnel ; (2) objectif utilisateur **inféré + réglage explicite optionnel** ; (3) **fiche unifiée remplaçante** ; (4) livraison en une passe.
+
+### Domaine pur — `src/lib/fitness/analysis/` (zéro React, testé)
+- `types.ts` — types + labels (TrainingObjective, MuscleRole, PhysicalTrait, ExerciseAnalysis, etc.).
+- `muscleRoles.ts` — `resolveMuscleRoles()` : décompose un exercice en principal/secondaire/stabilisateur. Repli 1 = `exerciseToMuscles` (mapping plat existant), repli 2 = muscles résolus par l'IA (`muscle_groups`), repli 3 = **modèle biomécanique générique** (jamais vide, `isGeneric:true`).
+- `physicalImpact.ts` — vecteur largeur/épaisseur/force/hypertrophie/explosivité/stabilité/posture/mobilité, pondéré par mouvement + plage de reps réelle + objectif.
+- `profile.ts` — `inferObjective()`/`buildProfileContext()` : priorité objectif explicite > signaux Corps (body_fat/muscle_mass trend) + goals > plage de reps. Utilise `body_tracking`.
+- `comparison.ts` — évolution charge/reps/volume/1RM dernière séance vs précédente + PR + état (progression/stagnation/régression/nouveau) + explication. Réutilise `sets.ts`.
+- `recommendations.ts` — moteur de recommandations (charge/reps/série/amplitude/excentrique/technique/fréquence/récup) selon état + reps + récup + objectif.
+- `imbalance.ts` — déséquilibres déduits de la **recovery map** (aucune requête sup.) : push/pull, haut/bas, muscle négligé, récup incomplète, progression insuffisante.
+- `relevance.ts` — score ★1-5 + label (essentiel/recommandé/secondaire/peu pertinent) + raisons, selon profil+objectif.
+- `narrative.ts` — textes déterministes (analyse rédigée + résumé intelligent), repli par défaut instantané/offline.
+- `engine.ts` — `analyzeExercise(input)` agrège tout. `index.ts` = façade publique.
+- `engine.test.ts` — 25 tests (vitest). ⚠️ vitest non installable ici (registre privé Lovable `europe-west4-npm.pkg.dev` bloqué 403 par la policy réseau) → tests lancés avec un vitest isolé depuis registry.npmjs.org : **55/55 verts**. tsc du moteur pur : clean.
+
+### Hooks — `src/hooks/`
+- `useExerciseAnalysis.ts` — assemble les entrées depuis les caches existants (`useExerciseSetHistory`, `useWorkouts`→`useRecoveryMap`, `useBodyMeasurements`, `useGoals`, `useTrainingObjective`), mémoïse `analyzeExercise`. **Zéro requête supplémentaire.**
+- `useDeepExerciseAI.ts` — IA à la demande via `useQuery` `enabled:false` + `refetch()`, cache `staleTime:Infinity` (pas de re-appel en rouvrant la fiche). Appelle l'edge `analyze-exercise`.
+- `useTrainingObjective.ts` — objectif explicite stocké dans `user_preferences.ai_preferences` (JSON, **aucune migration** — choix délibéré vu le drift migrations documenté).
+
+### UI — `src/components/fitness/ExerciseAnalysisSheet.tsx`
+Fiche unifiée (drop-in, mêmes props qu'`ExerciseStatsSheet`) : résumé intelligent + pertinence ★, `ExerciseRankCard` (rang RPG/XP/progression réutilisé tel quel), analyse rédigée + bouton IA + sélecteur d'objectif, graphes poids/volume/1RM (repris d'ExerciseStatsSheet), comparaison, muscles par rôle (barre sollicitation + pastille récup), impact physique, recommandations, déséquilibres, détail des séries. **Branchée** dans `WorkoutCard.tsx` et `ActiveWorkoutView.tsx` (imports repointés). `ExerciseStatsSheet.tsx` conservé mais **superseded** (plus référencé en render — supprimable plus tard sur validation).
+
+### Edge — `supabase/functions/analyze-exercise/`
+Gemini 2.5 Flash, prose FR 4-6 phrases, CORS/auth/rate-limit (`analyze_exercise`, 20/h) calqués sur `analyze-workout`. Retourne `{ text }`. ✅ **DÉPLOYÉE** sur projet `bcwfvpwxzlmkxobvbtzp` via MCP (v1, ACTIVE, verify_jwt). ⚠️ La **version déployée diverge du repo** : le bundler MCP place l'entrypoint sous `source/`, donc l'import `../_shared/rate-limit.ts` ne résout pas → la version déployée a le rate-limit **inliné** (auto-contenue). Le repo garde l'import partagé `../_shared/rate-limit.ts` (cohérent avec les fonctions sœurs, résolu par un déploiement CLI/Lovable). Pour re-déployer via MCP, réutiliser la variante inlinée. Nécessite le secret `GEMINI_API_KEY` (déjà présent). Le bouton se dégrade proprement si l'edge est indisponible (texte déterministe conservé).
+
 ## Nettoyage complet du code mort (2026-07-05)
 - Rapport détaillé : `CLEANUP_AUDIT_REPORT.md` (racine du repo).
 - Frontend : `src/ui/` supprimé, `src/lib/fitness/index.ts` (façade jamais utilisée) supprimé, `src/components/recipe/` entier supprimé (feature création de recette jamais construite — seule la lecture `useRecipes`/`useRecipe` survit), 30 composants shadcn/ui inutilisés supprimés, `RestTimer.tsx` (remplacé par `RestTimerBar.tsx`+`useRestTimer`), `BodyHighlighterRenderer.tsx` (remplacé par `MuscleMap.tsx`), `HomeDashboard.tsx`, `ReportSummaryWidget.tsx`, `useNutritionCalculator.ts`, `useProgress.ts`, `use-mobile.tsx`, `motion.ts`, `hashing.ts`, `SwipeableExerciseRow.tsx`, `recipeTypes.ts` + son test, `auth-middleware.ts`, `client.server.ts`.

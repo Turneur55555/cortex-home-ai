@@ -30,7 +30,7 @@ import {
 import { EditableText } from "./EditableText";
 import { PhotoModal } from "./PhotoModal";
 import { WorkoutDeleteDialog } from "./WorkoutDeleteDialog";
-import { ExerciseStatsSheet } from "./ExerciseStatsSheet";
+import { ExerciseAnalysisSheet } from "./ExerciseAnalysisSheet";
 import { StatTile } from "./StatTile";
 import { AddExerciseModal } from "./AddExerciseModal";
 import { normalize } from "@/lib/fitness/exerciseCatalog";
@@ -599,7 +599,7 @@ export function WorkoutCard({
       )}
 
       {statsTarget && (
-        <ExerciseStatsSheet
+        <ExerciseAnalysisSheet
           exerciseName={statsTarget.name}
           weightHistory={histByName.get(statsTarget.key) ?? []}
           volumeHistory={volByName.get(statsTarget.key) ?? []}

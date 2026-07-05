@@ -24,7 +24,7 @@ import {
 import { normalize } from "@/lib/fitness/exerciseCatalog";
 import { useLastExerciseSessions } from "@/hooks/useLastExerciseSession";
 import { RestTimerBar } from "./RestTimerBar";
-import { ExerciseStatsSheet } from "./ExerciseStatsSheet";
+import { ExerciseAnalysisSheet } from "./ExerciseAnalysisSheet";
 import { useUserExercisePhotos, resolveCustomExerciseMuscles } from "@/hooks/useUserExercisePhotos";
 
 // ─── Main view ───────────────────────────────────────────────────────────────
@@ -346,7 +346,7 @@ export function ActiveWorkoutView({
 
       {/* Fiche détaillée exercice */}
       {statsTarget && (
-        <ExerciseStatsSheet
+        <ExerciseAnalysisSheet
           exerciseName={statsTarget.name}
           weightHistory={histByName.get(statsTarget.key) ?? []}
           volumeHistory={volByName.get(statsTarget.key) ?? []}
