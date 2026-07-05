@@ -54,13 +54,29 @@ export interface MasteryWeights {
   experience: number;
 }
 
-export interface ConfirmationRules {
-  /** Nombre de derniers paliers (sur 30) nécessitant confirmation avant validation (ex 10 = Olympien+Primordial). */
-  topTiersRequiringConfirmation: number;
-  /** Nb de séances distinctes >= ce palier, parmi les plus récentes, requises pour confirmer. */
+/**
+ * Un palier de confirmation : pour prétendre à un tierIndex >= fromTierIndex,
+ * il faut réunir plusieurs performances qualifiantes ÉTALÉES DANS LE TEMPS,
+ * pas seulement un pic récent. Olympien et Primordial ont chacun leur propre
+ * gate, Primordial nettement plus exigeant — ce sont les deux seuls rangs
+ * qui doivent représenter une vraie référence, pas juste un bon niveau.
+ */
+export interface ConfirmationGate {
+  /** Tier (0..29) à partir duquel cette gate s'applique. */
+  fromTierIndex: number;
+  /** Nb de séances qualifiantes (>= fromTierIndex) requises. */
   sessionsRequired: number;
-  /** Nb minimum de séances loguées sur l'exercice pour prétendre aux paliers du dessus. */
+  /** Écart minimum (jours) entre la 1ère et la dernière séance qualifiante. */
+  minSpanDays: number;
+  /** Nb minimum de séances loguées sur l'exercice, toutes confondues. */
   minExperienceSessions: number;
+  /** Nb de séances récentes (par date) parmi lesquelles chercher les qualifiantes. */
+  lookbackSessions: number;
+}
+
+export interface ConfirmationRules {
+  /** Triées par fromTierIndex décroissant (Primordial avant Olympien). */
+  gates: ConfirmationGate[];
 }
 
 export interface InactivityDecay {

@@ -53,15 +53,19 @@ const profiles: Profile[] = [
     sessions: [session(addDays(NOW, 0), 10, 70)],
   },
   {
-    label: "3. Intermédiaire — même niveau confirmé sur 6 séances",
+    label: "3. Intermédiaire — même niveau confirmé sur 10 séances / 87j",
     exercise: "Tirage vertical prise serrée",
     bodyweight: 75,
     sessions: [
-      session(addDays(NOW, -70), 8, 55),
-      session(addDays(NOW, -55), 8, 58),
-      session(addDays(NOW, -40), 9, 60),
-      session(addDays(NOW, -25), 10, 70),
-      session(addDays(NOW, -15), 10, 72),
+      session(addDays(NOW, -90), 10, 50),
+      session(addDays(NOW, -80), 10, 53),
+      session(addDays(NOW, -70), 10, 55),
+      session(addDays(NOW, -60), 10, 58),
+      session(addDays(NOW, -50), 10, 60),
+      session(addDays(NOW, -40), 10, 63),
+      session(addDays(NOW, -30), 10, 66),
+      session(addDays(NOW, -20), 10, 70),
+      session(addDays(NOW, -10), 10, 72),
       session(addDays(NOW, -3), 11, 70),
     ],
   },
@@ -115,6 +119,28 @@ const profiles: Profile[] = [
     bodyweight: 75,
     sessions: [session(addDays(NOW, 0), 10, 12)],
   },
+  {
+    label: "9. Élite — référence Primordial confirmée sur 15 séances / 104j",
+    exercise: "Développé couché",
+    bodyweight: 80,
+    sessions: [
+      session(addDays(NOW, -150), 5, 85),
+      session(addDays(NOW, -135), 5, 90),
+      session(addDays(NOW, -120), 5, 95),
+      session(addDays(NOW, -105), 5, 100),
+      session(addDays(NOW, -90), 5, 103),
+      session(addDays(NOW, -75), 5, 104),
+      session(addDays(NOW, -60), 5, 103),
+      session(addDays(NOW, -50), 5, 105),
+      session(addDays(NOW, -40), 5, 104),
+      session(addDays(NOW, -30), 5, 106),
+      session(addDays(NOW, -20), 5, 105),
+      session(addDays(NOW, -15), 5, 107),
+      session(addDays(NOW, -10), 5, 106),
+      session(addDays(NOW, -5), 5, 108),
+      session(addDays(NOW, -1), 5, 107),
+    ],
+  },
 ];
 
 describe("moteur Rang/Maîtrise — profils représentatifs", () => {
@@ -160,7 +186,8 @@ describe("moteur Rang/Maîtrise — profils représentatifs", () => {
     expect(interFirst.confirmedTierIndex).toBeLessThan(20);
     expect(interFirst.masteryPercent).toBeGreaterThanOrEqual(60);
 
-    // 3. Même niveau confirmé sur 6 séances → Olympien réellement atteint.
+    // 3. Même niveau confirmé sur 10 séances / 87j → Olympien réellement atteint
+    // (constance démontrée dans le temps, pas juste un pic récent).
     const interConfirmed = computeRankState(
       DEFAULT_RANK_ENGINE_CONFIG,
       "Tirage vertical prise serrée",
@@ -230,5 +257,27 @@ describe("moteur Rang/Maîtrise — profils représentatifs", () => {
       NOW,
     );
     expect(isolation.family).toBe("isolation");
+
+    // 9. Référence Primordial : seule une constance longue et étalée y donne accès.
+    const elite = computeRankState(
+      DEFAULT_RANK_ENGINE_CONFIG,
+      "Développé couché",
+      profiles[8].sessions,
+      80,
+      NOW,
+    );
+    expect(elite.confirmedTierIndex).toBeGreaterThanOrEqual(25);
+
+    // Un sous-ensemble de seulement 4 séances (extrait des 4 dernières) ne
+    // suffit PAS à confirmer Primordial : ni l'expérience (15 requises), ni
+    // l'étalement dans le temps ne sont réunis avec si peu de séances.
+    const eliteTooFewSessions = computeRankState(
+      DEFAULT_RANK_ENGINE_CONFIG,
+      "Développé couché",
+      profiles[8].sessions.slice(-4),
+      80,
+      NOW,
+    );
+    expect(eliteTooFewSessions.confirmedTierIndex).toBeLessThan(25);
   });
 });

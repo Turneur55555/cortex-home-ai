@@ -169,6 +169,7 @@ DROP POLICY IF EXISTS "taches_all" ON public.taches;
 CREATE POLICY "taches_all" ON public.taches FOR ALL USING (auth.role() = 'authenticated');
 DROP POLICY IF EXISTS "echeances_all" ON public.echeances;
 CREATE POLICY "echeances_all" ON public.echeances FOR ALL USING (auth.role() = 'authenticated');
+DROP POLICY IF EXISTS "dsn_all" ON public.dsn;
 CREATE POLICY "dsn_all" ON public.dsn FOR ALL USING (auth.role() = 'authenticated');
 CREATE POLICY "arrets_all" ON public.arrets_maladie FOR ALL USING (auth.role() = 'authenticated');
 CREATE POLICY "stc_all" ON public.stc FOR ALL USING (auth.role() = 'authenticated');

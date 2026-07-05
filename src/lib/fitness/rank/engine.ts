@@ -231,21 +231,29 @@ export function computeRankState(
   const rawTierPosition = positions[bestIdx];
   const rawRatioOrReps = ratioOrRepsForFamily(family, standard, windowMetrics[bestIdx], bodyweightKg);
 
-  const topThreshold = 30 - config.confirmation.topTiersRequiringConfirmation;
   let confirmedTierIndex = Math.floor(rawTierPosition);
 
-  // La confirmation ne regarde QUE les mêmes séances récentes que celles
-  // utilisées pour la position brute (fenêtre en nombre de séances, pas en
-  // jours) : on ne veut pas qu'un rang déjà validé s'effondre simplement
-  // parce que "now" s'éloigne dans le temps — ça, c'est le rôle exclusif
-  // de la décroissance d'inactivité ci-dessous, bornée à un seul palier.
-  if (confirmedTierIndex >= topThreshold) {
-    const confirmingCount = windowMetrics.filter(
-      (m) => computeRankScorePosition(config, family, standard, m, bodyweightKg) >= topThreshold,
-    ).length;
-    const hasExperience = allMetrics.length >= config.confirmation.minExperienceSessions;
-    if (confirmingCount < config.confirmation.sessionsRequired || !hasExperience) {
-      confirmedTierIndex = Math.min(confirmedTierIndex, topThreshold - 1);
+  // Confirmation en cascade, Primordial d'abord (la plus stricte) puis
+  // Olympien : chaque gate exige plusieurs séances qualifiantes ÉTALÉES sur
+  // une durée minimale (minSpanDays), pas seulement un cluster récent — ce
+  // sont les deux seuls rangs qui doivent représenter une vraie référence
+  // dans le temps, pas juste un excellent niveau instantané. En dessous de
+  // la plus basse gate, une seule séance suffit à être crédité pleinement.
+  const gatesDesc = [...config.confirmation.gates].sort((a, b) => b.fromTierIndex - a.fromTierIndex);
+  for (const gate of gatesDesc) {
+    if (confirmedTierIndex < gate.fromTierIndex) continue;
+    const lookback = allMetrics.slice(-gate.lookbackSessions);
+    const qualifying = lookback.filter(
+      (m) => computeRankScorePosition(config, family, standard, m, bodyweightKg) >= gate.fromTierIndex,
+    );
+    const span =
+      qualifying.length >= 2
+        ? daysBetween(new Date(qualifying[0].date), new Date(qualifying[qualifying.length - 1].date))
+        : 0;
+    const hasExperience = allMetrics.length >= gate.minExperienceSessions;
+    const satisfied = qualifying.length >= gate.sessionsRequired && span >= gate.minSpanDays && hasExperience;
+    if (!satisfied) {
+      confirmedTierIndex = Math.min(confirmedTierIndex, gate.fromTierIndex - 1);
     }
   }
 

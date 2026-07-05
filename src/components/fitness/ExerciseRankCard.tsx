@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { Sparkles, Target, Trophy } from "lucide-react";
+import { Sparkles, Trophy } from "lucide-react";
 import { ExerciseRankBadge } from "./ExerciseRankBadge";
 import { RankUpOverlay } from "./RankUpOverlay";
 import { useAuth } from "@/hooks/use-auth";
@@ -22,7 +22,7 @@ function saveSeen(userId: string, exerciseName: string, tierIndex: number) {
 
 export function ExerciseRankCard({ exerciseName }: { exerciseName: string }) {
   const { user } = useAuth();
-  const { rank, objectives, sessionCount, progression, isLoading } =
+  const { rank, masteryPercent, nextRankHint, best, sessionCount, bodyweightKnown, isLoading } =
     useExerciseProgression(exerciseName);
   const [rankUp, setRankUp] = useState<RankState | null>(null);
   const initialisedRef = useRef(false);
@@ -81,70 +81,53 @@ export function ExerciseRankCard({ exerciseName }: { exerciseName: string }) {
               {rank.fullName}
             </h3>
             <p className="mt-0.5 text-[11px] text-white/60">
-              {rank.xp.toLocaleString("fr-FR")} XP · {sessionCount} séance{sessionCount > 1 ? "s" : ""}
+              {sessionCount} séance{sessionCount > 1 ? "s" : ""}
             </p>
           </div>
         </div>
 
-        {/* Barre de progression */}
+        {/* Barre de Maîtrise */}
         <div className="relative mt-4">
           <div className="mb-1.5 flex items-center justify-between text-[10px] font-semibold">
-            <span className="text-white/70">
-              {rank.currentTierXp} / {rank.nextTierXp} XP
-            </span>
+            <span className="text-white/70">Maîtrise</span>
             <span style={{ color: colors.secondary }}>
-              {rank.isMax ? "Rang maximum" : `${Math.round(rank.progress * 100)} %`}
+              {rank.isMax ? "Rang maximum" : `${masteryPercent} %`}
             </span>
           </div>
           <div className="h-3 overflow-hidden rounded-full bg-white/5 ring-1 ring-white/5">
             <motion.div
               initial={{ width: 0 }}
-              animate={{ width: `${rank.progress * 100}%` }}
+              animate={{ width: `${masteryPercent}%` }}
               transition={{ duration: 0.8, ease: "easeOut" }}
               className="h-full rounded-full"
               style={{ background: colors.gradient, boxShadow: `0 0 12px ${colors.glow}` }}
             />
           </div>
-          {!rank.isMax && (
-            <p className="mt-1.5 text-[10px] text-white/50">
-              Encore {rank.xpToNext.toLocaleString("fr-FR")} XP jusqu'au prochain palier
-            </p>
-          )}
         </div>
 
-        {/* Objectifs pour le niveau suivant */}
-        {!rank.isMax && objectives.length > 0 && (
-          <div className="relative mt-4 rounded-xl border border-white/10 bg-black/30 p-3">
-            <div className="mb-2 flex items-center gap-1.5">
-              <Target className="h-3.5 w-3.5" style={{ color: colors.secondary }} />
-              <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: colors.secondary }}>
-                Pour atteindre le prochain palier
-              </span>
-            </div>
-            <ul className="space-y-1">
-              {objectives.map((o, i) => (
-                <li key={i} className="flex items-center gap-2 text-[11px] text-white/85">
-                  <Sparkles className="h-3 w-3 shrink-0" style={{ color: colors.primary }} />
-                  <span>{o}</span>
-                </li>
-              ))}
-            </ul>
+        {/* Message vers le rang suivant */}
+        {!rank.isMax && nextRankHint && (
+          <div className="relative mt-4 flex items-center gap-2 rounded-xl border border-white/10 bg-black/30 p-3">
+            <Sparkles className="h-3.5 w-3.5 shrink-0" style={{ color: colors.primary }} />
+            <span className="text-[11px] text-white/85">{nextRankHint}</span>
           </div>
         )}
 
+        {!bodyweightKnown && (
+          <p className="relative mt-3 text-[10px] text-white/40">
+            Renseigne ton poids de corps dans Corps pour un rang précis.
+          </p>
+        )}
+
         {/* Records rapides */}
-        {progression && progression.best.weight > 0 && (
+        {best.weight > 0 && (
           <div className="relative mt-3 flex items-center justify-between text-[10px] text-white/60">
             <span className="flex items-center gap-1">
               <Trophy className="h-3 w-3" style={{ color: colors.secondary }} />
-              PR {progression.best.weight} kg × {progression.best.reps}
+              PR {best.weight} kg × {best.reps}
             </span>
-            {progression.best.oneRM > 0 && (
-              <span>1RM {Math.round(progression.best.oneRM)} kg</span>
-            )}
-            {progression.best.tonnage > 0 && (
-              <span>Vol. {Math.round(progression.best.tonnage)} kg</span>
-            )}
+            {best.oneRM > 0 && <span>1RM {Math.round(best.oneRM)} kg</span>}
+            {best.tonnage > 0 && <span>Vol. {Math.round(best.tonnage)} kg</span>}
           </div>
         )}
       </div>

@@ -27,13 +27,28 @@ export const DEFAULT_RANK_ENGINE_CONFIG: RankEngineConfig = {
     experience: 0.1,
   },
 
-  // Règles de confirmation pour les paliers du sommet (Olympien + Primordial
-  // = 10 derniers paliers sur 30). En dessous de ce seuil, une seule séance
-  // suffit à être crédité pleinement.
+  // Confirmation des rangs sommet : en dessous du tier 20 (Olympien), une
+  // seule séance suffit à être crédité pleinement. Olympien et Primordial
+  // exigent chacun une constance démontrée — Primordial nettement plus.
   confirmation: {
-    topTiersRequiringConfirmation: 10,
-    sessionsRequired: 2,
-    minExperienceSessions: 6,
+    gates: [
+      {
+        // Primordial (tiers 25-29) : la référence absolue sur l'exercice.
+        fromTierIndex: 25,
+        sessionsRequired: 5,
+        minSpanDays: 60,
+        minExperienceSessions: 15,
+        lookbackSessions: 20,
+      },
+      {
+        // Olympien (tiers 20-24) : excellent niveau confirmé dans la durée.
+        fromTierIndex: 20,
+        sessionsRequired: 3,
+        minSpanDays: 30,
+        minExperienceSessions: 10,
+        lookbackSessions: 15,
+      },
+    ],
   },
 
   // Décroissance en cas d'arrêt : jamais plus d'un palier de rang par
