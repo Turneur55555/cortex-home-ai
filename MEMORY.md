@@ -3,6 +3,12 @@
 ## Dernière mise à jour
 2026-07-05
 
+## Fix CI "RLS Regression Tests" en échec sur les 2 derniers push (2026-07-05, branche claude/rls-regression-fix-j7iksz)
+- **Ce n'était pas une régression RLS au sens policies** : le job "RLS isolation tests" échouait dès l'étape `bun install --frozen-lockfile`, avant même d'exécuter `src/lib/security/rls.test.ts` (skip). Confirmé sur les runs GitHub Actions des commits `748a1f9` et `1f8cb27` (2026-07-05 12h19 et 13h05) : `error: lockfile had changes, but lockfile is frozen`.
+- Cause : le commit `86175c9` (nettoyage 32 deps npm) a mis à jour `package.json` + `package-lock.json` (npm) mais pas `bun.lock` (bun) — deux lockfiles coexistent dans ce repo pour deux gestionnaires différents. Fix : `bun.lock` régénéré (`rm bun.lock && bun install --registry=https://registry.npmjs.org`) pour matcher `package.json`. Vérifié : `bun install --frozen-lockfile` passe, `bunx vitest run` (52 tests) et `tsc` toujours verts.
+- **Bug distinct trouvé en creusant** (`scripts/validate-supabase.mjs`, checks `POLICY_NO_DROP`/`TRIGGER_NO_DROP`) : un garde `filePatched` limitait `--fix` à corriger **une seule occurrence par fichier et par exécution**. C'est pourquoi le job "ci: auto-fix migration idempotency" se re-déclenchait à répétition (3 commits le 05/07 sur le même fichier `20260521203001_tachepaie_initial_schema.sql`, une migration du projet Contrôle de Paie séparé qui partage la base). Fix : retrait du garde, `--fix` corrige maintenant tout en une passe (vérifié convergent : 0 correction au 2e run).
+- ⚠️ Si le job "RLS Regression Tests" échoue à nouveau, vérifier D'ABORD l'étape `bun install` dans les logs Actions avant de suspecter une vraie régression de policy — les deux causes sont indépendantes de toute policy RLS.
+
 ## Nettoyage complet du code mort (2026-07-05)
 - Rapport détaillé : `CLEANUP_AUDIT_REPORT.md` (racine du repo).
 - Frontend : `src/ui/` supprimé, `src/lib/fitness/index.ts` (façade jamais utilisée) supprimé, `src/components/recipe/` entier supprimé (feature création de recette jamais construite — seule la lecture `useRecipes`/`useRecipe` survit), 30 composants shadcn/ui inutilisés supprimés, `RestTimer.tsx` (remplacé par `RestTimerBar.tsx`+`useRestTimer`), `BodyHighlighterRenderer.tsx` (remplacé par `MuscleMap.tsx`), `HomeDashboard.tsx`, `ReportSummaryWidget.tsx`, `useNutritionCalculator.ts`, `useProgress.ts`, `use-mobile.tsx`, `motion.ts`, `hashing.ts`, `SwipeableExerciseRow.tsx`, `recipeTypes.ts` + son test, `auth-middleware.ts`, `client.server.ts`.
