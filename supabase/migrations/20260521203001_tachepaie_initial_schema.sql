@@ -171,8 +171,11 @@ DROP POLICY IF EXISTS "echeances_all" ON public.echeances;
 CREATE POLICY "echeances_all" ON public.echeances FOR ALL USING (auth.role() = 'authenticated');
 DROP POLICY IF EXISTS "dsn_all" ON public.dsn;
 CREATE POLICY "dsn_all" ON public.dsn FOR ALL USING (auth.role() = 'authenticated');
+DROP POLICY IF EXISTS "arrets_all" ON public.arrets_maladie;
 CREATE POLICY "arrets_all" ON public.arrets_maladie FOR ALL USING (auth.role() = 'authenticated');
+DROP POLICY IF EXISTS "stc_all" ON public.stc;
 CREATE POLICY "stc_all" ON public.stc FOR ALL USING (auth.role() = 'authenticated');
+DROP POLICY IF EXISTS "contrats_all" ON public.contrats;
 CREATE POLICY "contrats_all" ON public.contrats FOR ALL USING (auth.role() = 'authenticated');
 
 -- Trigger création profil automatique
