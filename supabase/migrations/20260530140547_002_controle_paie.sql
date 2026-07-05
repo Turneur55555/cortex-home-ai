@@ -62,4 +62,5 @@ ALTER TABLE public.imports          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.controle_lignes  ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "imports_all" ON public.imports;
 CREATE POLICY "imports_all"          ON public.imports         FOR ALL USING (auth.role() = 'authenticated');
+DROP POLICY IF EXISTS "controle_lignes_all" ON public.controle_lignes;
 CREATE POLICY "controle_lignes_all"  ON public.controle_lignes FOR ALL USING (auth.role() = 'authenticated');

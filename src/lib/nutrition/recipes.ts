@@ -28,7 +28,7 @@ const r1 = (v: number) => Math.round(v * 10) / 10;
 export const EMPTY_MACROS: MacroTotals = { calories: 0, protein: 0, carbs: 0, fat: 0 };
 
 /** Macros d'un seul ingrédient (per_100g × grams / 100). */
-export function ingredientMacros(input: IngredientMacroInput): MacroTotals {
+function ingredientMacros(input: IngredientMacroInput): MacroTotals {
   const g = num(input.grams);
   if (g === 0) return { ...EMPTY_MACROS };
   const f = g / 100;

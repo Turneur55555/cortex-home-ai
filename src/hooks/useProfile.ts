@@ -9,8 +9,8 @@ import {
 } from "@/services/profile";
 
 // Clé incluant l'uid pour que chaque utilisateur ait son propre cache.
-// L'export de base sert à vider toutes les entrées profile au logout.
-export const PROFILE_BASE_QK = ["profile"] as const;
+// (vidée globalement au logout par queryClient.clear() dans use-auth.tsx)
+const PROFILE_BASE_QK = ["profile"] as const;
 const profileQK = (uid: string) => [...PROFILE_BASE_QK, uid] as const;
 
 export function useProfile(fallback: string) {

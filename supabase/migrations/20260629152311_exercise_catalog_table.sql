@@ -15,6 +15,7 @@ DROP POLICY IF EXISTS "exercise_catalog_select" ON public.exercise_catalog;
 CREATE POLICY "exercise_catalog_select" ON public.exercise_catalog
   FOR SELECT USING (auth.uid() IS NOT NULL);
 
+DROP POLICY IF EXISTS "exercise_catalog_insert" ON public.exercise_catalog;
 CREATE POLICY "exercise_catalog_insert" ON public.exercise_catalog
   FOR INSERT WITH CHECK (auth.uid() IS NOT NULL);
 

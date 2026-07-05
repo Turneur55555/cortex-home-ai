@@ -24,7 +24,7 @@ export interface Recipe {
   updated_at: string;
 }
 
-export interface RecipeIngredient {
+interface RecipeIngredient {
   id: string;
   recipe_id: string;
   user_id: string;

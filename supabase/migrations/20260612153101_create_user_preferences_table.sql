@@ -17,6 +17,7 @@ ALTER TABLE public.user_preferences ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "user_prefs_select_own" ON public.user_preferences;
 CREATE POLICY "user_prefs_select_own" ON public.user_preferences
   FOR SELECT TO authenticated USING ((SELECT auth.uid()) = user_id);
+DROP POLICY IF EXISTS "user_prefs_insert_own" ON public.user_preferences;
 CREATE POLICY "user_prefs_insert_own" ON public.user_preferences
   FOR INSERT TO authenticated WITH CHECK ((SELECT auth.uid()) = user_id);
 CREATE POLICY "user_prefs_update_own" ON public.user_preferences

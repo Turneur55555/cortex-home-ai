@@ -79,6 +79,7 @@ WITH CHECK (
 );
 
 -- Policy SELECT pour lire les photos uploadées dans le sous-dossier
+DROP POLICY IF EXISTS "exercise-images user subfolder select" ON storage.objects;
 CREATE POLICY "exercise-images user subfolder select"
 ON storage.objects FOR SELECT
 USING (

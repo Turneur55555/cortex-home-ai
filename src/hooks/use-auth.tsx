@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { installAuthDiagnostics, logAuthEvent, summarizeSession } from "@/lib/authDiagnostics";
 import { refreshAuthSession, restoreAuthSession } from "@/lib/authSession";
@@ -16,6 +17,7 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     installAuthDiagnostics();
@@ -67,6 +69,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // ignore
     }
     await supabase.auth.signOut();
+    // Sans ça, le cache react-query (profil, séances, nutrition...) d'un compte
+    // reste visible pour le compte suivant qui se connecte dans le même onglet.
+    queryClient.clear();
   };
 
   return (
