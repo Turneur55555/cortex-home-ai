@@ -53,6 +53,7 @@ alter table public.meal_plans enable row level security;
 DROP POLICY IF EXISTS "Users manage own recipes" ON public.recipes;
 create policy "Users manage own recipes" on public.recipes
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users manage own recipe ingredients" ON public.recipe_ingredients;
 create policy "Users manage own recipe ingredients" on public.recipe_ingredients
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "Users manage own meal plans" on public.meal_plans

@@ -146,6 +146,7 @@ $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trg_dossiers_updated_at ON public.dossiers;
 CREATE TRIGGER trg_dossiers_updated_at BEFORE UPDATE ON public.dossiers FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+DROP TRIGGER IF EXISTS trg_taches_updated_at ON public.taches;
 CREATE TRIGGER trg_taches_updated_at BEFORE UPDATE ON public.taches FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
 -- RLS
@@ -160,6 +161,7 @@ ALTER TABLE public.contrats ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "profiles_select" ON public.profiles;
 CREATE POLICY "profiles_select" ON public.profiles FOR SELECT USING (auth.role() = 'authenticated');
+DROP POLICY IF EXISTS "profiles_update_own" ON public.profiles;
 CREATE POLICY "profiles_update_own" ON public.profiles FOR UPDATE USING (auth.uid() = id);
 CREATE POLICY "dossiers_all" ON public.dossiers FOR ALL USING (auth.role() = 'authenticated');
 CREATE POLICY "taches_all" ON public.taches FOR ALL USING (auth.role() = 'authenticated');
