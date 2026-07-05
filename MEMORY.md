@@ -3,6 +3,12 @@
 ## Dernière mise à jour
 2026-07-05
 
+## Audit + reconstruction complète des migrations (2026-07-05)
+- Rapport détaillé : `MIGRATION_AUDIT_REPORT.md` (racine du repo).
+- `supabase/migrations/` passe de 82 à **141 fichiers** : 58 migrations manquantes reconstruites verbatim depuis `supabase_migrations.schema_migrations.statements` (le SQL exact exécuté en prod, pas une approximation), 2 fichiers renommés à leur vrai timestamp prod, 1 snapshot non-historique ajouté pour 3 tables (`activity_log`, `dossier_documents`, `taches_recurrentes`) dont l'origine est introuvable.
+- **120/120 migrations prod désormais présentes dans le repo avec version+nom identiques.** Aucune modification du schéma de production.
+- ⚠️ Restent non résolus (voir rapport §6) : 20 migrations locales jamais trackées en prod (au moins 5 confirmées jamais appliquées : `calendar_tokens`, `daily_activity`, `compute_level_from_xp`, `award_xp_on_goal_complete`, `award_time_of_day_badges`) ; anomalie `reminders` (dropped par une migration non trackée le 19 juin mais toujours vivante avec son schéma enrichi — origine de la recréation introuvable) ; rejeu complet des 141 migrations jamais testé (pas de Docker/Supabase CLI disponibles dans cette session).
+
 ## ⚠️ IMPORTANT — Origine des IDs "SUP-XXXX-XXXX"
 Ces IDs ne viennent PAS de Supabase (dashboard/support) : ils sont générés par notre propre logger client `src/lib/error-logger.ts` (`generateSupportId()`) et stockés dans la table `public.error_logs` (colonne `support_id`). Pour investiguer un "SUP-...", toujours commencer par :
 ```sql
