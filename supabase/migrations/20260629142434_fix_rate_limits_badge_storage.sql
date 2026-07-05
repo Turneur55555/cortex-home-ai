@@ -70,6 +70,7 @@ GRANT EXECUTE ON FUNCTION public.unlock_user_badge(text) TO authenticated;
 -- ══════════════════════════════════════════════════════════════════════════════
 -- La policy existante vérifie foldername[1] = user_id
 -- mais le code upload dans user-exercise/{user_id}/... (user_id est en position [2])
+DROP POLICY IF EXISTS "exercise-images user subfolder upload" ON storage.objects;
 CREATE POLICY "exercise-images user subfolder upload"
 ON storage.objects FOR INSERT
 WITH CHECK (

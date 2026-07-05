@@ -34,6 +34,7 @@ CREATE INDEX IF NOT EXISTS idx_historique_imports_dossier   ON historique_import
 -- RLS
 ALTER TABLE historique_imports ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "historique_imports_select" ON historique_imports;
 CREATE POLICY "historique_imports_select" ON historique_imports
   FOR SELECT USING (true);
 

@@ -2,7 +2,7 @@
 --
 -- Contexte (audit du 2026-07-05, reconstruction du dépôt supabase/migrations/) :
 -- Les tables `activity_log`, `dossier_documents` et `taches_recurrentes` existent
--- en production mais leur `CREATE TABLE` d'origine est INTROUVABLE :
+-- en production mais leur `CREATE TABLE IF NOT EXISTS` d'origine est INTROUVABLE :
 --   - absent des 120 migrations trackées dans supabase_migrations.schema_migrations
 --   - absent des migrations locales non-trackées retrouvées dans le repo
 -- Elles ne sont référencées qu'indirectement, via des migrations ULTÉRIEURES qui

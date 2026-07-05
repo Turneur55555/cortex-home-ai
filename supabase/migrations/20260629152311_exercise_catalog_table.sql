@@ -11,6 +11,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS exercise_catalog_name_idx ON public.exercise_c
 
 ALTER TABLE public.exercise_catalog ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "exercise_catalog_select" ON public.exercise_catalog;
 CREATE POLICY "exercise_catalog_select" ON public.exercise_catalog
   FOR SELECT USING (auth.uid() IS NOT NULL);
 
