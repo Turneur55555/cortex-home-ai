@@ -349,38 +349,56 @@ export function ActiveExerciseCard({
     return result.weight;
   }, [lastSummary, recoveryMap, exercise.name]);
 
+  // C2 : `addSet.isPending` retombe à `false` entre deux `await` de la boucle
+  // de restauration ci-dessous, ré-activant brièvement les deux boutons et
+  // permettant un double-ajout sur le même `set_number` (violation UNIQUE).
+  // `isBusy` couvre toute la durée de l'opération, boucle incluse.
+  const [isBusy, setIsBusy] = useState(false);
+
   const handleAddSet = async () => {
-    const last = sortedSets[sortedSets.length - 1];
-    // C1 : max(set_number)+1 — `length+1` provoquait une violation UNIQUE
-    // après suppression d'une série intermédiaire.
-    const nextNumber =
-      sortedSets.reduce((m, st) => Math.max(m, st.set_number), 0) + 1;
-    const fallback = lastSetsByNumber.get(sortedSets.length + 1) ?? lastSession?.sets[0];
-    await addSet.mutateAsync({
-      exerciseId: exercise.id,
-      setNumber: nextNumber,
-      reps: last?.reps ?? fallback?.reps ?? null,
-      weight: last?.weight ?? fallback?.weight ?? null,
-    });
+    if (isBusy) return;
+    setIsBusy(true);
+    try {
+      const last = sortedSets[sortedSets.length - 1];
+      // C1 : max(set_number)+1 — `length+1` provoquait une violation UNIQUE
+      // après suppression d'une série intermédiaire.
+      const nextNumber =
+        sortedSets.reduce((m, st) => Math.max(m, st.set_number), 0) + 1;
+      const fallback = lastSetsByNumber.get(sortedSets.length + 1) ?? lastSession?.sets[0];
+      await addSet.mutateAsync({
+        exerciseId: exercise.id,
+        setNumber: nextNumber,
+        reps: last?.reps ?? fallback?.reps ?? null,
+        weight: last?.weight ?? fallback?.weight ?? null,
+      });
+    } finally {
+      setIsBusy(false);
+    }
   };
 
   const handleRestoreLastSession = async () => {
+    if (isBusy) return;
     const lastSets = lastSession?.sets ?? [];
     if (lastSets.length === 0) return;
-    for (const s of sortedSets) {
-      const ref = lastSetsByNumber.get(s.set_number);
-      if (!ref) continue;
-      updateSet.mutate({ id: s.id, reps: ref.reps, weight: ref.weight });
-    }
-    const existingNumbers = new Set(sortedSets.map((s) => s.set_number));
-    const toCreate = lastSets.filter((s) => !existingNumbers.has(s.set_number));
-    for (const ref of toCreate) {
-      await addSet.mutateAsync({
-        exerciseId: exercise.id,
-        setNumber: ref.set_number,
-        reps: ref.reps,
-        weight: ref.weight,
-      });
+    setIsBusy(true);
+    try {
+      for (const s of sortedSets) {
+        const ref = lastSetsByNumber.get(s.set_number);
+        if (!ref) continue;
+        updateSet.mutate({ id: s.id, reps: ref.reps, weight: ref.weight });
+      }
+      const existingNumbers = new Set(sortedSets.map((s) => s.set_number));
+      const toCreate = lastSets.filter((s) => !existingNumbers.has(s.set_number));
+      for (const ref of toCreate) {
+        await addSet.mutateAsync({
+          exerciseId: exercise.id,
+          setNumber: ref.set_number,
+          reps: ref.reps,
+          weight: ref.weight,
+        });
+      }
+    } finally {
+      setIsBusy(false);
     }
   };
 
@@ -571,7 +589,7 @@ export function ActiveExerciseCard({
             <button
               type="button"
               onClick={handleRestoreLastSession}
-              disabled={addSet.isPending || updateSet.isPending}
+              disabled={isBusy}
               className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl bg-primary/[0.07] py-2.5 text-[12px] font-semibold text-primary transition-colors hover:bg-primary/[0.12] disabled:opacity-50"
             >
               <RotateCcw className="h-3.5 w-3.5" />
@@ -616,7 +634,7 @@ export function ActiveExerciseCard({
             <button
               type="button"
               onClick={handleAddSet}
-              disabled={addSet.isPending}
+              disabled={isBusy}
               className="mt-2 flex h-12 w-full items-center justify-center gap-1.5 rounded-2xl bg-white/[0.05] text-[13px] font-semibold text-primary transition-all active:scale-[0.99] hover:bg-primary/10 disabled:opacity-50"
             >
               <Plus className="h-4 w-4" />

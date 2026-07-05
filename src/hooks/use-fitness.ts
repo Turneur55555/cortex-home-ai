@@ -807,14 +807,31 @@ export function useAddExerciseSet() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      const { error } = await supabase.from("exercise_sets").insert({
-        user_id: user.id,
-        exercise_id: exerciseId,
-        set_number: setNumber,
-        reps,
-        weight,
-      });
-      if (error) throw error;
+
+      // Défense en profondeur : si `setNumber` entre en conflit malgré tout
+      // (course entre onglets/appareils), on relit le max côté serveur et on
+      // retente une fois au lieu de faire échouer l'ajout de série.
+      let n = setNumber;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const { error } = await supabase.from("exercise_sets").insert({
+          user_id: user.id,
+          exercise_id: exerciseId,
+          set_number: n,
+          reps,
+          weight,
+        });
+        if (!error) return;
+        if (error.code !== "23505" || attempt === 1) throw error;
+        const { data: maxRow, error: maxErr } = await supabase
+          .from("exercise_sets")
+          .select("set_number")
+          .eq("exercise_id", exerciseId)
+          .order("set_number", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (maxErr) throw maxErr;
+        n = (maxRow?.set_number ?? n) + 1;
+      }
     },
     onMutate: async ({ exerciseId, setNumber, reps, weight }) => {
       await qc.cancelQueries({ queryKey: ACTIVE_KEY });

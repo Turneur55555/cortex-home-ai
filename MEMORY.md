@@ -21,6 +21,20 @@ Ne PAS supposer que c'est lié à un log Postgres/Storage/Edge Function juste pa
 - Fix : ajout d'un pattern `/react\.dev\/errors\/4(18|19|21|22|23|25)\b/` dans `NOISE_PATTERNS` (tous les codes d'erreur React liés à l'hydratation/Suspense). Complète l'intention déjà présente du filtre `/hydrat/i`, ne change rien au comportement fonctionnel.
 - Si ce bruit doit un jour être éliminé à la racine (pas juste filtré), regarder l'interaction `ssr:false` sur `_authenticated` + `<Suspense>` racine dans `__root.tsx`.
 
+## Fix race condition exercise_sets (2026-07-05) — cause de SUP-MR1OQX7K-Y8B5, SUP-MR4KR2Y8-WMLB (duplicate key exercise_sets_exercise_id_set_number_key, /seances)
+- `ActiveExerciseCard.tsx` : les boutons « Ajouter une série » et « Reprendre les charges précédentes » n'étaient gardés que par `addSet.isPending`/`updateSet.isPending`. Or `handleRestoreLastSession` boucle sur plusieurs `await addSet.mutateAsync(...)` séquentiels : `isPending` retombe à `false` entre deux itérations, ré-activant brièvement les deux boutons. Un clic pendant cette fenêtre calculait `nextNumber` depuis un `sortedSets` pas encore à jour → même `set_number` que celui en cours de création par la boucle → violation UNIQUE.
+- Fix : état local `isBusy` qui couvre toute la durée de l'opération (boucle de restauration incluse), remplace les deux `disabled=` séparés.
+- Défense en profondeur : `useAddExerciseSet` (`use-fitness.ts`) retry maintenant une fois sur conflit Postgres `23505` en relisant le `max(set_number)` serveur, au lieu de laisser échouer l'ajout de série (couvre aussi le cas multi-onglets/multi-appareils).
+
+## Deux bugs déjà corrigés en direct sur la BDD prod, jamais commités en migration (2026-07-05)
+- `SUP-MQZAWMJ6-3VU7` (StorageApiError "new row violates row-level security policy", /seances, 29 juin) : upload photo exercice sur chemin `user-exercise/<user_id>/...` — l'ancienne policy générique checkait `(storage.foldername(name))[1] = auth.uid()` (attendu pour un chemin plat `<user_id>/fichier`), donc toujours fausse pour ce chemin imbriqué. Une policy dédiée `exercise-images user subfolder {upload,select,delete}` (`[2] = auth.uid()`) existe **déjà en prod** et couvre le cas (RLS = OR des policies) → plus d'occurrence depuis. Migration jamais retrouvée dans le repo.
+- `nutrition_meal_check` (2 occurrences, 16 juin, /fitness) : le slug `"petit-dej"` utilisé partout dans l'app (`lib/nutrition/meals.ts`) violait la contrainte CHECK de `public.nutrition.meal` qui n'acceptait que `'petit-dejeuner'`. **Déjà corrigé en prod** (`ALTER ... CHECK (meal = ANY (ARRAY['petit-dej','petit-dejeuner',...]))`) — confirmé par 34 lignes `meal='petit-dej'` en base et aucune récidive depuis. Le repo contient bien une entrée `20260616143452_fix_nutrition_meal_check_petit_dej` dans l'historique **remote** des migrations (`list_migrations`), mais **aucun fichier .sql correspondant n'existe dans `supabase/migrations/`**.
+
+## ⚠️ DRIFT MAJEUR migrations repo vs prod (découvert 2026-07-05)
+- `list_migrations` (MCP Supabase) recense **120 migrations appliquées** sur le projet `bcwfvpwxzlmkxobvbtzp`. Le dossier `supabase/migrations/` du repo n'en contient que **82**. **58 migrations existent en prod sans fichier .sql correspondant dans GitHub** (dont les deux ci-dessus), notamment tout un bloc juin 21 → juillet 3 (RLS/perf hardening, exercise_sets, coach IA v2, nutrition v2, catalogue foods, saved_meals, weekly_reports, backups...).
+- Conséquence : rejouer les migrations du repo sur une base fraîche (nouvelle branche Supabase, restauration, onboarding dev) **ne reproduirait pas l'état réel de prod** et réintroduirait des bugs déjà corrigés (ex. les deux ci-dessus).
+- Pas traité dans cette session (hors périmètre de la demande initiale) — nécessite un audit dédié : `supabase db diff` / comparaison migration par migration pour reconstituer les .sql manquants avant de les committer.
+
 ## ⚠️ Règle : mettre ce fichier à jour à la fin de chaque session
 Toujours mettre à jour ce fichier avec les nouveaux composants, hooks, migrations, features découverts.
 
