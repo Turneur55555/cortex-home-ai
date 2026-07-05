@@ -76,14 +76,3 @@ export function scaleServings(perServingMacros: MacroTotals, servings: number | 
     fat: r1(perServingMacros.fat * s),
   };
 }
-
-/** Somme de plusieurs blocs de macros (ex. total d'une journée de planning). */
-export function sumMacros(blocks: ReadonlyArray<MacroTotals>): MacroTotals {
-  return blocks.reduce<MacroTotals>((acc, m) => {
-    acc.calories = r1(acc.calories + m.calories);
-    acc.protein = r1(acc.protein + m.protein);
-    acc.carbs = r1(acc.carbs + m.carbs);
-    acc.fat = r1(acc.fat + m.fat);
-    return acc;
-  }, { ...EMPTY_MACROS });
-}

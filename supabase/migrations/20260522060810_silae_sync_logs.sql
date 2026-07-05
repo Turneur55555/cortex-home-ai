@@ -11,8 +11,9 @@ CREATE TABLE IF NOT EXISTS public.silae_sync_logs (
 );
 
 ALTER TABLE public.silae_sync_logs ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "silae_logs_authenticated" ON public.silae_sync_logs;
 CREATE POLICY "silae_logs_authenticated" ON public.silae_sync_logs
   FOR ALL USING (auth.role() = 'authenticated');
 
-CREATE INDEX idx_silae_logs_type ON public.silae_sync_logs(sync_type);
-CREATE INDEX idx_silae_logs_started ON public.silae_sync_logs(started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_silae_logs_type ON public.silae_sync_logs(sync_type);
+CREATE INDEX IF NOT EXISTS idx_silae_logs_started ON public.silae_sync_logs(started_at DESC);

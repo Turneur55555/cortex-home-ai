@@ -48,15 +48,6 @@ const NIGHT: Quote[] = [
   { text: "Ce que tu plantes aujourd'hui, tu le récolteras demain.", author: "Anonyme" },
 ];
 
-// ─── Legacy pool (session-random, for backwards compat) ──────────────────────
-
-export const QUOTES: Quote[] = [
-  ...MORNING,
-  ...AFTERNOON,
-  ...EVENING,
-  ...NIGHT,
-];
-
 // ─── Contextual selection ─────────────────────────────────────────────────────
 
 function pickFromPool(pool: Quote[], storageKey: string): Quote {
@@ -81,8 +72,4 @@ export function getContextualQuote(): Quote {
   if (h >= 12 && h < 18) return pickFromPool(AFTERNOON, "icortex.quote.afternoon");
   if (h >= 18 && h < 23) return pickFromPool(EVENING, "icortex.quote.evening");
   return pickFromPool(NIGHT, "icortex.quote.night");
-}
-
-export function getSessionQuote(): Quote {
-  return getContextualQuote();
 }

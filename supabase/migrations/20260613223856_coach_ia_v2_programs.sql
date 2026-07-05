@@ -71,6 +71,7 @@ alter table public.program_weeks enable row level security;
 alter table public.program_sessions enable row level security;
 alter table public.program_exercises enable row level security;
 
+DROP POLICY IF EXISTS "Users manage own training programs" ON public.training_programs;
 create policy "Users manage own training programs" on public.training_programs
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "Users manage own program weeks" on public.program_weeks

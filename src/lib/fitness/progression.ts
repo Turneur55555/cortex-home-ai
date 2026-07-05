@@ -78,20 +78,3 @@ export function currentBests(stats: ReadonlyArray<SessionStat>): {
   }
   return { best1RM, topWeight };
 }
-
-/**
- * Progression en % entre la première et la dernière séance exploitable,
- * sur la métrique choisie. Retourne null si moins de 2 points.
- */
-export function progressionPct(
-  stats: ReadonlyArray<SessionStat>,
-  metric: "best1RM" | "tonnage" | "topWeight",
-): number | null {
-  const pts = stats
-    .map((s) => s[metric])
-    .filter((v): v is number => v != null && Number.isFinite(v) && v > 0);
-  if (pts.length < 2) return null;
-  const first = pts[0];
-  const last = pts[pts.length - 1];
-  return Math.round(((last - first) / first) * 1000) / 10;
-}

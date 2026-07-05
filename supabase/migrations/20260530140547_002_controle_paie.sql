@@ -53,11 +53,13 @@ CREATE INDEX IF NOT EXISTS idx_controle_lignes_matricule  ON public.controle_lig
 CREATE INDEX IF NOT EXISTS idx_controle_lignes_periode    ON public.controle_lignes(periode);
 CREATE INDEX IF NOT EXISTS idx_controle_lignes_anomalies  ON public.controle_lignes USING GIN(anomalies);
 
+DROP TRIGGER IF EXISTS trg_imports_updated_at ON public.imports;
 CREATE TRIGGER trg_imports_updated_at
   BEFORE UPDATE ON public.imports
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
 ALTER TABLE public.imports          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.controle_lignes  ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "imports_all" ON public.imports;
 CREATE POLICY "imports_all"          ON public.imports         FOR ALL USING (auth.role() = 'authenticated');
 CREATE POLICY "controle_lignes_all"  ON public.controle_lignes FOR ALL USING (auth.role() = 'authenticated');

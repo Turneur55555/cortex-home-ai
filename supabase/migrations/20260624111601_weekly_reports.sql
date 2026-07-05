@@ -1,4 +1,4 @@
-CREATE TABLE weekly_reports (
+CREATE TABLE IF NOT EXISTS weekly_reports (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
   week_start DATE NOT NULL,
@@ -15,7 +15,8 @@ CREATE TABLE weekly_reports (
 );
 
 ALTER TABLE weekly_reports ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Users see own reports" ON weekly_reports;
 CREATE POLICY "Users see own reports" ON weekly_reports FOR ALL USING (auth.uid() = user_id);
-CREATE INDEX idx_weekly_reports_user_week ON weekly_reports(user_id, week_start DESC);
+CREATE INDEX IF NOT EXISTS idx_weekly_reports_user_week ON weekly_reports(user_id, week_start DESC);
 
 NOTIFY pgrst, 'reload schema';

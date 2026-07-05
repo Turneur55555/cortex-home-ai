@@ -12,9 +12,10 @@ CREATE TABLE IF NOT EXISTS public.cp_historique (
   UNIQUE (period, created_by)
 );
 
-CREATE INDEX idx_cp_historique_period ON public.cp_historique(period);
-CREATE INDEX idx_cp_historique_saved_at ON public.cp_historique(saved_at DESC);
-CREATE INDEX idx_cp_historique_created_by ON public.cp_historique(created_by);
+CREATE INDEX IF NOT EXISTS idx_cp_historique_period ON public.cp_historique(period);
+CREATE INDEX IF NOT EXISTS idx_cp_historique_saved_at ON public.cp_historique(saved_at DESC);
+CREATE INDEX IF NOT EXISTS idx_cp_historique_created_by ON public.cp_historique(created_by);
 
 ALTER TABLE public.cp_historique ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "cp_historique_all" ON public.cp_historique;
 CREATE POLICY "cp_historique_all" ON public.cp_historique FOR ALL USING (auth.role() = 'authenticated');

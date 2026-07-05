@@ -220,23 +220,6 @@ function patchWorkoutsCache(
   return prev;
 }
 
-/** Met à jour les muscle_groups d'un exercice (résolution IA exercice personnalisé). */
-export function useUpdateExerciseMuscles() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, muscle_groups }: { id: string; muscle_groups: string[] }) => {
-      const { error } = await (supabase as any)
-        .from("exercises")
-        .update({ muscle_groups })
-        .eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: WORKOUTS_KEY });
-    },
-  });
-}
-
 export function useUpdateExercise() {
   const qc = useQueryClient();
   return useMutation({
@@ -274,42 +257,6 @@ export function useUpdateExercise() {
       );
       return { prev };
     },
-    onError: (e: Error, _v, ctx) => {
-      if (ctx?.prev) qc.setQueryData(WORKOUTS_KEY, ctx.prev);
-      toast.error(e.message);
-    },
-    onSettled: () => {
-      qc.invalidateQueries({ queryKey: WORKOUTS_KEY });
-    },
-  });
-}
-
-export function useDeleteExercise() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (id: string) => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error("Non authentifié");
-      const { error } = await supabase
-        .from("exercises")
-        .delete()
-        .eq("id", id)
-        .eq("user_id", user.id);
-      if (error) throw error;
-    },
-    onMutate: async (id) => {
-      await qc.cancelQueries({ queryKey: WORKOUTS_KEY });
-      const prev = patchWorkoutsCache(qc, (rows) =>
-        rows.map((w) => ({
-          ...w,
-          exercises: (w.exercises ?? []).filter((ex) => ex.id !== id),
-        })),
-      );
-      return { prev };
-    },
-    onSuccess: () => toast.success("Exercice supprimé"),
     onError: (e: Error, _v, ctx) => {
       if (ctx?.prev) qc.setQueryData(WORKOUTS_KEY, ctx.prev);
       toast.error(e.message);

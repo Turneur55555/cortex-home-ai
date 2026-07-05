@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS public.nutrition_favorites (
 
 ALTER TABLE public.nutrition_favorites ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "fav_select_own" ON public.nutrition_favorites;
 CREATE POLICY "fav_select_own" ON public.nutrition_favorites
   FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "fav_insert_own" ON public.nutrition_favorites
