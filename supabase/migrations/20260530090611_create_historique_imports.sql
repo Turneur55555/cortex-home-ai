@@ -46,5 +46,6 @@ DROP POLICY IF EXISTS "historique_imports_delete" ON historique_imports;
 CREATE POLICY "historique_imports_delete" ON historique_imports
   FOR DELETE USING (true);
 
+DROP POLICY IF EXISTS "historique_imports_update" ON historique_imports;
 CREATE POLICY "historique_imports_update" ON historique_imports
   FOR UPDATE USING (true);

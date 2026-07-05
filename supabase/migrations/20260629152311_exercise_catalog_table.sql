@@ -23,6 +23,7 @@ DROP POLICY IF EXISTS "exercise_catalog_update" ON public.exercise_catalog;
 CREATE POLICY "exercise_catalog_update" ON public.exercise_catalog
   FOR UPDATE USING (auth.uid() IS NOT NULL);
 
+DROP POLICY IF EXISTS "exercise_catalog_delete" ON public.exercise_catalog;
 CREATE POLICY "exercise_catalog_delete" ON public.exercise_catalog
   FOR DELETE USING (auth.uid() IS NOT NULL);
 

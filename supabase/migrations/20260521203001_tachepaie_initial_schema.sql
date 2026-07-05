@@ -165,6 +165,7 @@ DROP POLICY IF EXISTS "profiles_update_own" ON public.profiles;
 CREATE POLICY "profiles_update_own" ON public.profiles FOR UPDATE USING (auth.uid() = id);
 DROP POLICY IF EXISTS "dossiers_all" ON public.dossiers;
 CREATE POLICY "dossiers_all" ON public.dossiers FOR ALL USING (auth.role() = 'authenticated');
+DROP POLICY IF EXISTS "taches_all" ON public.taches;
 CREATE POLICY "taches_all" ON public.taches FOR ALL USING (auth.role() = 'authenticated');
 CREATE POLICY "echeances_all" ON public.echeances FOR ALL USING (auth.role() = 'authenticated');
 CREATE POLICY "dsn_all" ON public.dsn FOR ALL USING (auth.role() = 'authenticated');

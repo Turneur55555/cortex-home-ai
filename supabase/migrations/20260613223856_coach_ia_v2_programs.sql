@@ -80,5 +80,6 @@ create policy "Users manage own program weeks" on public.program_weeks
 DROP POLICY IF EXISTS "Users manage own program sessions" ON public.program_sessions;
 create policy "Users manage own program sessions" on public.program_sessions
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users manage own program exercises" ON public.program_exercises;
 create policy "Users manage own program exercises" on public.program_exercises
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
