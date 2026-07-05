@@ -262,27 +262,39 @@ jobs:
             exit 1
           fi
 
-          STATUS=$(curl -s -o /tmp/bucket_resp.json -w "%{http_code}" \
-            -X POST \
-            "https://${PROJECT_REF}.supabase.co/storage/v1/bucket" \
+          # Vérifie d'abord l'existence du bucket (GET) pour éviter de déclencher
+          # une violation de contrainte "buckets_pkey" côté Postgres à chaque run
+          # (le POST de création est bien idempotent côté HTTP mais logue quand
+          # même une vraie ERROR Postgres quand le bucket existe déjà).
+          EXISTS_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            "https://${PROJECT_REF}.supabase.co/storage/v1/bucket/pdfs" \
             -H "Authorization: Bearer ${SERVICE_KEY}" \
-            -H "apikey: ${SERVICE_KEY}" \
-            -H "Content-Type: application/json" \
-            -d '{
-              "id": "pdfs",
-              "name": "pdfs",
-              "public": false,
-              "file_size_limit": 52428800,
-              "allowed_mime_types": ["application/pdf"]
-            }')
+            -H "apikey: ${SERVICE_KEY}")
 
-          # 200/201 = créé, 400 = déjà existant
-          if [ "$STATUS" = "200" ] || [ "$STATUS" = "201" ] || [ "$STATUS" = "400" ]; then
-            echo "✅ Bucket pdfs OK (HTTP $STATUS)"
+          if [ "$EXISTS_STATUS" = "200" ]; then
+            echo "✅ Bucket pdfs déjà existant, rien à faire"
           else
-            echo "Erreur bucket (HTTP $STATUS) :"
-            cat /tmp/bucket_resp.json
-            exit 1
+            STATUS=$(curl -s -o /tmp/bucket_resp.json -w "%{http_code}" \
+              -X POST \
+              "https://${PROJECT_REF}.supabase.co/storage/v1/bucket" \
+              -H "Authorization: Bearer ${SERVICE_KEY}" \
+              -H "apikey: ${SERVICE_KEY}" \
+              -H "Content-Type: application/json" \
+              -d '{
+                "id": "pdfs",
+                "name": "pdfs",
+                "public": false,
+                "file_size_limit": 52428800,
+                "allowed_mime_types": ["application/pdf"]
+              }')
+
+            if [ "$STATUS" = "200" ] || [ "$STATUS" = "201" ]; then
+              echo "✅ Bucket pdfs créé (HTTP $STATUS)"
+            else
+              echo "Erreur bucket (HTTP $STATUS) :"
+              cat /tmp/bucket_resp.json
+              exit 1
+            fi
           fi
 
       # ── 5. GitHub Step Summary ────────────────────────────────────────────

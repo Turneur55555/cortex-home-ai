@@ -1,7 +1,11 @@
 # Mémoire projet — cortex-home-ai
 
 ## Dernière mise à jour
-2026-06-28
+2026-07-05
+
+## Fix erreur Supabase SUP-MR7LCKN4-61KC (2026-07-05)
+- Cause : `.github/workflows/migrate.yml` step "Ensure storage bucket pdfs" faisait un `POST /storage/v1/bucket` à **chaque** run CI (sur tout push touchant `supabase/migrations/**`), même quand le bucket `pdfs` existait déjà. Le 400 HTTP était bien géré côté workflow, mais l'INSERT sous-jacent déclenchait une vraie `ERROR: duplicate key value violates unique constraint "buckets_pkey"` côté Postgres, remontée comme erreur dans les logs/monitoring Supabase.
+- Fix : ajout d'un `GET /storage/v1/bucket/pdfs` préalable — le POST de création n'est tenté que si le bucket n'existe pas encore. Plus de duplicate key error à chaque run.
 
 ## ⚠️ Règle : mettre ce fichier à jour à la fin de chaque session
 Toujours mettre à jour ce fichier avec les nouveaux composants, hooks, migrations, features découverts.
