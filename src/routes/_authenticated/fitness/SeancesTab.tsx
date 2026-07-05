@@ -18,6 +18,7 @@ import { StartWorkoutSheet } from "@/components/fitness/StartWorkoutSheet";
 import { ActiveWorkoutView } from "@/components/fitness/ActiveWorkoutView";
 import { ExerciseCatalogSheet } from "@/components/fitness/ExerciseCatalogSheet";
 import { PostWorkoutAnalysisSheet } from "@/components/fitness/PostWorkoutAnalysisSheet";
+import { ExerciseRankStrip } from "@/components/fitness/ExerciseRankStrip";
 import {
   useExerciseImageUrls,
   useWorkouts,
