@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/use-auth";
 import { normalize } from "@/lib/fitness/exerciseCatalog";
 
 /**
@@ -23,32 +24,58 @@ export interface ExerciseSession {
   sets: ExerciseSessionSet[];
 }
 
-export function useExerciseSetHistory(exerciseName: string | null | undefined) {
-  const key = normalize(exerciseName ?? "");
+interface ExerciseInstanceRow {
+  id: string;
+  workout_id: string;
+  name: string;
+  reps: number | null;
+  weight: number | null;
+  sets: number | null;
+}
+
+/**
+ * Toutes les instances d'exercices de l'utilisateur (tous noms confondus),
+ * mise en cache une seule fois par utilisateur. Plusieurs exercices affichés
+ * en même temps (ex. le strip RPG) partagent ainsi ce fetch au lieu de le
+ * relancer un par un.
+ */
+function useUserExerciseInstances(userId: string | undefined) {
   return useQuery({
-    queryKey: ["exercise_set_history", key],
-    enabled: key.length > 0,
+    queryKey: ["exercise_instances_raw", userId],
+    enabled: !!userId,
+    staleTime: 30_000,
+    queryFn: async (): Promise<ExerciseInstanceRow[]> => {
+      const { data, error } = await supabase
+        .from("exercises")
+        .select("id, workout_id, name, reps, weight, sets")
+        .eq("user_id", userId!);
+      if (error) throw error;
+      return (data ?? []) as ExerciseInstanceRow[];
+    },
+  });
+}
+
+export function useExerciseSetHistory(exerciseName: string | null | undefined) {
+  const { user } = useAuth();
+  const key = normalize(exerciseName ?? "");
+  const instances = useUserExerciseInstances(user?.id);
+
+  return useQuery({
+    queryKey: ["exercise_set_history", key, user?.id],
+    enabled: key.length > 0 && !!user && !!instances.data,
     queryFn: async (): Promise<ExerciseSession[]> => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user || !exerciseName) return [];
+      if (!exerciseName) return [];
 
       // 1. Instances de l'exercice (identité accent-insensible via normalize)
       const target = normalize(exerciseName);
-      const { data: allExs, error: e1 } = await supabase
-        .from("exercises")
-        .select("id, workout_id, name")
-        .eq("user_id", user.id);
-      if (e1) throw e1;
-      const exs = (allExs ?? []).filter((e) => normalize(e.name) === target);
+      const exs = (instances.data ?? []).filter((e) => normalize(e.name) === target);
       if (exs.length === 0) return [];
 
       const exIds = exs.map((e) => e.id);
       const exToWorkout = new Map(exs.map((e) => [e.id, e.workout_id]));
       const workoutIds = Array.from(new Set(exs.map((e) => e.workout_id)));
 
-      // 2. Séries de ces exercices
+      // 2. Séries détaillées de ces exercices
       // H3 : seules les séries validées comptent dans l'historique.
       const { data: sets, error: e2 } = await supabase
         .from("exercise_sets")
@@ -57,7 +84,6 @@ export function useExerciseSetHistory(exerciseName: string | null | undefined) {
         .eq("completed", true)
         .order("set_number", { ascending: true });
       if (e2) throw e2;
-      if (!sets || sets.length === 0) return [];
 
       // 3. Dates des séances
       const { data: wks, error: e3 } = await supabase
@@ -67,9 +93,11 @@ export function useExerciseSetHistory(exerciseName: string | null | undefined) {
       if (e3) throw e3;
       const dateByWorkout = new Map((wks ?? []).map((w) => [w.id, w.date]));
 
-      // 4. Regroupement par séance
+      // 4. Regroupement par séance à partir des séries détaillées
       const byWorkout = new Map<string, ExerciseSessionSet[]>();
-      for (const s of sets) {
+      const exWithDetailedSets = new Set<string>();
+      for (const s of sets ?? []) {
+        exWithDetailedSets.add(s.exercise_id);
         const wid = exToWorkout.get(s.exercise_id);
         if (!wid) continue;
         const list = byWorkout.get(wid) ?? [];
@@ -80,6 +108,23 @@ export function useExerciseSetHistory(exerciseName: string | null | undefined) {
         });
         byWorkout.set(wid, list);
       }
+
+      // 4bis. Repli sur le résumé agrégé (exercises.weight/reps/sets) pour les
+      // instances sans aucune série détaillée validée — mêmes colonnes que
+      // celles utilisées par computePRs, pour ne jamais faire disparaître un
+      // exercice réellement pratiqué de la progression RPG.
+      for (const ex of exs) {
+        if (exWithDetailedSets.has(ex.id)) continue;
+        if (ex.reps == null || ex.reps <= 0) continue;
+        const list = byWorkout.get(ex.workout_id) ?? [];
+        const count = Math.max(1, ex.sets ?? 1);
+        for (let i = 0; i < count; i++) {
+          list.push({ set_number: i + 1, reps: ex.reps, weight: ex.weight });
+        }
+        byWorkout.set(ex.workout_id, list);
+      }
+
+      if (byWorkout.size === 0) return [];
 
       const sessions: ExerciseSession[] = [];
       for (const [wid, sList] of byWorkout) {

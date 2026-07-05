@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { motion } from "framer-motion";
 import type { RankState } from "@/lib/fitness/exerciseRanks";
 
@@ -58,6 +59,9 @@ export function ExerciseRankBadge({
   size?: number;
 }) {
   const { primary, secondary, glow, text } = rank.rank.colors;
+  const uid = useId();
+  const gradientId = `hex-${rank.rank.key}-${uid}`;
+  const strokeGradientId = `hex-stroke-${rank.rank.key}-${uid}`;
   return (
     <div
       className="relative flex items-center justify-center"
@@ -72,12 +76,12 @@ export function ExerciseRankBadge({
         transition={{ duration: 0.5, ease: "easeOut" }}
       >
         <defs>
-          <linearGradient id={`hex-${rank.rank.key}`} x1="0" x2="0" y1="0" y2="1">
+          <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
             <stop offset="0%" stopColor={secondary} />
             <stop offset="55%" stopColor={primary} />
             <stop offset="100%" stopColor="#0a0a0a" />
           </linearGradient>
-          <linearGradient id={`hex-stroke-${rank.rank.key}`} x1="0" x2="1" y1="0" y2="1">
+          <linearGradient id={strokeGradientId} x1="0" x2="1" y1="0" y2="1">
             <stop offset="0%" stopColor={secondary} stopOpacity="0.95" />
             <stop offset="100%" stopColor={primary} stopOpacity="0.6" />
           </linearGradient>
@@ -85,8 +89,8 @@ export function ExerciseRankBadge({
         {/* Hexagone extérieur */}
         <polygon
           points="32,2 60,17 60,47 32,62 4,47 4,17"
-          fill={`url(#hex-${rank.rank.key})`}
-          stroke={`url(#hex-stroke-${rank.rank.key})`}
+          fill={`url(#${gradientId})`}
+          stroke={`url(#${strokeGradientId})`}
           strokeWidth="2"
         />
         {/* Hexagone intérieur subtil */}

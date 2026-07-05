@@ -4,7 +4,10 @@ export type RequirementType =
   | "streak_days"
   | "protein_days"
   | "goals_completed"
-  | "body_measurements";
+  | "body_measurements"
+  // Débloqué automatiquement côté serveur (trigger sur workouts), jamais via
+  // un calcul de progression client — voir award_time_of_day_badges().
+  | "time_of_day";
 
 export type BadgeRarity = "common" | "rare" | "epic" | "legendary" | "mythic";
 
@@ -52,6 +55,9 @@ export interface FitnessStats {
 
 export function computeBadgeProgress(badge: BadgeCatalogEntry, stats: FitnessStats): number {
   if (badge.is_coming_soon) return 0;
+  // Débloqué uniquement par un trigger serveur à l'heure réelle de fin de
+  // séance — aucune progression calculable côté client.
+  if (badge.requirement_type === "time_of_day") return 0;
   const current = stats[badge.requirement_type as keyof FitnessStats] ?? 0;
   return Math.min(100, Math.round((current / badge.requirement_value) * 100));
 }

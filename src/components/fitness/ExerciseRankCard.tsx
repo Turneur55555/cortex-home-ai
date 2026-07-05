@@ -3,23 +3,25 @@ import { motion } from "framer-motion";
 import { Sparkles, Target, Trophy } from "lucide-react";
 import { ExerciseRankBadge } from "./ExerciseRankBadge";
 import { RankUpOverlay } from "./RankUpOverlay";
+import { useAuth } from "@/hooks/use-auth";
 import { useExerciseProgression } from "@/hooks/useExerciseProgression";
 import type { RankState } from "@/lib/fitness/exerciseRanks";
 
 const STORAGE_PREFIX = "exrank:seen:";
 
-function loadSeen(exerciseName: string): number | null {
+function loadSeen(userId: string, exerciseName: string): number | null {
   try {
-    const v = localStorage.getItem(STORAGE_PREFIX + exerciseName);
+    const v = localStorage.getItem(STORAGE_PREFIX + userId + ":" + exerciseName);
     return v == null ? null : parseInt(v, 10);
   } catch { return null; }
 }
-function saveSeen(exerciseName: string, tierIndex: number) {
-  try { localStorage.setItem(STORAGE_PREFIX + exerciseName, String(tierIndex)); }
+function saveSeen(userId: string, exerciseName: string, tierIndex: number) {
+  try { localStorage.setItem(STORAGE_PREFIX + userId + ":" + exerciseName, String(tierIndex)); }
   catch { /* noop */ }
 }
 
 export function ExerciseRankCard({ exerciseName }: { exerciseName: string }) {
+  const { user } = useAuth();
   const { rank, objectives, sessionCount, progression, isLoading } =
     useExerciseProgression(exerciseName);
   const [rankUp, setRankUp] = useState<RankState | null>(null);
@@ -27,20 +29,20 @@ export function ExerciseRankCard({ exerciseName }: { exerciseName: string }) {
 
   // Détection level-up sur la vie de la carte
   useEffect(() => {
-    if (isLoading || sessionCount === 0) return;
-    const seen = loadSeen(exerciseName);
+    if (isLoading || sessionCount === 0 || !user) return;
+    const seen = loadSeen(user.id, exerciseName);
     if (!initialisedRef.current) {
       initialisedRef.current = true;
       if (seen == null) {
-        saveSeen(exerciseName, rank.tierIndex);
+        saveSeen(user.id, exerciseName, rank.tierIndex);
         return;
       }
     }
     if (seen != null && rank.tierIndex > seen) {
       setRankUp(rank);
-      saveSeen(exerciseName, rank.tierIndex);
+      saveSeen(user.id, exerciseName, rank.tierIndex);
     }
-  }, [rank.tierIndex, isLoading, sessionCount, exerciseName, rank]);
+  }, [rank.tierIndex, isLoading, sessionCount, exerciseName, rank, user]);
 
   const { colors } = rank.rank;
 
