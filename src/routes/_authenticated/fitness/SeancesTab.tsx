@@ -18,6 +18,7 @@ import { StartWorkoutSheet } from "@/components/fitness/StartWorkoutSheet";
 import { ActiveWorkoutView } from "@/components/fitness/ActiveWorkoutView";
 import { ExerciseCatalogSheet } from "@/components/fitness/ExerciseCatalogSheet";
 import { PostWorkoutAnalysisSheet } from "@/components/fitness/PostWorkoutAnalysisSheet";
+import { ExerciseRankStrip } from "@/components/fitness/ExerciseRankStrip";
 import {
   useExerciseImageUrls,
   useWorkouts,
@@ -264,6 +265,18 @@ export function SeancesTab() {
           </p>
         </div>
       )}
+
+      {/* Progression RPG par exercice */}
+      {data && data.length > 0 && topExercises.length > 0 && !isLoading && (
+        <ExerciseRankStrip
+          topExercises={topExercises}
+          nameByKey={nameByKey}
+          histByName={histByName}
+          volByName={volByName}
+          prByName={prByName}
+        />
+      )}
+
 
       {/* Historique complet (repliable) */}
       {data && data.length > 0 && !isLoading && (

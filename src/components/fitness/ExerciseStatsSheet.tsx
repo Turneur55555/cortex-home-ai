@@ -14,6 +14,7 @@ import {
 import { useExerciseSetHistory } from "@/hooks/useExerciseSetHistory";
 import { buildSessionStats, currentBests } from "@/lib/fitness/progression";
 import { formatTonnage } from "@/lib/fitness/strength";
+import { ExerciseRankCard } from "./ExerciseRankCard";
 
 type Tab = "weight" | "volume" | "1rm";
 
@@ -142,6 +143,11 @@ export function ExerciseStatsSheet({
         </div>
 
         <div className="-mx-1 overflow-y-auto px-1">
+          {/* Carte de rang RPG */}
+          <div className="mb-4">
+            <ExerciseRankCard exerciseName={exerciseName} />
+          </div>
+
           {/* Photo de l'exercice */}
           {imageUrl && (
             <div className="mb-4 flex items-center justify-center overflow-hidden rounded-2xl bg-black/30 ring-1 ring-white/5">
