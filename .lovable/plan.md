@@ -1,118 +1,423 @@
-# Migration Nutrition : Open Food Facts → USDA + Gemini + Base Icortex
+# Système RPG de progression par exercice
 
-## Objectif
+Je veux créer un système de progression entièrement nouveau pour iCortex, inspiré des meilleurs RPG et de la mythologie grecque.
 
-Remplacer Open Food Facts par une architecture hybride **USDA FoodData Central** (source officielle) + **Gemini** (intelligence) + **base Supabase propriétaire** (cache progressif), sans casser le module Nutrition pendant la migration.
+L'objectif est de transformer chaque exercice en une véritable aventure où l'utilisateur progresse au fil des entraînements grâce à son travail, ses records et sa régularité.
 
----
-
-## Phase 1 — Audit (préalable, sans modification)
-
-Cartographier toutes les références OFF :
-- `src/services/openFoodFacts.ts` (service principal)
-- `src/hooks/useFoodSearch.ts`, `src/components/FoodAutocomplete.tsx`, `BarcodeScannerSheet.tsx`
-- Edge Functions (`scan-meal`, `scan-fridge`, `recipe-assistant`…) qui appellent OFF
-- Composants Nutrition consommateurs : `NutritionSheet`, `MealScanSheet`, `PortionSelector`, `RecipeMacros`, `MacroProgress`
-- Hooks dérivés : `useNutritionCalculator`, `use-nutrition-favorites`, `useMealPlan`
-- Tables Supabase actuelles : `nutrition`, `nutrition_goals` (pas de table aliments → à créer)
-
-Livrable : rapport `docs/migration-nutrition.md` listant fichiers/dépendances/impacts.
+Le système doit être premium, motivant, évolutif et devenir une fonctionnalité emblématique de l'application.
 
 ---
 
-## Phase 2 — Schéma Supabase (base alimentaire Icortex)
+# Principe
 
-Migration unique créant :
+Chaque exercice possède sa propre progression indépendante.
 
-```text
-foods                 — aliment canonique (nom, marque, source, macros /100g, micros JSONB)
-food_barcodes         — code-barres → food_id (lookup O(1))
-food_brands           — marques normalisées
-food_categories       — taxonomie (USDA + Icortex)
-food_synonyms         — alias FR/EN ("steack" → steak haché)
-food_servings         — portions standard (1 scoop = 30g, 1 œuf = 55g…)
-food_search_history   — historique par user (boost ranking)
-food_favorites        — favoris user
-food_custom_foods     — aliments perso user
-food_quality_scores   — quality_score + confidence_score + flags
-```
+Exemples :
 
-Index trigram (`pg_trgm`) sur `foods.name` + `food_synonyms.alias` pour recherche < 300 ms.
+- Développé couché → Titan II
 
-RLS :
-- `foods`, `food_barcodes`, `food_brands`, `food_categories`, `food_synonyms`, `food_servings`, `food_quality_scores` → lecture publique (`authenticated` + `anon`), écriture `service_role` uniquement (alimenté par edge functions)
-- `food_search_history`, `food_favorites`, `food_custom_foods` → scoped `auth.uid()`
+- Squat → Olympien I
 
-GRANTS explicites conformément aux règles Cloud.
+- Tractions → Héros IV
 
----
+- Curl incliné → Guerrier III
 
-## Phase 3 — Connecteur USDA
+Chaque exercice possède :
 
-Edge function `usda-lookup` :
-- Recherche par nom (`/foods/search`) et par FDC ID (`/food/{fdcId}`)
-- Récupération barcode (UPC) via `dataType=Branded`
-- Normalisation macros → /100g, micros → JSONB
-- Calcul automatique `quality_score` (kcal théoriques vs déclarées, complétude)
-- Upsert dans `foods` + `food_barcodes` + `food_quality_scores`
-- Cache : si `food` déjà présent → retour direct sans appel USDA
+- son niveau
 
-Secret requis : `USDA_API_KEY` (à demander à l'utilisateur — gratuit sur api.data.gov).
+- son XP
+
+- ses records
+
+- son historique
+
+- ses statistiques
+
+- ses badges
+
+Aucune XP n'est partagée entre les exercices.
+
+Chaque mouvement raconte sa propre histoire.
 
 ---
 
-## Phase 4 — Couche Gemini intelligente
+# Hiérarchie des rangs
 
-Edge function `smart-food-search` :
-- Input : requête utilisateur brute ("steack 5", "banne", "escalope")
-- Gemini → correction + expansion synonymes + intention (ne JAMAIS inventer macros)
-- Recherche FTS dans `foods` + `food_synonyms`
-- Si rien trouvé → fallback `usda-lookup` puis ré-indexation
-- Output : liste classée [favoris user > historique > base Icortex > USDA importable]
+Créer les rangs suivants.
 
-Edge function `estimate-portion` (Gemini vision) : photo → unité + grammage estimé, macros prises de `foods`.
+## Mortel
 
-Garde-fou : tout résultat Gemini sans correspondance `food_id` est marqué 🔴 et non sauvegardé.
+I
 
----
+II
 
-## Phase 5 — Refactor frontend (sans toucher au design)
+III
 
-- `src/services/usda.ts` (nouveau) — client HTTP vers edge function
-- `src/services/foodCatalog.ts` (nouveau) — façade unifiée recherche/barcode/favoris
-- `src/hooks/useFoodSearch.ts` — réécrit pour pointer sur `foodCatalog` (mêmes signatures)
-- `src/components/FoodAutocomplete.tsx`, `BarcodeScannerSheet.tsx` — branchés sur nouveau hook
-- Affichage badges qualité (🟢🟠🔴) dans la ligne résultat
-- React Query : `staleTime: 5min` sur recherches, `Infinity` sur lookup barcode
+IV
+
+V
+
+Couleurs :
+
+Pierre - Gris
 
 ---
 
-## Phase 6 — Suppression Open Food Facts
+## Guerrier
 
-Une fois la nouvelle chaîne validée (tests manuels whey/riz/œuf/scan barcode) :
-- `rm src/services/openFoodFacts.ts`
-- Retirer toutes occurrences `fetch('https://world.openfoodfacts.org')` dans edge functions
-- Nettoyer imports + `package.json` (si dépendance dédiée)
-- `rg -i "openfoodfacts|open.food.facts"` doit retourner 0 résultat
+I
+
+II
+
+III
+
+IV
+
+V
+
+Couleurs :
+
+Bronze
 
 ---
 
-## Phase 7 — Vérification & rapport
+## Héros
 
-- `tsc` clean, build Vite clean
-- Test e2e manuel : recherche "whey" → ajout 33g → macros correctes
-- Test scan barcode produit connu + inconnu
-- Rapport final `docs/migration-nutrition.md` mis à jour (avant/après, dette, risques)
+I
+
+II
+
+III
+
+IV
+
+V
+
+Couleurs :
+
+Argent
 
 ---
 
-## Détails techniques
+## Titan
 
-**Stack** : React Query, Supabase, Edge Functions Deno, Gemini via `GEMINI_API_KEY` (déjà configuré selon `MEMORY.md`), USDA via `USDA_API_KEY` (à provisionner).
+I
 
-**Risque principal** : volumétrie USDA (~600k aliments) — on n'importe pas en masse, on alimente à la demande via cache.
+II
 
-**Points qui nécessitent ta validation avant exécution** :
-1. Tu confirmes la création du secret `USDA_API_KEY` (clé gratuite, je te guiderai) ?
-2. Tu veux que je conserve **temporairement** OFF en fallback pendant la phase de validation, ou suppression directe Phase 6 ?
-3. Migration en **une seule grosse PR** ou découpée phase par phase avec validation à chaque étape (recommandé) ?
+III
+
+IV
+
+V
+
+Couleurs :
+
+Rouge profond
+
+---
+
+## Olympien
+
+I
+
+II
+
+III
+
+IV
+
+V
+
+Couleurs :
+
+Bleu électrique et Or
+
+---
+
+## Primordial
+
+I
+
+II
+
+III
+
+IV
+
+V
+
+Couleurs :
+
+Noir cosmique
+
+Violet
+
+Blanc lumineux
+
+Le rang Primordial représente le niveau ultime.
+
+---
+
+# Calcul de l'XP
+
+L'XP doit récompenser la progression réelle.
+
+Prendre en compte :
+
+- augmentation du poids
+
+- augmentation des répétitions
+
+- augmentation du volume
+
+- amélioration du 1RM estimé
+
+- nouveaux records
+
+- régularité des entraînements
+
+- difficulté de l'exercice
+
+- progression par rapport aux séances précédentes
+
+Une séance identique rapporte très peu d'XP.
+
+Le système doit empêcher tout "farm" d'XP.
+
+---
+
+# Difficulté des exercices
+
+Chaque exercice possède un coefficient.
+
+Exemple :
+
+Isolation → ×1
+
+Machines → ×1.1
+
+Machines convergentes → ×1.2
+
+Polyarticulaires → ×1.4
+
+Tractions → ×1.6
+
+Développé couché → ×1.6
+
+Squat → ×1.8
+
+Soulevé de terre → ×2
+
+---
+
+# Carte de progression
+
+Chaque exercice affiche une carte premium contenant :
+
+- Badge du rang
+
+- Nom du rang
+
+- Niveau
+
+- Barre de progression animée
+
+- Pourcentage
+
+- XP actuelle
+
+- XP restante
+
+Sous la barre, afficher dynamiquement plusieurs objectifs permettant d'atteindre le niveau suivant.
+
+Exemple :
+
+Titan III
+
+██████████░░░░░░ 68 %
+
+Pour atteindre Titan IV :
+
+• +2 répétitions à 135 kg
+
+ou
+
+• 137,5 kg × 8
+
+ou
+
+• Nouveau record de volume
+
+L'utilisateur doit toujours savoir quoi faire pour progresser.
+
+---
+
+# Animations
+
+Lors d'un passage de niveau :
+
+- vibration
+
+- barre qui se remplit
+
+- halo lumineux
+
+- particules
+
+- animation du badge
+
+- son discret
+
+- pluie de confettis légère
+
+Afficher :
+
+"Félicitations !
+
+Vous êtes devenu Olympien II"
+
+L'animation doit durer environ deux secondes.
+
+---
+
+# Badges
+
+Chaque rang possède :
+
+- un emblème unique
+
+- une bordure unique
+
+- une palette de couleurs dédiée
+
+- des effets lumineux
+
+- une animation spécifique
+
+L'inspiration doit venir de la mythologie grecque moderne.
+
+Utiliser :
+
+- couronnes de laurier
+
+- colonnes antiques
+
+- éclairs
+
+- flammes
+
+- ailes
+
+- boucliers
+
+- casques
+
+- lances
+
+- marbre
+
+- bronze
+
+- or
+
+- obsidienne
+
+Le rendu doit être digne d'un jeu AAA.
+
+---
+
+# Historique
+
+Créer une timeline retraçant tous les niveaux obtenus pour chaque exercice.
+
+Exemple :
+
+Mortel III
+
+↓
+
+Guerrier II
+
+↓
+
+Héros V
+
+↓
+
+Titan III
+
+↓
+
+Olympien I
+
+---
+
+# Statistiques
+
+Ajouter :
+
+- exercice le plus avancé
+
+- moyenne des niveaux
+
+- XP totale
+
+- niveaux gagnés
+
+- progression hebdomadaire
+
+- progression mensuelle
+
+- nombre de records battus
+
+- meilleur exercice
+
+---
+
+# Architecture technique
+
+Créer un système entièrement configurable.
+
+Chaque rang est défini dans une configuration contenant :
+
+- nom
+
+- couleur
+
+- icône
+
+- animation
+
+- seuil d'XP
+
+- effets visuels
+
+Le calcul de l'XP doit être centralisé dans un service unique.
+
+Aucune valeur ne doit être codée en dur.
+
+Le système doit être facilement extensible.
+
+---
+
+# Expérience utilisateur
+
+Je veux que cette fonctionnalité donne l'impression de jouer à un RPG.
+
+À chaque séance, l'utilisateur doit avoir envie de :
+
+- battre un record
+
+- gagner de l'XP
+
+- monter de niveau
+
+- débloquer un nouveau badge
+
+- faire progresser chacun de ses exercices
+
+L'expérience doit être fluide, moderne, premium et extrêmement gratifiante.
+
+Cette fonctionnalité doit devenir l'un des éléments les plus différenciants d'iCortex.
