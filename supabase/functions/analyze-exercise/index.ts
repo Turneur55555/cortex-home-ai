@@ -3,8 +3,36 @@
 // une analyse rédigée, personnalisée et enrichie en langage naturel.
 // Le client garde toujours son texte déterministe en repli : cette fonction
 // n'est appelée que lorsque l'utilisateur demande l'analyse approfondie.
+//
+// NB : le rate-limit est INLINÉ (et non importé depuis ../_shared/rate-limit.ts)
+// afin que le fichier soit auto-contenu. C'est volontaire : le bundler du
+// déploiement MCP place l'entrypoint sous `source/`, ce qui empêche de résoudre
+// un import remontant vers `../_shared`. Garder la logique inline garantit que
+// le code déployé est BYTE-POUR-BYTE identique à ce fichier du dépôt (le dépôt
+// reste la source de vérité, aucune divergence possible).
 import { createClient } from "@supabase/supabase-js";
-import { checkRateLimit, recordRateLimit } from "../_shared/rate-limit.ts";
+
+type Supa = ReturnType<typeof createClient>;
+
+async function checkRateLimit(supa: Supa, userId: string, action: string, maxPerHour: number) {
+  const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const { count, error } = await supa
+    .from("rate_limits")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .eq("action", action)
+    .gte("window_start", since);
+  if (error) {
+    console.error("[rate-limit] DB unavailable:", error);
+    return { ok: false, count: 0 };
+  }
+  return { ok: (count ?? 0) < maxPerHour, count: count ?? 0 };
+}
+
+async function recordRateLimit(supa: Supa, userId: string, action: string) {
+  const { error } = await supa.from("rate_limits").insert({ user_id: userId, action });
+  if (error) console.error("[rate-limit] insert failed", error);
+}
 
 function buildCors(req: Request) {
   const origin = req.headers.get("origin") ?? "";
@@ -21,12 +49,7 @@ function buildCors(req: Request) {
   };
 }
 
-interface MuscleLine {
-  name: string;
-  role: string;
-  solicitation: number;
-  recovery: string;
-}
+interface MuscleLine { name: string; role: string; solicitation: number; recovery: string; }
 interface Payload {
   exercise?: string;
   objective?: string;
@@ -78,9 +101,7 @@ Deno.serve(async (req) => {
     const muscles = (body.muscles ?? [])
       .map((m) => `  - ${m.name} (${m.role}, sollicitation ${m.solicitation}/100, récupération : ${m.recovery})`)
       .join("\n");
-    const impact = (body.physical_impact ?? [])
-      .map((t) => `${t.trait} ${t.score}/100`)
-      .join(", ");
+    const impact = (body.physical_impact ?? []).map((t) => `${t.trait} ${t.score}/100`).join(", ");
     const metrics = (body.comparison?.metrics ?? [])
       .map((mt) => `${mt.key} : ${mt.previous ?? "—"} → ${mt.current ?? "—"}${mt.delta_pct != null ? ` (${mt.delta_pct >= 0 ? "+" : ""}${mt.delta_pct}%)` : ""}`)
       .join(" | ");
@@ -115,10 +136,7 @@ ${imbalances || "  - aucun"}`;
       "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
       {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${GEMINI_API_KEY}`,
-          "Content-Type": "application/json",
-        },
+        headers: { Authorization: `Bearer ${GEMINI_API_KEY}`, "Content-Type": "application/json" },
         signal: AbortSignal.timeout(45_000),
         body: JSON.stringify({
           model: "gemini-2.5-flash",
