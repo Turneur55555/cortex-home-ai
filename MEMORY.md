@@ -3,9 +3,23 @@
 ## Dernière mise à jour
 2026-07-05
 
-## Fix erreur Supabase SUP-MR7LCKN4-61KC (2026-07-05)
-- Cause : `.github/workflows/migrate.yml` step "Ensure storage bucket pdfs" faisait un `POST /storage/v1/bucket` à **chaque** run CI (sur tout push touchant `supabase/migrations/**`), même quand le bucket `pdfs` existait déjà. Le 400 HTTP était bien géré côté workflow, mais l'INSERT sous-jacent déclenchait une vraie `ERROR: duplicate key value violates unique constraint "buckets_pkey"` côté Postgres, remontée comme erreur dans les logs/monitoring Supabase.
-- Fix : ajout d'un `GET /storage/v1/bucket/pdfs` préalable — le POST de création n'est tenté que si le bucket n'existe pas encore. Plus de duplicate key error à chaque run.
+## ⚠️ IMPORTANT — Origine des IDs "SUP-XXXX-XXXX"
+Ces IDs ne viennent PAS de Supabase (dashboard/support) : ils sont générés par notre propre logger client `src/lib/error-logger.ts` (`generateSupportId()`) et stockés dans la table `public.error_logs` (colonne `support_id`). Pour investiguer un "SUP-...", toujours commencer par :
+```sql
+select * from public.error_logs where support_id = 'SUP-...';
+```
+Ne PAS supposer que c'est lié à un log Postgres/Storage/Edge Function juste parce que le timing coïncide (erreur commise le 2026-07-05, corrigée ensuite).
+
+## Fix CI storage bucket pdfs (2026-07-05, sans rapport avec les IDs SUP-)
+- `.github/workflows/migrate.yml` step "Ensure storage bucket pdfs" faisait un `POST /storage/v1/bucket` à chaque run CI touchant `supabase/migrations/**`, même bucket déjà existant → `ERROR: duplicate key value violates unique constraint "buckets_pkey"` côté Postgres (bruit, sans impact utilisateur).
+- Fix : `GET /storage/v1/bucket/pdfs` préalable, POST seulement si absent.
+
+## Fix bruit hydratation React sur "/" (2026-07-05) — cause réelle des SUP-MR7LCKN4-61KC, SUP-MR7LYHIW-87MD, SUP-MR7MJHXQ-3OJ5 et consorts
+- Route `/` = `src/routes/_authenticated/index.tsx`, sous `_authenticated.tsx` qui a `ssr: false` (décision actée juin 12, chantier persistance de session). Le root `__root.tsx` enrobe `<Outlet/>` dans un `<Suspense fallback={<LoadingScreen/>}>`.
+- Conséquence connue et non-fatale de `ssr:false` + Suspense root : React jette parfois en prod "Minified React error #418" (mismatch hydratation) ou "#422" (Suspense boundary hydration → bascule client-side). React se rétablit tout seul en re-rendant côté client ; aucune casse fonctionnelle observée.
+- `error-logger.ts` avait déjà un filtre `/hydrat/i` avec le commentaire "hydration mismatch warnings" — mais il ne matchait jamais le texte minifié de prod (`"Minified React error #418..."` ne contient pas "hydrat"). Résultat : ces erreurs bénignes généraient un `support_id`, un toast "Une erreur s'est produite" visible utilisateur, et une ligne `error_logs` à chaque occurrence (plusieurs fois par jour depuis au moins le 16 juin).
+- Fix : ajout d'un pattern `/react\.dev\/errors\/4(18|19|21|22|23|25)\b/` dans `NOISE_PATTERNS` (tous les codes d'erreur React liés à l'hydratation/Suspense). Complète l'intention déjà présente du filtre `/hydrat/i`, ne change rien au comportement fonctionnel.
+- Si ce bruit doit un jour être éliminé à la racine (pas juste filtré), regarder l'interaction `ssr:false` sur `_authenticated` + `<Suspense>` racine dans `__root.tsx`.
 
 ## ⚠️ Règle : mettre ce fichier à jour à la fin de chaque session
 Toujours mettre à jour ce fichier avec les nouveaux composants, hooks, migrations, features découverts.

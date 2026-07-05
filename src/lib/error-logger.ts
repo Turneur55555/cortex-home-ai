@@ -30,7 +30,8 @@ type LogPayload = {
 const NOISE_PATTERNS: RegExp[] = [
   /^Warning:/i,
   /React does not recognize/i,
-  /hydrat/i,                          // hydration mismatch warnings
+  /hydrat/i,                          // hydration mismatch warnings (dev builds)
+  /react\.dev\/errors\/4(18|19|21|22|23|25)\b/, // minified hydration errors (prod builds) — React recovers by re-rendering client-side
   /source map/i,
   /ResizeObserver loop/i,
   /Download the React DevTools/i,
