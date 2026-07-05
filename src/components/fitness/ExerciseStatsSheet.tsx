@@ -14,6 +14,7 @@ import {
 import { useExerciseSetHistory } from "@/hooks/useExerciseSetHistory";
 import { buildSessionStats, currentBests } from "@/lib/fitness/progression";
 import { formatTonnage } from "@/lib/fitness/strength";
+import { ExerciseRankCard } from "./ExerciseRankCard";
 
 type Tab = "weight" | "volume" | "1rm";
 
