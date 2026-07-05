@@ -266,6 +266,18 @@ export function SeancesTab() {
         </div>
       )}
 
+      {/* Progression RPG par exercice */}
+      {data && data.length > 0 && topExercises.length > 0 && !isLoading && (
+        <ExerciseRankStrip
+          topExercises={topExercises}
+          nameByKey={nameByKey}
+          histByName={histByName}
+          volByName={volByName}
+          prByName={prByName}
+        />
+      )}
+
+
       {/* Historique complet (repliable) */}
       {data && data.length > 0 && !isLoading && (
         <div className="overflow-hidden rounded-3xl border border-white/5 bg-gradient-to-b from-card/95 to-card/70 shadow-card backdrop-blur-xl">
