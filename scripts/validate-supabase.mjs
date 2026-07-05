@@ -144,7 +144,6 @@ for (const m of migrations) {
   // Regex robuste multi-ligne : capture nom trigger + table
   const re = /CREATE TRIGGER\s+(\w+)(?:[\s\S]*?)(?:BEFORE|AFTER|INSTEAD OF)[\s\S]*?ON\s+([\w.]+)/gi;
   let match;
-  let filePatched = false;
   re.lastIndex = 0;
   while ((match = re.exec(sql)) !== null) {
     const [, trigName, tableName] = match;
@@ -152,12 +151,11 @@ for (const m of migrations) {
     if (!/DROP TRIGGER IF EXISTS/i.test(pre)) {
       issue('warn', 'TRIGGER_NO_DROP', m.name,
         `CREATE TRIGGER ${trigName} sans DROP TRIGGER IF EXISTS`);
-      if (FIX && !filePatched) {
+      if (FIX) {
         const drop = `DROP TRIGGER IF EXISTS ${trigName} ON ${tableName};\n`;
         sql = sql.slice(0, match.index) + drop + sql.slice(match.index);
         writeSql(m.name, sql);
         markFixed('TRIGGER_NO_DROP', m.name);
-        filePatched = true;
         re.lastIndex = match.index + drop.length + match[0].length;
       }
     }
@@ -171,7 +169,6 @@ for (const m of migrations) {
   let sql = readSql(m.name);
   const re = /CREATE POLICY\s+"([^"]+)"\s+ON\s+([\w.]+)/gi;
   let match;
-  let filePatched = false;
   re.lastIndex = 0;
   while ((match = re.exec(sql)) !== null) {
     const [, policyName, tableName] = match;
@@ -179,12 +176,11 @@ for (const m of migrations) {
     if (!/DROP POLICY IF EXISTS/i.test(pre)) {
       issue('warn', 'POLICY_NO_DROP', m.name,
         `CREATE POLICY "${policyName}" sans DROP POLICY IF EXISTS`);
-      if (FIX && !filePatched) {
+      if (FIX) {
         const drop = `DROP POLICY IF EXISTS "${policyName}" ON ${tableName};\n`;
         sql = sql.slice(0, match.index) + drop + sql.slice(match.index);
         writeSql(m.name, sql);
         markFixed('POLICY_NO_DROP', m.name);
-        filePatched = true;
         re.lastIndex = match.index + drop.length + match[0].length;
       }
     }
