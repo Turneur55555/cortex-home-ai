@@ -42,6 +42,7 @@ DROP POLICY IF EXISTS "historique_imports_insert" ON historique_imports;
 CREATE POLICY "historique_imports_insert" ON historique_imports
   FOR INSERT WITH CHECK (true);
 
+DROP POLICY IF EXISTS "historique_imports_delete" ON historique_imports;
 CREATE POLICY "historique_imports_delete" ON historique_imports
   FOR DELETE USING (true);
 

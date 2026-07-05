@@ -20,6 +20,7 @@ CREATE POLICY "user_prefs_select_own" ON public.user_preferences
 DROP POLICY IF EXISTS "user_prefs_insert_own" ON public.user_preferences;
 CREATE POLICY "user_prefs_insert_own" ON public.user_preferences
   FOR INSERT TO authenticated WITH CHECK ((SELECT auth.uid()) = user_id);
+DROP POLICY IF EXISTS "user_prefs_update_own" ON public.user_preferences;
 CREATE POLICY "user_prefs_update_own" ON public.user_preferences
   FOR UPDATE TO authenticated USING ((SELECT auth.uid()) = user_id) WITH CHECK ((SELECT auth.uid()) = user_id);
 CREATE POLICY "user_prefs_delete_own" ON public.user_preferences

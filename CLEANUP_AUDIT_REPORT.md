@@ -1,5 +1,32 @@
 # Audit de nettoyage complet — 2026-07-05
 
+## Complément (même jour) — bug corrigé + nettoyage additionnel
+
+- **Bug confirmé et corrigé** : `signOut()` (`use-auth.tsx`) ne vidait jamais le
+  cache react-query. En cas de changement de compte dans le même onglet (sans
+  rechargement complet de page), les données du compte précédent (profil,
+  séances, nutrition, etc.) restaient visibles jusqu'au premier refetch —
+  fuite de données entre comptes. `PROFILE_BASE_QK` avait été exporté dans
+  l'intention documentée de "vider les entrées profile au logout", mais rien
+  ne l'utilisait jamais. Fix à la racine (plus complet que l'intention
+  d'origine) : `queryClient.clear()` dans `signOut()`, qui couvre tout le
+  cache et pas seulement le profil. `PROFILE_BASE_QK` reste utilisé en
+  interne comme clé de repli mais n'a plus besoin d'être exporté.
+- **Nettoyage additionnel** (après re-scan complet via knip) : `RecipeIngredient`
+  (`useRecipes.ts`) et `ingredientMacros` (`lib/nutrition/recipes.ts`)
+  dé-exportés — utilisés en interne mais leur export n'avait plus aucun
+  consommateur externe après la suppression du CRUD recette mort de la
+  passe précédente.
+- Re-scan complet (knip + vérifications manuelles) : aucun autre élément
+  n'a pu être prouvé sûr à supprimer. Tout ce qui restait signalé (fonctions
+  SQL sans appelant trouvé, Edge Functions à déclenchement externe,
+  `@cloudflare/vite-plugin`/`@tanstack/router-plugin`, boilerplate shadcn,
+  fichiers auto-générés, points d'entrée framework) reste dans la catégorie
+  "conservé par précaution" détaillée plus bas — utilité incertaine, donc
+  non supprimé conformément à la consigne.
+- Validé après coup : `tsc --noEmit` (0 erreur), `npm run test` (52/52),
+  `npm run build` (build complet OK).
+
 ## Méthodologie
 
 Aucune suppression n'a été faite sur simple intuition. Pour chaque candidat :

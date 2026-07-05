@@ -88,6 +88,7 @@ USING (
 );
 
 -- Policy DELETE pour supprimer ses propres photos
+DROP POLICY IF EXISTS "exercise-images user subfolder delete" ON storage.objects;
 CREATE POLICY "exercise-images user subfolder delete"
 ON storage.objects FOR DELETE
 USING (

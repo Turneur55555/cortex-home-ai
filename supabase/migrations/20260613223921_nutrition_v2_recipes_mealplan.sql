@@ -56,5 +56,6 @@ create policy "Users manage own recipes" on public.recipes
 DROP POLICY IF EXISTS "Users manage own recipe ingredients" ON public.recipe_ingredients;
 create policy "Users manage own recipe ingredients" on public.recipe_ingredients
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users manage own meal plans" ON public.meal_plans;
 create policy "Users manage own meal plans" on public.meal_plans
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
