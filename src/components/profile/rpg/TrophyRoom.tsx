@@ -1,27 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  Activity,
-  Apple,
-  Award,
-  CheckCircle,
-  Crown,
-  Dumbbell,
-  Flame,
-  Search,
-  Shield,
-  Sparkles,
-  Star,
-  Swords,
-  Target,
-  Trophy,
-  Zap,
-} from "lucide-react";
+import { Award, Search, Target } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { BadgeMedallion } from "@/components/profile/BadgeMedallion";
 import { BadgeUnlockOverlay } from "@/components/profile/BadgeUnlockOverlay";
 import { HighlightRow } from "@/components/profile/shared";
+import { ACHIEVEMENT_ICON_MAP as ICON_MAP } from "@/components/profile/achievementIcons";
 import { cn } from "@/lib/utils";
 import {
   RARITY_BG,
@@ -31,7 +16,6 @@ import {
   RARITY_PROGRESS,
   RARITY_TEXT,
   type BadgeCatalogEntry,
-  type BadgeCategory,
   type BadgeRarity,
 } from "@/lib/fitness/badges";
 import type { BadgeWithProgress } from "@/hooks/useBadgeSystem";
@@ -42,59 +26,10 @@ import {
   type AchievementCategory,
 } from "@/lib/profile/achievements/types";
 import type { AchievementAggregate } from "@/lib/profile/achievements/evaluate";
-
-const ICON_MAP: Record<string, React.FC<{ className?: string }>> = {
-  Award,
-  Star,
-  Trophy,
-  Zap,
-  Flame,
-  Crown,
-  Dumbbell,
-  Shield,
-  Target,
-  Apple,
-  CheckCircle,
-  Activity,
-  Swords,
-  Sparkles,
-};
-
-// Les badges "historiques" (moteur existant, non modifié) sont pliés dans les
-// catégories du nouveau système pour former UNE seule collection à l'écran —
-// demande explicite : plus de module Badges indépendant.
-const LEGACY_TO_ACHIEVEMENT_CATEGORY: Record<BadgeCategory, AchievementCategory> = {
-  first_steps: "first_steps",
-  training: "rpg",
-  consistency: "endurance",
-  strength: "strength",
-  progression: "rpg",
-  duration: "endurance",
-  cardio: "endurance",
-  nutrition: "nutrition",
-  transformation: "body",
-  health: "body",
-  challenges: "collection",
-  journal: "exploration",
-  community: "collection",
-  secret: "secret",
-};
-
-interface CollectionItem {
-  key: string;
-  category: AchievementCategory;
-  rarity: BadgeRarity;
-  title: string;
-  description: string;
-  icon: React.FC<{ className?: string }>;
-  isUnlocked: boolean;
-  isSecret: boolean;
-  isComingSoon: boolean;
-  progress: number;
-  xpReward: number;
-  currentLabel?: string;
-  unlockedAt?: string | null;
-}
+import {
+  buildAchievementCollection,
+  type CollectionItem,
+} from "@/lib/profile/achievements/collection";
 
 type FilterKey = "all" | "unlocked" | "in_progress" | "locked" | BadgeRarity;
 
@@ -112,7 +47,7 @@ const FILTERS: { key: FilterKey; label: string }[] = [
 
 function CollectionCard({ item, index }: { item: CollectionItem; index: number }) {
   const { rarity, isUnlocked } = item;
-  const Icon = item.icon;
+  const Icon = ICON_MAP[item.icon] ?? Award;
   const isSecretHidden = item.isSecret && !isUnlocked;
   const label = isSecretHidden ? "Succès secret" : item.title;
   const description = isSecretHidden ? "Continue à progresser pour le révéler." : item.description;
@@ -291,72 +226,10 @@ export function TrophyRoom({
 
   const currentUnlock = unlockQueue[0] ?? null;
 
-  const items = useMemo((): CollectionItem[] => {
-    const fromAchievements: CollectionItem[] = achievements.all.map((r) => ({
-      key: r.def.id,
-      category: r.def.category,
-      rarity: r.def.rarity,
-      title: r.def.title,
-      description: r.def.description,
-      icon: ICON_MAP[r.def.icon] ?? Award,
-      isUnlocked: r.unlocked,
-      isSecret: !!r.def.secret,
-      isComingSoon: !!r.def.comingSoon,
-      progress: r.progress,
-      xpReward: r.def.xpReward,
-      currentLabel: r.currentLabel,
-      unlockedAt: undefined,
-    }));
-
-    const fromLegacy: CollectionItem[] = legacyBadges.map((b) => ({
-      key: `legacy_${b.catalog.badge_key}`,
-      category: LEGACY_TO_ACHIEVEMENT_CATEGORY[(b.catalog.category as BadgeCategory) ?? "training"],
-      rarity: b.catalog.rarity as BadgeRarity,
-      title: b.catalog.label,
-      description: b.catalog.description,
-      icon: ICON_MAP[b.catalog.icon] ?? Award,
-      isUnlocked: b.isUnlocked,
-      isSecret: !!b.catalog.is_secret,
-      isComingSoon: !!b.catalog.is_coming_soon,
-      progress: b.progress,
-      xpReward: b.catalog.xp_reward,
-      unlockedAt: b.unlockedAt,
-    }));
-
-    return [...fromAchievements, ...fromLegacy];
-  }, [achievements.all, legacyBadges]);
-
-  const unlockedCount = useMemo(() => items.filter((i) => i.isUnlocked).length, [items]);
-  const total = items.length;
-  const completionPct = total > 0 ? Math.round((unlockedCount / total) * 100) : 0;
-
-  const rarityCounts = useMemo(() => {
-    const counts: Record<BadgeRarity, { owned: number; total: number }> = {
-      common: { owned: 0, total: 0 },
-      rare: { owned: 0, total: 0 },
-      epic: { owned: 0, total: 0 },
-      legendary: { owned: 0, total: 0 },
-      mythic: { owned: 0, total: 0 },
-    };
-    for (const i of items) {
-      counts[i.rarity].total += 1;
-      if (i.isUnlocked) counts[i.rarity].owned += 1;
-    }
-    return counts;
-  }, [items]);
-
-  const categoryOverview = useMemo(() => {
-    const map = new Map<AchievementCategory, { owned: number; total: number }>();
-    for (const i of items) {
-      if (!map.has(i.category)) map.set(i.category, { owned: 0, total: 0 });
-      const e = map.get(i.category)!;
-      e.total += 1;
-      if (i.isUnlocked) e.owned += 1;
-    }
-    return ACHIEVEMENT_CATEGORY_ORDER.filter((c) => map.has(c)).map(
-      (c) => [c, map.get(c)!] as const,
-    );
-  }, [items]);
+  const { items, unlockedCount, total, completionPct, rarityCounts, categoryOverview } = useMemo(
+    () => buildAchievementCollection(achievements, legacyBadges),
+    [achievements, legacyBadges],
+  );
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();

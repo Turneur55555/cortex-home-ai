@@ -1,22 +1,12 @@
 import { useMemo } from "react";
-import { Dumbbell, Sparkles, Swords, TrendingUp } from "lucide-react";
+import { Sparkles, Swords, Target } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ExerciseRankStrip } from "@/components/fitness/ExerciseRankStrip";
-import { ExerciseRankBadge } from "@/components/fitness/ExerciseRankBadge";
-import { getRankVisual } from "@/lib/fitness/rankVisuals";
+import { MasteryBar } from "@/components/fitness/MasteryBar";
+import { toRankState } from "@/hooks/useExerciseProgression";
+import { TOTAL_TIERS } from "@/lib/fitness/exerciseRanks";
 import { StatChip, HighlightRow } from "@/components/profile/shared";
-import { TrophyRoom } from "@/components/profile/rpg/TrophyRoom";
-import { QuestsPanel } from "@/components/profile/rpg/QuestsPanel";
-import {
-  computeBroadActivity,
-  CATALOG_GROUPS,
-  type WorkoutLike,
-} from "@/lib/profile/achievements/muscleVolume";
 import type { RankAggregate } from "@/components/fitness/RankAggregator";
 import type { AchievementAggregateWithLoading } from "@/hooks/useAchievements";
-import type { BadgeWithProgress } from "@/hooks/useBadgeSystem";
-
-const MAX_RANK_PREVIEW = 8;
 
 function useRecentPRs(
   topExercises: string[],
@@ -42,45 +32,40 @@ function useRecentPRs(
 }
 
 /**
- * Progression RPG — cœur du module Profil. Reconstruit automatiquement le
- * profil du joueur à partir de TOUTES les données déjà calculées ailleurs :
- * rangs (RankAggregator/moteur Rang existant), records (computePRs
- * existant), badges historiques (useBadgeSystem existant) et le nouveau
- * système de succès additif (useAchievements). Intègre aussi la Salle des
- * trophées et les Quêtes — plus de cartes indépendantes pour ces deux blocs.
+ * Progression RPG — répond à UNE seule question : "Où en suis-je ?".
+ * Ne répète jamais le Hero (qui affiche déjà le rang global une seule fois
+ * en sous-titre) : ici, uniquement la progression vers la suite —
+ * progression globale, prochain rang, prochaine récompense, progression
+ * récente, conseil. La Salle des trophées et les Quêtes ont leurs propres
+ * sections sur le Profil (TrophyRoomPreview / QuestsPreview) et leurs
+ * écrans dédiés — plus embarquées ici.
  */
 export function RPGProgressionSection({
   rankAggregate,
   achievements,
-  legacyBadges,
   topExercises,
   nameByKey,
   histByName,
-  volByName,
   prByName,
-  workouts,
 }: {
   rankAggregate: RankAggregate;
   achievements: AchievementAggregateWithLoading;
-  legacyBadges: BadgeWithProgress[];
   topExercises: string[];
   nameByKey: Map<string, string>;
   histByName: Map<string, Array<{ date: string; weight: number }>>;
   volByName: Map<string, Array<{ date: string; volume: number }>>;
   prByName: Map<string, number>;
-  workouts: WorkoutLike[];
 }) {
   const recentPRs = useRecentPRs(topExercises, prByName, histByName, nameByKey, 2);
-  const broad = useMemo(() => computeBroadActivity(workouts, MAX_RANK_PREVIEW), [workouts]);
-
-  const mainExerciseKey = topExercises[0];
-  const mainExerciseName = mainExerciseKey
-    ? (nameByKey.get(mainExerciseKey) ?? mainExerciseKey)
-    : null;
 
   const isLoading = rankAggregate.isLoading || achievements.isLoading;
   const best = rankAggregate.best;
-  const visual = best ? getRankVisual(best.rank.rank.key) : null;
+
+  const nextRank = useMemo(() => {
+    if (!best) return null;
+    if (best.rank.isMax) return null;
+    return toRankState(Math.min(TOTAL_TIERS - 1, best.rank.tierIndex + 1), 0);
+  }, [best]);
 
   return (
     <section className="mb-6">
@@ -93,145 +78,78 @@ export function RPGProgressionSection({
 
       {isLoading && (
         <div className="space-y-2">
-          <Skeleton className="h-32 w-full rounded-2xl" />
+          <Skeleton className="h-24 w-full rounded-2xl" />
           <Skeleton className="h-12 w-full rounded-xl" />
         </div>
       )}
 
-      {!isLoading && (
+      {!isLoading && !best && (
+        <div className="rounded-2xl border border-dashed border-white/[0.08] p-6 text-center">
+          <p className="text-sm font-medium text-muted-foreground/60">Aucun rang pour l'instant</p>
+          <p className="mt-1 text-xs text-muted-foreground/40">
+            Enregistre quelques séances pour démarrer ta progression RPG.
+          </p>
+        </div>
+      )}
+
+      {!isLoading && best && (
         <div className="space-y-3">
-          {best && visual ? (
-            <div
-              className="relative overflow-hidden rounded-2xl p-4"
-              style={{
-                background: visual.atmosphere,
-                boxShadow: `inset 0 0 0 1px ${visual.vignette}, 0 8px 30px -16px ${best.rank.rank.colors.glow}`,
-              }}
-            >
-              <div className="relative flex items-center gap-4">
-                <ExerciseRankBadge rank={best.rank} size={72} animated />
-                <div className="min-w-0 flex-1">
-                  <p
-                    className="text-[9px] font-bold uppercase tracking-[0.3em]"
-                    style={{ color: best.rank.rank.colors.secondary, opacity: 0.85 }}
-                  >
-                    Meilleur rang obtenu
-                  </p>
-                  <h3
-                    className="mt-0.5 truncate font-serif text-lg font-bold uppercase tracking-wide"
-                    style={{ color: best.rank.rank.colors.text }}
-                  >
-                    {best.rank.rank.label} {best.rank.romanLevel}
-                  </h3>
-                  <p className="truncate text-[11px] text-white/60">{best.name}</p>
-                </div>
-              </div>
-              {best.nextRankHint && (
-                <div className="relative mt-3 flex items-start gap-2 rounded-xl bg-black/25 p-2.5">
-                  <Sparkles
-                    className="mt-0.5 h-3.5 w-3.5 shrink-0"
-                    style={{ color: best.rank.rank.colors.secondary }}
-                  />
-                  <span className="text-[11px] leading-relaxed text-white/80">
-                    {best.nextRankHint}
-                  </span>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-dashed border-white/[0.08] p-6 text-center">
-              <p className="text-sm font-medium text-muted-foreground/60">
-                Aucun rang pour l'instant
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground/40">
-                Enregistre quelques séances pour démarrer ta progression RPG.
+          {/* Progression globale */}
+          <div className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-4">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-semibold text-white/80">
+                {Math.round(best.rank.progress * 100)}% vers{" "}
+                {nextRank ? nextRank.fullName : "le rang maximum"}
               </p>
             </div>
-          )}
+            <div className="mt-2.5">
+              <MasteryBar
+                percent={best.rank.progress * 100}
+                colors={best.rank.rank.colors}
+                segments={5}
+                height={10}
+                showLabel={false}
+              />
+            </div>
+          </div>
 
+          {/* Prochain rang + progression récente */}
           <div className="grid grid-cols-2 gap-2">
-            {rankAggregate.average && (
+            <StatChip label="Prochain rang" value={nextRank ? nextRank.fullName : "Rang maximum"} />
+            {recentPRs[0] && (
               <StatChip
-                label="Rang global"
-                value={`${rankAggregate.average.rank.label} ${rankAggregate.average.romanLevel}`}
+                label="Progression récente"
+                value={`${recentPRs[0].weight} kg`}
+                hint={recentPRs[0].name}
               />
             )}
-            {mainExerciseName && (
-              <StatChip
-                label="Exercice principal"
-                value={mainExerciseName}
-                hint="le plus pratiqué"
-              />
-            )}
-            {broad.dominantMuscleGroup && (
-              <StatChip
-                label="Catégorie dominante"
-                value={broad.dominantMuscleGroup}
-                hint={`${broad.categoriesTrainedCount}/${CATALOG_GROUPS.length} travaillées`}
-              />
-            )}
-            <StatChip
-              label="Activité récente"
-              value={`${broad.distinctWeeksActive} semaine${broad.distinctWeeksActive > 1 ? "s" : ""}`}
-              hint={`${broad.distinctMonthsActive} mois actifs`}
-            />
           </div>
 
-          {topExercises.length > 0 && (
-            <ExerciseRankStrip
-              topExercises={broad.broadExercises.length > 0 ? broad.broadExercises : topExercises}
-              nameByKey={nameByKey}
-              histByName={histByName}
-              volByName={volByName}
-              prByName={prByName}
+          {/* Prochaine récompense */}
+          {achievements.nextObjective && (
+            <HighlightRow
+              icon={<Target className="h-3.5 w-3.5" />}
+              label={`Prochaine récompense (${achievements.nextObjective.progress}%)`}
+              title={achievements.nextObjective.def.title}
+              rarity={achievements.nextObjective.def.rarity}
             />
           )}
 
-          {recentPRs.length > 0 && (
-            <div className="grid grid-cols-2 gap-2">
-              {recentPRs.map((pr) => (
-                <StatChip
-                  key={pr.name}
-                  label="Record récent"
-                  value={`${pr.weight} kg`}
-                  hint={pr.name}
-                />
-              ))}
+          {/* Conseil */}
+          {best.nextRankHint && (
+            <div className="flex items-start gap-2 rounded-xl bg-white/[0.02] p-2.5 ring-1 ring-white/[0.04]">
+              <Sparkles
+                className="mt-0.5 h-3.5 w-3.5 shrink-0"
+                style={{ color: best.rank.rank.colors.secondary }}
+              />
+              <div className="min-w-0">
+                <p className="text-[9px] font-semibold uppercase tracking-wider text-white/40">
+                  Conseil
+                </p>
+                <p className="text-[11px] leading-relaxed text-white/80">{best.nextRankHint}</p>
+              </div>
             </div>
           )}
-
-          {(achievements.nextObjective || achievements.rarestUnlocked) && (
-            <div className="space-y-1.5">
-              {achievements.nextObjective && (
-                <HighlightRow
-                  icon={<Dumbbell className="h-3.5 w-3.5" />}
-                  label={`Prochaine récompense (${achievements.nextObjective.progress}%)`}
-                  title={achievements.nextObjective.def.title}
-                  rarity={achievements.nextObjective.def.rarity}
-                />
-              )}
-              {achievements.rarestUnlocked && (
-                <HighlightRow
-                  icon={<TrendingUp className="h-3.5 w-3.5" />}
-                  label="Succès le plus rare"
-                  title={achievements.rarestUnlocked.def.title}
-                  rarity={achievements.rarestUnlocked.def.rarity}
-                />
-              )}
-            </div>
-          )}
-
-          <div className="pt-2">
-            <TrophyRoom
-              achievements={achievements}
-              legacyBadges={legacyBadges}
-              isLoading={isLoading}
-            />
-          </div>
-
-          <div className="pt-2">
-            <QuestsPanel />
-          </div>
         </div>
       )}
     </section>

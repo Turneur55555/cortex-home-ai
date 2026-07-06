@@ -5,15 +5,13 @@ import { Apple, BarChart3, ChevronRight } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useProfile } from "@/hooks/useProfile";
 import { useActivityStreak } from "@/hooks/useActivityStreak";
-import { useUserStats } from "@/hooks/useUserStats";
-import { useWorkouts } from "@/hooks/use-fitness";
-import { useBadgeSystem } from "@/hooks/useBadgeSystem";
-import { computePRs } from "@/utils/fitness/exercise-stats";
-import { computeBroadActivity } from "@/lib/profile/achievements/muscleVolume";
-import { useAchievements } from "@/hooks/useAchievements";
-import { RankAggregator, type RankAggregate } from "@/components/fitness/RankAggregator";
+import { buildAchievementCollection } from "@/lib/profile/achievements/collection";
+import { ProfileRPGData, type ProfileRPGDataValue } from "@/components/profile/rpg/ProfileRPGData";
 import { ProfileHeroCard } from "@/components/profile/ProfileHeroCard";
 import { RPGProgressionSection } from "@/components/profile/rpg/RPGProgressionSection";
+import { ClassCard } from "@/components/profile/ClassCard";
+import { TrophyRoomPreview } from "@/components/profile/rpg/TrophyRoomPreview";
+import { QuestsPreview } from "@/components/profile/rpg/QuestsPreview";
 import { BodyStatusCard } from "@/components/profile/BodyStatusCard";
 import { DocumentsSummaryCard } from "@/components/profile/DocumentsSummaryCard";
 import { PersonalizationPanel } from "@/components/profile/PersonalizationPanel";
@@ -21,8 +19,6 @@ import { SecurityPanel } from "@/components/profile/SecurityPanel";
 import { HealthDataPanel } from "@/components/profile/HealthDataPanel";
 import { SettingsGroup } from "@/components/profile/SettingsGroup";
 import { EditPseudoSheet } from "@/components/profile/EditPseudoSheet";
-import type { BadgeRarity } from "@/lib/fitness/badges";
-import type { BadgeSystemSnapshot } from "@/hooks/useAchievements";
 
 export const Route = createFileRoute("/_authenticated/profil")({
   head: () => ({
@@ -39,82 +35,28 @@ function ProfilPage() {
   const fallback = useMemo(() => user?.email?.split("@")[0] ?? "Utilisateur", [user?.email]);
   const { pseudo, avatarUrl, updatePseudo, updateAvatar } = useProfile(fallback);
   const { current: streak } = useActivityStreak();
-  const { data: stats } = useUserStats();
   const [editOpen, setEditOpen] = useState(false);
-
-  // Élevés au niveau de la page pour être partagés entre le Hero et la
-  // Progression RPG — aucun nouveau calcul métier, uniquement des
-  // hooks/dérivations existants (computePRs, useBadgeSystem, RankAggregator).
-  const { data: workouts } = useWorkouts();
-  const { prByName, histByName, volByName, nameByKey, topExercises } = useMemo(
-    () => computePRs(workouts ?? []),
-    [workouts],
-  );
-  const badgeSystem = useBadgeSystem();
-
-  const workoutsSample = useMemo(
-    () =>
-      (workouts ?? []).map((w) => ({
-        date: w.date,
-        exercises: (w.exercises ?? []).map((ex) => ({
-          name: ex.name,
-          weight: ex.weight,
-          sets: ex.sets,
-          reps: ex.reps,
-        })),
-      })),
-    [workouts],
-  );
-
-  // Liste élargie (jusqu'à 8 exercices) pour une Progression RPG qui reflète
-  // vraiment "toutes les données existantes", pas seulement le top 3 utilisé
-  // historiquement pour les highlights de la fiche.
-  const broadExerciseKeys = useMemo(
-    () => computeBroadActivity(workoutsSample, 8).broadExercises,
-    [workoutsSample],
-  );
-  const probeExerciseNames = broadExerciseKeys.length > 0 ? broadExerciseKeys : topExercises;
-
-  const bestPR = useMemo(() => {
-    let bestKey: string | null = null;
-    let bestWeight = 0;
-    for (const [key, weight] of prByName) {
-      if (weight > bestWeight) {
-        bestWeight = weight;
-        bestKey = key;
-      }
-    }
-    if (!bestKey) return null;
-    return { name: nameByKey.get(bestKey) ?? bestKey, weight: bestWeight };
-  }, [prByName, nameByKey]);
 
   return (
     <main className="relative flex flex-1 flex-col overflow-hidden px-5 pb-32 pt-[max(2.5rem,env(safe-area-inset-top))]">
-      <RankAggregator exerciseNames={probeExerciseNames}>
-        {(rankAggregate) => (
-          <ProfilRPGBlock
-            rankAggregate={rankAggregate}
-            badgeSystem={badgeSystem}
+      <ProfileRPGData>
+        {(rpg) => (
+          <ProfilHub
+            rpg={rpg}
             pseudo={pseudo}
             streak={streak}
-            level={stats?.level ?? 1}
-            xp={stats?.xp ?? 0}
             avatarUrl={avatarUrl}
             onEdit={() => setEditOpen(true)}
             onAvatarChange={updateAvatar}
-            bestPR={bestPR}
-            topExercises={topExercises}
-            nameByKey={nameByKey}
-            histByName={histByName}
-            volByName={volByName}
-            prByName={prByName}
-            workouts={workoutsSample}
           />
         )}
-      </RankAggregator>
+      </ProfileRPGData>
 
       {/* État du corps — sobre, sans habillage RPG (décision actée) */}
       <BodyStatusCard />
+
+      {/* Documents — carte de résumé renvoyant vers /documents */}
+      <DocumentsSummaryCard />
 
       {/* Mes espaces */}
       <Section title="Mes espaces">
@@ -131,9 +73,6 @@ function ProfilPage() {
           />
         </div>
       </Section>
-
-      {/* Documents — carte de résumé renvoyant vers /documents */}
-      <DocumentsSummaryCard />
 
       {/* Paramètres — secondaires, tout en bas : l'attention va à la progression */}
       <Section title="Paramètres">
@@ -162,94 +101,74 @@ function ProfilPage() {
 }
 
 /**
- * Rendu comme un vrai composant (et non comme un simple callback) : les
- * hooks appelés à l'intérieur (via useAchievements) doivent être attribués à
- * SON propre rendu React, pas à celui de <RankAggregator>. Appeler des hooks
- * directement dans la fonction "children" d'un render-prop casserait les
- * règles des hooks — passer par un composant dédié est la façon correcte de
- * consommer `rankAggregate` tout en calculant les succès.
+ * Hub RPG du Profil : Hero (qui suis-je) → Progression RPG (où en suis-je)
+ * → Classe principale (quel combattant suis-je) → Salle des trophées et
+ * Quêtes en aperçu (qu'ai-je accompli / que dois-je faire ensuite). Chaque
+ * bloc ouvre son écran dédié — le Profil ne réaffiche plus jamais une copie
+ * complète d'un module.
  */
-function ProfilRPGBlock({
-  rankAggregate,
-  badgeSystem,
+function ProfilHub({
+  rpg,
   pseudo,
   streak,
-  level,
-  xp,
   avatarUrl,
   onEdit,
   onAvatarChange,
-  bestPR,
-  topExercises,
-  nameByKey,
-  histByName,
-  volByName,
-  prByName,
-  workouts,
 }: {
-  rankAggregate: RankAggregate;
-  badgeSystem: BadgeSystemSnapshot;
+  rpg: ProfileRPGDataValue;
   pseudo: string;
   streak: number;
-  level: number;
-  xp: number;
   avatarUrl?: string | null;
   onEdit: () => void;
   onAvatarChange: (url: string) => Promise<void>;
-  bestPR: { name: string; weight: number } | null;
-  topExercises: string[];
-  nameByKey: Map<string, string>;
-  histByName: Map<string, Array<{ date: string; weight: number }>>;
-  volByName: Map<string, Array<{ date: string; volume: number }>>;
-  prByName: Map<string, number>;
-  workouts: Array<{
-    date: string;
-    exercises: Array<{
-      name: string;
-      weight: number | null;
-      sets: number | null;
-      reps: number | null;
-    }>;
-  }>;
 }) {
-  const achievements = useAchievements(rankAggregate, badgeSystem);
-  const rarest = achievements.rarestUnlocked
-    ? {
-        title: achievements.rarestUnlocked.def.title,
-        rarity: achievements.rarestUnlocked.def.rarity as BadgeRarity,
-      }
-    : null;
+  const {
+    rankAggregate,
+    achievements,
+    legacyBadges,
+    topExercises,
+    nameByKey,
+    histByName,
+    volByName,
+    prByName,
+    workouts,
+    totalWorkouts,
+  } = rpg;
+
+  const collection = useMemo(
+    () => buildAchievementCollection(achievements, legacyBadges),
+    [achievements, legacyBadges],
+  );
 
   return (
     <>
-      {/* Hero — pièce maîtresse de l'écran, fiche de personnage */}
       <ProfileHeroCard
         pseudo={pseudo}
         streak={streak}
-        level={level}
-        xp={xp}
         avatarUrl={avatarUrl}
         onEdit={onEdit}
         onAvatarChange={onAvatarChange}
         rankAggregate={rankAggregate}
-        totalWorkouts={badgeSystem.stats.workouts_count}
-        bestPR={bestPR}
-        rarestAchievement={rarest}
+        totalWorkouts={totalWorkouts}
+        achievementsUnlocked={collection.unlockedCount}
+        achievementsTotal={collection.total}
       />
 
-      {/* Progression RPG — cœur du Profil : rang, records, Salle des
-          trophées (badges + nouveaux succès fusionnés) et Quêtes. */}
       <RPGProgressionSection
         rankAggregate={rankAggregate}
         achievements={achievements}
-        legacyBadges={badgeSystem.badgesWithProgress}
         topExercises={topExercises}
         nameByKey={nameByKey}
         histByName={histByName}
         volByName={volByName}
         prByName={prByName}
-        workouts={workouts}
       />
+
+      <ClassCard workouts={workouts} rankAggregate={rankAggregate} />
+
+      <TrophyRoomPreview achievements={achievements} legacyBadges={legacyBadges} />
+
+      <QuestsPreview />
     </>
   );
 }

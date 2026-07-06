@@ -9,11 +9,14 @@ export function MasteryBar({
   colors,
   segments = 5,
   height = 12,
+  showLabel = true,
 }: {
   percent: number;
   colors: { gradient: string; primary: string; secondary: string; glow: string };
   segments?: number;
   height?: number;
+  /** Pastille de pourcentage flottante au-dessus de la barre. */
+  showLabel?: boolean;
 }) {
   const clamped = Math.max(0, Math.min(100, percent));
   return (
@@ -23,10 +26,8 @@ export function MasteryBar({
         className="relative overflow-hidden rounded-full"
         style={{
           height,
-          background:
-            "linear-gradient(180deg,rgba(0,0,0,0.55) 0%,rgba(255,255,255,0.02) 100%)",
-          boxShadow:
-            "inset 0 1px 2px rgba(0,0,0,0.6), inset 0 -1px 0 rgba(255,255,255,0.04)",
+          background: "linear-gradient(180deg,rgba(0,0,0,0.55) 0%,rgba(255,255,255,0.02) 100%)",
+          boxShadow: "inset 0 1px 2px rgba(0,0,0,0.6), inset 0 -1px 0 rgba(255,255,255,0.04)",
         }}
       >
         {/* Remplissage */}
@@ -57,35 +58,33 @@ export function MasteryBar({
         {/* Segments (encoches des 5 niveaux) */}
         <div className="pointer-events-none absolute inset-0 flex">
           {Array.from({ length: segments - 1 }).map((_, i) => (
-            <div
-              key={i}
-              className="flex-1 border-r"
-              style={{ borderColor: "rgba(0,0,0,0.55)" }}
-            />
+            <div key={i} className="flex-1 border-r" style={{ borderColor: "rgba(0,0,0,0.55)" }} />
           ))}
           <div className="flex-1" />
         </div>
       </div>
 
       {/* Pill du pourcentage */}
-      <motion.div
-        initial={{ opacity: 0, y: -4 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.9 }}
-        className="absolute -top-2 -translate-y-full"
-        style={{ left: `calc(${clamped}% - 22px)` }}
-      >
-        <div
-          className="rounded-md px-1.5 py-0.5 text-[9px] font-bold"
-          style={{
-            background: colors.primary,
-            color: "#fff",
-            boxShadow: `0 4px 12px ${colors.glow}`,
-          }}
+      {showLabel && (
+        <motion.div
+          initial={{ opacity: 0, y: -4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.9 }}
+          className="absolute -top-2 -translate-y-full"
+          style={{ left: `calc(${clamped}% - 22px)` }}
         >
-          {Math.round(clamped)}%
-        </div>
-      </motion.div>
+          <div
+            className="rounded-md px-1.5 py-0.5 text-[9px] font-bold"
+            style={{
+              background: colors.primary,
+              color: "#fff",
+              boxShadow: `0 4px 12px ${colors.glow}`,
+            }}
+          >
+            {Math.round(clamped)}%
+          </div>
+        </motion.div>
+      )}
     </div>
   );
 }

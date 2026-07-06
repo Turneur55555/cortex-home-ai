@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useRef, useState } from "react";
+import { z } from "zod";
 import { toast } from "sonner";
 import {
   AlertTriangle,
@@ -13,13 +14,7 @@ import {
   Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import {
   Select,
   SelectContent,
@@ -47,9 +42,13 @@ export const Route = createFileRoute("/_authenticated/documents")({
   head: () => ({
     meta: [
       { title: "Documents — ICORTEX" },
-      { name: "description", content: "Analyse IA de vos PDF et photos, déversés vers les modules." },
+      {
+        name: "description",
+        content: "Analyse IA de vos PDF et photos, déversés vers les modules.",
+      },
     ],
   }),
+  validateSearch: z.object({ upload: z.boolean().optional() }),
   component: DocumentsPage,
 });
 
@@ -71,16 +70,19 @@ function toTransferTarget(module: DocModule): TransferTarget {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 function DocumentsPage() {
+  const { upload: openUploadOnLoad } = Route.useSearch();
   const docs = useDocuments();
   const upload = useUploadAndAnalyze();
   const imageUpload = useImageUpload();
   const remove = useDeleteDocument();
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(!!openUploadOnLoad);
   const [module, setModule] = useState<DocModuleSelection>("auto");
   const [pickedFiles, setPickedFiles] = useState<File[]>([]);
-  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null);
+  const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(
+    null,
+  );
   const [lastResult, setLastResult] = useState<{
     doc: Tables<"documents">;
     result: AnalysisResult;
@@ -102,7 +104,9 @@ function DocumentsPage() {
           if (res) {
             last = { doc: res.doc, result: res.result };
             if (res.wasAuto) {
-              toast.success(`Image analysée — détecté: ${MODULE_LABELS[res.detectedModule as DocModule] ?? res.detectedModule}`);
+              toast.success(
+                `Image analysée — détecté: ${MODULE_LABELS[res.detectedModule as DocModule] ?? res.detectedModule}`,
+              );
             } else {
               toast.success("Image analysée");
             }
@@ -173,7 +177,9 @@ function DocumentsPage() {
                   </SelectTrigger>
                   <SelectContent>
                     {(Object.keys(MODULE_SELECTION_LABELS) as DocModuleSelection[]).map((m) => (
-                      <SelectItem key={m} value={m}>{MODULE_SELECTION_LABELS[m]}</SelectItem>
+                      <SelectItem key={m} value={m}>
+                        {MODULE_SELECTION_LABELS[m]}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -188,9 +194,7 @@ function DocumentsPage() {
                   accept="application/pdf,image/jpeg,image/jpg,image/png,image/webp,image/heic,image/heif"
                   multiple
                   className="hidden"
-                  onChange={(e) =>
-                    setPickedFiles(e.target.files ? Array.from(e.target.files) : [])
-                  }
+                  onChange={(e) => setPickedFiles(e.target.files ? Array.from(e.target.files) : [])}
                 />
                 <Button
                   type="button"
@@ -276,9 +280,7 @@ function DocumentsPage() {
             Aucun document analysé pour l'instant.
           </div>
         ) : (
-          docs.data.map((d) => (
-            <DocCard key={d.id} doc={d} onDelete={() => remove.mutate(d)} />
-          ))
+          docs.data.map((d) => <DocCard key={d.id} doc={d} onDelete={() => remove.mutate(d)} />)
         )}
       </section>
     </main>
