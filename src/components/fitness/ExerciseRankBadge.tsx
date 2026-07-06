@@ -1,51 +1,69 @@
 import { useId } from "react";
 import { motion } from "framer-motion";
 import type { RankState } from "@/lib/fitness/exerciseRanks";
+import { getRankVisual, type SigilKind } from "@/lib/fitness/rankVisuals";
 
-// Motif SVG central par rang (mythologie grecque).
-function RankMotif({ motif, color }: { motif: string; color: string }) {
-  const stroke = { stroke: color, strokeWidth: 2, fill: "none", strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
-  switch (motif) {
-    case "shield": // Guerrier — bouclier + lance
+// ============================================================
+// Sigils — pleins, ombrage doux, plus artefacts que icônes.
+// ============================================================
+function Sigil({ kind, color, accent }: { kind: SigilKind; color: string; accent: string }) {
+  const fill = color;
+  const stroke = accent;
+  const s = { fill, stroke, strokeWidth: 1.2, strokeLinejoin: "round" as const };
+  switch (kind) {
+    case "rune":
       return (
-        <g {...stroke}>
-          <path d="M32 14 L48 22 V34 C48 42 40 48 32 52 C24 48 16 42 16 34 V22 Z" />
-          <path d="M32 22 L32 42 M24 30 L40 30" />
+        <g {...s}>
+          <path d="M32 14 L42 22 L38 34 L32 30 L26 34 L22 22 Z" opacity="0.95" />
+          <path d="M32 30 L32 44" strokeWidth="2" />
+          <circle cx="32" cy="44" r="2" />
         </g>
       );
-    case "helm": // Héros — casque grec
+    case "swords":
       return (
-        <g {...stroke}>
-          <path d="M18 36 C18 26 24 20 32 20 C40 20 46 26 46 36 V42 H18 Z" />
-          <path d="M28 20 L28 12 L36 12 L36 20" />
-          <path d="M32 42 V50" />
+        <g {...s}>
+          <path d="M20 16 L34 40 L30 42 L18 20 Z" />
+          <path d="M44 16 L30 40 L34 42 L46 20 Z" />
+          <rect x="30" y="42" width="4" height="6" rx="1" />
+          <path d="M26 44 L38 44" strokeWidth="2" />
         </g>
       );
-    case "flame": // Titan — flamme
+    case "laurel":
       return (
-        <g {...stroke}>
-          <path d="M32 12 C36 20 42 24 42 34 C42 42 37 48 32 48 C27 48 22 42 22 34 C22 28 26 24 28 20 C29 24 30 26 32 28 C33 24 32 18 32 12 Z" />
+        <g fill="none" stroke={color} strokeWidth="1.6" strokeLinecap="round">
+          <path d="M32 14 C22 16 16 22 16 34 C16 42 22 48 32 50" />
+          <path d="M32 14 C42 16 48 22 48 34 C48 42 42 48 32 50" />
+          <path d="M20 22 L14 20 M22 30 L14 30 M22 38 L14 40" />
+          <path d="M44 22 L50 20 M42 30 L50 30 M42 38 L50 40" />
+          <circle cx="32" cy="16" r="2" fill={accent} stroke="none" />
         </g>
       );
-    case "lightning": // Olympien — éclair
+    case "flame":
       return (
-        <g {...stroke}>
-          <path d="M34 12 L20 34 L30 34 L26 52 L44 28 L34 28 Z" />
+        <g {...s}>
+          <path d="M32 12 C36 20 42 24 42 34 C42 43 37 50 32 50 C27 50 22 43 22 34 C22 27 26 24 28 20 C29 25 30 27 32 29 C33 25 32 18 32 12 Z" />
+          <path d="M32 32 C33 36 35 38 35 41 C35 44 33 46 32 46 C31 46 29 44 29 41 C29 38 31 36 32 32 Z" fill={accent} stroke="none" opacity="0.85" />
         </g>
       );
-    case "cosmos": // Primordial — étoile + orbite
+    case "thunder":
       return (
-        <g {...stroke}>
-          <circle cx="32" cy="32" r="18" />
-          <path d="M32 18 L34 28 L44 30 L36 36 L38 46 L32 40 L26 46 L28 36 L20 30 L30 28 Z" />
+        <g {...s}>
+          <circle cx="32" cy="24" r="8" fill={accent} stroke="none" opacity="0.9" />
+          <path d="M32 16 L28 12 M32 16 L36 12 M24 20 L20 18 M40 20 L44 18" strokeWidth="1.8" />
+          <path d="M34 30 L20 44 L30 44 L26 54 L44 38 L34 38 Z" />
         </g>
       );
-    case "stone": // Mortel — bloc
-    default:
+    case "galaxy":
       return (
-        <g {...stroke}>
-          <path d="M20 26 L32 18 L44 26 V42 L32 50 L20 42 Z" />
-          <path d="M20 26 L32 34 L44 26 M32 34 L32 50" />
+        <g stroke={accent} strokeWidth="1.2" fill="none">
+          <ellipse cx="32" cy="32" rx="18" ry="6" transform="rotate(30 32 32)" opacity="0.6" />
+          <ellipse cx="32" cy="32" rx="18" ry="6" transform="rotate(-30 32 32)" opacity="0.6" />
+          <circle cx="32" cy="32" r="4" fill={color} stroke="none" />
+          <circle cx="32" cy="32" r="2" fill={accent} stroke="none" />
+          <circle cx="14" cy="20" r="0.8" fill={accent} stroke="none" />
+          <circle cx="52" cy="18" r="0.6" fill={accent} stroke="none" />
+          <circle cx="50" cy="46" r="0.8" fill={accent} stroke="none" />
+          <circle cx="16" cy="48" r="0.6" fill={accent} stroke="none" />
         </g>
       );
   }
@@ -54,71 +72,127 @@ function RankMotif({ motif, color }: { motif: string; color: string }) {
 export function ExerciseRankBadge({
   rank,
   size = 88,
+  animated = true,
 }: {
   rank: RankState;
   size?: number;
+  animated?: boolean;
 }) {
   const { primary, secondary, glow, text } = rank.rank.colors;
+  const visual = getRankVisual(rank.rank.key);
   const uid = useId();
-  const gradientId = `hex-${rank.rank.key}-${uid}`;
-  const strokeGradientId = `hex-stroke-${rank.rank.key}-${uid}`;
+  const metalId = `metal-${uid}`;
+  const enamelId = `enamel-${uid}`;
+  const glossId = `gloss-${uid}`;
+  const clipId = `clip-${uid}`;
+
   return (
-    <div
+    <motion.div
       className="relative flex items-center justify-center"
-      style={{ width: size, height: size, filter: `drop-shadow(0 0 12px ${glow})` }}
+      style={{ width: size, height: size }}
+      animate={animated ? { y: [0, -3, 0] } : undefined}
+      transition={animated ? { duration: 4, repeat: Infinity, ease: "easeInOut" } : undefined}
     >
-      <motion.svg
-        viewBox="0 0 64 64"
-        width={size}
-        height={size}
-        initial={{ scale: 0.85, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ duration: 0.5, ease: "easeOut" }}
-      >
+      {/* Halo respirant */}
+      <motion.div
+        className="absolute inset-0 rounded-full blur-2xl"
+        style={{ background: glow }}
+        animate={animated ? { opacity: [0.55, 0.85, 0.55], scale: [0.9, 1.05, 0.9] } : undefined}
+        transition={animated ? { duration: 3.2, repeat: Infinity, ease: "easeInOut" } : undefined}
+      />
+
+      {/* Anneau lumineux rotatif — subtil */}
+      {animated && (
+        <motion.div
+          className="absolute inset-0 rounded-[22%]"
+          style={{
+            background: `conic-gradient(from 0deg, transparent 0deg, ${secondary}80 60deg, transparent 140deg, transparent 220deg, ${primary}60 280deg, transparent 340deg)`,
+            filter: "blur(4px)",
+            opacity: 0.5,
+          }}
+          animate={{ rotate: 360 }}
+          transition={{ duration: 22, repeat: Infinity, ease: "linear" }}
+        />
+      )}
+
+      <svg viewBox="0 0 64 64" width={size} height={size} className="relative">
         <defs>
-          <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor={secondary} />
-            <stop offset="55%" stopColor={primary} />
-            <stop offset="100%" stopColor="#0a0a0a" />
+          <linearGradient id={metalId} x1="0" x2="1" y1="0" y2="1">
+            {visual.metal.match(/#[0-9a-f]{6}/gi)?.slice(0, 3).map((c, i, arr) => (
+              <stop key={i} offset={`${(i / (arr.length - 1)) * 100}%`} stopColor={c} />
+            ))}
           </linearGradient>
-          <linearGradient id={strokeGradientId} x1="0" x2="1" y1="0" y2="1">
-            <stop offset="0%" stopColor={secondary} stopOpacity="0.95" />
-            <stop offset="100%" stopColor={primary} stopOpacity="0.6" />
+          <radialGradient id={enamelId} cx="35%" cy="30%" r="75%">
+            {visual.enamel.match(/#[0-9a-f]{6}/gi)?.slice(0, 3).map((c, i, arr) => (
+              <stop key={i} offset={`${(i / (arr.length - 1)) * 100}%`} stopColor={c} />
+            ))}
+          </radialGradient>
+          <linearGradient id={glossId} x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.35" />
+            <stop offset="55%" stopColor="#ffffff" stopOpacity="0.05" />
+            <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
           </linearGradient>
+          <clipPath id={clipId}>
+            <polygon points="32,3 59,17.5 59,46.5 32,61 5,46.5 5,17.5" />
+          </clipPath>
         </defs>
-        {/* Hexagone extérieur */}
+
+        {/* Plaque métal */}
         <polygon
-          points="32,2 60,17 60,47 32,62 4,47 4,17"
-          fill={`url(#${gradientId})`}
-          stroke={`url(#${strokeGradientId})`}
-          strokeWidth="2"
-        />
-        {/* Hexagone intérieur subtil */}
-        <polygon
-          points="32,8 55,20 55,44 32,56 9,44 9,20"
-          fill="none"
+          points="32,3 59,17.5 59,46.5 32,61 5,46.5 5,17.5"
+          fill={`url(#${metalId})`}
           stroke={secondary}
-          strokeOpacity="0.35"
-          strokeWidth="1"
+          strokeOpacity="0.8"
+          strokeWidth="0.8"
         />
-        <RankMotif motif={rank.rank.motif} color={text} />
-        {/* Bandeau du niveau (romain) */}
+        {/* Médaillon émaillé intérieur */}
+        <polygon
+          points="32,10 53,21 53,43 32,54 11,43 11,21"
+          fill={`url(#${enamelId})`}
+          stroke={primary}
+          strokeOpacity="0.6"
+          strokeWidth="0.5"
+        />
+
+        {/* Sigil */}
+        <g transform="translate(0,-2)">
+          <Sigil kind={visual.sigil} color={text} accent={secondary} />
+        </g>
+
+        {/* Reflet spéculaire animé */}
+        {animated && (
+          <g clipPath={`url(#${clipId})`}>
+            <motion.rect
+              x="-40"
+              y="0"
+              width="30"
+              height="64"
+              fill={`url(#${glossId})`}
+              transform="skewX(-20)"
+              animate={{ x: [-40, 80] }}
+              transition={{ duration: 6, repeat: Infinity, repeatDelay: 2, ease: "easeInOut" }}
+            />
+          </g>
+        )}
+
+        {/* Bandeau du niveau — plaque gravée */}
         <g>
-          <rect x="24" y="52" width="16" height="8" rx="1.5" fill="#0a0a0a" opacity="0.85" />
+          <rect x="22" y="52" width="20" height="9" rx="1.5" fill="#0a0a0a" opacity="0.88" />
+          <rect x="22" y="52" width="20" height="9" rx="1.5" fill={`url(#${metalId})`} opacity="0.35" />
           <text
             x="32"
-            y="58.5"
+            y="58.8"
             textAnchor="middle"
-            fontSize="7"
+            fontSize="7.2"
             fontWeight="700"
             fill={text}
             fontFamily="ui-serif, Georgia, serif"
-            letterSpacing="1"
+            letterSpacing="1.5"
           >
             {rank.romanLevel}
           </text>
         </g>
-      </motion.svg>
-    </div>
+      </svg>
+    </motion.div>
   );
 }
