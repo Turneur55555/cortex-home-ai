@@ -7,14 +7,13 @@ import { useProfile } from "@/hooks/useProfile";
 import { useActivityStreak } from "@/hooks/useActivityStreak";
 import { useUserStats } from "@/hooks/useUserStats";
 import { useWorkouts } from "@/hooks/use-fitness";
+import { useBadgeSystem } from "@/hooks/useBadgeSystem";
 import { computePRs } from "@/utils/fitness/exercise-stats";
-import { useBadgeHighlights } from "@/hooks/useBadgeHighlights";
-import { useGoalsWithProgress } from "@/hooks/useGoalsWithProgress";
-import { RankAggregator } from "@/components/fitness/RankAggregator";
+import { computeBroadActivity } from "@/lib/profile/achievements/muscleVolume";
+import { useAchievements } from "@/hooks/useAchievements";
+import { RankAggregator, type RankAggregate } from "@/components/fitness/RankAggregator";
 import { ProfileHeroCard } from "@/components/profile/ProfileHeroCard";
-import { AccomplishmentsPanel } from "@/components/profile/AccomplishmentsPanel";
-import { GoalsManager } from "@/components/profile/GoalsManager";
-import { BadgesStrip } from "@/components/profile/BadgesStrip";
+import { RPGProgressionSection } from "@/components/profile/rpg/RPGProgressionSection";
 import { BodyStatusCard } from "@/components/profile/BodyStatusCard";
 import { DocumentsSummaryCard } from "@/components/profile/DocumentsSummaryCard";
 import { PersonalizationPanel } from "@/components/profile/PersonalizationPanel";
@@ -22,6 +21,8 @@ import { SecurityPanel } from "@/components/profile/SecurityPanel";
 import { HealthDataPanel } from "@/components/profile/HealthDataPanel";
 import { SettingsGroup } from "@/components/profile/SettingsGroup";
 import { EditPseudoSheet } from "@/components/profile/EditPseudoSheet";
+import type { BadgeRarity } from "@/lib/fitness/badges";
+import type { BadgeSystemSnapshot } from "@/hooks/useAchievements";
 
 export const Route = createFileRoute("/_authenticated/profil")({
   head: () => ({
@@ -41,48 +42,76 @@ function ProfilPage() {
   const { data: stats } = useUserStats();
   const [editOpen, setEditOpen] = useState(false);
 
-  // Élevés au niveau de la page pour être partagés entre le Hero et les
-  // Accomplissements — aucun nouveau calcul métier, uniquement des hooks/dérivations existants.
+  // Élevés au niveau de la page pour être partagés entre le Hero et la
+  // Progression RPG — aucun nouveau calcul métier, uniquement des
+  // hooks/dérivations existants (computePRs, useBadgeSystem, RankAggregator).
   const { data: workouts } = useWorkouts();
-  const { topExercises } = useMemo(() => computePRs(workouts ?? []), [workouts]);
-  const badgeHighlights = useBadgeHighlights();
-  const { goals } = useGoalsWithProgress();
-  const questsDone = useMemo(() => goals.filter((g) => g.is_completed).length, [goals]);
-  const questsTotal = goals.length;
+  const { prByName, histByName, volByName, nameByKey, topExercises } = useMemo(
+    () => computePRs(workouts ?? []),
+    [workouts],
+  );
+  const badgeSystem = useBadgeSystem();
+
+  const workoutsSample = useMemo(
+    () =>
+      (workouts ?? []).map((w) => ({
+        date: w.date,
+        exercises: (w.exercises ?? []).map((ex) => ({
+          name: ex.name,
+          weight: ex.weight,
+          sets: ex.sets,
+          reps: ex.reps,
+        })),
+      })),
+    [workouts],
+  );
+
+  // Liste élargie (jusqu'à 8 exercices) pour une Progression RPG qui reflète
+  // vraiment "toutes les données existantes", pas seulement le top 3 utilisé
+  // historiquement pour les highlights de la fiche.
+  const broadExerciseKeys = useMemo(
+    () => computeBroadActivity(workoutsSample, 8).broadExercises,
+    [workoutsSample],
+  );
+  const probeExerciseNames = broadExerciseKeys.length > 0 ? broadExerciseKeys : topExercises;
+
+  const bestPR = useMemo(() => {
+    let bestKey: string | null = null;
+    let bestWeight = 0;
+    for (const [key, weight] of prByName) {
+      if (weight > bestWeight) {
+        bestWeight = weight;
+        bestKey = key;
+      }
+    }
+    if (!bestKey) return null;
+    return { name: nameByKey.get(bestKey) ?? bestKey, weight: bestWeight };
+  }, [prByName, nameByKey]);
 
   return (
     <main className="relative flex flex-1 flex-col overflow-hidden px-5 pb-32 pt-[max(2.5rem,env(safe-area-inset-top))]">
-      <RankAggregator exerciseNames={topExercises}>
+      <RankAggregator exerciseNames={probeExerciseNames}>
         {(rankAggregate) => (
-          <>
-            {/* Identité — pièce maîtresse de l'écran, fiche de personnage */}
-            <ProfileHeroCard
-              pseudo={pseudo}
-              streak={streak}
-              level={stats?.level ?? 1}
-              xp={stats?.xp ?? 0}
-              avatarUrl={avatarUrl}
-              onEdit={() => setEditOpen(true)}
-              onAvatarChange={updateAvatar}
-              rankAggregate={rankAggregate}
-              badgesUnlocked={badgeHighlights.unlockedCount}
-              badgesTotal={badgeHighlights.total}
-              questsDone={questsDone}
-              questsTotal={questsTotal}
-            />
-
-            {/* Accomplissements — meilleur rang, rang moyen, exercice principal,
-                records récents, prochaine grande récompense, succès le plus rare */}
-            <AccomplishmentsPanel rankAggregate={rankAggregate} badgeHighlights={badgeHighlights} />
-          </>
+          <ProfilRPGBlock
+            rankAggregate={rankAggregate}
+            badgeSystem={badgeSystem}
+            pseudo={pseudo}
+            streak={streak}
+            level={stats?.level ?? 1}
+            xp={stats?.xp ?? 0}
+            avatarUrl={avatarUrl}
+            onEdit={() => setEditOpen(true)}
+            onAvatarChange={updateAvatar}
+            bestPR={bestPR}
+            topExercises={topExercises}
+            nameByKey={nameByKey}
+            histByName={histByName}
+            volByName={volByName}
+            prByName={prByName}
+            workouts={workoutsSample}
+          />
         )}
       </RankAggregator>
-
-      {/* Salle des trophées — le cœur du module, véritable espace de collection */}
-      <BadgesStrip />
-
-      {/* Quêtes */}
-      <GoalsManager />
 
       {/* État du corps — sobre, sans habillage RPG (décision actée) */}
       <BodyStatusCard />
@@ -103,10 +132,10 @@ function ProfilPage() {
         </div>
       </Section>
 
-      {/* Documents — carte de résumé renvoyant vers /documents (expérience complète, avec Transfer) */}
+      {/* Documents — carte de résumé renvoyant vers /documents */}
       <DocumentsSummaryCard />
 
-      {/* Paramètres — un seul conteneur, 3 sous-groupes */}
+      {/* Paramètres — secondaires, tout en bas : l'attention va à la progression */}
       <Section title="Paramètres">
         <SettingsGroup title="Personnalisation">
           <PersonalizationPanel />
@@ -132,6 +161,99 @@ function ProfilPage() {
   );
 }
 
+/**
+ * Rendu comme un vrai composant (et non comme un simple callback) : les
+ * hooks appelés à l'intérieur (via useAchievements) doivent être attribués à
+ * SON propre rendu React, pas à celui de <RankAggregator>. Appeler des hooks
+ * directement dans la fonction "children" d'un render-prop casserait les
+ * règles des hooks — passer par un composant dédié est la façon correcte de
+ * consommer `rankAggregate` tout en calculant les succès.
+ */
+function ProfilRPGBlock({
+  rankAggregate,
+  badgeSystem,
+  pseudo,
+  streak,
+  level,
+  xp,
+  avatarUrl,
+  onEdit,
+  onAvatarChange,
+  bestPR,
+  topExercises,
+  nameByKey,
+  histByName,
+  volByName,
+  prByName,
+  workouts,
+}: {
+  rankAggregate: RankAggregate;
+  badgeSystem: BadgeSystemSnapshot;
+  pseudo: string;
+  streak: number;
+  level: number;
+  xp: number;
+  avatarUrl?: string | null;
+  onEdit: () => void;
+  onAvatarChange: (url: string) => Promise<void>;
+  bestPR: { name: string; weight: number } | null;
+  topExercises: string[];
+  nameByKey: Map<string, string>;
+  histByName: Map<string, Array<{ date: string; weight: number }>>;
+  volByName: Map<string, Array<{ date: string; volume: number }>>;
+  prByName: Map<string, number>;
+  workouts: Array<{
+    date: string;
+    exercises: Array<{
+      name: string;
+      weight: number | null;
+      sets: number | null;
+      reps: number | null;
+    }>;
+  }>;
+}) {
+  const achievements = useAchievements(rankAggregate, badgeSystem);
+  const rarest = achievements.rarestUnlocked
+    ? {
+        title: achievements.rarestUnlocked.def.title,
+        rarity: achievements.rarestUnlocked.def.rarity as BadgeRarity,
+      }
+    : null;
+
+  return (
+    <>
+      {/* Hero — pièce maîtresse de l'écran, fiche de personnage */}
+      <ProfileHeroCard
+        pseudo={pseudo}
+        streak={streak}
+        level={level}
+        xp={xp}
+        avatarUrl={avatarUrl}
+        onEdit={onEdit}
+        onAvatarChange={onAvatarChange}
+        rankAggregate={rankAggregate}
+        totalWorkouts={badgeSystem.stats.workouts_count}
+        bestPR={bestPR}
+        rarestAchievement={rarest}
+      />
+
+      {/* Progression RPG — cœur du Profil : rang, records, Salle des
+          trophées (badges + nouveaux succès fusionnés) et Quêtes. */}
+      <RPGProgressionSection
+        rankAggregate={rankAggregate}
+        achievements={achievements}
+        legacyBadges={badgeSystem.badgesWithProgress}
+        topExercises={topExercises}
+        nameByKey={nameByKey}
+        histByName={histByName}
+        volByName={volByName}
+        prByName={prByName}
+        workouts={workouts}
+      />
+    </>
+  );
+}
+
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="mt-6">
@@ -143,15 +265,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function SpaceLink({
-  to,
-  icon,
-  label,
-}: {
-  to: string;
-  icon: React.ReactNode;
-  label: string;
-}) {
+function SpaceLink({ to, icon, label }: { to: string; icon: React.ReactNode; label: string }) {
   return (
     <Link
       to={to}

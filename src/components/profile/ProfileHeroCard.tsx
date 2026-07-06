@@ -1,13 +1,14 @@
 import { useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { Award, Camera, Flame, Target, Trophy } from "lucide-react";
+import { Award, Dumbbell, Camera, Flame, Layers, Trophy } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { xpForLevel } from "@/lib/fitness/badges";
+import { xpForLevel, RARITY_TEXT, RARITY_LABELS, type BadgeRarity } from "@/lib/fitness/badges";
 import { MasteryBar } from "@/components/fitness/MasteryBar";
 import { RankAmbientParticles } from "@/components/fitness/RankAmbientParticles";
 import { getRankVisual } from "@/lib/fitness/rankVisuals";
+import { cn } from "@/lib/utils";
 import type { RankAggregate } from "@/components/fitness/RankAggregator";
 
 interface Props {
@@ -19,10 +20,9 @@ interface Props {
   onEdit: () => void;
   onAvatarChange: (url: string) => Promise<void>;
   rankAggregate: RankAggregate;
-  badgesUnlocked: number;
-  badgesTotal: number;
-  questsDone: number;
-  questsTotal: number;
+  totalWorkouts: number;
+  bestPR: { name: string; weight: number } | null;
+  rarestAchievement: { title: string; rarity: BadgeRarity } | null;
 }
 
 async function compressAvatar(file: File): Promise<Blob> {
@@ -59,14 +59,16 @@ function StatPill({
   icon,
   value,
   label,
+  accentClass,
 }: {
   icon: React.ReactNode;
   value: string;
   label: string;
+  accentClass?: string;
 }) {
   return (
-    <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-xl bg-black/25 px-2.5 py-2 ring-1 ring-white/10 backdrop-blur-sm">
-      <span className="shrink-0 text-white/70">{icon}</span>
+    <div className="flex min-w-[92px] shrink-0 items-center gap-1.5 rounded-xl bg-black/25 px-2.5 py-2 ring-1 ring-white/10 backdrop-blur-sm">
+      <span className={cn("shrink-0", accentClass ?? "text-white/70")}>{icon}</span>
       <div className="min-w-0">
         <div className="truncate text-[12px] font-black leading-tight text-white">{value}</div>
         <div className="truncate text-[8.5px] font-semibold uppercase tracking-wider text-white/45">
@@ -82,6 +84,12 @@ function StatPill({
  * atmosphérique "Reliquary" (rankVisuals) pour le rang le plus élevé obtenu
  * par l'utilisateur, sans dupliquer le moteur : `rankAggregate` est fourni
  * par `RankAggregator`, qui ne fait qu'observer `useExerciseProgression`.
+ *
+ * Refonte : niveau/XP affichés une seule fois, pas de crayon permanent
+ * (édition du pseudo au tap uniquement), et une bande de statistiques
+ * élargie (rang global + meilleur rang, séances totales, record personnel,
+ * succès le plus rare) plutôt que la grille à 4 cases précédente qui ne
+ * laissait pas de place à tout ça.
  */
 export function ProfileHeroCard({
   pseudo,
@@ -92,10 +100,9 @@ export function ProfileHeroCard({
   onEdit,
   onAvatarChange,
   rankAggregate,
-  badgesUnlocked,
-  badgesTotal,
-  questsDone,
-  questsTotal,
+  totalWorkouts,
+  bestPR,
+  rarestAchievement,
 }: Props) {
   const { user } = useAuth();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -211,7 +218,9 @@ export function ProfileHeroCard({
             }}
           />
           {uploading && (
-            <span className="absolute inset-0 flex items-center justify-center rounded-[20px] bg-black/60 text-[10px] text-white">…</span>
+            <span className="absolute inset-0 flex items-center justify-center rounded-[20px] bg-black/60 text-[10px] text-white">
+              …
+            </span>
           )}
         </div>
 
@@ -243,27 +252,42 @@ export function ProfileHeroCard({
         </div>
       </div>
 
-      <div className="relative mt-4 grid grid-cols-4 gap-1.5">
+      <div className="relative mt-4 -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5 scrollbar-none">
         <StatPill
           icon={<Trophy className="h-3.5 w-3.5" />}
-          value={bestRank ? bestRank.rank.label : "—"}
-          label="Rang"
-        />
-        <StatPill
-          icon={<Award className="h-3.5 w-3.5" />}
-          value={`${badgesUnlocked}/${badgesTotal}`}
-          label="Succès"
-        />
-        <StatPill
-          icon={<Target className="h-3.5 w-3.5" />}
-          value={`${questsDone}/${questsTotal}`}
-          label="Quêtes"
+          value={
+            rankAggregate.average
+              ? `${rankAggregate.average.rank.label} ${rankAggregate.average.romanLevel}`
+              : "—"
+          }
+          label="Rang global"
         />
         <StatPill
           icon={<Flame className="h-3.5 w-3.5 text-orange-400" />}
           value={`${streak}j`}
           label="Série"
+          accentClass="text-orange-400"
         />
+        <StatPill
+          icon={<Layers className="h-3.5 w-3.5" />}
+          value={`${totalWorkouts}`}
+          label="Séances"
+        />
+        {bestPR && (
+          <StatPill
+            icon={<Dumbbell className="h-3.5 w-3.5" />}
+            value={`${bestPR.weight} kg`}
+            label={bestPR.name}
+          />
+        )}
+        {rarestAchievement && (
+          <StatPill
+            icon={<Award className="h-3.5 w-3.5" />}
+            value={RARITY_LABELS[rarestAchievement.rarity]}
+            label={rarestAchievement.title}
+            accentClass={RARITY_TEXT[rarestAchievement.rarity]}
+          />
+        )}
       </div>
     </motion.header>
   );

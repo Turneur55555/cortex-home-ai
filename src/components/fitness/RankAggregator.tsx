@@ -35,6 +35,13 @@ export interface RankAggregate {
   /** Rang moyen (index de palier moyen, converti en état affichable). */
   average: RankState | null;
   probedCount: number;
+  /**
+   * Détail par exercice sondé (avec au moins 1 séance) — ajouté pour le
+   * système de succès (Progression RPG / Salle des trophées), qui a besoin
+   * de la répartition complète des rangs, pas seulement du meilleur/moyen.
+   * Champ additif : ne change rien pour les consommateurs existants.
+   */
+  reports: ProbeResult[];
 }
 
 /**
@@ -72,7 +79,13 @@ export function RankAggregator({
     const isLoading = values.length < exerciseNames.length;
 
     if (withSessions.length === 0) {
-      return { isLoading, best: null, average: null, probedCount: withSessions.length };
+      return {
+        isLoading,
+        best: null,
+        average: null,
+        probedCount: withSessions.length,
+        reports: [],
+      };
     }
 
     const best = withSessions.reduce((a, b) => (b.rank.tierIndex > a.rank.tierIndex ? b : a));
@@ -81,7 +94,7 @@ export function RankAggregator({
     );
     const average = toRankState(avgTier, 0);
 
-    return { isLoading, best, average, probedCount: withSessions.length };
+    return { isLoading, best, average, probedCount: withSessions.length, reports: withSessions };
   }, [reports, exerciseNames]);
 
   return (
