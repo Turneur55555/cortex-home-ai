@@ -1,21 +1,11 @@
 import { useState } from "react";
 import { Loader2, X, Zap } from "lucide-react";
 import { useStartWorkout } from "@/hooks/use-fitness";
-import { GYMS } from "@/lib/fitness/config";
-
-function getDefaultName() {
-  const now = new Date();
-  const weekday = now.toLocaleDateString("fr-FR", { weekday: "long" });
-  const label = weekday.charAt(0).toUpperCase() + weekday.slice(1);
-  const h = now.getHours();
-  if (h < 12) return `Séance du ${label} matin`;
-  if (h < 17) return `Séance du ${label}`;
-  return `Séance du ${label} soir`;
-}
+import { GYMS, defaultWorkoutName } from "@/lib/fitness/config";
 
 export function StartWorkoutSheet({ onClose }: { onClose: () => void }) {
   const start = useStartWorkout();
-  const [name, setName] = useState(getDefaultName);
+  const [name, setName] = useState(defaultWorkoutName);
   const [gym, setGym] = useState<string>("Keep Cool");
 
   const handleSubmit = async (e: React.FormEvent) => {

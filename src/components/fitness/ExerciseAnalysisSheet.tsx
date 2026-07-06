@@ -9,14 +9,18 @@ import {
   Gauge,
   Loader2,
   Minus,
+  Pencil,
+  Plus,
   Scale,
   Sparkles,
   Star,
   Target,
   TrendingDown,
   TrendingUp,
+  Trash2,
   Trophy,
   X,
+  Zap,
 } from "lucide-react";
 import {
   CartesianGrid,
@@ -40,10 +44,12 @@ import {
   ROLE_LABELS,
   type MuscleContribution,
   type MuscleRole,
+  type TraitImpact,
   type Trend,
   type TrainingObjective,
 } from "@/lib/fitness/analysis";
 import { ExerciseRankCard } from "./ExerciseRankCard";
+import { ExerciseActionsMenu, type ExerciseMenuAction } from "./ExerciseActionsMenu";
 
 type Tab = "weight" | "volume" | "1rm";
 
@@ -56,6 +62,16 @@ const OBJECTIVE_ORDER: TrainingObjective[] = [
   "general",
 ];
 
+export interface ExerciseAnalysisActions {
+  /** "Démarrer une séance avec cet exercice" — fournir seulement si aucune séance n'est active. */
+  onStartSession?: () => void;
+  /** "Ajouter à la séance en cours" — fournir seulement si une séance est active. */
+  onAddToActiveWorkout?: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
+  onPromote?: () => void;
+}
+
 export function ExerciseAnalysisSheet({
   exerciseName,
   weightHistory,
@@ -63,6 +79,9 @@ export function ExerciseAnalysisSheet({
   pr,
   imageUrl,
   onClose,
+  actions,
+  similarExercises,
+  onSelectSimilar,
 }: {
   exerciseName: string;
   weightHistory: Array<{ date: string; weight: number }>;
@@ -70,10 +89,15 @@ export function ExerciseAnalysisSheet({
   pr: number | undefined;
   imageUrl?: string | null;
   onClose: () => void;
+  /** Actions contextuelles (Catalogue/Picker uniquement) — absentes ⇒ aucun bouton "...". */
+  actions?: ExerciseAnalysisActions;
+  /** Suggestions de variantes (même muscle principal), fournies par le Catalogue. */
+  similarExercises?: Array<{ name: string; group: string }>;
+  onSelectSimilar?: (name: string) => void;
 }) {
   const [tab, setTab] = useState<Tab>("weight");
   const { data: history } = useExerciseSetHistory(exerciseName);
-  const { analysis } = useExerciseAnalysis(exerciseName);
+  const { analysis, sessionCount } = useExerciseAnalysis(exerciseName);
   const deep = useDeepExerciseAI(analysis);
   const { objective: explicitObjective, setObjective } = useTrainingObjective();
   const [showObjective, setShowObjective] = useState(false);
@@ -132,6 +156,53 @@ export function ExerciseAnalysisSheet({
   const tabLabel: Record<Tab, string> = { weight: "Poids (kg)", volume: "Volume", "1rm": "1RM est." };
   const sessionsDesc = useMemo(() => [...stats].reverse(), [stats]);
 
+  // Actions contextuelles (menu "..." + CTA Découverte) — construites une seule
+  // fois ici à partir des callbacks fournis par l'appelant (Catalogue/Picker).
+  // Aucune action ⇒ aucun bouton, les 3 usages existants (WorkoutCard,
+  // ExerciseRankStrip, ActiveWorkoutView) ne passent pas `actions` et ne
+  // voient donc aucun changement.
+  const primaryActionLabel = actions?.onAddToActiveWorkout
+    ? "Ajouter à la séance en cours"
+    : actions?.onStartSession
+      ? "Démarrer une séance avec cet exercice"
+      : null;
+  const primaryActionFn = actions?.onAddToActiveWorkout ?? actions?.onStartSession;
+
+  const menuActions: ExerciseMenuAction[] = useMemo(() => {
+    if (!actions) return [];
+    const list: ExerciseMenuAction[] = [];
+    if (primaryActionFn && primaryActionLabel) {
+      list.push({
+        key: "primary",
+        label: primaryActionLabel,
+        icon: actions.onAddToActiveWorkout ? <Plus className="h-4 w-4" /> : <Zap className="h-4 w-4" />,
+        onClick: primaryActionFn,
+      });
+    }
+    if (actions.onEdit) {
+      list.push({ key: "edit", label: "Modifier", icon: <Pencil className="h-4 w-4" />, onClick: actions.onEdit });
+    }
+    if (actions.onPromote) {
+      list.push({
+        key: "promote",
+        label: "Ajouter au catalogue",
+        icon: <Star className="h-4 w-4" />,
+        onClick: actions.onPromote,
+      });
+    }
+    if (actions.onDelete) {
+      list.push({
+        key: "delete",
+        label: "Supprimer",
+        icon: <Trash2 className="h-4 w-4" />,
+        onClick: actions.onDelete,
+        destructive: true,
+      });
+    }
+    return list;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [actions, primaryActionFn, primaryActionLabel]);
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm"
@@ -142,23 +213,36 @@ export function ExerciseAnalysisSheet({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Brain className="h-4 w-4 text-primary" />
-            <div>
-              <h3 className="text-sm font-semibold capitalize">{exerciseName}</h3>
-              <p className="text-[11px] text-muted-foreground">Fiche d'analyse intelligente</p>
+        <div className="mb-4 flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <Brain className="h-4 w-4 shrink-0 text-primary" />
+            <div className="min-w-0">
+              <h3 className="truncate text-sm font-semibold capitalize">{exerciseName}</h3>
+              <p className="text-[11px] text-muted-foreground">
+                {sessionCount > 0 ? "Fiche d'analyse intelligente" : "Découverte de l'exercice"}
+              </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-full bg-surface text-muted-foreground"
-          >
-            <X className="h-4 w-4" />
-          </button>
+          <div className="flex shrink-0 items-center gap-1.5">
+            {menuActions.length > 0 && (
+              <ExerciseActionsMenu
+                title={exerciseName}
+                actions={menuActions}
+                triggerClassName="flex h-8 w-8 items-center justify-center rounded-full bg-surface text-muted-foreground hover:bg-white/10 hover:text-foreground"
+              />
+            )}
+            <button
+              onClick={onClose}
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-surface text-muted-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
 
         <div className="-mx-1 space-y-4 overflow-y-auto px-1">
+          {sessionCount > 0 ? (
+            <>
           {/* Résumé intelligent + pertinence */}
           {analysis && (
             <div className="rounded-2xl border border-primary/20 bg-primary/[0.06] p-4">
@@ -427,6 +511,19 @@ export function ExerciseAnalysisSheet({
               </div>
             </div>
           )}
+            </>
+          ) : (
+            <DiscoveryBody
+              exerciseName={exerciseName}
+              imageUrl={imageUrl}
+              muscles={analysis?.muscles ?? []}
+              physicalImpact={analysis?.physicalImpact ?? []}
+              similarExercises={similarExercises}
+              onSelectSimilar={onSelectSimilar}
+              ctaLabel={primaryActionLabel}
+              onCta={primaryActionFn}
+            />
+          )}
         </div>
       </div>
     </div>
@@ -528,4 +625,137 @@ function ObjChip({ active, label, onClick }: { active: boolean; label: string; o
       {label}
     </button>
   );
+}
+
+// ── État "Découverte" (exercice jamais pratiqué) ─────────────────────────────
+// Ne montre jamais de graphique/rang/analyse IA vides : uniquement des
+// données déjà validées ailleurs dans l'app (muscles = moteur de rôles
+// musculaires, bénéfices = moteur d'impact physique), jamais inventées.
+
+function DiscoveryBody({
+  exerciseName,
+  imageUrl,
+  muscles,
+  physicalImpact,
+  similarExercises,
+  onSelectSimilar,
+  ctaLabel,
+  onCta,
+}: {
+  exerciseName: string;
+  imageUrl?: string | null;
+  muscles: MuscleContribution[];
+  physicalImpact: TraitImpact[];
+  similarExercises?: Array<{ name: string; group: string }>;
+  onSelectSimilar?: (name: string) => void;
+  ctaLabel: string | null;
+  onCta?: () => void;
+}) {
+  const primary = muscles.filter((m) => m.role === "primary");
+  const secondary = muscles.filter((m) => m.role === "secondary");
+
+  return (
+    <>
+      {imageUrl ? (
+        <div className="flex items-center justify-center overflow-hidden rounded-2xl bg-black/30 ring-1 ring-white/5">
+          <img src={imageUrl} alt={exerciseName} className="max-h-56 w-full object-contain" loading="lazy" />
+        </div>
+      ) : (
+        <div className="flex h-40 items-center justify-center rounded-2xl bg-surface/60 text-muted-foreground">
+          <Dumbbell className="h-8 w-8" />
+        </div>
+      )}
+
+      <div className="rounded-2xl border border-primary/20 bg-primary/[0.06] p-4">
+        <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-primary">Pas encore pratiqué</p>
+        <p className="text-[12.5px] leading-relaxed text-foreground/90">{discoveryBlurb(exerciseName, primary, secondary)}</p>
+      </div>
+
+      {(primary.length > 0 || secondary.length > 0) && (
+        <SectionCard icon={<Activity className="h-3.5 w-3.5" />} title="Muscles sollicités">
+          <div className="space-y-3">
+            {primary.length > 0 && (
+              <div>
+                <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Principal</p>
+                <div className="space-y-2">
+                  {primary.map((m) => (
+                    <MuscleRow key={m.id} m={m} />
+                  ))}
+                </div>
+              </div>
+            )}
+            {secondary.length > 0 && (
+              <div>
+                <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Secondaire</p>
+                <div className="space-y-2">
+                  {secondary.map((m) => (
+                    <MuscleRow key={m.id} m={m} />
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </SectionCard>
+      )}
+
+      {physicalImpact.length > 0 && (
+        <SectionCard icon={<Gauge className="h-3.5 w-3.5" />} title="Bénéfices">
+          <div className="space-y-2">
+            {physicalImpact.slice(0, 4).map((t) => (
+              <div key={t.trait}>
+                <div className="mb-0.5 flex items-center justify-between text-[11px]">
+                  <span className="text-foreground/85">{t.label}</span>
+                </div>
+                <Bar value={t.score} />
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+      )}
+
+      {similarExercises && similarExercises.length > 0 && (
+        <SectionCard icon={<Dumbbell className="h-3.5 w-3.5" />} title="Variantes / exercices similaires">
+          <div className="flex flex-wrap gap-1.5">
+            {similarExercises.map((s) => (
+              <button
+                key={s.name}
+                type="button"
+                onClick={() => onSelectSimilar?.(s.name)}
+                disabled={!onSelectSimilar}
+                className="rounded-full border border-border bg-surface px-3 py-1.5 text-[11px] font-medium text-foreground/85 transition-colors hover:border-primary/40 hover:text-primary disabled:pointer-events-none"
+              >
+                {s.name}
+              </button>
+            ))}
+          </div>
+        </SectionCard>
+      )}
+
+      {ctaLabel && onCta && (
+        <button
+          type="button"
+          onClick={onCta}
+          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary py-3.5 text-sm font-semibold text-primary-foreground shadow-glow transition-all active:scale-[0.99]"
+        >
+          <Zap className="h-4 w-4" />
+          {ctaLabel}
+        </button>
+      )}
+    </>
+  );
+}
+
+function discoveryBlurb(name: string, primary: MuscleContribution[], secondary: MuscleContribution[]): string {
+  if (primary.length === 0) {
+    return `« ${name} » ne fait pas encore partie de tes séances. Lance-toi pour débloquer son rang, sa progression et ses records.`;
+  }
+  const p = joinLabels(primary.map((m) => m.label));
+  const s = secondary.length > 0 ? `, avec l'appui de ${joinLabels(secondary.map((m) => m.label))}` : "";
+  return `« ${name} » cible principalement ${p}${s}. Pas encore pratiqué — lance-toi pour débloquer le rang, la progression et les records sur cet exercice.`;
+}
+
+function joinLabels(labels: string[]): string {
+  if (labels.length === 0) return "";
+  if (labels.length === 1) return labels[0];
+  return labels.slice(0, -1).join(", ") + " et " + labels[labels.length - 1];
 }

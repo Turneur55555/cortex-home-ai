@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { CheckCircle2, Flame, Loader2, MoreVertical, Plus, XCircle } from "lucide-react";
+import { BookOpen, CheckCircle2, Flame, Loader2, MoreVertical, Plus, XCircle } from "lucide-react";
 import type { ActiveWorkout } from "@/hooks/use-fitness";
 import {
   useAddExerciseToActiveWorkout,
@@ -33,12 +33,16 @@ export function ActiveWorkoutView({
   workout,
   recoveryMap,
   onFinished,
+  onOpenCatalog,
 }: {
   workout: ActiveWorkout;
   recoveryMap?: Map<MuscleId, MuscleRecovery>;
   /** C2 : remonte le snapshot au parent — la fiche d'analyse IA doit survivre
    *  au démontage de cette vue (déclenché par le refetch post-clôture). */
   onFinished: (finished: ActiveWorkout) => void;
+  /** Ouvre le Catalogue d'exercices (bibliothèque de référence) — optionnel,
+   *  fourni par SeancesTab pour le rendre accessible même en séance active. */
+  onOpenCatalog?: () => void;
 }) {
   const finish = useFinishWorkout();
   const cancel = useCancelWorkout();
@@ -321,19 +325,31 @@ export function ActiveWorkoutView({
       )}
 
       {/* ── Add exercise ── */}
-      <button
-        type="button"
-        onClick={() => setPickerOpen(true)}
-        disabled={addExercise.isPending}
-        className="flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-white/10 bg-white/[0.02] py-4 text-sm font-semibold text-primary transition-all active:scale-[0.99] hover:border-primary/40 hover:bg-primary/5 disabled:opacity-50"
-      >
-        {addExercise.isPending ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        ) : (
-          <Plus className="h-4 w-4" />
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => setPickerOpen(true)}
+          disabled={addExercise.isPending}
+          className="flex flex-1 items-center justify-center gap-2 rounded-2xl border border-dashed border-white/10 bg-white/[0.02] py-4 text-sm font-semibold text-primary transition-all active:scale-[0.99] hover:border-primary/40 hover:bg-primary/5 disabled:opacity-50"
+        >
+          {addExercise.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Plus className="h-4 w-4" />
+          )}
+          Ajouter un exercice
+        </button>
+        {onOpenCatalog && (
+          <button
+            type="button"
+            onClick={onOpenCatalog}
+            aria-label="Ouvrir le catalogue d'exercices"
+            className="flex shrink-0 items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-4 text-primary transition-all active:scale-[0.99] hover:border-primary/40 hover:bg-primary/5"
+          >
+            <BookOpen className="h-4 w-4" />
+          </button>
         )}
-        Ajouter un exercice
-      </button>
+      </div>
 
       {/* Exercise picker */}
       {pickerOpen && (

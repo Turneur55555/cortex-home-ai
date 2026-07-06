@@ -159,6 +159,7 @@ export function SeancesTab() {
           workout={activeWorkout}
           recoveryMap={recoveryMap}
           onFinished={setFinishedSnapshot}
+          onOpenCatalog={() => setCatalogOpen(true)}
         />
         {finishedSnapshot && (
           <PostWorkoutAnalysisSheet
@@ -167,6 +168,16 @@ export function SeancesTab() {
             previousWorkouts={data ?? []}
             recoveryMap={recoveryMap}
             onClose={() => setFinishedSnapshot(null)}
+          />
+        )}
+        {/* Catalogue accessible aussi pendant une séance active — bibliothèque
+            de référence du module Exercices, atteignable partout dans l'app. */}
+        {catalogOpen && (
+          <ExerciseCatalogSheet
+            onClose={() => setCatalogOpen(false)}
+            histByName={histByName}
+            volByName={volByName}
+            prByName={prByName}
           />
         )}
       </section>
@@ -357,7 +368,12 @@ export function SeancesTab() {
       )}
 
       {catalogOpen && (
-        <ExerciseCatalogSheet onClose={() => setCatalogOpen(false)} />
+        <ExerciseCatalogSheet
+          onClose={() => setCatalogOpen(false)}
+          histByName={histByName}
+          volByName={volByName}
+          prByName={prByName}
+        />
       )}
 
       {/* C2 : fiche d'analyse IA — rendue aussi hors séance active */}

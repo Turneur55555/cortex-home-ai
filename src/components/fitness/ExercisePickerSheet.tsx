@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Book, Camera, Clock, Loader2, Search, Sparkles, X } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { Book, BookOpen, Camera, Clock, Loader2, Sparkles } from "lucide-react";
 import {
   CATALOG_GROUPS,
   EXERCISE_CATALOG,
@@ -10,6 +10,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { useExerciseCatalog, dbRowsToCatalog } from "@/hooks/useExerciseCatalog";
 import { exerciseIllustration } from "@/lib/fitness/exerciseIllustrations";
 import { toast } from "sonner";
+import { ExerciseListBrowser, type BrowserExercise } from "./ExerciseListBrowser";
+import { ExerciseActionsMenu, type ExerciseMenuAction } from "./ExerciseActionsMenu";
+import { ExerciseAnalysisSheet } from "./ExerciseAnalysisSheet";
 
 export type RecentExercise = {
   name: string;
@@ -90,15 +93,10 @@ export function ExercisePickerSheet({
   const [scanning, setScanning] = useState(false);
   const [suggestions, setSuggestions] = useState<Suggestion[] | null>(null);
   const [detectedMachine, setDetectedMachine] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [openExercise, setOpenExercise] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const { data: dbRows } = useExerciseCatalog();
   const effectiveCatalog = dbRows && dbRows.length > 0 ? dbRowsToCatalog(dbRows) : EXERCISE_CATALOG;
-
-  useEffect(() => {
-    const t = setTimeout(() => inputRef.current?.focus(), 80);
-    return () => clearTimeout(t);
-  }, []);
 
   const normQuery = normalize(query);
 
@@ -112,15 +110,10 @@ export function ExercisePickerSheet({
     [query, effectiveCatalog],
   );
 
-  const catalogByGroup = useMemo(() => {
-    const map = new Map<string, typeof EXERCISE_CATALOG>();
-    for (const e of filteredCatalog) {
-      const arr = map.get(e.group) ?? [];
-      arr.push(e);
-      map.set(e.group, arr);
-    }
-    return map;
-  }, [filteredCatalog]);
+  const browserItems: BrowserExercise[] = useMemo(
+    () => effectiveCatalog.map((e) => ({ id: e.name, name: e.name, group: e.group })),
+    [effectiveCatalog],
+  );
 
   const exactMatchExists =
     filteredRecents.some((e) => normalize(e.name) === normQuery) ||
@@ -188,6 +181,18 @@ export function ExercisePickerSheet({
     }
   };
 
+  const rowMenu = (ex: BrowserExercise) => {
+    const actions: ExerciseMenuAction[] = [
+      {
+        key: "open",
+        label: "Voir la fiche",
+        icon: <BookOpen className="h-4 w-4" />,
+        onClick: () => setOpenExercise(ex.name),
+      },
+    ];
+    return <ExerciseActionsMenu title={ex.name} actions={actions} />;
+  };
+
   return (
     <div
       className="fixed inset-0 z-[60] flex items-end justify-center"
@@ -204,209 +209,174 @@ export function ExercisePickerSheet({
           <div className="h-1 w-10 rounded-full bg-white/20" />
         </div>
 
-        {/* Search bar + camera */}
-        <div className="shrink-0 px-4 pb-3">
-          <div className="flex items-center gap-2">
-            <div className="flex flex-1 items-center gap-2 rounded-2xl border border-border bg-surface px-4 py-3">
-              <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
-              <input
-                ref={inputRef}
-                type="search"
-                inputMode="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Développé couché, squat…"
-                className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-              />
-              {query && (
-                <button type="button" onClick={() => setQuery("")} aria-label="Effacer">
-                  <X className="h-4 w-4 text-muted-foreground" />
-                </button>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={handleScanClick}
-              disabled={scanning}
-              aria-label="Scanner une machine"
-              className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-2xl border border-primary/30 bg-primary/10 text-primary transition-colors active:bg-primary/20 disabled:opacity-50"
-            >
-              {scanning ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
-                <Camera className="h-5 w-5" />
-              )}
-            </button>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="hidden"
-              onChange={handleFile}
-            />
-          </div>
-        </div>
-
-        {/* Scrollable list */}
-        <div className="flex-1 overflow-y-auto px-4 pb-8">
-          {/* AI suggestions */}
-          {suggestions && suggestions.length > 0 && (
-            <section className="mb-6">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
-                  <Sparkles className="h-3 w-3" />
-                  Détecté par IA
-                  {detectedMachine && (
-                    <span className="ml-1 normal-case tracking-normal text-muted-foreground">
-                      · {detectedMachine}
-                    </span>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSuggestions(null);
-                    setDetectedMachine(null);
-                  }}
-                  className="text-[11px] text-muted-foreground hover:text-foreground"
-                >
-                  Masquer
-                </button>
-              </div>
-              <ul className="space-y-1.5">
-                {suggestions.map((s, i) => (
-                  <li key={`${s.name}-${i}`}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const recent = recentExercises.find(
-                          (r) => normalize(r.name) === normalize(s.name),
-                        );
-                        pick(s.name, recent);
-                      }}
-                      className="flex w-full items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/10 px-4 py-3 text-left transition-colors active:bg-primary/20"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-semibold">{s.name}</span>
-                          <span className="rounded-full bg-primary/20 px-1.5 py-0.5 text-[9px] font-semibold text-primary">
-                            {Math.round(s.confidence * 100)}%
+        {/* Liste partagée (Catalogue ↔ Picker) : recherche + scan caméra + suggestions/récents + catalogue groupé */}
+        <div className="flex min-h-0 flex-1 flex-col px-4">
+          <ExerciseListBrowser
+            items={browserItems}
+            query={query}
+            onQueryChange={setQuery}
+            autoFocusSearch
+            searchPlaceholder="Développé couché, squat…"
+            groupOrder={CATALOG_GROUPS}
+            getPhoto={(name) => exerciseIllustration(name) ?? undefined}
+            onRowTap={(ex) => pick(ex.name)}
+            renderRowMenu={rowMenu}
+            trailingSearchSlot={
+              <button
+                type="button"
+                onClick={handleScanClick}
+                disabled={scanning}
+                aria-label="Scanner une machine"
+                className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-2xl border border-primary/30 bg-primary/10 text-primary transition-colors active:bg-primary/20 disabled:opacity-50"
+              >
+                {scanning ? <Loader2 className="h-5 w-5 animate-spin" /> : <Camera className="h-5 w-5" />}
+              </button>
+            }
+            beforeListSlot={
+              <>
+                {/* AI suggestions */}
+                {suggestions && suggestions.length > 0 && (
+                  <section className="mb-6">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
+                        <Sparkles className="h-3 w-3" />
+                        Détecté par IA
+                        {detectedMachine && (
+                          <span className="ml-1 normal-case tracking-normal text-muted-foreground">
+                            · {detectedMachine}
                           </span>
-                        </div>
-                        <span className="text-[11px] text-muted-foreground">
-                          {s.group}
-                          {s.reason ? ` · ${s.reason}` : ""}
-                        </span>
+                        )}
                       </div>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSuggestions(null);
+                          setDetectedMachine(null);
+                        }}
+                        className="text-[11px] text-muted-foreground hover:text-foreground"
+                      >
+                        Masquer
+                      </button>
+                    </div>
+                    <ul className="space-y-1.5">
+                      {suggestions.map((s, i) => (
+                        <li key={`${s.name}-${i}`}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const recent = recentExercises.find(
+                                (r) => normalize(r.name) === normalize(s.name),
+                              );
+                              pick(s.name, recent);
+                            }}
+                            className="flex w-full items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/10 px-4 py-3 text-left transition-colors active:bg-primary/20"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-semibold">{s.name}</span>
+                                <span className="rounded-full bg-primary/20 px-1.5 py-0.5 text-[9px] font-semibold text-primary">
+                                  {Math.round(s.confidence * 100)}%
+                                </span>
+                              </div>
+                              <span className="text-[11px] text-muted-foreground">
+                                {s.group}
+                                {s.reason ? ` · ${s.reason}` : ""}
+                              </span>
+                            </div>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
 
-          {/* Create custom */}
-          {showCreateNew && (
-            <button
-              type="button"
-              onClick={() => pick(query.trim())}
-              className="mb-5 flex w-full items-center gap-3 rounded-xl border border-primary/30 bg-primary/10 p-3 text-left transition-colors active:bg-primary/20"
-            >
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/20 text-lg font-bold text-primary">
-                +
-              </span>
-              <div>
-                <span className="block text-sm font-semibold">
-                  Créer "{query.trim()}"
-                </span>
-                <span className="text-[11px] text-muted-foreground">
-                  Exercice personnalisé
-                </span>
-              </div>
-            </button>
-          )}
+                {/* Create custom */}
+                {showCreateNew && (
+                  <button
+                    type="button"
+                    onClick={() => pick(query.trim())}
+                    className="mb-5 flex w-full items-center gap-3 rounded-xl border border-primary/30 bg-primary/10 p-3 text-left transition-colors active:bg-primary/20"
+                  >
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/20 text-lg font-bold text-primary">
+                      +
+                    </span>
+                    <div>
+                      <span className="block text-sm font-semibold">Créer "{query.trim()}"</span>
+                      <span className="text-[11px] text-muted-foreground">Exercice personnalisé</span>
+                    </div>
+                  </button>
+                )}
 
-          {/* Recent exercises */}
-          {filteredRecents.length > 0 && (
-            <section className="mb-6">
-              <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                <Clock className="h-3 w-3" />
-                Exercices récents
-              </div>
-              <ul className="space-y-1.5">
-                {filteredRecents.map((r) => (
-                  <li key={r.name}>
-                    <button
-                      type="button"
-                      onClick={() => pick(r.name, r)}
-                      className="flex w-full items-center justify-between rounded-xl border border-border bg-surface px-4 py-3 text-left transition-colors active:bg-surface/60"
-                    >
-                      <span className="text-sm font-medium">{r.name}</span>
-                      {(r.lastSets || r.lastReps || r.lastWeight) && (
-                        <span className="ml-3 shrink-0 text-[11px] text-muted-foreground">
-                          {[
-                            r.lastSets && r.lastReps
-                              ? `${r.lastSets}×${r.lastReps}`
-                              : null,
-                            r.lastWeight ? `${r.lastWeight} kg` : null,
-                          ]
-                            .filter(Boolean)
-                            .join(" · ")}
-                        </span>
-                      )}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
+                {/* Recent exercises */}
+                {filteredRecents.length > 0 && (
+                  <section className="mb-6">
+                    <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      <Clock className="h-3 w-3" />
+                      Exercices récents
+                    </div>
+                    <ul className="space-y-1.5">
+                      {filteredRecents.map((r) => (
+                        <li key={r.name}>
+                          <button
+                            type="button"
+                            onClick={() => pick(r.name, r)}
+                            className="flex w-full items-center justify-between rounded-xl border border-border bg-surface px-4 py-3 text-left transition-colors active:bg-surface/60"
+                          >
+                            <span className="text-sm font-medium">{r.name}</span>
+                            {(r.lastSets || r.lastReps || r.lastWeight) && (
+                              <span className="ml-3 shrink-0 text-[11px] text-muted-foreground">
+                                {[
+                                  r.lastSets && r.lastReps ? `${r.lastSets}×${r.lastReps}` : null,
+                                  r.lastWeight ? `${r.lastWeight} kg` : null,
+                                ]
+                                  .filter(Boolean)
+                                  .join(" · ")}
+                              </span>
+                            )}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
 
-          {/* Catalog */}
-          {filteredCatalog.length > 0 && (
-            <section>
-              <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                <Book className="h-3 w-3" />
-                {normQuery ? "Catalogue" : "Tous les exercices"}
-              </div>
-              {CATALOG_GROUPS.filter((g) => catalogByGroup.has(g)).map((group) => (
-                <div key={group} className="mb-4">
-                  <p className="mb-1 px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
-                    {group}
-                  </p>
-                  <ul className="space-y-0.5">
-                    {(catalogByGroup.get(group) ?? []).map((ex) => (
-                      <li key={ex.name}>
-                        <button
-                          type="button"
-                          onClick={() => pick(ex.name)}
-                          className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm transition-colors hover:bg-white/[0.04] active:bg-white/[0.07]"
-                        >
-                          {exerciseIllustration(ex.name) ? (
-                            <img
-                              src={exerciseIllustration(ex.name)!}
-                              alt={ex.name}
-                              loading="lazy"
-                              className="h-10 w-10 shrink-0 rounded-lg object-cover ring-1 ring-white/10"
-                            />
-                          ) : null}
-                          <span className="min-w-0 flex-1">{ex.name}</span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </section>
-          )}
-
-          {normQuery && filteredRecents.length === 0 && filteredCatalog.length === 0 && (
-            <p className="mt-4 text-center text-sm text-muted-foreground">
-              Aucun résultat — appuyez sur "Créer" pour ajouter un exercice.
-            </p>
-          )}
+                {filteredCatalog.length > 0 && (
+                  <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    <Book className="h-3 w-3" />
+                    {normQuery ? "Catalogue" : "Tous les exercices"}
+                  </div>
+                )}
+              </>
+            }
+            emptyLabel={
+              normQuery && filteredRecents.length === 0
+                ? 'Aucun résultat — appuyez sur "Créer" pour ajouter un exercice.'
+                : undefined
+            }
+          />
         </div>
+
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={handleFile}
+        />
       </div>
+
+      {/* Fiche d'analyse — consultation rapide sans quitter la sélection */}
+      {openExercise && (
+        <ExerciseAnalysisSheet
+          exerciseName={openExercise}
+          weightHistory={[]}
+          volumeHistory={[]}
+          pr={undefined}
+          imageUrl={exerciseIllustration(openExercise)}
+          onClose={() => setOpenExercise(null)}
+        />
+      )}
     </div>
   );
 }
