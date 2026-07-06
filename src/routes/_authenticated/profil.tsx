@@ -6,6 +6,11 @@ import { useAuth } from "@/hooks/use-auth";
 import { useProfile } from "@/hooks/useProfile";
 import { useActivityStreak } from "@/hooks/useActivityStreak";
 import { useUserStats } from "@/hooks/useUserStats";
+import { useWorkouts } from "@/hooks/use-fitness";
+import { computePRs } from "@/utils/fitness/exercise-stats";
+import { useBadgeHighlights } from "@/hooks/useBadgeHighlights";
+import { useGoalsWithProgress } from "@/hooks/useGoalsWithProgress";
+import { RankAggregator } from "@/components/fitness/RankAggregator";
 import { ProfileHeroCard } from "@/components/profile/ProfileHeroCard";
 import { AccomplishmentsPanel } from "@/components/profile/AccomplishmentsPanel";
 import { GoalsManager } from "@/components/profile/GoalsManager";
@@ -36,24 +41,44 @@ function ProfilPage() {
   const { data: stats } = useUserStats();
   const [editOpen, setEditOpen] = useState(false);
 
+  // Élevés au niveau de la page pour être partagés entre le Hero et les
+  // Accomplissements — aucun nouveau calcul métier, uniquement des hooks/dérivations existants.
+  const { data: workouts } = useWorkouts();
+  const { topExercises } = useMemo(() => computePRs(workouts ?? []), [workouts]);
+  const badgeHighlights = useBadgeHighlights();
+  const { goals } = useGoalsWithProgress();
+  const questsDone = useMemo(() => goals.filter((g) => g.is_completed).length, [goals]);
+  const questsTotal = goals.length;
+
   return (
     <main className="relative flex flex-1 flex-col overflow-hidden px-5 pb-32 pt-[max(2.5rem,env(safe-area-inset-top))]">
-      {/* Identité — pièce maîtresse de l'écran */}
-      <ProfileHeroCard
-        pseudo={pseudo}
-        streak={streak}
-        level={stats?.level ?? 1}
-        xp={stats?.xp ?? 0}
-        avatarUrl={avatarUrl}
-        onEdit={() => setEditOpen(true)}
-        onAvatarChange={updateAvatar}
-      />
+      <RankAggregator exerciseNames={topExercises}>
+        {(rankAggregate) => (
+          <>
+            {/* Identité — pièce maîtresse de l'écran, fiche de personnage */}
+            <ProfileHeroCard
+              pseudo={pseudo}
+              streak={streak}
+              level={stats?.level ?? 1}
+              xp={stats?.xp ?? 0}
+              avatarUrl={avatarUrl}
+              onEdit={() => setEditOpen(true)}
+              onAvatarChange={updateAvatar}
+              rankAggregate={rankAggregate}
+              badgesUnlocked={badgeHighlights.unlockedCount}
+              badgesTotal={badgeHighlights.total}
+              questsDone={questsDone}
+              questsTotal={questsTotal}
+            />
 
-      {/* Accomplissements — meilleurs rangs, records récents, badges rares,
-          prochaine récompense, objectifs principaux */}
-      <AccomplishmentsPanel />
+            {/* Accomplissements — meilleur rang, rang moyen, exercice principal,
+                records récents, prochaine grande récompense, succès le plus rare */}
+            <AccomplishmentsPanel rankAggregate={rankAggregate} badgeHighlights={badgeHighlights} />
+          </>
+        )}
+      </RankAggregator>
 
-      {/* Salle des trophées — le cœur du module */}
+      {/* Salle des trophées — le cœur du module, véritable espace de collection */}
       <BadgesStrip />
 
       {/* Quêtes */}

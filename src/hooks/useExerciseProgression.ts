@@ -9,7 +9,7 @@ const ROMAN = ["I", "II", "III", "IV", "V"];
 /** Poids de corps utilisé tant que l'utilisateur n'en a renseigné aucun. */
 const DEFAULT_BODYWEIGHT_KG = 75;
 
-function toRankState(confirmedTierIndex: number, masteryPercent: number): RankState {
+export function toRankState(confirmedTierIndex: number, masteryPercent: number): RankState {
   const idx = Math.max(0, Math.min(TOTAL_TIERS - 1, confirmedTierIndex));
   const rank = RANK_TIERS[Math.floor(idx / LEVELS_PER_RANK)];
   const levelInRank = (idx % LEVELS_PER_RANK) + 1;

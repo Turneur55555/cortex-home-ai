@@ -32,7 +32,6 @@ import {
   RARITY_LABELS,
   RARITY_PROGRESS,
   RARITY_TEXT,
-  xpForLevel,
   type BadgeCatalogEntry,
   type BadgeCategory,
   type BadgeRarity,
@@ -107,7 +106,11 @@ function BadgeCard({
         "relative overflow-hidden rounded-2xl border p-3.5 transition-shadow",
         isUnlocked
           ? cn(rarityBorder, "shadow-md bg-gradient-to-br", rarityBg)
-          : "border-white/[0.05] bg-white/[0.02]",
+          : isSecret || isComingSoon
+            ? "border-white/[0.05] bg-white/[0.02]"
+            // Verrouillé mais visible : on garde un liseré teinté par la rareté
+            // pour que le badge donne envie d'être débloqué (demande explicite).
+            : cn(rarityBorder, "bg-white/[0.025]"),
         isComingSoon && "opacity-60",
       )}
       style={
@@ -165,7 +168,11 @@ function BadgeCard({
           <span
             className={cn(
               "rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider",
-              isUnlocked ? cn("bg-gradient-to-br", rarityBg, rarityText) : "bg-white/[0.06] text-white/25",
+              isUnlocked
+                ? cn("bg-gradient-to-br", rarityBg, rarityText)
+                : isSecret || isComingSoon
+                  ? "bg-white/[0.06] text-white/25"
+                  : cn("bg-white/[0.04]", rarityText, "opacity-60"),
             )}
           >
             {isSecret ? "???" : rarityLabel}
@@ -228,21 +235,11 @@ export function BadgesStrip() {
   const [unlockQueue, setUnlockQueue] = useState<BadgeCatalogEntry[]>([]);
   const seenKeysRef = useRef<Set<string> | null>(null);
 
-  const xp = stats?.xp ?? 0;
-  const level = stats?.level ?? 1;
-  const nextLevelXp = xpForLevel(level + 1);
-  const currentLevelXp = xpForLevel(level);
-  const xpIntoLevel = Math.max(0, xp - currentLevelXp);
-  const xpForNext = Math.max(1, nextLevelXp - currentLevelXp);
-  const pct = Math.min(100, Math.round((xpIntoLevel / xpForNext) * 100));
-
   const {
     unlocked,
     unlockedCount,
     total,
     completionPct,
-    rarestUnlocked,
-    latestUnlocked,
     nextObjective,
   } = useBadgeHighlights();
 
@@ -261,19 +258,41 @@ export function BadgesStrip() {
     seenKeysRef.current = currentKeys;
   }, [unlocked]);
 
-  // Top category
-  const topCategory = useMemo(() => {
-    const counts = new Map<BadgeCategory, number>();
-    unlocked.forEach((b) => {
-      const c = (b.catalog.category as BadgeCategory) ?? "training";
-      counts.set(c, (counts.get(c) ?? 0) + 1);
-    });
-    let top: [BadgeCategory, number] | null = null;
-    for (const [k, v] of counts) {
-      if (!top || v > top[1]) top = [k, v];
+  // Nombre de badges possédés par rareté — fait "sauter aux yeux" la rareté
+  // dès l'entrée dans la section (demande explicite : sensation de collection).
+  const rarityCounts = useMemo(() => {
+    const counts: Record<BadgeRarity, { owned: number; total: number }> = {
+      common: { owned: 0, total: 0 },
+      rare: { owned: 0, total: 0 },
+      epic: { owned: 0, total: 0 },
+      legendary: { owned: 0, total: 0 },
+      mythic: { owned: 0, total: 0 },
+    };
+    for (const b of badgesWithProgress) {
+      const r = b.catalog.rarity as BadgeRarity;
+      counts[r].total += 1;
+      if (b.isUnlocked) counts[r].owned += 1;
     }
-    return top;
-  }, [unlocked]);
+    return counts;
+  }, [badgesWithProgress]);
+
+  // Progression par catégorie — mise en valeur des catégories (demande explicite).
+  const categoryOverview = useMemo(() => {
+    const map = new Map<BadgeCategory, { owned: number; total: number }>();
+    for (const b of badgesWithProgress) {
+      const cat = (b.catalog.category as BadgeCategory) ?? "training";
+      if (!map.has(cat)) map.set(cat, { owned: 0, total: 0 });
+      const entry = map.get(cat)!;
+      entry.total += 1;
+      if (b.isUnlocked) entry.owned += 1;
+    }
+    const order: BadgeCategory[] = [
+      "first_steps", "training", "consistency", "strength", "progression",
+      "duration", "cardio", "nutrition", "transformation", "health",
+      "challenges", "journal", "community", "secret",
+    ];
+    return order.filter((c) => map.has(c)).map((c) => [c, map.get(c)!] as const);
+  }, [badgesWithProgress]);
 
   // Filter + search
   const filtered = useMemo(() => {
@@ -331,93 +350,85 @@ export function BadgesStrip() {
 
   return (
     <section className="mb-6">
-      {/* ─── Hero banner ─── */}
-      <div className="relative overflow-hidden rounded-3xl border border-white/[0.08] bg-gradient-to-br from-white/[0.04] via-white/[0.02] to-transparent p-4 shadow-xl">
+      {/* ─── Hero banner : vitrine de la collection ─── */}
+      <div className="relative overflow-hidden rounded-3xl border border-white/[0.08] bg-gradient-to-br from-white/[0.05] via-white/[0.02] to-transparent p-4 shadow-xl">
         {/* Ambient glow */}
         <div className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full bg-amber-500/20 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-16 -left-16 h-40 w-40 rounded-full bg-violet-500/15 blur-3xl" />
 
-        <div className="relative flex items-center gap-3">
-          <div
-            className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400/30 to-orange-500/20"
-            style={{ boxShadow: "0 0 24px rgba(251,191,36,0.35)" }}
-          >
-            <Crown className="h-7 w-7 text-amber-400" />
-            <span className="absolute -bottom-1 -right-1 rounded-full bg-black px-1.5 py-0.5 text-[9px] font-black text-amber-400 ring-1 ring-amber-400/60">
-              {level}
-            </span>
+        <div className="relative flex items-end justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-white/40">
+              Salle des trophées
+            </p>
+            <div className="mt-1 flex items-baseline gap-1.5">
+              <span className="font-serif text-4xl font-black leading-none text-white">
+                {unlockedCount}
+              </span>
+              <span className="text-sm font-semibold text-white/40">/ {total} succès</span>
+            </div>
           </div>
+          <div className="shrink-0 text-right">
+            <span className="text-2xl font-black tabular-nums text-amber-400">{completionPct}%</span>
+            <p className="text-[9px] font-semibold uppercase tracking-wider text-white/30">complété</p>
+          </div>
+        </div>
 
-          <div className="min-w-0 flex-1">
-            <div className="flex items-baseline justify-between gap-2">
-              <div>
-                <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-amber-400/80">
-                  Niveau {level}
-                </div>
-                <div className="text-xs text-white/50 tabular-nums">
-                  {xpIntoLevel.toLocaleString()} / {xpForNext.toLocaleString()} XP
-                </div>
+        {/* Répartition par rareté — la rareté saute aux yeux immédiatement */}
+        <div className="relative mt-3 grid grid-cols-5 gap-1.5">
+          {(["common", "rare", "epic", "legendary", "mythic"] as BadgeRarity[]).map((r) => {
+            const c = rarityCounts[r];
+            const owned = c.owned > 0;
+            return (
+              <div
+                key={r}
+                className={cn(
+                  "flex flex-col items-center gap-0.5 rounded-xl border py-2",
+                  owned ? cn("bg-gradient-to-b", RARITY_BG[r], RARITY_BORDER[r]) : "border-white/[0.05] bg-white/[0.02]",
+                )}
+              >
+                <span className={cn("text-sm font-black tabular-nums", owned ? RARITY_TEXT[r] : "text-white/20")}>
+                  {c.owned}
+                </span>
+                <span className="text-[7.5px] font-bold uppercase tracking-wider text-white/35">
+                  {RARITY_LABELS[r]}
+                </span>
               </div>
-              <span className="text-lg font-black tabular-nums text-amber-400">{pct}%</span>
-            </div>
-            <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-white/[0.06]">
-              <motion.div
-                className="h-full rounded-full bg-gradient-to-r from-amber-500 via-orange-400 to-yellow-300"
-                initial={{ width: "0%" }}
-                animate={{ width: `${pct}%` }}
-                transition={{ duration: 1, ease: "easeOut" }}
-                style={{ boxShadow: "0 0 12px rgba(251,191,36,0.6)" }}
-              />
-            </div>
-          </div>
+            );
+          })}
         </div>
 
-        {/* Stats grid */}
-        <div className="relative mt-3 grid grid-cols-3 gap-2">
-          <StatChip
-            label="Complétion"
-            value={`${completionPct}%`}
-            hint={`${unlockedCount}/${total}`}
-          />
-          <StatChip
-            label="XP total"
-            value={xp.toLocaleString()}
-            hint="points"
-          />
-          <StatChip
-            label="Top catégorie"
-            value={topCategory ? CATEGORY_EMOJI[topCategory[0]] : "—"}
-            hint={topCategory ? CATEGORY_LABELS[topCategory[0]] : "aucune"}
-          />
+        {/* Catégories — navigation rapide vers la collection */}
+        <div className="relative mt-3 -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5 scrollbar-none">
+          {categoryOverview.map(([cat, c]) => (
+            <button
+              key={cat}
+              type="button"
+              onClick={() =>
+                document
+                  .getElementById(`badge-category-${cat}`)
+                  ?.scrollIntoView({ behavior: "smooth", block: "start" })
+              }
+              className="flex shrink-0 items-center gap-1.5 rounded-full border border-white/[0.07] bg-white/[0.03] px-2.5 py-1.5 transition-colors hover:border-white/[0.15]"
+            >
+              <span className="text-sm leading-none">{CATEGORY_EMOJI[cat]}</span>
+              <span className="text-[10px] font-semibold text-white/70">{CATEGORY_LABELS[cat]}</span>
+              <span className="text-[9px] font-bold text-white/35">
+                {c.owned}/{c.total}
+              </span>
+            </button>
+          ))}
         </div>
 
-        {/* Rarest + latest + next */}
-        {(rarestUnlocked || latestUnlocked || nextObjective) && (
-          <div className="relative mt-3 space-y-1.5">
-            {rarestUnlocked && (
-              <HighlightRow
-                icon={<Sparkles className="h-3.5 w-3.5" />}
-                label="Plus rare obtenu"
-                title={rarestUnlocked.catalog.label}
-                rarity={rarestUnlocked.catalog.rarity as BadgeRarity}
-              />
-            )}
-            {latestUnlocked && latestUnlocked.catalog.badge_key !== rarestUnlocked?.catalog.badge_key && (
-              <HighlightRow
-                icon={<Trophy className="h-3.5 w-3.5" />}
-                label="Dernier débloqué"
-                title={latestUnlocked.catalog.label}
-                rarity={latestUnlocked.catalog.rarity as BadgeRarity}
-              />
-            )}
-            {nextObjective && (
-              <HighlightRow
-                icon={<Target className="h-3.5 w-3.5" />}
-                label={`Prochain (${nextObjective.progress}%)`}
-                title={nextObjective.catalog.label}
-                rarity={nextObjective.catalog.rarity as BadgeRarity}
-              />
-            )}
+        {/* Prochain succès accessible — donne envie de continuer */}
+        {nextObjective && (
+          <div className="relative mt-3">
+            <HighlightRow
+              icon={<Target className="h-3.5 w-3.5" />}
+              label={`Prochain succès (${nextObjective.progress}%)`}
+              title={nextObjective.catalog.label}
+              rarity={nextObjective.catalog.rarity as BadgeRarity}
+            />
           </div>
         )}
       </div>
@@ -474,16 +485,27 @@ export function BadgesStrip() {
       <AnimatePresence>
         {!isLoading && groups.length > 0 && (
           <div className="mt-4 space-y-5">
-            {groups.map(([cat, list]) => (
-              <div key={cat}>
-                <div className="mb-2 flex items-center justify-between px-0.5">
-                  <h3 className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-white/60">
-                    <span className="text-sm">{CATEGORY_EMOJI[cat]}</span>
+            {groups.map(([cat, list]) => {
+              const catOwned = list.filter((b) => b.isUnlocked).length;
+              const catPct = list.length > 0 ? Math.round((catOwned / list.length) * 100) : 0;
+              return (
+              <div key={cat} id={`badge-category-${cat}`} className="scroll-mt-4">
+                <div className="mb-2.5 flex items-center justify-between gap-2 border-l-2 border-primary/40 pl-2.5">
+                  <h3 className="flex items-center gap-2 text-[13px] font-bold text-white/90">
+                    <span className="text-lg leading-none">{CATEGORY_EMOJI[cat]}</span>
                     {CATEGORY_LABELS[cat]}
                   </h3>
-                  <span className="text-[10px] text-white/30">
-                    {list.filter((b) => b.isUnlocked).length}/{list.length}
-                  </span>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <div className="h-1 w-10 overflow-hidden rounded-full bg-white/[0.08]">
+                      <div
+                        className="h-full rounded-full bg-primary"
+                        style={{ width: `${catPct}%` }}
+                      />
+                    </div>
+                    <span className="text-[10px] font-bold tabular-nums text-white/40">
+                      {catOwned}/{list.length}
+                    </span>
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   {list.map((b, i) => (
@@ -498,7 +520,8 @@ export function BadgesStrip() {
                   ))}
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </AnimatePresence>

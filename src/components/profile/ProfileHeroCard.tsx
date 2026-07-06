@@ -1,11 +1,14 @@
 import { useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { Camera, Flame, Pencil } from "lucide-react";
+import { Award, Camera, Flame, Target, Trophy } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { xpForLevel } from "@/lib/fitness/badges";
 import { MasteryBar } from "@/components/fitness/MasteryBar";
+import { RankAmbientParticles } from "@/components/fitness/RankAmbientParticles";
+import { getRankVisual } from "@/lib/fitness/rankVisuals";
+import type { RankAggregate } from "@/components/fitness/RankAggregator";
 
 interface Props {
   pseudo: string;
@@ -15,23 +18,11 @@ interface Props {
   avatarUrl?: string | null;
   onEdit: () => void;
   onAvatarChange: (url: string) => Promise<void>;
-}
-
-// Palette dédiée au Hero Header — cohérente avec l'identité RPG (Reliquary)
-// sans en reprendre l'habillage complet (réservé à la Salle des trophées).
-const HERO_COLORS = {
-  primary: "#6c63ff",
-  secondary: "#4dafff",
-  glow: "rgba(108,99,255,0.45)",
-  text: "#ffffff",
-  gradient: "linear-gradient(90deg,#6c63ff 0%,#4dafff 100%)",
-};
-
-function greeting() {
-  const h = new Date().getHours();
-  if (h < 6) return "Bonsoir";
-  if (h < 18) return "Bonjour";
-  return "Bonsoir";
+  rankAggregate: RankAggregate;
+  badgesUnlocked: number;
+  badgesTotal: number;
+  questsDone: number;
+  questsTotal: number;
 }
 
 async function compressAvatar(file: File): Promise<Blob> {
@@ -64,7 +55,48 @@ async function compressAvatar(file: File): Promise<Blob> {
   });
 }
 
-export function ProfileHeroCard({ pseudo, streak, level, xp, avatarUrl, onEdit, onAvatarChange }: Props) {
+function StatPill({
+  icon,
+  value,
+  label,
+}: {
+  icon: React.ReactNode;
+  value: string;
+  label: string;
+}) {
+  return (
+    <div className="flex min-w-0 flex-1 items-center gap-1.5 rounded-xl bg-black/25 px-2.5 py-2 ring-1 ring-white/10 backdrop-blur-sm">
+      <span className="shrink-0 text-white/70">{icon}</span>
+      <div className="min-w-0">
+        <div className="truncate text-[12px] font-black leading-tight text-white">{value}</div>
+        <div className="truncate text-[8.5px] font-semibold uppercase tracking-wider text-white/45">
+          {label}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Fiche de personnage — pièce maîtresse de Profil. Reprend le langage
+ * atmosphérique "Reliquary" (rankVisuals) pour le rang le plus élevé obtenu
+ * par l'utilisateur, sans dupliquer le moteur : `rankAggregate` est fourni
+ * par `RankAggregator`, qui ne fait qu'observer `useExerciseProgression`.
+ */
+export function ProfileHeroCard({
+  pseudo,
+  streak,
+  level,
+  xp,
+  avatarUrl,
+  onEdit,
+  onAvatarChange,
+  rankAggregate,
+  badgesUnlocked,
+  badgesTotal,
+  questsDone,
+  questsTotal,
+}: Props) {
   const { user } = useAuth();
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -75,6 +107,17 @@ export function ProfileHeroCard({ pseudo, streak, level, xp, avatarUrl, onEdit, 
   const xpIntoLevel = Math.max(0, xp - currentLevelXp);
   const xpForNext = Math.max(1, nextLevelXp - currentLevelXp);
   const pct = Math.min(100, Math.round((xpIntoLevel / xpForNext) * 100));
+
+  const bestRank = rankAggregate.best?.rank ?? null;
+  const rankKey = bestRank?.rank.key ?? "mortel";
+  const visual = getRankVisual(rankKey);
+  const colors = bestRank?.rank.colors ?? {
+    primary: "#78716c",
+    secondary: "#a8a29e",
+    glow: "rgba(120,113,108,0.35)",
+    text: "#f5f5f4",
+    gradient: "linear-gradient(90deg,#57534e 0%,#a8a29e 100%)",
+  };
 
   const handleFile = async (file: File) => {
     if (!user) return;
@@ -93,7 +136,6 @@ export function ProfileHeroCard({ pseudo, streak, level, xp, avatarUrl, onEdit, 
       const { data } = supabase.storage.from("avatars").getPublicUrl(path);
       await onAvatarChange(data.publicUrl);
 
-      // Nettoyage : supprime les anciens avatars (fire-and-forget)
       void supabase.storage
         .from("avatars")
         .list(user.id)
@@ -118,31 +160,34 @@ export function ProfileHeroCard({ pseudo, streak, level, xp, avatarUrl, onEdit, 
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
-      className="relative mb-6 overflow-hidden rounded-[28px] border border-white/10 bg-gradient-to-br from-white/[0.07] via-white/[0.02] to-transparent p-5 shadow-elevated backdrop-blur-xl"
+      className="relative mb-6 overflow-hidden rounded-[28px] p-5 shadow-elevated"
+      style={{
+        background: visual.atmosphere,
+        boxShadow: `inset 0 0 0 1px ${visual.vignette}, 0 12px 44px -20px ${colors.glow}`,
+      }}
     >
-      {/* Halos ambiants — pièce maîtresse de l'écran */}
+      <RankAmbientParticles rankKey={rankKey} />
       <div
         aria-hidden
-        className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full blur-3xl"
-        style={{ background: "radial-gradient(circle, rgba(108,99,255,0.4), transparent 70%)" }}
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute -bottom-20 -left-10 h-44 w-44 rounded-full blur-3xl"
-        style={{ background: "radial-gradient(circle, rgba(77,175,255,0.22), transparent 70%)" }}
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background: "radial-gradient(120% 60% at 50% 100%, rgba(0,0,0,0.5) 0%, transparent 70%)",
+        }}
       />
 
       <div className="relative flex items-center gap-4">
         <div className="relative shrink-0">
-          <div
-            className="absolute inset-[-3px] rounded-[22px] opacity-70 blur-[2px]"
-            style={{ background: HERO_COLORS.gradient }}
+          <motion.div
+            className="absolute inset-[-4px] rounded-[24px] blur-[3px]"
+            style={{ background: colors.gradient, opacity: 0.75 }}
+            animate={{ opacity: [0.55, 0.85, 0.55] }}
+            transition={{ duration: 3.2, repeat: Infinity, ease: "easeInOut" }}
             aria-hidden
           />
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
-            className="group relative flex h-[4.5rem] w-[4.5rem] items-center justify-center overflow-hidden rounded-[20px] border border-white/20 bg-background shadow-lg"
+            className="group relative flex h-20 w-20 items-center justify-center overflow-hidden rounded-[20px] border border-white/20 bg-black/40 shadow-lg"
             aria-label="Changer l'avatar"
           >
             {avatarUrl ? (
@@ -154,13 +199,6 @@ export function ProfileHeroCard({ pseudo, streak, level, xp, avatarUrl, onEdit, 
               <Camera className="h-5 w-5 text-white" />
             </span>
           </button>
-          {/* Plaque de niveau — écho discret du médaillon RPG, sans dupliquer son habillage complet */}
-          <span
-            className="absolute -bottom-1.5 -right-1.5 flex h-6 min-w-6 items-center justify-center rounded-full border-2 border-background px-1 text-[10px] font-black text-white shadow-md"
-            style={{ background: HERO_COLORS.gradient }}
-          >
-            {level}
-          </span>
           <input
             ref={fileRef}
             type="file"
@@ -178,37 +216,54 @@ export function ProfileHeroCard({ pseudo, streak, level, xp, avatarUrl, onEdit, 
         </div>
 
         <div className="min-w-0 flex-1">
-          <p className="text-xs text-muted-foreground">{greeting()}</p>
-          <div className="flex items-center gap-1.5">
-            <h1 className="truncate text-2xl font-bold tracking-tight">{pseudo}</h1>
-            <button type="button" onClick={onEdit} className="rounded-full p-1 text-muted-foreground hover:bg-white/10" aria-label="Modifier le pseudo">
-              <Pencil className="h-3.5 w-3.5" />
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={onEdit}
+            className="block max-w-full text-left"
+            aria-label="Modifier le pseudo"
+          >
+            <h1 className="truncate text-2xl font-bold tracking-tight text-white">{pseudo}</h1>
+          </button>
+          <p
+            className="mt-0.5 truncate font-serif text-[13px] italic tracking-wide"
+            style={{ color: colors.secondary }}
+          >
+            {bestRank ? bestRank.fullName : "Pas encore classé"}
+          </p>
 
-          <div className="mt-2 flex items-center gap-3">
-            <span className="text-xs font-semibold" style={{ color: HERO_COLORS.secondary }}>
-              Niveau {level}
-            </span>
-            <span className="text-[11px] tabular-nums text-muted-foreground">
+          <div className="mt-2.5 flex items-center gap-2">
+            <span className="text-[11px] font-bold text-white/85">Niveau {level}</span>
+            <span className="text-[10px] tabular-nums text-white/50">
               {xpIntoLevel.toLocaleString()} / {xpForNext.toLocaleString()} XP
             </span>
-            <span className="ml-auto inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-semibold">
-              <Flame className="h-3 w-3 text-orange-400" />
-              {streak}j
-            </span>
           </div>
-
-          <div className="mt-2">
-            <MasteryBar percent={pct} colors={HERO_COLORS} segments={5} height={8} />
+          <div className="mt-1.5">
+            <MasteryBar percent={pct} colors={colors} segments={5} height={8} />
           </div>
-
-          {user?.created_at && (
-            <p className="mt-3 text-[10px] text-muted-foreground/60">
-              Membre depuis {new Date(user.created_at).toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}
-            </p>
-          )}
         </div>
+      </div>
+
+      <div className="relative mt-4 grid grid-cols-4 gap-1.5">
+        <StatPill
+          icon={<Trophy className="h-3.5 w-3.5" />}
+          value={bestRank ? bestRank.rank.label : "—"}
+          label="Rang"
+        />
+        <StatPill
+          icon={<Award className="h-3.5 w-3.5" />}
+          value={`${badgesUnlocked}/${badgesTotal}`}
+          label="Succès"
+        />
+        <StatPill
+          icon={<Target className="h-3.5 w-3.5" />}
+          value={`${questsDone}/${questsTotal}`}
+          label="Quêtes"
+        />
+        <StatPill
+          icon={<Flame className="h-3.5 w-3.5 text-orange-400" />}
+          value={`${streak}j`}
+          label="Série"
+        />
       </div>
     </motion.header>
   );
