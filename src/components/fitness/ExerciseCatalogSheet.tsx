@@ -441,7 +441,7 @@ export function ExerciseCatalogSheet({ onClose }: Props) {
                               <div className="h-10 w-10 shrink-0 rounded-lg bg-white/5" />
                             )}
                             <span className="flex-1 truncate text-sm">{ex.name}</span>
-                            <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                            <div className="flex shrink-0 items-center gap-1">
                               {isCustomEx ? (
                                 <button
                                   type="button"
