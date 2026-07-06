@@ -2,7 +2,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { Swords } from "lucide-react";
 import { ExerciseRankBadge } from "./ExerciseRankBadge";
-import { ExerciseStatsSheet } from "./ExerciseStatsSheet";
+import { ExerciseAnalysisSheet } from "./ExerciseAnalysisSheet";
 import { useExerciseProgression } from "@/hooks/useExerciseProgression";
 import { normalize } from "@/lib/fitness/exerciseCatalog";
 
@@ -101,7 +101,7 @@ export function ExerciseRankStrip({
       </div>
 
       {openExercise && (
-        <ExerciseStatsSheet
+        <ExerciseAnalysisSheet
           exerciseName={openExercise}
           weightHistory={histByName.get(normalize(openExercise)) ?? []}
           volumeHistory={volByName.get(normalize(openExercise)) ?? []}

@@ -9,7 +9,7 @@ import { normalize } from "@/lib/fitness/exerciseCatalog";
  * Recherche tous les exercices de l'utilisateur portant ce nom (insensible à la
  * casse), récupère leurs séries puis les regroupe par séance (workout + date),
  * triées par date croissante. Sert à alimenter les courbes de progression
- * (1RM, tonnage) et le détail série-par-série dans ExerciseStatsSheet.
+ * (1RM, tonnage) et le détail série-par-série dans ExerciseAnalysisSheet.
  */
 
 export interface ExerciseSessionSet {

@@ -101,60 +101,25 @@ export const RANK_TIERS: RankTier[] = [
 export const LEVELS_PER_RANK = 5;
 export const TOTAL_TIERS = RANK_TIERS.length * LEVELS_PER_RANK; // 30
 
-/** XP cumulé requis pour atteindre l'index de palier `tier` (0..30). */
-export function xpForTier(tier: number): number {
-  if (tier <= 0) return 0;
-  // Progression accélérée au début, exigeante à la fin.
-  return Math.round(180 * Math.pow(tier, 1.85));
-}
-
-const ROMAN = ["I", "II", "III", "IV", "V"];
-
+/**
+ * État affichable d'un rang. Le calcul du tierIndex vit désormais dans
+ * `lib/fitness/rank/engine.ts` (moteur Rang/Maîtrise, basé sur la force
+ * relative + confirmation dans le temps pour Olympien/Primordial — plus sur
+ * une XP cumulative). Les champs xp/currentTierXp/nextTierXp/xpToNext
+ * portent ici un pourcentage de Maîtrise (0..100), pas une XP.
+ */
 export interface RankState {
   tierIndex: number;        // 0..29
   rank: RankTier;           // Titan
   levelInRank: number;      // 1..5
   romanLevel: string;       // "III"
   fullName: string;         // "Titan III"
-  xp: number;               // XP totale accumulée
-  currentTierXp: number;    // XP dans le palier courant
-  nextTierXp: number;       // XP requis pour boucler le palier
-  xpToNext: number;         // reste à faire
+  xp: number;               // Maîtrise (0..100)
+  currentTierXp: number;    // Maîtrise (0..100)
+  nextTierXp: number;       // toujours 100
+  xpToNext: number;         // 100 - Maîtrise
   progress: number;         // 0..1
   isMax: boolean;
-}
-
-export function rankFromXp(xp: number): RankState {
-  const safe = Math.max(0, Math.floor(xp));
-  let tierIndex = 0;
-  for (let i = 1; i <= TOTAL_TIERS; i++) {
-    if (safe >= xpForTier(i)) tierIndex = i;
-    else break;
-  }
-  const isMax = tierIndex >= TOTAL_TIERS - 1;
-  const cappedIdx = Math.min(tierIndex, TOTAL_TIERS - 1);
-  const rank = RANK_TIERS[Math.floor(cappedIdx / LEVELS_PER_RANK)];
-  const levelInRank = (cappedIdx % LEVELS_PER_RANK) + 1;
-
-  const base = xpForTier(cappedIdx);
-  const next = xpForTier(cappedIdx + 1);
-  const span = Math.max(1, next - base);
-  const currentTierXp = safe - base;
-  const progress = isMax ? 1 : Math.min(1, currentTierXp / span);
-
-  return {
-    tierIndex: cappedIdx,
-    rank,
-    levelInRank,
-    romanLevel: ROMAN[levelInRank - 1],
-    fullName: `${rank.label} ${ROMAN[levelInRank - 1]}`,
-    xp: safe,
-    currentTierXp: Math.max(0, currentTierXp),
-    nextTierXp: span,
-    xpToNext: Math.max(0, next - safe),
-    progress,
-    isMax,
-  };
 }
 
 // ============================================================
