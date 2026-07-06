@@ -50,6 +50,16 @@ import {
 } from "@/lib/fitness/analysis";
 import { ExerciseRankCard } from "./ExerciseRankCard";
 import { ExerciseActionsMenu, type ExerciseMenuAction } from "./ExerciseActionsMenu";
+import { ExerciseDiscoveryPage } from "./ExerciseDiscoveryPage";
+import {
+  Bar,
+  MuscleRow,
+  ObjChip,
+  SectionCard,
+  StarRating,
+  StatTileMini,
+  TrendIcon,
+} from "./ExerciseAnalysisPrimitives";
 
 type Tab = "weight" | "volume" | "1rm";
 
@@ -513,7 +523,7 @@ export function ExerciseAnalysisSheet({
           )}
             </>
           ) : (
-            <DiscoveryBody
+            <ExerciseDiscoveryPage
               exerciseName={exerciseName}
               imageUrl={imageUrl}
               muscles={analysis?.muscles ?? []}
@@ -528,234 +538,4 @@ export function ExerciseAnalysisSheet({
       </div>
     </div>
   );
-}
-
-// ── Sous-composants ──────────────────────────────────────────────────────────
-
-function SectionCard({ icon, title, children }: { icon: React.ReactNode; title: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded-2xl border border-border bg-surface/40 p-4">
-      <div className="mb-3 flex items-center gap-2">
-        <span className="text-primary">{icon}</span>
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</h3>
-      </div>
-      {children}
-    </div>
-  );
-}
-
-function StarRating({ stars }: { stars: number }) {
-  return (
-    <span className="flex items-center gap-0.5">
-      {[1, 2, 3, 4, 5].map((i) => (
-        <Star
-          key={i}
-          className={`h-4 w-4 ${i <= stars ? "fill-warning text-warning" : "text-muted-foreground/30"}`}
-        />
-      ))}
-    </span>
-  );
-}
-
-function TrendIcon({ trend }: { trend: Trend }) {
-  if (trend === "up") return <TrendingUp className="h-3.5 w-3.5 text-green-500" />;
-  if (trend === "down") return <TrendingDown className="h-3.5 w-3.5 text-destructive" />;
-  if (trend === "flat") return <Minus className="h-3.5 w-3.5 text-muted-foreground" />;
-  return <Minus className="h-3.5 w-3.5 text-muted-foreground/40" />;
-}
-
-function Bar({ value }: { value: number }) {
-  return (
-    <div className="h-2 overflow-hidden rounded-full bg-white/5">
-      <div className="h-full rounded-full bg-primary" style={{ width: `${Math.max(4, Math.min(100, value))}%` }} />
-    </div>
-  );
-}
-
-function MuscleRow({ m }: { m: MuscleContribution }) {
-  const c = RECOVERY_COLORS[m.recovery];
-  return (
-    <div className="flex items-center gap-2">
-      <span className="w-24 shrink-0 truncate text-[11.5px] text-foreground/85">{m.label}</span>
-      <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/5">
-        <div className="h-full rounded-full bg-primary" style={{ width: `${m.solicitation}%` }} />
-      </div>
-      <span
-        className="shrink-0 rounded-full px-2 py-0.5 text-[9px] font-semibold"
-        style={{ color: c.stroke, background: c.fill }}
-      >
-        {RECOVERY_LABELS[m.recovery]}
-      </span>
-    </div>
-  );
-}
-
-function StatTileMini({
-  icon,
-  label,
-  value,
-  highlight,
-  valueClass,
-}: {
-  icon?: React.ReactNode;
-  label: string;
-  value: string;
-  highlight?: boolean;
-  valueClass?: string;
-}) {
-  return (
-    <div className={`rounded-xl p-3 text-center ${highlight ? "bg-warning/10" : "bg-surface"}`}>
-      <div className="mb-1 flex items-center justify-center gap-1">
-        {icon}
-        <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">{label}</span>
-      </div>
-      <p className={`text-sm font-bold ${valueClass ?? ""}`}>{value}</p>
-    </div>
-  );
-}
-
-function ObjChip({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      className={`rounded-full px-3 py-1 text-[11px] font-medium transition-colors ${
-        active ? "bg-primary text-primary-foreground" : "bg-surface text-muted-foreground"
-      }`}
-    >
-      {label}
-    </button>
-  );
-}
-
-// ── État "Découverte" (exercice jamais pratiqué) ─────────────────────────────
-// Ne montre jamais de graphique/rang/analyse IA vides : uniquement des
-// données déjà validées ailleurs dans l'app (muscles = moteur de rôles
-// musculaires, bénéfices = moteur d'impact physique), jamais inventées.
-
-function DiscoveryBody({
-  exerciseName,
-  imageUrl,
-  muscles,
-  physicalImpact,
-  similarExercises,
-  onSelectSimilar,
-  ctaLabel,
-  onCta,
-}: {
-  exerciseName: string;
-  imageUrl?: string | null;
-  muscles: MuscleContribution[];
-  physicalImpact: TraitImpact[];
-  similarExercises?: Array<{ name: string; group: string }>;
-  onSelectSimilar?: (name: string) => void;
-  ctaLabel: string | null;
-  onCta?: () => void;
-}) {
-  const primary = muscles.filter((m) => m.role === "primary");
-  const secondary = muscles.filter((m) => m.role === "secondary");
-
-  return (
-    <>
-      {imageUrl ? (
-        <div className="flex items-center justify-center overflow-hidden rounded-2xl bg-black/30 ring-1 ring-white/5">
-          <img src={imageUrl} alt={exerciseName} className="max-h-56 w-full object-contain" loading="lazy" />
-        </div>
-      ) : (
-        <div className="flex h-40 items-center justify-center rounded-2xl bg-surface/60 text-muted-foreground">
-          <Dumbbell className="h-8 w-8" />
-        </div>
-      )}
-
-      <div className="rounded-2xl border border-primary/20 bg-primary/[0.06] p-4">
-        <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-primary">Pas encore pratiqué</p>
-        <p className="text-[12.5px] leading-relaxed text-foreground/90">{discoveryBlurb(exerciseName, primary, secondary)}</p>
-      </div>
-
-      {(primary.length > 0 || secondary.length > 0) && (
-        <SectionCard icon={<Activity className="h-3.5 w-3.5" />} title="Muscles sollicités">
-          <div className="space-y-3">
-            {primary.length > 0 && (
-              <div>
-                <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Principal</p>
-                <div className="space-y-2">
-                  {primary.map((m) => (
-                    <MuscleRow key={m.id} m={m} />
-                  ))}
-                </div>
-              </div>
-            )}
-            {secondary.length > 0 && (
-              <div>
-                <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Secondaire</p>
-                <div className="space-y-2">
-                  {secondary.map((m) => (
-                    <MuscleRow key={m.id} m={m} />
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </SectionCard>
-      )}
-
-      {physicalImpact.length > 0 && (
-        <SectionCard icon={<Gauge className="h-3.5 w-3.5" />} title="Bénéfices">
-          <div className="space-y-2">
-            {physicalImpact.slice(0, 4).map((t) => (
-              <div key={t.trait}>
-                <div className="mb-0.5 flex items-center justify-between text-[11px]">
-                  <span className="text-foreground/85">{t.label}</span>
-                </div>
-                <Bar value={t.score} />
-              </div>
-            ))}
-          </div>
-        </SectionCard>
-      )}
-
-      {similarExercises && similarExercises.length > 0 && (
-        <SectionCard icon={<Dumbbell className="h-3.5 w-3.5" />} title="Variantes / exercices similaires">
-          <div className="flex flex-wrap gap-1.5">
-            {similarExercises.map((s) => (
-              <button
-                key={s.name}
-                type="button"
-                onClick={() => onSelectSimilar?.(s.name)}
-                disabled={!onSelectSimilar}
-                className="rounded-full border border-border bg-surface px-3 py-1.5 text-[11px] font-medium text-foreground/85 transition-colors hover:border-primary/40 hover:text-primary disabled:pointer-events-none"
-              >
-                {s.name}
-              </button>
-            ))}
-          </div>
-        </SectionCard>
-      )}
-
-      {ctaLabel && onCta && (
-        <button
-          type="button"
-          onClick={onCta}
-          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary py-3.5 text-sm font-semibold text-primary-foreground shadow-glow transition-all active:scale-[0.99]"
-        >
-          <Zap className="h-4 w-4" />
-          {ctaLabel}
-        </button>
-      )}
-    </>
-  );
-}
-
-function discoveryBlurb(name: string, primary: MuscleContribution[], secondary: MuscleContribution[]): string {
-  if (primary.length === 0) {
-    return `« ${name} » ne fait pas encore partie de tes séances. Lance-toi pour débloquer son rang, sa progression et ses records.`;
-  }
-  const p = joinLabels(primary.map((m) => m.label));
-  const s = secondary.length > 0 ? `, avec l'appui de ${joinLabels(secondary.map((m) => m.label))}` : "";
-  return `« ${name} » cible principalement ${p}${s}. Pas encore pratiqué — lance-toi pour débloquer le rang, la progression et les records sur cet exercice.`;
-}
-
-function joinLabels(labels: string[]): string {
-  if (labels.length === 0) return "";
-  if (labels.length === 1) return labels[0];
-  return labels.slice(0, -1).join(", ") + " et " + labels[labels.length - 1];
 }
