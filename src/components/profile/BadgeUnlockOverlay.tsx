@@ -17,13 +17,13 @@ import {
 } from "lucide-react";
 import {
   RARITY_BG,
-  RARITY_BORDER,
   RARITY_COLORS,
   RARITY_LABELS,
   RARITY_TEXT,
   type BadgeCatalogEntry,
 } from "@/lib/fitness/badges";
 import { cn } from "@/lib/utils";
+import { BadgeMedallion } from "@/components/profile/BadgeMedallion";
 
 const ICON_MAP: Record<string, React.FC<{ className?: string }>> = {
   Award, Star, Trophy, Zap, Flame, Crown, Dumbbell, Shield, Target, Apple, CheckCircle, Activity,
@@ -80,7 +80,6 @@ function BadgeShowcase({ badge }: { badge: BadgeCatalogEntry }) {
   const Icon = ICON_MAP[badge.icon] ?? Award;
   const color = RARITY_COLORS[badge.rarity];
   const bg = RARITY_BG[badge.rarity];
-  const border = RARITY_BORDER[badge.rarity];
   const text = RARITY_TEXT[badge.rarity];
 
   return (
@@ -101,29 +100,22 @@ function BadgeShowcase({ badge }: { badge: BadgeCatalogEntry }) {
       </motion.p>
 
       <motion.div
-        className={cn(
-          "relative flex h-36 w-36 items-center justify-center rounded-3xl border-2 bg-gradient-to-br",
-          border,
-          bg,
-        )}
-        style={{ boxShadow: `0 0 60px ${color}80, 0 0 20px ${color}` }}
-        animate={{
-          rotate: [0, -3, 3, 0],
-          scale: [1, 1.05, 1],
-        }}
+        className="relative flex h-40 w-40 items-center justify-center"
+        style={{ filter: `drop-shadow(0 0 40px ${color}80)` }}
+        animate={{ scale: [1, 1.04, 1] }}
         transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
       >
-        <Icon className={cn("h-16 w-16", text)} />
-        {/* Rotating shine ring */}
+        {/* Anneau lumineux rotatif — même trame que la cinématique de montée de rang */}
         <motion.div
-          className="pointer-events-none absolute inset-[-8px] rounded-3xl"
+          className="pointer-events-none absolute inset-[-10px] rounded-full"
           style={{
             background: `conic-gradient(from 0deg, transparent 0deg, ${color}60 90deg, transparent 180deg, ${color}40 270deg, transparent 360deg)`,
-            filter: "blur(6px)",
+            filter: "blur(8px)",
           }}
           animate={{ rotate: 360 }}
           transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
         />
+        <BadgeMedallion rarity={badge.rarity} icon={Icon} size={140} unlocked animated />
       </motion.div>
 
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>

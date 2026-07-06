@@ -100,9 +100,6 @@ export function HealthDataPanel() {
 
   return (
     <section className="mb-5">
-      <h2 className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-        Import & export
-      </h2>
       <div className="divide-y divide-white/5 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] backdrop-blur-xl">
         <input
           ref={fileRef}

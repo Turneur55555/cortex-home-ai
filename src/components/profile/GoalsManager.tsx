@@ -417,10 +417,10 @@ function AddGoalForm({ onClose }: { onClose: () => void }) {
         target_date: targetDate,
         xp_reward: selectedType === "custom" ? 100 : 150,
       });
-      toast.success("Objectif créé !");
+      toast.success("Nouvelle quête lancée !");
       onClose();
     } catch {
-      toast.error("Impossible de créer l'objectif. Réessayez.");
+      toast.error("Impossible de lancer la quête. Réessayez.");
     }
   };
 
@@ -476,7 +476,7 @@ function AddGoalForm({ onClose }: { onClose: () => void }) {
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="Décrivez votre objectif..."
+            placeholder="Décrivez votre quête..."
             className="w-full rounded-xl border border-white/[0.08] bg-white/[0.05] px-3 py-2.5 text-sm placeholder:text-muted-foreground/40 focus:border-violet-500/40 focus:outline-none focus:ring-0 focus:bg-white/[0.07] transition-all"
           />
         </div>
@@ -525,7 +525,7 @@ function AddGoalForm({ onClose }: { onClose: () => void }) {
             disabled={!title.trim() || addGoal.isPending}
             className="flex-[2] rounded-xl bg-gradient-to-r from-violet-600 to-purple-600 py-2.5 text-sm font-semibold text-white shadow-lg shadow-violet-500/20 transition-opacity disabled:opacity-50"
           >
-            {addGoal.isPending ? "Création..." : "Créer l'objectif"}
+            {addGoal.isPending ? "Lancement..." : "Lancer la quête"}
           </button>
         </div>
       </div>
@@ -535,6 +535,8 @@ function AddGoalForm({ onClose }: { onClose: () => void }) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
+const COMPACT_QUEST_LIMIT = 3;
+
 export function GoalsManager() {
   const { goals, isLoading } = useGoalsWithProgress();
   const completeGoal = useCompleteGoal();
@@ -542,6 +544,7 @@ export function GoalsManager() {
   const updateGoal = useUpdateGoal();
   const [showForm, setShowForm] = useState(false);
   const [showDone, setShowDone] = useState(false);
+  const [showAllActive, setShowAllActive] = useState(false);
 
   // Auto-mark typed goals as completed once they hit 100%
   useEffect(() => {
@@ -555,6 +558,10 @@ export function GoalsManager() {
 
   const activeGoals = goals.filter((g) => !g.is_completed);
   const doneGoals = goals.filter((g) => g.is_completed);
+  const visibleActiveGoals =
+    showAllActive || activeGoals.length <= COMPACT_QUEST_LIMIT
+      ? activeGoals
+      : activeGoals.slice(0, COMPACT_QUEST_LIMIT);
 
   return (
     <section className="mb-6">
@@ -562,11 +569,11 @@ export function GoalsManager() {
       <div className="mb-3 flex items-center justify-between px-0.5">
         <div>
           <h2 className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-            Objectifs
+            Quêtes
           </h2>
           {goals.length > 0 && (
             <p className="text-[10px] text-muted-foreground/50">
-              {doneGoals.length} / {goals.length} complétés
+              {doneGoals.length} / {goals.length} quêtes accomplies
             </p>
           )}
         </div>
@@ -579,7 +586,7 @@ export function GoalsManager() {
               ? "border-violet-500/40 bg-violet-500/[0.15] text-violet-400"
               : "border-white/[0.08] bg-white/[0.04] text-muted-foreground hover:border-white/[0.14] hover:bg-white/[0.08]",
           )}
-          aria-label={showForm ? "Fermer" : "Ajouter un objectif"}
+          aria-label={showForm ? "Fermer" : "Nouvelle quête"}
         >
           <motion.div
             animate={{ rotate: showForm ? 45 : 0 }}
@@ -606,7 +613,7 @@ export function GoalsManager() {
 
         <AnimatePresence initial={false}>
           {!isLoading &&
-            (showDone ? goals : activeGoals).map((g) => (
+            (showDone ? goals : visibleActiveGoals).map((g) => (
               <GoalCard
                 key={g.id}
                 goal={g}
@@ -616,12 +623,24 @@ export function GoalsManager() {
                 onRemove={() => removeGoal.mutate(g.id)}
                 onSave={(patch) => {
                   updateGoal.mutate({ id: g.id, ...patch });
-                  toast.success("Objectif mis à jour");
+                  toast.success("Quête mise à jour");
                 }}
               />
             ))}
 
         </AnimatePresence>
+
+        {!isLoading && !showDone && activeGoals.length > COMPACT_QUEST_LIMIT && (
+          <button
+            type="button"
+            onClick={() => setShowAllActive((v) => !v)}
+            className="w-full rounded-xl border border-white/[0.06] bg-white/[0.02] py-2 text-[11px] font-medium text-muted-foreground/70 hover:bg-white/[0.05]"
+          >
+            {showAllActive
+              ? "Replier"
+              : `Voir les ${activeGoals.length - COMPACT_QUEST_LIMIT} autres quêtes`}
+          </button>
+        )}
 
         {!isLoading && doneGoals.length > 0 && (
           <button
@@ -629,7 +648,7 @@ export function GoalsManager() {
             onClick={() => setShowDone((v) => !v)}
             className="w-full rounded-xl border border-white/[0.06] bg-white/[0.02] py-2 text-[11px] font-medium text-muted-foreground/70 hover:bg-white/[0.05]"
           >
-            {showDone ? "Masquer" : "Afficher"} les {doneGoals.length} objectif{doneGoals.length > 1 ? "s" : ""} complété{doneGoals.length > 1 ? "s" : ""}
+            {showDone ? "Masquer" : "Afficher"} les {doneGoals.length} quête{doneGoals.length > 1 ? "s" : ""} accomplie{doneGoals.length > 1 ? "s" : ""}
           </button>
         )}
 
@@ -641,10 +660,10 @@ export function GoalsManager() {
             className="rounded-2xl border border-dashed border-white/[0.08] p-8 text-center"
           >
             <p className="text-sm font-medium text-muted-foreground/60">
-              Aucun objectif en cours
+              Aucune quête en cours
             </p>
             <p className="mt-1 text-xs text-muted-foreground/40">
-              Créez votre premier objectif avec le bouton +
+              Lance ta première quête avec le bouton +
             </p>
           </motion.div>
         )}

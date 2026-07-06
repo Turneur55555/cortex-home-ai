@@ -8,8 +8,6 @@ import {
   Crown,
   Dumbbell,
   Flame,
-  HelpCircle,
-  Lock,
   Search,
   Shield,
   Sparkles,
@@ -20,9 +18,11 @@ import {
 } from "lucide-react";
 import { useUserStats } from "@/hooks/useUserStats";
 import { useBadgeSystem } from "@/hooks/useBadgeSystem";
+import { useBadgeHighlights } from "@/hooks/useBadgeHighlights";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { BadgeUnlockOverlay } from "@/components/profile/BadgeUnlockOverlay";
+import { BadgeMedallion } from "@/components/profile/BadgeMedallion";
 import {
   CATEGORY_EMOJI,
   CATEGORY_LABELS,
@@ -31,7 +31,6 @@ import {
   RARITY_COLORS,
   RARITY_LABELS,
   RARITY_PROGRESS,
-  RARITY_RANK,
   RARITY_TEXT,
   xpForLevel,
   type BadgeCatalogEntry,
@@ -154,21 +153,15 @@ function BadgeCard({
 
       <div className="relative flex flex-col gap-2.5">
         <div className="flex items-start justify-between">
-          <div
-            className={cn(
-              "flex h-10 w-10 items-center justify-center rounded-xl",
-              isUnlocked ? cn("bg-gradient-to-br", rarityBg) : "bg-white/[0.05]",
-            )}
-            style={isUnlocked ? { boxShadow: `0 0 12px ${rarityColor}40` } : undefined}
-          >
-            {isSecret ? (
-              <HelpCircle className="h-5 w-5 text-white/30" />
-            ) : isComingSoon ? (
-              <Lock className="h-5 w-5 text-white/30" />
-            ) : (
-              <Icon className={cn("h-5 w-5", isUnlocked ? rarityText : "text-white/25")} />
-            )}
-          </div>
+          <BadgeMedallion
+            rarity={rarity}
+            icon={Icon}
+            unlocked={isUnlocked}
+            isSecret={isSecret}
+            isComingSoon={isComingSoon}
+            size={48}
+            animated={false}
+          />
           <span
             className={cn(
               "rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider",
@@ -243,13 +236,15 @@ export function BadgesStrip() {
   const xpForNext = Math.max(1, nextLevelXp - currentLevelXp);
   const pct = Math.min(100, Math.round((xpIntoLevel / xpForNext) * 100));
 
-  const unlocked = useMemo(
-    () => badgesWithProgress.filter((b) => b.isUnlocked),
-    [badgesWithProgress],
-  );
-  const unlockedCount = unlocked.length;
-  const total = badgesWithProgress.length;
-  const completionPct = total > 0 ? Math.round((unlockedCount / total) * 100) : 0;
+  const {
+    unlocked,
+    unlockedCount,
+    total,
+    completionPct,
+    rarestUnlocked,
+    latestUnlocked,
+    nextObjective,
+  } = useBadgeHighlights();
 
   // Detect newly unlocked badges → push to overlay queue
   useEffect(() => {
@@ -265,30 +260,6 @@ export function BadgesStrip() {
     }
     seenKeysRef.current = currentKeys;
   }, [unlocked]);
-
-  // Rarest unlocked + latest unlocked
-  const rarestUnlocked = useMemo(() => {
-    if (unlocked.length === 0) return null;
-    return [...unlocked].sort(
-      (a, b) => RARITY_RANK[b.catalog.rarity] - RARITY_RANK[a.catalog.rarity],
-    )[0];
-  }, [unlocked]);
-
-  const latestUnlocked = useMemo(() => {
-    if (unlocked.length === 0) return null;
-    return [...unlocked].sort(
-      (a, b) => new Date(b.unlockedAt ?? 0).getTime() - new Date(a.unlockedAt ?? 0).getTime(),
-    )[0];
-  }, [unlocked]);
-
-  // Next objective: locked badge with highest progress (excluding secret & coming_soon)
-  const nextObjective = useMemo(() => {
-    const candidates = badgesWithProgress.filter(
-      (b) => !b.isUnlocked && !b.catalog.is_secret && !b.catalog.is_coming_soon,
-    );
-    if (candidates.length === 0) return null;
-    return [...candidates].sort((a, b) => b.progress - a.progress)[0];
-  }, [badgesWithProgress]);
 
   // Top category
   const topCategory = useMemo(() => {
@@ -543,7 +514,7 @@ export function BadgesStrip() {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function StatChip({ label, value, hint }: { label: string; value: string; hint?: string }) {
+export function StatChip({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div className="rounded-xl bg-white/[0.03] px-2.5 py-2 ring-1 ring-white/[0.04]">
       <div className="text-[9px] font-semibold uppercase tracking-wider text-white/40">{label}</div>
@@ -553,7 +524,7 @@ function StatChip({ label, value, hint }: { label: string; value: string; hint?:
   );
 }
 
-function HighlightRow({
+export function HighlightRow({
   icon,
   label,
   title,

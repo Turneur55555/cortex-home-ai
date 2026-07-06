@@ -1,28 +1,28 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { FileText, Apple, ChevronRight, BarChart3 } from "lucide-react";
-import { ProfileCompletionCard } from "@/components/profile/ProfileCompletionCard";
+import { Apple, BarChart3, ChevronRight } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useProfile } from "@/hooks/useProfile";
 import { useActivityStreak } from "@/hooks/useActivityStreak";
 import { useUserStats } from "@/hooks/useUserStats";
-import { ProfileHeader } from "@/components/profile/ProfileHeader";
+import { ProfileHeroCard } from "@/components/profile/ProfileHeroCard";
+import { AccomplishmentsPanel } from "@/components/profile/AccomplishmentsPanel";
 import { GoalsManager } from "@/components/profile/GoalsManager";
 import { BadgesStrip } from "@/components/profile/BadgesStrip";
-import { ActivityTimeline } from "@/components/profile/ActivityTimeline";
-import { BodyMeasurementsHistory } from "@/components/profile/BodyMeasurementsHistory";
+import { BodyStatusCard } from "@/components/profile/BodyStatusCard";
+import { DocumentsSummaryCard } from "@/components/profile/DocumentsSummaryCard";
 import { PersonalizationPanel } from "@/components/profile/PersonalizationPanel";
-import { PdfPanel } from "@/components/profile/PdfPanel";
 import { SecurityPanel } from "@/components/profile/SecurityPanel";
 import { HealthDataPanel } from "@/components/profile/HealthDataPanel";
+import { SettingsGroup } from "@/components/profile/SettingsGroup";
 import { EditPseudoSheet } from "@/components/profile/EditPseudoSheet";
 
 export const Route = createFileRoute("/_authenticated/profil")({
   head: () => ({
     meta: [
       { title: "Profil — ICORTEX" },
-      { name: "description", content: "Votre compte, progression, espaces et préférences." },
+      { name: "description", content: "Le tableau de bord de ta progression." },
     ],
   }),
   component: ProfilPage,
@@ -38,38 +38,33 @@ function ProfilPage() {
 
   return (
     <main className="relative flex flex-1 flex-col overflow-hidden px-5 pb-32 pt-[max(2.5rem,env(safe-area-inset-top))]">
-      <ProfileHeader
+      {/* Identité — pièce maîtresse de l'écran */}
+      <ProfileHeroCard
         pseudo={pseudo}
-        email={user?.email ?? undefined}
         streak={streak}
         level={stats?.level ?? 1}
+        xp={stats?.xp ?? 0}
         avatarUrl={avatarUrl}
         onEdit={() => setEditOpen(true)}
         onAvatarChange={updateAvatar}
       />
 
-      {/* Profil complété */}
-      <Section title="Progression du profil">
-        <ProfileCompletionCard
-          hasAvatar={!!avatarUrl}
-          hasCustomPseudo={pseudo !== fallback}
-        />
-      </Section>
+      {/* Accomplissements — meilleurs rangs, records récents, badges rares,
+          prochaine récompense, objectifs principaux */}
+      <AccomplishmentsPanel />
 
-      {/* Objectifs fitness */}
-      <Section title="Objectifs fitness">
-        <GoalsManager />
-      </Section>
+      {/* Salle des trophées — le cœur du module */}
+      <BadgesStrip />
 
-      {/* Badges & succès */}
-      <Section title="Badges & succès">
-        <BadgesStrip />
-      </Section>
+      {/* Quêtes */}
+      <GoalsManager />
+
+      {/* État du corps — sobre, sans habillage RPG (décision actée) */}
+      <BodyStatusCard />
 
       {/* Mes espaces */}
       <Section title="Mes espaces">
         <div className="grid grid-cols-2 gap-2">
-          <SpaceLink to="/documents" icon={<FileText className="h-4 w-4" />} label="Documents" />
           <SpaceLink
             to="/preferences-alimentaires"
             icon={<Apple className="h-4 w-4" />}
@@ -83,24 +78,20 @@ function ProfilPage() {
         </div>
       </Section>
 
-      {/* Habitudes & activité */}
-      <Section title="Habitudes & activité">
-        <ActivityTimeline />
-        <BodyMeasurementsHistory />
-      </Section>
+      {/* Documents — carte de résumé renvoyant vers /documents (expérience complète, avec Transfer) */}
+      <DocumentsSummaryCard />
 
-      {/* Paramètres & notifications */}
-      <Section title="Paramètres & notifications">
-        <PersonalizationPanel />
-      </Section>
-
-      {/* Données personnelles */}
-      <Section title="Données personnelles">
-        <HealthDataPanel />
-        <PdfPanel />
-        <div className="mt-4">
+      {/* Paramètres — un seul conteneur, 3 sous-groupes */}
+      <Section title="Paramètres">
+        <SettingsGroup title="Personnalisation">
+          <PersonalizationPanel />
+        </SettingsGroup>
+        <SettingsGroup title="Compte & sécurité">
           <SecurityPanel />
-        </div>
+        </SettingsGroup>
+        <SettingsGroup title="Données">
+          <HealthDataPanel />
+        </SettingsGroup>
       </Section>
 
       <EditPseudoSheet
