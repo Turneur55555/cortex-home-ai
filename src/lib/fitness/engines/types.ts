@@ -81,10 +81,21 @@ export interface WorkoutTemplateExercise {
  *  Conservée telle quelle pour la rétrocompatibilité avec WorkoutSheet
  *  et SeancesTab, qui l'attendent déjà. Les disciplines non-musculation
  *  ne sont PAS obligées de produire des "exercises" au sens strict —
- *  voir `toWorkoutRecord` pour la vraie frontière de persistance. */
+ *  voir `toWorkoutRecord` pour la vraie frontière de persistance.
+ *
+ *  `segments` (phase 4) est le pendant générique de `exercises` pour
+ *  toute discipline dont le contenu généré n'est PAS une liste
+ *  sets/reps/weight : Cardio, HYROX, Course, Activités accompagnées.
+ *  Un moteur non-force laisse `exercises` vide et remplit `segments`
+ *  (même forme que SessionSegment, réutilisée à dessein) — ce qui
+ *  permet à `toWorkoutRecord`/`toSessionView` de transporter CE contenu
+ *  tel quel jusqu'à l'écran de relecture et l'historique, sans jamais
+ *  le forcer dans le vocabulaire "exercice" de la musculation. Voir
+ *  sessionViewHelpers.ts pour la convention de stockage dans metadata. */
 export interface WorkoutTemplate {
   name: string;
   exercises: WorkoutTemplateExercise[];
+  segments?: SessionSegment[];
   notes?: string;
 }
 

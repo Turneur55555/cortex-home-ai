@@ -30,3 +30,15 @@ export function durationQuestion(defaultMinutes: number): SenseiQuestionSpec {
     defaultValue: defaultMinutes,
   };
 }
+
+export const levelQuestion: SenseiQuestionSpec = {
+  id: "level",
+  prompt: "Quel est ton niveau ?",
+  type: "single-choice",
+  options: [
+    { value: "débutant", label: "Débutant" },
+    { value: "intermédiaire", label: "Intermédiaire" },
+    { value: "avancé", label: "Avancé" },
+  ],
+  defaultValue: "intermédiaire",
+};

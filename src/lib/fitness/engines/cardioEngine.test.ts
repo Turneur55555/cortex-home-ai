@@ -54,16 +54,29 @@ describe("CardioWorkoutEngine.questions — flux conditionnel par activité", ()
 });
 
 describe("CardioWorkoutEngine.generate", () => {
-  it("construit un nom déterministe sans appel réseau", async () => {
-    const tpl = await CardioWorkoutEngine.generate({ activity: "Vélo", duration_minutes: 40 });
+  it("construit un nom déterministe et des segments pré-labellisés, sans appel réseau", async () => {
+    const tpl = await CardioWorkoutEngine.generate({
+      activity: "Vélo",
+      duration_minutes: 40,
+      resistance: 12,
+      cadence_rpm: 85,
+    });
     expect(tpl.name).toBe("Vélo — 40 min");
     expect(tpl.exercises).toEqual([]);
+    expect(tpl.segments).toEqual([
+      {
+        label: "Vélo",
+        stats: [
+          { label: "Résistance", value: "12" },
+          { label: "Cadence", value: "85 rpm" },
+        ],
+      },
+    ]);
   });
 });
 
 describe("CardioWorkoutEngine.toWorkoutRecord", () => {
-  it("range les paramètres propres à l'activité dans metadata, jamais dans exerciseRows", () => {
-    const template = { name: "Vélo — 40 min", exercises: [] };
+  it("copie les segments du template et range les paramètres bruts dans metadata, jamais dans exerciseRows", async () => {
     const answers: SenseiAnswers = {
       activity: "Vélo",
       duration_minutes: 40,
@@ -71,6 +84,7 @@ describe("CardioWorkoutEngine.toWorkoutRecord", () => {
       cadence_rpm: 85,
       gym_location: "Fitness Park",
     };
+    const template = await CardioWorkoutEngine.generate(answers);
 
     const draft = CardioWorkoutEngine.toWorkoutRecord(template, answers);
 
@@ -78,29 +92,56 @@ describe("CardioWorkoutEngine.toWorkoutRecord", () => {
     expect(draft.duration_minutes).toBe(40);
     expect(draft.gym_location).toBe("Fitness Park");
     expect(draft.exerciseRows).toBeUndefined();
-    expect(draft.metadata).toEqual({ activity: "Vélo", resistance: 12, cadence_rpm: 85 });
+    expect(draft.metadata).toEqual({
+      activity: "Vélo",
+      resistance: 12,
+      cadence_rpm: 85,
+      segments: template.segments,
+    });
   });
 });
 
 describe("CardioWorkoutEngine.toSessionView", () => {
-  it("produit un segment unique avec les stats de l'activité, unités incluses", () => {
+  it("relit les segments stockés dans metadata sans les re-dériver", () => {
     const view = CardioWorkoutEngine.toSessionView({
       discipline: "cardio",
       name: "Vélo — 40 min",
       duration_minutes: 40,
-      metadata: { activity: "Vélo", resistance: 12, cadence_rpm: 85 },
+      metadata: {
+        activity: "Vélo",
+        segments: [
+          {
+            label: "Vélo",
+            stats: [
+              { label: "Résistance", value: "12" },
+              { label: "Cadence", value: "85 rpm" },
+            ],
+          },
+        ],
+      },
     });
 
     expect(view.segments).toHaveLength(1);
     expect(view.segments[0].label).toBe("Vélo");
-    expect(view.segments[0].stats).toEqual(
+    expect(view.segments[0].stats).toEqual([
+      { label: "Résistance", value: "12" },
+      { label: "Cadence", value: "85 rpm" },
+    ]);
+    expect(view.summaryStats).toEqual(
       expect.arrayContaining([
-        { label: "Résistance", value: "12" },
-        { label: "Cadence", value: "85 rpm" },
+        { label: "Durée", value: "40 min" },
+        { label: "Activité", value: "Vélo" },
       ]),
     );
-    expect(view.summaryStats).toEqual(
-      expect.arrayContaining([{ label: "Durée", value: "40 min" }]),
-    );
+  });
+
+  it("ne plante pas si metadata.segments est absent (ligne historique inattendue)", () => {
+    const view = CardioWorkoutEngine.toSessionView({
+      discipline: "cardio",
+      name: "Vélo — 40 min",
+      duration_minutes: 40,
+      metadata: { activity: "Vélo" },
+    });
+    expect(view.segments).toEqual([]);
   });
 });

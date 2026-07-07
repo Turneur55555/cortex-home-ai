@@ -1,6 +1,6 @@
 // ============================================================
 // Vérifie les invariants de fondation : toutes les disciplines
-// prévues existent, muscu et cardio sont les moteurs réels (phase 3),
+// prévues existent, muscu/cardio/hyrox sont les moteurs réels (phase 4),
 // et aucune discipline "comingSoon" n'alimente le moteur de Rang.
 // ============================================================
 
@@ -9,6 +9,7 @@ import { ENGINE_REGISTRY, listEngines } from "./registry";
 import { isReadyEngine } from "./types";
 import { StrengthWorkoutEngine } from "./strengthEngine";
 import { CardioWorkoutEngine } from "./cardioEngine";
+import { HyroxWorkoutEngine } from "./hyroxEngine";
 
 describe("ENGINE_REGISTRY", () => {
   it("expose les 5 disciplines prévues pour les phases 1 à 6", () => {
@@ -17,11 +18,12 @@ describe("ENGINE_REGISTRY", () => {
     );
   });
 
-  it("muscu et cardio sont les moteurs prêts (phase 3)", () => {
+  it("muscu, cardio et hyrox sont les moteurs prêts (phase 4)", () => {
     const ready = listEngines().filter(isReadyEngine);
-    expect(ready.map((e) => e.id).sort()).toEqual(["cardio", "muscu"]);
+    expect(ready.map((e) => e.id).sort()).toEqual(["cardio", "hyrox", "muscu"]);
     expect(ENGINE_REGISTRY.muscu).toBe(StrengthWorkoutEngine);
     expect(ENGINE_REGISTRY.cardio).toBe(CardioWorkoutEngine);
+    expect(ENGINE_REGISTRY.hyrox).toBe(HyroxWorkoutEngine);
   });
 
   it("aucune discipline comingSoon n'alimente le moteur de Rang", () => {
@@ -33,7 +35,7 @@ describe("ENGINE_REGISTRY", () => {
   });
 
   it("toutes les disciplines à venir sont marquées comingSoon", () => {
-    for (const id of ["hyrox", "course", "guided"] as const) {
+    for (const id of ["course", "guided"] as const) {
       expect(ENGINE_REGISTRY[id].comingSoon).toBe(true);
     }
   });

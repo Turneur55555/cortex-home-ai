@@ -15,7 +15,7 @@
 // ============================================================
 
 import { supabase } from "@/integrations/supabase/client";
-import { durationQuestion, gymLocationQuestion } from "./sharedQuestions";
+import { durationQuestion, gymLocationQuestion, levelQuestion } from "./sharedQuestions";
 import type {
   SenseiAnswers,
   SenseiContext,
@@ -47,17 +47,7 @@ const QUESTIONS: SenseiQuestionSpec[] = [
     ],
     defaultValue: "salle complète",
   },
-  {
-    id: "level",
-    prompt: "Quel est ton niveau ?",
-    type: "single-choice",
-    options: [
-      { value: "débutant", label: "Débutant" },
-      { value: "intermédiaire", label: "Intermédiaire" },
-      { value: "avancé", label: "Avancé" },
-    ],
-    defaultValue: "intermédiaire",
-  },
+  levelQuestion,
   {
     id: "goal",
     prompt: "Quel est ton objectif ?",

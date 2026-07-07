@@ -1,5 +1,5 @@
 // ============================================================
-// CardioWorkoutEngine — famille Cardio (phase 3).
+// CardioWorkoutEngine — famille Cardio (phase 3, retouché phase 4).
 //
 // Une seule discipline "cardio" qui couvre plusieurs activités
 // (Marche inclinée, Escalier, Vélo, Elliptique, Assault Bike, Rameur),
@@ -13,12 +13,18 @@
 // et ses paramètres. Générer via un LLM ici ajouterait coût et latence
 // pour zéro valeur ajoutée.
 //
+// Phase 4 : bascule sur `WorkoutTemplate.segments` + les helpers partagés
+// (sessionViewHelpers.ts), extraits en préparation du moteur HYROX — la
+// génération construit les stats UNE fois, `toSessionView` les relit
+// telles quelles, aucune re-dérivation dupliquée entre les deux.
+//
 // Ce fichier ne doit JAMAIS contenir de logique propre à une autre
 // discipline. Toute évolution des paramètres cardio (nouvelle machine,
 // nouveau champ) vit ici et nulle part ailleurs.
 // ============================================================
 
 import { durationQuestion, gymLocationQuestion } from "./sharedQuestions";
+import { baseSummaryStats, segmentsFromMetadata } from "./sessionViewHelpers";
 import type {
   SenseiAnswers,
   SenseiContext,
@@ -54,6 +60,10 @@ const PARAM_META: Record<string, { label: string; unit?: string }> = {
   distance_m: { label: "Distance", unit: "m" },
   intensity: { label: "Intensité" },
 };
+
+// Clés de paramètres propres à l'activité (tout sauf activity/duration/lieu,
+// qui sont portées par des champs dédiés de WorkoutRecordDraft).
+const METADATA_KEYS = Object.keys(PARAM_META);
 
 const QUESTIONS: SenseiQuestionSpec[] = [
   {
@@ -120,17 +130,15 @@ const QUESTIONS: SenseiQuestionSpec[] = [
   gymLocationQuestion,
 ];
 
-// Clés de métadonnées propres à l'activité (tout sauf activity/duration/lieu,
-// qui sont portées par des champs dédiés de WorkoutRecordDraft).
-const METADATA_KEYS = [
-  "speed_kmh",
-  "incline_pct",
-  "level",
-  "resistance",
-  "cadence_rpm",
-  "distance_m",
-  "intensity",
-];
+/** Construit les stats affichables à partir des réponses — appelé UNE
+ *  fois à la génération, jamais re-dérivé ensuite (voir sessionViewHelpers.ts). */
+function buildStats(answers: SenseiAnswers): SessionStat[] {
+  return METADATA_KEYS.filter((key) => answers[key] !== undefined).map((key) => {
+    const meta = PARAM_META[key];
+    const value = answers[key];
+    return { label: meta.label, value: meta.unit ? `${value} ${meta.unit}` : String(value) };
+  });
+}
 
 export const CardioWorkoutEngine: WorkoutEngine = {
   id: "cardio",
@@ -145,12 +153,13 @@ export const CardioWorkoutEngine: WorkoutEngine = {
     return {
       name: `${activity} — ${duration} min`,
       exercises: [],
+      segments: [{ label: activity, stats: buildStats(answers) }],
     };
   },
 
   toWorkoutRecord(template: WorkoutTemplate, answers: SenseiAnswers): WorkoutRecordDraft {
     const activity = String(answers.activity ?? "Cardio");
-    const metadata: Record<string, unknown> = { activity };
+    const metadata: Record<string, unknown> = { activity, segments: template.segments ?? [] };
     for (const key of METADATA_KEYS) {
       if (answers[key] !== undefined) metadata[key] = answers[key];
     }
@@ -168,20 +177,10 @@ export const CardioWorkoutEngine: WorkoutEngine = {
     const metadata = (record.metadata ?? {}) as Record<string, unknown>;
     const activity = typeof metadata.activity === "string" ? metadata.activity : "Cardio";
 
-    const stats: SessionStat[] = Object.entries(metadata)
-      .filter(([key]) => key !== "activity")
-      .map(([key, value]) => {
-        const meta = PARAM_META[key] ?? { label: key };
-        return { label: meta.label, value: meta.unit ? `${value} ${meta.unit}` : String(value) };
-      });
-
     return {
       title: record.name,
-      summaryStats: [
-        { label: "Durée", value: `${record.duration_minutes} min` },
-        { label: "Activité", value: activity },
-      ],
-      segments: [{ label: activity, stats }],
+      summaryStats: baseSummaryStats(record, [{ label: "Activité", value: activity }]),
+      segments: segmentsFromMetadata(record),
       notes: record.notes,
     };
   },
