@@ -23,6 +23,7 @@ import { Route as AuthenticatedProgressionRouteImport } from './routes/_authenti
 import { Route as AuthenticatedProfilRouteImport } from './routes/_authenticated/profil'
 import { Route as AuthenticatedPreferencesAlimentairesRouteImport } from './routes/_authenticated/preferences-alimentaires'
 import { Route as AuthenticatedNutritionRouteImport } from './routes/_authenticated/nutrition'
+import { Route as AuthenticatedMaitrisesRouteImport } from './routes/_authenticated/maitrises'
 import { Route as AuthenticatedDocumentsRouteImport } from './routes/_authenticated/documents'
 import { Route as AuthenticatedCorpsRouteImport } from './routes/_authenticated/corps'
 import { Route as AuthenticatedRapportsIndexRouteImport } from './routes/_authenticated/rapports/index'
@@ -100,6 +101,11 @@ const AuthenticatedNutritionRoute = AuthenticatedNutritionRouteImport.update({
   path: '/nutrition',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedMaitrisesRoute = AuthenticatedMaitrisesRouteImport.update({
+  id: '/maitrises',
+  path: '/maitrises',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedDocumentsRoute = AuthenticatedDocumentsRouteImport.update({
   id: '/documents',
   path: '/documents',
@@ -136,6 +142,7 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/corps': typeof AuthenticatedCorpsRoute
   '/documents': typeof AuthenticatedDocumentsRoute
+  '/maitrises': typeof AuthenticatedMaitrisesRoute
   '/nutrition': typeof AuthenticatedNutritionRoute
   '/preferences-alimentaires': typeof AuthenticatedPreferencesAlimentairesRoute
   '/profil': typeof AuthenticatedProfilRoute
@@ -155,6 +162,7 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/corps': typeof AuthenticatedCorpsRoute
   '/documents': typeof AuthenticatedDocumentsRoute
+  '/maitrises': typeof AuthenticatedMaitrisesRoute
   '/nutrition': typeof AuthenticatedNutritionRoute
   '/preferences-alimentaires': typeof AuthenticatedPreferencesAlimentairesRoute
   '/profil': typeof AuthenticatedProfilRoute
@@ -177,6 +185,7 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/_authenticated/corps': typeof AuthenticatedCorpsRoute
   '/_authenticated/documents': typeof AuthenticatedDocumentsRoute
+  '/_authenticated/maitrises': typeof AuthenticatedMaitrisesRoute
   '/_authenticated/nutrition': typeof AuthenticatedNutritionRoute
   '/_authenticated/preferences-alimentaires': typeof AuthenticatedPreferencesAlimentairesRoute
   '/_authenticated/profil': typeof AuthenticatedProfilRoute
@@ -200,6 +209,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/corps'
     | '/documents'
+    | '/maitrises'
     | '/nutrition'
     | '/preferences-alimentaires'
     | '/profil'
@@ -219,6 +229,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/corps'
     | '/documents'
+    | '/maitrises'
     | '/nutrition'
     | '/preferences-alimentaires'
     | '/profil'
@@ -240,6 +251,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/_authenticated/corps'
     | '/_authenticated/documents'
+    | '/_authenticated/maitrises'
     | '/_authenticated/nutrition'
     | '/_authenticated/preferences-alimentaires'
     | '/_authenticated/profil'
@@ -362,6 +374,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedNutritionRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/maitrises': {
+      id: '/_authenticated/maitrises'
+      path: '/maitrises'
+      fullPath: '/maitrises'
+      preLoaderRoute: typeof AuthenticatedMaitrisesRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/documents': {
       id: '/_authenticated/documents'
       path: '/documents'
@@ -403,6 +422,7 @@ declare module '@tanstack/react-router' {
 interface AuthenticatedRouteChildren {
   AuthenticatedCorpsRoute: typeof AuthenticatedCorpsRoute
   AuthenticatedDocumentsRoute: typeof AuthenticatedDocumentsRoute
+  AuthenticatedMaitrisesRoute: typeof AuthenticatedMaitrisesRoute
   AuthenticatedNutritionRoute: typeof AuthenticatedNutritionRoute
   AuthenticatedPreferencesAlimentairesRoute: typeof AuthenticatedPreferencesAlimentairesRoute
   AuthenticatedProfilRoute: typeof AuthenticatedProfilRoute
@@ -420,6 +440,7 @@ interface AuthenticatedRouteChildren {
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedCorpsRoute: AuthenticatedCorpsRoute,
   AuthenticatedDocumentsRoute: AuthenticatedDocumentsRoute,
+  AuthenticatedMaitrisesRoute: AuthenticatedMaitrisesRoute,
   AuthenticatedNutritionRoute: AuthenticatedNutritionRoute,
   AuthenticatedPreferencesAlimentairesRoute:
     AuthenticatedPreferencesAlimentairesRoute,

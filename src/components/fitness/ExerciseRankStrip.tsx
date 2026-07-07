@@ -12,6 +12,7 @@ function MiniRankTile({
   histByName,
   volByName,
   prByName,
+  fixedWidth,
 }: {
   exerciseName: string;
   displayName: string;
@@ -19,6 +20,7 @@ function MiniRankTile({
   histByName: Map<string, Array<{ date: string; weight: number }>>;
   volByName: Map<string, Array<{ date: string; volume: number }>>;
   prByName: Map<string, number>;
+  fixedWidth: boolean;
 }) {
   const { rank, sessionCount } = useExerciseProgression(exerciseName);
   const { colors } = rank.rank;
@@ -29,7 +31,9 @@ function MiniRankTile({
   return (
     <button
       onClick={() => onOpen(exerciseName)}
-      className="flex w-[150px] shrink-0 flex-col items-center gap-2 rounded-2xl border p-3 text-left transition-transform hover:scale-[1.02]"
+      className={`flex flex-col items-center gap-2 rounded-2xl border p-3 text-left transition-transform hover:scale-[1.02] ${
+        fixedWidth ? "w-[150px] shrink-0" : "w-full"
+      }`}
       style={{
         borderColor: colors.primary + "55",
         background: `linear-gradient(180deg, ${colors.primary}15 0%, transparent 60%), #0b0b0f`,
@@ -64,12 +68,17 @@ export function ExerciseRankStrip({
   histByName,
   volByName,
   prByName,
+  layout = "carousel",
 }: {
   topExercises: string[]; // clés normalisées
   nameByKey: Map<string, string>;
   histByName: Map<string, Array<{ date: string; weight: number }>>;
   volByName: Map<string, Array<{ date: string; volume: number }>>;
   prByName: Map<string, number>;
+  /** "carousel" (défaut, historique) : rangée qui défile horizontalement.
+   *  "grid" : grille pleine largeur — pour un écran dédié qui liste des
+   *  dizaines/centaines de maîtrises sans logique de swipe. */
+  layout?: "carousel" | "grid";
 }) {
   const [openExercise, setOpenExercise] = useState<string | null>(null);
 
@@ -77,7 +86,13 @@ export function ExerciseRankStrip({
 
   return (
     <div className="overflow-hidden rounded-3xl border border-white/[0.06] bg-gradient-to-b from-white/[0.04] to-white/[0.01] p-4 shadow-card backdrop-blur-xl">
-      <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
+      <div
+        className={
+          layout === "grid"
+            ? "grid grid-cols-2 gap-2 sm:grid-cols-3"
+            : "-mx-4 flex gap-2 overflow-x-auto px-4 pb-1"
+        }
+      >
         {topExercises.map((key) => {
           const display = nameByKey.get(key) ?? key;
           return (
@@ -89,6 +104,7 @@ export function ExerciseRankStrip({
               histByName={histByName}
               volByName={volByName}
               prByName={prByName}
+              fixedWidth={layout === "carousel"}
             />
           );
         })}

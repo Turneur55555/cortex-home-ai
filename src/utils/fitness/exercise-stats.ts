@@ -93,3 +93,29 @@ export function computePRs(workouts: WorkoutWithExercises[] | null | undefined) 
 
   return { prByName, histByName, volByName, prByGym, histByGym, nameByKey, topExercises };
 }
+
+/**
+ * Dernières progressions (PR) parmi une liste d'exercices — extrait de la
+ * Progression RPG du Profil pour être réutilisé tel quel (même formule,
+ * aucun changement) par toute autre carte de progression (ex. Séances).
+ */
+export function computeRecentPRs(
+  exerciseKeys: string[],
+  prByName: Map<string, number>,
+  histByName: Map<string, Array<{ date: string; weight: number }>>,
+  nameByKey: Map<string, string>,
+  limit = 2,
+): Array<{ name: string; weight: number; date: string }> {
+  const rows: { name: string; weight: number; date: string }[] = [];
+  for (const key of exerciseKeys) {
+    const pr = prByName.get(key);
+    const hist = histByName.get(key);
+    if (!pr || !hist || hist.length === 0) continue;
+    const atPr = [...hist]
+      .filter((h) => h.weight === pr)
+      .sort((a, b) => (a.date < b.date ? 1 : -1));
+    if (atPr.length === 0) continue;
+    rows.push({ name: nameByKey.get(key) ?? key, weight: pr, date: atPr[0].date });
+  }
+  return rows.sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, limit);
+}

@@ -5,31 +5,9 @@ import { MasteryBar } from "@/components/fitness/MasteryBar";
 import { toRankState } from "@/hooks/useExerciseProgression";
 import { TOTAL_TIERS } from "@/lib/fitness/exerciseRanks";
 import { StatChip, HighlightRow } from "@/components/profile/shared";
+import { computeRecentPRs } from "@/utils/fitness/exercise-stats";
 import type { RankAggregate } from "@/components/fitness/RankAggregator";
 import type { AchievementAggregateWithLoading } from "@/hooks/useAchievements";
-
-function useRecentPRs(
-  topExercises: string[],
-  prByName: Map<string, number>,
-  histByName: Map<string, { date: string; weight: number }[]>,
-  nameByKey: Map<string, string>,
-  limit = 2,
-) {
-  return useMemo(() => {
-    const rows: { name: string; weight: number; date: string }[] = [];
-    for (const key of topExercises) {
-      const pr = prByName.get(key);
-      const hist = histByName.get(key);
-      if (!pr || !hist || hist.length === 0) continue;
-      const atPr = [...hist]
-        .filter((h) => h.weight === pr)
-        .sort((a, b) => (a.date < b.date ? 1 : -1));
-      if (atPr.length === 0) continue;
-      rows.push({ name: nameByKey.get(key) ?? key, weight: pr, date: atPr[0].date });
-    }
-    return rows.sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, limit);
-  }, [prByName, histByName, nameByKey, topExercises, limit]);
-}
 
 /**
  * Progression RPG — répond à UNE seule question : "Où en suis-je ?".
@@ -56,7 +34,10 @@ export function RPGProgressionSection({
   volByName: Map<string, Array<{ date: string; volume: number }>>;
   prByName: Map<string, number>;
 }) {
-  const recentPRs = useRecentPRs(topExercises, prByName, histByName, nameByKey, 2);
+  const recentPRs = useMemo(
+    () => computeRecentPRs(topExercises, prByName, histByName, nameByKey, 2),
+    [topExercises, prByName, histByName, nameByKey],
+  );
 
   const isLoading = rankAggregate.isLoading || achievements.isLoading;
   const best = rankAggregate.best;

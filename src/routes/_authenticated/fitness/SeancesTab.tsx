@@ -1,4 +1,5 @@
 import { useMemo, useState, useCallback } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import {
   Dumbbell,
   Loader2,
@@ -27,7 +28,8 @@ import { StartWorkoutSheet } from "@/components/fitness/StartWorkoutSheet";
 import { ActiveWorkoutView } from "@/components/fitness/ActiveWorkoutView";
 import { ExerciseCatalogSheet } from "@/components/fitness/ExerciseCatalogSheet";
 import { PostWorkoutAnalysisSheet } from "@/components/fitness/PostWorkoutAnalysisSheet";
-import { ExerciseRankStrip } from "@/components/fitness/ExerciseRankStrip";
+import { SeancesProgressionCard } from "@/components/fitness/SeancesProgressionCard";
+import { ProfileRPGData } from "@/components/profile/rpg/ProfileRPGData";
 import { SectionReveal } from "@/components/fitness/SectionReveal";
 import { AnimatedNumber } from "@/components/fitness/AnimatedNumber";
 import {
@@ -60,6 +62,7 @@ function weekdayLabel(iso: string) {
 // ── Composant principal ─────────────────────────────────────────────────────────
 
 export function SeancesTab() {
+  const navigate = useNavigate();
   const { data, isLoading, error } = useWorkouts();
   const { data: activeWorkout, isLoading: activeLoading } = useActiveWorkout();
   const recoveryMap = useRecoveryMap(data);
@@ -216,18 +219,34 @@ export function SeancesTab() {
       {/* Trait de liaison — même lieu, pas des cartes indépendantes */}
       <SectionLink />
 
-      {/* ── Progression RPG — remonte juste après l'épreuve choisie ──── */}
+      {/* ── Progression RPG — une seule carte immersive qui raconte où en
+          est le joueur, plutôt qu'un carousel de dizaines d'exercices.
+          Le détail complet ("Toutes les maîtrises") vit dans son propre
+          écran, ouvert via le bouton de la carte. ──────────────────── */}
       {topExercises.length > 0 && (
         <SectionReveal>
           <div>
             <SectionTitle icon={<Swords className="h-3 w-3" />} title="Progression RPG" />
-            <ExerciseRankStrip
-              topExercises={topExercises}
-              nameByKey={nameByKey}
-              histByName={histByName}
-              volByName={volByName}
-              prByName={prByName}
-            />
+            <ProfileRPGData>
+              {({
+                rankAggregate,
+                achievements,
+                topExercises: rpgTop,
+                nameByKey: rpgNameByKey,
+                histByName: rpgHist,
+                prByName: rpgPr,
+              }) => (
+                <SeancesProgressionCard
+                  rankAggregate={rankAggregate}
+                  achievements={achievements}
+                  topExercises={rpgTop}
+                  nameByKey={rpgNameByKey}
+                  histByName={rpgHist}
+                  prByName={rpgPr}
+                  onViewAll={() => navigate({ to: "/maitrises" })}
+                />
+              )}
+            </ProfileRPGData>
           </div>
         </SectionReveal>
       )}
