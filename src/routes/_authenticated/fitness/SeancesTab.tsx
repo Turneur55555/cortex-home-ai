@@ -172,8 +172,8 @@ export function SeancesTab() {
   // ── VUE HISTORIQUE ─────────────────────────────────────────────────────────
   return (
     <section className="flex flex-col gap-5">
-      {/* ── HERO — LA FORGE ─────────────────────────────────────────── */}
-      <SeancesHero topExercises={topExercises} />
+      {/* ── Hero — respiration d'ambiance ───────────────────────────── */}
+      <SeancesHero />
 
       {/* ── Sensei^IA ───────────────────────────────────────────────── */}
       <SenseiIACard onClick={() => openCoach()} />

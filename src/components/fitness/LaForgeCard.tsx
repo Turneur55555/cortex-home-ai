@@ -1,12 +1,11 @@
 import { motion } from "framer-motion";
-import { Hammer } from "lucide-react";
 
 /**
  * La Forge — même identité visuelle que Sensei^IA (même matériau : verre
  * teinté, même halo doré, même filet lumineux, même hiérarchie
- * typographique, même niveau de finition). La seule différence entre les
- * deux cartes est le glyphe (marteau plutôt que "IA"), le titre et le
- * contenu — pour que l'utilisateur comprenne immédiatement que les deux
+ * typographique, même niveau de finition). Aucune icône : les seules
+ * différences entre les deux cartes sont le titre, le texte et l'action
+ * proposée — pour que l'utilisateur comprenne immédiatement que les deux
  * appartiennent à la même famille : Sensei le coach, La Forge l'atelier.
  */
 export function LaForgeCard({ onClick }: { onClick: () => void }) {
@@ -45,15 +44,6 @@ export function LaForgeCard({ onClick }: { onClick: () => void }) {
       <div className="relative">
         <p className="font-serif text-[26px] font-semibold italic leading-none tracking-wide text-white">
           La Forge
-          <sup
-            className="ml-1.5 inline-flex align-super"
-            style={{
-              color: "rgba(234,179,8,0.92)",
-              filter: "drop-shadow(0 0 6px rgba(234,179,8,0.35))",
-            }}
-          >
-            <Hammer className="h-3 w-3" strokeWidth={2.5} />
-          </sup>
         </p>
 
         <p className="mt-2 max-w-[36ch] text-[13px] leading-relaxed text-white/70">

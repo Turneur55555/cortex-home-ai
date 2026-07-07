@@ -3,6 +3,14 @@
 ## Dernière mise à jour
 2026-07-07
 
+## Séances → passe de finition Hero (2026-07-07, branche `claude/sessions-hero-refinement-568s1k`)
+Nouvelle passe UX demandée par Nathan, strictement le Hero (aucun moteur/hook/Supabase/Edge Function/calcul touché) — changement de philosophie : le Hero n'est plus un point d'entrée, juste une respiration visuelle entre la nav et Sensei^IA, qui redevient le vrai point d'entrée de la page.
+- **`SeancesHero.tsx` réécrit à l'os** : hauteur réduite d'environ 40% supplémentaires (`min-h-[72px]`→`44px`, `py-3`→`py-2`, `rounded-[22px]`→`rounded-2xl`). Suppression totale de la sensation de carte : filet métallique haut, bordure inset (`boxShadow` ring) et vignette réactive au hover retirés — plus aucun `whileHover`/`whileTap`, la citation flotte sans jamais inviter au tap. **Découplage complet du rang de l'utilisateur** : `RankAggregator`/`topExercises`/`getRankVisual` retirés du composant (n'était utilisé que pour une couleur d'ambiance cosmétique) — remplacés par une ambiance fixe autonome (fond dégradé sombre `#150808→#070303`, un seul halo rouge très léger en respiration extrêmement lente 16s, 4 braises discrètes faites main avec durées 17-23s). `SeancesHero` ne prend donc plus de props ; l'appel dans `SeancesTab.tsx` passe de `<SeancesHero topExercises={topExercises} />` à `<SeancesHero />` (`topExercises` reste utilisé ailleurs dans le fichier, non supprimé).
+- **`LaForgeCard.tsx`** : suppression complète de l'icône marteau (`Hammer` de lucide-react, affichée en exposant) — plus aucune icône, comme demandé. La carte n'a désormais plus aucune différence structurelle avec `SenseiIACard.tsx` hormis titre/texte/action.
+- Commentaire de section stale corrigé dans `SeancesTab.tsx` (`{/* HERO — LA FORGE */}` → `{/* Hero — respiration d'ambiance */}`, la Forge étant désormais une carte séparée plus bas, ce libellé prêtait à confusion).
+- Validé : `npx tsc --noEmit` 0 erreur, `eslint` clean sur les 3 fichiers touchés, `npm run test` 145/145 verts (0 régression), `npm run build` OK.
+- ⚠️ Test navigateur manuel impossible dans cette session (pas d'environnement de preview) — à vérifier par Nathan sur le déploiement Lovable/preview.
+
 ## Séances → refonte finale : RPG et Performances retirés, La Forge alignée sur Sensei (2026-07-07, branche `claude/seances-page-redesign-jfi73t`)
 Dernière passe UX demandée par Nathan, strictement UI (aucun moteur/hook/Supabase/Edge Function/calcul touché) :
 - **`SeancesHero.tsx`** : réduction d'environ 50% supplémentaire par rapport à la session précédente (`min-h-[150px]`→`72px`, `py-8`→`py-3`, `rounded-[28px]`→`[22px]`, texte `19px`→`13px`, `leading-[1.6]`→`1.45`). Particules/braises/halos/centrage intouchés — le Hero n'est plus qu'une ambiance d'introduction, ne rivalise plus visuellement avec Sensei.
