@@ -35,6 +35,7 @@ export type AchievementCategory =
   | "hyrox"
   | "running"
   | "recovery"
+  | "guided"
   | "exploration"
   | "secret";
 
@@ -50,6 +51,7 @@ export const ACHIEVEMENT_CATEGORY_LABELS: Record<AchievementCategory, string> = 
   hyrox: "HYROX",
   running: "Course",
   recovery: "Récupération",
+  guided: "Activités accompagnées",
   exploration: "Exploration",
   secret: "Secrets",
 };
@@ -66,6 +68,7 @@ export const ACHIEVEMENT_CATEGORY_EMOJI: Record<AchievementCategory, string> = {
   hyrox: "🧱",
   running: "🏃",
   recovery: "🌙",
+  guided: "🧘",
   exploration: "🧭",
   secret: "⭐",
 };
@@ -80,6 +83,7 @@ export const ACHIEVEMENT_CATEGORY_ORDER: AchievementCategory[] = [
   "nutrition",
   "body",
   "recovery",
+  "guided",
   "exploration",
   "hyrox",
   "running",
@@ -111,6 +115,9 @@ export interface AchievementContext {
 
   workoutsCountTotal: number; // comptage exact serveur (non plafonné)
   weeklyWorkouts: number;
+  /** Comptage exact serveur des séances discipline='guided' (Phase 6) —
+   *  voir useDisciplineWorkoutCount, même principe que workoutsCountTotal. */
+  guidedSessionsCount: number;
   goalsCompletedTotal: number;
   bodyMeasurementsCount: number;
   proteinDays30: number;

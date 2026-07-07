@@ -9,6 +9,7 @@ import { collectionAchievements } from "./definitions/collection";
 import { hyroxAchievements } from "./definitions/hyrox";
 import { runningAchievements } from "./definitions/running";
 import { recoveryAchievements } from "./definitions/recovery";
+import { guidedAchievements } from "./definitions/guided";
 import { explorationAchievements } from "./definitions/exploration";
 import { secretAchievements } from "./definitions/secret";
 import type { AchievementDef } from "./types";
@@ -27,6 +28,7 @@ export const ACHIEVEMENT_REGISTRY: AchievementDef[] = [
   ...nutritionAchievements,
   ...bodyAchievements,
   ...recoveryAchievements,
+  ...guidedAchievements,
   ...explorationAchievements,
   ...hyroxAchievements,
   ...runningAchievements,

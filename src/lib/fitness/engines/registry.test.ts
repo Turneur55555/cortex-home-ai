@@ -11,6 +11,7 @@ import { StrengthWorkoutEngine } from "./strengthEngine";
 import { CardioWorkoutEngine } from "./cardioEngine";
 import { HyroxWorkoutEngine } from "./hyroxEngine";
 import { CourseWorkoutEngine } from "./courseEngine";
+import { GuidedActivityEngine } from "./guidedEngine";
 
 describe("ENGINE_REGISTRY", () => {
   it("expose les 5 disciplines prévues pour les phases 1 à 6", () => {
@@ -19,25 +20,28 @@ describe("ENGINE_REGISTRY", () => {
     );
   });
 
-  it("muscu, cardio, hyrox et course sont les moteurs prêts (phase 5)", () => {
+  it("les 5 disciplines sont désormais les moteurs prêts (phase 6)", () => {
     const ready = listEngines().filter(isReadyEngine);
-    expect(ready.map((e) => e.id).sort()).toEqual(["cardio", "course", "hyrox", "muscu"]);
+    expect(ready.map((e) => e.id).sort()).toEqual(["cardio", "course", "guided", "hyrox", "muscu"]);
     expect(ENGINE_REGISTRY.muscu).toBe(StrengthWorkoutEngine);
     expect(ENGINE_REGISTRY.cardio).toBe(CardioWorkoutEngine);
     expect(ENGINE_REGISTRY.hyrox).toBe(HyroxWorkoutEngine);
     expect(ENGINE_REGISTRY.course).toBe(CourseWorkoutEngine);
+    expect(ENGINE_REGISTRY.guided).toBe(GuidedActivityEngine);
   });
 
-  it("aucune discipline comingSoon n'alimente le moteur de Rang", () => {
+  it("aucune discipline n'alimente le moteur de Rang hors musculation", () => {
     for (const entry of listEngines()) {
-      if (entry.comingSoon) {
+      if (entry.id !== "muscu") {
         expect(entry.feedsRankEngine).toBe(false);
       }
     }
   });
 
-  it("seule 'guided' reste à venir (phase 6)", () => {
-    expect(ENGINE_REGISTRY.guided.comingSoon).toBe(true);
+  it("plus aucune discipline comingSoon — les 7 phases sont couvertes côté moteurs", () => {
+    for (const entry of listEngines()) {
+      expect(entry.comingSoon).toBe(false);
+    }
   });
 });
 

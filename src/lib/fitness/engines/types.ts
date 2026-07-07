@@ -47,7 +47,20 @@ export type SenseiAnswers = Record<string, SenseiAnswerValue>;
 /** Contexte calculé par l'app (PAS une réponse de l'utilisateur) : données
  *  déjà connues qu'on ne redemande pas dans le dialogue (récupération
  *  musculaire, profil, historique récent...). Opaque pour l'orchestrateur,
- *  interprété uniquement par le moteur qui le reçoit. */
+ *  interprété uniquement par le moteur qui le reçoit.
+ *
+ *  Phase 6 — séparation avec un futur "Planner Engine" (pas construit
+ *  aujourd'hui, mais préparé) : c'est le SEUL moteur qui aurait le droit
+ *  de "décider" quelle discipline/quels paramètres proposer (objectifs,
+ *  historique, récupération, wearable, quêtes, progression RPG). Un
+ *  WorkoutEngine ne décide JAMAIS lui-même quoi proposer — cette
+ *  responsabilité appartient déjà exclusivement à l'utilisateur (étape
+ *  "discipline" du Sensei, CoachSheet.tsx) et appartiendra demain au
+ *  Planner. Le point d'injection est CE type : un Planner futur n'aurait
+ *  qu'à enrichir `SenseiContext` (ex: `context.recommendation`) avant
+ *  `generate()`, ou pré-remplir `answers`/`disciplineId` avant l'ouverture
+ *  du Sensei (précédent déjà posé par `initialMuscles` sur CoachSheet) —
+ *  aucun moteur existant n'a besoin d'être modifié pour ça. */
 export type SenseiContext = Record<string, unknown>;
 
 export interface SenseiQuestionOption {

@@ -3,6 +3,7 @@ import { useUserStats } from "@/hooks/useUserStats";
 import { useActivityStreak } from "@/hooks/useActivityStreak";
 import { useWorkouts, useBodyMeasurements } from "@/hooks/use-fitness";
 import { useGoalsWithProgress } from "@/hooks/useGoalsWithProgress";
+import { useDisciplineWorkoutCount } from "@/hooks/useDisciplineWorkoutCount";
 import { computePRs } from "@/utils/fitness/exercise-stats";
 import { classifyExerciseFamily } from "@/lib/fitness/rank/familyClassification";
 import { buildAchievementContext } from "@/lib/profile/achievements/context";
@@ -42,6 +43,9 @@ export function useAchievements(
   const { data: workouts, isLoading: workoutsLoading } = useWorkouts();
   const { data: bodyMeasurements } = useBodyMeasurements();
   const { goals, isLoading: goalsLoading } = useGoalsWithProgress();
+  // Phase 6 (Activités accompagnées) : comptage exact, indépendant du
+  // plafond à 60 lignes de useWorkouts() — voir useDisciplineWorkoutCount.
+  const { data: guidedSessionsCount = 0 } = useDisciplineWorkoutCount("guided");
 
   const { prByName, histByName, volByName, nameByKey, topExercises } = useMemo(
     () => computePRs(workouts ?? []),
@@ -75,6 +79,7 @@ export function useAchievements(
       streakDays,
       workoutsCountTotal: stats.workouts_count,
       weeklyWorkouts: stats.weekly_workouts,
+      guidedSessionsCount,
       goalsCompletedTotal: stats.goals_completed,
       bodyMeasurementsCount: stats.body_measurements,
       proteinDays30: stats.protein_days,
@@ -118,6 +123,7 @@ export function useAchievements(
     bodyWeightHistory,
     goals,
     badgesWithProgress,
+    guidedSessionsCount,
   ]);
 
   return {

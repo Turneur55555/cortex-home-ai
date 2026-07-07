@@ -17,6 +17,7 @@ export interface BuildAchievementContextInput {
   streakDays: number;
   workoutsCountTotal: number;
   weeklyWorkouts: number;
+  guidedSessionsCount: number;
   goalsCompletedTotal: number;
   bodyMeasurementsCount: number;
   proteinDays30: number;
@@ -43,6 +44,7 @@ export function buildAchievementContext(input: BuildAchievementContextInput): Ac
     streakDays: input.streakDays,
     workoutsCountTotal: input.workoutsCountTotal,
     weeklyWorkouts: input.weeklyWorkouts,
+    guidedSessionsCount: input.guidedSessionsCount,
     goalsCompletedTotal: input.goalsCompletedTotal,
     bodyMeasurementsCount: input.bodyMeasurementsCount,
     proteinDays30: input.proteinDays30,

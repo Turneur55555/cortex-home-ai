@@ -128,7 +128,12 @@ describe("CourseWorkoutEngine.generate — vocabulaire 100% course, jamais séri
   it("consomme une FC max fournie par un futur contexte wearable, sans connecteur réel", async () => {
     const context: SenseiContext = { wearable: { maxHeartRate: 190 } };
     const tpl = await CourseWorkoutEngine.generate(
-      { objective: "endurance", endurance_type: "endurance_fondamentale", level: "intermédiaire", duration_minutes: 30 },
+      {
+        objective: "endurance",
+        endurance_type: "endurance_fondamentale",
+        level: "intermédiaire",
+        duration_minutes: 30,
+      },
       context,
     );
     const zone = tpl.segments![0].stats.find((s) => s.label === "Zone FC cible")?.value;
