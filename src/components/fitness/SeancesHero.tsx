@@ -7,12 +7,14 @@ import type { RankKey } from "@/lib/fitness/exerciseRanks";
 /**
  * Hero du module Séances — reprend strictement le langage visuel du Hero
  * du Profil (ProfileHeroCard) : atmosphère "Reliquary" du meilleur rang de
- * l'utilisateur, particules ambiantes, halo, vignettage, typographie serif
- * italique pour la signature. Aucun hook métier ajouté : l'atmosphère est
- * simplement dérivée du RankAggregator existant (topExercises).
+ * l'utilisateur, particules ambiantes, halo, vignettage. Aucun hook métier
+ * ajouté : l'atmosphère est simplement dérivée du RankAggregator existant
+ * (topExercises).
  *
- * Signature officielle du module : "Chaque légende est forgée une
- * répétition à la fois." — devient le sous-titre du Hero.
+ * Contenu réduit à l'os : la citation "Chaque légende est forgée une
+ * répétition à la fois." est l'unique élément — centrée horizontalement et
+ * verticalement, comme une maxime gravée. Les braises/halos/animations
+ * restent en pure ambiance, au service de la citation.
  *
  * Ce n'est pas un bouton : aucune action au tap. La carte réagit
  * simplement au survol/à la pression (halo qui s'intensifie, léger
@@ -47,7 +49,7 @@ function SeancesHeroCard({ rankKey, aggregate }: { rankKey: RankKey; aggregate?:
       transition={{ duration: 0.5 }}
       whileHover={{ scale: 1.005 }}
       whileTap={{ scale: 0.994 }}
-      className="group relative mb-2 overflow-hidden rounded-[28px] p-6 shadow-elevated"
+      className="group relative mb-2 flex min-h-[240px] items-center justify-center overflow-hidden rounded-[28px] px-8 py-14 text-center shadow-elevated"
       style={{
         background: visual.atmosphere,
         boxShadow: `inset 0 0 0 1px ${visual.vignette}, 0 12px 44px -20px ${colors.glow}`,
@@ -108,47 +110,19 @@ function SeancesHeroCard({ rankKey, aggregate }: { rankKey: RankKey; aggregate?:
         style={{ boxShadow: `inset 0 0 0 1px ${colors.glow}, inset 0 0 40px -18px ${colors.glow}` }}
       />
 
-      <div className="relative">
-        <p
-          className="text-[10px] font-semibold uppercase tracking-[0.28em]"
-          style={{ color: colors.secondary }}
-        >
-          La Forge
-        </p>
-
-        <motion.h1
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1, duration: 0.5 }}
-          className="mt-3 font-serif text-[26px] font-semibold italic leading-tight tracking-wide text-white"
-          style={{
-            textShadow: `0 0 24px ${colors.glow}, 0 2px 8px rgba(0,0,0,0.5)`,
-          }}
-        >
-          Chaque légende est forgée
-          <br />
-          une répétition à la fois.
-        </motion.h1>
-
-        <div className="mt-4 flex items-center gap-3">
-          <div
-            aria-hidden
-            className="h-px flex-1"
-            style={{ background: `linear-gradient(90deg, ${colors.primary}55, transparent)` }}
-          />
-          <p
-            className="text-[11px] font-bold uppercase tracking-[0.32em] text-white/90"
-            style={{ textShadow: `0 0 12px ${colors.glow}` }}
-          >
-            Séances
-          </p>
-          <div
-            aria-hidden
-            className="h-px flex-1"
-            style={{ background: `linear-gradient(270deg, ${colors.primary}55, transparent)` }}
-          />
-        </div>
-      </div>
+      <motion.h1
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1, duration: 0.5 }}
+        className="relative max-w-[24ch] font-serif text-[26px] font-semibold italic leading-[1.85] tracking-wide text-white"
+        style={{
+          textShadow: `0 0 24px ${colors.glow}, 0 2px 8px rgba(0,0,0,0.5)`,
+        }}
+      >
+        Chaque légende est forgée
+        <br />
+        une répétition à la fois.
+      </motion.h1>
     </motion.header>
   );
 }

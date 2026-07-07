@@ -194,13 +194,10 @@ function RecoveryBodyMap({ recoveryMap, onMuscleClick }: RecoveryProps) {
         />
       ))}
 
-      <div className="relative mb-2 flex items-center justify-between">
+      <div className="relative mb-2">
         <h3 className="font-serif text-[13px] font-semibold italic text-cyan-100/90">
           Scan des Titans
         </h3>
-        <span className="text-[9.5px] font-medium uppercase tracking-wider text-white/35">
-          basé sur tes séances
-        </span>
       </div>
 
       <div className="relative">
