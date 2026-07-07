@@ -3,13 +3,19 @@ import {
   BookOpen,
   Dumbbell,
   Loader2,
-  Sparkles,
   AlertCircle,
   ChevronDown,
   CalendarDays,
-  History,
+  Trophy,
   Repeat,
+  Flame,
+  Layers,
+  Award,
+  HeartPulse,
 } from "lucide-react";
+import { SeancesHero } from "@/components/fitness/SeancesHero";
+import { SenseiIACard } from "@/components/fitness/SenseiIACard";
+import { ChoisirEpreuveCard } from "@/components/fitness/ChoisirEpreuveCard";
 import { BodyMap } from "@/components/fitness/BodyMap";
 import { WorkoutCard, type WorkoutRow } from "@/components/fitness/WorkoutCard";
 import { WorkoutSheet } from "@/components/fitness/WorkoutSheet";
