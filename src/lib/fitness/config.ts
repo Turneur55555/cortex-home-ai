@@ -1,4 +1,6 @@
-export const GYMS = ["Keep Cool", "On Air"] as const;
+// Salles codées en dur (pas de gestion dynamique demandée). Maison et
+// Fitness Park ajoutés phase 2 pour la question Lieu du Sensei conversationnel.
+export const GYMS = ["Maison", "Keep Cool", "On Air", "Fitness Park"] as const;
 
 /** Nom de séance par défaut ("Séance du lundi soir"), basé sur le jour et
  *  l'heure actuels. Utilisé par StartWorkoutSheet et par le Catalogue

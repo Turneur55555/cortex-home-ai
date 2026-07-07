@@ -15,6 +15,7 @@
 // ============================================================
 
 import { supabase } from "@/integrations/supabase/client";
+import { GYMS } from "@/lib/fitness/config";
 import type {
   SenseiAnswers,
   SenseiContext,
@@ -29,6 +30,13 @@ const QUESTIONS: SenseiQuestionSpec[] = [
     id: "muscles",
     prompt: "Quels groupes musculaires veux-tu travailler ?",
     type: "multi-choice",
+  },
+  {
+    id: "gym_location",
+    prompt: "Où vas-tu t'entraîner ?",
+    type: "location",
+    options: GYMS.map((g) => ({ value: g, label: g })),
+    defaultValue: "Keep Cool",
   },
   {
     id: "duration_minutes",

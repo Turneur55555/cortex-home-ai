@@ -1,91 +1,65 @@
-import { useState } from "react";
+// ============================================================
+// Sensei^IA — orchestrateur conversationnel (phase 2).
+//
+// Ce composant ne connaît AUCUNE règle propre à une discipline : il
+// lit ENGINE_REGISTRY, pose les questions déclarées par le moteur
+// choisi (WorkoutEngine.questions), délègue le rendu de chaque
+// question à QuestionRenderer (générique + registre de widgets
+// spéciaux) et appelle engine.generate() pour produire la séance.
+// Ajouter une discipline (phase 3+) ne nécessite AUCUNE modification
+// de ce fichier — seulement une entrée dans ENGINE_REGISTRY.
+//
+// Props externes inchangées depuis la phase 1 (onClose/onResult/
+// initialMuscles/recoveryMap) : SeancesTab.tsx n'a rien à changer.
+// ============================================================
+
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useMutation } from "@tanstack/react-query";
-import { Dumbbell, Sparkles, BatteryWarning } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
-import { Field, Sheet, SubmitButton } from "@/components/shared/FormComponents";
-import { MUSCLE_META, type MuscleId } from "@/lib/fitness/muscleMapping";
-import { RECOVERY_COLORS, RECOVERY_LABELS, type MuscleRecovery } from "@/lib/fitness/recovery";
 import {
-  MUSCLE_AI_NAME,
-  worstStatus,
-  selectionRecovery,
-  buildAiRecoveryContext,
-} from "@/lib/fitness/recoveryAdvice";
-import { StrengthWorkoutEngine } from "@/lib/fitness/engines/strengthEngine";
-import type { WorkoutTemplate } from "@/lib/fitness/engines/types";
+  ChevronLeft,
+  Dumbbell,
+  Flame,
+  Footprints,
+  HeartPulse,
+  Loader2,
+  Sparkles,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { Sheet } from "@/components/shared/FormComponents";
+import type { MuscleId } from "@/lib/fitness/muscleMapping";
+import type { MuscleRecovery } from "@/lib/fitness/recovery";
+import { ENGINE_REGISTRY, listEngines } from "@/lib/fitness/engines/registry";
+import { isReadyEngine } from "@/lib/fitness/engines/types";
+import type {
+  DisciplineId,
+  SenseiAnswerValue,
+  SenseiAnswers,
+  WorkoutTemplate,
+} from "@/lib/fitness/engines/types";
+import {
+  QuestionRenderer,
+  formatAnswerForSummary,
+  isAnswerValid,
+} from "@/components/fitness/sensei/QuestionRenderer";
+import { DISCIPLINE_CONTEXT_BUILDERS } from "@/components/fitness/sensei/senseiCustomRenderers";
 
 // Réexporté pour rétro-compat : WorkoutSheet.tsx et SeancesTab.tsx importent
-// ce type depuis ce fichier. La définition canonique vit désormais dans
-// l'interface commune des moteurs (src/lib/fitness/engines/types.ts).
+// ce type depuis ce fichier. La définition canonique vit dans l'interface
+// commune des moteurs (src/lib/fitness/engines/types.ts) depuis la phase 1.
 export type { WorkoutTemplate } from "@/lib/fitness/engines/types";
 
-// ─── Muscle option types ──────────────────────────────────────────────────────
+// Icônes par discipline — purement décoratif, jamais consulté par la
+// logique métier. Étendre cette table à chaque nouvelle discipline.
+const DISCIPLINE_ICON: Record<DisciplineId, LucideIcon> = {
+  muscu: Dumbbell,
+  hyrox: Flame,
+  course: Footprints,
+  cardio: HeartPulse,
+  guided: Sparkles,
+};
 
-type MuscleDomainOption = { id: MuscleId; label: string };
-type MuscleAliasOption  = { id: "jambes"; label: string; isAlias: true;  resolves: MuscleId[] };
-type MuscleCardioOption = { id: "cardio"; label: string; isCardio: true };
-type MuscleOption = MuscleDomainOption | MuscleAliasOption | MuscleCardioOption;
-
-// Only the major groups shown in the coach UI — not all 14 MUSCLE_META entries.
-// Labels are sourced from MUSCLE_META so they stay in sync with the domain.
-export const MUSCLE_OPTIONS: MuscleOption[] = [
-  { id: "pectoraux", label: MUSCLE_META.pectoraux.label },
-  { id: "dos",       label: MUSCLE_META.dos.label },
-  { id: "epaules",   label: MUSCLE_META.epaules.label },
-  { id: "biceps",    label: MUSCLE_META.biceps.label },
-  { id: "triceps",   label: MUSCLE_META.triceps.label },
-  { id: "fessiers",  label: MUSCLE_META.fessiers.label },
-  { id: "abdos",     label: MUSCLE_META.abdos.label },
-  { id: "jambes",  label: "Jambes",  isAlias: true, resolves: ["quadriceps", "ischio", "fessiers"] },
-  { id: "cardio",  label: "Cardio",  isCardio: true },
-];
-
-// Muscles fins du domaine sollicités par une option UI (vide pour le cardio).
-function optionMuscleIds(opt: MuscleOption): MuscleId[] {
-  if ("isCardio" in opt) return [];
-  if ("isAlias"  in opt) return opt.resolves;
-  return [opt.id];
-}
-
-// Résout les sélections UI → MuscleId[] du domaine (cardio ignoré, alias étendus).
-function resolveMuscleIds(selected: string[]): MuscleId[] {
-  return selected.flatMap((id) => {
-    const opt = MUSCLE_OPTIONS.find((o) => o.id === id);
-    return opt ? optionMuscleIds(opt) : [];
-  });
-}
-
-function hasCardio(selected: string[]): boolean {
-  return selected.some((id) => {
-    const opt = MUSCLE_OPTIONS.find((o) => o.id === id);
-    return opt != null && "isCardio" in opt;
-  });
-}
-
-// Noms de groupes attendus par l'edge (minuscules), dédupliqués. + "cardio" si sélectionné.
-function aiMuscleNames(selected: string[]): string[] {
-  const names = resolveMuscleIds(selected).map((id) => MUSCLE_AI_NAME[id]);
-  if (hasCardio(selected)) names.push("cardio");
-  return [...new Set(names)];
-}
-
-// ─── Component ───────────────────────────────────────────────────────────────
-
-type Mode = "muscu" | "autre";
-
-const ACTIVITY_SUGGESTIONS = [
-  "Pilates Lagree",
-  "Natation",
-  "Yoga",
-  "Course à pied",
-  "Vélo",
-  "Boxe",
-  "CrossFit",
-  "HIIT",
-  "Escalade",
-  "Danse",
-];
+type Step = "discipline" | "question" | "summary";
 
 export function CoachSheet({
   onClose,
@@ -99,87 +73,84 @@ export function CoachSheet({
   recoveryMap?: Map<MuscleId, MuscleRecovery>;
 }) {
   const recovery = recoveryMap ?? new Map<MuscleId, MuscleRecovery>();
-  const [mode, setMode] = useState<Mode>("muscu");
-  const [muscles, setMuscles] = useState<string[]>(
-    initialMuscles && initialMuscles.length > 0 ? initialMuscles : ["pectoraux"],
+  const hasInitialMuscles = Boolean(initialMuscles && initialMuscles.length > 0);
+
+  // Si on arrive avec des muscles pré-sélectionnés (tap sur la BodyMap), on
+  // saute directement dans le flux Musculation — comme aujourd'hui, où le
+  // mode par défaut était déjà "muscu". L'utilisateur peut revenir en
+  // arrière vers le choix de discipline via "Précédent".
+  const [step, setStep] = useState<Step>(hasInitialMuscles ? "question" : "discipline");
+  const [disciplineId, setDisciplineId] = useState<DisciplineId | null>(
+    hasInitialMuscles ? "muscu" : null,
   );
-  const [duration, setDuration] = useState("45");
-  const [equipment, setEquipment] = useState("salle complète");
-  const [level, setLevel] = useState("intermédiaire");
-  const [goal, setGoal] = useState("hypertrophie");
+  const [answers, setAnswers] = useState<SenseiAnswers>(() => {
+    if (!hasInitialMuscles) return {};
+    const defaults: SenseiAnswers = {};
+    for (const q of ENGINE_REGISTRY.muscu.questions ?? []) {
+      if (q.defaultValue !== undefined) defaults[q.id] = q.defaultValue;
+    }
+    return { ...defaults, muscles: initialMuscles };
+  });
+  const [questionIndex, setQuestionIndex] = useState(0);
 
-  const [activity, setActivity] = useState("");
-  const [intensity, setIntensity] = useState("modérée");
+  const entry = disciplineId ? ENGINE_REGISTRY[disciplineId] : null;
+  const engine = entry && isReadyEngine(entry) ? entry : null;
 
-  const toggleMuscle = (id: string) =>
-    setMuscles((arr) => (arr.includes(id) ? arr.filter((m) => m !== id) : [...arr, id]));
-
-  // ── Contexte de récupération de la sélection courante ──
-  const selectedIds = resolveMuscleIds(muscles);
-  const { fatigued: fatiguedSel, recovering: recoveringSel } = selectionRecovery(selectedIds, recovery);
-  // Alternatives prêtes : options non sélectionnées dont tous les muscles sont 'ready'.
-  const readyOptions = MUSCLE_OPTIONS.filter(
-    (o) => !("isCardio" in o) && !muscles.includes(o.id) && worstStatus(optionMuscleIds(o), recovery) === "ready",
+  const questions = useMemo(
+    () => (engine ? engine.questions.filter((q) => !q.when || q.when(answers)) : []),
+    [engine, answers],
   );
-  const hasRecoveryData = recovery.size > 0;
+  const currentQuestion = questions[questionIndex];
+
+  const selectDiscipline = (id: DisciplineId) => {
+    const candidate = ENGINE_REGISTRY[id];
+    if (!isReadyEngine(candidate)) return; // comingSoon — désactivé dans l'UI, garde défensive.
+
+    const defaults: SenseiAnswers = {};
+    for (const q of candidate.questions) {
+      if (q.defaultValue !== undefined) defaults[q.id] = q.defaultValue;
+    }
+    setDisciplineId(id);
+    setAnswers({
+      ...defaults,
+      ...(id === "muscu" && hasInitialMuscles ? { muscles: initialMuscles } : {}),
+    });
+    setQuestionIndex(0);
+    setStep("question");
+  };
+
+  const answerCurrent = (value: SenseiAnswerValue) => {
+    if (!currentQuestion) return;
+    setAnswers((prev) => ({ ...prev, [currentQuestion.id]: value }));
+  };
+
+  const goNext = () => {
+    if (questionIndex < questions.length - 1) {
+      setQuestionIndex((i) => i + 1);
+    } else {
+      setStep("summary");
+    }
+  };
+
+  const goBack = () => {
+    if (step === "summary") {
+      setQuestionIndex(Math.max(0, questions.length - 1));
+      setStep("question");
+      return;
+    }
+    if (questionIndex > 0) {
+      setQuestionIndex((i) => i - 1);
+      return;
+    }
+    setStep("discipline");
+    setDisciplineId(null);
+  };
 
   const generate = useMutation({
     mutationFn: async (): Promise<WorkoutTemplate> => {
-      if (mode === "muscu") {
-        // Musculation : passe désormais par StrengthWorkoutEngine plutôt que
-        // d'invoquer l'edge function directement — même payload, même résultat,
-        // seul le point d'appel a changé (fondation moteurs, phase 1).
-        return StrengthWorkoutEngine.generate(
-          {
-            muscles: aiMuscleNames(muscles),
-            has_cardio: hasCardio(muscles),
-            duration_minutes: Number(duration) || 45,
-            equipment,
-            level,
-            goal,
-          },
-          { recovery: buildAiRecoveryContext(selectedIds, recovery) },
-        );
-      }
-
-      // "Autre activité" : pas encore de moteur dédié — HYROX/Course/Cardio/
-      // Activités accompagnées arrivent phases 3 à 6. Comportement inchangé.
-      const payload = {
-        mode: "autre",
-        activity: activity.trim(),
-        duration_minutes: Number(duration) || 45,
-        level,
-        intensity,
-      };
-
-      const { data, error } = await supabase.functions.invoke("coach-workout", { body: payload });
-      if (error) throw new Error(error.message);
-      if (data?.error) throw new Error(data.error);
-
-      const result = data as {
-        name: string;
-        notes?: string;
-        muscles_worked?: string[];
-        exercises: Array<{ name: string; sets: number; reps: number; weight?: number }>;
-      };
-
-      const musclesLine =
-        result.muscles_worked && result.muscles_worked.length > 0
-          ? `Muscles sollicités : ${result.muscles_worked.join(", ")}.`
-          : "";
-      const notes = [musclesLine, result.notes].filter(Boolean).join("\n").trim();
-
-      return {
-        name: result.name,
-        notes: notes || undefined,
-        exercises: (result.exercises ?? []).map((ex) => ({
-          name: ex.name,
-          sets: String(ex.sets ?? ""),
-          reps: String(ex.reps ?? ""),
-          weight: ex.weight != null && ex.weight > 0 ? String(ex.weight) : "",
-          image_path: null,
-        })),
-      };
+      if (!engine) throw new Error("Aucun moteur disponible pour cette discipline.");
+      const context = DISCIPLINE_CONTEXT_BUILDERS[engine.id]?.(answers, recovery) ?? {};
+      return engine.generate(answers, context);
     },
     onSuccess: (tpl: WorkoutTemplate) => {
       toast.success("Séance générée — ajuste-la avant d'enregistrer");
@@ -188,255 +159,101 @@ export function CoachSheet({
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (mode === "muscu" && muscles.length === 0) {
-      toast.error("Sélectionne au moins un groupe musculaire");
-      return;
-    }
-    if (mode === "autre" && activity.trim().length < 2) {
-      toast.error("Décris l'activité (ex: Pilates Lagree, natation…)");
-      return;
-    }
-    generate.mutate();
-  };
+  const title =
+    step === "discipline"
+      ? "Sensei — Quel entraînement aujourd'hui ?"
+      : step === "summary"
+        ? "Sensei — Résumé"
+        : `Sensei — ${currentQuestion?.prompt ?? ""}`;
 
   return (
-    <Sheet title="Coach IA — Génère ma séance" onClose={onClose}>
-      <form onSubmit={submit} className="space-y-4">
-        {/* Mode toggle */}
-        <div className="grid grid-cols-2 gap-2 rounded-xl border border-border bg-surface p-1">
+    <Sheet title={title} onClose={onClose}>
+      <div className="space-y-4">
+        {step !== "discipline" && (
           <button
             type="button"
-            onClick={() => setMode("muscu")}
-            className={
-              "flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-all " +
-              (mode === "muscu"
-                ? "bg-gradient-primary text-primary-foreground shadow-glow"
-                : "text-muted-foreground hover:text-foreground")
-            }
+            onClick={goBack}
+            className="flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground"
           >
-            <Dumbbell className="h-3.5 w-3.5" />
-            Musculation
+            <ChevronLeft className="h-3.5 w-3.5" />
+            Précédent
           </button>
-          <button
-            type="button"
-            onClick={() => setMode("autre")}
-            className={
-              "flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-all " +
-              (mode === "autre"
-                ? "bg-gradient-primary text-primary-foreground shadow-glow"
-                : "text-muted-foreground hover:text-foreground")
-            }
-          >
-            <Sparkles className="h-3.5 w-3.5" />
-            Autre activité
-          </button>
-        </div>
-
-        {mode === "muscu" ? (
-          <>
-            <div>
-              <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Groupes musculaires
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {MUSCLE_OPTIONS.map((m) => {
-                  const active = muscles.includes(m.id);
-                  const status = "isCardio" in m ? "unknown" : worstStatus(optionMuscleIds(m), recovery);
-                  const showDot = hasRecoveryData && status !== "unknown";
-                  return (
-                    <button
-                      key={m.id}
-                      type="button"
-                      onClick={() => toggleMuscle(m.id)}
-                      title={showDot ? `Récupération : ${RECOVERY_LABELS[status]}` : undefined}
-                      className={
-                        "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-all " +
-                        (active
-                          ? "border-primary bg-primary/15 text-primary"
-                          : "border-border bg-surface text-muted-foreground hover:text-foreground")
-                      }
-                    >
-                      {showDot && (
-                        <span
-                          aria-hidden
-                          className="h-2 w-2 rounded-full"
-                          style={{ backgroundColor: RECOVERY_COLORS[status].stroke }}
-                        />
-                      )}
-                      {m.label}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Avertissement récupération (recovery-aware coach) */}
-              {(fatiguedSel.length > 0 || recoveringSel.length > 0) && (
-                <div className="mt-3 rounded-xl border border-border bg-surface p-3">
-                  <div className="flex items-start gap-2">
-                    <BatteryWarning className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-                    <div className="space-y-1 text-xs">
-                      {fatiguedSel.length > 0 && (
-                        <p className="text-foreground">
-                          <span className="font-semibold">Encore fatigué :</span>{" "}
-                          {fatiguedSel
-                            .map((f) => f.hoursRemaining ? `${f.label} (récup ~${f.hoursRemaining}h)` : f.label)
-                            .join(", ")}
-                          . Le coach l'évitera ou l'allègera.
-                        </p>
-                      )}
-                      {recoveringSel.length > 0 && (
-                        <p className="text-muted-foreground">
-                          <span className="font-semibold">En récupération :</span>{" "}
-                          {recoveringSel
-                            .map((f) => f.hoursRemaining ? `${f.label} (~${f.hoursRemaining}h)` : f.label)
-                            .join(", ")}
-                          . Volume réduit conseillé.
-                        </p>
-                      )}
-                      {readyOptions.length > 0 && (
-                        <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                          <span className="text-muted-foreground">Prêts :</span>
-                          {readyOptions.map((o) => (
-                            <button
-                              key={o.id}
-                              type="button"
-                              onClick={() => toggleMuscle(o.id)}
-                              className="rounded-full border border-primary/40 bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary transition hover:bg-primary/20"
-                            >
-                              + {o.label}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Durée (min)" type="number" value={duration} onChange={setDuration} />
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Niveau
-                </label>
-                <select
-                  value={level}
-                  onChange={(e) => setLevel(e.target.value)}
-                  className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary"
-                >
-                  <option value="débutant">Débutant</option>
-                  <option value="intermédiaire">Intermédiaire</option>
-                  <option value="avancé">Avancé</option>
-                </select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Matériel
-                </label>
-                <select
-                  value={equipment}
-                  onChange={(e) => setEquipment(e.target.value)}
-                  className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary"
-                >
-                  <option value="salle complète">Salle complète</option>
-                  <option value="haltères">Haltères + banc</option>
-                  <option value="élastiques">Élastiques</option>
-                  <option value="poids du corps">Poids du corps</option>
-                  <option value="kettlebell">Kettlebell</option>
-                </select>
-              </div>
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Objectif
-                </label>
-                <select
-                  value={goal}
-                  onChange={(e) => setGoal(e.target.value)}
-                  className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary"
-                >
-                  <option value="hypertrophie">Hypertrophie</option>
-                  <option value="force">Force</option>
-                  <option value="endurance">Endurance</option>
-                  <option value="perte de poids">Perte de gras</option>
-                </select>
-              </div>
-            </div>
-          </>
-        ) : (
-          <>
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Quelle activité ?
-              </label>
-              <input
-                type="text"
-                value={activity}
-                onChange={(e) => setActivity(e.target.value)}
-                placeholder="Ex: Pilates Lagree, natation crawl, yoga vinyasa…"
-                maxLength={120}
-                className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary"
-              />
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {ACTIVITY_SUGGESTIONS.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => setActivity(s)}
-                    className="rounded-full border border-border bg-surface px-2.5 py-1 text-[11px] text-muted-foreground transition hover:border-primary/40 hover:text-foreground"
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
-              <p className="mt-2 text-[11px] text-muted-foreground">
-                L'IA structurera la séance et déduira les muscles sollicités.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-3 gap-3">
-              <Field label="Durée (min)" type="number" value={duration} onChange={setDuration} />
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Niveau
-                </label>
-                <select
-                  value={level}
-                  onChange={(e) => setLevel(e.target.value)}
-                  className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary"
-                >
-                  <option value="débutant">Débutant</option>
-                  <option value="intermédiaire">Intermédiaire</option>
-                  <option value="avancé">Avancé</option>
-                </select>
-              </div>
-              <div>
-                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Intensité
-                </label>
-                <select
-                  value={intensity}
-                  onChange={(e) => setIntensity(e.target.value)}
-                  className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary"
-                >
-                  <option value="légère">Légère</option>
-                  <option value="modérée">Modérée</option>
-                  <option value="intense">Intense</option>
-                </select>
-              </div>
-            </div>
-          </>
         )}
 
-        <SubmitButton pending={generate.isPending}>
-          {generate.isPending ? "Génération…" : "Générer la séance"}
-        </SubmitButton>
-      </form>
+        {step === "discipline" && (
+          <div className="grid grid-cols-2 gap-2">
+            {listEngines().map((e) => {
+              const Icon = DISCIPLINE_ICON[e.id];
+              return (
+                <button
+                  key={e.id}
+                  type="button"
+                  disabled={e.comingSoon}
+                  onClick={() => selectDiscipline(e.id)}
+                  className={
+                    "flex flex-col items-center gap-2 rounded-xl border px-3 py-4 text-sm font-semibold transition-colors " +
+                    (e.comingSoon
+                      ? "cursor-not-allowed border-border bg-surface/50 text-muted-foreground/50"
+                      : "border-border bg-card text-foreground hover:border-primary/40")
+                  }
+                >
+                  <Icon className="h-5 w-5" />
+                  {e.label}
+                  {e.comingSoon && (
+                    <span className="text-[10px] font-normal uppercase tracking-wider text-muted-foreground/70">
+                      Bientôt disponible
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {step === "question" && currentQuestion && engine && (
+          <div className="space-y-4">
+            <QuestionRenderer
+              disciplineId={engine.id}
+              question={currentQuestion}
+              value={answers[currentQuestion.id]}
+              onChange={answerCurrent}
+              recoveryMap={recovery}
+            />
+            <button
+              type="button"
+              onClick={goNext}
+              disabled={!isAnswerValid(currentQuestion, answers[currentQuestion.id])}
+              className="inline-flex h-12 w-full items-center justify-center rounded-xl bg-gradient-primary text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-50"
+            >
+              {questionIndex < questions.length - 1 ? "Suivant" : "Voir le résumé"}
+            </button>
+          </div>
+        )}
+
+        {step === "summary" && engine && (
+          <div className="space-y-4">
+            <div className="space-y-2 rounded-xl border border-border bg-surface p-3">
+              {questions.map((q) => (
+                <div key={q.id} className="flex items-baseline justify-between gap-3 text-xs">
+                  <span className="text-muted-foreground">{q.prompt}</span>
+                  <span className="font-semibold text-foreground">
+                    {formatAnswerForSummary(q, answers[q.id])}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => generate.mutate()}
+              disabled={generate.isPending}
+              className="inline-flex h-13 w-full items-center justify-center gap-2 rounded-xl bg-gradient-primary text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-50"
+            >
+              {generate.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+              {generate.isPending ? "Génération…" : "⚔️ Forger mon épreuve"}
+            </button>
+          </div>
+        )}
+      </div>
     </Sheet>
   );
 }

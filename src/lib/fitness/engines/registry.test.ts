@@ -70,3 +70,22 @@ describe("StrengthWorkoutEngine.toWorkoutRecord", () => {
     expect(draft.duration_minutes).toBe(45);
   });
 });
+describe("StrengthWorkoutEngine.questions", () => {
+  it("expose une question 'gym_location' dont les options suivent GYMS", () => {
+    const q = StrengthWorkoutEngine.questions.find((q) => q.id === "gym_location");
+    expect(q).toBeDefined();
+    expect(q?.type).toBe("location");
+    expect(q?.options?.map((o) => o.value)).toEqual([
+      "Maison",
+      "Keep Cool",
+      "On Air",
+      "Fitness Park",
+    ]);
+  });
+
+  it("la question 'muscles' n'a pas d'options (rendu confié au widget custom recovery-aware)", () => {
+    const q = StrengthWorkoutEngine.questions.find((q) => q.id === "muscles");
+    expect(q?.type).toBe("multi-choice");
+    expect(q?.options).toBeUndefined();
+  });
+});
