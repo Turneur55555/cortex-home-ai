@@ -21,10 +21,10 @@ import type { RankKey } from "@/lib/fitness/exerciseRanks";
  * relief) pour exploiter l'envie instinctive de la toucher, sans jamais
  * prétendre déclencher quoi que ce soit — un lieu vivant, pas un CTA.
  *
- * Finition (2026-07-07) : la carte devient une respiration visuelle plutôt
- * que le héros de la page — hauteur et typographie réduites d'environ 37%
- * (`min-h-[240px]`→`150px`, `py-14`→`py-8`, `26px`→`19px`) pour laisser
- * Sensei^IA et "Choisir une épreuve" porter le véritable appel à l'action.
+ * Finition (2026-07-07) : la carte n'est plus qu'une ambiance d'introduction
+ * — hauteur et typographie réduites d'environ 50% supplémentaires
+ * (`min-h-[150px]`→`72px`, `py-8`→`py-3`, `19px`→`13px`) pour ne plus jamais
+ * rivaliser visuellement avec Sensei^IA.
  */
 export function SeancesHero({ topExercises }: { topExercises: string[] }) {
   if (topExercises.length === 0) {
@@ -54,7 +54,7 @@ function SeancesHeroCard({ rankKey, aggregate }: { rankKey: RankKey; aggregate?:
       transition={{ duration: 0.5 }}
       whileHover={{ scale: 1.005 }}
       whileTap={{ scale: 0.994 }}
-      className="group relative mb-2 flex min-h-[150px] items-center justify-center overflow-hidden rounded-[28px] px-8 py-8 text-center shadow-elevated"
+      className="group relative mb-2 flex min-h-[72px] items-center justify-center overflow-hidden rounded-[22px] px-6 py-3 text-center shadow-elevated"
       style={{
         background: visual.atmosphere,
         boxShadow: `inset 0 0 0 1px ${visual.vignette}, 0 12px 44px -20px ${colors.glow}`,
@@ -119,7 +119,7 @@ function SeancesHeroCard({ rankKey, aggregate }: { rankKey: RankKey; aggregate?:
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1, duration: 0.5 }}
-        className="relative max-w-[24ch] font-serif text-[19px] font-semibold italic leading-[1.6] tracking-wide text-white"
+        className="relative max-w-[26ch] font-serif text-[13px] font-semibold italic leading-[1.45] tracking-wide text-white"
         style={{
           textShadow: `0 0 24px ${colors.glow}, 0 2px 8px rgba(0,0,0,0.5)`,
         }}
