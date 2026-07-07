@@ -44,6 +44,7 @@ import {
   isAnswerValid,
 } from "@/components/fitness/sensei/QuestionRenderer";
 import { DISCIPLINE_CONTEXT_BUILDERS } from "@/components/fitness/sensei/senseiCustomRenderers";
+import type { SenseiRuntimeInputs } from "@/components/fitness/sensei/senseiCustomRenderers";
 
 // Réexporté pour rétro-compat : WorkoutSheet.tsx et SeancesTab.tsx importent
 // ce type depuis ce fichier. La définition canonique vit dans l'interface
@@ -153,7 +154,12 @@ export function CoachSheet({
   const generate = useMutation({
     mutationFn: async (): Promise<{ template: WorkoutTemplate; draft: WorkoutRecordDraft }> => {
       if (!engine) throw new Error("Aucun moteur disponible pour cette discipline.");
-      const context = DISCIPLINE_CONTEXT_BUILDERS[engine.id]?.(answers, recovery) ?? {};
+      // Phase 5 : sac générique (voir SenseiRuntimeInputs) — `wearable` reste
+      // undefined tant qu'aucun connecteur (Apple Santé/Garmin/Strava...)
+      // n'est branché ; un moteur (ex: Course) peut le lire sans jamais
+      // supposer qu'il est renseigné.
+      const runtimeInputs: SenseiRuntimeInputs = { recoveryMap: recovery };
+      const context = DISCIPLINE_CONTEXT_BUILDERS[engine.id]?.(answers, runtimeInputs) ?? {};
       const template = await engine.generate(answers, context);
       const draft = engine.toWorkoutRecord(template, answers);
       return { template, draft };

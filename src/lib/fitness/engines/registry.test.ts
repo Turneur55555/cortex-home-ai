@@ -10,6 +10,7 @@ import { isReadyEngine } from "./types";
 import { StrengthWorkoutEngine } from "./strengthEngine";
 import { CardioWorkoutEngine } from "./cardioEngine";
 import { HyroxWorkoutEngine } from "./hyroxEngine";
+import { CourseWorkoutEngine } from "./courseEngine";
 
 describe("ENGINE_REGISTRY", () => {
   it("expose les 5 disciplines prévues pour les phases 1 à 6", () => {
@@ -18,12 +19,13 @@ describe("ENGINE_REGISTRY", () => {
     );
   });
 
-  it("muscu, cardio et hyrox sont les moteurs prêts (phase 4)", () => {
+  it("muscu, cardio, hyrox et course sont les moteurs prêts (phase 5)", () => {
     const ready = listEngines().filter(isReadyEngine);
-    expect(ready.map((e) => e.id).sort()).toEqual(["cardio", "hyrox", "muscu"]);
+    expect(ready.map((e) => e.id).sort()).toEqual(["cardio", "course", "hyrox", "muscu"]);
     expect(ENGINE_REGISTRY.muscu).toBe(StrengthWorkoutEngine);
     expect(ENGINE_REGISTRY.cardio).toBe(CardioWorkoutEngine);
     expect(ENGINE_REGISTRY.hyrox).toBe(HyroxWorkoutEngine);
+    expect(ENGINE_REGISTRY.course).toBe(CourseWorkoutEngine);
   });
 
   it("aucune discipline comingSoon n'alimente le moteur de Rang", () => {
@@ -34,10 +36,8 @@ describe("ENGINE_REGISTRY", () => {
     }
   });
 
-  it("toutes les disciplines à venir sont marquées comingSoon", () => {
-    for (const id of ["course", "guided"] as const) {
-      expect(ENGINE_REGISTRY[id].comingSoon).toBe(true);
-    }
+  it("seule 'guided' reste à venir (phase 6)", () => {
+    expect(ENGINE_REGISTRY.guided.comingSoon).toBe(true);
   });
 });
 

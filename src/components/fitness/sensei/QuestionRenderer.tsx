@@ -135,8 +135,13 @@ export function formatAnswerForSummary(
 
 /** Validation générique minimale : un multi-choice doit avoir au moins une
  *  sélection. Les autres types sont considérés valides dès qu'une valeur
- *  (même par défaut) existe — pas de règle propre à une discipline ici. */
+ *  (même par défaut) existe — pas de règle propre à une discipline ici.
+ *  Phase 5 : une question `optional` est toujours valide, avec ou sans
+ *  réponse — c'est la seule dérogation générique (pas de règle propre à
+ *  une discipline non plus : n'importe quel moteur peut marquer une de
+ *  ses questions `optional`). */
 export function isAnswerValid(question: SenseiQuestionSpec, value: SenseiAnswerValue): boolean {
+  if (question.optional) return true;
   if (question.type === "multi-choice") return Array.isArray(value) && value.length > 0;
   return value !== undefined && value !== "";
 }

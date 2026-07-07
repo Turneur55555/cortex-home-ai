@@ -65,6 +65,12 @@ export interface SenseiQuestionSpec {
   /** Affichage conditionnel selon les réponses déjà données (ex: pas de
    *  question "matériel" pour une discipline qui n'en a pas besoin). */
   when?: (answers: SenseiAnswers) => boolean;
+  /** Phase 5 — question facultative : le Sensei doit pouvoir avancer sans
+   *  réponse (ex: FC max, pas toujours connue). Par défaut (absent/false)
+   *  une question reste obligatoire, comportement 100% inchangé pour
+   *  toutes les questions existantes de muscu/cardio/hyrox. Seule
+   *  isAnswerValid() (QuestionRenderer.tsx) interprète ce champ. */
+  optional?: boolean;
 }
 
 // ---- Résultat de génération ----
