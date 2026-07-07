@@ -19,6 +19,8 @@ import { ChoisirEpreuveCard } from "@/components/fitness/ChoisirEpreuveCard";
 import { BodyMap } from "@/components/fitness/BodyMap";
 import { WorkoutCard, type WorkoutRow } from "@/components/fitness/WorkoutCard";
 import { WorkoutSheet } from "@/components/fitness/WorkoutSheet";
+import { GenericHistoryCard } from "@/components/fitness/session/GenericHistoryCard";
+import { GenericSessionReviewSheet } from "@/components/fitness/session/GenericSessionReviewSheet";
 import { WorkoutProgressCharts } from "@/components/fitness/WorkoutProgressCharts";
 import { StartWorkoutSheet } from "@/components/fitness/StartWorkoutSheet";
 import { ActiveWorkoutView } from "@/components/fitness/ActiveWorkoutView";
@@ -39,6 +41,12 @@ import { formatTonnage, workoutTonnage } from "@/lib/fitness/strength";
 import { exerciseToMuscles, MUSCLE_META, type MuscleId } from "@/lib/fitness/muscleMapping";
 import { CoachSheet, type WorkoutTemplate } from "./CoachSheet";
 import { computePRs } from "@/utils/fitness/exercise-stats";
+import { ENGINE_REGISTRY } from "@/lib/fitness/engines/registry";
+import {
+  isReadyEngine,
+  type DisciplineId,
+  type WorkoutRecordDraft,
+} from "@/lib/fitness/engines/types";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -88,6 +96,7 @@ export function SeancesTab() {
   // IA survive au démontage d'ActiveWorkoutView.
   const [finishedSnapshot, setFinishedSnapshot] = useState<ActiveWorkout | null>(null);
   const [template, setTemplate] = useState<WorkoutTemplate | null>(null);
+  const [genericDraft, setGenericDraft] = useState<WorkoutRecordDraft | null>(null);
   const [coachOpen, setCoachOpen] = useState(false);
   const [coachInitialMuscles, setCoachInitialMuscles] = useState<string[] | undefined>(undefined);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -138,10 +147,20 @@ export function SeancesTab() {
     setOpen(true);
   }, []);
 
-  const handleCoachResult = useCallback((tpl: WorkoutTemplate) => {
+  const handleCoachResult = useCallback((tpl: WorkoutTemplate, draft: WorkoutRecordDraft) => {
     setCoachOpen(false);
-    setTemplate(tpl);
-    setOpen(true);
+    // Musculation garde WorkoutSheet (édition fine, intouché) ; toute autre
+    // discipline route vers l'écran de relecture générique — décision prise
+    // une seule fois ici, jamais dupliquée pour HYROX/Course/Cardio/Guidé.
+    const entry = ENGINE_REGISTRY[draft.discipline];
+    const isStrength =
+      entry && isReadyEngine(entry) && entry.historyPresentation.cardVariant === "strength";
+    if (isStrength) {
+      setTemplate(tpl);
+      setOpen(true);
+    } else {
+      setGenericDraft(draft);
+    }
   }, []);
 
   const openCoach = useCallback((initial?: string[]) => {
@@ -213,7 +232,9 @@ export function SeancesTab() {
           <BookOpen className="h-4.5 w-4.5" />
         </span>
         <span className="flex-1">
-          <span className="block text-[13px] font-semibold text-white/90">Catalogue d'exercices</span>
+          <span className="block text-[13px] font-semibold text-white/90">
+            Catalogue d'exercices
+          </span>
           <span className="block text-[10.5px] text-white/50">
             Consulter et modifier la bibliothèque
           </span>
@@ -279,21 +300,34 @@ export function SeancesTab() {
                   nameByKey={nameByKey}
                 />
                 <ul className="mt-3 space-y-3">
-                  {data.map((w) => (
-                    <WorkoutCard
-                      key={w.id}
-                      w={w}
-                      prByName={prByName}
-                      histByName={histByName}
-                      volByName={volByName}
-                      prByGym={prByGym}
-                      histByGym={histByGym}
-                      imageUrls={listImageUrls}
-                      latestDate={latestDate}
-                      onRepeatLive={repeatLive}
-                      onOpenFromTemplate={openFromTemplate}
-                    />
-                  ))}
+                  {data.map((w) => {
+                    // Musculation garde WorkoutCard tel quel (intouché) ; toute
+                    // autre discipline route vers la carte générique — décision
+                    // prise une seule fois ici, jamais dupliquée par discipline.
+                    const entry = ENGINE_REGISTRY[(w.discipline as DisciplineId | null) ?? "muscu"];
+                    const isStrength =
+                      !entry ||
+                      !isReadyEngine(entry) ||
+                      entry.historyPresentation.cardVariant === "strength";
+                    if (!isStrength) {
+                      return <GenericHistoryCard key={w.id} workout={w} />;
+                    }
+                    return (
+                      <WorkoutCard
+                        key={w.id}
+                        w={w}
+                        prByName={prByName}
+                        histByName={histByName}
+                        volByName={volByName}
+                        prByGym={prByGym}
+                        histByGym={histByGym}
+                        imageUrls={listImageUrls}
+                        latestDate={latestDate}
+                        onRepeatLive={repeatLive}
+                        onOpenFromTemplate={openFromTemplate}
+                      />
+                    );
+                  })}
                 </ul>
               </div>
             )}
@@ -367,8 +401,6 @@ export function SeancesTab() {
         </div>
       )}
 
-
-
       {startOpen && <StartWorkoutSheet onClose={() => setStartOpen(false)} />}
 
       {open && (
@@ -387,6 +419,14 @@ export function SeancesTab() {
           onClose={() => setCoachOpen(false)}
           onResult={handleCoachResult}
           initialMuscles={coachInitialMuscles}
+        />
+      )}
+
+      {genericDraft && (
+        <GenericSessionReviewSheet
+          draft={genericDraft}
+          onClose={() => setGenericDraft(null)}
+          onSaved={() => setGenericDraft(null)}
         />
       )}
 
@@ -460,7 +500,9 @@ function WeekSessions({
             <span
               className={
                 "flex h-3 w-3 items-center justify-center rounded-[3px] border text-[8px] " +
-                (detailed ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/50")
+                (detailed
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-muted-foreground/50")
               }
             >
               {detailed ? "✓" : ""}
@@ -469,8 +511,7 @@ function WeekSessions({
           </button>
           <ChevronDown
             className={
-              "h-4 w-4 text-muted-foreground transition-transform " +
-              (weekOpen ? "rotate-180" : "")
+              "h-4 w-4 text-muted-foreground transition-transform " + (weekOpen ? "rotate-180" : "")
             }
           />
         </div>
@@ -488,10 +529,7 @@ function WeekSessions({
                 const muscles = detailed ? workoutMuscleLabels(w) : [];
                 const volume = detailed ? Math.round(workoutTonnage(w.exercises ?? [])) : 0;
                 return (
-                  <li
-                    key={w.id}
-                    className="rounded-xl border border-border bg-card/50 px-3 py-2.5"
-                  >
+                  <li key={w.id} className="rounded-xl border border-border bg-card/50 px-3 py-2.5">
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex min-w-0 items-center gap-3">
                         <span className="w-9 shrink-0 text-center text-[10px] font-semibold uppercase tracking-wide text-primary">
@@ -596,4 +634,3 @@ function PerfTile({
     </div>
   );
 }
-

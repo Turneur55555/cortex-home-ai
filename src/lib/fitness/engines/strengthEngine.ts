@@ -15,11 +15,12 @@
 // ============================================================
 
 import { supabase } from "@/integrations/supabase/client";
-import { GYMS } from "@/lib/fitness/config";
+import { durationQuestion, gymLocationQuestion } from "./sharedQuestions";
 import type {
   SenseiAnswers,
   SenseiContext,
   SenseiQuestionSpec,
+  SessionView,
   WorkoutEngine,
   WorkoutRecordDraft,
   WorkoutTemplate,
@@ -31,19 +32,8 @@ const QUESTIONS: SenseiQuestionSpec[] = [
     prompt: "Quels groupes musculaires veux-tu travailler ?",
     type: "multi-choice",
   },
-  {
-    id: "gym_location",
-    prompt: "Où vas-tu t'entraîner ?",
-    type: "location",
-    options: GYMS.map((g) => ({ value: g, label: g })),
-    defaultValue: "Keep Cool",
-  },
-  {
-    id: "duration_minutes",
-    prompt: "Combien de temps as-tu devant toi ?",
-    type: "number",
-    defaultValue: 45,
-  },
+  gymLocationQuestion,
+  durationQuestion(45),
   {
     id: "equipment",
     prompt: "Avec quel matériel ?",
@@ -154,8 +144,33 @@ export const StrengthWorkoutEngine: WorkoutEngine = {
     };
   },
 
+  toSessionView(record: WorkoutRecordDraft): SessionView {
+    const rows = record.exerciseRows ?? [];
+    return {
+      title: record.name,
+      summaryStats: [
+        { label: "Durée", value: `${record.duration_minutes} min` },
+        { label: "Exercices", value: String(rows.length) },
+      ],
+      segments: rows.map((e) => ({
+        label: e.name,
+        stats: [
+          { label: "Séries", value: e.sets != null ? String(e.sets) : "—" },
+          { label: "Répétitions", value: e.reps != null ? String(e.reps) : "—" },
+          {
+            label: "Charge",
+            value: e.weight != null && e.weight > 0 ? `${e.weight} kg` : "poids du corps",
+          },
+        ],
+      })),
+      notes: record.notes,
+    };
+  },
+
+  // Non consommé par l'historique aujourd'hui (cardVariant='strength' réutilise
+  // WorkoutCard tel quel, sans passer par SessionView) — implémenté pour que
+  // l'interface WorkoutEngine reste homogène entre toutes les disciplines.
   historyPresentation: {
     cardVariant: "strength",
-    primaryMetrics: ["tonnage", "duration_minutes", "muscles_worked"],
   },
 };

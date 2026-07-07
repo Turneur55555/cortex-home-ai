@@ -10,16 +10,17 @@
 
 import type { DisciplineId, RegistryEntry } from "./types";
 import { StrengthWorkoutEngine } from "./strengthEngine";
+import { CardioWorkoutEngine } from "./cardioEngine";
 
 export const ENGINE_REGISTRY: Record<DisciplineId, RegistryEntry> = {
   muscu: StrengthWorkoutEngine,
+  cardio: CardioWorkoutEngine,
 
-  // Points d'extension — phases 3 à 6. Descriptors seuls : l'UI doit les
+  // Points d'extension — phases 4 à 6. Descriptors seuls : l'UI doit les
   // afficher désactivés/"bientôt disponible" et ne jamais appeler
   // generate()/toWorkoutRecord() dessus (voir isReadyEngine dans types.ts).
   hyrox: { id: "hyrox", label: "HYROX", comingSoon: true, feedsRankEngine: false },
   course: { id: "course", label: "Course", comingSoon: true, feedsRankEngine: false },
-  cardio: { id: "cardio", label: "Cardio", comingSoon: true, feedsRankEngine: false },
   guided: { id: "guided", label: "Activité accompagnée", comingSoon: true, feedsRankEngine: false },
 };
 

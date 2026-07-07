@@ -23,6 +23,12 @@
 // Aucune discipline future ne doit écrire dans `exercises` /
 // `exercise_sets` — tout son contenu structuré vit dans
 // `workouts.metadata` (jsonb, additif, jamais lu par le Rang).
+//
+// Phase 3 : `toSessionView` donne à chaque moteur le contrôle total de
+// SON résumé et SON affichage de séance (segments + stats libres), sans
+// jamais exposer sa structure interne à l'UI générique. C'est le SEUL
+// point de contact entre un moteur et l'affichage (Sensei "résumé après
+// génération", écran de relecture avant sauvegarde, carte d'historique).
 // ============================================================
 
 /** Identifiants stables des disciplines. Étendre cette union = seule
@@ -107,15 +113,49 @@ export interface WorkoutRecordDraft {
   }>;
 }
 
-// ---- Présentation dans l'historique (contrat posé en phase 1, consommé phase 7) ----
+// ---- Affichage générique d'une séance (posé phase 1 sous forme de
+// HistoryPresentation, complété phase 3 avec un vrai contrat de rendu) ----
+
+/** Une statistique affichable : "Distance" / "5.2 km". Format 100% texte —
+ *  chaque moteur décide lui-même des unités et de la mise en forme. */
+export interface SessionStat {
+  label: string;
+  value: string;
+}
+
+/** Un bloc de la séance (un exercice en musculation, une station HYROX,
+ *  un fractionné en course, l'activité unique en cardio...). Le nom
+ *  générique "segment" est délibéré : aucune discipline n'impose son
+ *  vocabulaire aux autres. */
+export interface SessionSegment {
+  label: string;
+  stats: SessionStat[];
+}
+
+/** Représentation 100% générique d'une séance, consommée par UN SEUL jeu
+ *  de composants UI (src/components/fitness/session/) pour : l'écran de
+ *  relecture avant sauvegarde, le résumé Sensei et la carte d'historique.
+ *  Construite soit depuis un WorkoutTemplate frais (avant sauvegarde),
+ *  soit depuis une ligne `workouts` persistée relue en base — les deux
+ *  passent par `toWorkoutRecord`/la lecture DB puis par `toSessionView`. */
+export interface SessionView {
+  title: string;
+  /** Stats mises en avant en haut de carte (durée, tonnage, distance...). */
+  summaryStats: SessionStat[];
+  segments: SessionSegment[];
+  notes?: string;
+}
+
+// ---- Présentation dans l'historique ----
 
 export interface HistoryPresentation {
-  /** 'strength' réutilise WorkoutCard tel quel sans aucune modification.
-   *  Les futures variantes (phase 7) sont des ADDITIONS à cette union,
-   *  jamais un remplacement de 'strength'. */
+  /** 'strength' réutilise WorkoutCard tel quel sans aucune modification —
+   *  c'est la SEULE variante qui contourne SessionView, pour ne rien
+   *  casser sur la musculation. Toute autre discipline utilise
+   *  'metric-grid' (métriques en grille) ou 'guided-session' (cours
+   *  encadré, pas de programmation générée) et passe par le kit UI
+   *  générique alimenté par `toSessionView`. */
   cardVariant: "strength" | "metric-grid" | "guided-session";
-  /** Libellés des métriques à mettre en avant, dans l'ordre d'affichage. */
-  primaryMetrics: string[];
 }
 
 // ---- Contrat commun des moteurs ----
@@ -142,6 +182,11 @@ export interface WorkoutEngine extends EngineDescriptor {
   /** Traduit un résultat généré (+ les réponses d'origine) en brouillon
    *  prêt à persister. Seul point de contact avec le schéma Supabase. */
   toWorkoutRecord(template: WorkoutTemplate, answers: SenseiAnswers): WorkoutRecordDraft;
+  /** Construit la représentation d'affichage générique d'une séance, à
+   *  partir d'un brouillon (avant sauvegarde) OU d'une ligne persistée
+   *  relue en base (même forme structurelle — voir WorkoutRecordDraft).
+   *  Unique point de contact entre ce moteur et le kit UI générique. */
+  toSessionView(record: WorkoutRecordDraft): SessionView;
   historyPresentation: HistoryPresentation;
 }
 

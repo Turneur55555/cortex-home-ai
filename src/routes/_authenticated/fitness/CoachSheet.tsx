@@ -35,6 +35,7 @@ import type {
   DisciplineId,
   SenseiAnswerValue,
   SenseiAnswers,
+  WorkoutRecordDraft,
   WorkoutTemplate,
 } from "@/lib/fitness/engines/types";
 import {
@@ -68,7 +69,10 @@ export function CoachSheet({
   recoveryMap,
 }: {
   onClose: () => void;
-  onResult: (tpl: WorkoutTemplate) => void;
+  /** `draft` porte déjà `discipline` — SeancesTab route sur cardVariant
+   *  sans avoir besoin d'un paramètre séparé. `template` reste fourni
+   *  pour WorkoutSheet.tsx (musculation), intouché depuis la phase 1. */
+  onResult: (template: WorkoutTemplate, draft: WorkoutRecordDraft) => void;
   initialMuscles?: string[];
   recoveryMap?: Map<MuscleId, MuscleRecovery>;
 }) {
@@ -147,14 +151,16 @@ export function CoachSheet({
   };
 
   const generate = useMutation({
-    mutationFn: async (): Promise<WorkoutTemplate> => {
+    mutationFn: async (): Promise<{ template: WorkoutTemplate; draft: WorkoutRecordDraft }> => {
       if (!engine) throw new Error("Aucun moteur disponible pour cette discipline.");
       const context = DISCIPLINE_CONTEXT_BUILDERS[engine.id]?.(answers, recovery) ?? {};
-      return engine.generate(answers, context);
+      const template = await engine.generate(answers, context);
+      const draft = engine.toWorkoutRecord(template, answers);
+      return { template, draft };
     },
-    onSuccess: (tpl: WorkoutTemplate) => {
+    onSuccess: ({ template, draft }: { template: WorkoutTemplate; draft: WorkoutRecordDraft }) => {
       toast.success("Séance générée — ajuste-la avant d'enregistrer");
-      onResult(tpl);
+      onResult(template, draft);
     },
     onError: (e: Error) => toast.error(e.message),
   });
