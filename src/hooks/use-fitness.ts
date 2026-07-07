@@ -34,6 +34,12 @@ export function useAddWorkout() {
       duration_minutes?: number | null;
       notes?: string | null;
       gym_location?: string;
+      // Fondation moteurs (phase 1) : discipline + metadata sont additifs,
+      // par défaut 'muscu'/{} pour tout appelant existant. Réservé aux
+      // futurs moteurs (HYROX, Course, Cardio...) qui n'écrivent jamais
+      // dans exercises/exercise_sets — voir src/lib/fitness/engines/types.ts.
+      discipline?: "muscu" | "hyrox" | "course" | "cardio" | "guided";
+      metadata?: Record<string, unknown>;
       exercises: Array<{
         name: string;
         sets?: number | null;
@@ -60,6 +66,8 @@ export function useAddWorkout() {
           duration_minutes: input.duration_minutes ?? null,
           notes: input.notes ?? null,
           gym_location: input.gym_location ?? "Salle inconnue",
+          discipline: input.discipline ?? "muscu",
+          metadata: input.metadata ?? {},
         } as unknown as TablesInsert<"workouts">)
         .select()
         .single();

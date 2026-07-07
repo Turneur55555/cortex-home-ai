@@ -12,18 +12,13 @@ import {
   selectionRecovery,
   buildAiRecoveryContext,
 } from "@/lib/fitness/recoveryAdvice";
+import { StrengthWorkoutEngine } from "@/lib/fitness/engines/strengthEngine";
+import type { WorkoutTemplate } from "@/lib/fitness/engines/types";
 
-export type WorkoutTemplate = {
-  name: string;
-  exercises: Array<{
-    name: string;
-    sets: string;
-    reps: string;
-    weight: string;
-    image_path: string | null;
-  }>;
-  notes?: string;
-};
+// Réexporté pour rétro-compat : WorkoutSheet.tsx et SeancesTab.tsx importent
+// ce type depuis ce fichier. La définition canonique vit désormais dans
+// l'interface commune des moteurs (src/lib/fitness/engines/types.ts).
+export type { WorkoutTemplate } from "@/lib/fitness/engines/types";
 
 // ─── Muscle option types ──────────────────────────────────────────────────────
 
@@ -129,48 +124,55 @@ export function CoachSheet({
   const hasRecoveryData = recovery.size > 0;
 
   const generate = useMutation({
-    mutationFn: async () => {
-      const payload =
-        mode === "muscu"
-          ? {
-              mode: "muscu",
-              muscles: aiMuscleNames(muscles),
-              has_cardio: hasCardio(muscles),
-              duration_minutes: Number(duration) || 45,
-              equipment,
-              level,
-              goal,
-              recovery: buildAiRecoveryContext(selectedIds, recovery),
-            }
-          : {
-              mode: "autre",
-              activity: activity.trim(),
-              duration_minutes: Number(duration) || 45,
-              level,
-              intensity,
-            };
+    mutationFn: async (): Promise<WorkoutTemplate> => {
+      if (mode === "muscu") {
+        // Musculation : passe désormais par StrengthWorkoutEngine plutôt que
+        // d'invoquer l'edge function directement — même payload, même résultat,
+        // seul le point d'appel a changé (fondation moteurs, phase 1).
+        return StrengthWorkoutEngine.generate(
+          {
+            muscles: aiMuscleNames(muscles),
+            has_cardio: hasCardio(muscles),
+            duration_minutes: Number(duration) || 45,
+            equipment,
+            level,
+            goal,
+          },
+          { recovery: buildAiRecoveryContext(selectedIds, recovery) },
+        );
+      }
+
+      // "Autre activité" : pas encore de moteur dédié — HYROX/Course/Cardio/
+      // Activités accompagnées arrivent phases 3 à 6. Comportement inchangé.
+      const payload = {
+        mode: "autre",
+        activity: activity.trim(),
+        duration_minutes: Number(duration) || 45,
+        level,
+        intensity,
+      };
 
       const { data, error } = await supabase.functions.invoke("coach-workout", { body: payload });
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
-      return data as {
+
+      const result = data as {
         name: string;
         notes?: string;
         muscles_worked?: string[];
         exercises: Array<{ name: string; sets: number; reps: number; weight?: number }>;
       };
-    },
-    onSuccess: (data) => {
-      const musclesLine =
-        data.muscles_worked && data.muscles_worked.length > 0
-          ? `Muscles sollicités : ${data.muscles_worked.join(", ")}.`
-          : "";
-      const notes = [musclesLine, data.notes].filter(Boolean).join("\n").trim();
 
-      const tpl: WorkoutTemplate = {
-        name: data.name,
+      const musclesLine =
+        result.muscles_worked && result.muscles_worked.length > 0
+          ? `Muscles sollicités : ${result.muscles_worked.join(", ")}.`
+          : "";
+      const notes = [musclesLine, result.notes].filter(Boolean).join("\n").trim();
+
+      return {
+        name: result.name,
         notes: notes || undefined,
-        exercises: (data.exercises ?? []).map((ex) => ({
+        exercises: (result.exercises ?? []).map((ex) => ({
           name: ex.name,
           sets: String(ex.sets ?? ""),
           reps: String(ex.reps ?? ""),
@@ -178,6 +180,8 @@ export function CoachSheet({
           image_path: null,
         })),
       };
+    },
+    onSuccess: (tpl: WorkoutTemplate) => {
       toast.success("Séance générée — ajuste-la avant d'enregistrer");
       onResult(tpl);
     },

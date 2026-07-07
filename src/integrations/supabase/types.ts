@@ -1208,9 +1208,11 @@ export type Database = {
         Row: {
           created_at: string
           date: string
+          discipline: string
           duration_minutes: number | null
           gym_location: string
           id: string
+          metadata: Json
           name: string
           notes: string | null
           user_id: string
@@ -1218,9 +1220,11 @@ export type Database = {
         Insert: {
           created_at?: string
           date: string
+          discipline?: string
           duration_minutes?: number | null
           gym_location?: string
           id?: string
+          metadata?: Json
           name: string
           notes?: string | null
           user_id: string
@@ -1228,9 +1232,11 @@ export type Database = {
         Update: {
           created_at?: string
           date?: string
+          discipline?: string
           duration_minutes?: number | null
           gym_location?: string
           id?: string
+          metadata?: Json
           name?: string
           notes?: string | null
           user_id?: string
