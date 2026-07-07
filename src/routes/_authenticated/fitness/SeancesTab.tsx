@@ -34,7 +34,7 @@ import {
 } from "@/hooks/use-fitness";
 import { useRecoveryMap } from "@/hooks/useRecoveryMap";
 import { useFitnessStreak } from "@/hooks/useFitnessStreak";
-import { FabAdd } from "@/components/shared/FormComponents";
+
 import { formatTonnage, workoutTonnage } from "@/lib/fitness/strength";
 import { exerciseToMuscles, MUSCLE_META, type MuscleId } from "@/lib/fitness/muscleMapping";
 import { CoachSheet, type WorkoutTemplate } from "./CoachSheet";
