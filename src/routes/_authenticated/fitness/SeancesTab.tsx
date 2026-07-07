@@ -47,6 +47,7 @@ import {
   type DisciplineId,
   type WorkoutRecordDraft,
 } from "@/lib/fitness/engines/types";
+import { adaptWorkoutRow } from "@/lib/fitness/engines/adaptRow";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -72,14 +73,19 @@ export function SeancesTab() {
   const recoveryMap = useRecoveryMap(data);
   const streak = useFitnessStreak(data);
 
-  const weekTonnage = useMemo(() => {
+  // Phase 7 : remplace l'ancien "Tonnage 7j" (implicitement muscu — 0 kg
+  // silencieux pour Cardio/HYROX/Course/Guidé) par une métrique réellement
+  // commune à TOUTE discipline : la durée. Le tonnage reste visible là où
+  // il a du sens (WorkoutCard, propre à la musculation), juste plus comme
+  // KPI global de tête de page.
+  const weekDurationMinutes = useMemo(() => {
     if (!data) return 0;
     const now = new Date();
     const start = new Date(now);
     start.setDate(start.getDate() - 7);
     return data
       .filter((w) => new Date(w.date) >= start)
-      .reduce((acc, w) => acc + workoutTonnage(w.exercises ?? []), 0);
+      .reduce((acc, w) => acc + (w.duration_minutes ?? 0), 0);
   }, [data]);
 
   const weekWorkouts = useMemo(() => {
@@ -380,9 +386,13 @@ export function SeancesTab() {
             />
             <PerfTile
               icon={<Layers className="h-3.5 w-3.5 text-amber-300" />}
-              label="Tonnage 7j"
-              value={formatTonnage(weekTonnage)}
-              sub="volume total"
+              label="Durée 7j"
+              value={
+                weekDurationMinutes >= 60
+                  ? `${(weekDurationMinutes / 60).toFixed(1)}h`
+                  : `${weekDurationMinutes}`
+              }
+              sub={weekDurationMinutes >= 60 ? "toutes disciplines" : "min · toutes disciplines"}
               accent="rgba(251,191,36,0.30)"
             />
           </div>
@@ -525,57 +535,91 @@ function WeekSessions({
             </p>
           ) : (
             <ul className="space-y-2">
-              {workouts.map((w) => {
-                const muscles = detailed ? workoutMuscleLabels(w) : [];
-                const volume = detailed ? Math.round(workoutTonnage(w.exercises ?? [])) : 0;
-                return (
-                  <li key={w.id} className="rounded-xl border border-border bg-card/50 px-3 py-2.5">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex min-w-0 items-center gap-3">
-                        <span className="w-9 shrink-0 text-center text-[10px] font-semibold uppercase tracking-wide text-primary">
-                          {weekdayLabel(w.date)}
-                        </span>
-                        <span className="truncate text-xs font-semibold">{w.name || "Séance"}</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => onRefaire(w)}
-                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/5 text-muted-foreground transition-all active:scale-90 hover:bg-primary/15 hover:text-primary"
-                        title="Refaire cette séance"
-                        aria-label="Refaire cette séance"
-                      >
-                        <Repeat className="h-3.5 w-3.5" />
-                      </button>
+              {workouts.map((w) => (
+                <li key={w.id} className="rounded-xl border border-border bg-card/50 px-3 py-2.5">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span className="w-9 shrink-0 text-center text-[10px] font-semibold uppercase tracking-wide text-primary">
+                        {weekdayLabel(w.date)}
+                      </span>
+                      <span className="truncate text-xs font-semibold">{w.name || "Séance"}</span>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => onRefaire(w)}
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/5 text-muted-foreground transition-all active:scale-90 hover:bg-primary/15 hover:text-primary"
+                      title="Refaire cette séance"
+                      aria-label="Refaire cette séance"
+                    >
+                      <Repeat className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
 
-                    {detailed && (
-                      <div className="mt-2 pl-12">
-                        <p className="text-[10px] text-muted-foreground">
-                          {w.duration_minutes ? `${w.duration_minutes} min` : "durée —"}
-                          {` · ${formatTonnage(volume)}`}
-                          {` · ${(w.exercises ?? []).length} exos`}
-                        </p>
-                        {muscles.length > 0 && (
-                          <div className="mt-1.5 flex flex-wrap gap-1">
-                            {muscles.map((m) => (
-                              <span
-                                key={m}
-                                className="rounded-full border border-white/8 bg-white/5 px-2 py-0.5 text-[9px] font-medium text-muted-foreground"
-                              >
-                                {m}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </li>
-                );
-              })}
+                  {detailed && (
+                    <div className="mt-2 pl-12">
+                      <WeekSessionDetail w={w} />
+                    </div>
+                  )}
+                </li>
+              ))}
             </ul>
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// Phase 7 : le détail "semaine" était implicitement pensé pour la
+// musculation (muscles sollicités + tonnage + nombre d'exos, silencieux à
+// "0 kg · 0 exos" pour Cardio/HYROX/Course/Guidé). Chaque discipline
+// affiche désormais SES propres stats de résumé (déjà produites par
+// toSessionView — rien de nouveau à calculer, juste à ne plus ignorer).
+function WeekSessionDetail({ w }: { w: WorkoutRow }) {
+  const discipline =
+    ((w as { discipline?: string | null }).discipline as DisciplineId | null) ?? "muscu";
+  const entry = ENGINE_REGISTRY[discipline];
+  const isStrength =
+    !entry || !isReadyEngine(entry) || entry.historyPresentation.cardVariant === "strength";
+
+  if (isStrength) {
+    const muscles = workoutMuscleLabels(w);
+    const volume = Math.round(workoutTonnage(w.exercises ?? []));
+    return (
+      <>
+        <p className="text-[10px] text-muted-foreground">
+          {w.duration_minutes ? `${w.duration_minutes} min` : "durée —"}
+          {` · ${formatTonnage(volume)}`}
+          {` · ${(w.exercises ?? []).length} exos`}
+        </p>
+        {muscles.length > 0 && (
+          <div className="mt-1.5 flex flex-wrap gap-1">
+            {muscles.map((m) => (
+              <span
+                key={m}
+                className="rounded-full border border-white/8 bg-white/5 px-2 py-0.5 text-[9px] font-medium text-muted-foreground"
+              >
+                {m}
+              </span>
+            ))}
+          </div>
+        )}
+      </>
+    );
+  }
+
+  const draft = adaptWorkoutRow(w, discipline);
+  const stats = entry.toSessionView(draft).summaryStats.slice(0, 3);
+  return (
+    <div className="flex flex-wrap gap-1">
+      {stats.map((s) => (
+        <span
+          key={s.label}
+          className="rounded-full border border-white/8 bg-white/5 px-2 py-0.5 text-[9px] font-medium text-muted-foreground"
+        >
+          {s.label} : {s.value}
+        </span>
+      ))}
     </div>
   );
 }

@@ -21,6 +21,8 @@ import { adaptWorkoutRow, type PersistedWorkoutRow } from "@/lib/fitness/engines
 import { WorkoutDeleteDialog } from "@/components/fitness/WorkoutDeleteDialog";
 import { SessionSummaryCard } from "./SessionSummaryCard";
 import { SessionSegmentList } from "./SessionSegmentList";
+import { DisciplineBadge } from "./DisciplineIcon";
+import { HISTORY_CONTENT_RENDERERS } from "./historyContentRenderers";
 
 export function GenericHistoryCard({
   workout,
@@ -58,9 +60,11 @@ export function GenericHistoryCard({
                   {gymLocation}
                 </span>
               )}
-              <span className="inline-flex items-center rounded-full border border-border bg-surface px-2 py-0.5 text-[10px] font-semibold tracking-normal text-muted-foreground">
-                {entry.label}
-              </span>
+              <DisciplineBadge
+                icon={engine.icon}
+                label={engine.label}
+                accentClassName={engine.accentClassName}
+              />
             </p>
           </div>
           <div className="relative flex shrink-0 items-center gap-1.5">
@@ -91,8 +95,16 @@ export function GenericHistoryCard({
         </div>
 
         <div className="relative mt-3 space-y-3">
-          <SessionSummaryCard view={view} />
-          <SessionSegmentList segments={view.segments} />
+          {(() => {
+            const Custom = HISTORY_CONTENT_RENDERERS[engine.id];
+            if (Custom) return <Custom view={view} />;
+            return (
+              <>
+                <SessionSummaryCard view={view} />
+                <SessionSegmentList segments={view.segments} />
+              </>
+            );
+          })()}
         </div>
       </div>
 

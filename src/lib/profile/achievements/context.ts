@@ -18,6 +18,13 @@ export interface BuildAchievementContextInput {
   workoutsCountTotal: number;
   weeklyWorkouts: number;
   guidedSessionsCount: number;
+  hyroxSimulationsCount: number;
+  hyroxDistinctStationsCount: number;
+  courseSessionsCount: number;
+  coursePrep5kDone: boolean;
+  coursePrep10kDone: boolean;
+  coursePrepSemiDone: boolean;
+  coursePrepMarathonDone: boolean;
   goalsCompletedTotal: number;
   bodyMeasurementsCount: number;
   proteinDays30: number;
@@ -45,6 +52,13 @@ export function buildAchievementContext(input: BuildAchievementContextInput): Ac
     workoutsCountTotal: input.workoutsCountTotal,
     weeklyWorkouts: input.weeklyWorkouts,
     guidedSessionsCount: input.guidedSessionsCount,
+    hyroxSimulationsCount: input.hyroxSimulationsCount,
+    hyroxDistinctStationsCount: input.hyroxDistinctStationsCount,
+    courseSessionsCount: input.courseSessionsCount,
+    coursePrep5kDone: input.coursePrep5kDone,
+    coursePrep10kDone: input.coursePrep10kDone,
+    coursePrepSemiDone: input.coursePrepSemiDone,
+    coursePrepMarathonDone: input.coursePrepMarathonDone,
     goalsCompletedTotal: input.goalsCompletedTotal,
     bodyMeasurementsCount: input.bodyMeasurementsCount,
     proteinDays30: input.proteinDays30,

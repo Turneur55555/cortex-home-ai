@@ -16,17 +16,9 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useMutation } from "@tanstack/react-query";
-import {
-  ChevronLeft,
-  Dumbbell,
-  Flame,
-  Footprints,
-  HeartPulse,
-  Loader2,
-  Sparkles,
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { ChevronLeft, Loader2 } from "lucide-react";
 import { Sheet } from "@/components/shared/FormComponents";
+import { DisciplineIcon } from "@/components/fitness/session/DisciplineIcon";
 import type { MuscleId } from "@/lib/fitness/muscleMapping";
 import type { MuscleRecovery } from "@/lib/fitness/recovery";
 import { ENGINE_REGISTRY, listEngines } from "@/lib/fitness/engines/registry";
@@ -45,21 +37,20 @@ import {
 } from "@/components/fitness/sensei/QuestionRenderer";
 import { DISCIPLINE_CONTEXT_BUILDERS } from "@/components/fitness/sensei/senseiCustomRenderers";
 import type { SenseiRuntimeInputs } from "@/components/fitness/sensei/senseiCustomRenderers";
+import { useWorkouts } from "@/hooks/use-fitness";
+import { useGoalsWithProgress } from "@/hooks/useGoalsWithProgress";
+import { computePRs } from "@/utils/fitness/exercise-stats";
+import { buildSenseiBriefing, type SenseiBriefing } from "@/lib/fitness/engines/senseiBriefing";
 
 // Réexporté pour rétro-compat : WorkoutSheet.tsx et SeancesTab.tsx importent
 // ce type depuis ce fichier. La définition canonique vit dans l'interface
 // commune des moteurs (src/lib/fitness/engines/types.ts) depuis la phase 1.
 export type { WorkoutTemplate } from "@/lib/fitness/engines/types";
 
-// Icônes par discipline — purement décoratif, jamais consulté par la
-// logique métier. Étendre cette table à chaque nouvelle discipline.
-const DISCIPLINE_ICON: Record<DisciplineId, LucideIcon> = {
-  muscu: Dumbbell,
-  hyrox: Flame,
-  course: Footprints,
-  cardio: HeartPulse,
-  guided: Sparkles,
-};
+// Phase 7 : l'icône n'est plus dupliquée ici — chaque moteur porte la
+// sienne (EngineDescriptor.icon, voir types.ts), résolue par le même
+// composant que l'historique (DisciplineIcon.tsx). Ajouter une
+// discipline ne touche plus ce fichier, même pour son icône.
 
 type Step = "discipline" | "question" | "summary";
 
@@ -77,8 +68,41 @@ export function CoachSheet({
   initialMuscles?: string[];
   recoveryMap?: Map<MuscleId, MuscleRecovery>;
 }) {
-  const recovery = recoveryMap ?? new Map<MuscleId, MuscleRecovery>();
+  const recovery = useMemo(() => recoveryMap ?? new Map<MuscleId, MuscleRecovery>(), [recoveryMap]);
   const hasInitialMuscles = Boolean(initialMuscles && initialMuscles.length > 0);
+
+  // Phase 8 — "Sensei briefing" : le Sensei PRÉPARE ces informations (lecture
+  // seule, purement informatif) sans jamais en déduire un choix — c'est
+  // exactement la frontière avec le futur Planner Engine (voir SenseiContext
+  // dans types.ts, et l'en-tête de senseiBriefing.ts). N'affecte ni le
+  // dialogue ni answers/disciplineId.
+  const { data: briefingWorkouts } = useWorkouts();
+  const { goals: briefingGoals } = useGoalsWithProgress();
+  const { prByName: briefingPrByName, nameByKey: briefingNameByKey } = useMemo(
+    () => computePRs(briefingWorkouts ?? []),
+    [briefingWorkouts],
+  );
+  const briefingBestPR = useMemo(() => {
+    let bestKey: string | null = null;
+    let bestWeight = 0;
+    for (const [key, weight] of briefingPrByName) {
+      if (weight > bestWeight) {
+        bestWeight = weight;
+        bestKey = key;
+      }
+    }
+    return bestKey ? { name: briefingNameByKey.get(bestKey) ?? bestKey, weight: bestWeight } : null;
+  }, [briefingPrByName, briefingNameByKey]);
+  const briefing = useMemo(
+    () =>
+      buildSenseiBriefing({
+        workouts: briefingWorkouts ?? [],
+        bestPR: briefingBestPR,
+        goals: briefingGoals,
+        recoveryMap: recovery,
+      }),
+    [briefingWorkouts, briefingBestPR, briefingGoals, recovery],
+  );
 
   // Si on arrive avec des muscles pré-sélectionnés (tap sur la BodyMap), on
   // saute directement dans le flux Musculation — comme aujourd'hui, où le
@@ -192,33 +216,32 @@ export function CoachSheet({
           </button>
         )}
 
+        {step === "discipline" && <SenseiBriefingPanel briefing={briefing} />}
+
         {step === "discipline" && (
           <div className="grid grid-cols-2 gap-2">
-            {listEngines().map((e) => {
-              const Icon = DISCIPLINE_ICON[e.id];
-              return (
-                <button
-                  key={e.id}
-                  type="button"
-                  disabled={e.comingSoon}
-                  onClick={() => selectDiscipline(e.id)}
-                  className={
-                    "flex flex-col items-center gap-2 rounded-xl border px-3 py-4 text-sm font-semibold transition-colors " +
-                    (e.comingSoon
-                      ? "cursor-not-allowed border-border bg-surface/50 text-muted-foreground/50"
-                      : "border-border bg-card text-foreground hover:border-primary/40")
-                  }
-                >
-                  <Icon className="h-5 w-5" />
-                  {e.label}
-                  {e.comingSoon && (
-                    <span className="text-[10px] font-normal uppercase tracking-wider text-muted-foreground/70">
-                      Bientôt disponible
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+            {listEngines().map((e) => (
+              <button
+                key={e.id}
+                type="button"
+                disabled={e.comingSoon}
+                onClick={() => selectDiscipline(e.id)}
+                className={
+                  "flex flex-col items-center gap-2 rounded-xl border px-3 py-4 text-sm font-semibold transition-colors " +
+                  (e.comingSoon
+                    ? "cursor-not-allowed border-border bg-surface/50 text-muted-foreground/50"
+                    : `border-border bg-card text-foreground hover:border-primary/40 ${e.accentClassName}`)
+                }
+              >
+                <DisciplineIcon icon={e.icon} className="h-5 w-5" />
+                {e.label}
+                {e.comingSoon && (
+                  <span className="text-[10px] font-normal uppercase tracking-wider text-muted-foreground/70">
+                    Bientôt disponible
+                  </span>
+                )}
+              </button>
+            ))}
           </div>
         )}
 
@@ -267,5 +290,51 @@ export function CoachSheet({
         )}
       </div>
     </Sheet>
+  );
+}
+
+// Phase 8 — panneau informatif, lecture seule, affiché uniquement à
+// l'étape "quelle discipline ?" : prouve concrètement que "le Sensei
+// connaît ces informations" sans jamais les utiliser pour décider à la
+// place de l'utilisateur (aucun disciplineId ni answer n'est pré-rempli
+// à partir de ce panneau).
+function SenseiBriefingPanel({ briefing }: { briefing: SenseiBriefing }) {
+  const hasContent =
+    briefing.recentDisciplines.length > 0 ||
+    briefing.activeGoals.length > 0 ||
+    briefing.bestPR != null ||
+    briefing.recovery.fatiguedCount > 0;
+  if (!hasContent) return null;
+
+  return (
+    <div className="space-y-1.5 rounded-xl border border-border bg-surface/60 p-3 text-[11px] text-muted-foreground">
+      {briefing.recentDisciplines.length > 0 && (
+        <p>
+          <span className="font-semibold text-foreground/80">Dernièrement : </span>
+          {briefing.recentDisciplines.map((d) => ENGINE_REGISTRY[d.discipline].label).join(", ")}
+          {` · ${briefing.totalSessions} séances (${briefing.weeklySessions} cette semaine)`}
+        </p>
+      )}
+      {briefing.bestPR && (
+        <p>
+          <span className="font-semibold text-foreground/80">Record : </span>
+          {briefing.bestPR.name} {briefing.bestPR.weight} kg
+        </p>
+      )}
+      {briefing.activeGoals.length > 0 && (
+        <p>
+          <span className="font-semibold text-foreground/80">Objectifs actifs : </span>
+          {briefing.activeGoals.map((g) => `${g.title} (${g.progress}%)`).join(" · ")}
+        </p>
+      )}
+      {briefing.recovery.fatiguedCount > 0 && (
+        <p>
+          <span className="font-semibold text-foreground/80">Récupération : </span>
+          {briefing.recovery.readyCount} groupe(s) prêt(s)
+          {briefing.recovery.mostFatigued.length > 0 &&
+            ` · encore en repos : ${briefing.recovery.mostFatigued.join(", ")}`}
+        </p>
+      )}
+    </div>
   );
 }

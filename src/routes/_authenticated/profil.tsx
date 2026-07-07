@@ -13,6 +13,7 @@ import { ClassCard } from "@/components/profile/ClassCard";
 import { TrophyRoomPreview } from "@/components/profile/rpg/TrophyRoomPreview";
 import { QuestsPreview } from "@/components/profile/rpg/QuestsPreview";
 import { BodyStatusCard } from "@/components/profile/BodyStatusCard";
+import { DisciplineBreakdownCard } from "@/components/profile/DisciplineBreakdownCard";
 import { DocumentsSummaryCard } from "@/components/profile/DocumentsSummaryCard";
 import { PersonalizationPanel } from "@/components/profile/PersonalizationPanel";
 import { SecurityPanel } from "@/components/profile/SecurityPanel";
@@ -54,6 +55,10 @@ function ProfilPage() {
 
       {/* État du corps — sobre, sans habillage RPG (décision actée) */}
       <BodyStatusCard />
+
+      {/* Répartition par discipline (Phase 8) — toutes disciplines, pas
+          seulement musculation ; masquée si aucune séance. */}
+      <DisciplineBreakdownCard />
 
       {/* Documents — carte de résumé renvoyant vers /documents */}
       <DocumentsSummaryCard />

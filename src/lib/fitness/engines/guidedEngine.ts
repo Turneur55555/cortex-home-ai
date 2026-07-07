@@ -128,6 +128,8 @@ export const GuidedActivityEngine: WorkoutEngine = {
   label: "Activité accompagnée",
   comingSoon: false,
   feedsRankEngine: false,
+  icon: "Sparkles",
+  accentClassName: "text-violet-400",
   questions: QUESTIONS,
 
   async generate(answers: SenseiAnswers, _context?: SenseiContext): Promise<WorkoutTemplate> {

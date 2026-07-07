@@ -43,6 +43,18 @@ describe("ENGINE_REGISTRY", () => {
       expect(entry.comingSoon).toBe(false);
     }
   });
+
+  it("chaque moteur porte sa propre identité visuelle (icône + couleur d'accent) — Phase 7", () => {
+    for (const entry of listEngines()) {
+      expect(typeof entry.icon).toBe("string");
+      expect(entry.icon.length).toBeGreaterThan(0);
+      expect(typeof entry.accentClassName).toBe("string");
+      expect(entry.accentClassName.length).toBeGreaterThan(0);
+    }
+    // Pas deux disciplines avec la même icône — identification immédiate garantie.
+    const icons = listEngines().map((e) => e.icon);
+    expect(new Set(icons).size).toBe(icons.length);
+  });
 });
 
 describe("StrengthWorkoutEngine.toWorkoutRecord", () => {

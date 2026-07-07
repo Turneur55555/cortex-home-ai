@@ -145,6 +145,8 @@ export const CardioWorkoutEngine: WorkoutEngine = {
   label: "Cardio",
   comingSoon: false,
   feedsRankEngine: false,
+  icon: "HeartPulse",
+  accentClassName: "text-pink-400",
   questions: QUESTIONS,
 
   async generate(answers: SenseiAnswers, _context?: SenseiContext): Promise<WorkoutTemplate> {

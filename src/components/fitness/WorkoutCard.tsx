@@ -37,6 +37,8 @@ import { normalize } from "@/lib/fitness/exerciseCatalog";
 import { estimate1RM, formatTonnage, workoutTonnage } from "@/lib/fitness/strength";
 import { estimateWorkoutCalories } from "@/lib/fitness/calories";
 import { useLatestBodyWeight } from "@/hooks/useLatestBodyWeight";
+import { ENGINE_REGISTRY } from "@/lib/fitness/engines/registry";
+import { DisciplineBadge } from "./session/DisciplineIcon";
 
 export type WorkoutRow = NonNullable<ReturnType<typeof useWorkouts>["data"]>[number];
 type ExerciseRow = NonNullable<WorkoutRow["exercises"]>[number];
@@ -76,7 +78,7 @@ type DetailedSetRow = {
 
 function rowToSeries(r: ExerciseRow): SerieView[] {
   const detailed =
-    ((r as unknown as { exercise_sets?: DetailedSetRow[] | null }).exercise_sets) ?? [];
+    (r as unknown as { exercise_sets?: DetailedSetRow[] | null }).exercise_sets ?? [];
   if (detailed.length > 0) {
     // H3 : les séries explicitement non validées ne font pas partie de la séance.
     return [...detailed]
@@ -93,14 +95,13 @@ function rowToSeries(r: ExerciseRow): SerieView[] {
   // contient en réalité les reps et `reps` la charge (kg).
   const hasExplicitWeight = r.weight != null;
   const reps = hasExplicitWeight ? r.reps : (r.sets ?? r.reps);
-  const weight = hasExplicitWeight ? r.weight : (r.sets != null ? r.reps : null);
+  const weight = hasExplicitWeight ? r.weight : r.sets != null ? r.reps : null;
   return [{ index: 1, reps, weight, sourceId: r.id }];
 }
 
 function expandToSeries(rows: ExerciseRow[]): SerieView[] {
   return rows.flatMap((r) => rowToSeries(r)).map((sset, i) => ({ ...sset, index: i + 1 }));
 }
-
 
 function buildGroups(rows: ExerciseRow[]): ExerciseGroup[] {
   const byKey = new Map<string, ExerciseRow[]>();
@@ -238,11 +239,12 @@ export function WorkoutCard({
     };
   }, [groups, w.duration_minutes, w.exercises, w.id, bodyWeightKg]);
 
-
   const handlePhotoUpload = async (exId: string, file: File) => {
     setUploadingExId(exId);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
       const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
       const path = `${user.id}/${crypto.randomUUID()}.${ext}`;
@@ -283,13 +285,21 @@ export function WorkoutCard({
         />
         <div className="relative flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground/80">
+            <p className="flex flex-wrap items-center gap-2 text-[11px] font-medium uppercase tracking-[0.14em] text-muted-foreground/80">
               {dateLabel}
               {gymLocation !== "Salle inconnue" && (
-                <span className="ml-2 inline-flex items-center rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold tracking-normal text-primary">
+                <span className="inline-flex items-center rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold tracking-normal text-primary">
                   {gymLocation}
                 </span>
               )}
+              {/* Phase 7 : identité visuelle — même mécanisme que
+                  GenericHistoryCard, seule ligne ajoutée à ce fichier
+                  (intouché sinon depuis la Phase 1). */}
+              <DisciplineBadge
+                icon={ENGINE_REGISTRY.muscu.icon}
+                label={ENGINE_REGISTRY.muscu.label}
+                accentClassName={ENGINE_REGISTRY.muscu.accentClassName}
+              />
             </p>
             <EditableText
               value={w.name}
@@ -320,7 +330,10 @@ export function WorkoutCard({
               <div className="absolute right-0 top-10 z-20 min-w-[180px] overflow-hidden rounded-2xl border border-border bg-card shadow-elevated">
                 <button
                   type="button"
-                  onClick={() => { setMenuOpen(false); onRepeatLive(w); }}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onRepeatLive(w);
+                  }}
                   className="flex w-full items-center gap-3 px-4 py-3 text-sm font-medium transition-colors hover:bg-white/5"
                 >
                   <Repeat className="h-4 w-4 text-muted-foreground" />
@@ -328,7 +341,10 @@ export function WorkoutCard({
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setMenuOpen(false); onOpenFromTemplate(w); }}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onOpenFromTemplate(w);
+                  }}
                   className="flex w-full items-center gap-3 border-t border-border px-4 py-3 text-sm font-medium transition-colors hover:bg-white/5"
                 >
                   <Plus className="h-4 w-4 text-muted-foreground" />
@@ -336,7 +352,10 @@ export function WorkoutCard({
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setMenuOpen(false); setConfirmDelete(true); }}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setConfirmDelete(true);
+                  }}
                   className="flex w-full items-center gap-3 border-t border-border px-4 py-3 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10"
                 >
                   <Trash2 className="h-4 w-4" />
@@ -389,13 +408,12 @@ export function WorkoutCard({
       {groups.length > 0 && (
         <ul className="space-y-3 px-4 pb-3">
           {groups.map((g) => {
-            const imgUrl = (g.imagePath ? imageUrls?.get(g.imagePath) : null) ?? exerciseIllustration(g.name);
+            const imgUrl =
+              (g.imagePath ? imageUrls?.get(g.imagePath) : null) ?? exerciseIllustration(g.name);
             const gymPR = prByGym.get(gymLocation)?.get(g.key) ?? null;
             const isPR =
               g.maxWeight != null &&
-              (gymPR != null
-                ? g.maxWeight === gymPR
-                : prByName.get(g.key) === g.maxWeight);
+              (gymPR != null ? g.maxWeight === gymPR : prByName.get(g.key) === g.maxWeight);
             const isLatestPR = isPR && w.date === latestDate;
             const isOpen = expandedKeys.has(g.key);
             return (
@@ -522,9 +540,7 @@ export function WorkoutCard({
                                 {s.index}
                               </span>
                             </div>
-                            <div className="text-center font-semibold">
-                              {s.reps ?? "—"}
-                            </div>
+                            <div className="text-center font-semibold">{s.reps ?? "—"}</div>
                             <div className="flex items-center justify-center gap-1 text-center font-semibold">
                               {s.weight ?? "—"}
                               {isMax && <Trophy className="h-3 w-3 text-warning" />}
@@ -539,9 +555,7 @@ export function WorkoutCard({
                         <span className="uppercase tracking-wider text-muted-foreground/70">
                           Tonnage
                         </span>
-                        <span className="font-bold tabular-nums">
-                          {formatTonnage(g.volume)}
-                        </span>
+                        <span className="font-bold tabular-nums">{formatTonnage(g.volume)}</span>
                       </div>
                     )}
                   </div>
@@ -611,7 +625,10 @@ export function WorkoutCard({
       {confirmDelete && (
         <WorkoutDeleteDialog
           workoutName={w.name}
-          onConfirm={() => { deleteWorkout.mutate(w.id); setConfirmDelete(false); }}
+          onConfirm={() => {
+            deleteWorkout.mutate(w.id);
+            setConfirmDelete(false);
+          }}
           onCancel={() => setConfirmDelete(false)}
         />
       )}
@@ -620,9 +637,7 @@ export function WorkoutCard({
       {confirmDeleteGroup && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
           <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-lg">
-            <h3 className="text-base font-bold">
-              Supprimer « {confirmDeleteGroup.name} » ?
-            </h3>
+            <h3 className="text-base font-bold">Supprimer « {confirmDeleteGroup.name} » ?</h3>
             <p className="mt-1 text-sm text-muted-foreground">
               {confirmDeleteGroup.totalSeries} série
               {confirmDeleteGroup.totalSeries > 1 ? "s" : ""} supprimée
@@ -648,12 +663,7 @@ export function WorkoutCard({
         </div>
       )}
 
-      {showAddModal && (
-        <AddExerciseModal
-          workoutId={w.id}
-          onClose={() => setShowAddModal(false)}
-        />
-      )}
+      {showAddModal && <AddExerciseModal workoutId={w.id} onClose={() => setShowAddModal(false)} />}
 
       {uploadingExId && (
         <div className="pointer-events-none fixed inset-x-0 bottom-20 z-50 flex justify-center">

@@ -4,6 +4,7 @@ import { useActivityStreak } from "@/hooks/useActivityStreak";
 import { useWorkouts, useBodyMeasurements } from "@/hooks/use-fitness";
 import { useGoalsWithProgress } from "@/hooks/useGoalsWithProgress";
 import { useDisciplineWorkoutCount } from "@/hooks/useDisciplineWorkoutCount";
+import { useDisciplineMetadataSample } from "@/hooks/useDisciplineMetadataSample";
 import { computePRs } from "@/utils/fitness/exercise-stats";
 import { classifyExerciseFamily } from "@/lib/fitness/rank/familyClassification";
 import { buildAchievementContext } from "@/lib/profile/achievements/context";
@@ -46,6 +47,35 @@ export function useAchievements(
   // Phase 6 (Activités accompagnées) : comptage exact, indépendant du
   // plafond à 60 lignes de useWorkouts() — voir useDisciplineWorkoutCount.
   const { data: guidedSessionsCount = 0 } = useDisciplineWorkoutCount("guided");
+  // Phase 8 : HYROX/Course exploitent désormais de VRAIES données (plus de
+  // comingSoon générique) — voir useDisciplineMetadataSample pour le détail
+  // du contenu regardé (metadata.objective/station pour HYROX,
+  // metadata.sessionType pour Course), jamais de donnée inventée.
+  const { data: courseSessionsCount = 0 } = useDisciplineWorkoutCount("course");
+  const { data: hyroxMetadataSample = [] } = useDisciplineMetadataSample("hyrox");
+  const { data: courseMetadataSample = [] } = useDisciplineMetadataSample("course");
+
+  const hyroxSimulationsCount = useMemo(
+    () => hyroxMetadataSample.filter((m) => m.objective === "simulation_complete").length,
+    [hyroxMetadataSample],
+  );
+  const hyroxDistinctStationsCount = useMemo(() => {
+    const stations = new Set(
+      hyroxMetadataSample
+        .filter((m) => m.objective === "specific" && typeof m.station === "string")
+        .map((m) => m.station as string),
+    );
+    return stations.size;
+  }, [hyroxMetadataSample]);
+  const coursePrepFlags = useMemo(
+    () => ({
+      coursePrep5kDone: courseMetadataSample.some((m) => m.sessionType === "prep_5k"),
+      coursePrep10kDone: courseMetadataSample.some((m) => m.sessionType === "prep_10k"),
+      coursePrepSemiDone: courseMetadataSample.some((m) => m.sessionType === "prep_semi"),
+      coursePrepMarathonDone: courseMetadataSample.some((m) => m.sessionType === "prep_marathon"),
+    }),
+    [courseMetadataSample],
+  );
 
   const { prByName, histByName, volByName, nameByKey, topExercises } = useMemo(
     () => computePRs(workouts ?? []),
@@ -80,6 +110,10 @@ export function useAchievements(
       workoutsCountTotal: stats.workouts_count,
       weeklyWorkouts: stats.weekly_workouts,
       guidedSessionsCount,
+      hyroxSimulationsCount,
+      hyroxDistinctStationsCount,
+      courseSessionsCount,
+      ...coursePrepFlags,
       goalsCompletedTotal: stats.goals_completed,
       bodyMeasurementsCount: stats.body_measurements,
       proteinDays30: stats.protein_days,
@@ -124,6 +158,10 @@ export function useAchievements(
     goals,
     badgesWithProgress,
     guidedSessionsCount,
+    hyroxSimulationsCount,
+    hyroxDistinctStationsCount,
+    courseSessionsCount,
+    coursePrepFlags,
   ]);
 
   return {

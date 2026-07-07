@@ -500,6 +500,8 @@ export const CourseWorkoutEngine: WorkoutEngine = {
   label: "Course",
   comingSoon: false,
   feedsRankEngine: false,
+  icon: "Footprints",
+  accentClassName: "text-emerald-400",
   questions: QUESTIONS,
 
   async generate(answers: SenseiAnswers, context?: SenseiContext): Promise<WorkoutTemplate> {

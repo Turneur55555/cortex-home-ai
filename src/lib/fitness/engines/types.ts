@@ -199,6 +199,18 @@ export interface EngineDescriptor {
   comingSoon: boolean;
   /** Frontière avec le moteur de Rang — voir en-tête de fichier. */
   feedsRankEngine: boolean;
+  /** Phase 7 — identité visuelle : CHAQUE moteur possède sa propre icône
+   *  et sa propre couleur d'accent, pour qu'une séance soit identifiable
+   *  au premier coup d'œil dans l'historique, avant même de l'ouvrir.
+   *  `icon` est un NOM d'icône Lucide (string, pas un composant) — /lib/
+   *  fitness reste 100% pur, zéro import React ; c'est à la couche UI
+   *  (voir src/components/fitness/session/DisciplineIcon.tsx) de résoudre
+   *  ce nom en composant réel. Un seul résolveur, jamais un import Lucide
+   *  direct dans un moteur. `accentClassName` est une classe Tailwind
+   *  (texte/anneau) — même logique, décidée par le moteur, appliquée
+   *  telle quelle par l'UI générique. */
+  icon: string;
+  accentClassName: string;
 }
 
 export interface WorkoutEngine extends EngineDescriptor {

@@ -94,6 +94,8 @@ export const StrengthWorkoutEngine: WorkoutEngine = {
   label: "Musculation",
   comingSoon: false,
   feedsRankEngine: true,
+  icon: "Dumbbell",
+  accentClassName: "text-primary",
   questions: QUESTIONS,
 
   async generate(answers: SenseiAnswers, context?: SenseiContext): Promise<WorkoutTemplate> {

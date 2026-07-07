@@ -285,6 +285,8 @@ export const HyroxWorkoutEngine: WorkoutEngine = {
   label: "HYROX",
   comingSoon: false,
   feedsRankEngine: false,
+  icon: "Flame",
+  accentClassName: "text-red-400",
   questions: QUESTIONS,
 
   async generate(answers: SenseiAnswers, _context?: SenseiContext): Promise<WorkoutTemplate> {

@@ -118,6 +118,21 @@ export interface AchievementContext {
   /** Comptage exact serveur des séances discipline='guided' (Phase 6) —
    *  voir useDisciplineWorkoutCount, même principe que workoutsCountTotal. */
   guidedSessionsCount: number;
+  /** Phase 8 — dérivés de useDisciplineMetadataSample('hyrox') : nombre de
+   *  simulations complètes générées, et nombre de postes DIFFÉRENTS déjà
+   *  travaillés en mode "spécifique" (sur les 9 possibles). */
+  hyroxSimulationsCount: number;
+  hyroxDistinctStationsCount: number;
+  /** Phase 8 — comptage exact des séances discipline='course'. */
+  courseSessionsCount: number;
+  /** Phase 8 — dérivés de useDisciplineMetadataSample('course') : au moins
+   *  une séance de préparation de ce type a-t-elle été générée et
+   *  enregistrée ? (pas une vraie course chronométrée — voir definitions/
+   *  running.ts pour la nuance honnête sur ce que ça mesure vraiment). */
+  coursePrep5kDone: boolean;
+  coursePrep10kDone: boolean;
+  coursePrepSemiDone: boolean;
+  coursePrepMarathonDone: boolean;
   goalsCompletedTotal: number;
   bodyMeasurementsCount: number;
   proteinDays30: number;
