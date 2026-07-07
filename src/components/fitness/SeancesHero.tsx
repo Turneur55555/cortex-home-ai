@@ -13,6 +13,11 @@ import type { RankKey } from "@/lib/fitness/exerciseRanks";
  *
  * Signature officielle du module : "Chaque légende est forgée une
  * répétition à la fois." — devient le sous-titre du Hero.
+ *
+ * Ce n'est pas un bouton : aucune action au tap. La carte réagit
+ * simplement au survol/à la pression (halo qui s'intensifie, léger
+ * relief) pour exploiter l'envie instinctive de la toucher, sans jamais
+ * prétendre déclencher quoi que ce soit — un lieu vivant, pas un CTA.
  */
 export function SeancesHero({ topExercises }: { topExercises: string[] }) {
   if (topExercises.length === 0) {
@@ -25,13 +30,7 @@ export function SeancesHero({ topExercises }: { topExercises: string[] }) {
   );
 }
 
-function SeancesHeroCard({
-  rankKey,
-  aggregate,
-}: {
-  rankKey: RankKey;
-  aggregate?: RankAggregate;
-}) {
+function SeancesHeroCard({ rankKey, aggregate }: { rankKey: RankKey; aggregate?: RankAggregate }) {
   const visual = getRankVisual(rankKey);
   const colors = aggregate?.best?.rank.rank.colors ?? {
     primary: "#ef4444",
@@ -46,27 +45,67 @@ function SeancesHeroCard({
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
-      className="relative mb-2 overflow-hidden rounded-[28px] p-6 shadow-elevated"
+      whileHover={{ scale: 1.005 }}
+      whileTap={{ scale: 0.994 }}
+      className="group relative mb-2 overflow-hidden rounded-[28px] p-6 shadow-elevated"
       style={{
         background: visual.atmosphere,
         boxShadow: `inset 0 0 0 1px ${visual.vignette}, 0 12px 44px -20px ${colors.glow}`,
       }}
     >
+      {/* Couche de profondeur lointaine — embers flous, plus lents, en arrière-plan */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 scale-110 opacity-50 blur-[1px]"
+      >
+        <RankAmbientParticles rankKey={rankKey} seed={11} />
+      </div>
+      {/* Couche de profondeur proche — embers nets, au premier plan */}
       <RankAmbientParticles rankKey={rankKey} />
+
+      {/* Cœur du brasier — respiration lente, s'intensifie au toucher */}
+      <motion.div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-2/3 transition-opacity duration-700 group-hover:opacity-100"
+        style={{
+          background: `radial-gradient(60% 90% at 50% 120%, ${colors.glow} 0%, transparent 70%)`,
+          opacity: 0.7,
+        }}
+        animate={{ opacity: [0.5, 0.85, 0.5] }}
+        transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+      />
+
+      {/* Halo lointain — respiration plus ample, effet de profondeur */}
+      <motion.div
+        aria-hidden
+        className="pointer-events-none absolute -inset-8"
+        style={{
+          background: `radial-gradient(50% 50% at 50% 40%, ${colors.glow} 0%, transparent 65%)`,
+        }}
+        animate={{ opacity: [0.12, 0.28, 0.12] }}
+        transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+      />
+
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0"
         style={{
-          background:
-            "radial-gradient(120% 60% at 50% 100%, rgba(0,0,0,0.55) 0%, transparent 70%)",
+          background: "radial-gradient(120% 60% at 50% 100%, rgba(0,0,0,0.55) 0%, transparent 70%)",
         }}
       />
 
       {/* Filet métallique haut — évoque la barre d'acier */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-x-6 top-4 h-px"
+        className="pointer-events-none absolute inset-x-6 top-4 h-px transition-opacity duration-500 group-hover:opacity-90"
         style={{ background: colors.gradient, opacity: 0.5 }}
+      />
+
+      {/* Vignettage réactif — le rebord de la carte s'illumine au toucher */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 rounded-[28px] opacity-0 transition-opacity duration-500 group-hover:opacity-100 group-active:opacity-100"
+        style={{ boxShadow: `inset 0 0 0 1px ${colors.glow}, inset 0 0 40px -18px ${colors.glow}` }}
       />
 
       <div className="relative">

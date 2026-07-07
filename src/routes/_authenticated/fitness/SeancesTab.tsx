@@ -12,6 +12,7 @@ import {
   Layers,
   Award,
   HeartPulse,
+  Swords,
 } from "lucide-react";
 import { SeancesHero } from "@/components/fitness/SeancesHero";
 import { SenseiIACard } from "@/components/fitness/SenseiIACard";
@@ -27,6 +28,8 @@ import { ActiveWorkoutView } from "@/components/fitness/ActiveWorkoutView";
 import { ExerciseCatalogSheet } from "@/components/fitness/ExerciseCatalogSheet";
 import { PostWorkoutAnalysisSheet } from "@/components/fitness/PostWorkoutAnalysisSheet";
 import { ExerciseRankStrip } from "@/components/fitness/ExerciseRankStrip";
+import { SectionReveal } from "@/components/fitness/SectionReveal";
+import { AnimatedNumber } from "@/components/fitness/AnimatedNumber";
 import {
   useExerciseImageUrls,
   useWorkouts,
@@ -227,25 +230,46 @@ export function SeancesTab() {
       {/* ── Choisir une épreuve — action principale ─────────────────── */}
       <ChoisirEpreuveCard onClick={() => setStartOpen(true)} />
 
-      {/* ── Catalogue d'exercices (secondaire) ──────────────────────── */}
-      <button
-        type="button"
-        onClick={() => setCatalogOpen(true)}
-        className="flex items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-3.5 text-left shadow-card transition-all active:scale-[0.99] hover:border-white/[0.12]"
-        aria-label="Voir le catalogue d'exercices"
-      >
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/5 text-muted-foreground">
-          <BookOpen className="h-4.5 w-4.5" />
-        </span>
-        <span className="flex-1">
-          <span className="block text-[13px] font-semibold text-white/90">
-            Catalogue d'exercices
+      {/* Trait de liaison — même lieu, pas des cartes indépendantes */}
+      <SectionLink />
+
+      {/* ── Progression RPG — remonte juste après l'épreuve choisie ──── */}
+      {topExercises.length > 0 && (
+        <SectionReveal>
+          <div>
+            <SectionTitle icon={<Swords className="h-3 w-3" />} title="Progression RPG" />
+            <ExerciseRankStrip
+              topExercises={topExercises}
+              nameByKey={nameByKey}
+              histByName={histByName}
+              volByName={volByName}
+              prByName={prByName}
+            />
+          </div>
+        </SectionReveal>
+      )}
+
+      {/* ── Catalogue d'exercices (outil secondaire) ────────────────── */}
+      <SectionReveal delay={0.05}>
+        <button
+          type="button"
+          onClick={() => setCatalogOpen(true)}
+          className="flex items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-3.5 text-left shadow-card transition-all active:scale-[0.99] hover:border-white/[0.12]"
+          aria-label="Voir le catalogue d'exercices"
+        >
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/5 text-muted-foreground">
+            <BookOpen className="h-4.5 w-4.5" />
           </span>
-          <span className="block text-[10.5px] text-white/50">
-            Consulter et modifier la bibliothèque
+          <span className="flex-1">
+            <span className="block text-[13px] font-semibold text-white/90">
+              Catalogue d'exercices
+            </span>
+            <span className="block text-[10.5px] text-white/50">
+              Consulter et modifier la bibliothèque
+            </span>
           </span>
-        </span>
-      </button>
+        </button>
+      </SectionReveal>
 
       {error && !isLoading && (
         <div className="rounded-2xl border border-destructive/50 bg-destructive/10 p-4">
@@ -267,78 +291,84 @@ export function SeancesTab() {
         </div>
       )}
 
+      {/* Trait de liaison — vers le Palmarès et le reste du sanctuaire */}
+      {data && !isLoading && data.length > 0 && <SectionLink />}
+
       {/* ── LE PALMARÈS ─────────────────────────────────────────────── */}
       {data && !isLoading && data.length > 0 && (
-        <PalmaresSection>
-          <WeekSessions workouts={weekWorkouts} onRefaire={repeatLive} />
+        <SectionReveal>
+          <PalmaresSection>
+            <WeekSessions workouts={weekWorkouts} onRefaire={repeatLive} />
 
-          {/* Historique complet (repliable) */}
-          <div className="overflow-hidden rounded-3xl border border-white/[0.06] bg-gradient-to-b from-white/[0.04] to-white/[0.01] shadow-card backdrop-blur-xl">
-            <button
-              type="button"
-              onClick={() => setHistoryOpen((v) => !v)}
-              className="flex w-full items-center justify-between gap-2 px-5 py-4 text-left"
-              aria-expanded={historyOpen}
-            >
-              <span className="flex items-center gap-2">
-                <Trophy className="h-4 w-4 text-amber-400" />
-                <span className="font-serif text-[13px] font-semibold italic text-white/90">
-                  Chroniques complètes
+            {/* Historique complet (repliable) */}
+            <div className="overflow-hidden rounded-3xl border border-white/[0.06] bg-gradient-to-b from-white/[0.04] to-white/[0.01] shadow-card backdrop-blur-xl">
+              <button
+                type="button"
+                onClick={() => setHistoryOpen((v) => !v)}
+                className="flex w-full items-center justify-between gap-2 px-5 py-4 text-left"
+                aria-expanded={historyOpen}
+              >
+                <span className="flex items-center gap-2">
+                  <Trophy className="h-4 w-4 text-amber-400" />
+                  <span className="font-serif text-[13px] font-semibold italic text-white/90">
+                    Chroniques complètes
+                  </span>
+                  <span className="rounded-full bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-semibold text-white/70">
+                    {data.length}
+                  </span>
                 </span>
-                <span className="rounded-full bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-semibold text-white/70">
-                  {data.length}
-                </span>
-              </span>
-              <ChevronDown
-                className={
-                  "h-4 w-4 text-muted-foreground transition-transform " +
-                  (historyOpen ? "rotate-180" : "")
-                }
-              />
-            </button>
-
-            {historyOpen && (
-              <div className="px-3 pb-4">
-                <WorkoutProgressCharts
-                  topExercises={topExercises}
-                  histByName={histByName}
-                  prByName={prByName}
-                  nameByKey={nameByKey}
+                <ChevronDown
+                  className={
+                    "h-4 w-4 text-muted-foreground transition-transform " +
+                    (historyOpen ? "rotate-180" : "")
+                  }
                 />
-                <ul className="mt-3 space-y-3">
-                  {data.map((w) => {
-                    // Musculation garde WorkoutCard tel quel (intouché) ; toute
-                    // autre discipline route vers la carte générique — décision
-                    // prise une seule fois ici, jamais dupliquée par discipline.
-                    const entry = ENGINE_REGISTRY[(w.discipline as DisciplineId | null) ?? "muscu"];
-                    const isStrength =
-                      !entry ||
-                      !isReadyEngine(entry) ||
-                      entry.historyPresentation.cardVariant === "strength";
-                    if (!isStrength) {
-                      return <GenericHistoryCard key={w.id} workout={w} />;
-                    }
-                    return (
-                      <WorkoutCard
-                        key={w.id}
-                        w={w}
-                        prByName={prByName}
-                        histByName={histByName}
-                        volByName={volByName}
-                        prByGym={prByGym}
-                        histByGym={histByGym}
-                        imageUrls={listImageUrls}
-                        latestDate={latestDate}
-                        onRepeatLive={repeatLive}
-                        onOpenFromTemplate={openFromTemplate}
-                      />
-                    );
-                  })}
-                </ul>
-              </div>
-            )}
-          </div>
-        </PalmaresSection>
+              </button>
+
+              {historyOpen && (
+                <div className="px-3 pb-4">
+                  <WorkoutProgressCharts
+                    topExercises={topExercises}
+                    histByName={histByName}
+                    prByName={prByName}
+                    nameByKey={nameByKey}
+                  />
+                  <ul className="mt-3 space-y-3">
+                    {data.map((w) => {
+                      // Musculation garde WorkoutCard tel quel (intouché) ; toute
+                      // autre discipline route vers la carte générique — décision
+                      // prise une seule fois ici, jamais dupliquée par discipline.
+                      const entry =
+                        ENGINE_REGISTRY[(w.discipline as DisciplineId | null) ?? "muscu"];
+                      const isStrength =
+                        !entry ||
+                        !isReadyEngine(entry) ||
+                        entry.historyPresentation.cardVariant === "strength";
+                      if (!isStrength) {
+                        return <GenericHistoryCard key={w.id} workout={w} />;
+                      }
+                      return (
+                        <WorkoutCard
+                          key={w.id}
+                          w={w}
+                          prByName={prByName}
+                          histByName={histByName}
+                          volByName={volByName}
+                          prByGym={prByGym}
+                          histByGym={histByGym}
+                          imageUrls={listImageUrls}
+                          latestDate={latestDate}
+                          onRepeatLive={repeatLive}
+                          onOpenFromTemplate={openFromTemplate}
+                        />
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </PalmaresSection>
+        </SectionReveal>
       )}
 
       {data && data.length === 0 && !isLoading && (
@@ -353,62 +383,50 @@ export function SeancesTab() {
 
       {/* ── ÉTAT DU CORPS — récupération musculaire (déplacé plus bas) ── */}
       {data && (
-        <div>
-          <SectionTitle icon={<HeartPulse className="h-3 w-3" />} title="État du corps" />
-          <div className="overflow-hidden rounded-3xl border border-white/[0.06] bg-white/[0.02] p-2 shadow-card">
+        <SectionReveal>
+          <div>
+            <SectionTitle icon={<HeartPulse className="h-3 w-3" />} title="État du corps" />
             <BodyMap mode="recovery" recoveryMap={recoveryMap} />
           </div>
-        </div>
+        </SectionReveal>
       )}
 
       {/* ── LES PERFORMANCES ────────────────────────────────────────── */}
       {data && data.length > 0 && (
-        <div>
-          <SectionTitle icon={<Award className="h-3 w-3" />} title="Les Performances" />
-          <div className="grid grid-cols-3 gap-2">
-            <PerfTile
-              icon={<Flame className="h-3.5 w-3.5 text-orange-400" />}
-              label="Série"
-              value={`${streak.current}`}
-              sub={`≥ ${streak.threshold}/sem`}
-              accent="rgba(251,146,60,0.35)"
-            />
-            <PerfTile
-              icon={<CalendarDays className="h-3.5 w-3.5 text-sky-300" />}
-              label="Cette semaine"
-              value={`${streak.thisWeekCount}`}
-              sub={
-                streak.thisWeekCount >= streak.threshold
-                  ? "Objectif ✓"
-                  : `${streak.threshold - streak.thisWeekCount} restantes`
-              }
-              accent="rgba(56,189,248,0.30)"
-            />
-            <PerfTile
-              icon={<Layers className="h-3.5 w-3.5 text-amber-300" />}
-              label="Durée 7j"
-              value={
-                weekDurationMinutes >= 60
-                  ? `${(weekDurationMinutes / 60).toFixed(1)}h`
-                  : `${weekDurationMinutes}`
-              }
-              sub={weekDurationMinutes >= 60 ? "toutes disciplines" : "min · toutes disciplines"}
-              accent="rgba(251,191,36,0.30)"
-            />
-          </div>
-
-          {topExercises.length > 0 && (
-            <div className="mt-3">
-              <ExerciseRankStrip
-                topExercises={topExercises}
-                nameByKey={nameByKey}
-                histByName={histByName}
-                volByName={volByName}
-                prByName={prByName}
+        <SectionReveal>
+          <div>
+            <SectionTitle icon={<Award className="h-3 w-3" />} title="Les Performances" />
+            <div className="grid grid-cols-3 gap-2">
+              <PerfTile
+                icon={<Flame className="h-3.5 w-3.5 text-orange-400" />}
+                label="Ardeur"
+                value={streak.current}
+                sub={`≥ ${streak.threshold}/sem`}
+                accent="rgba(251,146,60,0.35)"
+              />
+              <PerfTile
+                icon={<CalendarDays className="h-3.5 w-3.5 text-sky-300" />}
+                label="Cycle en cours"
+                value={streak.thisWeekCount}
+                sub={
+                  streak.thisWeekCount >= streak.threshold
+                    ? "Objectif ✓"
+                    : `${streak.threshold - streak.thisWeekCount} restantes`
+                }
+                accent="rgba(56,189,248,0.30)"
+              />
+              <PerfTile
+                icon={<Layers className="h-3.5 w-3.5 text-amber-300" />}
+                label="Temps forgé"
+                value={weekDurationMinutes >= 60 ? weekDurationMinutes / 60 : weekDurationMinutes}
+                decimals={weekDurationMinutes >= 60 ? 1 : 0}
+                suffix={weekDurationMinutes >= 60 ? "h" : ""}
+                sub={weekDurationMinutes >= 60 ? "toutes disciplines" : "min · toutes disciplines"}
+                accent="rgba(251,191,36,0.30)"
               />
             </div>
-          )}
-        </div>
+          </div>
+        </SectionReveal>
       )}
 
       {startOpen && <StartWorkoutSheet onClose={() => setStartOpen(false)} />}
@@ -635,6 +653,16 @@ function SectionTitle({ icon, title }: { icon: React.ReactNode; title: string })
   );
 }
 
+// Trait de liaison discret entre deux zones de la page — évoque un même
+// lieu que l'on traverse plutôt qu'un empilement de cartes indépendantes.
+function SectionLink() {
+  return (
+    <div aria-hidden className="flex justify-center py-0.5">
+      <div className="h-6 w-px bg-gradient-to-b from-transparent via-white/[0.12] to-transparent" />
+    </div>
+  );
+}
+
 function PalmaresSection({ children }: { children: React.ReactNode }) {
   return (
     <div>
@@ -648,18 +676,22 @@ function PerfTile({
   icon,
   label,
   value,
+  decimals = 0,
+  suffix = "",
   sub,
   accent,
 }: {
   icon: React.ReactNode;
   label: string;
-  value: string;
+  value: number;
+  decimals?: number;
+  suffix?: string;
   sub?: string;
   accent: string;
 }) {
   return (
     <div
-      className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02] p-3 shadow-card"
+      className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02] p-3 shadow-card transition-colors hover:border-white/[0.12]"
       style={{
         boxShadow: `inset 0 0 0 1px rgba(255,255,255,0.02), 0 8px 24px -14px ${accent}`,
       }}
@@ -669,11 +701,20 @@ function PerfTile({
         className="pointer-events-none absolute inset-x-3 top-0 h-px"
         style={{ background: `linear-gradient(90deg, transparent, ${accent}, transparent)` }}
       />
-      <div className="flex items-center gap-1.5">
+      <div
+        aria-hidden
+        className="mb-1.5 flex h-6 w-6 items-center justify-center rounded-full"
+        style={{
+          background: `radial-gradient(circle, ${accent} 0%, transparent 72%)`,
+          boxShadow: `inset 0 0 0 1px ${accent}`,
+        }}
+      >
         {icon}
-        <p className="text-[9px] font-semibold uppercase tracking-wider text-white/50">{label}</p>
       </div>
-      <p className="mt-1 text-lg font-black tabular-nums leading-none text-white">{value}</p>
+      <p className="text-[9px] font-semibold uppercase tracking-wider text-white/50">{label}</p>
+      <p className="mt-1 text-lg font-black tabular-nums leading-none text-white">
+        <AnimatedNumber value={value} decimals={decimals} suffix={suffix} />
+      </p>
       {sub && <p className="mt-1 text-[9.5px] text-white/45">{sub}</p>}
     </div>
   );

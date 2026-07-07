@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import { motion } from "framer-motion";
 import Model from "react-body-highlighter";
 import type { IMuscleStats, Muscle } from "react-body-highlighter";
 import type { MuscleId } from "@/lib/fitness/muscleMapping";
@@ -39,33 +40,33 @@ const MEASURE_HIGHLIGHTED = ["#6366F15C", "#6366F1EE"] as const;
 
 // Which lib slugs belong to each measurement zone
 const ZONE_SLUGS: Partial<Record<MeasurementField, string[]>> = {
-  chest:       ["chest"],
-  waist:       ["abs", "obliques"],
-  hips:        ["gluteal", "lower-back"],
-  right_arm:   ["biceps", "triceps", "forearm"],
+  chest: ["chest"],
+  waist: ["abs", "obliques"],
+  hips: ["gluteal", "lower-back"],
+  right_arm: ["biceps", "triceps", "forearm"],
   right_thigh: ["quadriceps", "hamstring"],
 };
 
 // Reverse: lib slug → MeasurementField (for onClick)
 const SLUG_TO_ZONE: Partial<Record<string, MeasurementField>> = {
-  chest:        "chest",
-  abs:          "waist",
-  obliques:     "waist",
-  gluteal:      "hips",
+  chest: "chest",
+  abs: "waist",
+  obliques: "waist",
+  gluteal: "hips",
   "lower-back": "hips",
-  biceps:       "right_arm",
-  triceps:      "right_arm",
-  forearm:      "right_arm",
-  quadriceps:   "right_thigh",
-  hamstring:    "right_thigh",
+  biceps: "right_arm",
+  triceps: "right_arm",
+  forearm: "right_arm",
+  quadriceps: "right_thigh",
+  hamstring: "right_thigh",
 };
 
 // Labels shown in the tap hint
 const ZONE_LABELS: Partial<Record<MeasurementField, string>> = {
-  chest:       "Poitrine",
-  waist:       "Taille",
-  hips:        "Hanches",
-  right_arm:   "Bras",
+  chest: "Poitrine",
+  waist: "Taille",
+  hips: "Hanches",
+  right_arm: "Bras",
   right_thigh: "Cuisse",
 };
 
@@ -92,31 +93,33 @@ function ModelViews({
   data,
   highlightedColors,
   onClick,
+  bodyColor = "#1F2937",
+  maxWidthPx = 400,
+  labelClassName = "mb-1 text-[9px] font-semibold uppercase tracking-wider text-white/30",
 }: {
   data: Array<{ name: string; muscles: Muscle[]; frequency: number }>;
   highlightedColors: readonly string[];
   onClick: (stats: IMuscleStats) => void;
+  bodyColor?: string;
+  maxWidthPx?: number;
+  labelClassName?: string;
 }) {
   const modelProps = {
     data,
     highlightedColors: [...highlightedColors],
-    bodyColor: "#1F2937",
+    bodyColor,
     onClick,
     svgStyle: { width: "100%", height: "auto" } as React.CSSProperties,
   };
 
   return (
-    <div className="mx-auto flex max-w-[400px] justify-center gap-1">
+    <div className="mx-auto flex justify-center gap-1" style={{ maxWidth: maxWidthPx }}>
       <div className="flex flex-1 flex-col items-center">
-        <span className="mb-1 text-[9px] font-semibold uppercase tracking-wider text-white/30">
-          Face
-        </span>
+        <span className={labelClassName}>Face</span>
         <Model {...modelProps} type="anterior" />
       </div>
       <div className="flex flex-1 flex-col items-center">
-        <span className="mb-1 text-[9px] font-semibold uppercase tracking-wider text-white/30">
-          Dos
-        </span>
+        <span className={labelClassName}>Dos</span>
         <Model {...modelProps} type="posterior" />
       </div>
     </div>
@@ -145,21 +148,80 @@ function RecoveryBodyMap({ recoveryMap, onMuscleClick }: RecoveryProps) {
   );
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#1A202C] p-4 shadow-card">
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-white/90">Récupération musculaire</h3>
-        <span className="text-[10px] font-medium uppercase tracking-wider text-white/40">
-          basé sur vos séances
+    <div
+      className="relative overflow-hidden rounded-3xl border p-3 shadow-card"
+      style={{
+        borderColor: "rgba(103,232,249,0.14)",
+        background:
+          "radial-gradient(120% 70% at 50% 0%, rgba(56,189,248,0.10) 0%, transparent 55%), radial-gradient(90% 60% at 100% 100%, rgba(167,139,250,0.10) 0%, transparent 60%), linear-gradient(180deg,#0b0f18 0%,#05070c 100%)",
+      }}
+    >
+      {/* Trame divine — grille fine évoquant un scanner */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 opacity-[0.06]"
+        style={{
+          backgroundImage:
+            "linear-gradient(rgba(103,232,249,0.6) 1px, transparent 1px), linear-gradient(90deg, rgba(103,232,249,0.6) 1px, transparent 1px)",
+          backgroundSize: "18px 18px",
+        }}
+      />
+
+      {/* Balayage de scan — respiration lente, non intrusive */}
+      <motion.div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 h-16"
+        style={{
+          background:
+            "linear-gradient(180deg, transparent 0%, rgba(103,232,249,0.10) 50%, transparent 100%)",
+        }}
+        animate={{ top: ["-8%", "104%"] }}
+        transition={{ duration: 6, repeat: Infinity, ease: "linear" }}
+      />
+
+      {/* Réticules d'angle — évoque une analyse instrumentée, pas un schéma anatomique */}
+      {[
+        "left-2 top-2 border-l border-t",
+        "right-2 top-2 border-r border-t",
+        "left-2 bottom-2 border-l border-b",
+        "right-2 bottom-2 border-r border-b",
+      ].map((pos) => (
+        <span
+          key={pos}
+          aria-hidden
+          className={`pointer-events-none absolute h-3 w-3 rounded-[2px] ${pos}`}
+          style={{ borderColor: "rgba(103,232,249,0.35)" }}
+        />
+      ))}
+
+      <div className="relative mb-2 flex items-center justify-between">
+        <h3 className="font-serif text-[13px] font-semibold italic text-cyan-100/90">
+          Scan des Titans
+        </h3>
+        <span className="text-[9.5px] font-medium uppercase tracking-wider text-white/35">
+          basé sur tes séances
         </span>
       </div>
 
-      <ModelViews data={data} highlightedColors={RECOVERY_HIGHLIGHTED} onClick={handleClick} />
+      <div className="relative">
+        <ModelViews
+          data={data}
+          highlightedColors={RECOVERY_HIGHLIGHTED}
+          onClick={handleClick}
+          bodyColor="#151a26"
+          maxWidthPx={290}
+          labelClassName="mb-0.5 text-[8.5px] font-semibold uppercase tracking-wider text-cyan-100/25"
+        />
+      </div>
 
-      <div className="mt-4 flex flex-wrap justify-center gap-x-5 gap-y-1.5">
+      <div className="relative mt-2 flex flex-wrap justify-center gap-x-4 gap-y-1">
         {RECOVERY_LEGEND.map((l) => (
           <div key={l.status} className="flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: l.color }} />
-            <span className="text-[10px] font-medium text-white/50">{l.label}</span>
+            <span
+              className="h-2 w-2 rounded-full"
+              style={{ backgroundColor: l.color, boxShadow: `0 0 6px ${l.color}` }}
+            />
+            <span className="text-[9.5px] font-medium text-white/50">{l.label}</span>
           </div>
         ))}
       </div>
@@ -174,13 +236,11 @@ function MeasurementBodyMap({ latest, onZoneClick }: MeasurementProps) {
 
   const data = useMemo(
     () =>
-      (Object.entries(ZONE_SLUGS) as Array<[MeasurementField, string[]]>).map(
-        ([field, slugs]) => ({
-          name: field,
-          muscles: slugs as Muscle[],
-          frequency: field === activeZone ? 2 : 1,
-        }),
-      ),
+      (Object.entries(ZONE_SLUGS) as Array<[MeasurementField, string[]]>).map(([field, slugs]) => ({
+        name: field,
+        muscles: slugs as Muscle[],
+        frequency: field === activeZone ? 2 : 1,
+      })),
     [activeZone],
   );
 

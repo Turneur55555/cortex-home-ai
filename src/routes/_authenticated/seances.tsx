@@ -13,14 +13,7 @@ export const Route = createFileRoute("/_authenticated/seances")({
 
 function SeancesPage() {
   return (
-    <main className="flex flex-1 flex-col px-5 pb-6 pt-12">
-      <header className="mb-6">
-        <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
-          Module
-        </p>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight">Séances</h1>
-      </header>
-
+    <main className="flex flex-1 flex-col px-5 pb-6 pt-10">
       <SeancesTab />
     </main>
   );

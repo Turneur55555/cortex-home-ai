@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Swords } from "lucide-react";
 import { ExerciseRankBadge } from "./ExerciseRankBadge";
 import { ExerciseAnalysisSheet } from "./ExerciseAnalysisSheet";
 import { useExerciseProgression } from "@/hooks/useExerciseProgression";
@@ -23,7 +22,9 @@ function MiniRankTile({
 }) {
   const { rank, sessionCount } = useExerciseProgression(exerciseName);
   const { colors } = rank.rank;
-  void histByName; void volByName; void prByName;
+  void histByName;
+  void volByName;
+  void prByName;
 
   return (
     <button
@@ -75,14 +76,7 @@ export function ExerciseRankStrip({
   if (topExercises.length === 0) return null;
 
   return (
-    <div className="rounded-2xl border border-border bg-card p-4">
-      <div className="mb-3 flex items-center gap-2">
-        <Swords className="h-4 w-4 text-primary" />
-        <h3 className="text-sm font-semibold">Progression RPG</h3>
-        <span className="text-[10px] text-muted-foreground">
-          Chaque exercice a son propre rang
-        </span>
-      </div>
+    <div className="overflow-hidden rounded-3xl border border-white/[0.06] bg-gradient-to-b from-white/[0.04] to-white/[0.01] p-4 shadow-card backdrop-blur-xl">
       <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1">
         {topExercises.map((key) => {
           const display = nameByKey.get(key) ?? key;
