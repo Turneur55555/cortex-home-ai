@@ -3,13 +3,19 @@ import {
   BookOpen,
   Dumbbell,
   Loader2,
-  Sparkles,
   AlertCircle,
   ChevronDown,
   CalendarDays,
-  History,
+  Trophy,
   Repeat,
+  Flame,
+  Layers,
+  Award,
+  HeartPulse,
 } from "lucide-react";
+import { SeancesHero } from "@/components/fitness/SeancesHero";
+import { SenseiIACard } from "@/components/fitness/SenseiIACard";
+import { ChoisirEpreuveCard } from "@/components/fitness/ChoisirEpreuveCard";
 import { BodyMap } from "@/components/fitness/BodyMap";
 import { WorkoutCard, type WorkoutRow } from "@/components/fitness/WorkoutCard";
 import { WorkoutSheet } from "@/components/fitness/WorkoutSheet";
@@ -28,7 +34,7 @@ import {
 } from "@/hooks/use-fitness";
 import { useRecoveryMap } from "@/hooks/useRecoveryMap";
 import { useFitnessStreak } from "@/hooks/useFitnessStreak";
-import { FabAdd } from "@/components/shared/FormComponents";
+
 import { formatTonnage, workoutTonnage } from "@/lib/fitness/strength";
 import { exerciseToMuscles, MUSCLE_META, type MuscleId } from "@/lib/fitness/muscleMapping";
 import { CoachSheet, type WorkoutTemplate } from "./CoachSheet";
@@ -186,61 +192,33 @@ export function SeancesTab() {
 
   // ── VUE HISTORIQUE ─────────────────────────────────────────────────────────
   return (
-    <section className="flex flex-col gap-4">
-      {data && <BodyMap mode="recovery" recoveryMap={recoveryMap} />}
+    <section className="flex flex-col gap-5">
+      {/* ── HERO — LA FORGE ─────────────────────────────────────────── */}
+      <SeancesHero topExercises={topExercises} />
 
-      {/* Coach IA */}
-      <button
-        type="button"
-        onClick={() => openCoach()}
-        className="group flex items-center gap-3 rounded-2xl border border-primary/30 bg-gradient-to-r from-primary/15 via-primary/5 to-transparent p-4 text-left shadow-card transition-all active:scale-[0.99]"
-        aria-label="Ouvrir le Coach IA"
-      >
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-primary text-primary-foreground shadow-glow">
-          <Sparkles className="h-5 w-5" />
-        </span>
-        <span className="flex-1">
-          <span className="block text-sm font-semibold">Coach IA — Génère ma séance</span>
-          <span className="block text-[11px] text-muted-foreground">
-            Choisis muscles, durée, niveau. L'IA crée ta séance.
-          </span>
-        </span>
-      </button>
+      {/* ── Sensei^IA ───────────────────────────────────────────────── */}
+      <SenseiIACard onClick={() => openCoach()} />
 
-      {/* Catalogue d'exercices */}
+      {/* ── Choisir une épreuve — action principale ─────────────────── */}
+      <ChoisirEpreuveCard onClick={() => setStartOpen(true)} />
+
+      {/* ── Catalogue d'exercices (secondaire) ──────────────────────── */}
       <button
         type="button"
         onClick={() => setCatalogOpen(true)}
-        className="flex items-center gap-3 rounded-2xl border border-border bg-card/50 p-4 text-left shadow-card transition-all active:scale-[0.99]"
+        className="flex items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-3.5 text-left shadow-card transition-all active:scale-[0.99] hover:border-white/[0.12]"
         aria-label="Voir le catalogue d'exercices"
       >
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/5 text-muted-foreground">
-          <BookOpen className="h-5 w-5" />
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/5 text-muted-foreground">
+          <BookOpen className="h-4.5 w-4.5" />
         </span>
         <span className="flex-1">
-          <span className="block text-sm font-semibold">Exercices</span>
-          <span className="block text-[11px] text-muted-foreground">
-            Voir et modifier le catalogue complet
+          <span className="block text-[13px] font-semibold text-white/90">Catalogue d'exercices</span>
+          <span className="block text-[10.5px] text-white/50">
+            Consulter et modifier la bibliothèque
           </span>
         </span>
       </button>
-
-      {/* KPIs */}
-      {data && data.length > 0 && (
-        <div className="grid grid-cols-3 gap-2">
-          <KpiTile label="Streak" value={`${streak.current}`} sub={`sem. ≥ ${streak.threshold}/sem`} />
-          <KpiTile
-            label="Cette semaine"
-            value={`${streak.thisWeekCount}`}
-            sub={
-              streak.thisWeekCount >= streak.threshold
-                ? "Objectif ✓"
-                : `${streak.threshold - streak.thisWeekCount} restantes`
-            }
-          />
-          <KpiTile label="Tonnage 7j" value={formatTonnage(weekTonnage)} sub="volume total" />
-        </div>
-      )}
 
       {error && !isLoading && (
         <div className="rounded-2xl border border-destructive/50 bg-destructive/10 p-4">
@@ -262,89 +240,134 @@ export function SeancesTab() {
         </div>
       )}
 
-      {/* Séances de la semaine */}
-      {data && !isLoading && (
-        <WeekSessions workouts={weekWorkouts} onRefaire={repeatLive} />
+      {/* ── LE PALMARÈS ─────────────────────────────────────────────── */}
+      {data && !isLoading && data.length > 0 && (
+        <PalmaresSection>
+          <WeekSessions workouts={weekWorkouts} onRefaire={repeatLive} />
+
+          {/* Historique complet (repliable) */}
+          <div className="overflow-hidden rounded-3xl border border-white/[0.06] bg-gradient-to-b from-white/[0.04] to-white/[0.01] shadow-card backdrop-blur-xl">
+            <button
+              type="button"
+              onClick={() => setHistoryOpen((v) => !v)}
+              className="flex w-full items-center justify-between gap-2 px-5 py-4 text-left"
+              aria-expanded={historyOpen}
+            >
+              <span className="flex items-center gap-2">
+                <Trophy className="h-4 w-4 text-amber-400" />
+                <span className="font-serif text-[13px] font-semibold italic text-white/90">
+                  Chroniques complètes
+                </span>
+                <span className="rounded-full bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-semibold text-white/70">
+                  {data.length}
+                </span>
+              </span>
+              <ChevronDown
+                className={
+                  "h-4 w-4 text-muted-foreground transition-transform " +
+                  (historyOpen ? "rotate-180" : "")
+                }
+              />
+            </button>
+
+            {historyOpen && (
+              <div className="px-3 pb-4">
+                <WorkoutProgressCharts
+                  topExercises={topExercises}
+                  histByName={histByName}
+                  prByName={prByName}
+                  nameByKey={nameByKey}
+                />
+                <ul className="mt-3 space-y-3">
+                  {data.map((w) => (
+                    <WorkoutCard
+                      key={w.id}
+                      w={w}
+                      prByName={prByName}
+                      histByName={histByName}
+                      volByName={volByName}
+                      prByGym={prByGym}
+                      histByGym={histByGym}
+                      imageUrls={listImageUrls}
+                      latestDate={latestDate}
+                      onRepeatLive={repeatLive}
+                      onOpenFromTemplate={openFromTemplate}
+                    />
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        </PalmaresSection>
       )}
 
       {data && data.length === 0 && !isLoading && (
-        <div className="rounded-2xl border border-border bg-card p-8 text-center">
+        <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-8 text-center">
           <Dumbbell className="mx-auto h-8 w-8 text-muted-foreground" />
           <p className="mt-3 text-sm font-medium">Aucune séance</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Lance-toi, ta première séance t'attend.
+            Lance-toi, ta première légende t'attend.
           </p>
         </div>
       )}
 
-      {/* Progression RPG par exercice */}
-      {data && data.length > 0 && topExercises.length > 0 && !isLoading && (
-        <ExerciseRankStrip
-          topExercises={topExercises}
-          nameByKey={nameByKey}
-          histByName={histByName}
-          volByName={volByName}
-          prByName={prByName}
-        />
+      {/* ── ÉTAT DU CORPS — récupération musculaire (déplacé plus bas) ── */}
+      {data && (
+        <div>
+          <SectionTitle icon={<HeartPulse className="h-3 w-3" />} title="État du corps" />
+          <div className="overflow-hidden rounded-3xl border border-white/[0.06] bg-white/[0.02] p-2 shadow-card">
+            <BodyMap mode="recovery" recoveryMap={recoveryMap} />
+          </div>
+        </div>
       )}
 
-
-      {/* Historique complet (repliable) */}
-      {data && data.length > 0 && !isLoading && (
-        <div className="overflow-hidden rounded-3xl border border-white/5 bg-gradient-to-b from-card/95 to-card/70 shadow-card backdrop-blur-xl">
-          <button
-            type="button"
-            onClick={() => setHistoryOpen((v) => !v)}
-            className="flex w-full items-center justify-between gap-2 px-5 py-4 text-left"
-            aria-expanded={historyOpen}
-          >
-            <span className="flex items-center gap-2">
-              <History className="h-4 w-4 text-primary" />
-              <span className="text-sm font-semibold">Historique complet</span>
-              <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
-                {data.length}
-              </span>
-            </span>
-            <ChevronDown
-              className={
-                "h-4 w-4 text-muted-foreground transition-transform " +
-                (historyOpen ? "rotate-180" : "")
-              }
+      {/* ── LES PERFORMANCES ────────────────────────────────────────── */}
+      {data && data.length > 0 && (
+        <div>
+          <SectionTitle icon={<Award className="h-3 w-3" />} title="Les Performances" />
+          <div className="grid grid-cols-3 gap-2">
+            <PerfTile
+              icon={<Flame className="h-3.5 w-3.5 text-orange-400" />}
+              label="Série"
+              value={`${streak.current}`}
+              sub={`≥ ${streak.threshold}/sem`}
+              accent="rgba(251,146,60,0.35)"
             />
-          </button>
+            <PerfTile
+              icon={<CalendarDays className="h-3.5 w-3.5 text-sky-300" />}
+              label="Cette semaine"
+              value={`${streak.thisWeekCount}`}
+              sub={
+                streak.thisWeekCount >= streak.threshold
+                  ? "Objectif ✓"
+                  : `${streak.threshold - streak.thisWeekCount} restantes`
+              }
+              accent="rgba(56,189,248,0.30)"
+            />
+            <PerfTile
+              icon={<Layers className="h-3.5 w-3.5 text-amber-300" />}
+              label="Tonnage 7j"
+              value={formatTonnage(weekTonnage)}
+              sub="volume total"
+              accent="rgba(251,191,36,0.30)"
+            />
+          </div>
 
-          {historyOpen && (
-            <div className="px-3 pb-4">
-              <WorkoutProgressCharts
+          {topExercises.length > 0 && (
+            <div className="mt-3">
+              <ExerciseRankStrip
                 topExercises={topExercises}
-                histByName={histByName}
-                prByName={prByName}
                 nameByKey={nameByKey}
+                histByName={histByName}
+                volByName={volByName}
+                prByName={prByName}
               />
-              <ul className="mt-3 space-y-3">
-                {data.map((w) => (
-                  <WorkoutCard
-                    key={w.id}
-                    w={w}
-                    prByName={prByName}
-                    histByName={histByName}
-                    volByName={volByName}
-                    prByGym={prByGym}
-                    histByGym={histByGym}
-                    imageUrls={listImageUrls}
-                    latestDate={latestDate}
-                    onRepeatLive={repeatLive}
-                    onOpenFromTemplate={openFromTemplate}
-                  />
-                ))}
-              </ul>
             </div>
           )}
         </div>
       )}
 
-      {/* FAB → démarre une séance live */}
-      <FabAdd onClick={() => setStartOpen(true)} label="Nouvelle séance" />
+
 
       {startOpen && <StartWorkoutSheet onClose={() => setStartOpen(false)} />}
 
@@ -519,12 +542,58 @@ function WeekSessions({
   );
 }
 
-function KpiTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
+function SectionTitle({ icon, title }: { icon: React.ReactNode; title: string }) {
   return (
-    <div className="rounded-2xl border border-border bg-card p-3">
-      <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
-      <p className="mt-1 text-lg font-bold leading-none">{value}</p>
-      {sub && <p className="mt-1 text-[10px] text-muted-foreground">{sub}</p>}
+    <div className="mb-2 flex items-center gap-1.5 px-1">
+      <span className="text-muted-foreground">{icon}</span>
+      <h2 className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        {title}
+      </h2>
     </div>
   );
 }
+
+function PalmaresSection({ children }: { children: React.ReactNode }) {
+  return (
+    <div>
+      <SectionTitle icon={<Trophy className="h-3 w-3" />} title="Le Palmarès" />
+      <div className="space-y-3">{children}</div>
+    </div>
+  );
+}
+
+function PerfTile({
+  icon,
+  label,
+  value,
+  sub,
+  accent,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  sub?: string;
+  accent: string;
+}) {
+  return (
+    <div
+      className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02] p-3 shadow-card"
+      style={{
+        boxShadow: `inset 0 0 0 1px rgba(255,255,255,0.02), 0 8px 24px -14px ${accent}`,
+      }}
+    >
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-3 top-0 h-px"
+        style={{ background: `linear-gradient(90deg, transparent, ${accent}, transparent)` }}
+      />
+      <div className="flex items-center gap-1.5">
+        {icon}
+        <p className="text-[9px] font-semibold uppercase tracking-wider text-white/50">{label}</p>
+      </div>
+      <p className="mt-1 text-lg font-black tabular-nums leading-none text-white">{value}</p>
+      {sub && <p className="mt-1 text-[9.5px] text-white/45">{sub}</p>}
+    </div>
+  );
+}
+
