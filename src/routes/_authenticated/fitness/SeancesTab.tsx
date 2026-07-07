@@ -542,12 +542,58 @@ function WeekSessions({
   );
 }
 
-function KpiTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
+function SectionTitle({ icon, title }: { icon: React.ReactNode; title: string }) {
   return (
-    <div className="rounded-2xl border border-border bg-card p-3">
-      <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
-      <p className="mt-1 text-lg font-bold leading-none">{value}</p>
-      {sub && <p className="mt-1 text-[10px] text-muted-foreground">{sub}</p>}
+    <div className="mb-2 flex items-center gap-1.5 px-1">
+      <span className="text-muted-foreground">{icon}</span>
+      <h2 className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        {title}
+      </h2>
     </div>
   );
 }
+
+function PalmaresSection({ children }: { children: React.ReactNode }) {
+  return (
+    <div>
+      <SectionTitle icon={<Trophy className="h-3 w-3" />} title="Le Palmarès" />
+      <div className="space-y-3">{children}</div>
+    </div>
+  );
+}
+
+function PerfTile({
+  icon,
+  label,
+  value,
+  sub,
+  accent,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  sub?: string;
+  accent: string;
+}) {
+  return (
+    <div
+      className="relative overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02] p-3 shadow-card"
+      style={{
+        boxShadow: `inset 0 0 0 1px rgba(255,255,255,0.02), 0 8px 24px -14px ${accent}`,
+      }}
+    >
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-3 top-0 h-px"
+        style={{ background: `linear-gradient(90deg, transparent, ${accent}, transparent)` }}
+      />
+      <div className="flex items-center gap-1.5">
+        {icon}
+        <p className="text-[9px] font-semibold uppercase tracking-wider text-white/50">{label}</p>
+      </div>
+      <p className="mt-1 text-lg font-black tabular-nums leading-none text-white">{value}</p>
+      {sub && <p className="mt-1 text-[9.5px] text-white/45">{sub}</p>}
+    </div>
+  );
+}
+
