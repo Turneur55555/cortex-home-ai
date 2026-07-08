@@ -258,7 +258,7 @@ export function useStartWorkoutFromSavedTemplate() {
       // useStartWorkoutFromTemplate / "Refaire en live"). `status` n'est pas
       // dans les types générés (drift déjà documenté dans MEMORY.md pour la
       // table workouts) — même contournement que le reste de ce fichier.
-      const { data: existing } = await (supabase as any)
+      const { data: existing } = await supabase
         .from("workouts")
         .select("id")
         .eq("user_id", user.id)

@@ -26,7 +26,7 @@ export function useUserPreferences() {
     enabled: !!user,
     staleTime: 60_000,
     queryFn: async (): Promise<UserPreferences> => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("user_preferences")
         .select("accent_color, animations_enabled, height_cm")
         .eq("user_id", user!.id)
@@ -39,7 +39,7 @@ export function useUserPreferences() {
   const update = useMutation({
     mutationFn: async (patch: Partial<UserPreferences>) => {
       const next = { ...(query.data ?? DEFAULTS), ...patch };
-      const { error } = await (supabase as any)
+      const { error } = await supabase
         .from("user_preferences")
         .upsert({ ...next, user_id: user!.id }, { onConflict: "user_id" });
       if (error) throw error;

@@ -132,7 +132,7 @@ export function useGoals() {
     enabled: !!user,
     staleTime: 30_000,
     queryFn: async (): Promise<Goal[]> => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("goals")
         .select("id, title, goal_type, target_value, start_value, target_date, xp_reward, is_completed, completed_at, created_at")
         .eq("user_id", user!.id)
@@ -170,7 +170,7 @@ export function useAddGoal() {
         start_value = lastWeight?.weight ?? null;
       }
 
-      const { error } = await (supabase as any)
+      const { error } = await supabase
         .from("goals")
         .insert({ ...input, user_id: user.id, xp_reward: input.xp_reward ?? 100, start_value });
       if (error) throw error;

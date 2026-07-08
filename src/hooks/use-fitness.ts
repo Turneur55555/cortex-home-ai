@@ -431,7 +431,7 @@ export function useActiveWorkout() {
       // plus par duration_minutes NULL — une saisie rétro sans durée ne bascule
       // donc plus l'UI en mode live.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("workouts")
         .select(
           "id, name, gym_location, created_at, exercises(id, name, image_path, sets, reps, weight, exercise_sets(id, set_number, reps, weight, completed))",
@@ -603,7 +603,7 @@ export function useStartWorkoutFromTemplate() {
       if (!user) throw new Error("Non authentifié");
 
       // Garde : une seule séance active à la fois.
-      const { data: existing } = await (supabase as any)
+      const { data: existing } = await supabase
         .from("workouts")
         .select("id")
         .eq("user_id", user.id)

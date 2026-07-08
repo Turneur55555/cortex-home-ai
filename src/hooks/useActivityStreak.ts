@@ -14,7 +14,7 @@ export function useActivityStreak() {
     enabled: !!user,
     staleTime: 60_000,
     queryFn: async (): Promise<number> => {
-      const { data, error } = await (supabase as any).rpc("get_user_streak_days");
+      const { data, error } = await supabase.rpc("get_user_streak_days");
       if (error) throw error;
       return (data as number) ?? 0;
     },

@@ -19,7 +19,7 @@ export function useUserExercisePhotos() {
       } = await supabase.auth.getUser();
       if (!user) return new Map<string, string>();
 
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("user_exercise_illustrations")
         .select("exercise_name, storage_path");
       if (error) throw error;
@@ -74,7 +74,7 @@ export function useUpsertExercisePhoto() {
       if (upErr) throw upErr;
 
       // Persiste le lien exercice → photo pour les futures séances
-      const { error: upsErr } = await (supabase as any)
+      const { error: upsErr } = await supabase
         .from("user_exercise_illustrations")
         .upsert(
           { user_id: user.id, exercise_name: exerciseName, storage_path: path },
@@ -84,7 +84,7 @@ export function useUpsertExercisePhoto() {
 
       // Met aussi à jour image_path de l'instance en cours si fourni
       if (exerciseId) {
-        await (supabase as any)
+        await supabase
           .from("exercises")
           .update({ image_path: path })
           .eq("id", exerciseId)
@@ -138,7 +138,7 @@ export async function resolveCustomExerciseMuscles(
       );
       if (!match) continue;
 
-      await (supabase as any)
+      await supabase
         .from("exercises")
         .update({ muscle_groups: muscles })
         .eq("id", match.id);

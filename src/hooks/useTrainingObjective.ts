@@ -39,7 +39,7 @@ export function useTrainingObjective() {
     enabled: !!user,
     staleTime: 60_000,
     queryFn: async (): Promise<TrainingObjective | null> => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("user_preferences")
         .select("ai_preferences")
         .eq("user_id", user!.id)
@@ -52,7 +52,7 @@ export function useTrainingObjective() {
   const update = useMutation({
     mutationFn: async (objective: TrainingObjective | null) => {
       // Lecture-fusion pour ne pas écraser les autres clés de ai_preferences.
-      const { data: current } = await (supabase as any)
+      const { data: current } = await supabase
         .from("user_preferences")
         .select("ai_preferences")
         .eq("user_id", user!.id)
@@ -61,7 +61,7 @@ export function useTrainingObjective() {
       if (objective) ai.training_objective = objective;
       else delete ai.training_objective;
 
-      const { error } = await (supabase as any)
+      const { error } = await supabase
         .from("user_preferences")
         .upsert({ user_id: user!.id, ai_preferences: ai }, { onConflict: "user_id" });
       if (error) throw error;
