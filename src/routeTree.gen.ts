@@ -16,6 +16,7 @@ import { Route as ConfidentialiteRouteImport } from './routes/confidentialite'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
 import { Route as AuthenticatedTropheesRouteImport } from './routes/_authenticated/trophees'
+import { Route as AuthenticatedSupplementsRouteImport } from './routes/_authenticated/supplements'
 import { Route as AuthenticatedSeancesRouteImport } from './routes/_authenticated/seances'
 import { Route as AuthenticatedRlsStatusRouteImport } from './routes/_authenticated/rls-status'
 import { Route as AuthenticatedQuetesRouteImport } from './routes/_authenticated/quetes'
@@ -63,6 +64,12 @@ const AuthenticatedTropheesRoute = AuthenticatedTropheesRouteImport.update({
   path: '/trophees',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedSupplementsRoute =
+  AuthenticatedSupplementsRouteImport.update({
+    id: '/supplements',
+    path: '/supplements',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedSeancesRoute = AuthenticatedSeancesRouteImport.update({
   id: '/seances',
   path: '/seances',
@@ -143,6 +150,7 @@ export interface FileRoutesByFullPath {
   '/quetes': typeof AuthenticatedQuetesRoute
   '/rls-status': typeof AuthenticatedRlsStatusRoute
   '/seances': typeof AuthenticatedSeancesRoute
+  '/supplements': typeof AuthenticatedSupplementsRoute
   '/trophees': typeof AuthenticatedTropheesRoute
   '/rapports/$id': typeof AuthenticatedRapportsIdRoute
   '/fitness/': typeof AuthenticatedFitnessIndexRoute
@@ -162,6 +170,7 @@ export interface FileRoutesByTo {
   '/quetes': typeof AuthenticatedQuetesRoute
   '/rls-status': typeof AuthenticatedRlsStatusRoute
   '/seances': typeof AuthenticatedSeancesRoute
+  '/supplements': typeof AuthenticatedSupplementsRoute
   '/trophees': typeof AuthenticatedTropheesRoute
   '/': typeof AuthenticatedIndexRoute
   '/rapports/$id': typeof AuthenticatedRapportsIdRoute
@@ -184,6 +193,7 @@ export interface FileRoutesById {
   '/_authenticated/quetes': typeof AuthenticatedQuetesRoute
   '/_authenticated/rls-status': typeof AuthenticatedRlsStatusRoute
   '/_authenticated/seances': typeof AuthenticatedSeancesRoute
+  '/_authenticated/supplements': typeof AuthenticatedSupplementsRoute
   '/_authenticated/trophees': typeof AuthenticatedTropheesRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/rapports/$id': typeof AuthenticatedRapportsIdRoute
@@ -207,6 +217,7 @@ export interface FileRouteTypes {
     | '/quetes'
     | '/rls-status'
     | '/seances'
+    | '/supplements'
     | '/trophees'
     | '/rapports/$id'
     | '/fitness/'
@@ -226,6 +237,7 @@ export interface FileRouteTypes {
     | '/quetes'
     | '/rls-status'
     | '/seances'
+    | '/supplements'
     | '/trophees'
     | '/'
     | '/rapports/$id'
@@ -247,6 +259,7 @@ export interface FileRouteTypes {
     | '/_authenticated/quetes'
     | '/_authenticated/rls-status'
     | '/_authenticated/seances'
+    | '/_authenticated/supplements'
     | '/_authenticated/trophees'
     | '/_authenticated/'
     | '/_authenticated/rapports/$id'
@@ -311,6 +324,13 @@ declare module '@tanstack/react-router' {
       path: '/trophees'
       fullPath: '/trophees'
       preLoaderRoute: typeof AuthenticatedTropheesRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/supplements': {
+      id: '/_authenticated/supplements'
+      path: '/supplements'
+      fullPath: '/supplements'
+      preLoaderRoute: typeof AuthenticatedSupplementsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/seances': {
@@ -410,6 +430,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedQuetesRoute: typeof AuthenticatedQuetesRoute
   AuthenticatedRlsStatusRoute: typeof AuthenticatedRlsStatusRoute
   AuthenticatedSeancesRoute: typeof AuthenticatedSeancesRoute
+  AuthenticatedSupplementsRoute: typeof AuthenticatedSupplementsRoute
   AuthenticatedTropheesRoute: typeof AuthenticatedTropheesRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedRapportsIdRoute: typeof AuthenticatedRapportsIdRoute
@@ -428,6 +449,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedQuetesRoute: AuthenticatedQuetesRoute,
   AuthenticatedRlsStatusRoute: AuthenticatedRlsStatusRoute,
   AuthenticatedSeancesRoute: AuthenticatedSeancesRoute,
+  AuthenticatedSupplementsRoute: AuthenticatedSupplementsRoute,
   AuthenticatedTropheesRoute: AuthenticatedTropheesRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedRapportsIdRoute: AuthenticatedRapportsIdRoute,
