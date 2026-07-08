@@ -257,23 +257,16 @@ export type Database = {
         }
         Relationships: []
       }
-      // NB : bloc reconcilié à la main le 08/07/2026 contre le schéma prod réel
-      // (vérifié via information_schema.columns) — les types générés avaient
-      // dérivé : `rpe`/`updated_at` n'existent plus (rpe supprimée migration
-      // 20260702100030, jamais eu de updated_at), `notes`/`tempo`/
-      // `rest_seconds` existent depuis 20260613172120 / 20260615192004 mais
-      // n'avaient jamais été inclus. Voir MEMORY.md pour le drift plus large.
       exercise_sets: {
         Row: {
           completed: boolean
           created_at: string
           exercise_id: string
           id: string
-          notes: string | null
           reps: number | null
-          rest_seconds: number | null
+          rpe: number | null
           set_number: number
-          tempo: string | null
+          updated_at: string
           user_id: string
           weight: number | null
         }
@@ -282,11 +275,10 @@ export type Database = {
           created_at?: string
           exercise_id: string
           id?: string
-          notes?: string | null
           reps?: number | null
-          rest_seconds?: number | null
+          rpe?: number | null
           set_number: number
-          tempo?: string | null
+          updated_at?: string
           user_id: string
           weight?: number | null
         }
@@ -295,11 +287,10 @@ export type Database = {
           created_at?: string
           exercise_id?: string
           id?: string
-          notes?: string | null
           reps?: number | null
-          rest_seconds?: number | null
+          rpe?: number | null
           set_number?: number
-          tempo?: string | null
+          updated_at?: string
           user_id?: string
           weight?: number | null
         }
@@ -321,7 +312,6 @@ export type Database = {
           notes: string | null
           reps: number | null
           sets: number | null
-          superset_group: number | null
           user_id: string
           weight: number | null
           workout_id: string
@@ -333,7 +323,6 @@ export type Database = {
           notes?: string | null
           reps?: number | null
           sets?: number | null
-          superset_group?: number | null
           user_id: string
           weight?: number | null
           workout_id: string
@@ -345,7 +334,6 @@ export type Database = {
           notes?: string | null
           reps?: number | null
           sets?: number | null
-          superset_group?: number | null
           user_id?: string
           weight?: number | null
           workout_id?: string
@@ -1220,11 +1208,9 @@ export type Database = {
         Row: {
           created_at: string
           date: string
-          discipline: string
           duration_minutes: number | null
           gym_location: string
           id: string
-          metadata: Json
           name: string
           notes: string | null
           user_id: string
@@ -1232,11 +1218,9 @@ export type Database = {
         Insert: {
           created_at?: string
           date: string
-          discipline?: string
           duration_minutes?: number | null
           gym_location?: string
           id?: string
-          metadata?: Json
           name: string
           notes?: string | null
           user_id: string
@@ -1244,96 +1228,14 @@ export type Database = {
         Update: {
           created_at?: string
           date?: string
-          discipline?: string
           duration_minutes?: number | null
           gym_location?: string
           id?: string
-          metadata?: Json
           name?: string
           notes?: string | null
           user_id?: string
         }
         Relationships: []
-      }
-      workout_templates: {
-        Row: {
-          color: string
-          created_at: string
-          icon: string
-          id: string
-          name: string
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          color?: string
-          created_at?: string
-          icon?: string
-          id?: string
-          name: string
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          color?: string
-          created_at?: string
-          icon?: string
-          id?: string
-          name?: string
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
-      workout_template_exercises: {
-        Row: {
-          created_at: string
-          default_reps: number | null
-          default_sets: number | null
-          default_weight: number | null
-          id: string
-          name: string
-          notes: string | null
-          position: number
-          superset_group: number | null
-          template_id: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          default_reps?: number | null
-          default_sets?: number | null
-          default_weight?: number | null
-          id?: string
-          name: string
-          notes?: string | null
-          position?: number
-          superset_group?: number | null
-          template_id: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          default_reps?: number | null
-          default_sets?: number | null
-          default_weight?: number | null
-          id?: string
-          name?: string
-          notes?: string | null
-          position?: number
-          superset_group?: number | null
-          template_id?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "workout_template_exercises_template_id_fkey"
-            columns: ["template_id"]
-            isOneToOne: false
-            referencedRelation: "workout_templates"
-            referencedColumns: ["id"]
-          },
-        ]
       }
     }
     Views: {
