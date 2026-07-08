@@ -176,18 +176,10 @@ export function useToggleSupplementLog(date: string) {
             date,
             taken: true,
           },
-      if (taken) {
-        const { error } = await supabase.from("supplement_logs").upsert(
-          {
-            user_id: user.id,
-            supplement_id,
-            date,
-            taken: true,
-          },
           { onConflict: "user_id,supplement_id,date" },
         );
         if (error) throw error;
-
+      } else {
         const { error } = await supabase
           .from("supplement_logs")
           .delete()
@@ -196,6 +188,7 @@ export function useToggleSupplementLog(date: string) {
           .eq("date", date);
         if (error) throw error;
       }
+
     },
     onMutate: async ({ supplement_id, taken }) => {
       await qc.cancelQueries({ queryKey: ["supplements", date] });
