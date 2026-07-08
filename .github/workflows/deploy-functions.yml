@@ -19,7 +19,10 @@ jobs:
 
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          # Épinglé (au lieu de "latest") — même correctif que migrate.yml :
+          # la résolution de "latest" appelle l'API GitHub (rate-limitable),
+          # une version fixe télécharge directement l'asset.
+          version: "2.109.1"
 
       - name: Deploy all edge functions
         run: |
