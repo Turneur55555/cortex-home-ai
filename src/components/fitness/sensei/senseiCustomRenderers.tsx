@@ -65,9 +65,10 @@ export const CUSTOM_QUESTION_RENDERERS: Record<string, CustomQuestionRenderer> =
 export interface SenseiRuntimeInputs {
   recoveryMap: Map<MuscleId, MuscleRecovery>;
   wearable?: WearableSnapshot;
-  /** Historique de séances déjà chargé par CoachSheet.tsx (briefing) —
-   *  réutilisé par le builder muscu pour déduire niveau/objectif sans
-   *  refetch (voir senseiAutoProfile.ts). */
+  /** Historique LARGE (jusqu'à 500 séances, voir useSenseiTrainingHistory.ts)
+   *  chargé par CoachSheet.tsx spécifiquement pour l'analyse — distinct du
+   *  briefing informatif (borné à 60). Réutilisé par le builder muscu pour
+   *  construire le profil d'entraînement complet (voir senseiAutoProfile.ts). */
   workouts?: ReadonlyArray<AutoProfileWorkout> | null;
 }
 

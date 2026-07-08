@@ -293,3 +293,247 @@ describe("inferSenseiAutoProfile — niveau", () => {
     expect(result.level).toBe("débutant");
   });
 });
+
+describe("inferSenseiAutoProfile — compatibilité anciennes données (pré set-by-set)", () => {
+  it("reprend les colonnes résumé (reps/weight/sets) quand exercise_sets est absent", () => {
+    const workouts = [
+      {
+        date: "2026-05-01",
+        discipline: "muscu",
+        exercises: [{ name: "Squat", weight: 80, reps: 8, sets: 3 }],
+      },
+      {
+        date: "2026-05-08",
+        discipline: "muscu",
+        exercises: [{ name: "Squat", weight: 85, reps: 8, sets: 3 }],
+      },
+      {
+        date: "2026-05-15",
+        discipline: "muscu",
+        exercises: [{ name: "Squat", weight: 90, reps: 8, sets: 3 }],
+      },
+    ];
+    const result = inferSenseiAutoProfile(workouts);
+    expect(result.sessionsConsidered).toBe(3);
+    const squat = result.exerciseProgress.find((e) => e.name === "Squat");
+    expect(squat?.trend).toBe("progression");
+    expect(squat?.lastWeight).toBe(90);
+    expect(squat?.sessionsTracked).toBe(3);
+    expect(
+      result.muscleVolume.find((m) => m.muscle === "quadriceps")?.weeklyVolume,
+    ).toBeGreaterThan(0);
+  });
+
+  it("mélange sans erreur des séances anciennes (résumé) et récentes (set-by-set)", () => {
+    const workouts = [
+      {
+        date: "2026-05-01",
+        discipline: "muscu",
+        exercises: [{ name: "Squat", weight: 80, reps: 8, sets: 3 }],
+      },
+      workout("2026-06-01", [
+        { name: "Squat", exercise_sets: [set(8, 90), set(8, 90), set(8, 90)] },
+      ]),
+    ];
+    const result = inferSenseiAutoProfile(workouts);
+    const squat = result.exerciseProgress.find((e) => e.name === "Squat");
+    expect(squat?.sessionsTracked).toBe(2);
+    expect(squat?.lastWeight).toBe(90);
+  });
+
+  it("ne plante pas sur une séance sans exercises ni colonnes résumé exploitables", () => {
+    const workouts = [
+      { date: "2026-05-01", discipline: "muscu", exercises: [{ name: "Squat" }] },
+      { date: "2026-05-08", discipline: "muscu", exercises: undefined },
+    ];
+    expect(() => inferSenseiAutoProfile(workouts)).not.toThrow();
+    const result = inferSenseiAutoProfile(workouts);
+    expect(result.sessionsConsidered).toBe(2);
+    expect(result.exerciseProgress).toEqual([]);
+  });
+});
+
+describe("inferSenseiAutoProfile — charge et séries suggérées", () => {
+  it("suggère une charge en légère hausse pour un exercice en progression normale", () => {
+    const result = inferSenseiAutoProfile([
+      workout("2026-01-01", [
+        { name: "Squat", exercise_sets: [set(8, 100), set(8, 100), set(8, 100)] },
+      ]),
+      workout("2026-03-01", [
+        { name: "Squat", exercise_sets: [set(8, 103), set(8, 103), set(8, 103)] },
+      ]),
+    ]);
+    const squat = result.exerciseProgress.find((e) => e.name === "Squat");
+    expect(squat?.trend).toBe("progression");
+    expect(squat?.pace).toBe("normale");
+    expect(squat?.suggestedWeight).toBeGreaterThan(103);
+    expect(squat?.suggestedSets).toBe(3);
+  });
+
+  it("détecte un rythme de progression 'rapide' et suggère une hausse plus marquée", () => {
+    const result = inferSenseiAutoProfile([
+      workout("2026-01-01", [{ name: "Squat", exercise_sets: [set(8, 100)] }]),
+      workout("2026-01-08", [{ name: "Squat", exercise_sets: [set(8, 115)] }]),
+    ]);
+    const squat = result.exerciseProgress.find((e) => e.name === "Squat");
+    expect(squat?.trend).toBe("progression");
+    expect(squat?.pace).toBe("rapide");
+    expect(squat!.suggestedWeight).toBeGreaterThan(squat!.lastWeight * 1.03);
+  });
+
+  it("compte les semaines de stagnation et suggère un léger deload après 3+ semaines", () => {
+    const result = inferSenseiAutoProfile([
+      workout("2026-01-01", [{ name: "Squat", exercise_sets: [set(8, 100)] }]),
+      workout("2026-01-15", [{ name: "Squat", exercise_sets: [set(8, 100)] }]),
+      workout("2026-02-01", [{ name: "Squat", exercise_sets: [set(8, 100)] }]),
+      workout("2026-02-15", [{ name: "Squat", exercise_sets: [set(8, 100)] }]),
+    ]);
+    const squat = result.exerciseProgress.find((e) => e.name === "Squat");
+    expect(squat?.trend).toBe("stagnation");
+    expect(squat?.stagnantWeeks).toBeGreaterThanOrEqual(3);
+    expect(squat?.suggestedWeight).toBeLessThan(100);
+  });
+
+  it("garde la charge stable pour une régression (ne pousse pas plus bas automatiquement)", () => {
+    const result = inferSenseiAutoProfile([
+      workout("2026-01-01", [{ name: "Squat", exercise_sets: [set(8, 100)] }]),
+      workout("2026-01-08", [{ name: "Squat", exercise_sets: [set(8, 80)] }]),
+    ]);
+    const squat = result.exerciseProgress.find((e) => e.name === "Squat");
+    expect(squat?.trend).toBe("regression");
+    expect(squat?.suggestedWeight).toBe(80);
+  });
+});
+
+describe("inferSenseiAutoProfile — statut relatif des groupes musculaires", () => {
+  it("marque surentraîné un muscle avec un volume nettement supérieur aux autres", () => {
+    const workouts: AutoProfileWorkout[] = [];
+    for (let i = 0; i < 6; i += 1) {
+      const date = new Date(2026, 0, 1 + i * 7).toISOString().slice(0, 10);
+      workouts.push(
+        workout(date, [
+          // Pectoraux : très haut volume chaque semaine.
+          { name: "Développé couché", exercise_sets: [set(10, 100), set(10, 100), set(10, 100)] },
+          // Dos, épaules, jambes : volume modéré et comparable entre eux.
+          { name: "Tirage poitrine", exercise_sets: [set(10, 30)] },
+          { name: "Développé militaire", exercise_sets: [set(10, 25)] },
+          { name: "Squat", exercise_sets: [set(10, 28)] },
+        ]),
+      );
+    }
+    const result = inferSenseiAutoProfile(workouts);
+    const pecs = result.muscleVolume.find((m) => m.muscle === "pectoraux");
+    expect(pecs?.status).toBe("surentraine");
+    expect(result.overTrainedMuscles).toContain("pectoraux");
+  });
+
+  it("marque 'neglige' un muscle jamais travaillé", () => {
+    const workouts: AutoProfileWorkout[] = [];
+    for (let i = 0; i < 4; i += 1) {
+      const date = new Date(2026, 0, 1 + i * 7).toISOString().slice(0, 10);
+      workouts.push(workout(date, [{ name: "Squat", exercise_sets: [set(8, 80)] }]));
+    }
+    const result = inferSenseiAutoProfile(workouts);
+    const pecs = result.muscleVolume.find((m) => m.muscle === "pectoraux");
+    expect(pecs?.status).toBe("neglige");
+    expect(pecs?.weeklyVolume).toBe(0);
+  });
+
+  it("n'affirme pas de sur/sous-entraînement avec trop peu de muscles distincts pour comparer", () => {
+    const workouts: AutoProfileWorkout[] = [];
+    for (let i = 0; i < 4; i += 1) {
+      const date = new Date(2026, 0, 1 + i * 7).toISOString().slice(0, 10);
+      workouts.push(workout(date, [{ name: "Squat", exercise_sets: [set(8, 80)] }]));
+    }
+    const result = inferSenseiAutoProfile(workouts);
+    const quadriceps = result.muscleVolume.find((m) => m.muscle === "quadriceps");
+    expect(quadriceps?.status).toBe("equilibre");
+  });
+});
+
+describe("inferSenseiAutoProfile — exercices jamais pratiqués mais pertinents", () => {
+  it("propose des candidats du catalogue jamais réalisés par l'utilisateur", () => {
+    const workouts: AutoProfileWorkout[] = [];
+    for (let i = 0; i < 3; i += 1) {
+      const date = new Date(2026, 0, 1 + i * 7).toISOString().slice(0, 10);
+      workouts.push(workout(date, [{ name: "Squat", exercise_sets: [set(8, 80)] }]));
+    }
+    const result = inferSenseiAutoProfile(workouts);
+    expect(result.neverDoneExercises.length).toBeGreaterThan(0);
+    expect(result.neverDoneExercises.every((e) => e.name !== "Squat")).toBe(true);
+    expect(result.neverDoneExercises.length).toBeLessThanOrEqual(12);
+  });
+});
+
+describe("inferSenseiAutoProfile — anti-répétition (séances récentes)", () => {
+  it("retourne les dernières séances (la plus récente en premier), bornées à 3", () => {
+    const workouts = [
+      workout("2026-01-01", [{ name: "Squat", exercise_sets: [set(8, 80)] }]),
+      workout("2026-01-08", [{ name: "Développé couché", exercise_sets: [set(8, 60)] }]),
+      workout("2026-01-15", [{ name: "Tirage poitrine", exercise_sets: [set(8, 50)] }]),
+      workout("2026-01-22", [{ name: "Curl", exercise_sets: [set(10, 15)] }]),
+    ];
+    const result = inferSenseiAutoProfile(workouts);
+    expect(result.recentSessions.length).toBe(3);
+    expect(result.recentSessions[0].date).toBe("2026-01-22");
+    expect(result.recentSessions[0].exerciseNames).toEqual(["Curl"]);
+  });
+});
+
+describe("inferSenseiAutoProfile — volume optimal et cycles de progression", () => {
+  it("calcule un volume hebdomadaire optimal à partir des semaines de records", () => {
+    const workouts = [
+      workout("2026-01-01", [{ name: "Squat", exercise_sets: [set(8, 80), set(8, 80)] }]),
+      workout("2026-01-08", [{ name: "Squat", exercise_sets: [set(8, 85), set(8, 85)] }]), // record
+      workout("2026-01-15", [{ name: "Squat", exercise_sets: [set(8, 80), set(8, 80)] }]),
+      workout("2026-01-22", [{ name: "Squat", exercise_sets: [set(8, 90), set(8, 90)] }]), // record
+    ];
+    const result = inferSenseiAutoProfile(workouts);
+    expect(result.optimalWeeklyVolume).not.toBeNull();
+    expect(result.optimalWeeklyVolume).toBeGreaterThan(0);
+  });
+
+  it("retourne null pour le volume optimal sans au moins 2 semaines de record", () => {
+    const workouts = [
+      workout("2026-01-01", [{ name: "Squat", exercise_sets: [set(8, 80)] }]),
+      workout("2026-01-08", [{ name: "Squat", exercise_sets: [set(8, 70)] }]),
+    ];
+    const result = inferSenseiAutoProfile(workouts);
+    expect(result.optimalWeeklyVolume).toBeNull();
+  });
+
+  it("compte les blocs de progression d'au moins 3 semaines consécutives de hausse", () => {
+    const workouts: AutoProfileWorkout[] = [];
+    const weeklyWeights = [80, 85, 90, 90, 88, 95, 100, 105]; // 3 hausses (bloc 1), plateau, 3 hausses (bloc 2)
+    weeklyWeights.forEach((weight, i) => {
+      const date = new Date(2026, 0, 1 + i * 7).toISOString().slice(0, 10);
+      workouts.push(
+        workout(date, [{ name: "Squat", exercise_sets: [set(8, weight), set(8, weight)] }]),
+      );
+    });
+    const result = inferSenseiAutoProfile(workouts);
+    expect(result.progressionCyclesCompleted).toBeGreaterThanOrEqual(1);
+  });
+
+  it("garde l'ordre chronologique des semaines au-delà de la semaine 9 (pas de tri lexical)", () => {
+    // Régression : un weekKey non zero-paddé ("2026-W10") trie AVANT
+    // "2026-W9" en tri lexical (comparaison caractère par caractère : '1' <
+    // '8'/'9'), cassant l'ordre chronologique dont dépend
+    // progressionCyclesCompleted — inévitable sur un historique complet, qui
+    // dépasse forcément 9 semaines. Cette suite de poids n'a AUCUN bloc de
+    // 3 hausses consécutives en ordre chronologique correct (100→105→100→
+    // 105→100→95), mais un tri lexical qui regroupe W10-W13 avant W8-W9 en
+    // fabrique un artificiellement (vérifié à la main).
+    const workouts: AutoProfileWorkout[] = [];
+    const weights = [100, 105, 100, 105, 100, 95];
+    for (let i = 0; i < weights.length; i += 1) {
+      const week = 8 + i;
+      const date = new Date(2026, 0, 1 + week * 7).toISOString().slice(0, 10);
+      workouts.push(
+        workout(date, [{ name: "Squat", exercise_sets: [set(8, weights[i]), set(8, weights[i])] }]),
+      );
+    }
+    const result = inferSenseiAutoProfile(workouts);
+    expect(result.progressionCyclesCompleted).toBe(0);
+  });
+});

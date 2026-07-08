@@ -38,6 +38,7 @@ import {
 import { DISCIPLINE_CONTEXT_BUILDERS } from "@/components/fitness/sensei/senseiCustomRenderers";
 import type { SenseiRuntimeInputs } from "@/components/fitness/sensei/senseiCustomRenderers";
 import { useWorkouts } from "@/hooks/use-fitness";
+import { useSenseiTrainingHistory } from "@/hooks/useSenseiTrainingHistory";
 import { useGoalsWithProgress } from "@/hooks/useGoalsWithProgress";
 import { computePRs } from "@/utils/fitness/exercise-stats";
 import { buildSenseiBriefing, type SenseiBriefing } from "@/lib/fitness/engines/senseiBriefing";
@@ -77,6 +78,11 @@ export function CoachSheet({
   // dans types.ts, et l'en-tête de senseiBriefing.ts). N'affecte ni le
   // dialogue ni answers/disciplineId.
   const { data: briefingWorkouts } = useWorkouts();
+  // Historique LARGE (jusqu'à 500 séances, pas les 60 de useWorkouts())
+  // dédié à l'analyse Sensei — voir useSenseiTrainingHistory.ts. Le
+  // briefing informatif ci-dessus continue d'utiliser briefingWorkouts
+  // (comportement inchangé, aucune régression sur le reste de l'app).
+  const { data: senseiHistory } = useSenseiTrainingHistory();
   const { goals: briefingGoals } = useGoalsWithProgress();
   const { prByName: briefingPrByName, nameByKey: briefingNameByKey } = useMemo(
     () => computePRs(briefingWorkouts ?? []),
@@ -190,7 +196,7 @@ export function CoachSheet({
       // supposer qu'il est renseigné.
       const runtimeInputs: SenseiRuntimeInputs = {
         recoveryMap: recovery,
-        workouts: briefingWorkouts,
+        workouts: senseiHistory,
       };
       const context = DISCIPLINE_CONTEXT_BUILDERS[engine.id]?.(answers, runtimeInputs) ?? {};
       const template = await engine.generate(answers, context);

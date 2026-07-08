@@ -40,10 +40,15 @@ const FALLBACK_AUTO_PROFILE: SenseiAutoProfile = {
   weeklyFrequency: 0,
   avgSessionDurationMinutes: null,
   avgRestSeconds: null,
+  optimalWeeklyVolume: null,
+  progressionCyclesCompleted: 0,
   muscleVolume: [],
   mostTrainedMuscles: [],
   leastTrainedMuscles: [],
+  overTrainedMuscles: [],
   exerciseProgress: [],
+  neverDoneExercises: [],
+  recentSessions: [],
 };
 
 const QUESTIONS: SenseiQuestionSpec[] = [
@@ -124,9 +129,14 @@ export const StrengthWorkoutEngine: WorkoutEngine = {
         weeklyFrequency: autoProfile.weeklyFrequency,
         avgSessionDurationMinutes: autoProfile.avgSessionDurationMinutes,
         avgRestSeconds: autoProfile.avgRestSeconds,
+        optimalWeeklyVolume: autoProfile.optimalWeeklyVolume,
+        progressionCyclesCompleted: autoProfile.progressionCyclesCompleted,
         mostTrainedMuscles: autoProfile.mostTrainedMuscles,
         leastTrainedMuscles: autoProfile.leastTrainedMuscles,
+        overTrainedMuscles: autoProfile.overTrainedMuscles,
         exerciseProgress: autoProfile.exerciseProgress,
+        neverDoneExercises: autoProfile.neverDoneExercises,
+        recentSessions: autoProfile.recentSessions,
       },
       // Contexte calculé par l'app (récupération musculaire), pas une
       // réponse de l'utilisateur — voir SenseiContext dans types.ts.

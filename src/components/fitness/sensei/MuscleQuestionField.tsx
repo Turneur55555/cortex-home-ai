@@ -76,6 +76,11 @@ export function aiMuscleNames(selected: string[]): string[] {
   return [...new Set(names)];
 }
 
+// Le profil brut calcule des candidats "jamais pratiqués" sur TOUS les
+// muscles (voir senseiAutoProfile.ts) ; on ne garde ici que ceux pertinents
+// pour LA sélection de cette séance, et on resserre le nombre envoyé à l'IA.
+const MAX_NEVER_DONE_FOR_SESSION = 5;
+
 /** Contexte Sensei (SenseiContext) pour StrengthWorkoutEngine : calculé par
  *  l'app à partir de la récupération musculaire connue et de l'historique de
  *  séances, jamais demandé à l'utilisateur (niveau/objectif ne sont plus des
@@ -87,9 +92,15 @@ export function buildMuscuSenseiContext(
   workouts: ReadonlyArray<AutoProfileWorkout> | null | undefined,
 ): { recovery: AiRecoveryItem[]; autoProfile: SenseiAutoProfile } {
   const selectedIds = resolveMuscleIds(selectedMuscleOptionIds);
+  const selectedIdSet = new Set(selectedIds);
+  const profile = inferSenseiAutoProfile(workouts);
+  const relevantNeverDone = profile.neverDoneExercises
+    .filter((c) => c.muscles.some((m) => selectedIdSet.has(m)))
+    .slice(0, MAX_NEVER_DONE_FOR_SESSION);
+
   return {
     recovery: buildAiRecoveryContext(selectedIds, recoveryMap),
-    autoProfile: inferSenseiAutoProfile(workouts),
+    autoProfile: { ...profile, neverDoneExercises: relevantNeverDone },
   };
 }
 
