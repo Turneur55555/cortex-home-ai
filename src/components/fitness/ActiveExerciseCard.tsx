@@ -1,16 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
   BarChart3,
-  Camera,
   Check,
-  ChevronDown,
-  Dumbbell,
   History,
-  Loader2,
   Minus,
-  Plus,
   RotateCcw,
   Trash2,
   Trophy,
@@ -31,6 +26,17 @@ import { exerciseToMuscles } from "@/lib/fitness/muscleMapping";
 import type { MuscleRecovery } from "@/lib/fitness/recovery";
 import { recommendLoad } from "@/lib/fitness/loadRecommendation";
 import { estimate1RM } from "@/lib/fitness/strength";
+import {
+  ExerciseCardConfirmDelete,
+  ExerciseCardContainer,
+  ExerciseCardHeader,
+  ExerciseCardIconButton,
+  ExerciseCardPillButton,
+  ExerciseCardSetIndex,
+  ExerciseCardSetRow,
+  ExerciseCardStatField,
+  ExercisePhotoTile,
+} from "./exerciseCard/ExerciseCardPrimitives";
 
 // ─── Comparaison série courante vs dernière séance ──────────────────────────
 
@@ -53,47 +59,10 @@ function compareToLast(
 
 function TrendIcon({ trend }: { trend: "up" | "down" | "equal" | null }) {
   if (!trend) return null;
-  if (trend === "up")
-    return <ArrowUp className="h-3 w-3 text-success" aria-label="Progression" />;
+  if (trend === "up") return <ArrowUp className="h-3 w-3 text-success" aria-label="Progression" />;
   if (trend === "down")
     return <ArrowDown className="h-3 w-3 text-destructive" aria-label="Régression" />;
   return <Minus className="h-3 w-3 text-muted-foreground/50" aria-label="Identique" />;
-}
-
-// ─── Champ numérique tactile (kg / reps) ────────────────────────────────────
-
-function StatField({
-  value,
-  onChange,
-  onCommit,
-  placeholder,
-  unit,
-  step,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  onCommit: (v: string) => void;
-  placeholder: string;
-  unit: string;
-  step?: string;
-}) {
-  return (
-    <label className="flex h-12 flex-1 flex-col items-center justify-center rounded-[14px] bg-white/[0.05] transition-all focus-within:bg-primary/10 focus-within:ring-1 focus-within:ring-primary/40">
-      <input
-        type="number"
-        inputMode="decimal"
-        step={step}
-        value={value}
-        placeholder={placeholder}
-        onChange={(e) => onChange(e.target.value)}
-        onBlur={(e) => onCommit(e.target.value)}
-        className="w-full bg-transparent text-center text-[15px] font-bold leading-none tabular-nums outline-none placeholder:font-semibold placeholder:text-muted-foreground/25"
-      />
-      <span className="mt-0.5 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground/45">
-        {unit}
-      </span>
-    </label>
-  );
 }
 
 // ─── Ligne de série ──────────────────────────────────────────────────────────
@@ -169,13 +138,9 @@ function SetRow({
   const weightPh = lastSet?.weight != null ? String(lastSet.weight) : "";
 
   return (
-    <li
-      className={`group flex items-center gap-1.5 rounded-2xl py-1 pl-1 pr-1 transition-colors ${
-        done ? "bg-success/[0.07]" : isMax ? "bg-warning/[0.06]" : ""
-      }`}
-    >
+    <ExerciseCardSetRow tone={done ? "success" : isMax ? "warning" : null}>
       {/* Numéro (capsule) + 1RM live + tendance */}
-      <div className="relative flex h-12 w-10 shrink-0 flex-col items-center justify-center gap-0.5 rounded-xl bg-white/[0.06]">
+      <ExerciseCardSetIndex>
         <span
           className={`text-sm font-extrabold tabular-nums leading-none ${
             isMax ? "text-warning" : done ? "text-success" : "text-foreground"
@@ -193,10 +158,10 @@ function SetRow({
             <TrendIcon trend={trend} />
           </span>
         )}
-      </div>
+      </ExerciseCardSetIndex>
 
       {/* Poids */}
-      <StatField
+      <ExerciseCardStatField
         value={weight}
         onChange={setWeight}
         onCommit={(v) => onUpdate("weight", parse(v))}
@@ -206,7 +171,7 @@ function SetRow({
       />
 
       {/* Reps */}
-      <StatField
+      <ExerciseCardStatField
         value={reps}
         onChange={setReps}
         onCommit={(v) => onUpdate("reps", parse(v))}
@@ -240,7 +205,7 @@ function SetRow({
       >
         <Trash2 className="h-3.5 w-3.5" />
       </button>
-    </li>
+    </ExerciseCardSetRow>
   );
 }
 
@@ -266,20 +231,12 @@ export function ActiveExerciseCard({
   const deleteSet = useDeleteExerciseSet();
   const deleteExercises = useDeleteExercises();
   const upsertPhoto = useUpsertExercisePhoto();
-  const fileRef = useRef<HTMLInputElement>(null);
 
   const [confirmDeleteEx, setConfirmDeleteEx] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
 
-  const handlePhotoFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    await upsertPhoto.mutateAsync({
-      exerciseName: exercise.name,
-      file,
-      exerciseId: exercise.id,
-    });
+  const handlePhotoFile = (file: File) => {
+    upsertPhoto.mutate({ exerciseName: exercise.name, file, exerciseId: exercise.id });
   };
 
   const sortedSets = [...(exercise.exercise_sets ?? [])].sort(
@@ -297,10 +254,7 @@ export function ActiveExerciseCard({
     null,
   );
 
-  const volume = sortedSets.reduce(
-    (acc, s) => acc + (s.reps ?? 0) * (s.weight ?? 0),
-    0,
-  );
+  const volume = sortedSets.reduce((acc, s) => acc + (s.reps ?? 0) * (s.weight ?? 0), 0);
 
   const doneCount = sortedSets.filter((s) => s.completed).length;
 
@@ -362,8 +316,7 @@ export function ActiveExerciseCard({
       const last = sortedSets[sortedSets.length - 1];
       // C1 : max(set_number)+1 — `length+1` provoquait une violation UNIQUE
       // après suppression d'une série intermédiaire.
-      const nextNumber =
-        sortedSets.reduce((m, st) => Math.max(m, st.set_number), 0) + 1;
+      const nextNumber = sortedSets.reduce((m, st) => Math.max(m, st.set_number), 0) + 1;
       const fallback = lastSetsByNumber.get(sortedSets.length + 1) ?? lastSession?.sets[0];
       await addSet.mutateAsync({
         exerciseId: exercise.id,
@@ -402,11 +355,7 @@ export function ActiveExerciseCard({
     }
   };
 
-  const handleUpdate = (
-    set: ActiveSet,
-    field: "reps" | "weight",
-    value: number | null,
-  ) => {
+  const handleUpdate = (set: ActiveSet, field: "reps" | "weight", value: number | null) => {
     updateSet.mutate({ id: set.id, [field]: value });
   };
 
@@ -414,171 +363,104 @@ export function ActiveExerciseCard({
     updateSet.mutate({ id: set.id, completed: done });
     if (done) {
       restTimer.startForExercise(exercise.id);
-      try { navigator.vibrate?.(50); } catch {}
+      try {
+        navigator.vibrate?.(50);
+      } catch {}
     }
   };
 
   const handleDeleteSet = (id: string) => deleteSet.mutate(id);
   const handleDeleteExercise = () => deleteExercises.mutate([exercise.id]);
 
-  return (
-    <div className="overflow-hidden rounded-[24px] border border-white/5 bg-surface/80 p-4 shadow-[0_4px_24px_-12px_rgba(0,0,0,0.5)] animate-in fade-in slide-in-from-bottom-2 duration-300">
-      {/* ── En-tête ── */}
-      <div className="flex items-start gap-3">
-        {/* Photo + bouton caméra overlay */}
-        <div className="relative h-[72px] w-[72px] shrink-0">
-          <button
-            type="button"
-            onClick={onOpenStats}
-            aria-label="Voir la photo et les détails"
-            className="flex h-full w-full items-center justify-center overflow-hidden rounded-2xl bg-black/25 ring-1 ring-white/10 transition-opacity active:opacity-70"
-          >
-            {imageUrl ? (
-              <img
-                src={imageUrl}
-                alt={exercise.name}
-                className="h-full w-full object-contain"
-                loading="lazy"
-              />
-            ) : (
-              <Dumbbell className="h-7 w-7 text-primary/70" />
-            )}
-          </button>
-          {/* Bouton ajout photo */}
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            disabled={upsertPhoto.isPending}
-            aria-label="Ajouter une photo"
-            className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-card border border-border shadow-sm text-primary transition-colors hover:bg-primary/10 disabled:opacity-50"
-          >
-            {upsertPhoto.isPending ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
-            ) : (
-              <Camera className="h-3 w-3" />
-            )}
-          </button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            onChange={handlePhotoFile}
-          />
-        </div>
+  const metaLine = (
+    <div className="mt-1.5 flex items-center gap-1.5 text-[12px] text-muted-foreground">
+      <span className="tabular-nums">
+        {sortedSets.length} série{sortedSets.length > 1 ? "s" : ""}
+        {doneCount > 0 && <span className="text-success"> ({doneCount}✓)</span>}
+      </span>
+      {maxWeight != null && (
+        <>
+          <span className="text-muted-foreground/30">•</span>
+          <span className="tabular-nums">{maxWeight} kg max</span>
+        </>
+      )}
+      {volume > 0 && (
+        <>
+          <span className="text-muted-foreground/30">•</span>
+          <span className="tabular-nums text-muted-foreground/70">{volLabel} kg</span>
+        </>
+      )}
+    </div>
+  );
 
-        {/* Nom + stats → repli/dépli */}
-        <button
-          type="button"
-          onClick={() => setCollapsed((c) => !c)}
-          className="min-w-0 flex-1 pt-0.5 text-left"
+  const badges = (
+    <>
+      {isPR && (
+        <span className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-bold text-warning">
+          <Trophy className="h-3 w-3" />
+          {isNewPR ? "Nouveau record" : `Record ${pr} kg`}
+        </span>
+      )}
+      {lastSummary && (
+        <span className="inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+          <History className="h-3 w-3" />
+          {lastSummary.weight ?? "—"} kg × {lastSummary.reps ?? "—"}
+        </span>
+      )}
+      {fatigued.map((rec) => (
+        <span
+          key={rec.id}
+          className="inline-flex items-center gap-1 rounded-full bg-orange-500/15 px-2 py-0.5 text-[10px] font-bold text-orange-400"
+          title={`${rec.label} peu récupéré — ${rec.hoursRemaining != null ? Math.round(rec.hoursRemaining) + "h restantes" : ""}`}
         >
-          <div className="flex items-start gap-1.5">
-            <h3 className="line-clamp-2 flex-1 text-[17px] font-semibold leading-tight tracking-tight">
-              {exercise.name}
-            </h3>
-            <ChevronDown
-              className={`mt-0.5 h-4 w-4 shrink-0 text-muted-foreground/70 transition-transform duration-200 ${
-                collapsed ? "" : "rotate-180"
-              }`}
+          ⚠ {rec.label}
+        </span>
+      ))}
+    </>
+  );
+
+  return (
+    <ExerciseCardContainer>
+      <ExerciseCardHeader
+        photo={
+          <ExercisePhotoTile
+            imageUrl={imageUrl}
+            name={exercise.name}
+            onOpenPreview={onOpenStats}
+            onPickPhoto={handlePhotoFile}
+            uploading={upsertPhoto.isPending}
+          />
+        }
+        title={exercise.name}
+        collapsed={collapsed}
+        onToggleCollapse={() => setCollapsed((c) => !c)}
+        metaLine={metaLine}
+        badges={badges}
+        actions={
+          <>
+            <ExerciseCardIconButton
+              icon={BarChart3}
+              onClick={() => onOpenStats?.()}
+              label="Statistiques de l'exercice"
             />
-          </div>
-
-          <div className="mt-1.5 flex items-center gap-1.5 text-[12px] text-muted-foreground">
-            <span className="tabular-nums">
-              {sortedSets.length} série{sortedSets.length > 1 ? "s" : ""}
-              {doneCount > 0 && (
-                <span className="text-success"> ({doneCount}✓)</span>
-              )}
-            </span>
-            {maxWeight != null && (
-              <>
-                <span className="text-muted-foreground/30">•</span>
-                <span className="tabular-nums">{maxWeight} kg max</span>
-              </>
-            )}
-            {volume > 0 && (
-              <>
-                <span className="text-muted-foreground/30">•</span>
-                <span className="tabular-nums text-muted-foreground/70">{volLabel} kg</span>
-              </>
-            )}
-          </div>
-
-          {/* Badges */}
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-            {isPR && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-bold text-warning">
-                <Trophy className="h-3 w-3" />
-                {isNewPR ? "Nouveau record" : `Record ${pr} kg`}
-              </span>
-            )}
-            {lastSummary && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-                <History className="h-3 w-3" />
-                {lastSummary.weight ?? "—"} kg × {lastSummary.reps ?? "—"}
-              </span>
-            )}
-            {fatigued.map((rec) => (
-              <span
-                key={rec.id}
-                className="inline-flex items-center gap-1 rounded-full bg-orange-500/15 px-2 py-0.5 text-[10px] font-bold text-orange-400"
-                title={`${rec.label} peu récupéré — ${rec.hoursRemaining != null ? Math.round(rec.hoursRemaining) + "h restantes" : ""}`}
-              >
-                ⚠ {rec.label}
-              </span>
-            ))}
-          </div>
-        </button>
-
-        {/* Actions */}
-        <div className="flex shrink-0 flex-col gap-1.5">
-          <button
-            type="button"
-            onClick={onOpenStats}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-white/5 text-muted-foreground transition-all active:scale-90 hover:bg-primary/10 hover:text-primary"
-            aria-label="Statistiques de l'exercice"
-          >
-            <BarChart3 className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => setConfirmDeleteEx(true)}
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-white/5 text-muted-foreground transition-all active:scale-90 hover:bg-destructive/10 hover:text-destructive"
-            aria-label="Supprimer l'exercice"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
+            <ExerciseCardIconButton
+              icon={Trash2}
+              onClick={() => setConfirmDeleteEx(true)}
+              label="Supprimer l'exercice"
+              variant="destructive"
+            />
+          </>
+        }
+      />
 
       {/* ── Confirmation suppression exercice ── */}
       {confirmDeleteEx && (
-        <div className="mt-3 rounded-2xl border border-destructive/30 bg-destructive/10 p-3 animate-in fade-in zoom-in-95 duration-150">
-          <p className="text-sm font-semibold text-destructive">
-            Supprimer « {exercise.name} » ?
-          </p>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            Toutes les séries associées seront supprimées.
-          </p>
-          <div className="mt-3 flex gap-2">
-            <button
-              type="button"
-              onClick={() => setConfirmDeleteEx(false)}
-              className="flex-1 rounded-xl border border-border py-2 text-xs font-medium"
-            >
-              Annuler
-            </button>
-            <button
-              type="button"
-              onClick={handleDeleteExercise}
-              className="flex-1 rounded-xl bg-destructive py-2 text-xs font-semibold text-destructive-foreground"
-            >
-              Supprimer
-            </button>
-          </div>
-        </div>
+        <ExerciseCardConfirmDelete
+          label={`Supprimer « ${exercise.name} » ?`}
+          detail="Toutes les séries associées seront supprimées."
+          onCancel={() => setConfirmDeleteEx(false)}
+          onConfirm={handleDeleteExercise}
+        />
       )}
 
       {/* ── Contenu repliable ── */}
@@ -603,7 +485,9 @@ export function ActiveExerciseCard({
               <Zap className="h-3.5 w-3.5 shrink-0 text-primary" />
               <span className="text-muted-foreground">Suggéré :</span>
               <span className="font-bold text-primary">{suggestion} kg</span>
-              <span className="text-muted-foreground/60">× {lastSummary?.reps} reps · récup. incomplète</span>
+              <span className="text-muted-foreground/60">
+                × {lastSummary?.reps} reps · récup. incomplète
+              </span>
             </div>
           )}
 
@@ -631,18 +515,14 @@ export function ActiveExerciseCard({
             )}
 
             {/* Ajouter une série */}
-            <button
-              type="button"
+            <ExerciseCardPillButton
+              label="Ajouter une série"
               onClick={handleAddSet}
               disabled={isBusy}
-              className="mt-2 flex h-12 w-full items-center justify-center gap-1.5 rounded-2xl bg-white/[0.05] text-[13px] font-semibold text-primary transition-all active:scale-[0.99] hover:bg-primary/10 disabled:opacity-50"
-            >
-              <Plus className="h-4 w-4" />
-              Ajouter une série
-            </button>
+            />
           </div>
         </div>
       )}
-    </div>
+    </ExerciseCardContainer>
   );
 }

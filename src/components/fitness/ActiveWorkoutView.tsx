@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { BookOpen, CheckCircle2, Flame, Loader2, MoreVertical, Plus, XCircle } from "lucide-react";
+import { BookOpen, CheckCircle2, Flame, Loader2, MoreVertical, XCircle } from "lucide-react";
 import type { ActiveWorkout } from "@/hooks/use-fitness";
 import {
   useAddExerciseToActiveWorkout,
@@ -14,13 +14,11 @@ import { useFitnessStreak } from "@/hooks/useFitnessStreak";
 import { WorkoutTimer } from "./WorkoutTimer";
 import { WorkoutSummaryOverlay } from "./WorkoutSummaryOverlay";
 import { ActiveExerciseCard } from "./ActiveExerciseCard";
+import { AddExerciseButton } from "./exerciseCard/ExerciseCardPrimitives";
 import { exerciseIllustration } from "@/lib/fitness/exerciseIllustrations";
 import { computePRs } from "@/utils/fitness/exercise-stats";
-import {
-  ExercisePickerSheet,
-  type PickedExercise,
-  type RecentExercise,
-} from "./ExercisePickerSheet";
+import { ExercisePickerSheet, type PickedExercise } from "./ExercisePickerSheet";
+import { computeRecentExercises } from "@/lib/fitness/recentExercises";
 import { normalize } from "@/lib/fitness/exerciseCatalog";
 import { useLastExerciseSessions } from "@/hooks/useLastExerciseSession";
 import { RestTimerBar } from "./RestTimerBar";
@@ -71,34 +69,18 @@ export function ActiveWorkoutView({
   );
 
   // Fiche détaillée d'un exercice (au tap sur la carte)
-  const [statsTarget, setStatsTarget] = useState<
-    { key: string; name: string; imageUrl: string | null } | null
-  >(null);
+  const [statsTarget, setStatsTarget] = useState<{
+    key: string;
+    name: string;
+    imageUrl: string | null;
+  } | null>(null);
 
   // Image URLs for all exercises in this workout
   const allImagePaths = (workout.exercises ?? []).map((ex) => ex.image_path);
   const { data: imageUrls } = useExerciseImageUrls(allImagePaths);
 
   // Recent exercises for picker
-  const recentExercises = useMemo<RecentExercise[]>(() => {
-    if (!allWorkouts) return [];
-    const seen = new Map<string, RecentExercise>();
-    for (const w of allWorkouts) {
-      for (const ex of w.exercises ?? []) {
-        if (!ex.name.trim()) continue;
-        const key = normalize(ex.name);
-        if (!seen.has(key)) {
-          seen.set(key, {
-            name: ex.name,
-            lastSets: ex.sets ?? null,
-            lastReps: ex.reps ?? null,
-            lastWeight: ex.weight ?? null,
-          });
-        }
-      }
-    }
-    return Array.from(seen.values()).slice(0, 30);
-  }, [allWorkouts]);
+  const recentExercises = useMemo(() => computeRecentExercises(allWorkouts), [allWorkouts]);
 
   const handlePickExercise = async (picked: PickedExercise) => {
     setPickerOpen(false);
@@ -168,9 +150,7 @@ export function ActiveWorkoutView({
                 {workout.name}
               </h2>
               {workout.gym_location && workout.gym_location !== "Salle inconnue" && (
-                <p className="mt-0.5 text-sm text-muted-foreground">
-                  {workout.gym_location}
-                </p>
+                <p className="mt-0.5 text-sm text-muted-foreground">{workout.gym_location}</p>
               )}
             </div>
 
@@ -196,8 +176,8 @@ export function ActiveWorkoutView({
             </span>
             <span>·</span>
             <span>
-              <strong className="text-foreground">{totalSeries}</strong>{" "}
-              série{totalSeries > 1 ? "s" : ""}
+              <strong className="text-foreground">{totalSeries}</strong> série
+              {totalSeries > 1 ? "s" : ""}
             </span>
           </div>
 
@@ -326,19 +306,7 @@ export function ActiveWorkoutView({
 
       {/* ── Add exercise ── */}
       <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={() => setPickerOpen(true)}
-          disabled={addExercise.isPending}
-          className="flex flex-1 items-center justify-center gap-2 rounded-2xl border border-dashed border-white/10 bg-white/[0.02] py-4 text-sm font-semibold text-primary transition-all active:scale-[0.99] hover:border-primary/40 hover:bg-primary/5 disabled:opacity-50"
-        >
-          {addExercise.isPending ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Plus className="h-4 w-4" />
-          )}
-          Ajouter un exercice
-        </button>
+        <AddExerciseButton onClick={() => setPickerOpen(true)} disabled={addExercise.isPending} />
         {onOpenCatalog && (
           <button
             type="button"
