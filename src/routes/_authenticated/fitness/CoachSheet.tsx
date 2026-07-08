@@ -204,7 +204,18 @@ export function CoachSheet({
       return { template, draft };
     },
     onSuccess: ({ template, draft }: { template: WorkoutTemplate; draft: WorkoutRecordDraft }) => {
-      toast.success("Séance générée — ajuste-la avant d'enregistrer");
+      // Explication concise de Sensei (charge augmentée par progression,
+      // volume réduit par fatigue...) — basée uniquement sur des données
+      // réelles, voir buildSenseiExplanation() dans strengthEngine.ts.
+      // Absente pour les disciplines non-musculation (template.explanation
+      // reste undefined) : pas de description dans ce cas, comportement
+      // inchangé pour elles.
+      toast.success("Séance générée — ajuste-la avant d'enregistrer", {
+        description:
+          template.explanation && template.explanation.length > 0
+            ? template.explanation.join(" · ")
+            : undefined,
+      });
       onResult(template, draft);
     },
     onError: (e: Error) => toast.error(e.message),

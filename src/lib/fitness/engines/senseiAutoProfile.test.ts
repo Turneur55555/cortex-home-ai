@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { inferSenseiAutoProfile, type AutoProfileWorkout } from "./senseiAutoProfile";
+import {
+  inferSenseiAutoProfile,
+  buildSenseiExplanation,
+  type AutoProfileWorkout,
+} from "./senseiAutoProfile";
 
 function set(reps: number, weight: number, completed = true, rest_seconds?: number) {
   return { reps, weight, completed, rest_seconds };
@@ -535,5 +539,200 @@ describe("inferSenseiAutoProfile — volume optimal et cycles de progression", (
     }
     const result = inferSenseiAutoProfile(workouts);
     expect(result.progressionCyclesCompleted).toBe(0);
+  });
+});
+
+describe("inferSenseiAutoProfile — mémoire à long terme", () => {
+  it("classe les exercices en progression la plus rapide en premier", () => {
+    const workouts = [
+      // Squat : hausse rapide (+15% en 1 semaine).
+      workout("2026-01-01", [{ name: "Squat", exercise_sets: [set(8, 100)] }]),
+      workout("2026-01-08", [{ name: "Squat", exercise_sets: [set(8, 115)] }]),
+      // Développé couché : hausse normale (+3% sur 2 mois).
+      workout("2026-01-01", [{ name: "Développé couché", exercise_sets: [set(8, 100)] }]),
+      workout("2026-03-01", [{ name: "Développé couché", exercise_sets: [set(8, 103)] }]),
+    ];
+    const result = inferSenseiAutoProfile(workouts);
+    expect(result.bestProgressingExercises[0]).toBe("Squat");
+    expect(result.bestProgressingExercises).toContain("Développé couché");
+  });
+
+  it("identifie une stagnation chronique (≥4 semaines) mais pas une stagnation récente", () => {
+    const workouts = [
+      // Squat : stagnation depuis longtemps.
+      workout("2026-01-01", [{ name: "Squat", exercise_sets: [set(8, 100)] }]),
+      workout("2026-01-15", [{ name: "Squat", exercise_sets: [set(8, 100)] }]),
+      workout("2026-02-01", [{ name: "Squat", exercise_sets: [set(8, 100)] }]),
+      workout("2026-02-15", [{ name: "Squat", exercise_sets: [set(8, 100)] }]),
+      // Curl : stagnation très récente (1 semaine), ne doit pas être "chronique".
+      workout("2026-02-08", [{ name: "Curl", exercise_sets: [set(10, 15)] }]),
+      workout("2026-02-15", [{ name: "Curl", exercise_sets: [set(10, 15)] }]),
+    ];
+    const result = inferSenseiAutoProfile(workouts);
+    expect(result.chronicStagnationExercises).toContain("Squat");
+    expect(result.chronicStagnationExercises).not.toContain("Curl");
+  });
+
+  it("détecte un exercice abandonné (pratiqué régulièrement puis plus revu depuis longtemps)", () => {
+    const workouts = [
+      workout("2026-01-01", [{ name: "Tirage poitrine", exercise_sets: [set(8, 50)] }]),
+      workout("2026-01-08", [{ name: "Tirage poitrine", exercise_sets: [set(8, 52)] }]),
+      workout("2026-01-15", [{ name: "Tirage poitrine", exercise_sets: [set(8, 54)] }]),
+      // L'utilisateur continue à s'entraîner (Squat) longtemps après avoir arrêté le tirage.
+      workout("2026-02-01", [{ name: "Squat", exercise_sets: [set(8, 80)] }]),
+      workout("2026-04-01", [{ name: "Squat", exercise_sets: [set(8, 85)] }]),
+    ];
+    const result = inferSenseiAutoProfile(workouts);
+    expect(result.abandonedExercises).toContain("Tirage poitrine");
+    expect(result.abandonedExercises).not.toContain("Squat");
+  });
+
+  it("identifie les exercices les plus fréquents", () => {
+    const workouts: AutoProfileWorkout[] = [];
+    for (let i = 0; i < 5; i += 1) {
+      workouts.push(
+        workout(`2026-01-${String(i * 7 + 1).padStart(2, "0")}`, [
+          { name: "Squat", exercise_sets: [set(8, 80 + i)] },
+        ]),
+      );
+    }
+    workouts.push(workout("2026-04-01", [{ name: "Curl", exercise_sets: [set(10, 15)] }]));
+    const result = inferSenseiAutoProfile(workouts);
+    expect(result.mostFrequentExercises[0]).toBe("Squat");
+  });
+
+  it("identifie la meilleure variante parmi des exercices ciblant les mêmes muscles", () => {
+    const workouts = [
+      // Développé couché barre et haltères ciblent EXACTEMENT les mêmes
+      // muscles (pectoraux/triceps/epaules) — une vraie "famille" détectable.
+      workout("2026-01-01", [{ name: "Développé couché barre", exercise_sets: [set(8, 100)] }]),
+      workout("2026-01-15", [{ name: "Développé couché barre", exercise_sets: [set(8, 100)] }]),
+      workout("2026-02-01", [{ name: "Développé couché barre", exercise_sets: [set(8, 100)] }]),
+      workout("2026-01-08", [{ name: "Développé couché haltères", exercise_sets: [set(8, 40)] }]),
+      workout("2026-01-22", [{ name: "Développé couché haltères", exercise_sets: [set(8, 45)] }]),
+    ];
+    const result = inferSenseiAutoProfile(workouts);
+    const group = result.bestVariants.find((g) => g.bestExercise === "Développé couché haltères");
+    expect(group).toBeDefined();
+    expect(group?.alternatives).toContain("Développé couché barre");
+  });
+});
+
+describe("inferSenseiAutoProfile — fatigue systémique", () => {
+  it("reste 'faible' pour un rythme d'entraînement stable et régulier", () => {
+    const workouts: AutoProfileWorkout[] = [];
+    for (let week = 0; week < 10; week += 1) {
+      const date = new Date(2026, 0, 1 + week * 7).toISOString().slice(0, 10);
+      workouts.push(workout(date, [{ name: "Squat", exercise_sets: [set(8, 80 + week)] }]));
+    }
+    const result = inferSenseiAutoProfile(workouts);
+    expect(result.fatigue.level).toBe("faible");
+    expect(result.fatigue.reasons).toEqual([]);
+  });
+
+  it("détecte une fatigue élevée sur un pic soudain de fréquence et de volume", () => {
+    const workouts: AutoProfileWorkout[] = [];
+    // Rythme habituel : 1 séance légère toutes les 2 semaines pendant ~4 mois.
+    for (let i = 0; i < 8; i += 1) {
+      const date = new Date(2026, 0, 1 + i * 14).toISOString().slice(0, 10);
+      workouts.push(workout(date, [{ name: "Squat", exercise_sets: [set(8, 80)] }]));
+    }
+    // Pic soudain : 4 séances à haut volume dans les 6 derniers jours.
+    const lastBaseDate = new Date(2026, 0, 1 + 7 * 14);
+    for (let d = 0; d < 4; d += 1) {
+      const date = new Date(lastBaseDate.getTime() + d * 2 * 86_400_000).toISOString().slice(0, 10);
+      workouts.push(
+        workout(date, [
+          { name: "Squat", exercise_sets: [set(8, 80), set(8, 80), set(8, 80), set(8, 80)] },
+        ]),
+      );
+    }
+    const result = inferSenseiAutoProfile(workouts);
+    expect(result.fatigue.level).toBe("élevée");
+    expect(result.fatigue.reasons.length).toBeGreaterThan(0);
+  });
+});
+
+describe("inferSenseiAutoProfile — points faibles", () => {
+  it("priorise un muscle négligé ET un muscle qui progresse lentement", () => {
+    const workouts: AutoProfileWorkout[] = [];
+    for (let i = 0; i < 6; i += 1) {
+      const date = new Date(2026, 0, 1 + i * 7).toISOString().slice(0, 10);
+      workouts.push(
+        workout(date, [
+          // Pectoraux : bien entraînés et en progression.
+          { name: "Développé couché", exercise_sets: [set(8, 80 + i * 2)] },
+          // Dos : entraîné mais qui stagne (progression lente).
+          { name: "Tirage poitrine", exercise_sets: [set(8, 50)] },
+        ]),
+      );
+    }
+    const result = inferSenseiAutoProfile(workouts);
+    // Jambes jamais entraînées : forcément un point faible (volume nul).
+    expect(result.weakPoints).toContain("quadriceps");
+  });
+});
+
+describe("buildSenseiExplanation", () => {
+  it("explique la hausse de charge pour un exercice en progression repris dans la séance", () => {
+    const workouts = [
+      workout("2026-01-01", [{ name: "Squat", exercise_sets: [set(8, 80)] }]),
+      workout("2026-01-08", [{ name: "Squat", exercise_sets: [set(8, 85)] }]),
+      workout("2026-01-15", [{ name: "Squat", exercise_sets: [set(8, 90)] }]),
+    ];
+    const profile = inferSenseiAutoProfile(workouts);
+    const explanation = buildSenseiExplanation(profile, ["Squat"]);
+    expect(explanation.some((r) => r.includes("Squat") && r.includes("progression"))).toBe(true);
+  });
+
+  it("mentionne la fatigue élevée quand elle est détectée", () => {
+    const workouts: AutoProfileWorkout[] = [];
+    for (let i = 0; i < 8; i += 1) {
+      const date = new Date(2026, 0, 1 + i * 14).toISOString().slice(0, 10);
+      workouts.push(workout(date, [{ name: "Squat", exercise_sets: [set(8, 80)] }]));
+    }
+    const lastBaseDate = new Date(2026, 0, 1 + 7 * 14);
+    for (let d = 0; d < 4; d += 1) {
+      const date = new Date(lastBaseDate.getTime() + d * 2 * 86_400_000).toISOString().slice(0, 10);
+      workouts.push(
+        workout(date, [
+          { name: "Squat", exercise_sets: [set(8, 80), set(8, 80), set(8, 80), set(8, 80)] },
+        ]),
+      );
+    }
+    const profile = inferSenseiAutoProfile(workouts);
+    const explanation = buildSenseiExplanation(profile, ["Squat"]);
+    expect(explanation.some((r) => r.toLowerCase().includes("fatigue"))).toBe(true);
+  });
+
+  it("reste vide (pas de raison inventée) quand aucun signal ne s'applique", () => {
+    const explanation = buildSenseiExplanation(
+      {
+        level: "intermédiaire",
+        goal: "hypertrophie",
+        sessionsConsidered: 0,
+        weeklyFrequency: 0,
+        avgSessionDurationMinutes: null,
+        avgRestSeconds: null,
+        optimalWeeklyVolume: null,
+        progressionCyclesCompleted: 0,
+        muscleVolume: [],
+        mostTrainedMuscles: [],
+        leastTrainedMuscles: [],
+        overTrainedMuscles: [],
+        exerciseProgress: [],
+        neverDoneExercises: [],
+        recentSessions: [],
+        bestProgressingExercises: [],
+        chronicStagnationExercises: [],
+        abandonedExercises: [],
+        mostFrequentExercises: [],
+        bestVariants: [],
+        fatigue: { level: "faible", reasons: [] },
+        weakPoints: [],
+      },
+      ["Squat"],
+    );
+    expect(explanation).toEqual([]);
   });
 });

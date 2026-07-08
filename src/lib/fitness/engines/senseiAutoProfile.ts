@@ -44,6 +44,7 @@ export type AutoGoal = "hypertrophie" | "force" | "endurance" | "perte de poids"
 export type ExerciseTrend = "progression" | "stagnation" | "regression" | "nouveau";
 export type ExercisePace = "rapide" | "normale";
 export type MuscleTrainingStatus = "neglige" | "sous-entraine" | "equilibre" | "surentraine";
+export type FatigueLevel = "faible" | "modérée" | "élevée";
 
 export interface AutoProfileSet {
   reps: number | null;
@@ -114,6 +115,23 @@ export interface RecentSession {
   avgReps: number;
 }
 
+/** Parmi les exercices qui ciblent EXACTEMENT les mêmes muscles (une
+ *  "famille" au sens le plus fiable qu'on puisse déduire sans référentiel
+ *  externe de variantes), celui qui donne le meilleur résultat actuellement
+ *  (progression > stagnation > régression), et les alternatives testées. */
+export interface BestVariantGroup {
+  muscles: MuscleId[];
+  bestExercise: string;
+  alternatives: string[];
+}
+
+export interface FatigueAssessment {
+  level: FatigueLevel;
+  /** Raisons factuelles courtes, directement affichables — jamais de texte
+   *  générique, uniquement ce qui a réellement contribué au score. */
+  reasons: string[];
+}
+
 export interface SenseiAutoProfile {
   level: AutoLevel;
   goal: AutoGoal;
@@ -149,6 +167,34 @@ export interface SenseiAutoProfile {
   /** Dernières séances (3 max, la plus récente en premier) — pour que
    *  Sensei varie la programmation plutôt que répéter la même. */
   recentSessions: RecentSession[];
+
+  // ---- Mémoire à long terme (recalculée à chaque appel depuis TOUT
+  // l'historique — pas un état stocké séparément qui pourrait diverger,
+  // voir en-tête de fichier : "apprendre" = analyser plus de données au fil
+  // du temps, pas maintenir une mémoire mutable indépendante). ----
+  /** Exercices en progression la plus rapide (borné à 3). */
+  bestProgressingExercises: string[];
+  /** Exercices en stagnation depuis longtemps (≥4 semaines, borné à 3). */
+  chronicStagnationExercises: string[];
+  /** Exercices pratiqués régulièrement par le passé (≥3 séances) puis
+   *  abandonnés depuis longtemps (borné à 3). */
+  abandonedExercises: string[];
+  /** Exercices les plus fréquemment pratiqués, toutes tendances confondues
+   *  (borné à 3 — sous-ensemble de exerciseProgress, trié pareil). */
+  mostFrequentExercises: string[];
+  /** Groupes de variantes (même muscles exacts) où une nettement meilleure
+   *  qu'une autre a émergé — borné à 3 groupes. */
+  bestVariants: BestVariantGroup[];
+
+  /** Fatigue systémique estimée (volume/fréquence/régressions récentes) —
+   *  complémentaire de la récupération par muscle déjà calculée ailleurs
+   *  (recovery map, voir buildMuscuSenseiContext) : ce champ ne duplique
+   *  jamais cette dernière, il capture un signal global, pas par muscle. */
+  fatigue: FatigueAssessment;
+  /** Muscles à prioriser progressivement (volume et/ou progression plus
+   *  faibles que les autres) — signal plus riche que leastTrainedMuscles
+   *  (qui reste un simple fait de volume), borné à 4. */
+  weakPoints: MuscleId[];
 }
 
 const EMPTY_PROFILE: Omit<SenseiAutoProfile, "sessionsConsidered"> = {
@@ -166,12 +212,29 @@ const EMPTY_PROFILE: Omit<SenseiAutoProfile, "sessionsConsidered"> = {
   exerciseProgress: [],
   neverDoneExercises: [],
   recentSessions: [],
+  bestProgressingExercises: [],
+  chronicStagnationExercises: [],
+  abandonedExercises: [],
+  mostFrequentExercises: [],
+  bestVariants: [],
+  fatigue: { level: "faible", reasons: [] },
+  weakPoints: [],
 };
 
 const MAX_TRACKED_EXERCISES = 8;
 const MAX_NEVER_DONE = 12;
 const MAX_RECENT_SESSIONS = 3;
+const MAX_MEMORY_ITEMS = 3;
+const MAX_BEST_VARIANT_GROUPS = 3;
+const MAX_WEAK_POINTS = 4;
 const ALL_MUSCLES = Object.keys(MUSCLE_META) as MuscleId[];
+
+// Un exercice est en "stagnation chronique" au-delà de ce nombre de
+// semaines sans vraie hausse — au-delà d'une simple stagnation ponctuelle.
+const CHRONIC_STAGNATION_WEEKS = 4;
+// Un exercice pratiqué régulièrement (≥3 séances) puis absent depuis ce
+// nombre de semaines est considéré "abandonné".
+const ABANDONED_GAP_WEEKS = 6;
 
 // Un mouvement de charge est considéré significatif au-delà de ce seuil ;
 // en-deçà, c'est du bruit de mesure (arrondis de poids, variation de forme).
@@ -229,6 +292,10 @@ interface TrendResult {
   trend: ExerciseTrend;
   pace?: ExercisePace;
   stagnantWeeks?: number;
+  /** Rythme de progression en %/semaine — uniquement en progression, sert
+   *  au classement interne de bestProgressingExercises (pas exposé tel
+   *  quel dans ExerciseProgress, `pace` suffit à l'IA/l'edge). */
+  weeklyRate?: number;
 }
 
 /** Tendance récente d'un exercice : compare une fenêtre RÉCENTE à la fenêtre
@@ -254,6 +321,7 @@ function computeExerciseTrend(entries: ReadonlyArray<ExerciseHistoryEntry>): Tre
     return {
       trend: "progression",
       pace: weeklyRate >= FAST_PACE_WEEKLY_RATE ? "rapide" : "normale",
+      weeklyRate,
     };
   }
 
@@ -409,6 +477,13 @@ export function inferSenseiAutoProfile(
   // pas juste premier-vs-dernier sur tout l'historique) ----
   const exerciseProgress: ExerciseProgress[] = [];
   const trackedExerciseKeys = new Set<string>();
+  // Mémoire à long terme : données internes non exposées telles quelles dans
+  // ExerciseProgress (weeklyRate précis, dernière date), utiles uniquement
+  // pour classer bestProgressingExercises/abandonedExercises ci-dessous.
+  const weeklyRateByKey = new Map<string, number>();
+  const lastSeenDateByKey = new Map<string, string>();
+  const mostRecentSessionDate = sessions[sessions.length - 1].date;
+
   for (const [key, { name, entries }] of historyByExercise) {
     trackedExerciseKeys.add(key);
     const sessionsTracked = entries.length;
@@ -419,6 +494,9 @@ export function inferSenseiAutoProfile(
       1,
       Math.min(6, Math.round(average(entries.map((e) => e.setCount)))),
     );
+
+    lastSeenDateByKey.set(key, entries[entries.length - 1].date);
+    if (trendResult.weeklyRate != null) weeklyRateByKey.set(key, trendResult.weeklyRate);
 
     exerciseProgress.push({
       name,
@@ -438,10 +516,69 @@ export function inferSenseiAutoProfile(
 
   const withTrend = exerciseProgress.filter((e) => e.trend !== "nouveau");
   const progressingCount = withTrend.filter((e) => e.trend === "progression").length;
+  const regressingCount = withTrend.filter((e) => e.trend === "regression").length;
   const recentPRCount = exerciseProgress.filter(
     (e) => e.sessionsTracked >= 2 && e.lastWeight >= e.personalRecord,
   ).length;
   const progressionRatio = withTrend.length > 0 ? progressingCount / withTrend.length : 0;
+
+  // ---- Mémoire à long terme : apprend des habitudes en repassant sur les
+  // mêmes signaux (trend/pace/stagnantWeeks/fréquence) déjà calculés
+  // ci-dessus, pas un état séparé — voir en-tête de fichier. ----
+  const bestProgressingExercises = exerciseProgress
+    .filter((e) => e.trend === "progression")
+    .map((e) => ({ name: e.name, key: normalize(e.name) }))
+    .sort((a, b) => (weeklyRateByKey.get(b.key) ?? 0) - (weeklyRateByKey.get(a.key) ?? 0))
+    .slice(0, MAX_MEMORY_ITEMS)
+    .map((e) => e.name);
+
+  const chronicStagnationExercises = exerciseProgress
+    .filter((e) => e.trend === "stagnation" && (e.stagnantWeeks ?? 0) >= CHRONIC_STAGNATION_WEEKS)
+    .sort((a, b) => (b.stagnantWeeks ?? 0) - (a.stagnantWeeks ?? 0))
+    .slice(0, MAX_MEMORY_ITEMS)
+    .map((e) => e.name);
+
+  const abandonedExercises = exerciseProgress
+    .filter((e) => e.sessionsTracked >= 3)
+    .map((e) => ({
+      name: e.name,
+      gapWeeks: daysBetween(lastSeenDateByKey.get(normalize(e.name))!, mostRecentSessionDate) / 7,
+    }))
+    .filter((e) => e.gapWeeks >= ABANDONED_GAP_WEEKS)
+    .sort((a, b) => b.gapWeeks - a.gapWeeks)
+    .slice(0, MAX_MEMORY_ITEMS)
+    .map((e) => e.name);
+
+  const mostFrequentExercises = exerciseProgress.slice(0, MAX_MEMORY_ITEMS).map((e) => e.name);
+
+  // Variantes : exercices ciblant EXACTEMENT les mêmes muscles (le seul
+  // regroupement fiable sans référentiel externe de "familles de mouvement")
+  // — parmi elles, laquelle donne le meilleur résultat actuellement.
+  const TREND_RANK: Record<ExerciseTrend, number> = {
+    progression: 3,
+    stagnation: 2,
+    nouveau: 1,
+    regression: 0,
+  };
+  const byMuscleSignature = new Map<string, ExerciseProgress[]>();
+  for (const e of exerciseProgress) {
+    if (e.muscles.length === 0) continue;
+    const signature = [...e.muscles].sort().join(",");
+    const group = byMuscleSignature.get(signature) ?? [];
+    group.push(e);
+    byMuscleSignature.set(signature, group);
+  }
+  const bestVariants: BestVariantGroup[] = Array.from(byMuscleSignature.values())
+    .filter((group) => group.length >= 2)
+    .map((group) => {
+      const sorted = [...group].sort((a, b) => TREND_RANK[b.trend] - TREND_RANK[a.trend]);
+      return {
+        muscles: sorted[0].muscles,
+        bestExercise: sorted[0].name,
+        alternatives: sorted.slice(1).map((e) => e.name),
+      };
+    })
+    .slice(0, MAX_BEST_VARIANT_GROUPS);
 
   // ---- Volume hebdomadaire par groupe musculaire (statut RELATIF) ----
   const weeks = Array.from(weeklyTonnage.keys()).sort();
@@ -488,6 +625,32 @@ export function inferSenseiAutoProfile(
     .slice(0, 3)
     .map((m) => m.muscle);
 
+  // ---- Points faibles à prioriser progressivement : volume insuffisant
+  // (statut) OU progression plus lente que la moyenne des exercices suivis
+  // sur ce muscle — union bornée, jamais un remplacement brutal du
+  // programme (juste un signal de priorité "un peu plus" pour le prompt). ----
+  const progressByMuscle = new Map<MuscleId, { progressing: number; total: number }>();
+  for (const e of exerciseProgress) {
+    if (e.trend === "nouveau") continue;
+    for (const muscle of e.muscles) {
+      const acc = progressByMuscle.get(muscle) ?? { progressing: 0, total: 0 };
+      acc.total += 1;
+      if (e.trend === "progression") acc.progressing += 1;
+      progressByMuscle.set(muscle, acc);
+    }
+  }
+  const slowProgressMuscles = ALL_MUSCLES.filter((muscle) => {
+    const acc = progressByMuscle.get(muscle);
+    return acc != null && acc.total >= 2 && acc.progressing / acc.total < 0.34;
+  });
+  const volumeWeakMuscles = muscleVolume
+    .filter((m) => m.status === "neglige" || m.status === "sous-entraine")
+    .map((m) => m.muscle);
+  const weakPoints = Array.from(new Set([...volumeWeakMuscles, ...slowProgressMuscles])).slice(
+    0,
+    MAX_WEAK_POINTS,
+  );
+
   // ---- Tendance de volume hebdomadaire : moitié récente vs moitié ancienne
   // des semaines réellement entraînées (plus robuste face à un rythme
   // d'entraînement irrégulier qu'une comparaison séance par séance). ----
@@ -495,6 +658,50 @@ export function inferSenseiAutoProfile(
   const olderAvg = average(weeks.slice(0, mid).map((w) => weeklyTonnage.get(w)!));
   const recentAvg = average(weeks.slice(mid).map((w) => weeklyTonnage.get(w)!));
   const tonnageTrend = olderAvg > 0 ? (recentAvg - olderAvg) / olderAvg : 0;
+
+  // ---- Fatigue systémique : volume/fréquence récents vs habituels, et part
+  // d'exercices suivis actuellement en régression (signal de surcharge plutôt
+  // que ponctuel). Complémentaire de la récupération PAR MUSCLE déjà
+  // calculée ailleurs (recovery map) — volontairement pas dupliquée ici, voir
+  // JSDoc de SenseiAutoProfile.fatigue. ----
+  let fatigueScore = 0;
+  const fatigueReasons: string[] = [];
+
+  const recentVolumeWeeks = weeks.slice(-2);
+  const baselineVolumeWeeks = weeks.slice(0, -2);
+  const recentVolumeAvg = average(recentVolumeWeeks.map((w) => weeklyTonnage.get(w)!));
+  const baselineVolumeAvg =
+    baselineVolumeWeeks.length > 0
+      ? average(baselineVolumeWeeks.map((w) => weeklyTonnage.get(w)!))
+      : 0;
+  if (baselineVolumeAvg > 0 && recentVolumeAvg > baselineVolumeAvg * 1.3) {
+    fatigueScore += 2;
+    fatigueReasons.push("volume des 2 dernières semaines nettement supérieur à ton habitude");
+  }
+
+  const sevenDaysAgoCount = sessions.filter(
+    (s) => daysBetween(s.date, mostRecentSessionDate) <= 7,
+  ).length;
+  if (sevenDaysAgoCount >= 4 && sevenDaysAgoCount > weeklyFrequency * 1.4) {
+    fatigueScore += 2;
+    fatigueReasons.push("fréquence des 7 derniers jours plus élevée que ton rythme habituel");
+  }
+
+  if (withTrend.length >= 2) {
+    const regressionRatio = regressingCount / withTrend.length;
+    if (regressionRatio >= 0.4) {
+      fatigueScore += 2;
+      fatigueReasons.push("plusieurs exercices suivis montrent une charge en baisse récemment");
+    } else if (regressionRatio >= 0.25) {
+      fatigueScore += 1;
+      fatigueReasons.push("quelques exercices suivis montrent une charge en baisse récemment");
+    }
+  }
+
+  const fatigue: FatigueAssessment = {
+    level: fatigueScore >= 3 ? "élevée" : fatigueScore >= 1 ? "modérée" : "faible",
+    reasons: fatigueReasons,
+  };
 
   // ---- Volume hebdomadaire "optimal" : volume total des semaines qui ont
   // précédé un nouveau record personnel chez CET utilisateur (pas une norme
@@ -587,5 +794,66 @@ export function inferSenseiAutoProfile(
     exerciseProgress: trackedExerciseProgress,
     neverDoneExercises,
     recentSessions: recentSessions.slice(-MAX_RECENT_SESSIONS).reverse(),
+    bestProgressingExercises,
+    chronicStagnationExercises,
+    abandonedExercises,
+    mostFrequentExercises,
+    bestVariants,
+    fatigue,
+    weakPoints,
   };
+}
+
+/** Explication concise des choix de Sensei pour LA séance qui vient d'être
+ *  générée — basée uniquement sur les données réelles déjà calculées ci-
+ *  dessus, jamais un texte libre inventé par l'IA (voir en-tête de fichier :
+ *  demande explicite Nathan "basé uniquement sur les données réelles").
+ *  Compare les noms d'exercices réellement retenus par l'IA aux signaux du
+ *  profil pour ne citer que ce qui s'est vraiment produit. Bornée à 4
+ *  raisons, chacune une phrase courte. */
+export function buildSenseiExplanation(
+  profile: SenseiAutoProfile,
+  generatedExerciseNames: ReadonlyArray<string>,
+): string[] {
+  const generatedKeys = new Set(generatedExerciseNames.map((n) => normalize(n)));
+  const reasons: string[] = [];
+
+  if (profile.fatigue.level === "élevée") {
+    reasons.push("Volume et intensité réduits : signes de fatigue accumulée détectés.");
+  }
+
+  const progressingReused = profile.exerciseProgress.filter(
+    (e) => e.trend === "progression" && generatedKeys.has(normalize(e.name)),
+  );
+  if (progressingReused.length > 0) {
+    reasons.push(
+      `Charge augmentée sur ${progressingReused
+        .slice(0, 2)
+        .map((e) => e.name)
+        .join(", ")} grâce à une progression constante.`,
+    );
+  }
+
+  const stagnantDropped = profile.exerciseProgress.filter(
+    (e) =>
+      e.trend === "stagnation" &&
+      (e.stagnantWeeks ?? 0) >= CHRONIC_STAGNATION_WEEKS &&
+      !generatedKeys.has(normalize(e.name)),
+  );
+  if (stagnantDropped.length > 0) {
+    reasons.push(
+      `Variante changée pour sortir "${stagnantDropped[0].name}" d'une stagnation de ${stagnantDropped[0].stagnantWeeks} semaines.`,
+    );
+  }
+
+  const addedForWeakPoint = profile.neverDoneExercises.filter((e) =>
+    generatedKeys.has(normalize(e.name)),
+  );
+  if (addedForWeakPoint.length > 0) {
+    reasons.push(
+      `Ajout de "${addedForWeakPoint[0].name}" pour renforcer un groupe musculaire moins développé.`,
+    );
+  }
+
+  return reasons.slice(0, 4);
 }

@@ -16,7 +16,7 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import { durationQuestion, gymLocationQuestion } from "./sharedQuestions";
-import type { SenseiAutoProfile } from "./senseiAutoProfile";
+import { buildSenseiExplanation, type SenseiAutoProfile } from "./senseiAutoProfile";
 import type {
   SenseiAnswers,
   SenseiContext,
@@ -49,6 +49,13 @@ const FALLBACK_AUTO_PROFILE: SenseiAutoProfile = {
   exerciseProgress: [],
   neverDoneExercises: [],
   recentSessions: [],
+  bestProgressingExercises: [],
+  chronicStagnationExercises: [],
+  abandonedExercises: [],
+  mostFrequentExercises: [],
+  bestVariants: [],
+  fatigue: { level: "faible", reasons: [] },
+  weakPoints: [],
 };
 
 const QUESTIONS: SenseiQuestionSpec[] = [
@@ -137,6 +144,16 @@ export const StrengthWorkoutEngine: WorkoutEngine = {
         exerciseProgress: autoProfile.exerciseProgress,
         neverDoneExercises: autoProfile.neverDoneExercises,
         recentSessions: autoProfile.recentSessions,
+        // Mémoire à long terme (voir senseiAutoProfile.ts) + fatigue/points
+        // faibles : influencent le prompt (gestion de la fatigue,
+        // priorisation progressive) sans remplacer exerciseProgress, déjà
+        // exhaustif par exercice — ces listes ne font que le résumer.
+        bestProgressingExercises: autoProfile.bestProgressingExercises,
+        chronicStagnationExercises: autoProfile.chronicStagnationExercises,
+        abandonedExercises: autoProfile.abandonedExercises,
+        bestVariants: autoProfile.bestVariants,
+        fatigue: autoProfile.fatigue,
+        weakPoints: autoProfile.weakPoints,
       },
       // Contexte calculé par l'app (récupération musculaire), pas une
       // réponse de l'utilisateur — voir SenseiContext dans types.ts.
@@ -147,7 +164,14 @@ export const StrengthWorkoutEngine: WorkoutEngine = {
     if (error) throw new Error(error.message);
     if (data?.error) throw new Error(data.error);
 
-    return toWorkoutTemplate(data as CoachWorkoutResponse);
+    const template = toWorkoutTemplate(data as CoachWorkoutResponse);
+    // Explication basée uniquement sur les données réelles déjà calculées
+    // (jamais un texte libre de l'IA) — voir buildSenseiExplanation().
+    template.explanation = buildSenseiExplanation(
+      autoProfile,
+      template.exercises.map((e) => e.name),
+    );
+    return template;
   },
 
   toWorkoutRecord(template: WorkoutTemplate, answers: SenseiAnswers): WorkoutRecordDraft {

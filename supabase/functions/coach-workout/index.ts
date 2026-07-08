@@ -53,6 +53,16 @@ interface ParsedRecentSession {
   avgReps: number | null;
 }
 
+interface ParsedBestVariant {
+  bestExercise: string;
+  alternatives: string[];
+}
+
+interface ParsedFatigue {
+  level: string;
+  reasons: string[];
+}
+
 interface ParsedTrainingProfile {
   sessionsConsidered: number;
   weeklyFrequency: number | null;
@@ -66,9 +76,16 @@ interface ParsedTrainingProfile {
   exerciseProgress: ParsedExerciseProgress[];
   neverDoneExercises: ParsedNeverDone[];
   recentSessions: ParsedRecentSession[];
+  bestProgressingExercises: string[];
+  chronicStagnationExercises: string[];
+  abandonedExercises: string[];
+  bestVariants: ParsedBestVariant[];
+  fatigue: ParsedFatigue;
+  weakPoints: string[];
 }
 
 const ALLOWED_PACE = ["rapide", "normale"];
+const ALLOWED_FATIGUE = ["faible", "modérée", "élevée"];
 
 /** Valide/borne le profil d'entraînement calculé côté client
  *  (src/lib/fitness/engines/senseiAutoProfile.ts) avant de l'injecter dans le
@@ -136,6 +153,46 @@ function parseTrainingProfile(raw: unknown): ParsedTrainingProfile | null {
         .filter((s) => s.exerciseNames.length > 0)
     : [];
 
+  const nameList = (value: unknown, limit = 3): string[] =>
+    Array.isArray(value)
+      ? value
+          .filter((n): n is string => typeof n === "string")
+          .map((n) => sanitizeExerciseName(n))
+          .filter((n) => n.length > 0)
+          .slice(0, limit)
+      : [];
+
+  const bestVariants: ParsedBestVariant[] = Array.isArray(r.bestVariants)
+    ? r.bestVariants
+        .slice(0, 3)
+        .map((g: unknown) => {
+          const group = (g && typeof g === "object" ? g : {}) as Record<string, unknown>;
+          return {
+            bestExercise: sanitizeExerciseName(group.bestExercise),
+            alternatives: nameList(group.alternatives, 4),
+          };
+        })
+        .filter((g) => g.bestExercise.length > 0)
+    : [];
+
+  const fatigueRaw = (r.fatigue && typeof r.fatigue === "object" ? r.fatigue : {}) as Record<
+    string,
+    unknown
+  >;
+  const fatigue: ParsedFatigue = {
+    level:
+      typeof fatigueRaw.level === "string" && ALLOWED_FATIGUE.includes(fatigueRaw.level)
+        ? fatigueRaw.level
+        : "faible",
+    reasons: Array.isArray(fatigueRaw.reasons)
+      ? fatigueRaw.reasons
+          .filter((n: unknown): n is string => typeof n === "string")
+          .map((n: string) => sanitizeExerciseName(n))
+          .filter((n) => n.length > 0)
+          .slice(0, 3)
+      : [],
+  };
+
   return {
     sessionsConsidered: clampNumber(r.sessionsConsidered, 0, 100_000) ?? 0,
     weeklyFrequency: clampNumber(r.weeklyFrequency, 0, 21),
@@ -149,6 +206,12 @@ function parseTrainingProfile(raw: unknown): ParsedTrainingProfile | null {
     exerciseProgress,
     neverDoneExercises,
     recentSessions,
+    bestProgressingExercises: nameList(r.bestProgressingExercises),
+    chronicStagnationExercises: nameList(r.chronicStagnationExercises),
+    abandonedExercises: nameList(r.abandonedExercises),
+    bestVariants,
+    fatigue,
+    weakPoints: muscleList(r.weakPoints, 4),
   };
 }
 
@@ -162,6 +225,15 @@ function buildTrainingProfileBlock(profile: ParsedTrainingProfile | null): strin
   }
 
   const lines: string[] = [`Historique analysé : ${profile.sessionsConsidered} séance(s) au total.`];
+  if (profile.fatigue.level === "élevée") {
+    lines.push(
+      `⚠️ FATIGUE ÉLEVÉE détectée (${profile.fatigue.reasons.join("; ") || "signaux cumulés"}) : réduis le volume total (moins de séries et/ou moins d'exercices), diminue l'intensité (charges un peu plus légères que suggéré, RIR plus élevé), et privilégie des exercices moins exigeants (machines guidées/isolation plutôt que gros polyarticulaires lourds). Traite cette séance comme un deload.`,
+    );
+  } else if (profile.fatigue.level === "modérée") {
+    lines.push(
+      `Fatigue modérée détectée (${profile.fatigue.reasons.join("; ") || "signaux cumulés"}) : reste prudent sur le volume et l'intensité, sans réduction drastique.`,
+    );
+  }
   if (profile.weeklyFrequency != null) {
     lines.push(`Fréquence habituelle : ~${profile.weeklyFrequency} séance(s)/semaine.`);
   }
@@ -193,6 +265,30 @@ function buildTrainingProfileBlock(profile: ParsedTrainingProfile | null): strin
     lines.push(
       `Muscles proportionnellement surentraînés par rapport aux autres (n'ajoute pas de volume superflu dessus) : ${profile.overTrainedMuscles.join(", ")}.`,
     );
+  }
+  if (profile.weakPoints.length > 0) {
+    lines.push(
+      `Points faibles à prioriser PROGRESSIVEMENT (volume et/ou progression plus faibles que les autres muscles — un peu plus, jamais au point de déséquilibrer la séance) : ${profile.weakPoints.join(", ")}.`,
+    );
+  }
+  if (profile.bestProgressingExercises.length > 0) {
+    lines.push(`Exercices où l'utilisateur progresse le mieux : ${profile.bestProgressingExercises.join(", ")}.`);
+  }
+  if (profile.chronicStagnationExercises.length > 0) {
+    lines.push(
+      `Exercices en stagnation chronique (privilégie une variante ou une technique d'intensification si l'un d'eux est concerné) : ${profile.chronicStagnationExercises.join(", ")}.`,
+    );
+  }
+  if (profile.abandonedExercises.length > 0) {
+    lines.push(
+      `Exercices pratiqués régulièrement par le passé puis abandonnés (à réintroduire seulement si pertinent pour la demande, jamais forcé) : ${profile.abandonedExercises.join(", ")}.`,
+    );
+  }
+  if (profile.bestVariants.length > 0) {
+    const variantLines = profile.bestVariants
+      .map((g) => `${g.bestExercise} (donne de meilleurs résultats que ${g.alternatives.join(", ")})`)
+      .join(" ; ");
+    lines.push(`Variantes à privilégier quand le choix se pose : ${variantLines}.`);
   }
 
   const exerciseLines = profile.exerciseProgress

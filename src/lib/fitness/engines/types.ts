@@ -116,6 +116,12 @@ export interface WorkoutTemplate {
   exercises: WorkoutTemplateExercise[];
   segments?: SessionSegment[];
   notes?: string;
+  /** Explication concise des choix de Sensei pour CETTE génération (charge
+   *  augmentée par progression, volume réduit par fatigue, exercice ajouté
+   *  pour un point faible...) — réservée aux moteurs qui en produisent une
+   *  (StrengthWorkoutEngine), toujours basée sur des données réelles, jamais
+   *  un texte libre d'IA. Absente pour les autres disciplines. */
+  explanation?: string[];
 }
 
 // ---- Persistance générique (frontière avec Supabase) ----
