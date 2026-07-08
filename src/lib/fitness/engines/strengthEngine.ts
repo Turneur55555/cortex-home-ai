@@ -27,14 +27,23 @@ import type {
   WorkoutTemplate,
 } from "./types";
 
-// Niveau et objectif ne sont plus demandés : SenseiAutoProfile les déduit de
-// l'historique de séances (voir senseiAutoProfile.ts) et les fournit via
-// SenseiContext (context.autoProfile), calculé par buildMuscuSenseiContext
-// dans MuscleQuestionField.tsx. Repli défensif si le contexte manquerait.
+// Niveau et objectif ne sont plus demandés : SenseiAutoProfile construit un
+// véritable profil d'entraînement depuis l'historique (voir
+// senseiAutoProfile.ts) et le fournit via SenseiContext (context.autoProfile),
+// calculé par buildMuscuSenseiContext dans MuscleQuestionField.tsx. Repli
+// défensif si le contexte manquerait (profil vide, mêmes valeurs par défaut
+// que sans historique).
 const FALLBACK_AUTO_PROFILE: SenseiAutoProfile = {
   level: "intermédiaire",
   goal: "hypertrophie",
   sessionsConsidered: 0,
+  weeklyFrequency: 0,
+  avgSessionDurationMinutes: null,
+  avgRestSeconds: null,
+  muscleVolume: [],
+  mostTrainedMuscles: [],
+  leastTrainedMuscles: [],
+  exerciseProgress: [],
 };
 
 const QUESTIONS: SenseiQuestionSpec[] = [
@@ -104,9 +113,21 @@ export const StrengthWorkoutEngine: WorkoutEngine = {
       duration_minutes: Number(answers.duration_minutes) || 45,
       equipment: answers.equipment,
       // Niveau et objectif ne sont plus des réponses utilisateur — voir
-      // senseiAutoProfile.ts et l'en-tête de ce fichier.
+      // senseiAutoProfile.ts et l'en-tête de ce fichier. `training_profile`
+      // porte le véritable moteur d'analyse (progression par exercice,
+      // volume par groupe musculaire, durée/repos moyens...) : level/goal
+      // ne restent qu'un résumé compact pour le cadrage général du prompt.
       level: autoProfile.level,
       goal: autoProfile.goal,
+      training_profile: {
+        sessionsConsidered: autoProfile.sessionsConsidered,
+        weeklyFrequency: autoProfile.weeklyFrequency,
+        avgSessionDurationMinutes: autoProfile.avgSessionDurationMinutes,
+        avgRestSeconds: autoProfile.avgRestSeconds,
+        mostTrainedMuscles: autoProfile.mostTrainedMuscles,
+        leastTrainedMuscles: autoProfile.leastTrainedMuscles,
+        exerciseProgress: autoProfile.exerciseProgress,
+      },
       // Contexte calculé par l'app (récupération musculaire), pas une
       // réponse de l'utilisateur — voir SenseiContext dans types.ts.
       recovery: context?.recovery,

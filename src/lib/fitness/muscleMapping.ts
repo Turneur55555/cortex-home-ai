@@ -34,53 +34,79 @@ export const MUSCLE_META: Record<
   lombaires: { label: "Lombaires", recoveryHours: 72, view: "back" },
 };
 
-const EXERCISE_TO_MUSCLES: Array<{ pattern: RegExp; muscles: MuscleId[] }> = [
+// Patterns écrits avec leurs accents pour rester lisibles (vocabulaire
+// d'exercices en français) : ils sont compilés en regex désaccentuées par
+// compileRules() ci-dessous, pour matcher exerciseToMuscles() qui compare
+// toujours un nom d'exercice désaccentué. Ne JAMAIS construire ces patterns
+// en `RegExp` directement (littéral `/développé/i`) — un accent littéral ne
+// matchera plus jamais rien une fois comparé à une chaîne désaccentuée.
+const EXERCISE_TO_MUSCLES: Array<{ pattern: string; muscles: MuscleId[] }> = [
   // Pectoraux
-  { pattern: /bench press|développé.?couché|pompes?|push.?up|dips?.*pec|écarté|butterfly|chest/i, muscles: ["pectoraux", "triceps", "epaules"] },
-  { pattern: /développé.?incliné|incline/i, muscles: ["pectoraux", "epaules", "triceps"] },
-  { pattern: /développé.?décliné|decline/i, muscles: ["pectoraux", "triceps"] },
+  {
+    pattern: "bench press|développé.?couché|pompes?|push.?up|dips?.*pec|écarté|butterfly|chest",
+    muscles: ["pectoraux", "triceps", "epaules"],
+  },
+  { pattern: "développé.?incliné|incline", muscles: ["pectoraux", "epaules", "triceps"] },
+  { pattern: "développé.?décliné|decline", muscles: ["pectoraux", "triceps"] },
 
   // Dos
-  { pattern: /tirage|rowing|row|pull.?down|lat.?pull|traction|chin.?up|pull.?up/i, muscles: ["dos", "biceps"] },
-  { pattern: /deadlift|soulevé.?de.?terre/i, muscles: ["dos", "lombaires", "fessiers", "ischio"] },
+  {
+    pattern: "tirage|rowing|row|pull.?down|lat.?pull|traction|chin.?up|pull.?up",
+    muscles: ["dos", "biceps"],
+  },
+  { pattern: "deadlift|soulevé.?de.?terre", muscles: ["dos", "lombaires", "fessiers", "ischio"] },
 
   // Épaules
-  { pattern: /développé.?militaire|overhead.?press|shoulder.?press|press.?épaule/i, muscles: ["epaules", "triceps"] },
-  { pattern: /élévation.?latérale|lateral.?raise/i, muscles: ["epaules"] },
-  { pattern: /élévation.?frontale|front.?raise/i, muscles: ["epaules"] },
-  { pattern: /oiseau|face.?pull|rear.?delt|reverse.?fly/i, muscles: ["epaules", "trapeze"] },
-  { pattern: /shrug|haussement/i, muscles: ["trapeze"] },
+  {
+    pattern: "développé.?militaire|overhead.?press|shoulder.?press|press.?épaule",
+    muscles: ["epaules", "triceps"],
+  },
+  { pattern: "élévation.?latérale|lateral.?raise", muscles: ["epaules"] },
+  { pattern: "élévation.?frontale|front.?raise", muscles: ["epaules"] },
+  { pattern: "oiseau|face.?pull|rear.?delt|reverse.?fly", muscles: ["epaules", "trapeze"] },
+  { pattern: "shrug|haussement", muscles: ["trapeze"] },
 
   // Bras
-  { pattern: /curl|bicep|boucle/i, muscles: ["biceps", "avant-bras"] },
-  { pattern: /extension.?triceps?|skull.?crush|kick.?back|dips?/i, muscles: ["triceps"] },
-  { pattern: /wrist.?curl|avant.?bras|forearm/i, muscles: ["avant-bras"] },
+  { pattern: "curl|bicep|boucle", muscles: ["biceps", "avant-bras"] },
+  { pattern: "extension.?triceps?|skull.?crush|kick.?back|dips?", muscles: ["triceps"] },
+  { pattern: "wrist.?curl|avant.?bras|forearm", muscles: ["avant-bras"] },
 
   // Jambes
-  { pattern: /squat|presse.?cuisse|leg.?press|fente|lunge|hack/i, muscles: ["quadriceps", "fessiers"] },
-  { pattern: /leg.?extension|extension.?jambe/i, muscles: ["quadriceps"] },
-  { pattern: /leg.?curl|ischio|hamstring/i, muscles: ["ischio"] },
-  { pattern: /hip.?thrust|pont.?fessier|glute/i, muscles: ["fessiers"] },
-  { pattern: /mollet|calf|raise.*mollet/i, muscles: ["mollets"] },
+  {
+    pattern: "squat|presse.?cuisse|leg.?press|fente|lunge|hack",
+    muscles: ["quadriceps", "fessiers"],
+  },
+  { pattern: "leg.?extension|extension.?jambe", muscles: ["quadriceps"] },
+  { pattern: "leg.?curl|ischio|hamstring", muscles: ["ischio"] },
+  { pattern: "hip.?thrust|pont.?fessier|glute", muscles: ["fessiers"] },
+  { pattern: "mollet|calf|raise.*mollet", muscles: ["mollets"] },
 
   // Abdos
-  { pattern: /crunch|abdo|planche|plank|sit.?up|gainage|ab.?wheel/i, muscles: ["abdos"] },
-  { pattern: /oblique|rotation|russian.?twist|wood.?chop/i, muscles: ["obliques", "abdos"] },
+  { pattern: "crunch|abdo|planche|plank|sit.?up|gainage|ab.?wheel", muscles: ["abdos"] },
+  { pattern: "oblique|rotation|russian.?twist|wood.?chop", muscles: ["obliques", "abdos"] },
 
   // Lombaires
-  { pattern: /extension.?lombaire|back.?extension|hyperextension|good.?morning/i, muscles: ["lombaires"] },
+  {
+    pattern: "extension.?lombaire|back.?extension|hyperextension|good.?morning",
+    muscles: ["lombaires"],
+  },
 
   // Cardio — on ne mappe pas, pas de muscle spécifique
 ];
 
-export function exerciseToMuscles(exerciseName: string): MuscleId[] {
-  const name = exerciseName
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/\p{Diacritic}/gu, "");
+function stripDiacritics(value: string): string {
+  return value.normalize("NFD").replace(/\p{Diacritic}/gu, "");
+}
 
-  for (const rule of EXERCISE_TO_MUSCLES) {
-    if (rule.pattern.test(name)) return rule.muscles;
+const COMPILED_RULES: Array<{ regex: RegExp; muscles: MuscleId[] }> = EXERCISE_TO_MUSCLES.map(
+  (rule) => ({ regex: new RegExp(stripDiacritics(rule.pattern), "i"), muscles: rule.muscles }),
+);
+
+export function exerciseToMuscles(exerciseName: string): MuscleId[] {
+  const name = stripDiacritics(exerciseName.toLowerCase());
+
+  for (const rule of COMPILED_RULES) {
+    if (rule.regex.test(name)) return rule.muscles;
   }
   return [];
 }

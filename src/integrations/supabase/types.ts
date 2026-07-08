@@ -257,16 +257,23 @@ export type Database = {
         }
         Relationships: []
       }
+      // NB : bloc reconcilié à la main le 08/07/2026 contre le schéma prod réel
+      // (vérifié via information_schema.columns) — les types générés avaient
+      // dérivé : `rpe`/`updated_at` n'existent plus (rpe supprimée migration
+      // 20260702100030, jamais eu de updated_at), `notes`/`tempo`/
+      // `rest_seconds` existent depuis 20260613172120 / 20260615192004 mais
+      // n'avaient jamais été inclus. Voir MEMORY.md pour le drift plus large.
       exercise_sets: {
         Row: {
           completed: boolean
           created_at: string
           exercise_id: string
           id: string
+          notes: string | null
           reps: number | null
-          rpe: number | null
+          rest_seconds: number | null
           set_number: number
-          updated_at: string
+          tempo: string | null
           user_id: string
           weight: number | null
         }
@@ -275,10 +282,11 @@ export type Database = {
           created_at?: string
           exercise_id: string
           id?: string
+          notes?: string | null
           reps?: number | null
-          rpe?: number | null
+          rest_seconds?: number | null
           set_number: number
-          updated_at?: string
+          tempo?: string | null
           user_id: string
           weight?: number | null
         }
@@ -287,10 +295,11 @@ export type Database = {
           created_at?: string
           exercise_id?: string
           id?: string
+          notes?: string | null
           reps?: number | null
-          rpe?: number | null
+          rest_seconds?: number | null
           set_number?: number
-          updated_at?: string
+          tempo?: string | null
           user_id?: string
           weight?: number | null
         }

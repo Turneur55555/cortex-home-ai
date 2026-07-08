@@ -9,10 +9,30 @@ describe("exerciseToMuscles", () => {
     expect(muscles).toContain("epaules");
   });
 
-  it("retourne [] pour 'développé couché' (noms français non reconnus par la fonction)", () => {
-    // exerciseToMuscles opère sur des noms d'exercices en anglais/translittérés
+  it("mappe 'développé couché' vers pectoraux, triceps, épaules (accents)", () => {
     const muscles = exerciseToMuscles("développé couché");
-    expect(muscles).toEqual([]);
+    expect(muscles).toContain("pectoraux");
+    expect(muscles).toContain("triceps");
+    expect(muscles).toContain("epaules");
+  });
+
+  it("mappe 'développé militaire' vers épaules et triceps (accents)", () => {
+    const muscles = exerciseToMuscles("Développé militaire");
+    expect(muscles).toContain("epaules");
+    expect(muscles).toContain("triceps");
+  });
+
+  it("mappe 'soulevé de terre' vers dos, lombaires, fessiers, ischio (accents)", () => {
+    const muscles = exerciseToMuscles("soulevé de terre");
+    expect(muscles).toContain("dos");
+    expect(muscles).toContain("lombaires");
+    expect(muscles).toContain("fessiers");
+    expect(muscles).toContain("ischio");
+  });
+
+  it("mappe 'élévation latérale' vers épaules uniquement (accents)", () => {
+    const muscles = exerciseToMuscles("élévation latérale");
+    expect(muscles).toEqual(["epaules"]);
   });
 
   it("mappe 'squat' vers quadriceps et fessiers", () => {
@@ -85,9 +105,20 @@ describe("exerciseToMuscles", () => {
 describe("MUSCLE_META", () => {
   it("contient tous les 14 muscles attendus", () => {
     const expectedMuscles: MuscleId[] = [
-      "pectoraux", "dos", "epaules", "biceps", "triceps",
-      "abdos", "obliques", "quadriceps", "ischio", "fessiers",
-      "mollets", "trapeze", "avant-bras", "lombaires",
+      "pectoraux",
+      "dos",
+      "epaules",
+      "biceps",
+      "triceps",
+      "abdos",
+      "obliques",
+      "quadriceps",
+      "ischio",
+      "fessiers",
+      "mollets",
+      "trapeze",
+      "avant-bras",
+      "lombaires",
     ];
     for (const muscleId of expectedMuscles) {
       expect(MUSCLE_META).toHaveProperty(muscleId);
@@ -116,7 +147,14 @@ describe("MUSCLE_META", () => {
 
   it("les muscles à récupération courte ont 48h", () => {
     // biceps, triceps, abdos, obliques, mollets, avant-bras sont à 48h
-    const shortRecovery: MuscleId[] = ["biceps", "triceps", "abdos", "obliques", "mollets", "avant-bras"];
+    const shortRecovery: MuscleId[] = [
+      "biceps",
+      "triceps",
+      "abdos",
+      "obliques",
+      "mollets",
+      "avant-bras",
+    ];
     for (const id of shortRecovery) {
       expect(MUSCLE_META[id].recoveryHours).toBe(48);
     }
@@ -124,7 +162,16 @@ describe("MUSCLE_META", () => {
 
   it("les muscles à récupération longue ont 72h", () => {
     // pectoraux, dos, epaules, quadriceps, ischio, fessiers, trapeze, lombaires sont à 72h
-    const longRecovery: MuscleId[] = ["pectoraux", "dos", "epaules", "quadriceps", "ischio", "fessiers", "trapeze", "lombaires"];
+    const longRecovery: MuscleId[] = [
+      "pectoraux",
+      "dos",
+      "epaules",
+      "quadriceps",
+      "ischio",
+      "fessiers",
+      "trapeze",
+      "lombaires",
+    ];
     for (const id of longRecovery) {
       expect(MUSCLE_META[id].recoveryHours).toBe(72);
     }

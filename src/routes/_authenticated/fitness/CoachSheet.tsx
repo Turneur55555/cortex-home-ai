@@ -41,10 +41,6 @@ import { useWorkouts } from "@/hooks/use-fitness";
 import { useGoalsWithProgress } from "@/hooks/useGoalsWithProgress";
 import { computePRs } from "@/utils/fitness/exercise-stats";
 import { buildSenseiBriefing, type SenseiBriefing } from "@/lib/fitness/engines/senseiBriefing";
-import {
-  inferSenseiAutoProfile,
-  type SenseiAutoProfile,
-} from "@/lib/fitness/engines/senseiAutoProfile";
 
 // Réexporté pour rétro-compat : WorkoutSheet.tsx et SeancesTab.tsx importent
 // ce type depuis ce fichier. La définition canonique vit dans l'interface
@@ -107,14 +103,12 @@ export function CoachSheet({
       }),
     [briefingWorkouts, briefingBestPR, briefingGoals, recovery],
   );
-  // Niveau/objectif musculation ne sont plus des questions posées à
-  // l'utilisateur (voir StrengthWorkoutEngine + senseiAutoProfile.ts) —
-  // affiché ici en lecture seule, purement informatif comme le reste du
-  // briefing (aucune décision automatique prise à la place de l'utilisateur).
-  const autoProfile = useMemo(
-    () => inferSenseiAutoProfile(briefingWorkouts ?? []),
-    [briefingWorkouts],
-  );
+  // Niveau/objectif/profil d'entraînement musculation ne sont plus des
+  // questions posées à l'utilisateur ET ne sont plus affichés (demande
+  // Nathan, 2026-07-08 : "informations internes au moteur de recommandation,
+  // n'apportent pas de valeur à l'utilisateur"). Le calcul continue en
+  // arrière-plan via buildMuscuSenseiContext (senseiCustomRenderers.tsx),
+  // appelé uniquement au moment de generate() — voir plus bas.
 
   // Si on arrive avec des muscles pré-sélectionnés (tap sur la BodyMap), on
   // saute directement dans le flux Musculation — comme aujourd'hui, où le
@@ -231,9 +225,7 @@ export function CoachSheet({
           </button>
         )}
 
-        {step === "discipline" && (
-          <SenseiBriefingPanel briefing={briefing} autoProfile={autoProfile} />
-        )}
+        {step === "discipline" && <SenseiBriefingPanel briefing={briefing} />}
 
         {step === "discipline" && (
           <div className="grid grid-cols-2 gap-2">
@@ -315,20 +307,12 @@ export function CoachSheet({
 // connaît ces informations" sans jamais les utiliser pour décider à la
 // place de l'utilisateur (aucun disciplineId ni answer n'est pré-rempli
 // à partir de ce panneau).
-function SenseiBriefingPanel({
-  briefing,
-  autoProfile,
-}: {
-  briefing: SenseiBriefing;
-  autoProfile: SenseiAutoProfile;
-}) {
-  const hasAutoProfile = autoProfile.sessionsConsidered >= 3;
+function SenseiBriefingPanel({ briefing }: { briefing: SenseiBriefing }) {
   const hasContent =
     briefing.recentDisciplines.length > 0 ||
     briefing.activeGoals.length > 0 ||
     briefing.bestPR != null ||
-    briefing.recovery.fatiguedCount > 0 ||
-    hasAutoProfile;
+    briefing.recovery.fatiguedCount > 0;
   if (!hasContent) return null;
 
   return (
@@ -360,25 +344,6 @@ function SenseiBriefingPanel({
             ` · encore en repos : ${briefing.recovery.mostFatigued.join(", ")}`}
         </p>
       )}
-      {hasAutoProfile && (
-        <p>
-          <span className="font-semibold text-foreground/80">Profil détecté (muscu) : </span>
-          {AUTO_LEVEL_LABELS[autoProfile.level]} · {AUTO_GOAL_LABELS[autoProfile.goal]}
-        </p>
-      )}
     </div>
   );
 }
-
-const AUTO_LEVEL_LABELS: Record<SenseiAutoProfile["level"], string> = {
-  débutant: "Niveau débutant",
-  intermédiaire: "Niveau intermédiaire",
-  avancé: "Niveau avancé",
-};
-
-const AUTO_GOAL_LABELS: Record<SenseiAutoProfile["goal"], string> = {
-  hypertrophie: "objectif hypertrophie",
-  force: "objectif force",
-  endurance: "objectif endurance",
-  "perte de poids": "objectif perte de poids",
-};
