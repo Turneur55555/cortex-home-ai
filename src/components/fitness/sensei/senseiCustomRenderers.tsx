@@ -36,6 +36,7 @@ import type { DisciplineId, SenseiAnswerValue, SenseiContext } from "@/lib/fitne
 import type { MuscleId } from "@/lib/fitness/muscleMapping";
 import type { MuscleRecovery } from "@/lib/fitness/recovery";
 import type { WearableSnapshot } from "@/lib/fitness/engines/wearableTypes";
+import type { AutoProfileWorkout } from "@/lib/fitness/engines/senseiAutoProfile";
 import { MuscleQuestionField, buildMuscuSenseiContext } from "./MuscleQuestionField";
 
 export type CustomQuestionRendererProps = {
@@ -64,6 +65,10 @@ export const CUSTOM_QUESTION_RENDERERS: Record<string, CustomQuestionRenderer> =
 export interface SenseiRuntimeInputs {
   recoveryMap: Map<MuscleId, MuscleRecovery>;
   wearable?: WearableSnapshot;
+  /** Historique de séances déjà chargé par CoachSheet.tsx (briefing) —
+   *  réutilisé par le builder muscu pour déduire niveau/objectif sans
+   *  refetch (voir senseiAutoProfile.ts). */
+  workouts?: ReadonlyArray<AutoProfileWorkout> | null;
 }
 
 export type ContextBuilder = (
@@ -76,5 +81,6 @@ export const DISCIPLINE_CONTEXT_BUILDERS: Partial<Record<DisciplineId, ContextBu
     buildMuscuSenseiContext(
       Array.isArray(answers.muscles) ? (answers.muscles as string[]) : [],
       inputs.recoveryMap,
+      inputs.workouts,
     ),
 };

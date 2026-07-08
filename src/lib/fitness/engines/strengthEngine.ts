@@ -15,7 +15,8 @@
 // ============================================================
 
 import { supabase } from "@/integrations/supabase/client";
-import { durationQuestion, gymLocationQuestion, levelQuestion } from "./sharedQuestions";
+import { durationQuestion, gymLocationQuestion } from "./sharedQuestions";
+import type { SenseiAutoProfile } from "./senseiAutoProfile";
 import type {
   SenseiAnswers,
   SenseiContext,
@@ -25,6 +26,16 @@ import type {
   WorkoutRecordDraft,
   WorkoutTemplate,
 } from "./types";
+
+// Niveau et objectif ne sont plus demandés : SenseiAutoProfile les déduit de
+// l'historique de séances (voir senseiAutoProfile.ts) et les fournit via
+// SenseiContext (context.autoProfile), calculé par buildMuscuSenseiContext
+// dans MuscleQuestionField.tsx. Repli défensif si le contexte manquerait.
+const FALLBACK_AUTO_PROFILE: SenseiAutoProfile = {
+  level: "intermédiaire",
+  goal: "hypertrophie",
+  sessionsConsidered: 0,
+};
 
 const QUESTIONS: SenseiQuestionSpec[] = [
   {
@@ -39,26 +50,11 @@ const QUESTIONS: SenseiQuestionSpec[] = [
     prompt: "Avec quel matériel ?",
     type: "single-choice",
     options: [
-      { value: "salle complète", label: "Salle complète" },
-      { value: "haltères", label: "Haltères + banc" },
-      { value: "élastiques", label: "Élastiques" },
-      { value: "poids du corps", label: "Poids du corps" },
-      { value: "kettlebell", label: "Kettlebell" },
+      { value: "maison", label: "🏠 Maison" },
+      { value: "salle avec poulies", label: "🏋️ Salle avec poulies" },
+      { value: "salle complète", label: "💪 Salle complète" },
     ],
     defaultValue: "salle complète",
-  },
-  levelQuestion,
-  {
-    id: "goal",
-    prompt: "Quel est ton objectif ?",
-    type: "single-choice",
-    options: [
-      { value: "hypertrophie", label: "Hypertrophie" },
-      { value: "force", label: "Force" },
-      { value: "endurance", label: "Endurance" },
-      { value: "perte de poids", label: "Perte de gras" },
-    ],
-    defaultValue: "hypertrophie",
   },
 ];
 
@@ -99,14 +95,18 @@ export const StrengthWorkoutEngine: WorkoutEngine = {
   questions: QUESTIONS,
 
   async generate(answers: SenseiAnswers, context?: SenseiContext): Promise<WorkoutTemplate> {
+    const autoProfile =
+      (context?.autoProfile as SenseiAutoProfile | undefined) ?? FALLBACK_AUTO_PROFILE;
     const payload = {
       mode: "muscu",
       muscles: answers.muscles,
       has_cardio: answers.has_cardio,
       duration_minutes: Number(answers.duration_minutes) || 45,
       equipment: answers.equipment,
-      level: answers.level,
-      goal: answers.goal,
+      // Niveau et objectif ne sont plus des réponses utilisateur — voir
+      // senseiAutoProfile.ts et l'en-tête de ce fichier.
+      level: autoProfile.level,
+      goal: autoProfile.goal,
       // Contexte calculé par l'app (récupération musculaire), pas une
       // réponse de l'utilisateur — voir SenseiContext dans types.ts.
       recovery: context?.recovery,

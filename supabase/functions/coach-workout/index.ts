@@ -49,7 +49,12 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const ALLOWED_LEVELS = ["débutant", "intermédiaire", "avancé"];
     const ALLOWED_GOALS = ["force", "hypertrophie", "endurance", "perte de poids", "remise en forme"];
-    const ALLOWED_EQUIPMENT = ["salle complète", "haltères", "barre", "élastiques", "poids du corps", "machines", "kettlebell"];
+    const ALLOWED_EQUIPMENT = ["maison", "salle avec poulies", "salle complète"];
+    const EQUIPMENT_PROMPT: Record<string, string> = {
+      "maison": "à la maison (poids du corps, éventuellement quelques haltères ou élastiques, pas de machines)",
+      "salle avec poulies": "en salle équipée de poulies et machines guidées (type Keep Cool) — pas de zone poids libres complète",
+      "salle complète": "en salle complète (accès libre aux barres, haltères, machines et poulies)",
+    };
     const ALLOWED_INTENSITY = ["légère", "modérée", "intense"];
 
     const mode: "muscu" | "autre" = body.mode === "autre" ? "autre" : "muscu";
@@ -75,6 +80,7 @@ Deno.serve(async (req) => {
       }
       const eqRaw = typeof body.equipment === "string" ? body.equipment.slice(0, 100) : "salle complète";
       const equipment = ALLOWED_EQUIPMENT.includes(eqRaw) ? eqRaw : "salle complète";
+      const equipmentPrompt = EQUIPMENT_PROMPT[equipment];
       const goalRaw = typeof body.goal === "string" ? body.goal.slice(0, 100) : "hypertrophie";
       const goal = ALLOWED_GOALS.includes(goalRaw) ? goalRaw : "hypertrophie";
 
@@ -83,7 +89,7 @@ Deno.serve(async (req) => {
 Contraintes :
 - Groupes musculaires ciblés : ${muscles.join(", ")}
 - Durée totale : ~${duration} minutes (compte ~2-3 min par série incluant repos)
-- Matériel : ${equipment}
+- Lieu et matériel : ${equipmentPrompt}
 - Niveau : ${level}
 - Objectif : ${goal}
 

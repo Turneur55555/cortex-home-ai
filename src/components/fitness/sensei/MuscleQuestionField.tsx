@@ -22,6 +22,11 @@ import {
   buildAiRecoveryContext,
   type AiRecoveryItem,
 } from "@/lib/fitness/recoveryAdvice";
+import {
+  inferSenseiAutoProfile,
+  type AutoProfileWorkout,
+  type SenseiAutoProfile,
+} from "@/lib/fitness/engines/senseiAutoProfile";
 
 type MuscleDomainOption = { id: MuscleId; label: string };
 type MuscleAliasOption = { id: "jambes"; label: string; isAlias: true; resolves: MuscleId[] };
@@ -72,15 +77,20 @@ export function aiMuscleNames(selected: string[]): string[] {
 }
 
 /** Contexte Sensei (SenseiContext) pour StrengthWorkoutEngine : calculé par
- *  l'app à partir de la récupération musculaire connue, jamais demandé à
- *  l'utilisateur. Seul point d'entrée utilisé par le registre de builders
- *  de contexte par discipline (voir senseiCustomRenderers.tsx). */
+ *  l'app à partir de la récupération musculaire connue et de l'historique de
+ *  séances, jamais demandé à l'utilisateur (niveau/objectif ne sont plus des
+ *  questions — voir senseiAutoProfile.ts). Seul point d'entrée utilisé par le
+ *  registre de builders de contexte par discipline (voir senseiCustomRenderers.tsx). */
 export function buildMuscuSenseiContext(
   selectedMuscleOptionIds: string[],
   recoveryMap: Map<MuscleId, MuscleRecovery>,
-): { recovery: AiRecoveryItem[] } {
+  workouts: ReadonlyArray<AutoProfileWorkout> | null | undefined,
+): { recovery: AiRecoveryItem[]; autoProfile: SenseiAutoProfile } {
   const selectedIds = resolveMuscleIds(selectedMuscleOptionIds);
-  return { recovery: buildAiRecoveryContext(selectedIds, recoveryMap) };
+  return {
+    recovery: buildAiRecoveryContext(selectedIds, recoveryMap),
+    autoProfile: inferSenseiAutoProfile(workouts),
+  };
 }
 
 export function MuscleQuestionField({
