@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import {
   BarChart3,
   ChevronRight,
+  ClipboardList,
   Clock,
   Dumbbell,
   Flame,
@@ -156,6 +157,7 @@ export function WorkoutCard({
   latestDate,
   onRepeatLive,
   onOpenFromTemplate,
+  onSaveAsTemplate,
 }: {
   w: WorkoutRow;
   prByName: Map<string, number>;
@@ -167,8 +169,12 @@ export function WorkoutCard({
   latestDate: string;
   /** H1 : relance la séance en LIVE (pré-remplie). */
   onRepeatLive: (w: WorkoutRow) => void;
-  /** Saisie rétroactive (ancien comportement), via le menu ⋮. */
+  /** Saisie rétroactive (ancien comportement, inchangé), via le menu ⋮. */
   onOpenFromTemplate: (w: WorkoutRow) => void;
+  /** Ouvre l'éditeur de modèle (déjà développé pour Module 2), pré-rempli
+   *  depuis cette séance passée — crée un NOUVEAU modèle réutilisable, ne
+   *  modifie ni ne remplace "Enregistrer comme séance passée". */
+  onSaveAsTemplate: (w: WorkoutRow) => void;
 }) {
   const updateName = useUpdateWorkoutName();
   const updateEx = useUpdateExercise();
@@ -338,6 +344,17 @@ export function WorkoutCard({
                 >
                   <Repeat className="h-4 w-4 text-muted-foreground" />
                   Refaire en live
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onSaveAsTemplate(w);
+                  }}
+                  className="flex w-full items-center gap-3 border-t border-border px-4 py-3 text-sm font-medium transition-colors hover:bg-white/5"
+                >
+                  <ClipboardList className="h-4 w-4 text-muted-foreground" />
+                  Enregistrer comme séance sauvegardée
                 </button>
                 <button
                   type="button"

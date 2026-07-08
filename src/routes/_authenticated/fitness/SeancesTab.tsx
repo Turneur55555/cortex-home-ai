@@ -13,6 +13,7 @@ import { WorkoutProgressCharts } from "@/components/fitness/WorkoutProgressChart
 import { StartWorkoutSheet } from "@/components/fitness/StartWorkoutSheet";
 import { NewSessionChoiceSheet } from "@/components/fitness/templates/NewSessionChoiceSheet";
 import { SavedTemplatesSheet } from "@/components/fitness/templates/SavedTemplatesSheet";
+import { TemplateEditorSheet } from "@/components/fitness/templates/TemplateEditorSheet";
 import { ActiveWorkoutView } from "@/components/fitness/ActiveWorkoutView";
 import { ExerciseCatalogSheet } from "@/components/fitness/ExerciseCatalogSheet";
 import { PostWorkoutAnalysisSheet } from "@/components/fitness/PostWorkoutAnalysisSheet";
@@ -34,6 +35,7 @@ import {
   type DisciplineId,
   type WorkoutRecordDraft,
 } from "@/lib/fitness/engines/types";
+import { workoutToTemplateSeed, type TemplateSeedExercise } from "@/lib/fitness/workoutTemplates";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -63,6 +65,14 @@ export function SeancesTab() {
   // IA survive au démontage d'ActiveWorkoutView.
   const [finishedSnapshot, setFinishedSnapshot] = useState<ActiveWorkout | null>(null);
   const [template, setTemplate] = useState<WorkoutTemplate | null>(null);
+  // "Enregistrer comme séance sauvegardée" (menu ⋮) : ouvre l'éditeur de
+  // modèle déjà développé (Module 2) en mode CRÉATION, pré-rempli depuis la
+  // séance passée sélectionnée. Sans lien avec `template`/`open` ci-dessus,
+  // qui restent la saisie rétroactive "Enregistrer comme séance passée".
+  const [templateSeed, setTemplateSeed] = useState<{
+    name: string;
+    exercises: TemplateSeedExercise[];
+  } | null>(null);
   const [genericDraft, setGenericDraft] = useState<WorkoutRecordDraft | null>(null);
   const [coachOpen, setCoachOpen] = useState(false);
   const [coachInitialMuscles, setCoachInitialMuscles] = useState<string[] | undefined>(undefined);
@@ -112,6 +122,16 @@ export function SeancesTab() {
       })),
     });
     setOpen(true);
+  }, []);
+
+  // Crée un NOUVEAU modèle réutilisable à partir d'une séance passée —
+  // accessible via le menu ⋮ d'une séance, distinct et sans impact sur
+  // openFromTemplate ci-dessus.
+  const saveAsTemplate = useCallback((w: WorkoutRow) => {
+    setTemplateSeed({
+      name: w.name || "",
+      exercises: workoutToTemplateSeed(w.exercises ?? []),
+    });
   }, []);
 
   const handleCoachResult = useCallback((tpl: WorkoutTemplate, draft: WorkoutRecordDraft) => {
@@ -307,6 +327,7 @@ export function SeancesTab() {
                         latestDate={latestDate}
                         onRepeatLive={repeatLive}
                         onOpenFromTemplate={openFromTemplate}
+                        onSaveAsTemplate={saveAsTemplate}
                       />
                     );
                   })}
@@ -365,6 +386,14 @@ export function SeancesTab() {
             setOpen(false);
             setTemplate(null);
           }}
+        />
+      )}
+
+      {templateSeed && (
+        <TemplateEditorSheet
+          seedName={templateSeed.name}
+          seedExercises={templateSeed.exercises}
+          onClose={() => setTemplateSeed(null)}
         />
       )}
 

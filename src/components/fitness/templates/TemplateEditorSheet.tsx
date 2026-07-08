@@ -8,7 +8,7 @@ import {
   type WorkoutTemplateRow,
 } from "@/hooks/useWorkoutTemplates";
 import { EXERCISE_CATALOG } from "@/lib/fitness/exerciseCatalog";
-import { computeSupersetGroups } from "@/lib/fitness/workoutTemplates";
+import { computeSupersetGroups, type TemplateSeedExercise } from "@/lib/fitness/workoutTemplates";
 import {
   TemplateIcon,
   TEMPLATE_ICON_NAMES,
@@ -51,24 +51,48 @@ function toEditable(exercises: WorkoutTemplateRow["exercises"]): EditableExercis
   }));
 }
 
+/** Pré-remplissage depuis une séance PASSÉE (« Enregistrer comme séance
+ *  sauvegardée » dans l'historique) — reste en mode création (`template`
+ *  n'est jamais fourni ici), seules les valeurs de départ changent. */
+function toEditableFromSeed(seed: TemplateSeedExercise[]): EditableExercise[] {
+  return seed.map((e) => ({
+    key: crypto.randomUUID(),
+    name: e.name,
+    supersetWithPrevious: false,
+    default_sets: e.default_sets != null ? String(e.default_sets) : "3",
+    default_reps: e.default_reps != null ? String(e.default_reps) : "10",
+    default_weight: e.default_weight != null ? String(e.default_weight) : "",
+    notes: e.notes ?? "",
+  }));
+}
+
 export function TemplateEditorSheet({
   template,
+  seedName,
+  seedExercises,
   onClose,
 }: {
   /** undefined = création, sinon édition du modèle fourni. */
   template?: WorkoutTemplateRow;
+  /** Pré-remplissage optionnel depuis une séance passée — ignoré si
+   *  `template` est fourni (édition). Le flux reste une CRÉATION : un
+   *  nouveau modèle est créé, la séance d'origine n'est pas modifiée. */
+  seedName?: string;
+  seedExercises?: TemplateSeedExercise[];
   onClose: () => void;
 }) {
   const create = useCreateWorkoutTemplate();
   const update = useUpdateWorkoutTemplate();
   const datalistId = useId();
 
-  const [name, setName] = useState(template?.name ?? "");
+  const [name, setName] = useState(template?.name ?? seedName ?? "");
   const [icon, setIcon] = useState(template?.icon ?? "Dumbbell");
   const [color, setColor] = useState(template?.color ?? "primary");
-  const [exercises, setExercises] = useState<EditableExercise[]>(
-    template ? toEditable(template.exercises) : [emptyExercise()],
-  );
+  const [exercises, setExercises] = useState<EditableExercise[]>(() => {
+    if (template) return toEditable(template.exercises);
+    if (seedExercises && seedExercises.length > 0) return toEditableFromSeed(seedExercises);
+    return [emptyExercise()];
+  });
 
   const isPending = create.isPending || update.isPending;
 
