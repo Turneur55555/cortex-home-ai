@@ -63,6 +63,13 @@ export function NutritionTab() {
   const readd = useAddNutrition();
   const addFav = useAddFavorite();
   const copyDay = useCopyNutritionDay();
+  const copyMeal = useCopyNutritionMeal();
+  const deleteMeal = useDeleteNutritionMeal();
+  const [confirmDeleteMeal, setConfirmDeleteMeal] = useState<{
+    key: string;
+    label: string;
+  } | null>(null);
+
   const [copyOpen, setCopyOpen] = useState(false);
   const [copyFrom, setCopyFrom] = useState(() =>
     format(subDays(new Date(), 1), "yyyy-MM-dd"),
