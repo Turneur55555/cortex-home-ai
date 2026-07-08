@@ -78,7 +78,12 @@ jobs:
 
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          # Épinglé (au lieu de "latest") : la résolution de "latest" appelle
+          # l'API GitHub pour lister les releases de supabase/cli, ce qui a
+          # déjà échoué en prod avec "rate limit exceeded" (run 28934605199,
+          # 08/07/2026) avant même d'atteindre le push des migrations. Une
+          # version fixe télécharge directement l'asset, sans cet appel API.
+          version: "2.109.1"
 
       # ── 1. Link ────────────────────────────────────────────────────────────
       - name: Link Supabase project
