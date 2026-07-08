@@ -4,7 +4,7 @@ import {
   AlertTriangle,
   Apple,
   Barcode,
-  BookmarkPlus,
+  
   Calendar,
   ChevronLeft,
   ChevronRight,
