@@ -181,9 +181,6 @@ export function SeancesTab() {
       {/* ── Choisir une épreuve — action principale ─────────────────── */}
       <ChoisirEpreuveCard onClick={() => setStartOpen(true)} />
 
-      {/* Trait de liaison — même lieu, pas des cartes indépendantes */}
-      <SectionLink />
-
       {/* ── La Forge — atelier de sélection des techniques ──────────── */}
       <SectionReveal delay={0.05}>
         <LaForgeCard onClick={() => setCatalogOpen(true)} />
@@ -208,9 +205,6 @@ export function SeancesTab() {
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
       )}
-
-      {/* Trait de liaison — vers les Chroniques et le reste du sanctuaire */}
-      {data && !isLoading && data.length > 0 && <SectionLink />}
 
       {/* ── CHRONIQUES COMPLÈTES — source unique de l'historique : vue
           compacte (dernières séances) repliée, vue détaillée (graphes
@@ -382,15 +376,5 @@ export function SeancesTab() {
         />
       )}
     </section>
-  );
-}
-
-// Trait de liaison discret entre deux zones de la page — évoque un même
-// lieu que l'on traverse plutôt qu'un empilement de cartes indépendantes.
-function SectionLink() {
-  return (
-    <div aria-hidden className="flex justify-center py-0.5">
-      <div className="h-6 w-px bg-gradient-to-b from-transparent via-white/[0.12] to-transparent" />
-    </div>
   );
 }
