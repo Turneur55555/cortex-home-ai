@@ -621,7 +621,21 @@ export function NutritionTab() {
           onClose={() => setPortionItem(null)}
         />
       )}
+      {confirmDeleteMeal && (
+        <WorkoutDeleteDialog
+          workoutName={confirmDeleteMeal.label}
+          onCancel={() => setConfirmDeleteMeal(null)}
+          onConfirm={() => {
+            const meal = confirmDeleteMeal.key;
+            deleteMeal.mutate(
+              { date, meal },
+              { onSuccess: () => setConfirmDeleteMeal(null) },
+            );
+          }}
+        />
+      )}
     </section>
+
   );
 }
 
