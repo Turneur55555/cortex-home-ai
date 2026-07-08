@@ -313,6 +313,11 @@ export function NutritionTab() {
         </div>
       </div>
 
+      {/* Compléments alimentaires du jour */}
+      <SupplementsCard date={date} />
+
+
+
       {/* N2 — alerte dépassement calorique >10% */}
       {remaining?.calories != null &&
         goals?.calories != null &&
