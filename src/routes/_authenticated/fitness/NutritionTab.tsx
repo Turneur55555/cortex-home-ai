@@ -24,11 +24,17 @@ import { addDays, format, parseISO, subDays } from "date-fns";
 import {
   useAddNutrition,
   useCopyNutritionDay,
+  useCopyNutritionMeal,
   useDeleteNutrition,
+  useDeleteNutritionMeal,
   useNutrition,
   useNutritionGoals,
 } from "@/hooks/use-fitness";
 import { useAddFavorite } from "@/hooks/use-nutrition-favorites";
+import { MealActionMenu } from "@/components/fitness/MealActionMenu";
+import { SupplementsCard } from "@/components/fitness/SupplementsCard";
+import { WorkoutDeleteDialog } from "@/components/fitness/WorkoutDeleteDialog";
+
 import { FabAdd } from "@/components/shared/FormComponents";
 import { BarcodeScannerSheet } from "@/components/BarcodeScannerSheet";
 import { MealScanSheet } from "@/components/fitness/MealScanSheet";
