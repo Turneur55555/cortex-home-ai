@@ -33,13 +33,9 @@ import { useActiveWorkout, useAddExerciseToActiveWorkout, useStartWorkoutFromTem
 import { ExerciseListBrowser, type BrowserExercise } from "./ExerciseListBrowser";
 import { ExerciseActionsMenu, type ExerciseMenuAction } from "./ExerciseActionsMenu";
 import { ExerciseAnalysisSheet, type ExerciseAnalysisActions } from "./ExerciseAnalysisSheet";
+import type { RecentExercise } from "@/lib/fitness/recentExercises";
 
-export type RecentExercise = {
-  name: string;
-  lastSets: number | null;
-  lastReps: number | null;
-  lastWeight: number | null;
-};
+export type { RecentExercise };
 
 export type PickedExercise = {
   name: string;
