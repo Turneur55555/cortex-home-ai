@@ -11,6 +11,8 @@ import { GenericHistoryCard } from "@/components/fitness/session/GenericHistoryC
 import { GenericSessionReviewSheet } from "@/components/fitness/session/GenericSessionReviewSheet";
 import { WorkoutProgressCharts } from "@/components/fitness/WorkoutProgressCharts";
 import { StartWorkoutSheet } from "@/components/fitness/StartWorkoutSheet";
+import { NewSessionChoiceSheet } from "@/components/fitness/templates/NewSessionChoiceSheet";
+import { SavedTemplatesSheet } from "@/components/fitness/templates/SavedTemplatesSheet";
 import { ActiveWorkoutView } from "@/components/fitness/ActiveWorkoutView";
 import { ExerciseCatalogSheet } from "@/components/fitness/ExerciseCatalogSheet";
 import { PostWorkoutAnalysisSheet } from "@/components/fitness/PostWorkoutAnalysisSheet";
@@ -51,6 +53,11 @@ export function SeancesTab() {
   const recentWorkouts = useMemo(() => (data ?? []).slice(0, 5), [data]);
 
   const [startOpen, setStartOpen] = useState(false);
+  // Nouveau parcours "Nouvelle séance" : choix vide/modèle avant d'ouvrir
+  // StartWorkoutSheet (inchangé) ou la liste des modèles sauvegardés. Ne
+  // concerne pas Sensei (SenseiIACard/CoachSheet, séparés plus bas).
+  const [newSessionChoiceOpen, setNewSessionChoiceOpen] = useState(false);
+  const [savedTemplatesOpen, setSavedTemplatesOpen] = useState(false);
   const [open, setOpen] = useState(false);
   // C2 : le snapshot de la séance clôturée vit ici pour que la fiche d'analyse
   // IA survive au démontage d'ActiveWorkoutView.
@@ -179,7 +186,7 @@ export function SeancesTab() {
       <SenseiIACard onClick={() => openCoach()} />
 
       {/* ── Choisir une épreuve — action principale ─────────────────── */}
-      <ChoisirEpreuveCard onClick={() => setStartOpen(true)} />
+      <ChoisirEpreuveCard onClick={() => setNewSessionChoiceOpen(true)} />
 
       {/* ── La Forge — atelier de sélection des techniques ──────────── */}
       <SectionReveal delay={0.05}>
@@ -327,7 +334,28 @@ export function SeancesTab() {
         </SectionReveal>
       )}
 
+      {newSessionChoiceOpen && (
+        <NewSessionChoiceSheet
+          onClose={() => setNewSessionChoiceOpen(false)}
+          onChooseBlank={() => {
+            setNewSessionChoiceOpen(false);
+            setStartOpen(true);
+          }}
+          onChooseSaved={() => {
+            setNewSessionChoiceOpen(false);
+            setSavedTemplatesOpen(true);
+          }}
+        />
+      )}
+
       {startOpen && <StartWorkoutSheet onClose={() => setStartOpen(false)} />}
+
+      {savedTemplatesOpen && (
+        <SavedTemplatesSheet
+          onClose={() => setSavedTemplatesOpen(false)}
+          onStarted={() => setSavedTemplatesOpen(false)}
+        />
+      )}
 
       {open && (
         <WorkoutSheet
