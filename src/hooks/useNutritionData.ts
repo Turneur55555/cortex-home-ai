@@ -150,3 +150,74 @@ export function useCopyNutritionDay() {
     onError: (e: Error) => toast.error(e.message),
   });
 }
+
+/** Supprime tous les aliments d'un repas (date + slug) d'un coup. */
+export function useDeleteNutritionMeal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ date, meal }: { date: string; meal: string }) => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Non authentifié");
+      const { error, count } = await supabase
+        .from("nutrition")
+        .delete({ count: "exact" })
+        .eq("user_id", user.id)
+        .eq("date", date)
+        .eq("meal", meal);
+      if (error) throw error;
+      return count ?? 0;
+    },
+    onSuccess: (n, vars) => {
+      toast.success(`Repas supprimé (${n} aliment${n > 1 ? "s" : ""})`);
+      qc.invalidateQueries({ queryKey: ["nutrition", vars.date] });
+      qc.invalidateQueries({ queryKey: ["nutrition"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+}
+
+/** Copie uniquement le repas correspondant (petit-dej, déjeuner…) d'un autre jour. */
+export function useCopyNutritionMeal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      from,
+      to,
+      meal,
+    }: {
+      from: string;
+      to: string;
+      meal: string;
+    }) => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Non authentifié");
+      const { data: rows, error } = await supabase
+        .from("nutrition")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("date", from)
+        .eq("meal", meal);
+      if (error) throw error;
+      if (!rows || rows.length === 0)
+        throw new Error("Aucun aliment à copier pour ce repas");
+      const clones = rows.map((r) => {
+        const rec = r as Record<string, unknown>;
+        const { id: _id, created_at: _ca, ...rest } = rec;
+        return { ...rest, date: to, user_id: user.id } as TablesInsert<"nutrition">;
+      });
+      const { error: insErr } = await supabase.from("nutrition").insert(clones);
+      if (insErr) throw insErr;
+      return clones.length;
+    },
+    onSuccess: (n, vars) => {
+      toast.success(`${n} aliment${n > 1 ? "s" : ""} copié${n > 1 ? "s" : ""}`);
+      qc.invalidateQueries({ queryKey: ["nutrition", vars.to] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+}
+

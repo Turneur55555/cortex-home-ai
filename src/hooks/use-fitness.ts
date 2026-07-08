@@ -172,9 +172,12 @@ export {
   useAddNutrition,
   useAddNutritionBatch,
   useDeleteNutrition,
+  useDeleteNutritionMeal,
   useUpdateNutrition,
   useCopyNutritionDay,
+  useCopyNutritionMeal,
 } from "./useNutritionData";
+
 
 // ---------- Workout / exercise mutations ----------
 export function useUpdateWorkoutName() {

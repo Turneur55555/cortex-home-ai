@@ -4,7 +4,7 @@ import {
   AlertTriangle,
   Apple,
   Barcode,
-  BookmarkPlus,
+  
   Calendar,
   ChevronLeft,
   ChevronRight,
@@ -24,11 +24,17 @@ import { addDays, format, parseISO, subDays } from "date-fns";
 import {
   useAddNutrition,
   useCopyNutritionDay,
+  useCopyNutritionMeal,
   useDeleteNutrition,
+  useDeleteNutritionMeal,
   useNutrition,
   useNutritionGoals,
 } from "@/hooks/use-fitness";
 import { useAddFavorite } from "@/hooks/use-nutrition-favorites";
+import { MealActionMenu } from "@/components/fitness/MealActionMenu";
+import { SupplementsCard } from "@/components/fitness/SupplementsCard";
+import { WorkoutDeleteDialog } from "@/components/fitness/WorkoutDeleteDialog";
+
 import { FabAdd } from "@/components/shared/FormComponents";
 import { BarcodeScannerSheet } from "@/components/BarcodeScannerSheet";
 import { MealScanSheet } from "@/components/fitness/MealScanSheet";
@@ -57,6 +63,13 @@ export function NutritionTab() {
   const readd = useAddNutrition();
   const addFav = useAddFavorite();
   const copyDay = useCopyNutritionDay();
+  const copyMeal = useCopyNutritionMeal();
+  const deleteMeal = useDeleteNutritionMeal();
+  const [confirmDeleteMeal, setConfirmDeleteMeal] = useState<{
+    key: string;
+    label: string;
+  } | null>(null);
+
   const [copyOpen, setCopyOpen] = useState(false);
   const [copyFrom, setCopyFrom] = useState(() =>
     format(subDays(new Date(), 1), "yyyy-MM-dd"),
@@ -300,6 +313,11 @@ export function NutritionTab() {
         </div>
       </div>
 
+      {/* Compléments alimentaires du jour */}
+      <SupplementsCard date={date} />
+
+
+
       {/* N2 — alerte dépassement calorique >10% */}
       {remaining?.calories != null &&
         goals?.calories != null &&
@@ -473,19 +491,22 @@ export function NutritionTab() {
                 {Math.round(gTotals.calories)} kcal · P{Math.round(gTotals.proteins)} G{Math.round(gTotals.carbs)} L{Math.round(gTotals.fats)}
               </span>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                setSaveGroupName(g.label);
-                setSaveGroupKey((k) => (k === g.key ? null : g.key));
+            <MealActionMenu
+              mealLabel={g.label}
+              onAction={(action) => {
+                if (action === "copy-yesterday") {
+                  const from = format(subDays(parseISO(date), 1), "yyyy-MM-dd");
+                  copyMeal.mutate({ from, to: date, meal: g.key });
+                } else if (action === "save-as-template") {
+                  setSaveGroupName(g.label);
+                  setSaveGroupKey((k) => (k === g.key ? null : g.key));
+                } else if (action === "delete") {
+                  setConfirmDeleteMeal({ key: g.key, label: g.label });
+                }
               }}
-              className="inline-flex shrink-0 items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground"
-              title="Enregistrer ce repas comme modèle"
-            >
-              <BookmarkPlus className="h-3.5 w-3.5" />
-              Enregistrer
-            </button>
+            />
           </div>
+
           {saveGroupKey === g.key && (
             <div className="mb-2.5 flex items-center gap-2 rounded-xl border border-border bg-card p-2">
               <input
@@ -600,7 +621,21 @@ export function NutritionTab() {
           onClose={() => setPortionItem(null)}
         />
       )}
+      {confirmDeleteMeal && (
+        <WorkoutDeleteDialog
+          workoutName={confirmDeleteMeal.label}
+          onCancel={() => setConfirmDeleteMeal(null)}
+          onConfirm={() => {
+            const meal = confirmDeleteMeal.key;
+            deleteMeal.mutate(
+              { date, meal },
+              { onSuccess: () => setConfirmDeleteMeal(null) },
+            );
+          }}
+        />
+      )}
     </section>
+
   );
 }
 
