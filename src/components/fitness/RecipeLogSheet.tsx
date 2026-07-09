@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Loader2, Utensils } from "lucide-react";
-import { Sheet } from "@/components/shared/FormComponents";
+import { FullscreenSheet as Sheet } from "@/components/shared/FormComponents";
 import { MEAL_LABELS } from "@/lib/nutrition/meals";
 import { useRecipes, useRecipe } from "@/hooks/useRecipes";
 import { useAddNutritionBatch } from "@/hooks/use-fitness";

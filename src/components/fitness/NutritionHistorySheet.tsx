@@ -12,7 +12,7 @@ import {
 } from "recharts";
 import { format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
-import { Sheet } from "@/components/shared/FormComponents";
+import { FullscreenSheet as Sheet } from "@/components/shared/FormComponents";
 import { useNutritionGoals } from "@/hooks/use-fitness";
 import {
   averageOverTrackedDays,

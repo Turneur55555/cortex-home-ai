@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Loader2, Plus, Star, Trash2, X } from "lucide-react";
-import { Sheet, Field } from "@/components/shared/FormComponents";
+import { FullscreenSheet as Sheet, Field } from "@/components/shared/FormComponents";
 import { FoodAutocomplete } from "@/components/FoodAutocomplete";
 import { MEAL_LABELS, MEAL_SLUGS, scalePer100 } from "@/lib/nutrition/meals";
 import { parseDecimal } from "@/lib/nutrition/portions";
