@@ -1,7 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Apple, BarChart3, ChevronRight } from "lucide-react";
 import { ProfileRPGData } from "@/components/profile/rpg/ProfileRPGData";
-import { TrophyRoomPreview } from "@/components/profile/rpg/TrophyRoomPreview";
 import { QuestsPreview } from "@/components/profile/rpg/QuestsPreview";
 import { BodyStatusCard } from "@/components/profile/BodyStatusCard";
 import { DisciplineBreakdownCard } from "@/components/profile/DisciplineBreakdownCard";
@@ -24,30 +23,18 @@ export const Route = createFileRoute("/_authenticated/profil")({
 function ProfilPage() {
   return (
     <main className="relative flex flex-1 flex-col overflow-hidden px-5 pb-32 pt-[max(2.5rem,env(safe-area-inset-top))]">
-      {/* Les 3 premières cartes (Hero, Progression RPG, Classe) sont désormais sur Accueil */}
       <ProfileRPGData>
         {(rpg) => (
-          <>
-            {/* Salle des trophées — première carte du Profil */}
-            <TrophyRoomPreview achievements={rpg.achievements} legacyBadges={rpg.legacyBadges} />
-
-            {/* Quêtes en aperçu */}
-            <QuestsPreview />
-          </>
+          <QuestsPreview />
         )}
       </ProfileRPGData>
 
-      {/* État du corps — sobre, sans habillage RPG (décision actée) */}
       <BodyStatusCard />
 
-      {/* Répartition par discipline (Phase 8) — toutes disciplines, pas
-          seulement musculation ; masquée si aucune séance. */}
       <DisciplineBreakdownCard />
 
-      {/* Documents — carte de résumé renvoyant vers /documents */}
       <DocumentsSummaryCard />
 
-      {/* Mes espaces */}
       <Section title="Mes espaces">
         <div className="grid grid-cols-2 gap-2">
           <SpaceLink
@@ -63,7 +50,6 @@ function ProfilPage() {
         </div>
       </Section>
 
-      {/* Paramètres — secondaires, tout en bas : l'attention va à la progression */}
       <Section title="Paramètres">
         <SettingsGroup title="Personnalisation">
           <PersonalizationPanel />
