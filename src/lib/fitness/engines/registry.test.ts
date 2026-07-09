@@ -12,22 +12,31 @@ import { CardioWorkoutEngine } from "./cardioEngine";
 import { HyroxWorkoutEngine } from "./hyroxEngine";
 import { CourseWorkoutEngine } from "./courseEngine";
 import { GuidedActivityEngine } from "./guidedEngine";
+import { FreeformActivityEngine } from "./freeformEngine";
 
 describe("ENGINE_REGISTRY", () => {
-  it("expose les 5 disciplines prévues pour les phases 1 à 6", () => {
+  it("expose les 6 disciplines prévues (phases 1 à 6 + restauration 'Autre activité')", () => {
     expect(Object.keys(ENGINE_REGISTRY).sort()).toEqual(
-      ["cardio", "course", "guided", "hyrox", "muscu"].sort(),
+      ["autre", "cardio", "course", "guided", "hyrox", "muscu"].sort(),
     );
   });
 
-  it("les 5 disciplines sont désormais les moteurs prêts (phase 6)", () => {
+  it("les 6 disciplines sont désormais les moteurs prêts", () => {
     const ready = listEngines().filter(isReadyEngine);
-    expect(ready.map((e) => e.id).sort()).toEqual(["cardio", "course", "guided", "hyrox", "muscu"]);
+    expect(ready.map((e) => e.id).sort()).toEqual([
+      "autre",
+      "cardio",
+      "course",
+      "guided",
+      "hyrox",
+      "muscu",
+    ]);
     expect(ENGINE_REGISTRY.muscu).toBe(StrengthWorkoutEngine);
     expect(ENGINE_REGISTRY.cardio).toBe(CardioWorkoutEngine);
     expect(ENGINE_REGISTRY.hyrox).toBe(HyroxWorkoutEngine);
     expect(ENGINE_REGISTRY.course).toBe(CourseWorkoutEngine);
     expect(ENGINE_REGISTRY.guided).toBe(GuidedActivityEngine);
+    expect(ENGINE_REGISTRY.autre).toBe(FreeformActivityEngine);
   });
 
   it("aucune discipline n'alimente le moteur de Rang hors musculation", () => {
@@ -38,7 +47,7 @@ describe("ENGINE_REGISTRY", () => {
     }
   });
 
-  it("plus aucune discipline comingSoon — les 7 phases sont couvertes côté moteurs", () => {
+  it("plus aucune discipline comingSoon — les 7 phases + la restauration 'Autre activité' sont couvertes", () => {
     for (const entry of listEngines()) {
       expect(entry.comingSoon).toBe(false);
     }

@@ -7,7 +7,15 @@
 // un import Lucide direct dans CoachSheet/GenericHistoryCard/WorkoutCard.
 // ============================================================
 
-import { Dumbbell, Flame, Footprints, HeartPulse, Sparkles, type LucideIcon } from "lucide-react";
+import {
+  Dumbbell,
+  Flame,
+  Footprints,
+  HeartPulse,
+  Sparkles,
+  Wand2,
+  type LucideIcon,
+} from "lucide-react";
 
 const ICONS: Record<string, LucideIcon> = {
   Dumbbell,
@@ -15,6 +23,7 @@ const ICONS: Record<string, LucideIcon> = {
   Footprints,
   HeartPulse,
   Sparkles,
+  Wand2,
 };
 
 /** Badge compact icône + libellé, couleur d'accent pilotée par le moteur

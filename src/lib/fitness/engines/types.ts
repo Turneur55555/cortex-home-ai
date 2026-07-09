@@ -33,7 +33,7 @@
 
 /** Identifiants stables des disciplines. Étendre cette union = seule
  *  modification nécessaire ici pour préparer une discipline future. */
-export type DisciplineId = "muscu" | "hyrox" | "course" | "cardio" | "guided";
+export type DisciplineId = "muscu" | "hyrox" | "course" | "cardio" | "guided" | "autre";
 
 // ---- Dialogue Sensei (contrat posé en phase 1, consommé en phase 2) ----
 

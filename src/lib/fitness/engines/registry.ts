@@ -14,6 +14,7 @@ import { CardioWorkoutEngine } from "./cardioEngine";
 import { HyroxWorkoutEngine } from "./hyroxEngine";
 import { CourseWorkoutEngine } from "./courseEngine";
 import { GuidedActivityEngine } from "./guidedEngine";
+import { FreeformActivityEngine } from "./freeformEngine";
 
 export const ENGINE_REGISTRY: Record<DisciplineId, RegistryEntry> = {
   muscu: StrengthWorkoutEngine,
@@ -21,6 +22,7 @@ export const ENGINE_REGISTRY: Record<DisciplineId, RegistryEntry> = {
   hyrox: HyroxWorkoutEngine,
   course: CourseWorkoutEngine,
   guided: GuidedActivityEngine,
+  autre: FreeformActivityEngine,
 };
 
 export function listEngines(): RegistryEntry[] {

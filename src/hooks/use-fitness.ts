@@ -3,11 +3,16 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { logActivity } from "@/lib/activity";
 import { localDateYMD } from "@/lib/dates";
+import type { DisciplineId } from "@/lib/fitness/engines/types";
 
 // ---------- Domaines extraits (re-exports pour rétro-compat) ----------
 export type { NutritionGoals } from "./useNutritionGoals";
 export { useNutritionGoals, useUpsertNutritionGoals } from "./useNutritionGoals";
-export { useBodyMeasurements, useAddBodyMeasurement, useDeleteBodyMeasurement } from "./useBodyTracking";
+export {
+  useBodyMeasurements,
+  useAddBodyMeasurement,
+  useDeleteBodyMeasurement,
+} from "./useBodyTracking";
 
 // ---------- Workouts ----------
 export function useWorkouts() {
@@ -40,7 +45,7 @@ export function useAddWorkout() {
       // par défaut 'muscu'/{} pour tout appelant existant. Réservé aux
       // futurs moteurs (HYROX, Course, Cardio...) qui n'écrivent jamais
       // dans exercises/exercise_sets — voir src/lib/fitness/engines/types.ts.
-      discipline?: "muscu" | "hyrox" | "course" | "cardio" | "guided";
+      discipline?: DisciplineId;
       metadata?: Record<string, unknown>;
       exercises: Array<{
         name: string;
@@ -126,9 +131,7 @@ export function useAddWorkout() {
             }));
           });
           if (setRows.length > 0) {
-            const { error: setErr } = await supabase
-              .from("exercise_sets")
-              .insert(setRows);
+            const { error: setErr } = await supabase.from("exercise_sets").insert(setRows);
             if (setErr) throw setErr;
           }
         }
@@ -177,7 +180,6 @@ export {
   useCopyNutritionDay,
   useCopyNutritionMeal,
 } from "./useNutritionData";
-
 
 // ---------- Workout / exercise mutations ----------
 export function useUpdateWorkoutName() {
@@ -263,9 +265,7 @@ export function useUpdateExercise() {
       const prev = patchWorkoutsCache(qc, (rows) =>
         rows.map((w) => ({
           ...w,
-          exercises: (w.exercises ?? []).map((ex) =>
-            ex.id === id ? { ...ex, ...fields } : ex,
-          ),
+          exercises: (w.exercises ?? []).map((ex) => (ex.id === id ? { ...ex, ...fields } : ex)),
         })),
       );
       return { prev };
@@ -430,7 +430,7 @@ export function useActiveWorkout() {
       // C3 : la séance active est identifiée par status='active' (colonne dédiée),
       // plus par duration_minutes NULL — une saisie rétro sans durée ne bascule
       // donc plus l'UI en mode live.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       const { data, error } = await supabase
         .from("workouts")
         .select(
@@ -474,13 +474,7 @@ export function useActiveWorkout() {
 export function useStartWorkout() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({
-      name,
-      gym_location,
-    }: {
-      name: string;
-      gym_location: string;
-    }) => {
+    mutationFn: async ({ name, gym_location }: { name: string; gym_location: string }) => {
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -706,13 +700,7 @@ export function useStartWorkoutFromTemplate() {
 export function useAddExerciseToActiveWorkout() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({
-      workoutId,
-      name,
-    }: {
-      workoutId: string;
-      name: string;
-    }) => {
+    mutationFn: async ({ workoutId, name }: { workoutId: string; name: string }) => {
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -844,10 +832,7 @@ export function useUpdateExerciseSet() {
       if (Object.keys(fields).length === 0) return;
       // Garde : série optimiste pas encore confirmée par le serveur.
       if (id.startsWith("tmp-")) return;
-      const { error } = await supabase
-        .from("exercise_sets")
-        .update(fields)
-        .eq("id", id);
+      const { error } = await supabase.from("exercise_sets").update(fields).eq("id", id);
       if (error) throw error;
     },
     onMutate: async ({ id, ...fields }) => {
