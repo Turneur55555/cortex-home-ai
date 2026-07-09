@@ -430,7 +430,14 @@ export function useActiveWorkout() {
       // C3 : la séance active est identifiée par status='active' (colonne dédiée),
       // plus par duration_minutes NULL — une saisie rétro sans durée ne bascule
       // donc plus l'UI en mode live.
-
+      //
+      // Phase pilote Course (2026-07-09) : filtre explicite sur discipline
+      // 'muscu' — sans ça, une séance active générique (course, voir
+      // useGenericActiveSession.ts / useStartGenericActiveWorkout) serait
+      // AUSSI remontée ici et rendue par erreur avec des exercises vides.
+      // Sans risque pour l'existant : toute séance déjà en base a
+      // discipline='muscu' par défaut depuis la migration
+      // ..._workout_engine_foundation.sql (comportement 100% inchangé).
       const { data, error } = await supabase
         .from("workouts")
         .select(
@@ -438,6 +445,7 @@ export function useActiveWorkout() {
         )
         .eq("user_id", user.id)
         .eq("status", "active")
+        .eq("discipline", "muscu")
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
