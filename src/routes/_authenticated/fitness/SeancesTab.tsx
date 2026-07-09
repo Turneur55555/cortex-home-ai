@@ -15,6 +15,7 @@ import { NewSessionChoiceSheet } from "@/components/fitness/templates/NewSession
 import { SavedTemplatesSheet } from "@/components/fitness/templates/SavedTemplatesSheet";
 import { TemplateEditorSheet } from "@/components/fitness/templates/TemplateEditorSheet";
 import { ActiveWorkoutView } from "@/components/fitness/ActiveWorkoutView";
+import { ActiveGenericSessionView } from "@/components/fitness/session/ActiveGenericSessionView";
 import { ExerciseCatalogSheet } from "@/components/fitness/ExerciseCatalogSheet";
 import { PostWorkoutAnalysisSheet } from "@/components/fitness/PostWorkoutAnalysisSheet";
 import { SectionReveal } from "@/components/fitness/SectionReveal";
@@ -25,6 +26,10 @@ import {
   useStartWorkoutFromTemplate,
   type ActiveWorkout,
 } from "@/hooks/use-fitness";
+import {
+  useActiveGenericWorkout,
+  useStartGenericActiveWorkout,
+} from "@/hooks/useGenericActiveSession";
 import { useRecoveryMap } from "@/hooks/useRecoveryMap";
 
 import { CoachSheet, type WorkoutTemplate } from "./CoachSheet";
@@ -50,6 +55,11 @@ function weekdayLabel(iso: string) {
 export function SeancesTab() {
   const { data, isLoading, error } = useWorkouts();
   const { data: activeWorkout, isLoading: activeLoading } = useActiveWorkout();
+  // Phase pilote Course (2026-07-09) : séance active générique (segments
+  // éditables live, voir useGenericActiveSession.ts) — musculation et
+  // générique ne sont jamais actives simultanément (garde côté hook).
+  const { data: activeGeneric, isLoading: activeGenericLoading } = useActiveGenericWorkout();
+  const startGenericActive = useStartGenericActiveWorkout();
   const recoveryMap = useRecoveryMap(data);
 
   const recentWorkouts = useMemo(() => (data ?? []).slice(0, 5), [data]);
@@ -134,32 +144,56 @@ export function SeancesTab() {
     });
   }, []);
 
-  const handleCoachResult = useCallback((tpl: WorkoutTemplate, draft: WorkoutRecordDraft) => {
-    setCoachOpen(false);
-    // Musculation garde WorkoutSheet (édition fine, intouché) ; toute autre
-    // discipline route vers l'écran de relecture générique — décision prise
-    // une seule fois ici, jamais dupliquée pour HYROX/Course/Cardio/Guidé.
-    const entry = ENGINE_REGISTRY[draft.discipline];
-    const isStrength =
-      entry && isReadyEngine(entry) && entry.historyPresentation.cardVariant === "strength";
-    if (isStrength) {
-      setTemplate(tpl);
-      setOpen(true);
-    } else {
-      setGenericDraft(draft);
-    }
-  }, []);
+  const handleCoachResult = useCallback(
+    (tpl: WorkoutTemplate, draft: WorkoutRecordDraft) => {
+      setCoachOpen(false);
+      // Musculation garde WorkoutSheet (édition fine, intouché). Phase
+      // pilote Course (2026-07-09) : un moteur avec supportsLiveTracking
+      // démarre directement une séance ACTIVE éditable (voir
+      // ActiveGenericSessionView) au lieu de l'écran de relecture générique
+      // — décision prise une seule fois ici, via le registre (aucun
+      // if/switch sur "course" ailleurs), donc automatiquement applicable
+      // à un futur moteur qui poserait le même flag.
+      const entry = ENGINE_REGISTRY[draft.discipline];
+      const isStrength =
+        entry && isReadyEngine(entry) && entry.historyPresentation.cardVariant === "strength";
+      const isLiveTrackable = entry && isReadyEngine(entry) && entry.supportsLiveTracking === true;
+      if (isStrength) {
+        setTemplate(tpl);
+        setOpen(true);
+      } else if (isLiveTrackable && entry.buildLiveSegments) {
+        const seedSegments = entry.buildLiveSegments(tpl, draft);
+        startGenericActive.mutate({ draft, seedSegments });
+      } else {
+        setGenericDraft(draft);
+      }
+    },
+    [startGenericActive],
+  );
 
   const openCoach = useCallback((initial?: string[]) => {
     setCoachInitialMuscles(initial?.length ? initial : undefined);
     setCoachOpen(true);
   }, []);
 
-  if (activeLoading && isLoading) {
+  if ((activeLoading || activeGenericLoading) && isLoading) {
     return (
       <div className="flex h-40 items-center justify-center">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
       </div>
+    );
+  }
+
+  // ── VUE SÉANCE ACTIVE GÉNÉRIQUE (phase pilote Course, 2026-07-09) ────────
+  // Vérifiée AVANT activeWorkout : les deux requêtes sont mutuellement
+  // exclusives (garde côté useStartGenericActiveWorkout/useStartWorkout),
+  // mais on privilégie explicitement la vue musculation si jamais les deux
+  // étaient renvoyées (comportement identique à avant ce chantier).
+  if (!activeWorkout && activeGeneric) {
+    return (
+      <section className="flex flex-col gap-4">
+        <ActiveGenericSessionView workout={activeGeneric} onFinished={() => {}} />
+      </section>
     );
   }
 
