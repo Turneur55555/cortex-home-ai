@@ -1,15 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
-import { toast } from "sonner";
 import { Apple, BarChart3, ChevronRight } from "lucide-react";
-import { useAuth } from "@/hooks/use-auth";
-import { useProfile } from "@/hooks/useProfile";
-import { useActivityStreak } from "@/hooks/useActivityStreak";
-import { buildAchievementCollection } from "@/lib/profile/achievements/collection";
-import { ProfileRPGData, type ProfileRPGDataValue } from "@/components/profile/rpg/ProfileRPGData";
-import { ProfileHeroCard } from "@/components/profile/ProfileHeroCard";
-import { RPGProgressionSection } from "@/components/profile/rpg/RPGProgressionSection";
-import { ClassCard } from "@/components/profile/ClassCard";
+import { ProfileRPGData } from "@/components/profile/rpg/ProfileRPGData";
 import { TrophyRoomPreview } from "@/components/profile/rpg/TrophyRoomPreview";
 import { QuestsPreview } from "@/components/profile/rpg/QuestsPreview";
 import { BodyStatusCard } from "@/components/profile/BodyStatusCard";
@@ -19,7 +10,6 @@ import { PersonalizationPanel } from "@/components/profile/PersonalizationPanel"
 import { SecurityPanel } from "@/components/profile/SecurityPanel";
 import { HealthDataPanel } from "@/components/profile/HealthDataPanel";
 import { SettingsGroup } from "@/components/profile/SettingsGroup";
-import { EditPseudoSheet } from "@/components/profile/EditPseudoSheet";
 
 export const Route = createFileRoute("/_authenticated/profil")({
   head: () => ({
@@ -32,24 +22,18 @@ export const Route = createFileRoute("/_authenticated/profil")({
 });
 
 function ProfilPage() {
-  const { user } = useAuth();
-  const fallback = useMemo(() => user?.email?.split("@")[0] ?? "Utilisateur", [user?.email]);
-  const { pseudo, avatarUrl, updatePseudo, updateAvatar } = useProfile(fallback);
-  const { current: streak } = useActivityStreak();
-  const [editOpen, setEditOpen] = useState(false);
-
   return (
     <main className="relative flex flex-1 flex-col overflow-hidden px-5 pb-32 pt-[max(2.5rem,env(safe-area-inset-top))]">
+      {/* Les 3 premières cartes (Hero, Progression RPG, Classe) sont désormais sur Accueil */}
       <ProfileRPGData>
         {(rpg) => (
-          <ProfilHub
-            rpg={rpg}
-            pseudo={pseudo}
-            streak={streak}
-            avatarUrl={avatarUrl}
-            onEdit={() => setEditOpen(true)}
-            onAvatarChange={updateAvatar}
-          />
+          <>
+            {/* Salle des trophées — première carte du Profil */}
+            <TrophyRoomPreview achievements={rpg.achievements} legacyBadges={rpg.legacyBadges} />
+
+            {/* Quêtes en aperçu */}
+            <QuestsPreview />
+          </>
         )}
       </ProfileRPGData>
 
@@ -91,90 +75,7 @@ function ProfilPage() {
           <HealthDataPanel />
         </SettingsGroup>
       </Section>
-
-      <EditPseudoSheet
-        open={editOpen}
-        onOpenChange={setEditOpen}
-        current={pseudo}
-        onSave={async (v) => {
-          await updatePseudo(v);
-          toast.success("Pseudo mis à jour");
-        }}
-      />
     </main>
-  );
-}
-
-/**
- * Hub RPG du Profil : Hero (qui suis-je) → Progression RPG (où en suis-je)
- * → Classe principale (quel combattant suis-je) → Salle des trophées et
- * Quêtes en aperçu (qu'ai-je accompli / que dois-je faire ensuite). Chaque
- * bloc ouvre son écran dédié — le Profil ne réaffiche plus jamais une copie
- * complète d'un module.
- */
-function ProfilHub({
-  rpg,
-  pseudo,
-  streak,
-  avatarUrl,
-  onEdit,
-  onAvatarChange,
-}: {
-  rpg: ProfileRPGDataValue;
-  pseudo: string;
-  streak: number;
-  avatarUrl?: string | null;
-  onEdit: () => void;
-  onAvatarChange: (url: string) => Promise<void>;
-}) {
-  const {
-    rankAggregate,
-    achievements,
-    legacyBadges,
-    topExercises,
-    nameByKey,
-    histByName,
-    volByName,
-    prByName,
-    workouts,
-    totalWorkouts,
-  } = rpg;
-
-  const collection = useMemo(
-    () => buildAchievementCollection(achievements, legacyBadges),
-    [achievements, legacyBadges],
-  );
-
-  return (
-    <>
-      <ProfileHeroCard
-        pseudo={pseudo}
-        streak={streak}
-        avatarUrl={avatarUrl}
-        onEdit={onEdit}
-        onAvatarChange={onAvatarChange}
-        rankAggregate={rankAggregate}
-        totalWorkouts={totalWorkouts}
-        achievementsUnlocked={collection.unlockedCount}
-        achievementsTotal={collection.total}
-      />
-
-      <RPGProgressionSection
-        rankAggregate={rankAggregate}
-        achievements={achievements}
-        topExercises={topExercises}
-        nameByKey={nameByKey}
-        histByName={histByName}
-        volByName={volByName}
-        prByName={prByName}
-      />
-
-      <ClassCard workouts={workouts} rankAggregate={rankAggregate} />
-
-      <TrophyRoomPreview achievements={achievements} legacyBadges={legacyBadges} />
-
-      <QuestsPreview />
-    </>
   );
 }
 
