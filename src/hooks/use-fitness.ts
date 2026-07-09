@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { logActivity } from "@/lib/activity";
-import type { TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
+import { localDateYMD } from "@/lib/dates";
 
 // ---------- Domaines extraits (re-exports pour rétro-compat) ----------
 export type { NutritionGoals } from "./useNutritionGoals";
@@ -70,7 +70,7 @@ export function useAddWorkout() {
           gym_location: input.gym_location ?? "Salle inconnue",
           discipline: input.discipline ?? "muscu",
           metadata: input.metadata ?? {},
-        } as unknown as TablesInsert<"workouts">)
+        })
         .select()
         .single();
       if (error) throw error;
@@ -485,14 +485,14 @@ export function useStartWorkout() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      const today = new Date().toISOString().split("T")[0];
+      const today = localDateYMD();
       const { error } = await supabase.from("workouts").insert({
         user_id: user.id,
         name,
         date: today,
         gym_location,
         status: "active",
-      } as unknown as TablesInsert<"workouts">);
+      });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -511,7 +511,7 @@ export function useFinishWorkout() {
       const durationMin = Math.min(600, Math.max(1, Math.round(durationMs / 60_000)));
       const { error } = await supabase
         .from("workouts")
-        .update({ duration_minutes: durationMin, status: "completed" } as unknown as TablesUpdate<"workouts">)
+        .update({ duration_minutes: durationMin, status: "completed" })
         .eq("id", workout.id);
       if (error) throw error;
 
@@ -612,7 +612,7 @@ export function useStartWorkoutFromTemplate() {
         .maybeSingle();
       if (existing) throw new Error("Une séance est déjà en cours.");
 
-      const today = new Date().toISOString().split("T")[0];
+      const today = localDateYMD();
       const { data: workout, error } = await supabase
         .from("workouts")
         .insert({
@@ -621,7 +621,7 @@ export function useStartWorkoutFromTemplate() {
           date: today,
           gym_location: source.gym_location ?? "Salle inconnue",
           status: "active",
-        } as unknown as TablesInsert<"workouts">)
+        })
         .select("id")
         .single();
       if (error) throw error;

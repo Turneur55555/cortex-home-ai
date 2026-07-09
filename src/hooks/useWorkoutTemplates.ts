@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { localDateYMD } from "@/lib/dates";
 import type { TablesInsert } from "@/integrations/supabase/types";
 
 // ============================================================
@@ -255,9 +256,7 @@ export function useStartWorkoutFromSavedTemplate() {
       if (!user) throw new Error("Non authentifié");
 
       // Garde : une seule séance active à la fois (même convention que
-      // useStartWorkoutFromTemplate / "Refaire en live"). `status` n'est pas
-      // dans les types générés (drift déjà documenté dans MEMORY.md pour la
-      // table workouts) — même contournement que le reste de ce fichier.
+      // useStartWorkoutFromTemplate / "Refaire en live").
       const { data: existing } = await supabase
         .from("workouts")
         .select("id")
@@ -267,7 +266,7 @@ export function useStartWorkoutFromSavedTemplate() {
         .maybeSingle();
       if (existing) throw new Error("Une séance est déjà en cours.");
 
-      const today = new Date().toISOString().split("T")[0];
+      const today = localDateYMD();
       const { data: workout, error } = await supabase
         .from("workouts")
         .insert({
@@ -276,7 +275,7 @@ export function useStartWorkoutFromSavedTemplate() {
           date: today,
           gym_location: "Salle inconnue",
           status: "active",
-        } as unknown as TablesInsert<"workouts">)
+        })
         .select("id")
         .single();
       if (error) throw error;
