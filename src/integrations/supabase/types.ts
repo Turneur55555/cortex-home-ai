@@ -340,6 +340,7 @@ export type Database = {
           notes: string | null
           reps: number | null
           sets: number | null
+          superset_group: number | null
           user_id: string
           weight: number | null
           workout_id: string
@@ -352,6 +353,7 @@ export type Database = {
           notes?: string | null
           reps?: number | null
           sets?: number | null
+          superset_group?: number | null
           user_id: string
           weight?: number | null
           workout_id: string
@@ -364,6 +366,7 @@ export type Database = {
           notes?: string | null
           reps?: number | null
           sets?: number | null
+          superset_group?: number | null
           user_id?: string
           weight?: number | null
           workout_id?: string
@@ -1263,6 +1266,7 @@ export type Database = {
           ai_preferences: Json
           animations_enabled: boolean
           created_at: string
+          height_cm: number | null
           notifications_enabled: boolean
           theme: string
           units: string
@@ -1274,6 +1278,7 @@ export type Database = {
           ai_preferences?: Json
           animations_enabled?: boolean
           created_at?: string
+          height_cm?: number | null
           notifications_enabled?: boolean
           theme?: string
           units?: string
@@ -1285,6 +1290,7 @@ export type Database = {
           ai_preferences?: Json
           animations_enabled?: boolean
           created_at?: string
+          height_cm?: number | null
           notifications_enabled?: boolean
           theme?: string
           units?: string
@@ -1335,6 +1341,131 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           id?: string
+        }
+        Relationships: []
+      }
+      weekly_reports: {
+        Row: {
+          ai_analysis: Json
+          body_data: Json
+          created_at: string
+          fitness_data: Json
+          id: string
+          nutrition_data: Json
+          pdf_url: string | null
+          status: string
+          summary: Json
+          user_id: string
+          week_end: string
+          week_start: string
+        }
+        Insert: {
+          ai_analysis?: Json
+          body_data?: Json
+          created_at?: string
+          fitness_data?: Json
+          id?: string
+          nutrition_data?: Json
+          pdf_url?: string | null
+          status?: string
+          summary?: Json
+          user_id: string
+          week_end: string
+          week_start: string
+        }
+        Update: {
+          ai_analysis?: Json
+          body_data?: Json
+          created_at?: string
+          fitness_data?: Json
+          id?: string
+          nutrition_data?: Json
+          pdf_url?: string | null
+          status?: string
+          summary?: Json
+          user_id?: string
+          week_end?: string
+          week_start?: string
+        }
+        Relationships: []
+      }
+      workout_template_exercises: {
+        Row: {
+          created_at: string
+          default_reps: number | null
+          default_sets: number | null
+          default_weight: number | null
+          id: string
+          name: string
+          notes: string | null
+          position: number
+          superset_group: number | null
+          template_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          default_reps?: number | null
+          default_sets?: number | null
+          default_weight?: number | null
+          id?: string
+          name: string
+          notes?: string | null
+          position?: number
+          superset_group?: number | null
+          template_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          default_reps?: number | null
+          default_sets?: number | null
+          default_weight?: number | null
+          id?: string
+          name?: string
+          notes?: string | null
+          position?: number
+          superset_group?: number | null
+          template_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workout_template_exercises_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "workout_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workout_templates: {
+        Row: {
+          color: string
+          created_at: string
+          icon: string
+          id: string
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          icon?: string
+          id?: string
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          icon?: string
+          id?: string
+          name?: string
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }
