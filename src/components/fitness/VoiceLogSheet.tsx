@@ -3,7 +3,7 @@ import { Loader2, Mic, MicOff, Plus, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Sheet } from "@/components/shared/FormComponents";
+import { FullscreenSheet as Sheet } from "@/components/shared/FormComponents";
 import { MEAL_LABELS, clampMacroSet, isMealSlug } from "@/lib/nutrition/meals";
 import { formatDecimal, parseDecimal } from "@/lib/nutrition/portions";
 import { useAddNutritionBatch } from "@/hooks/use-fitness";

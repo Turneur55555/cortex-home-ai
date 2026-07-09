@@ -20,7 +20,7 @@ import type { Result } from "@zxing/library";
 import { toast } from "sonner";
 // useAddStockItem removed: Maison/stocks module deleted.
 import { useAddNutrition } from "@/hooks/use-fitness";
-import { Sheet } from "@/components/shared/FormComponents";
+import { FullscreenSheet as Sheet } from "@/components/shared/FormComponents";
 import { format } from "date-fns";
 import { computeMacros, type ProductNutriments } from "@/lib/nutrition/macros";
 import { lookupBarcode } from "@/services/foodCatalog";

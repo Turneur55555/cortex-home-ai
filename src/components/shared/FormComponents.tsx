@@ -1,4 +1,5 @@
-import { Loader2, Plus, X } from "lucide-react";
+import { useEffect } from "react";
+import { ChevronLeft, Loader2, Plus, X } from "lucide-react";
 
 export function FabAdd({ onClick, label }: { onClick: () => void; label: string }) {
   return (
@@ -49,6 +50,81 @@ export function Sheet({
             <X className="h-4 w-4" />
           </button>
         </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Sheet plein écran calqué sur la page /supplements :
+ * - overlay full-viewport
+ * - header sticky avec bouton retour + titre
+ * - corps scrollable, même design system
+ * - animation d'entrée slide-up + bloc du scroll body
+ */
+export function FullscreenSheet({
+  title,
+  subtitle,
+  onClose,
+  backLabel = "Nutrition",
+  actions,
+  children,
+}: {
+  title: string;
+  subtitle?: string;
+  onClose: () => void;
+  backLabel?: string;
+  actions?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex flex-col bg-background animate-in slide-in-from-bottom duration-200"
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+    >
+      <header
+        className="sticky top-0 z-10 flex items-center gap-3 border-b border-border bg-background/95 px-5 backdrop-blur-md"
+        style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top))", paddingBottom: "0.75rem" }}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border text-muted-foreground transition-colors hover:text-foreground"
+          aria-label={`Retour ${backLabel}`}
+        >
+          <ChevronLeft className="h-4 w-4" />
+        </button>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+            {backLabel}
+          </p>
+          <h1 className="truncate text-base font-bold tracking-tight text-foreground">{title}</h1>
+          {subtitle && (
+            <p className="truncate text-[11px] text-muted-foreground">{subtitle}</p>
+          )}
+        </div>
+        {actions}
+      </header>
+      <div
+        className="flex-1 overflow-y-auto px-5 pt-5"
+        style={{ paddingBottom: "calc(2rem + env(safe-area-inset-bottom))" }}
+      >
         {children}
       </div>
     </div>

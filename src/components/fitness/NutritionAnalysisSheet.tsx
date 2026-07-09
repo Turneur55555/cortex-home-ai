@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Loader2, Activity, AlertTriangle, Pill, Sparkles } from "lucide-react";
-import { Sheet } from "@/components/shared/FormComponents";
+import { FullscreenSheet as Sheet } from "@/components/shared/FormComponents";
 import {
   useNutritionAnalysis,
   type AnalysisNutrient,

@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { addDays, format, startOfWeek } from "date-fns";
 import { fr } from "date-fns/locale";
 import { ChevronLeft, ChevronRight, Loader2, ShoppingCart, Trash2 } from "lucide-react";
-import { Sheet, SubmitButton } from "@/components/shared/FormComponents";
+import { FullscreenSheet as Sheet, SubmitButton } from "@/components/shared/FormComponents";
 import { useRecipes } from "@/hooks/useRecipes";
 import {
   useMealPlan,

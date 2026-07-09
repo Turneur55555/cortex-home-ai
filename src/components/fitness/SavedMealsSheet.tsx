@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronLeft, ChevronUp, Loader2, Plus, Trash2, Utensils, X } from "lucide-react";
-import { Sheet, Field, SubmitButton } from "@/components/shared/FormComponents";
+import { FullscreenSheet as Sheet, Field, SubmitButton } from "@/components/shared/FormComponents";
 import { FoodAutocomplete } from "@/components/FoodAutocomplete";
 import { MEAL_LABELS, scalePer100 } from "@/lib/nutrition/meals";
 import type { FoodSuggestion } from "@/services/foodSuggestion";
