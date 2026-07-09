@@ -257,6 +257,30 @@ export type Database = {
         }
         Relationships: []
       }
+      exercise_catalog: {
+        Row: {
+          created_at: string
+          group_name: string
+          id: string
+          name: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          group_name: string
+          id?: string
+          name: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          group_name?: string
+          id?: string
+          name?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
       exercise_sets: {
         Row: {
           completed: boolean
@@ -264,6 +288,7 @@ export type Database = {
           exercise_id: string
           id: string
           reps: number | null
+          rest_seconds: number | null
           rpe: number | null
           set_number: number
           updated_at: string
@@ -276,6 +301,7 @@ export type Database = {
           exercise_id: string
           id?: string
           reps?: number | null
+          rest_seconds?: number | null
           rpe?: number | null
           set_number: number
           updated_at?: string
@@ -288,6 +314,7 @@ export type Database = {
           exercise_id?: string
           id?: string
           reps?: number | null
+          rest_seconds?: number | null
           rpe?: number | null
           set_number?: number
           updated_at?: string
@@ -308,6 +335,7 @@ export type Database = {
         Row: {
           id: string
           image_path: string | null
+          muscle_groups: string[] | null
           name: string
           notes: string | null
           reps: number | null
@@ -319,6 +347,7 @@ export type Database = {
         Insert: {
           id?: string
           image_path?: string | null
+          muscle_groups?: string[] | null
           name: string
           notes?: string | null
           reps?: number | null
@@ -330,6 +359,7 @@ export type Database = {
         Update: {
           id?: string
           image_path?: string | null
+          muscle_groups?: string[] | null
           name?: string
           notes?: string | null
           reps?: number | null
@@ -723,6 +753,7 @@ export type Database = {
           goal_type: Database["public"]["Enums"]["goal_type"]
           id: string
           is_completed: boolean
+          start_value: number | null
           target_date: string
           target_value: number | null
           title: string
@@ -736,6 +767,7 @@ export type Database = {
           goal_type?: Database["public"]["Enums"]["goal_type"]
           id?: string
           is_completed?: boolean
+          start_value?: number | null
           target_date: string
           target_value?: number | null
           title: string
@@ -749,6 +781,7 @@ export type Database = {
           goal_type?: Database["public"]["Enums"]["goal_type"]
           id?: string
           is_completed?: boolean
+          start_value?: number | null
           target_date?: string
           target_value?: number | null
           title?: string
@@ -1170,6 +1203,33 @@ export type Database = {
         }
         Relationships: []
       }
+      user_exercise_illustrations: {
+        Row: {
+          created_at: string
+          exercise_name: string
+          id: string
+          storage_path: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          exercise_name: string
+          id?: string
+          storage_path: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          exercise_name?: string
+          id?: string
+          storage_path?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_pdfs: {
         Row: {
           created_at: string
@@ -1282,31 +1342,40 @@ export type Database = {
         Row: {
           created_at: string
           date: string
+          discipline: string
           duration_minutes: number | null
           gym_location: string
           id: string
+          metadata: Json
           name: string
           notes: string | null
+          status: string
           user_id: string
         }
         Insert: {
           created_at?: string
           date: string
+          discipline?: string
           duration_minutes?: number | null
           gym_location?: string
           id?: string
+          metadata?: Json
           name: string
           notes?: string | null
+          status?: string
           user_id: string
         }
         Update: {
           created_at?: string
           date?: string
+          discipline?: string
           duration_minutes?: number | null
           gym_location?: string
           id?: string
+          metadata?: Json
           name?: string
           notes?: string | null
+          status?: string
           user_id?: string
         }
         Relationships: []
@@ -1318,6 +1387,7 @@ export type Database = {
     Functions: {
       compute_level_from_xp: { Args: { _xp: number }; Returns: number }
       ensure_home_categories_for_me: { Args: never; Returns: undefined }
+      get_user_streak_days: { Args: never; Returns: number }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
       unlock_user_badge: {
