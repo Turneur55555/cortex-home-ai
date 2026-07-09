@@ -45,6 +45,8 @@ import { distanceForDuration, formatPace } from "@/lib/fitness/pace";
 import { describeZone } from "@/lib/fitness/heartRateZones";
 import type { WearableSnapshot } from "./wearableTypes";
 import type {
+  LiveSegmentRow,
+  LiveSegmentSeed,
   SenseiAnswers,
   SenseiContext,
   SenseiQuestionSpec,
@@ -495,6 +497,305 @@ function buildSession(
   }
 }
 
+// ============================================================
+// Édition live (phase pilote, 2026-07-09) — voir supportsLiveTracking sur
+// EngineDescriptor. Reconstruit des segments STRUCTURÉS (metrics numériques)
+// à partir des mêmes paramètres que buildSession(), pour les seeder dans
+// `workout_segments` au démarrage d'une séance active. Fonction séparée
+// (plutôt que de changer la signature de buildSession) pour ne RIEN changer
+// au comportement existant de generate()/toWorkoutRecord() — seule
+// addition, zéro régression sur les tests courseEngine.test.ts existants.
+// ============================================================
+
+/** metricKey heuristique par type de séance : "pace_min_per_km" quand le
+ *  progrès recherché est d'aller plus vite (vitesse/seuil/allures cibles),
+ *  "distance_m" quand le progrès recherché est de tenir plus longtemps
+ *  (endurance/volume), "elevation_m" pour le travail en côtes. Purement
+ *  indicatif pour une future recommandation de surcharge progressive
+ *  (phase 2, non branchée ici) — n'affecte ni l'affichage ni la sauvegarde. */
+const LIVE_METRIC_KEY_BY_TYPE: Record<SessionType, "distance_m" | "pace_min_per_km" | undefined> = {
+  endurance_fondamentale: "distance_m",
+  sortie_longue: "distance_m",
+  footing_recuperation: "distance_m",
+  fractionne: "pace_min_per_km",
+  vma: "pace_min_per_km",
+  tempo: "pace_min_per_km",
+  seuil: "pace_min_per_km",
+  cotes: undefined,
+  prep_5k: "pace_min_per_km",
+  prep_10k: "pace_min_per_km",
+  prep_semi: "pace_min_per_km",
+  prep_marathon: "pace_min_per_km",
+  allure_specifique: "pace_min_per_km",
+};
+
+function continuousLiveSegment(
+  label: string,
+  distanceKm: number,
+  paceMinPerKm: number,
+  zoneNumber: 1 | 2 | 3 | 4 | 5 | undefined,
+  maxHeartRate: number | undefined,
+  metricKey: "distance_m" | "pace_min_per_km" | undefined,
+): LiveSegmentSeed {
+  const metrics: Record<string, number | string> = {
+    distance_m: Math.round(distanceKm * 1000),
+    pace_min_per_km: paceMinPerKm,
+  };
+  if (zoneNumber) metrics.zone = zoneNumber;
+  if (maxHeartRate) metrics.max_heart_rate = maxHeartRate;
+  return { label, metrics, metricKey };
+}
+
+function intervalLiveSegments(
+  effortLabel: string,
+  reps: number,
+  effortMeters: number,
+  effortPace: number,
+  recoveryMeters: number,
+  recoveryPace: number,
+  zoneNumber: 1 | 2 | 3 | 4 | 5,
+  maxHeartRate: number | undefined,
+  metricKey: "distance_m" | "pace_min_per_km" | undefined,
+): LiveSegmentSeed[] {
+  const segments: LiveSegmentSeed[] = [];
+  for (let i = 1; i <= reps; i++) {
+    const effortMetrics: Record<string, number | string> = {
+      distance_m: effortMeters,
+      pace_min_per_km: effortPace,
+      zone: zoneNumber,
+    };
+    if (maxHeartRate) effortMetrics.max_heart_rate = maxHeartRate;
+    segments.push({ label: `${effortLabel} ${i}/${reps}`, metrics: effortMetrics, metricKey });
+    segments.push({
+      label: "Récupération trottinée",
+      metrics: { distance_m: recoveryMeters, pace_min_per_km: recoveryPace },
+    });
+  }
+  return segments;
+}
+
+function hillLiveSegments(reps: number, level: Level): LiveSegmentSeed[] {
+  const elevationPerRep = byLevel(level, { débutant: 10, intermédiaire: 15, avancé: 20 });
+  const segments: LiveSegmentSeed[] = [];
+  for (let i = 1; i <= reps; i++) {
+    segments.push({
+      label: `Montée ${i}/${reps}`,
+      metrics: { elevation_m: elevationPerRep, zone: 5 },
+      metricKey: "elevation_m",
+    });
+    segments.push({ label: "Descente récupération", metrics: {} });
+  }
+  return segments;
+}
+
+function buildLiveSegmentsForSession(
+  type: SessionType,
+  level: Level,
+  duration: number,
+  targetPace: number | undefined,
+  maxHeartRate: number | undefined,
+): LiveSegmentSeed[] {
+  const metricKey = LIVE_METRIC_KEY_BY_TYPE[type];
+  switch (type) {
+    case "endurance_fondamentale": {
+      const pace = EASY_PACE[level];
+      return [
+        continuousLiveSegment(
+          "Endurance fondamentale",
+          distanceForDuration(duration, pace),
+          pace,
+          2,
+          maxHeartRate,
+          metricKey,
+        ),
+      ];
+    }
+    case "sortie_longue": {
+      const pace = EASY_PACE[level] + LONG_OFFSET;
+      return [
+        continuousLiveSegment(
+          "Sortie longue",
+          distanceForDuration(duration, pace),
+          pace,
+          2,
+          maxHeartRate,
+          metricKey,
+        ),
+      ];
+    }
+    case "footing_recuperation": {
+      const pace = EASY_PACE[level] + RECOVERY_OFFSET;
+      return [
+        continuousLiveSegment(
+          "Footing récupération",
+          distanceForDuration(duration, pace),
+          pace,
+          1,
+          maxHeartRate,
+          metricKey,
+        ),
+      ];
+    }
+    case "fractionne": {
+      const reps = clamp(duration / 6, 4, 12);
+      return intervalLiveSegments(
+        "400m rapide",
+        reps,
+        400,
+        FAST_PACE[level],
+        200,
+        EASY_PACE[level] + RECOVERY_OFFSET,
+        4,
+        maxHeartRate,
+        metricKey,
+      );
+    }
+    case "vma": {
+      const reps = clamp(duration / 4, 6, 16);
+      return intervalLiveSegments(
+        "300m très rapide",
+        reps,
+        300,
+        FAST_PACE[level] - 0.3,
+        200,
+        EASY_PACE[level] + RECOVERY_OFFSET,
+        5,
+        maxHeartRate,
+        metricKey,
+      );
+    }
+    case "tempo": {
+      const pace = TEMPO_PACE[level];
+      return [
+        continuousLiveSegment(
+          "Tempo",
+          distanceForDuration(duration, pace),
+          pace,
+          3,
+          maxHeartRate,
+          metricKey,
+        ),
+      ];
+    }
+    case "seuil": {
+      const pace = THRESHOLD_PACE[level];
+      return [
+        continuousLiveSegment(
+          "Seuil",
+          distanceForDuration(duration, pace),
+          pace,
+          4,
+          maxHeartRate,
+          metricKey,
+        ),
+      ];
+    }
+    case "cotes": {
+      const reps = clamp(duration / 5, 4, 10);
+      return hillLiveSegments(reps, level);
+    }
+    case "prep_5k": {
+      const reps = clamp(duration / 5, 5, 14);
+      return intervalLiveSegments(
+        "400m allure 5 km",
+        reps,
+        400,
+        FAST_PACE[level],
+        200,
+        EASY_PACE[level] + RECOVERY_OFFSET,
+        5,
+        maxHeartRate,
+        metricKey,
+      );
+    }
+    case "prep_10k": {
+      const pace = THRESHOLD_PACE[level];
+      return [
+        continuousLiveSegment(
+          "Allure 10 km",
+          distanceForDuration(duration, pace),
+          pace,
+          4,
+          maxHeartRate,
+          metricKey,
+        ),
+      ];
+    }
+    case "prep_semi": {
+      const pace = TEMPO_PACE[level] + SEMI_OFFSET;
+      return [
+        continuousLiveSegment(
+          "Allure semi-marathon",
+          distanceForDuration(duration, pace),
+          pace,
+          3,
+          maxHeartRate,
+          metricKey,
+        ),
+      ];
+    }
+    case "prep_marathon": {
+      const pace = targetPace ?? EASY_PACE[level] + LONG_OFFSET;
+      return [
+        continuousLiveSegment(
+          "Allure marathon",
+          distanceForDuration(duration, pace),
+          pace,
+          2,
+          maxHeartRate,
+          metricKey,
+        ),
+      ];
+    }
+    case "allure_specifique": {
+      const pace = targetPace ?? TEMPO_PACE[level];
+      return [
+        continuousLiveSegment(
+          "Allure cible",
+          distanceForDuration(duration, pace),
+          pace,
+          undefined,
+          maxHeartRate,
+          metricKey,
+        ),
+      ];
+    }
+  }
+}
+
+/** Reformate un segment live (potentiellement modifié par l'utilisateur)
+ *  en SessionSegment d'affichage — utilisé à la clôture de la séance pour
+ *  resynchroniser workouts.metadata.segments (voir en-tête de fichier
+ *  types.ts, formatLiveSegment). Ne connaît QUE le vocabulaire de metrics
+ *  posé par buildLiveSegmentsForSession ci-dessus ; toute clé inconnue est
+ *  affichée telle quelle (robuste à un futur ajout de métrique). */
+function formatLiveSegmentImpl(segment: LiveSegmentRow): SessionSegment {
+  const stats: SessionStat[] = [];
+  const m = segment.metrics ?? {};
+  const known = new Set(["distance_m", "pace_min_per_km", "zone", "elevation_m", "max_heart_rate"]);
+
+  if (typeof m.distance_m === "number") {
+    stats.push({ label: "Distance", value: `${(m.distance_m / 1000).toFixed(2)} km` });
+  }
+  if (typeof m.pace_min_per_km === "number") {
+    stats.push({ label: "Allure", value: formatPace(m.pace_min_per_km) });
+  }
+  if (typeof m.zone === "number") {
+    const maxHr = typeof m.max_heart_rate === "number" ? m.max_heart_rate : undefined;
+    stats.push({ label: "Zone FC cible", value: describeZone(m.zone as 1 | 2 | 3 | 4 | 5, maxHr) });
+  }
+  if (typeof m.elevation_m === "number") {
+    stats.push({ label: "Dénivelé+", value: `${m.elevation_m} m` });
+  }
+  for (const [key, value] of Object.entries(m)) {
+    if (known.has(key)) continue;
+    stats.push({ label: key, value: String(value) });
+  }
+  if (segment.completed) stats.push({ label: "Statut", value: "Réalisé" });
+
+  return { label: segment.label, stats };
+}
+
 export const CourseWorkoutEngine: WorkoutEngine = {
   id: "course",
   label: "Course",
@@ -502,6 +803,10 @@ export const CourseWorkoutEngine: WorkoutEngine = {
   feedsRankEngine: false,
   icon: "Footprints",
   accentClassName: "text-emerald-400",
+  // Phase pilote (2026-07-09) : premier moteur avec édition live des
+  // segments pendant la séance (voir buildLiveSegments/formatLiveSegment
+  // ci-dessous et supportsLiveTracking sur EngineDescriptor).
+  supportsLiveTracking: true,
   questions: QUESTIONS,
 
   async generate(answers: SenseiAnswers, context?: SenseiContext): Promise<WorkoutTemplate> {
@@ -539,11 +844,40 @@ export const CourseWorkoutEngine: WorkoutEngine = {
         level,
         maxHeartRate:
           typeof answers.max_heart_rate === "number" ? answers.max_heart_rate : undefined,
+        // Conservé pour buildLiveSegments (édition live, voir plus bas) :
+        // sans ce champ, prep_marathon/allure_specifique perdraient l'allure
+        // cible explicitement saisie par l'utilisateur lors du seed des
+        // segments live (retomberaient sur l'heuristique par défaut).
+        targetPaceMinPerKm:
+          typeof answers.target_pace_min_per_km === "number"
+            ? answers.target_pace_min_per_km
+            : undefined,
         cadenceTarget: CADENCE_TARGET,
         recoveryHoursEstimate: estimateRecoveryHours(sessionType, level),
         segments: template.segments ?? [],
       },
     };
+  },
+
+  buildLiveSegments(_template: WorkoutTemplate, draft: WorkoutRecordDraft): LiveSegmentSeed[] {
+    // Lit le brouillon déjà résolu par toWorkoutRecord plutôt que de
+    // redemander les réponses brutes du Sensei (non disponibles au point
+    // d'appel — voir SeancesTab.handleCoachResult, qui ne reçoit que
+    // template+draft). Mêmes valeurs que celles utilisées par generate(),
+    // donc segments live cohérents avec l'aperçu déjà montré à l'utilisateur.
+    const metadata = (draft.metadata ?? {}) as Record<string, unknown>;
+    const level = (metadata.level as Level) ?? "intermédiaire";
+    const sessionType = (metadata.sessionType as SessionType) ?? "endurance_fondamentale";
+    const duration = draft.duration_minutes || 40;
+    const targetPace =
+      typeof metadata.targetPaceMinPerKm === "number" ? metadata.targetPaceMinPerKm : undefined;
+    const maxHeartRate =
+      typeof metadata.maxHeartRate === "number" ? metadata.maxHeartRate : undefined;
+    return buildLiveSegmentsForSession(sessionType, level, duration, targetPace, maxHeartRate);
+  },
+
+  formatLiveSegment(segment: LiveSegmentRow): SessionSegment {
+    return formatLiveSegmentImpl(segment);
   },
 
   toSessionView(record: WorkoutRecordDraft): SessionView {

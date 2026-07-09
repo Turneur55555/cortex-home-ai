@@ -168,3 +168,91 @@ describe("CourseWorkoutEngine.toWorkoutRecord / toSessionView", () => {
     expect(view.summaryStats.some((s) => s.label === "Récupération estimée")).toBe(true);
   });
 });
+
+describe("CourseWorkoutEngine.buildLiveSegments / formatLiveSegment (édition live, phase pilote)", () => {
+  it("supportsLiveTracking est activé", () => {
+    expect(CourseWorkoutEngine.supportsLiveTracking).toBe(true);
+  });
+
+  it("produit des segments structurés cohérents avec les segments d'affichage pour une séance continue", async () => {
+    const answers: SenseiAnswers = {
+      objective: "endurance",
+      endurance_type: "endurance_fondamentale",
+      level: "intermédiaire",
+      duration_minutes: 40,
+    };
+    const template = await CourseWorkoutEngine.generate(answers);
+    const draft = CourseWorkoutEngine.toWorkoutRecord(template, answers);
+
+    const live = CourseWorkoutEngine.buildLiveSegments!(template, draft);
+    expect(live).toHaveLength(1);
+    expect(live[0].label).toBe("Endurance fondamentale");
+    expect(live[0].metrics.distance_m).toBeGreaterThan(0);
+    expect(live[0].metrics.pace_min_per_km).toBeGreaterThan(0);
+    expect(live[0].metricKey).toBe("distance_m");
+  });
+
+  it("produit des segments effort/récupération alternés pour une séance fractionnée", async () => {
+    const answers: SenseiAnswers = {
+      objective: "speed",
+      speed_type: "fractionne",
+      level: "intermédiaire",
+      duration_minutes: 30,
+    };
+    const template = await CourseWorkoutEngine.generate(answers);
+    const draft = CourseWorkoutEngine.toWorkoutRecord(template, answers);
+    const live = CourseWorkoutEngine.buildLiveSegments!(template, draft);
+
+    expect(live.length).toBeGreaterThan(2);
+    expect(live.length % 2).toBe(0);
+    expect(live[0].label).toContain("400m rapide");
+    expect(live[0].metricKey).toBe("pace_min_per_km");
+    expect(live[1].label).toBe("Récupération trottinée");
+    expect(live[1].metricKey).toBeUndefined();
+  });
+
+  it("respecte l'allure cible explicitement saisie par l'utilisateur (allure_specifique)", async () => {
+    const answers: SenseiAnswers = {
+      objective: "target_pace",
+      target_pace_min_per_km: 5.5,
+      level: "intermédiaire",
+      duration_minutes: 30,
+    };
+    const template = await CourseWorkoutEngine.generate(answers);
+    const draft = CourseWorkoutEngine.toWorkoutRecord(template, answers);
+    expect(draft.metadata?.targetPaceMinPerKm).toBe(5.5);
+
+    const live = CourseWorkoutEngine.buildLiveSegments!(template, draft);
+    expect(live[0].metrics.pace_min_per_km).toBe(5.5);
+  });
+
+  it("reformate un segment live modifié par l'utilisateur en SessionSegment d'affichage", () => {
+    const formatted = CourseWorkoutEngine.formatLiveSegment!({
+      id: "seg-1",
+      label: "Endurance fondamentale",
+      metrics: { distance_m: 6200, pace_min_per_km: 5.8 },
+      metricKey: "distance_m",
+      completed: true,
+      position: 0,
+    });
+    expect(formatted.label).toBe("Endurance fondamentale");
+    expect(formatted.stats).toEqual(
+      expect.arrayContaining([
+        { label: "Distance", value: "6.20 km" },
+        { label: "Statut", value: "Réalisé" },
+      ]),
+    );
+  });
+
+  it("formatLiveSegment affiche telle quelle une métrique inconnue (robustesse future)", () => {
+    const formatted = CourseWorkoutEngine.formatLiveSegment!({
+      id: "seg-2",
+      label: "Segment personnalisé",
+      metrics: { effort_note: "dur mais faisable" },
+      metricKey: undefined,
+      completed: false,
+      position: 1,
+    });
+    expect(formatted.stats).toEqual([{ label: "effort_note", value: "dur mais faisable" }]);
+  });
+});

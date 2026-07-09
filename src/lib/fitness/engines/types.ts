@@ -168,6 +168,45 @@ export interface SessionSegment {
   stats: SessionStat[];
 }
 
+// ---- Édition live générique (phase pilote Course, 2026-07-09) ----
+//
+// Pendant générique de ActiveSet (musculation) pour toute discipline avec
+// `supportsLiveTracking=true` : un segment devient une ligne persistée dans
+// `workout_segments` (voir migration ..._generic_workout_segments.sql),
+// ajoutable/supprimable/réordonnable/modifiable pendant la séance active,
+// au lieu d'être figé au moment de generate(). `metrics` reste libre par
+// discipline (distance_m, pace_min_per_km, zone, elevation_m...) — même
+// principe d'ouverture que `metadata` sur WorkoutRecordDraft.
+
+/** Valeur d'une métrique de segment live (distance, allure, effort...). */
+export type LiveSegmentMetricValue = number | string;
+
+/** Segment éditable seedé au démarrage d'une séance active, produit par
+ *  `WorkoutEngine.buildLiveSegments()` à partir d'une génération Sensei
+ *  fraîche. `metricKey` désigne la clé de `metrics` qui pourra être suivie
+ *  par une future recommandation de surcharge progressive (phase 2, PAS
+ *  implémentée ici) — laisser undefined si aucune progression n'a de sens
+ *  pour ce segment (ex: récupération trottinée). */
+export interface LiveSegmentSeed {
+  label: string;
+  metrics: Record<string, LiveSegmentMetricValue>;
+  metricKey?: string;
+}
+
+/** Ligne persistée de `workout_segments`, relue pendant la séance active
+ *  et reformatée en SessionSegment (voir `formatLiveSegment`) à la clôture
+ *  de la séance pour synchroniser le résumé d'affichage
+ *  `workouts.metadata.segments` — même pattern que la synchronisation des
+ *  colonnes résumé exercises.* côté musculation (voir useFinishWorkout). */
+export interface LiveSegmentRow {
+  id: string;
+  label: string;
+  metrics: Record<string, LiveSegmentMetricValue>;
+  metricKey?: string | null;
+  completed: boolean;
+  position: number;
+}
+
 /** Représentation 100% générique d'une séance, consommée par UN SEUL jeu
  *  de composants UI (src/components/fitness/session/) pour : l'écran de
  *  relecture avant sauvegarde, le résumé Sensei et la carte d'historique.
@@ -217,6 +256,17 @@ export interface EngineDescriptor {
    *  telle quelle par l'UI générique. */
   icon: string;
   accentClassName: string;
+  /** Phase pilote (Course, 2026-07-09) : true si ce moteur peut démarrer
+   *  une séance ACTIVE éditable en direct (segments ajoutés/supprimés/
+   *  réordonnés/modifiés pendant la séance, persistés dans
+   *  `workout_segments`), au lieu du parcours "génération -> relecture ->
+   *  sauvegarde directe" (GenericSessionReviewSheet) utilisé par les
+   *  autres disciplines. Par défaut absent/false pour toute discipline
+   *  existante — ne change RIEN à HYROX/Cardio/Guidé/Autre tant qu'ils ne
+   *  l'implémentent pas explicitement. Un moteur avec
+   *  supportsLiveTracking=true DOIT fournir buildLiveSegments() et
+   *  formatLiveSegment() (voir WorkoutEngine ci-dessous). */
+  supportsLiveTracking?: boolean;
 }
 
 export interface WorkoutEngine extends EngineDescriptor {
@@ -235,6 +285,16 @@ export interface WorkoutEngine extends EngineDescriptor {
    *  relue en base (même forme structurelle — voir WorkoutRecordDraft).
    *  Unique point de contact entre ce moteur et le kit UI générique. */
   toSessionView(record: WorkoutRecordDraft): SessionView;
+  /** Reçoit le brouillon déjà résolu (toWorkoutRecord), pas les réponses
+   *  brutes du Sensei : au point d'appel (SeancesTab.handleCoachResult),
+   *  seuls `template`/`draft` sont disponibles. `draft.metadata` porte déjà
+   *  tout ce qu'un moteur a besoin de relire (niveau, type de séance...). */
+  buildLiveSegments?(template: WorkoutTemplate, draft: WorkoutRecordDraft): LiveSegmentSeed[];
+  /** Réservé aux moteurs avec supportsLiveTracking=true : reformate un
+   *  segment live (potentiellement ajouté/modifié par l'utilisateur) en
+   *  SessionSegment d'affichage, pour resynchroniser
+   *  workouts.metadata.segments à la clôture de la séance. */
+  formatLiveSegment?(segment: LiveSegmentRow): SessionSegment;
   historyPresentation: HistoryPresentation;
 }
 
