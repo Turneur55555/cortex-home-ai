@@ -63,7 +63,7 @@ export function useTrainingObjective() {
 
       const { error } = await supabase
         .from("user_preferences")
-        .upsert({ user_id: user!.id, ai_preferences: ai }, { onConflict: "user_id" });
+        .upsert({ user_id: user!.id, ai_preferences: ai as never }, { onConflict: "user_id" });
       if (error) throw error;
       return objective;
     },
