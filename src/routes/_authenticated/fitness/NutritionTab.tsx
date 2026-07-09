@@ -30,6 +30,7 @@ import {
   useNutrition,
   useNutritionGoals,
 } from "@/hooks/use-fitness";
+import { useNutritionTotals } from "@/hooks/useNutritionTotals";
 import { useAddFavorite } from "@/hooks/use-nutrition-favorites";
 import { MealActionMenu } from "@/components/fitness/MealActionMenu";
 import { SupplementsCard } from "@/components/fitness/SupplementsCard";
@@ -91,30 +92,7 @@ export function NutritionTab() {
   const [saveGroupKey, setSaveGroupKey] = useState<string | null>(null);
   const [saveGroupName, setSaveGroupName] = useState("");
 
-  const totals = useMemo(() => {
-    return (data ?? []).reduce(
-      (acc, m) => ({
-        calories: acc.calories + (m.calories ?? 0),
-        proteins: acc.proteins + (m.proteins ?? 0),
-        carbs: acc.carbs + (m.carbs ?? 0),
-        fats: acc.fats + (m.fats ?? 0),
-      }),
-      { calories: 0, proteins: 0, carbs: 0, fats: 0 },
-    );
-  }, [data]);
-
-  // Macros restantes vs objectifs.
-  const remaining = useMemo(() => {
-    if (!goals) return null;
-    const r = (g: number | null | undefined, v: number) =>
-      g != null ? Math.round(g - v) : null;
-    return {
-      calories: r(goals.calories, totals.calories),
-      proteins: r(goals.proteins, totals.proteins),
-      carbs: r(goals.carbs, totals.carbs),
-      fats: r(goals.fats, totals.fats),
-    };
-  }, [goals, totals]);
+  const { totals, remaining } = useNutritionTotals(data, goals);
 
   const grouped = useMemo(() => {
     type Meal = NonNullable<typeof data>[number];
