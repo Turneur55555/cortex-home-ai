@@ -13,7 +13,7 @@ export function useWeeklyReports() {
         .order('week_start', { ascending: false })
         .limit(12)
       if (error) throw error
-      return (data ?? []) as WeeklyReport[]
+      return (data ?? []) as unknown as WeeklyReport[]
     },
     staleTime: 5 * 60 * 1000,
   })
@@ -29,7 +29,7 @@ export function useWeeklyReport(id: string) {
         .eq('id', id)
         .maybeSingle()
       if (error) throw error
-      return data as WeeklyReport | null
+      return (data as unknown) as WeeklyReport | null
     },
     staleTime: 5 * 60 * 1000,
     enabled: !!id,

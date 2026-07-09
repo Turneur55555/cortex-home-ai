@@ -74,7 +74,7 @@ export function useAddWorkout() {
           notes: input.notes ?? null,
           gym_location: input.gym_location ?? "Salle inconnue",
           discipline: input.discipline ?? "muscu",
-          metadata: input.metadata ?? {},
+          metadata: (input.metadata ?? {}) as never,
         })
         .select()
         .single();
