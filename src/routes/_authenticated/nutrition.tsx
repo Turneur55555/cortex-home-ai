@@ -1,5 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { MoreHorizontal, Flame } from "lucide-react";
 import { NutritionTab } from "./fitness/NutritionTab";
+import { useAuth } from "@/hooks/use-auth";
+import { useProfile } from "@/hooks/useProfile";
+import { useActivityStreak } from "@/hooks/useActivityStreak";
 
 export const Route = createFileRoute("/_authenticated/nutrition")({
   head: () => ({
@@ -12,13 +16,33 @@ export const Route = createFileRoute("/_authenticated/nutrition")({
 });
 
 function NutritionPage() {
+  const { user } = useAuth();
+  const fallback = user?.email?.split("@")[0] ?? "Toi";
+  const { pseudo } = useProfile(fallback);
+  const { current: streak } = useActivityStreak();
+
   return (
-    <main className="flex flex-1 flex-col px-5 pb-6 pt-12">
-      <header className="mb-6">
-        <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
-          Module
-        </p>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight">Nutrition</h1>
+    <main className="flex flex-1 flex-col px-5 pb-8 pt-8">
+      <header className="mb-4 flex items-center justify-between">
+        <h1 className="text-2xl font-bold tracking-tight">
+          Bonjour <span className="text-primary">{pseudo}</span>{" "}
+          <span className="inline-block">👋</span>
+        </h1>
+        <div className="flex items-center gap-2">
+          {streak > 0 && (
+            <div className="flex h-9 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-xs font-semibold">
+              <Flame className="h-3.5 w-3.5 text-warning" />
+              <span>{streak}</span>
+            </div>
+          )}
+          <button
+            type="button"
+            aria-label="Menu"
+            className="flex h-9 w-9 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <MoreHorizontal className="h-4 w-4" />
+          </button>
+        </div>
       </header>
 
       <NutritionTab />
