@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef } from "react";
 import { Link, useLocation } from "@tanstack/react-router";
 import { Home, Dumbbell, Apple, User } from "lucide-react";
 import { motion } from "framer-motion";
@@ -11,9 +12,28 @@ const tabs = [
 
 export function BottomNav() {
   const { pathname } = useLocation();
+  const wrapperRef = useRef<HTMLDivElement>(null);
+
+  // Publie la hauteur réellement rendue de la barre (safe area incluse, via
+  // son propre paddingBottom) dans une variable CSS globale, pour que
+  // n'importe quel écran puisse réserver exactement l'espace nécessaire en
+  // bas de sa ScrollView plutôt qu'une estimation figée — s'adapte seul aux
+  // Dynamic Island, aux appareils sans encoche, et aux réglages de police.
+  useLayoutEffect(() => {
+    const el = wrapperRef.current;
+    if (!el) return;
+    const publishHeight = () => {
+      document.documentElement.style.setProperty("--bottom-nav-height", `${el.offsetHeight}px`);
+    };
+    publishHeight();
+    const observer = new ResizeObserver(publishHeight);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <div
+      ref={wrapperRef}
       className="pointer-events-none fixed inset-x-0 bottom-0 z-30 mx-auto w-full max-w-[430px] px-3"
       style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
     >

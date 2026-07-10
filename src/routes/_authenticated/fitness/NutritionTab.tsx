@@ -668,7 +668,7 @@ export function NutritionTab() {
         type="button"
         onClick={() => setCommandCenterOpen(true)}
         className="pointer-events-auto fixed inset-x-0 z-30 mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-gradient-primary text-primary-foreground shadow-glow"
-        style={{ bottom: "calc(5.5rem + env(safe-area-inset-bottom))" }}
+        style={{ bottom: "calc(6.5rem + env(safe-area-inset-bottom))" }}
         aria-label="Ouvrir le centre de commandes"
       >
         <Plus className="h-6 w-6" />
