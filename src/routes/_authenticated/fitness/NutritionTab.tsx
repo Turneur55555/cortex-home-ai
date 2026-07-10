@@ -8,6 +8,7 @@ import {
   BookOpen,
   Bookmark,
   Calendar,
+  CalendarRange,
   Camera,
   Check,
   ChevronLeft,
@@ -114,9 +115,6 @@ export function NutritionTab() {
     label: string;
   } | null>(null);
   const [expandedMeal, setExpandedMeal] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"all" | "favoris" | "saved" | "history" | "plan">(
-    "all",
-  );
 
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [copyOpen, setCopyOpen] = useState(false);
@@ -253,15 +251,6 @@ export function NutritionTab() {
     });
   };
 
-  // ─── Tabs "Mes repas" ────────────────────────────────────────────────────
-  const handleTab = (t: typeof activeTab) => {
-    setActiveTab(t);
-    if (t === "favoris") setFavSheetOpen(true);
-    else if (t === "saved") setSavedOpen(true);
-    else if (t === "history") setHistoryOpen(true);
-    else if (t === "plan") setPlanOpen(true);
-  };
-
   const dateLabel = format(parseISO(date), "d MMMM yyyy", { locale: fr });
 
   return (
@@ -360,9 +349,6 @@ export function NutritionTab() {
                       {Math.round((totals.calories / goals.calories) * 100)}%
                     </span>
                   </div>
-                  <p className="mt-2 text-[11px] text-muted-foreground">
-                    Objectif quotidien : {goals.calories} kcal
-                  </p>
                 </div>
               </>
             ) : (
@@ -425,91 +411,10 @@ export function NutritionTab() {
           </div>
         )}
 
-      {/* ─── Actions rapides ────────────────────────────────────────────── */}
-      <section className="rounded-3xl border border-border bg-card p-4">
-        <p className="mb-3 text-sm font-bold">Actions rapides</p>
-        <div className="grid grid-cols-4 gap-2.5">
-          <QuickAction icon={Camera} label="Scan repas" onClick={() => setScanOpen(true)} />
-          <QuickAction icon={Mic} label="Vocal" onClick={() => setVoiceOpen(true)} />
-          <QuickAction icon={Barcode} label="Code-barres" onClick={() => setBarcodeOpen(true)} />
-          <QuickAction icon={Sparkles} label="Analyse IA" onClick={() => setAnalysisOpen(true)} />
-        </div>
-        <div className="mt-2.5 grid grid-cols-4 gap-2.5">
-          <QuickAction icon={Target} label="Objectifs" onClick={() => setGoalsOpen(true)} />
-          <QuickAction
-            icon={Copy}
-            label="Copier hier"
-            onClick={() =>
-              copyDay.mutate({ from: format(subDays(new Date(), 1), "yyyy-MM-dd"), to: date })
-            }
-            pending={copyDay.isPending}
-          />
-          <QuickAction icon={Calendar} label="Copier…" onClick={() => setCopyOpen((o) => !o)} />
-          <QuickAction icon={BookOpen} label="Recettes" onClick={() => setRecipeLogOpen(true)} />
-        </div>
-      </section>
-
-      {copyOpen && (
-        <div className="flex items-center gap-2 rounded-2xl border border-border bg-card p-3">
-          <input
-            type="date"
-            value={copyFrom}
-            onChange={(e) => setCopyFrom(e.target.value)}
-            className="flex-1 rounded-xl border border-border bg-transparent px-3 py-2 text-sm outline-none focus:border-primary/60"
-          />
-          <button
-            type="button"
-            disabled={copyDay.isPending}
-            onClick={() =>
-              copyDay.mutate(
-                { from: copyFrom, to: date },
-                { onSuccess: () => setCopyOpen(false) },
-              )
-            }
-            className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-primary px-3 text-xs font-semibold text-primary-foreground disabled:opacity-60"
-          >
-            {copyDay.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            Copier ici
-          </button>
-        </div>
-      )}
-
-      {/* ─── Mes repas — tabs + cartes ──────────────────────────────────── */}
+      {/* ─── Mes repas ──────────────────────────────────────────────────── */}
       <section>
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-lg font-bold tracking-tight">Mes repas</h2>
-        </div>
-        <div className="mb-3 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <TabChip
-            active={activeTab === "all"}
-            icon={Utensils}
-            label="Tous"
-            onClick={() => setActiveTab("all")}
-          />
-          <TabChip
-            active={activeTab === "favoris"}
-            icon={Star}
-            label="Favoris"
-            onClick={() => handleTab("favoris")}
-          />
-          <TabChip
-            active={activeTab === "saved"}
-            icon={Bookmark}
-            label="Enregistrés"
-            onClick={() => handleTab("saved")}
-          />
-          <TabChip
-            active={activeTab === "history"}
-            icon={Clock}
-            label="Historique"
-            onClick={() => handleTab("history")}
-          />
-          <TabChip
-            active={activeTab === "plan"}
-            icon={Calendar}
-            label="Plan"
-            onClick={() => handleTab("plan")}
-          />
         </div>
 
         {isLoading && (
@@ -748,7 +653,7 @@ export function NutritionTab() {
       {/* ─── Compléments — strip horizontal ─────────────────────────────── */}
       <SupplementsStrip date={date} />
 
-      {/* ─── FAB Speed Dial ─────────────────────────────────────────────── */}
+      {/* ─── FAB Speed Dial — centre de commandes ────────────────────────── */}
       <SpeedDialFab
         open={speedDialOpen}
         onToggle={() => setSpeedDialOpen((o) => !o)}
@@ -758,53 +663,72 @@ export function NutritionTab() {
           else if (action === "scan") setScanOpen(true);
           else if (action === "barcode") setBarcodeOpen(true);
           else if (action === "voice") setVoiceOpen(true);
+          else if (action === "analysis") setAnalysisOpen(true);
           else if (action === "recipe") setRecipeLogOpen(true);
           else if (action === "favorites") setFavSheetOpen(true);
           else if (action === "saved") setSavedOpen(true);
+          else if (action === "history") setHistoryOpen(true);
+          else if (action === "plan") setPlanOpen(true);
+          else if (action === "goals") setGoalsOpen(true);
+          else if (action === "copy-yesterday")
+            copyDay.mutate({ from: format(subDays(new Date(), 1), "yyyy-MM-dd"), to: date });
+          else if (action === "copy-day") setCopyOpen(true);
         }}
       />
 
       {open && <NutritionSheet date={date} prefill={prefill} onClose={() => setOpen(false)} />}
       {goalsOpen && <GoalsSheet current={goals ?? null} onClose={() => setGoalsOpen(false)} />}
-      {planOpen && (
-        <MealPlanSheet
-          onClose={() => {
-            setPlanOpen(false);
-            setActiveTab("all");
-          }}
-        />
-      )}
-      {historyOpen && (
-        <NutritionHistorySheet
-          onClose={() => {
-            setHistoryOpen(false);
-            setActiveTab("all");
-          }}
-        />
-      )}
+      {planOpen && <MealPlanSheet onClose={() => setPlanOpen(false)} />}
+      {historyOpen && <NutritionHistorySheet onClose={() => setHistoryOpen(false)} />}
       {scanOpen && <MealScanSheet onClose={() => setScanOpen(false)} date={date} />}
       {barcodeOpen && <BarcodeScannerSheet onClose={() => setBarcodeOpen(false)} />}
       {analysisOpen && <NutritionAnalysisSheet onClose={() => setAnalysisOpen(false)} />}
-      {savedOpen && (
-        <SavedMealsSheet
-          date={date}
-          onClose={() => {
-            setSavedOpen(false);
-            setActiveTab("all");
-          }}
-        />
-      )}
-      {favSheetOpen && (
-        <FavoritesSheet
-          date={date}
-          onClose={() => {
-            setFavSheetOpen(false);
-            setActiveTab("all");
-          }}
-        />
-      )}
+      {savedOpen && <SavedMealsSheet date={date} onClose={() => setSavedOpen(false)} />}
+      {favSheetOpen && <FavoritesSheet date={date} onClose={() => setFavSheetOpen(false)} />}
       {recipeLogOpen && <RecipeLogSheet date={date} onClose={() => setRecipeLogOpen(false)} />}
       {voiceOpen && <VoiceLogSheet date={date} onClose={() => setVoiceOpen(false)} />}
+      {copyOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm"
+          onClick={() => setCopyOpen(false)}
+        >
+          <div
+            className="mb-20 w-full max-w-sm rounded-2xl border border-border bg-card p-5 shadow-elevated"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p className="mb-3 text-sm font-semibold">Copier une journée</p>
+            <input
+              type="date"
+              value={copyFrom}
+              onChange={(e) => setCopyFrom(e.target.value)}
+              className="mb-4 w-full rounded-xl border border-border bg-transparent px-3 py-2 text-sm outline-none focus:border-primary/60"
+            />
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setCopyOpen(false)}
+                className="flex-1 rounded-xl border border-border py-2.5 text-sm font-medium"
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                disabled={copyDay.isPending}
+                onClick={() =>
+                  copyDay.mutate(
+                    { from: copyFrom, to: date },
+                    { onSuccess: () => setCopyOpen(false) },
+                  )
+                }
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-60"
+              >
+                {copyDay.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                Copier ici
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {portionItem && (
         <PortionEditModal
           item={portionItem}
@@ -932,62 +856,6 @@ function MacroCard({
   );
 }
 
-function QuickAction({
-  icon: Icon,
-  label,
-  onClick,
-  pending,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  onClick: () => void;
-  pending?: boolean;
-}) {
-  return (
-    <motion.button
-      whileTap={{ scale: 0.94 }}
-      type="button"
-      onClick={onClick}
-      disabled={pending}
-      className="flex flex-col items-center gap-1.5 rounded-2xl border border-border bg-surface/60 p-2.5 transition-colors hover:border-primary/40 disabled:opacity-60"
-    >
-      <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
-        {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Icon className="h-4 w-4" />}
-      </span>
-      <span className="text-center text-[10px] font-medium leading-tight text-foreground">
-        {label}
-      </span>
-    </motion.button>
-  );
-}
-
-function TabChip({
-  active,
-  icon: Icon,
-  label,
-  onClick,
-}: {
-  active: boolean;
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex shrink-0 items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-all ${
-        active
-          ? "bg-gradient-primary text-primary-foreground shadow-glow"
-          : "border border-border bg-card text-muted-foreground hover:text-foreground"
-      }`}
-    >
-      <Icon className="h-3.5 w-3.5" />
-      {label}
-    </button>
-  );
-}
-
 function MacroInline({
   color,
   label,
@@ -1082,15 +950,21 @@ function SupplementsStrip({ date }: { date: string }) {
   );
 }
 
-// ─── FAB Speed Dial ──────────────────────────────────────────────────────
+// ─── FAB Speed Dial — centre de commandes unique du module Nutrition ────────
 type SpeedDialAction =
   | "manual"
   | "scan"
   | "barcode"
   | "voice"
-  | "recipe"
+  | "analysis"
   | "favorites"
-  | "saved";
+  | "saved"
+  | "history"
+  | "plan"
+  | "recipe"
+  | "copy-yesterday"
+  | "copy-day"
+  | "goals";
 
 function SpeedDialFab({
   open,
@@ -1102,13 +976,19 @@ function SpeedDialFab({
   onAction: (a: SpeedDialAction) => void;
 }) {
   const items: Array<{ action: SpeedDialAction; label: string; icon: React.ComponentType<{ className?: string }> }> = [
-    { action: "manual", label: "Aliment", icon: Apple },
-    { action: "scan", label: "Scan repas", icon: Camera },
-    { action: "barcode", label: "Code-barres", icon: Barcode },
-    { action: "voice", label: "Vocal", icon: Mic },
-    { action: "recipe", label: "Recette", icon: BookOpen },
+    { action: "manual", label: "Ajouter un aliment", icon: Apple },
+    { action: "scan", label: "Scanner un repas", icon: Camera },
+    { action: "barcode", label: "Scanner un code-barres", icon: Barcode },
+    { action: "voice", label: "Saisie vocale", icon: Mic },
+    { action: "analysis", label: "Analyse IA", icon: Sparkles },
     { action: "favorites", label: "Favoris", icon: Star },
-    { action: "saved", label: "Enregistrés", icon: Bookmark },
+    { action: "saved", label: "Repas enregistrés", icon: Bookmark },
+    { action: "history", label: "Historique", icon: Clock },
+    { action: "plan", label: "Planning", icon: CalendarRange },
+    { action: "recipe", label: "Recettes", icon: BookOpen },
+    { action: "copy-yesterday", label: "Copier hier", icon: Copy },
+    { action: "copy-day", label: "Copier une journée", icon: Calendar },
+    { action: "goals", label: "Objectifs", icon: Target },
   ];
 
   return (
@@ -1137,7 +1017,7 @@ function SpeedDialFab({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 20 }}
               transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-              className="pointer-events-auto mb-3 grid w-full grid-cols-2 gap-2 rounded-3xl border border-border bg-card/95 p-3 shadow-elevated backdrop-blur-xl"
+              className="pointer-events-auto mb-3 grid max-h-[65vh] w-full grid-cols-2 gap-2 overflow-y-auto rounded-3xl border border-border bg-card/95 p-3 shadow-elevated backdrop-blur-xl"
             >
               {items.map((it, i) => {
                 const Icon = it.icon;
