@@ -1392,53 +1392,6 @@ export type Database = {
         }
         Relationships: []
       }
-      workout_segments: {
-        Row: {
-          completed: boolean
-          created_at: string
-          id: string
-          label: string
-          metric_key: string | null
-          metrics: Json
-          position: number
-          updated_at: string
-          user_id: string
-          workout_id: string
-        }
-        Insert: {
-          completed?: boolean
-          created_at?: string
-          id?: string
-          label: string
-          metric_key?: string | null
-          metrics?: Json
-          position?: number
-          updated_at?: string
-          user_id: string
-          workout_id: string
-        }
-        Update: {
-          completed?: boolean
-          created_at?: string
-          id?: string
-          label?: string
-          metric_key?: string | null
-          metrics?: Json
-          position?: number
-          updated_at?: string
-          user_id?: string
-          workout_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "workout_segments_workout_id_fkey"
-            columns: ["workout_id"]
-            isOneToOne: false
-            referencedRelation: "workouts"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       workout_template_exercises: {
         Row: {
           created_at: string
