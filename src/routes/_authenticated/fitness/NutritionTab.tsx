@@ -98,6 +98,16 @@ const DEFAULT_VISUAL = {
   accent: "text-muted-foreground",
 };
 
+// ─── Design system partagé — un seul rythme d'animation, une seule famille
+// de cartes pour tout le module (rayon, ombre, fond, effet de pression).
+const EASE = [0.16, 1, 0.3, 1] as const;
+const TRANSITION = { duration: 0.28, ease: EASE };
+const PRESS_SPRING = { type: "spring", stiffness: 500, damping: 30 } as const;
+const POP_SPRING = { type: "spring", stiffness: 380, damping: 22 } as const;
+const PRESS_LARGE = { scale: 0.985, transition: PRESS_SPRING };
+const PRESS_SMALL = { scale: 0.94, transition: PRESS_SPRING };
+const CARD = "rounded-3xl border border-border bg-card shadow-sm";
+
 export function NutritionTab() {
   const today = format(new Date(), "yyyy-MM-dd");
   const [date, setDate] = useState(today);
@@ -255,14 +265,15 @@ export function NutritionTab() {
     <section className="flex flex-col gap-4">
       {/* ─── Barre date premium ─────────────────────────────────────────── */}
       <div className="flex items-center gap-2">
-        <button
+        <motion.button
+          whileTap={PRESS_SMALL}
           type="button"
           onClick={() => setDate(format(subDays(parseISO(date), 1), "yyyy-MM-dd"))}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-all active:scale-95"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-card text-muted-foreground"
           aria-label="Jour précédent"
         >
           <ChevronLeft className="h-4 w-4" />
-        </button>
+        </motion.button>
 
         <div className="relative flex-1">
           <button
@@ -277,7 +288,7 @@ export function NutritionTab() {
                 initial={{ opacity: 0, y: 4 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -4 }}
-                transition={{ duration: 0.16 }}
+                transition={TRANSITION}
                 className="capitalize"
               >
                 {dateLabel}
@@ -302,32 +313,34 @@ export function NutritionTab() {
           )}
         </div>
 
-        <button
+        <motion.button
+          whileTap={PRESS_SMALL}
           type="button"
           onClick={() => setDate(format(addDays(parseISO(date), 1), "yyyy-MM-dd"))}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-all active:scale-95"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-card text-muted-foreground"
           aria-label="Jour suivant"
         >
           <ChevronRight className="h-4 w-4" />
-        </button>
+        </motion.button>
       </div>
 
       {date !== today && (
-        <button
+        <motion.button
+          whileTap={PRESS_SMALL}
           type="button"
           onClick={() => setDate(today)}
           className="mx-auto rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary"
         >
           ← Aujourd'hui
-        </button>
+        </motion.button>
       )}
 
       {/* ─── Carte Calories premium ─────────────────────────────────────── */}
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-        className="relative overflow-hidden rounded-3xl border border-border bg-card p-4"
+        transition={TRANSITION}
+        className={`relative overflow-hidden p-4 ${CARD}`}
       >
         <div
           aria-hidden
@@ -349,7 +362,7 @@ export function NutritionTab() {
                       animate={{
                         width: `${Math.min(100, (totals.calories / goals.calories) * 100)}%`,
                       }}
-                      transition={{ duration: 0.6, ease: "easeOut" }}
+                      transition={TRANSITION}
                       className="h-full rounded-full bg-gradient-primary"
                     />
                   </div>
@@ -361,14 +374,15 @@ export function NutritionTab() {
             ) : (
               <>
                 <p className="text-sm text-muted-foreground">Aucun objectif défini</p>
-                <button
+                <motion.button
+                  whileTap={PRESS_SMALL}
                   type="button"
                   onClick={() => setGoalsOpen(true)}
                   className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary"
                 >
                   <Target className="h-3 w-3" />
                   Définir un objectif
-                </button>
+                </motion.button>
               </>
             )}
           </div>
@@ -461,15 +475,23 @@ export function NutritionTab() {
                   layout
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.25, delay: idx * 0.04, ease: [0.16, 1, 0.3, 1] }}
-                  className="overflow-hidden rounded-3xl border border-border bg-card"
+                  transition={{ ...TRANSITION, delay: idx * 0.04 }}
+                  className={`relative overflow-hidden ${CARD}`}
                 >
                   <motion.button
-                    whileTap={{ scale: 0.985 }}
+                    initial="rest"
+                    whileTap="pressed"
+                    variants={{ rest: { scale: 1 }, pressed: PRESS_LARGE }}
                     type="button"
                     onClick={() => setExpandedMeal(expanded ? null : g.key)}
-                    className="flex w-full items-center gap-3 p-3.5 text-left"
+                    className="relative flex w-full items-center gap-3 p-3.5 text-left"
                   >
+                    <motion.span
+                      aria-hidden
+                      variants={{ rest: { opacity: 0 }, pressed: { opacity: 1 } }}
+                      transition={{ duration: 0.15 }}
+                      className="pointer-events-none absolute inset-0 rounded-[inherit] bg-primary/5"
+                    />
                     <div
                       className={`relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br shadow-sm ring-1 ring-white/10 ${visual.gradient}`}
                     >
@@ -505,7 +527,7 @@ export function NutritionTab() {
                         initial={{ height: 0, opacity: 0, scale: 0.98 }}
                         animate={{ height: "auto", opacity: 1, scale: 1 }}
                         exit={{ height: 0, opacity: 0, scale: 0.98 }}
-                        transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+                        transition={TRANSITION}
                         className="overflow-hidden"
                       >
                         <div className="border-t border-border/60 px-3 pb-3 pt-2">
@@ -538,7 +560,8 @@ export function NutritionTab() {
                                 placeholder="Nom du repas"
                                 className="min-w-0 flex-1 rounded-lg border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none focus:border-primary/60"
                               />
-                              <button
+                              <motion.button
+                                whileTap={PRESS_SMALL}
                                 type="button"
                                 disabled={createSavedMeal.isPending}
                                 onClick={() => saveGroupAsMeal(g)}
@@ -548,7 +571,7 @@ export function NutritionTab() {
                                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                 )}
                                 Enregistrer
-                              </button>
+                              </motion.button>
                             </div>
                           )}
 
@@ -576,7 +599,8 @@ export function NutritionTab() {
                                         L{m.fats ?? 0}
                                       </p>
                                     </div>
-                                    <button
+                                    <motion.button
+                                      whileTap={PRESS_SMALL}
                                       type="button"
                                       onClick={(e) => {
                                         e.stopPropagation();
@@ -605,8 +629,9 @@ export function NutritionTab() {
                                       aria-label="Re-ajouter"
                                     >
                                       <Plus className="h-4 w-4" />
-                                    </button>
-                                    <button
+                                    </motion.button>
+                                    <motion.button
+                                      whileTap={PRESS_SMALL}
                                       type="button"
                                       onClick={(e) => {
                                         e.stopPropagation();
@@ -617,7 +642,7 @@ export function NutritionTab() {
                                       aria-label="Ajouter aux favoris"
                                     >
                                       <Star className="h-4 w-4" />
-                                    </button>
+                                    </motion.button>
                                   </div>
                                 </SwipeableNutritionItem>
                               );
@@ -639,7 +664,7 @@ export function NutritionTab() {
 
       {/* ─── Bouton "+" — ouvre le centre de commandes ───────────────────── */}
       <motion.button
-        whileTap={{ scale: 0.9 }}
+        whileTap={PRESS_SMALL}
         type="button"
         onClick={() => setCommandCenterOpen(true)}
         className="pointer-events-auto fixed inset-x-0 z-30 mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-gradient-primary text-primary-foreground shadow-glow"
@@ -699,14 +724,16 @@ export function NutritionTab() {
               className="mb-4 w-full rounded-xl border border-border bg-transparent px-3 py-2 text-sm outline-none focus:border-primary/60"
             />
             <div className="flex gap-3">
-              <button
+              <motion.button
+                whileTap={PRESS_SMALL}
                 type="button"
                 onClick={() => setCopyOpen(false)}
                 className="flex-1 rounded-xl border border-border py-2.5 text-sm font-medium"
               >
                 Annuler
-              </button>
-              <button
+              </motion.button>
+              <motion.button
+                whileTap={PRESS_SMALL}
                 type="button"
                 disabled={copyDay.isPending}
                 onClick={() =>
@@ -719,7 +746,7 @@ export function NutritionTab() {
               >
                 {copyDay.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                 Copier ici
-              </button>
+              </motion.button>
             </div>
           </div>
         </div>
@@ -772,12 +799,12 @@ function CaloriesRing({ consumed, target }: { consumed: number; target: number }
           strokeDasharray={CIRC}
           initial={{ strokeDashoffset: CIRC }}
           animate={{ strokeDashoffset: offset }}
-          transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
+          transition={TRANSITION}
           className={over ? "text-destructive" : "text-primary"}
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-xl font-bold tabular-nums leading-none text-foreground">
+        <span className="text-2xl font-bold tabular-nums leading-none text-foreground">
           {consumed}
         </span>
         <span className="mt-0.5 text-[9px] font-medium uppercase tracking-wider text-muted-foreground">
@@ -813,8 +840,8 @@ function MacroCard({
     <motion.div
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-      className="rounded-2xl border border-border bg-card p-2.5"
+      transition={TRANSITION}
+      className={`p-3 ${CARD}`}
     >
       <div className="mb-1.5 flex items-center gap-1.5">
         <span className={`flex h-6 w-6 items-center justify-center rounded-lg ${iconBg}`}>
@@ -835,7 +862,7 @@ function MacroCard({
         <motion.div
           initial={{ width: 0 }}
           animate={{ width: `${pct}%` }}
-          transition={{ duration: 0.6, ease: "easeOut" }}
+          transition={TRANSITION}
           className={`h-full rounded-full ${barColor}`}
         />
       </div>
@@ -873,11 +900,11 @@ function SupplementsStrip({ date }: { date: string }) {
         </Link>
       </div>
       {isLoading ? (
-        <div className="h-20 animate-pulse rounded-2xl bg-muted/40" />
+        <div className="h-20 animate-pulse rounded-3xl bg-muted/40" />
       ) : items.length === 0 ? (
         <Link
           to="/supplements"
-          className="flex items-center justify-center gap-1.5 rounded-2xl border border-dashed border-border py-5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+          className="flex items-center justify-center gap-1.5 rounded-3xl border border-dashed border-border py-5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
         >
           <Plus className="h-3.5 w-3.5" />
           Ajouter un complément
@@ -888,10 +915,10 @@ function SupplementsStrip({ date }: { date: string }) {
             <motion.button
               key={s.id}
               layout
-              whileTap={{ scale: 0.94 }}
+              whileTap={PRESS_SMALL}
               type="button"
               onClick={() => toggle.mutate({ supplement_id: s.id, taken: !s.taken })}
-              className={`relative flex w-20 shrink-0 flex-col items-center gap-1 rounded-2xl border p-2.5 text-center transition-all ${
+              className={`relative flex w-20 shrink-0 flex-col items-center gap-1 rounded-3xl border p-2.5 text-center shadow-sm transition-colors ${
                 s.taken ? "border-primary/40 bg-primary/5" : "border-border bg-card"
               }`}
             >
@@ -923,7 +950,7 @@ function SupplementsStrip({ date }: { date: string }) {
                     initial={{ scale: 0, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
                     exit={{ scale: 0, opacity: 0 }}
-                    transition={{ type: "spring", stiffness: 380, damping: 20 }}
+                    transition={POP_SPRING}
                     className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-white shadow-glow"
                   >
                     <Check className="h-2.5 w-2.5" strokeWidth={3} />
@@ -1094,7 +1121,7 @@ function NutritionCommandCenter({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.25 }}
+            transition={TRANSITION}
             className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
             onClick={onClose}
           />
@@ -1104,7 +1131,7 @@ function NutritionCommandCenter({
             initial={{ y: "100%" }}
             animate={{ y: 0 }}
             exit={{ y: "100%" }}
-            transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+            transition={TRANSITION}
             drag="y"
             dragControls={dragControls}
             dragListener={false}
@@ -1120,51 +1147,80 @@ function NutritionCommandCenter({
               onPointerDown={(e) => dragControls.start(e)}
             >
               <span className="h-1.5 w-10 rounded-full bg-muted" />
-              <div className="mt-2 flex w-full items-center justify-between px-5">
+              <div className="mt-2.5 flex w-full items-center justify-between px-5">
                 <div>
                   <p className="text-base font-bold tracking-tight">Centre de commandes</p>
                   <p className="text-xs text-muted-foreground">
                     Toutes les actions Nutrition, au même endroit.
                   </p>
                 </div>
-                <button
+                <motion.button
+                  whileTap={PRESS_SMALL}
                   type="button"
                   onClick={onClose}
                   aria-label="Fermer"
                   className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:text-foreground"
                 >
                   <X className="h-4 w-4" />
-                </button>
+                </motion.button>
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto px-5 pb-8 pt-2">
+            <div className="flex-1 overflow-y-auto px-5 pb-8 pt-3">
               {COMMAND_SECTIONS.map((section, si) => (
-                <div key={section.key} className={si > 0 ? "mt-6" : ""}>
-                  <p className="text-sm font-bold">
-                    {section.emoji} {section.title}
-                  </p>
-                  <p className="mb-3 mt-0.5 text-xs text-muted-foreground">{section.description}</p>
-                  <div className="flex flex-col gap-2">
+                <div
+                  key={section.key}
+                  className={si > 0 ? "mt-7 border-t border-border/60 pt-6" : ""}
+                >
+                  <div className="mb-3.5 flex items-center gap-2.5">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-base">
+                      {section.emoji}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-bold">{section.title}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {section.description}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-2.5">
                     {section.items.map((it, i) => {
                       const Icon = it.icon;
                       return (
                         <motion.button
                           key={it.action}
-                          initial={{ opacity: 0, y: 8 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: 0.02 * i, duration: 0.2 }}
-                          whileTap={{ scale: 0.97 }}
+                          initial="hidden"
+                          animate="visible"
+                          whileTap="pressed"
+                          variants={{
+                            hidden: { opacity: 0, y: 8 },
+                            visible: {
+                              opacity: 1,
+                              y: 0,
+                              transition: { ...TRANSITION, delay: 0.02 * i },
+                            },
+                            pressed: PRESS_LARGE,
+                          }}
                           type="button"
                           onClick={() => onAction(it.action)}
-                          className="flex items-center gap-3 rounded-2xl border border-border bg-surface/60 p-3 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
+                          className={`relative flex items-center gap-3.5 p-4 text-left transition-colors hover:border-primary/40 hover:bg-primary/5 ${CARD}`}
                         >
-                          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                            <Icon className="h-5 w-5" />
+                          <motion.span
+                            aria-hidden
+                            variants={{
+                              hidden: { opacity: 0 },
+                              visible: { opacity: 0 },
+                              pressed: { opacity: 1 },
+                            }}
+                            transition={{ duration: 0.15 }}
+                            className="pointer-events-none absolute inset-0 rounded-[inherit] bg-primary/5"
+                          />
+                          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                            <Icon className="h-6 w-6" />
                           </span>
                           <div className="min-w-0 flex-1">
-                            <p className="text-sm font-semibold text-foreground">{it.title}</p>
-                            <p className="truncate text-[11px] text-muted-foreground">
+                            <p className="text-sm font-bold text-foreground">{it.title}</p>
+                            <p className="mt-0.5 truncate text-xs text-muted-foreground">
                               {it.description}
                             </p>
                           </div>
