@@ -22,14 +22,14 @@ function NutritionPage() {
   const { current: streak } = useActivityStreak();
 
   return (
-    <main className="flex flex-1 flex-col px-5 pb-8 pt-8">
-      <header className="mb-4 flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">
+    <main className="flex flex-1 flex-col px-5 pb-6 pt-6">
+      <header className="mb-3 flex items-center justify-between">
+        <h1 className="text-xl font-bold tracking-tight">
           Bonjour <span className="text-primary">{pseudo}</span>{" "}
           <span className="inline-block">👋</span>
         </h1>
         {streak > 0 && (
-          <div className="flex h-9 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-xs font-semibold">
+          <div className="flex h-8 items-center gap-1.5 rounded-full border border-border bg-card px-2.5 text-xs font-semibold">
             <Flame className="h-3.5 w-3.5 text-warning" />
             <span>{streak}</span>
           </div>

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, motion, useDragControls } from "framer-motion";
 import {
   Activity,
   AlertTriangle,
@@ -118,9 +118,7 @@ export function NutritionTab() {
 
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [copyOpen, setCopyOpen] = useState(false);
-  const [copyFrom, setCopyFrom] = useState(() =>
-    format(subDays(new Date(), 1), "yyyy-MM-dd"),
-  );
+  const [copyFrom, setCopyFrom] = useState(() => format(subDays(new Date(), 1), "yyyy-MM-dd"));
   const [historyOpen, setHistoryOpen] = useState(false);
   const [open, setOpen] = useState(false);
   const [goalsOpen, setGoalsOpen] = useState(false);
@@ -134,7 +132,7 @@ export function NutritionTab() {
   const [favSheetOpen, setFavSheetOpen] = useState(false);
   const [recipeLogOpen, setRecipeLogOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
-  const [speedDialOpen, setSpeedDialOpen] = useState(false);
+  const [commandCenterOpen, setCommandCenterOpen] = useState(false);
   const createSavedMeal = useCreateSavedMeal();
   const [saveGroupKey, setSaveGroupKey] = useState<string | null>(null);
   const [saveGroupName, setSaveGroupName] = useState("");
@@ -254,13 +252,13 @@ export function NutritionTab() {
   const dateLabel = format(parseISO(date), "d MMMM yyyy", { locale: fr });
 
   return (
-    <section className="flex flex-col gap-5">
+    <section className="flex flex-col gap-4">
       {/* ─── Barre date premium ─────────────────────────────────────────── */}
       <div className="flex items-center gap-2">
         <button
           type="button"
           onClick={() => setDate(format(subDays(parseISO(date), 1), "yyyy-MM-dd"))}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-all active:scale-95"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-all active:scale-95"
           aria-label="Jour précédent"
         >
           <ChevronLeft className="h-4 w-4" />
@@ -270,16 +268,27 @@ export function NutritionTab() {
           <button
             type="button"
             onClick={() => setDatePickerOpen((o) => !o)}
-            className="flex h-10 w-full items-center justify-center gap-2 rounded-full border border-border bg-card px-4 text-sm font-medium"
+            className="flex h-9 w-full items-center justify-center gap-2 rounded-full border border-border bg-card px-4 text-sm font-medium"
           >
             <Calendar className="h-4 w-4 text-primary" />
-            <span className="capitalize">{dateLabel}</span>
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.span
+                key={date}
+                initial={{ opacity: 0, y: 4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.16 }}
+                className="capitalize"
+              >
+                {dateLabel}
+              </motion.span>
+            </AnimatePresence>
             <ChevronRight
               className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${datePickerOpen ? "rotate-90" : "rotate-0"}`}
             />
           </button>
           {datePickerOpen && (
-            <div className="absolute left-0 right-0 top-12 z-20 rounded-2xl border border-border bg-card p-2 shadow-elevated">
+            <div className="absolute left-0 right-0 top-11 z-20 rounded-2xl border border-border bg-card p-2 shadow-elevated">
               <input
                 type="date"
                 value={date}
@@ -296,7 +305,7 @@ export function NutritionTab() {
         <button
           type="button"
           onClick={() => setDate(format(addDays(parseISO(date), 1), "yyyy-MM-dd"))}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-all active:scale-95"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-card text-muted-foreground transition-all active:scale-95"
           aria-label="Jour suivant"
         >
           <ChevronRight className="h-4 w-4" />
@@ -318,13 +327,13 @@ export function NutritionTab() {
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-        className="relative overflow-hidden rounded-3xl border border-border bg-card p-5"
+        className="relative overflow-hidden rounded-3xl border border-border bg-card p-4"
       >
         <div
           aria-hidden
           className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-primary/10 blur-3xl"
         />
-        <div className="relative flex items-center gap-5">
+        <div className="relative flex items-center gap-4">
           <CaloriesRing consumed={Math.round(totals.calories)} target={goals?.calories ?? 0} />
           <div className="min-w-0 flex-1">
             {goals?.calories ? (
@@ -333,22 +342,20 @@ export function NutritionTab() {
                   {Math.max(0, goals.calories - Math.round(totals.calories))}{" "}
                   <span className="text-sm font-medium text-primary/80">kcal restantes</span>
                 </p>
-                <div className="mt-3">
-                  <div className="flex items-center gap-2">
-                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{
-                          width: `${Math.min(100, (totals.calories / goals.calories) * 100)}%`,
-                        }}
-                        transition={{ duration: 0.6, ease: "easeOut" }}
-                        className="h-full rounded-full bg-gradient-primary"
-                      />
-                    </div>
-                    <span className="shrink-0 text-xs font-bold text-primary">
-                      {Math.round((totals.calories / goals.calories) * 100)}%
-                    </span>
+                <div className="mt-2.5 flex items-center gap-2">
+                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{
+                        width: `${Math.min(100, (totals.calories / goals.calories) * 100)}%`,
+                      }}
+                      transition={{ duration: 0.6, ease: "easeOut" }}
+                      className="h-full rounded-full bg-gradient-primary"
+                    />
                   </div>
+                  <span className="shrink-0 text-xs font-bold text-primary">
+                    {Math.round((totals.calories / goals.calories) * 100)}%
+                  </span>
                 </div>
               </>
             ) : (
@@ -369,7 +376,7 @@ export function NutritionTab() {
       </motion.div>
 
       {/* ─── Macros — 3 cartes ─────────────────────────────────────────── */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-3 gap-2.5">
         <MacroCard
           icon={Drumstick}
           iconColor="text-emerald-400"
@@ -413,7 +420,7 @@ export function NutritionTab() {
 
       {/* ─── Mes repas ──────────────────────────────────────────────────── */}
       <section>
-        <div className="mb-3 flex items-center justify-between">
+        <div className="mb-2.5 flex items-center justify-between">
           <h2 className="text-lg font-bold tracking-tight">Mes repas</h2>
         </div>
 
@@ -433,7 +440,7 @@ export function NutritionTab() {
           </div>
         )}
 
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           <AnimatePresence initial={false}>
             {grouped.map((g, idx) => {
               const gTotals = g.items.reduce(
@@ -457,13 +464,14 @@ export function NutritionTab() {
                   transition={{ duration: 0.25, delay: idx * 0.04, ease: [0.16, 1, 0.3, 1] }}
                   className="overflow-hidden rounded-3xl border border-border bg-card"
                 >
-                  <button
+                  <motion.button
+                    whileTap={{ scale: 0.985 }}
                     type="button"
                     onClick={() => setExpandedMeal(expanded ? null : g.key)}
-                    className="flex w-full items-center gap-3 p-3 text-left"
+                    className="flex w-full items-center gap-3 p-3.5 text-left"
                   >
                     <div
-                      className={`relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br ${visual.gradient}`}
+                      className={`relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br shadow-sm ring-1 ring-white/10 ${visual.gradient}`}
                     >
                       <Icon className={`h-6 w-6 ${visual.accent}`} />
                     </div>
@@ -473,24 +481,11 @@ export function NutritionTab() {
                         {g.items.length} aliment{g.items.length > 1 ? "s" : ""}
                       </p>
                     </div>
-                    <div className="flex shrink-0 items-center gap-3">
-                      <div className="hidden text-center xs:block">
-                        <p className="text-[10px] font-bold text-emerald-400">P</p>
-                        <p className="text-[11px] font-semibold">
-                          {Math.round(gTotals.proteins)}g
-                        </p>
-                      </div>
-                      <div className="hidden text-center xs:block">
-                        <p className="text-[10px] font-bold text-amber-400">G</p>
-                        <p className="text-[11px] font-semibold">
-                          {Math.round(gTotals.carbs)}g
-                        </p>
-                      </div>
-                      <div className="hidden text-center xs:block">
-                        <p className="text-[10px] font-bold text-rose-400">L</p>
-                        <p className="text-[11px] font-semibold">
-                          {Math.round(gTotals.fats)}g
-                        </p>
+                    <div className="flex shrink-0 items-center gap-2.5">
+                      <div className="grid grid-cols-3 gap-2">
+                        <MacroChip color="text-emerald-400" label="P" value={gTotals.proteins} />
+                        <MacroChip color="text-amber-400" label="G" value={gTotals.carbs} />
+                        <MacroChip color="text-rose-400" label="L" value={gTotals.fats} />
                       </div>
                       <div className="text-right">
                         <p className="text-base font-bold leading-none">
@@ -502,21 +497,14 @@ export function NutritionTab() {
                         className={`h-4 w-4 text-muted-foreground transition-transform ${expanded ? "rotate-90" : ""}`}
                       />
                     </div>
-                  </button>
-
-                  {/* Compact macros row on very small screens (mockup style) */}
-                  <div className="flex items-center gap-4 border-t border-border/60 px-3 py-2 xs:hidden">
-                    <MacroInline color="text-emerald-400" label="P" value={gTotals.proteins} />
-                    <MacroInline color="text-amber-400" label="G" value={gTotals.carbs} />
-                    <MacroInline color="text-rose-400" label="L" value={gTotals.fats} />
-                  </div>
+                  </motion.button>
 
                   <AnimatePresence initial={false}>
                     {expanded && (
                       <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: "auto", opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
+                        initial={{ height: 0, opacity: 0, scale: 0.98 }}
+                        animate={{ height: "auto", opacity: 1, scale: 1 }}
+                        exit={{ height: 0, opacity: 0, scale: 0.98 }}
                         transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
                         className="overflow-hidden"
                       >
@@ -529,10 +517,7 @@ export function NutritionTab() {
                               mealLabel={g.label}
                               onAction={(action) => {
                                 if (action === "copy-yesterday") {
-                                  const from = format(
-                                    subDays(parseISO(date), 1),
-                                    "yyyy-MM-dd",
-                                  );
+                                  const from = format(subDays(parseISO(date), 1), "yyyy-MM-dd");
                                   copyMeal.mutate({ from, to: date, meal: g.key });
                                 } else if (action === "save-as-template") {
                                   setSaveGroupName(g.label);
@@ -587,8 +572,8 @@ export function NutritionTab() {
                                         )}
                                       </div>
                                       <p className="mt-0.5 text-xs text-muted-foreground">
-                                        {m.calories ?? 0} kcal · P{m.proteins ?? 0} G
-                                        {m.carbs ?? 0} L{m.fats ?? 0}
+                                        {m.calories ?? 0} kcal · P{m.proteins ?? 0} G{m.carbs ?? 0}{" "}
+                                        L{m.fats ?? 0}
                                       </p>
                                     </div>
                                     <button
@@ -604,8 +589,7 @@ export function NutritionTab() {
                                           carbs: m.carbs,
                                           fats: m.fats,
                                           base_calories: m.base_calories ?? m.calories,
-                                          base_proteins:
-                                            m.base_proteins ?? m.proteins ?? null,
+                                          base_proteins: m.base_proteins ?? m.proteins ?? null,
                                           base_carbs: m.base_carbs ?? m.carbs ?? null,
                                           base_fats: m.base_fats ?? m.fats ?? null,
                                           serving_count: m.serving_count ?? 1,
@@ -653,12 +637,23 @@ export function NutritionTab() {
       {/* ─── Compléments — strip horizontal ─────────────────────────────── */}
       <SupplementsStrip date={date} />
 
-      {/* ─── FAB Speed Dial — centre de commandes ────────────────────────── */}
-      <SpeedDialFab
-        open={speedDialOpen}
-        onToggle={() => setSpeedDialOpen((o) => !o)}
+      {/* ─── Bouton "+" — ouvre le centre de commandes ───────────────────── */}
+      <motion.button
+        whileTap={{ scale: 0.9 }}
+        type="button"
+        onClick={() => setCommandCenterOpen(true)}
+        className="pointer-events-auto fixed inset-x-0 z-30 mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-gradient-primary text-primary-foreground shadow-glow"
+        style={{ bottom: "calc(5.5rem + env(safe-area-inset-bottom))" }}
+        aria-label="Ouvrir le centre de commandes"
+      >
+        <Plus className="h-6 w-6" />
+      </motion.button>
+
+      <NutritionCommandCenter
+        open={commandCenterOpen}
+        onClose={() => setCommandCenterOpen(false)}
         onAction={(action) => {
-          setSpeedDialOpen(false);
+          setCommandCenterOpen(false);
           if (action === "manual") openManual();
           else if (action === "scan") setScanOpen(true);
           else if (action === "barcode") setBarcodeOpen(true);
@@ -730,11 +725,7 @@ export function NutritionTab() {
         </div>
       )}
       {portionItem && (
-        <PortionEditModal
-          item={portionItem}
-          date={date}
-          onClose={() => setPortionItem(null)}
-        />
+        <PortionEditModal item={portionItem} date={date} onClose={() => setPortionItem(null)} />
       )}
       {confirmDeleteMeal && (
         <WorkoutDeleteDialog
@@ -742,10 +733,7 @@ export function NutritionTab() {
           onCancel={() => setConfirmDeleteMeal(null)}
           onConfirm={() => {
             const meal = confirmDeleteMeal.key;
-            deleteMeal.mutate(
-              { date, meal },
-              { onSuccess: () => setConfirmDeleteMeal(null) },
-            );
+            deleteMeal.mutate({ date, meal }, { onSuccess: () => setConfirmDeleteMeal(null) });
           }}
         />
       )}
@@ -762,7 +750,7 @@ function CaloriesRing({ consumed, target }: { consumed: number; target: number }
   const over = consumed > target;
   const offset = CIRC * (1 - Math.min(1, pct));
   return (
-    <div className="relative h-28 w-28 shrink-0">
+    <div className="relative h-24 w-24 shrink-0">
       <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
         <circle
           cx="50"
@@ -789,10 +777,10 @@ function CaloriesRing({ consumed, target }: { consumed: number; target: number }
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-2xl font-bold tabular-nums leading-none text-foreground">
+        <span className="text-xl font-bold tabular-nums leading-none text-foreground">
           {consumed}
         </span>
-        <span className="mt-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+        <span className="mt-0.5 text-[9px] font-medium uppercase tracking-wider text-muted-foreground">
           kcal
         </span>
         {target > 0 && (
@@ -826,7 +814,7 @@ function MacroCard({
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-      className="rounded-2xl border border-border bg-card p-3"
+      className="rounded-2xl border border-border bg-card p-2.5"
     >
       <div className="mb-1.5 flex items-center gap-1.5">
         <span className={`flex h-6 w-6 items-center justify-center rounded-lg ${iconBg}`}>
@@ -856,19 +844,13 @@ function MacroCard({
   );
 }
 
-function MacroInline({
-  color,
-  label,
-  value,
-}: {
-  color: string;
-  label: string;
-  value: number;
-}) {
+function MacroChip({ color, label, value }: { color: string; label: string; value: number }) {
   return (
-    <div className="flex items-center gap-1">
-      <span className={`text-[10px] font-bold ${color}`}>{label}</span>
-      <span className="text-[11px] font-semibold text-foreground">{Math.round(value)}g</span>
+    <div className="w-7 text-center">
+      <p className={`text-[9px] font-bold leading-none ${color}`}>{label}</p>
+      <p className="mt-0.5 text-[11px] font-semibold leading-none text-foreground">
+        {Math.round(value)}g
+      </p>
     </div>
   );
 }
@@ -881,7 +863,7 @@ function SupplementsStrip({ date }: { date: string }) {
 
   return (
     <section>
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-2.5 flex items-center justify-between">
         <h2 className="text-lg font-bold tracking-tight">Compléments</h2>
         <Link
           to="/supplements"
@@ -891,37 +873,36 @@ function SupplementsStrip({ date }: { date: string }) {
         </Link>
       </div>
       {isLoading ? (
-        <div className="h-24 animate-pulse rounded-2xl bg-muted/40" />
+        <div className="h-20 animate-pulse rounded-2xl bg-muted/40" />
       ) : items.length === 0 ? (
         <Link
           to="/supplements"
-          className="flex items-center justify-center gap-1.5 rounded-2xl border border-dashed border-border py-6 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+          className="flex items-center justify-center gap-1.5 rounded-2xl border border-dashed border-border py-5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
         >
           <Plus className="h-3.5 w-3.5" />
           Ajouter un complément
         </Link>
       ) : (
-        <div className="flex gap-2.5 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {items.map((s) => (
             <motion.button
               key={s.id}
+              layout
               whileTap={{ scale: 0.94 }}
               type="button"
               onClick={() => toggle.mutate({ supplement_id: s.id, taken: !s.taken })}
-              className={`relative flex w-24 shrink-0 flex-col items-center gap-1 rounded-2xl border p-3 text-center transition-all ${
-                s.taken
-                  ? "border-primary/40 bg-primary/5"
-                  : "border-border bg-card"
+              className={`relative flex w-20 shrink-0 flex-col items-center gap-1 rounded-2xl border p-2.5 text-center transition-all ${
+                s.taken ? "border-primary/40 bg-primary/5" : "border-border bg-card"
               }`}
             >
               <span
-                className={`flex h-10 w-10 items-center justify-center rounded-xl ${
+                className={`flex h-9 w-9 items-center justify-center rounded-xl ${
                   s.taken ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"
                 }`}
               >
-                <Pill className="h-5 w-5" />
+                <Pill className="h-4 w-4" />
               </span>
-              <span className="truncate text-[11px] font-semibold leading-tight text-foreground">
+              <span className="w-full truncate text-[11px] font-semibold leading-tight text-foreground">
                 {s.name}
               </span>
               {(s.dosage || s.unit) && (
@@ -929,6 +910,13 @@ function SupplementsStrip({ date }: { date: string }) {
                   {[s.dosage, s.unit].filter(Boolean).join(" ")}
                 </span>
               )}
+              <span
+                className={`mt-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-semibold ${
+                  s.taken ? "bg-emerald-500/15 text-emerald-500" : "bg-muted text-muted-foreground"
+                }`}
+              >
+                {s.taken ? "Pris" : "À prendre"}
+              </span>
               <AnimatePresence>
                 {s.taken && (
                   <motion.span
@@ -936,9 +924,9 @@ function SupplementsStrip({ date }: { date: string }) {
                     animate={{ scale: 1, opacity: 1 }}
                     exit={{ scale: 0, opacity: 0 }}
                     transition={{ type: "spring", stiffness: 380, damping: 20 }}
-                    className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 text-white shadow-glow"
+                    className="absolute right-1.5 top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500 text-white shadow-glow"
                   >
-                    <Check className="h-3 w-3" strokeWidth={3} />
+                    <Check className="h-2.5 w-2.5" strokeWidth={3} />
                   </motion.span>
                 )}
               </AnimatePresence>
@@ -950,8 +938,8 @@ function SupplementsStrip({ date }: { date: string }) {
   );
 }
 
-// ─── FAB Speed Dial — centre de commandes unique du module Nutrition ────────
-type SpeedDialAction =
+// ─── Centre de commandes — bottom sheet unique du module Nutrition ─────────
+type CommandAction =
   | "manual"
   | "scan"
   | "barcode"
@@ -966,98 +954,231 @@ type SpeedDialAction =
   | "copy-day"
   | "goals";
 
-function SpeedDialFab({
+type CommandItem = {
+  action: CommandAction;
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  description: string;
+};
+
+type CommandSection = {
+  key: string;
+  emoji: string;
+  title: string;
+  description: string;
+  items: CommandItem[];
+};
+
+const COMMAND_SECTIONS: CommandSection[] = [
+  {
+    key: "add",
+    emoji: "🍽",
+    title: "Ajouter",
+    description: "Enregistre un aliment, une recette ou un repas déjà prêt.",
+    items: [
+      {
+        action: "manual",
+        icon: Apple,
+        title: "Ajouter un aliment",
+        description: "Rechercher et ajouter un aliment manuellement.",
+      },
+      {
+        action: "recipe",
+        icon: BookOpen,
+        title: "Ajouter une recette",
+        description: "Choisir une recette et l'ajouter à ton journal.",
+      },
+      {
+        action: "saved",
+        icon: Bookmark,
+        title: "Repas enregistrés",
+        description: "Réutiliser un repas que tu as déjà enregistré.",
+      },
+    ],
+  },
+  {
+    key: "scan",
+    emoji: "📷",
+    title: "Scanner",
+    description: "Ajoute un repas en un instant grâce à la caméra ou ta voix.",
+    items: [
+      {
+        action: "scan",
+        icon: Camera,
+        title: "Scanner un repas",
+        description: "Scanner automatiquement une assiette avec l'IA.",
+      },
+      {
+        action: "barcode",
+        icon: Barcode,
+        title: "Scanner un code-barres",
+        description: "Ajouter un produit en scannant son code-barres.",
+      },
+      {
+        action: "voice",
+        icon: Mic,
+        title: "Saisie vocale",
+        description: "Décrire un repas à voix haute.",
+      },
+    ],
+  },
+  {
+    key: "tools",
+    emoji: "🧠",
+    title: "Outils",
+    description: "Analyse, historique, planning et objectifs nutritionnels.",
+    items: [
+      {
+        action: "analysis",
+        icon: Sparkles,
+        title: "Analyse IA",
+        description: "Obtenir une analyse détaillée de ton alimentation.",
+      },
+      {
+        action: "history",
+        icon: Clock,
+        title: "Historique",
+        description: "Consulter l'historique de tes repas passés.",
+      },
+      {
+        action: "plan",
+        icon: CalendarRange,
+        title: "Planning",
+        description: "Planifier tes repas de la semaine.",
+      },
+      {
+        action: "copy-yesterday",
+        icon: Copy,
+        title: "Copier hier",
+        description: "Reproduire les repas d'hier sur ce jour.",
+      },
+      {
+        action: "copy-day",
+        icon: Calendar,
+        title: "Copier une journée",
+        description: "Copier les repas d'une journée choisie.",
+      },
+      {
+        action: "goals",
+        icon: Target,
+        title: "Objectifs",
+        description: "Définir tes objectifs caloriques et macros.",
+      },
+      {
+        action: "favorites",
+        icon: Star,
+        title: "Favoris",
+        description: "Retrouver tes aliments et repas favoris.",
+      },
+    ],
+  },
+];
+
+function NutritionCommandCenter({
   open,
-  onToggle,
+  onClose,
   onAction,
 }: {
   open: boolean;
-  onToggle: () => void;
-  onAction: (a: SpeedDialAction) => void;
+  onClose: () => void;
+  onAction: (a: CommandAction) => void;
 }) {
-  const items: Array<{ action: SpeedDialAction; label: string; icon: React.ComponentType<{ className?: string }> }> = [
-    { action: "manual", label: "Ajouter un aliment", icon: Apple },
-    { action: "scan", label: "Scanner un repas", icon: Camera },
-    { action: "barcode", label: "Scanner un code-barres", icon: Barcode },
-    { action: "voice", label: "Saisie vocale", icon: Mic },
-    { action: "analysis", label: "Analyse IA", icon: Sparkles },
-    { action: "favorites", label: "Favoris", icon: Star },
-    { action: "saved", label: "Repas enregistrés", icon: Bookmark },
-    { action: "history", label: "Historique", icon: Clock },
-    { action: "plan", label: "Planning", icon: CalendarRange },
-    { action: "recipe", label: "Recettes", icon: BookOpen },
-    { action: "copy-yesterday", label: "Copier hier", icon: Copy },
-    { action: "copy-day", label: "Copier une journée", icon: Calendar },
-    { action: "goals", label: "Objectifs", icon: Target },
-  ];
+  const dragControls = useDragControls();
 
   return (
-    <>
-      <AnimatePresence>
-        {open && (
+    <AnimatePresence>
+      {open && (
+        <>
           <motion.div
+            key="backdrop"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.18 }}
-            className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm"
-            onClick={onToggle}
+            transition={{ duration: 0.25 }}
+            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+            onClick={onClose}
           />
-        )}
-      </AnimatePresence>
 
-      <div
-        className="pointer-events-none fixed inset-x-0 z-50 mx-auto flex w-full max-w-[430px] flex-col items-center px-4"
-        style={{ bottom: "calc(5.5rem + env(safe-area-inset-bottom))" }}
-      >
-        <AnimatePresence>
-          {open && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 20 }}
-              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-              className="pointer-events-auto mb-3 grid max-h-[65vh] w-full grid-cols-2 gap-2 overflow-y-auto rounded-3xl border border-border bg-card/95 p-3 shadow-elevated backdrop-blur-xl"
+          <motion.div
+            key="sheet"
+            initial={{ y: "100%" }}
+            animate={{ y: 0 }}
+            exit={{ y: "100%" }}
+            transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+            drag="y"
+            dragControls={dragControls}
+            dragListener={false}
+            dragConstraints={{ top: 0, bottom: 0 }}
+            dragElastic={{ top: 0, bottom: 0.5 }}
+            onDragEnd={(_, info) => {
+              if (info.offset.y > 120 || info.velocity.y > 600) onClose();
+            }}
+            className="fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[80vh] w-full max-w-[430px] flex-col rounded-t-3xl border-t border-border bg-card shadow-elevated"
+          >
+            <div
+              className="flex shrink-0 cursor-grab touch-none flex-col items-center pb-2 pt-3 active:cursor-grabbing"
+              onPointerDown={(e) => dragControls.start(e)}
             >
-              {items.map((it, i) => {
-                const Icon = it.icon;
-                return (
-                  <motion.button
-                    key={it.action}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.03 * i, duration: 0.2 }}
-                    whileTap={{ scale: 0.95 }}
-                    type="button"
-                    onClick={() => onAction(it.action)}
-                    className="flex items-center gap-2.5 rounded-2xl bg-surface/70 p-3 text-left transition-colors hover:bg-primary/10"
-                  >
-                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/15 text-primary">
-                      <Icon className="h-4 w-4" />
-                    </span>
-                    <span className="truncate text-sm font-semibold text-foreground">
-                      {it.label}
-                    </span>
-                  </motion.button>
-                );
-              })}
-            </motion.div>
-          )}
-        </AnimatePresence>
+              <span className="h-1.5 w-10 rounded-full bg-muted" />
+              <div className="mt-2 flex w-full items-center justify-between px-5">
+                <div>
+                  <p className="text-base font-bold tracking-tight">Centre de commandes</p>
+                  <p className="text-xs text-muted-foreground">
+                    Toutes les actions Nutrition, au même endroit.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  aria-label="Fermer"
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
 
-        <motion.button
-          whileTap={{ scale: 0.9 }}
-          animate={{ rotate: open ? 45 : 0 }}
-          transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-          type="button"
-          onClick={onToggle}
-          className="pointer-events-auto flex h-14 w-14 items-center justify-center rounded-full bg-gradient-primary text-primary-foreground shadow-glow"
-          aria-label={open ? "Fermer" : "Ajouter"}
-        >
-          {open ? <X className="h-6 w-6" /> : <Plus className="h-6 w-6" />}
-        </motion.button>
-      </div>
-    </>
+            <div className="flex-1 overflow-y-auto px-5 pb-8 pt-2">
+              {COMMAND_SECTIONS.map((section, si) => (
+                <div key={section.key} className={si > 0 ? "mt-6" : ""}>
+                  <p className="text-sm font-bold">
+                    {section.emoji} {section.title}
+                  </p>
+                  <p className="mb-3 mt-0.5 text-xs text-muted-foreground">{section.description}</p>
+                  <div className="flex flex-col gap-2">
+                    {section.items.map((it, i) => {
+                      const Icon = it.icon;
+                      return (
+                        <motion.button
+                          key={it.action}
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: 0.02 * i, duration: 0.2 }}
+                          whileTap={{ scale: 0.97 }}
+                          type="button"
+                          onClick={() => onAction(it.action)}
+                          className="flex items-center gap-3 rounded-2xl border border-border bg-surface/60 p-3 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"
+                        >
+                          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                            <Icon className="h-5 w-5" />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold text-foreground">{it.title}</p>
+                            <p className="truncate text-[11px] text-muted-foreground">
+                              {it.description}
+                            </p>
+                          </div>
+                        </motion.button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
   );
 }
 
