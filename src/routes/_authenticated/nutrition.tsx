@@ -23,8 +23,8 @@ function NutritionPage() {
 
   return (
     <main className="flex flex-1 flex-col px-5 pb-6 pt-6">
-      <header className="mb-3 flex items-center justify-between">
-        <h1 className="text-xl font-bold tracking-tight">
+      <header className="mb-2.5 flex items-center justify-between">
+        <h1 className="text-lg font-bold leading-tight tracking-tight">
           Bonjour <span className="text-primary">{pseudo}</span>{" "}
           <span className="inline-block">👋</span>
         </h1>

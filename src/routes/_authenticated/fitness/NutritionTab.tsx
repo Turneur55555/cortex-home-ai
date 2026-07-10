@@ -351,11 +351,11 @@ export function NutritionTab() {
           <div className="min-w-0 flex-1">
             {goals?.calories ? (
               <>
-                <p className="text-lg font-bold text-primary">
+                <p className="text-base font-bold leading-tight text-primary">
                   {Math.max(0, goals.calories - Math.round(totals.calories))}{" "}
-                  <span className="text-sm font-medium text-primary/80">kcal restantes</span>
+                  <span className="text-xs font-medium text-primary/80">kcal restantes</span>
                 </p>
-                <div className="mt-2.5 flex items-center gap-2">
+                <div className="mt-2 flex items-center gap-2">
                   <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
                     <motion.div
                       initial={{ width: 0 }}
@@ -373,12 +373,12 @@ export function NutritionTab() {
               </>
             ) : (
               <>
-                <p className="text-sm text-muted-foreground">Aucun objectif défini</p>
+                <p className="text-xs leading-snug text-muted-foreground">Aucun objectif défini</p>
                 <motion.button
                   whileTap={PRESS_SMALL}
                   type="button"
                   onClick={() => setGoalsOpen(true)}
-                  className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary"
+                  className="mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary"
                 >
                   <Target className="h-3 w-3" />
                   Définir un objectif
@@ -426,7 +426,7 @@ export function NutritionTab() {
         remaining.calories < -(goals.calories * 0.1) && (
           <div className="flex items-center gap-3 rounded-2xl border border-destructive/30 bg-destructive/10 px-4 py-3">
             <AlertTriangle className="h-4 w-4 shrink-0 text-destructive" />
-            <p className="text-sm font-medium text-destructive">
+            <p className="text-xs font-medium leading-snug text-destructive">
               Objectif dépassé de {Math.abs(remaining.calories)} kcal
             </p>
           </div>
@@ -434,8 +434,8 @@ export function NutritionTab() {
 
       {/* ─── Mes repas ──────────────────────────────────────────────────── */}
       <section>
-        <div className="mb-2.5 flex items-center justify-between">
-          <h2 className="text-lg font-bold tracking-tight">Mes repas</h2>
+        <div className="mb-2 flex items-center justify-between">
+          <h2 className="text-base font-bold tracking-tight">Mes repas</h2>
         </div>
 
         {isLoading && (
@@ -448,7 +448,7 @@ export function NutritionTab() {
           <div className="rounded-3xl border border-dashed border-border p-8 text-center">
             <Apple className="mx-auto h-8 w-8 text-muted-foreground" />
             <p className="mt-3 text-sm font-medium">Aucun repas aujourd'hui</p>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="mt-1 text-xs leading-snug text-muted-foreground">
               Ajoute un aliment pour suivre tes macros.
             </p>
           </div>
@@ -498,8 +498,8 @@ export function NutritionTab() {
                       <Icon className={`h-6 w-6 ${visual.accent}`} />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-bold">{g.label}</p>
-                      <p className="text-[11px] text-muted-foreground">
+                      <p className="truncate text-base font-bold leading-tight">{g.label}</p>
+                      <p className="text-[10px] text-muted-foreground">
                         {g.items.length} aliment{g.items.length > 1 ? "s" : ""}
                       </p>
                     </div>
@@ -510,7 +510,7 @@ export function NutritionTab() {
                         <MacroChip color="text-rose-400" label="L" value={gTotals.fats} />
                       </div>
                       <div className="text-right">
-                        <p className="text-base font-bold leading-none">
+                        <p className="text-sm font-bold leading-none">
                           {Math.round(gTotals.calories)}
                         </p>
                         <p className="text-[10px] text-muted-foreground">kcal</p>
@@ -728,7 +728,7 @@ export function NutritionTab() {
                 whileTap={PRESS_SMALL}
                 type="button"
                 onClick={() => setCopyOpen(false)}
-                className="flex-1 rounded-xl border border-border py-2.5 text-sm font-medium"
+                className="flex-1 rounded-xl border border-border py-2.5 text-xs font-medium"
               >
                 Annuler
               </motion.button>
@@ -742,7 +742,7 @@ export function NutritionTab() {
                     { onSuccess: () => setCopyOpen(false) },
                   )
                 }
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-60"
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary py-2.5 text-xs font-semibold text-primary-foreground disabled:opacity-60"
               >
                 {copyDay.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                 Copier ici
@@ -847,9 +847,9 @@ function MacroCard({
         <span className={`flex h-6 w-6 items-center justify-center rounded-lg ${iconBg}`}>
           <Icon className={`h-3.5 w-3.5 ${iconColor}`} />
         </span>
-        <p className="text-[11px] font-medium text-muted-foreground">{label}</p>
+        <p className="text-[10px] font-medium text-muted-foreground">{label}</p>
       </div>
-      <p className="text-xl font-bold tracking-tight">
+      <p className="text-sm font-bold leading-tight tracking-tight">
         {Math.round(value)}
         <span className="ml-0.5 text-[10px] font-medium text-muted-foreground">g</span>
       </p>
@@ -875,7 +875,7 @@ function MacroChip({ color, label, value }: { color: string; label: string; valu
   return (
     <div className="w-7 text-center">
       <p className={`text-[9px] font-bold leading-none ${color}`}>{label}</p>
-      <p className="mt-0.5 text-[11px] font-semibold leading-none text-foreground">
+      <p className="mt-0.5 text-[10px] font-semibold leading-none text-foreground">
         {Math.round(value)}g
       </p>
     </div>
@@ -890,8 +890,8 @@ function SupplementsStrip({ date }: { date: string }) {
 
   return (
     <section>
-      <div className="mb-2.5 flex items-center justify-between">
-        <h2 className="text-lg font-bold tracking-tight">Compléments</h2>
+      <div className="mb-2 flex items-center justify-between">
+        <h2 className="text-base font-bold tracking-tight">Compléments</h2>
         <Link
           to="/supplements"
           className="text-xs font-semibold text-primary transition-colors hover:text-primary-glow"
@@ -929,7 +929,7 @@ function SupplementsStrip({ date }: { date: string }) {
               >
                 <Pill className="h-4 w-4" />
               </span>
-              <span className="w-full truncate text-[11px] font-semibold leading-tight text-foreground">
+              <span className="w-full truncate text-[10px] font-semibold leading-tight text-foreground">
                 {s.name}
               </span>
               {(s.dosage || s.unit) && (
@@ -1150,7 +1150,7 @@ function NutritionCommandCenter({
               <div className="mt-2.5 flex w-full items-center justify-between px-5">
                 <div>
                   <p className="text-base font-bold tracking-tight">Centre de commandes</p>
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-xs leading-snug text-muted-foreground">
                     Toutes les actions Nutrition, au même endroit.
                   </p>
                 </div>
@@ -1178,7 +1178,7 @@ function NutritionCommandCenter({
                     </span>
                     <div className="min-w-0">
                       <p className="text-sm font-bold">{section.title}</p>
-                      <p className="truncate text-xs text-muted-foreground">
+                      <p className="truncate text-xs leading-snug text-muted-foreground">
                         {section.description}
                       </p>
                     </div>
@@ -1219,8 +1219,8 @@ function NutritionCommandCenter({
                             <Icon className="h-6 w-6" />
                           </span>
                           <div className="min-w-0 flex-1">
-                            <p className="text-sm font-bold text-foreground">{it.title}</p>
-                            <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                            <p className="text-sm font-semibold text-foreground">{it.title}</p>
+                            <p className="mt-0.5 truncate text-xs leading-snug text-muted-foreground">
                               {it.description}
                             </p>
                           </div>
