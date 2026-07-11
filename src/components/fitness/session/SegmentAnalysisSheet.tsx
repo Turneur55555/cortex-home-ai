@@ -13,6 +13,7 @@ import {
 } from "recharts";
 import { useSegmentHistory } from "@/hooks/useSegmentHistory";
 import {
+  SEGMENT_METRIC_CONFIG,
   buildSegmentNarrative,
   computeSegmentStats,
   segmentBaseLabel,
@@ -20,14 +21,25 @@ import {
 import { SectionCard, StatTileMini, TrendIcon } from "../ExerciseAnalysisPrimitives";
 
 // ============================================================
-// Fiche détaillée d'un segment Course à pied (ex. "400m allure 5 km",
+// Fiche détaillée d'un EXERCICE de course (ex. "400m allure 5 km",
 // "Récupération trottinée", "Tempo") — pendant de ExerciseAnalysisSheet
-// pour la musculation, ouverte en cliquant un segment dans l'historique
-// des séances Course (voir CourseHistoryContent.tsx). Réutilise les
-// primitives visuelles génériques (SectionCard/StatTileMini/TrendIcon)
-// pour rester cohérente avec la fiche exercice, SANS réutiliser les
-// sections propres à la musculation (muscles sollicités, impact
-// physique, rang RPG) qui n'ont pas d'équivalent ici.
+// pour la musculation, ouverte en cliquant un exercice dans l'historique
+// des séances Course (voir CourseHistoryContent.tsx) ou depuis la séance
+// en cours (voir ActiveCourseExerciseCard.tsx). Réutilise les primitives
+// visuelles génériques (SectionCard/StatTileMini/TrendIcon) pour rester
+// cohérente avec la fiche exercice, SANS réutiliser les sections propres
+// à la musculation (muscles sollicités, impact physique, rang RPG) qui
+// n'ont pas d'équivalent ici.
+//
+// CORRECTION 2026-07-11 (retour de Nathan) : cette fiche représente UN
+// EXERCICE (ex. "400m allure 5 km"), pas une répétition individuelle —
+// exactement le modèle séance > exercice > répétitions de la
+// musculation. `computeSegmentStats` (segmentStats.ts) regroupe déjà les
+// répétitions par séance ; cette fiche n'a donc plus qu'à consommer
+// `stats.sessions` (un point par séance, répétitions déjà agrégées) au
+// lieu des instances brutes — la section "Historique" ci-dessous montre
+// désormais UNE ligne par séance ("8 répétitions, meilleure allure ...")
+// et non huit lignes pour un même fractionné.
 //
 // Sections volontairement absentes de cette v1 (voir rapport de
 // livraison) :
@@ -74,7 +86,7 @@ export function SegmentAnalysisSheet({
     value: p.value,
   }));
 
-  const sessionsDesc = useMemo(() => [...(instances ?? [])].reverse(), [instances]);
+  const sessionsDesc = useMemo(() => [...stats.sessions].reverse(), [stats.sessions]);
 
   return (
     <div
@@ -92,7 +104,7 @@ export function SegmentAnalysisSheet({
             <div className="min-w-0">
               <h3 className="truncate text-sm font-semibold">{displayLabel}</h3>
               <p className="text-[11px] text-muted-foreground">
-                {stats.occurrences > 0 ? "Fiche segment" : "Pas encore réalisé"}
+                {stats.sessionCount > 0 ? "Fiche exercice" : "Pas encore réalisé"}
               </p>
             </div>
           </div>
@@ -105,7 +117,7 @@ export function SegmentAnalysisSheet({
         </div>
 
         <div className="-mx-1 space-y-4 overflow-y-auto px-1">
-          {stats.occurrences === 0 ? (
+          {stats.sessionCount === 0 ? (
             <p className="py-10 text-center text-[12px] leading-relaxed text-muted-foreground">
               {narrative}
             </p>
@@ -135,7 +147,7 @@ export function SegmentAnalysisSheet({
                 </div>
               )}
 
-              {/* Graphique */}
+              {/* Graphique — un point par séance (répétitions déjà agrégées) */}
               {chartData.length > 1 ? (
                 <ResponsiveContainer width="100%" height={160}>
                   <LineChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
@@ -166,7 +178,7 @@ export function SegmentAnalysisSheet({
                         fontSize: 11,
                       }}
                       formatter={(v: number) => [
-                        activeMetric ? formatForTooltip(activeMetric.key, v) : v,
+                        activeMetric ? formatMetricValue(activeMetric.key, v) : v,
                         activeMetric?.label ?? "",
                       ]}
                     />
@@ -191,7 +203,7 @@ export function SegmentAnalysisSheet({
                 <StatTileMini
                   icon={<Repeat className="h-3 w-3 text-primary" />}
                   label="Réalisations"
-                  value={String(stats.occurrences)}
+                  value={String(stats.sessionCount)}
                 />
                 {stats.metrics.map((m) => (
                   <StatTileMini
@@ -257,7 +269,7 @@ export function SegmentAnalysisSheet({
                 </p>
               </SectionCard>
 
-              {/* Historique */}
+              {/* Historique — UNE ligne par séance, répétitions déjà agrégées */}
               <div>
                 <div className="mb-2 flex items-center gap-1.5">
                   <CalendarClock className="h-3.5 w-3.5 text-primary" />
@@ -266,32 +278,35 @@ export function SegmentAnalysisSheet({
                   </span>
                 </div>
                 <div className="space-y-2">
-                  {sessionsDesc
-                    .filter((s) => s.completed)
-                    .map((s, idx) => (
-                      <div
-                        key={`${s.workoutId}-${idx}`}
-                        className="rounded-xl border border-border bg-surface p-3"
-                      >
-                        <p className="mb-1.5 text-[11px] font-semibold capitalize text-foreground">
+                  {sessionsDesc.map((s) => (
+                    <div
+                      key={s.workoutId}
+                      className="rounded-xl border border-border bg-surface p-3"
+                    >
+                      <div className="mb-1.5 flex items-center justify-between gap-2">
+                        <p className="text-[11px] font-semibold capitalize text-foreground">
                           {s.date
                             ? format(parseISO(s.date), "EEE d MMM yyyy", { locale: fr })
                             : "Date inconnue"}
                         </p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {Object.entries(s.metrics)
-                            .filter(([k]) => SEGMENT_METRIC_LABELS[k])
-                            .map(([k, v]) => (
-                              <span
-                                key={k}
-                                className="rounded-lg bg-card px-2 py-1 text-[10px] font-medium text-foreground/80"
-                              >
-                                {SEGMENT_METRIC_LABELS[k]}: {typeof v === "number" ? v : String(v)}
-                              </span>
-                            ))}
-                        </div>
+                        <span className="shrink-0 text-[10px] font-medium text-muted-foreground">
+                          {s.repCount} répétition{s.repCount > 1 ? "s" : ""}
+                        </span>
                       </div>
-                    ))}
+                      <div className="flex flex-wrap gap-1.5">
+                        {Object.entries(s.metrics)
+                          .filter(([k]) => SEGMENT_METRIC_CONFIG[k])
+                          .map(([k, v]) => (
+                            <span
+                              key={k}
+                              className="rounded-lg bg-card px-2 py-1 text-[10px] font-medium text-foreground/80"
+                            >
+                              {SEGMENT_METRIC_CONFIG[k].label}: {formatMetricValue(k, v)}
+                            </span>
+                          ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </>
@@ -302,20 +317,7 @@ export function SegmentAnalysisSheet({
   );
 }
 
-const SEGMENT_METRIC_LABELS: Record<string, string> = {
-  distance_m: "Distance (m)",
-  pace_min_per_km: "Allure",
-  elevation_m: "Dénivelé+ (m)",
-};
-
-function formatForTooltip(key: string, v: number): string {
-  if (key === "distance_m") return `${(v / 1000).toFixed(2)} km`;
-  if (key === "pace_min_per_km") {
-    const totalSeconds = Math.round(v * 60);
-    const min = Math.floor(totalSeconds / 60);
-    const sec = totalSeconds % 60;
-    return `${min}:${String(sec).padStart(2, "0")} min/km`;
-  }
-  if (key === "elevation_m") return `${Math.round(v)} m`;
-  return String(v);
+function formatMetricValue(key: string, v: number): string {
+  const config = SEGMENT_METRIC_CONFIG[key];
+  return config ? config.format(v) : String(v);
 }

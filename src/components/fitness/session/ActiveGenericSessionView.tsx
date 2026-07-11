@@ -1,10 +1,25 @@
 // ============================================================
 // Vue "séance en cours" GÉNÉRIQUE — pendant de ActiveWorkoutView
 // (musculation) pour toute discipline Sensei avec supportsLiveTracking=true
-// (phase pilote : Course à pied, 2026-07-09). Timer, liste de segments
-// éditables (ActiveSegmentCard), ajout d'un segment personnalisé, menu
-// Terminer/Annuler — même charte visuelle que la séance active musculation,
-// sans dépendre de son vocabulaire exercices/séries.
+// (phase pilote : Course à pied, 2026-07-09). Timer, liste d'exercices
+// (regroupés par type — voir ActiveCourseExerciseCard.tsx) avec leurs
+// répétitions éditables (ActiveSegmentCard), ajout d'un segment
+// personnalisé, menu Terminer/Annuler — même charte visuelle que la
+// séance active musculation, sans dépendre de son vocabulaire
+// exercices/séries.
+//
+// CORRECTION 2026-07-11 (retour de Nathan) : la liste de segments était
+// affichée à plat (une carte par répétition — jusqu'à 17 lignes pour un
+// fractionné à 8x400m). Nathan veut le même modèle qu'en musculation :
+// séance > exercice > répétitions, une seule carte par exercice avec ses
+// répétitions groupées à l'intérieur (cf. ActiveExerciseCard qui groupe
+// les séries). `groupByExerciseLabel` (segmentStats.ts) fait ce
+// regroupement ; `ActiveCourseExerciseCard` (nouveau) affiche chaque
+// groupe et réutilise ActiveSegmentCard tel quel pour chaque répétition
+// — aucune modification de ce composant. Le bouton "Ajouter un segment"
+// en bas reste inchangé (ajout d'un exercice entièrement nouveau, non
+// prévu par Sensei) ; chaque carte d'exercice a en plus son propre
+// "Ajouter une répétition".
 // ============================================================
 
 import { useMemo, useState } from "react";
@@ -13,14 +28,13 @@ import type { ActiveGenericWorkout } from "@/hooks/useGenericActiveSession";
 import {
   useAddGenericSegment,
   useCancelGenericActiveWorkout,
-  useDeleteGenericSegment,
   useFinishGenericActiveWorkout,
-  useReorderGenericSegment,
-  useUpdateGenericSegment,
 } from "@/hooks/useGenericActiveSession";
 import { ENGINE_REGISTRY } from "@/lib/fitness/engines/registry";
+import { groupByExerciseLabel } from "@/lib/fitness/segmentStats";
 import { WorkoutTimer } from "../WorkoutTimer";
-import { ActiveSegmentCard } from "./ActiveSegmentCard";
+import { ActiveCourseExerciseCard } from "./ActiveCourseExerciseCard";
+import { SegmentAnalysisSheet } from "./SegmentAnalysisSheet";
 import { DisciplineIcon } from "./DisciplineIcon";
 
 export function ActiveGenericSessionView({
@@ -32,9 +46,6 @@ export function ActiveGenericSessionView({
 }) {
   const entry = ENGINE_REGISTRY[workout.discipline];
 
-  const updateSegment = useUpdateGenericSegment();
-  const deleteSegment = useDeleteGenericSegment();
-  const reorderSegment = useReorderGenericSegment();
   const addSegment = useAddGenericSegment();
   const finish = useFinishGenericActiveWorkout();
   const cancel = useCancelGenericActiveWorkout();
@@ -46,12 +57,14 @@ export function ActiveGenericSessionView({
   const [newLabel, setNewLabel] = useState("");
   const [newDistance, setNewDistance] = useState("");
   const [newPace, setNewPace] = useState("");
+  const [statsLabel, setStatsLabel] = useState<string | null>(null);
 
   const sortedSegments = useMemo(
     () => [...workout.segments].sort((a, b) => a.position - b.position),
     [workout.segments],
   );
   const completedCount = sortedSegments.filter((s) => s.completed).length;
+  const groups = useMemo(() => groupByExerciseLabel(sortedSegments), [sortedSegments]);
 
   const handleAddSegment = async () => {
     const label = newLabel.trim();
@@ -240,36 +253,25 @@ export function ActiveGenericSessionView({
         </div>
       )}
 
-      {/* ── Segment cards ── */}
-      {sortedSegments.length === 0 ? (
+      {/* ── Cartes exercice (une par type de segment, répétitions groupées) ── */}
+      {groups.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border bg-card/50 p-8 text-center">
           <p className="text-sm font-medium text-muted-foreground">
             Aucun segment — ajoutez-en un ci-dessous
           </p>
         </div>
       ) : (
-        <ul className="flex flex-col gap-3">
-          {sortedSegments.map((segment, i) => (
-            <ActiveSegmentCard
-              key={segment.id}
-              segment={segment}
-              isFirst={i === 0}
-              isLast={i === sortedSegments.length - 1}
-              onUpdate={(fields) => updateSegment.mutate({ id: segment.id, ...fields })}
-              onDelete={() => deleteSegment.mutate(segment.id)}
-              onMoveUp={() =>
-                reorderSegment.mutate({ segments: sortedSegments, id: segment.id, direction: "up" })
-              }
-              onMoveDown={() =>
-                reorderSegment.mutate({
-                  segments: sortedSegments,
-                  id: segment.id,
-                  direction: "down",
-                })
-              }
+        <div className="flex flex-col gap-3">
+          {groups.map((g) => (
+            <ActiveCourseExerciseCard
+              key={g.key}
+              group={g}
+              workoutId={workout.id}
+              nextPosition={sortedSegments.length}
+              onOpenStats={setStatsLabel}
             />
           ))}
-        </ul>
+        </div>
       )}
 
       {/* ── Add segment ── */}
@@ -329,6 +331,10 @@ export function ActiveGenericSessionView({
           <Plus className="h-4 w-4" />
           Ajouter un segment
         </button>
+      )}
+
+      {statsLabel && (
+        <SegmentAnalysisSheet rawLabel={statsLabel} onClose={() => setStatsLabel(null)} />
       )}
     </div>
   );
