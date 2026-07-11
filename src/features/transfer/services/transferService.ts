@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { resolveExerciseId } from "@/services/exerciseResolution";
 import type { TransferTarget } from "../types";
 
 export const MODULE_QUERY_KEYS: Record<TransferTarget, string[][]> = {
@@ -164,14 +165,30 @@ export async function transferData(
         ? (it.exercises as Array<Record<string, unknown>>)
         : [];
       if (exs.length) {
-        const exerciseRows = exs.map((ex) => ({
+        // Phase 3 (exercice-central) — Étape 2, double écriture : cet
+        // import ne crée que des séances muscu (voir insert `workouts`
+        // ci-dessus, sans colonne discipline explicite -> défaut muscu).
+        const names = exs.map((ex) => str(ex.name) ?? "Exercice");
+        const referenceIds = await Promise.all(
+          names.map((name) =>
+            resolveExerciseId("muscu", name).catch((e) => {
+              console.error(
+                "[Phase3] resolveExerciseId(muscu) a échoué pendant un transfert — écriture principale non bloquée",
+                e,
+              );
+              return null;
+            }),
+          ),
+        );
+        const exerciseRows = exs.map((ex, i) => ({
           user_id: user.id,
           workout_id: w.id,
-          name: str(ex.name) ?? "Exercice",
+          name: names[i],
           sets: int(ex.sets),
           reps: int(ex.reps),
           weight: num(ex.weight),
           notes: str(ex.notes),
+          exercise_reference_id: referenceIds[i],
         }));
         const { error: eErr } = await supabase.from("exercises").insert(exerciseRows);
         if (eErr) { throw eErr; }
