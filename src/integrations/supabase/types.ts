@@ -257,29 +257,85 @@ export type Database = {
         }
         Relationships: []
       }
-      exercise_catalog: {
+      disciplines: {
         Row: {
+          accent_class: string
           created_at: string
+          icon: string
+          id: string
+          label: string
+          sort_order: number
+        }
+        Insert: {
+          accent_class: string
+          created_at?: string
+          icon: string
+          id: string
+          label: string
+          sort_order?: number
+        }
+        Update: {
+          accent_class?: string
+          created_at?: string
+          icon?: string
+          id?: string
+          label?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
+      exercise_reference: {
+        Row: {
+          aliases: string[] | null
+          config: Json | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          discipline_id: string
           group_name: string
           id: string
+          is_active: boolean
+          media: Json | null
           name: string
           sort_order: number
         }
         Insert: {
+          aliases?: string[] | null
+          config?: Json | null
           created_at?: string
+          created_by?: string | null
+          description?: string | null
+          discipline_id?: string
           group_name: string
           id?: string
+          is_active?: boolean
+          media?: Json | null
           name: string
           sort_order?: number
         }
         Update: {
+          aliases?: string[] | null
+          config?: Json | null
           created_at?: string
+          created_by?: string | null
+          description?: string | null
+          discipline_id?: string
           group_name?: string
           id?: string
+          is_active?: boolean
+          media?: Json | null
           name?: string
           sort_order?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "exercise_reference_discipline_id_fkey"
+            columns: ["discipline_id"]
+            isOneToOne: false
+            referencedRelation: "disciplines"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       exercise_sets: {
         Row: {
