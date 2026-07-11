@@ -800,7 +800,6 @@ export function NutritionTab() {
 
 // ─── Composants UI locaux ─────────────────────────────────────────────────
 
-
 function MacroCard({
   icon: Icon,
   iconColor,
