@@ -800,53 +800,6 @@ export function NutritionTab() {
 
 // ─── Composants UI locaux ─────────────────────────────────────────────────
 
-function CaloriesRing({ consumed, target }: { consumed: number; target: number }) {
-  const R = 42;
-  const CIRC = 2 * Math.PI * R;
-  const pct = target > 0 ? consumed / target : 0;
-  const over = consumed > target;
-  const offset = CIRC * (1 - Math.min(1, pct));
-  return (
-    <div className="relative h-24 w-24 shrink-0">
-      <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
-        <circle
-          cx="50"
-          cy="50"
-          r={R}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="7"
-          className="text-muted"
-        />
-        <motion.circle
-          cx="50"
-          cy="50"
-          r={R}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="7"
-          strokeLinecap="round"
-          strokeDasharray={CIRC}
-          initial={{ strokeDashoffset: CIRC }}
-          animate={{ strokeDashoffset: offset }}
-          transition={TRANSITION}
-          className={over ? "text-destructive" : "text-primary"}
-        />
-      </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-2xl font-bold tabular-nums leading-none text-foreground">
-          {consumed}
-        </span>
-        <span className="mt-0.5 text-[9px] font-medium uppercase tracking-wider text-muted-foreground">
-          kcal
-        </span>
-        {target > 0 && (
-          <span className="mt-0.5 text-[9px] text-muted-foreground">sur {target}</span>
-        )}
-      </div>
-    </div>
-  );
-}
 
 function MacroCard({
   icon: Icon,
