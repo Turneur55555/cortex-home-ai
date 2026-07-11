@@ -5,7 +5,7 @@ import { EXERCISE_CATALOG, type CatalogExercise } from "@/lib/fitness/exerciseCa
 export type DbCatalogRow = {
   id: string;
   name: string;
-  group_name: string;
+  category: string | null;
   sort_order: number;
   created_at: string;
 };
@@ -14,6 +14,10 @@ const CACHE_KEY = ["exercise-catalog"] as const;
 const FULL_CACHE_KEY = ["exercise-catalog-full"] as const;
 
 // ── Catalogue DB (pour le picker) ─────────────────────────────────────────────
+// Filtré sur discipline_id="muscu" : depuis Phase 3 (exercice-central),
+// exercise_reference est un référentiel partagé par toutes les disciplines
+// (voir ExerciseResolutionService) — ce picker reste muscu-only, il ne doit
+// jamais afficher les exercices auto-créés par les autres disciplines.
 export function useExerciseCatalog() {
   return useQuery({
     queryKey: CACHE_KEY,
@@ -21,7 +25,8 @@ export function useExerciseCatalog() {
       const { data, error } = await supabase
         .from("exercise_reference")
         .select("*")
-        .order("group_name")
+        .eq("discipline_id", "muscu")
+        .order("category")
         .order("sort_order")
         .order("name");
       if (error) throw error;
@@ -40,7 +45,8 @@ export function useFullExerciseCatalog() {
         supabase
           .from("exercise_reference")
           .select("*")
-          .order("group_name")
+          .eq("discipline_id", "muscu")
+          .order("category")
           .order("sort_order")
           .order("name"),
         supabase.from("exercises").select("name").order("name"),
@@ -60,7 +66,7 @@ export function useFullExerciseCatalog() {
           rows.push({
             id: `custom__${ex.name}`,
             name: ex.name,
-            group_name: "Mes exercices",
+            category: "Mes exercices",
             sort_order: 999,
             created_at: "",
           });
@@ -75,17 +81,17 @@ export function useFullExerciseCatalog() {
 
 // ── Convertit les lignes DB en CatalogExercise (pour ExercisePicker) ────────
 export function dbRowsToCatalog(rows: DbCatalogRow[]): CatalogExercise[] {
-  return rows.map((r) => ({ name: r.name, group: r.group_name }));
+  return rows.map((r) => ({ name: r.name, group: r.category ?? "" }));
 }
 
 // ── Mutations ─────────────────────────────────────────────────────────────────
 export function useAddExercise() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ name, group_name }: { name: string; group_name: string }) => {
+    mutationFn: async ({ name, category }: { name: string; category: string | null }) => {
       const { error } = await supabase
         .from("exercise_reference")
-        .insert({ name: name.trim(), group_name });
+        .insert({ name: name.trim(), category, discipline_id: "muscu" });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -115,15 +121,15 @@ export function useUpdateExercise() {
     mutationFn: async ({
       id,
       name,
-      group_name,
+      category,
     }: {
       id: string;
       name: string;
-      group_name: string;
+      category: string | null;
     }) => {
       const { error } = await supabase
         .from("exercise_reference")
-        .update({ name: name.trim(), group_name })
+        .update({ name: name.trim(), category })
         .eq("id", id);
       if (error) throw error;
     },
@@ -138,10 +144,10 @@ export function useUpdateExercise() {
 export function usePromoteExercise() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ name, group_name }: { name: string; group_name: string }) => {
+    mutationFn: async ({ name, category }: { name: string; category: string | null }) => {
       const { error } = await supabase
         .from("exercise_reference")
-        .insert({ name: name.trim(), group_name });
+        .insert({ name: name.trim(), category, discipline_id: "muscu" });
       if (error && !error.message.includes("duplicate")) throw error;
     },
     onSuccess: () => {
