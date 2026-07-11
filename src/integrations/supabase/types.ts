@@ -292,7 +292,7 @@ export type Database = {
           created_by: string | null
           description: string | null
           discipline_id: string
-          group_name: string
+          category: string | null
           id: string
           is_active: boolean
           media: Json | null
@@ -306,7 +306,7 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           discipline_id?: string
-          group_name: string
+          category?: string | null
           id?: string
           is_active?: boolean
           media?: Json | null
@@ -320,7 +320,7 @@ export type Database = {
           created_by?: string | null
           description?: string | null
           discipline_id?: string
-          group_name?: string
+          category?: string | null
           id?: string
           is_active?: boolean
           media?: Json | null
