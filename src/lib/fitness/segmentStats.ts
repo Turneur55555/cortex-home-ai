@@ -69,6 +69,14 @@ function formatPaceValue(v: number): string {
 // `zone` et `max_heart_rate` sont volontairement absents : ce sont des
 // cibles/contexte, pas des métriques de performance dont on cherche un
 // "meilleur" ou une progression.
+//
+// PHASE 1 MULTI-DISCIPLINE (2026-07-11) : clés ajoutées pour Cardio/HYROX/
+// Guided (voir SessionSegment.metrics, solution transitoire — ces
+// disciplines n'écrivent pas dans workout_segments, leurs métriques
+// viennent de workouts.metadata.segments via useDisciplineSegmentHistory).
+// "distance_m" est délibérément PARTAGÉ avec Course/HYROX (SkiErg/Rameur/
+// Running) : même grandeur, même unité, un seul vocabulaire — exactement
+// l'esprit "un seul système d'exercices commun" demandé par Nathan.
 export const SEGMENT_METRIC_CONFIG: Record<string, MetricConfig> = {
   distance_m: {
     label: "Distance",
@@ -84,6 +92,59 @@ export const SEGMENT_METRIC_CONFIG: Record<string, MetricConfig> = {
     label: "Dénivelé+",
     direction: "max",
     format: (v) => `${Math.round(v)} m`,
+  },
+  // ---- Cardio ----
+  speed_kmh: {
+    label: "Vitesse",
+    direction: "max",
+    format: (v) => `${v} km/h`,
+  },
+  incline_pct: {
+    label: "Inclinaison",
+    direction: "max",
+    format: (v) => `${v} %`,
+  },
+  escalier_level: {
+    label: "Niveau (escalier)",
+    direction: "max",
+    format: (v) => String(v),
+  },
+  resistance: {
+    label: "Résistance",
+    direction: "max",
+    format: (v) => String(v),
+  },
+  cadence_rpm: {
+    label: "Cadence",
+    direction: "max",
+    format: (v) => `${v} rpm`,
+  },
+  // ---- HYROX ----
+  charge_kg: {
+    label: "Charge",
+    direction: "max",
+    format: (v) => `${v} kg`,
+  },
+  reps: {
+    label: "Répétitions",
+    direction: "max",
+    format: (v) => String(v),
+  },
+  rounds: {
+    label: "Tours",
+    direction: "max",
+    format: (v) => String(v),
+  },
+  // ---- Guided ----
+  duration_min: {
+    label: "Durée",
+    direction: "max",
+    format: (v) => `${Math.round(v)} min`,
+  },
+  calories_estimate: {
+    label: "Calories estimées",
+    direction: "max",
+    format: (v) => `~${Math.round(v)} kcal`,
   },
 };
 
