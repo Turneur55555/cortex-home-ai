@@ -43,10 +43,7 @@ export function useFullExerciseCatalog() {
           .order("group_name")
           .order("sort_order")
           .order("name"),
-        supabase
-          .from("exercises")
-          .select("name")
-          .order("name"),
+        supabase.from("exercises").select("name").order("name"),
       ]);
 
       if (catalogResult.error) throw catalogResult.error;
@@ -102,10 +99,7 @@ export function useDeleteExercise() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("exercise_reference")
-        .delete()
-        .eq("id", id);
+      const { error } = await supabase.from("exercise_reference").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {
