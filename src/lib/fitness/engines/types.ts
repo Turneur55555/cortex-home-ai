@@ -166,6 +166,18 @@ export interface SessionStat {
 export interface SessionSegment {
   label: string;
   stats: SessionStat[];
+  /** SOLUTION TRANSITOIRE (Phase 1 multi-discipline, 2026-07-11) — miroir
+   *  numérique brut de `stats` (qui reste 100% texte formaté pour
+   *  l'affichage), pour permettre de calculer un historique/des
+   *  records/une progression par exercice pour les disciplines qui
+   *  n'écrivent PAS dans `workout_segments` (Cardio/HYROX/Guided
+   *  aujourd'hui — voir useDisciplineSegmentHistory.ts). Optionnel et
+   *  additif : ne change RIEN à l'affichage existant tant que rien ne le
+   *  lit. À RÉÉVALUER explicitement en Phase 2 : si `workout_segments`
+   *  devient à terme le modèle de persistance unique pour toutes les
+   *  disciplines, ce champ (et son adaptateur de lecture) deviendra
+   *  inutile et sera retiré — ne pas le considérer comme définitif. */
+  metrics?: Record<string, number>;
 }
 
 // ---- Édition live générique (phase pilote Course, 2026-07-09) ----

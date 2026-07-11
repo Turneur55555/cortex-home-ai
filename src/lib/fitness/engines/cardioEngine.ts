@@ -36,7 +36,7 @@ import type {
   WorkoutTemplate,
 } from "./types";
 
-const ACTIVITIES = [
+export const ACTIVITIES = [
   "Marche inclinée",
   "Escalier",
   "Vélo",
@@ -140,6 +140,21 @@ function buildStats(answers: SenseiAnswers): SessionStat[] {
   });
 }
 
+/** Miroir numérique brut de `buildStats` (voir `SessionSegment.metrics` —
+ *  solution transitoire Phase 1). "escalier_level" est renommé depuis la
+ *  clé de réponse `level` pour ne jamais entrer en collision avec un
+ *  futur "niveau" numérique d'une autre discipline dans
+ *  SEGMENT_METRIC_CONFIG (table globale à toutes les disciplines). */
+function buildMetrics(answers: SenseiAnswers): Record<string, number> {
+  const metrics: Record<string, number> = {};
+  for (const key of METADATA_KEYS) {
+    const value = answers[key];
+    if (typeof value !== "number") continue;
+    metrics[key === "level" ? "escalier_level" : key] = value;
+  }
+  return metrics;
+}
+
 export const CardioWorkoutEngine: WorkoutEngine = {
   id: "cardio",
   label: "Cardio",
@@ -155,7 +170,7 @@ export const CardioWorkoutEngine: WorkoutEngine = {
     return {
       name: `${activity} — ${duration} min`,
       exercises: [],
-      segments: [{ label: activity, stats: buildStats(answers) }],
+      segments: [{ label: activity, stats: buildStats(answers), metrics: buildMetrics(answers) }],
     };
   },
 

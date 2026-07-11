@@ -50,7 +50,7 @@ import type {
 
 type Level = "débutant" | "intermédiaire" | "avancé";
 
-const STATION_IDS = [
+export const STATION_IDS = [
   "Running",
   "SkiErg",
   "Rameur",
@@ -91,11 +91,15 @@ function stationSegment(
   opts: { volumeOverride?: number; rounds?: number } = {},
 ): SessionSegment {
   const stats: SessionStat[] = [];
+  // Miroir numérique brut de `stats` (voir `SessionSegment.metrics` —
+  // solution transitoire Phase 1, permet historique/records par poste).
+  const metrics: Record<string, number> = {};
 
   switch (id) {
     case "Running": {
       const distance = opts.volumeOverride ?? 1000;
       stats.push({ label: "Distance", value: `${distance} m` });
+      metrics.distance_m = distance;
       break;
     }
     case "SkiErg":
@@ -103,6 +107,7 @@ function stationSegment(
       const distance =
         opts.volumeOverride ?? byLevel(level, { débutant: 600, intermédiaire: 800, avancé: 1000 });
       stats.push({ label: "Distance", value: `${distance} m` });
+      metrics.distance_m = distance;
       break;
     }
     case "Sled Push":
@@ -113,6 +118,8 @@ function stationSegment(
         { label: "Charge", value: `${load} kg` },
         { label: "Distance", value: `${distance} m` },
       );
+      metrics.charge_kg = load;
+      metrics.distance_m = distance;
       break;
     }
     case "Farmer Carry": {
@@ -122,6 +129,8 @@ function stationSegment(
         { label: "Charge (par main)", value: `${load} kg` },
         { label: "Distance", value: `${distance} m` },
       );
+      metrics.charge_kg = load;
+      metrics.distance_m = distance;
       break;
     }
     case "Sandbag Lunges": {
@@ -131,12 +140,15 @@ function stationSegment(
         { label: "Charge", value: `${load} kg` },
         { label: "Distance", value: `${distance} m` },
       );
+      metrics.charge_kg = load;
+      metrics.distance_m = distance;
       break;
     }
     case "Burpee Broad Jump": {
       const reps =
         opts.volumeOverride ?? byLevel(level, { débutant: 40, intermédiaire: 60, avancé: 80 });
       stats.push({ label: "Répétitions", value: String(reps) });
+      metrics.reps = reps;
       break;
     }
     case "Wall Balls": {
@@ -147,15 +159,18 @@ function stationSegment(
         { label: "Charge (ballon)", value: `${ballWeight} kg` },
         { label: "Répétitions", value: String(reps) },
       );
+      metrics.charge_kg = ballWeight;
+      metrics.reps = reps;
       break;
     }
   }
 
   if (opts.rounds && opts.rounds > 1) {
     stats.push({ label: "Tours", value: String(opts.rounds) });
+    metrics.rounds = opts.rounds;
   }
 
-  return { label: id, stats };
+  return { label: id, stats, metrics };
 }
 
 // Groupes de postes par intention — connaissance 100% interne à HYROX.

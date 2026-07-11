@@ -70,6 +70,9 @@ describe("CardioWorkoutEngine.generate", () => {
           { label: "Résistance", value: "12" },
           { label: "Cadence", value: "85 rpm" },
         ],
+        // Phase 1 multi-discipline : miroir numérique brut (voir
+        // SessionSegment.metrics), permet l'historique/records par exercice.
+        metrics: { resistance: 12, cadence_rpm: 85 },
       },
     ]);
   });

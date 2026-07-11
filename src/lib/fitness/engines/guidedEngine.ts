@@ -65,7 +65,7 @@ import type {
 } from "./types";
 
 // Familles couvertes — extensible sans toucher le reste du fichier.
-const ACTIVITIES = ["Pilates Lagree", "Yoga", "Mobilité", "Stretching"] as const;
+export const ACTIVITIES = ["Pilates Lagree", "Yoga", "Mobilité", "Stretching"] as const;
 type Activity = (typeof ACTIVITIES)[number];
 
 interface ActivityProfile {
@@ -136,12 +136,22 @@ export const GuidedActivityEngine: WorkoutEngine = {
     const activity = String(answers.activity ?? "Yoga");
     const profile = profileFor(activity);
 
+    const duration = Number(answers.duration_minutes) || 45;
     const segment: SessionSegment = {
       label: activity,
       stats: [
         { label: "Groupes sollicités", value: profile.musclesInvolved },
         { label: "Bénéfices attendus", value: profile.benefits },
       ],
+      // Miroir numérique brut (voir SessionSegment.metrics — solution
+      // transitoire Phase 1) : seules les deux valeurs réellement
+      // quantifiables du cours (durée, calories estimées) — le reste
+      // (groupes sollicités, bénéfices) est du texte informatif, jamais
+      // une métrique de progression.
+      metrics: {
+        duration_min: duration,
+        calories_estimate: Math.round(profile.kcalPerMinute * duration),
+      },
     };
 
     return {
