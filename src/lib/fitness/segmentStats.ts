@@ -22,6 +22,19 @@
 // réel (chrono) par segment — `estimatedDuration` est un calcul honnête
 // (distance réelle × allure réelle) clairement distinct d'un chrono
 // mesuré, en attendant qu'une vraie métrique de durée existe.
+//
+// CORRECTION 2026-07-11 (retour de Nathan) : l'unité d'analyse n'est pas
+// la répétition individuelle mais l'EXERCICE réalisé au sein d'une
+// séance — exactement le modèle séance > exercice > séries de la
+// musculation (voir useExerciseSetHistory.ts, qui regroupe déjà les
+// séries détaillées par séance). `computeSegmentStats` regroupe donc
+// d'abord les répétitions réalisées PAR SÉANCE (même workout_id) avant de
+// calculer meilleur/dernier/progression — une séance de fractionné avec
+// 8 répétitions compte comme UNE réalisation, pas 8. `groupByExerciseLabel`
+// (nouveau) fournit le même regroupement pour l'AFFICHAGE d'une liste de
+// segments d'une séance (historique ou séance en cours), afin qu'une
+// seule carte par exercice soit montrée avec ses répétitions groupées à
+// l'intérieur — jamais une carte par répétition.
 // ============================================================
 
 import { normalize } from "@/lib/fitness/exerciseCatalog";
@@ -87,6 +100,39 @@ export function segmentTypeKey(rawLabel: string): string {
   return normalize(segmentBaseLabel(rawLabel));
 }
 
+export interface LabelGroup<T> {
+  key: string;
+  displayLabel: string;
+  instances: T[];
+}
+
+/** Regroupe une liste de segments d'UNE séance (historique ou séance en
+ *  cours) par type d'exercice (même identité que segmentTypeKey), en
+ *  conservant l'ordre d'apparition du groupe (celui de la première
+ *  occurrence) et l'ordre interne des répétitions. Générique sur T pour
+ *  servir à la fois SessionSegment (historique, voir
+ *  CourseHistoryContent.tsx) et ActiveGenericSegment (séance en cours,
+ *  voir ActiveGenericSessionView.tsx / ActiveCourseExerciseCard.tsx) sans
+ *  dupliquer la logique de regroupement — une seule carte par exercice,
+ *  jamais une par répétition (cf. en-tête de fichier, correction
+ *  2026-07-11). */
+export function groupByExerciseLabel<T extends { label: string }>(items: T[]): LabelGroup<T>[] {
+  const order: string[] = [];
+  const byKey = new Map<string, T[]>();
+  for (const item of items) {
+    const key = segmentTypeKey(item.label);
+    if (!byKey.has(key)) {
+      byKey.set(key, []);
+      order.push(key);
+    }
+    byKey.get(key)!.push(item);
+  }
+  return order.map((key) => {
+    const instances = byKey.get(key)!;
+    return { key, displayLabel: segmentBaseLabel(instances[0].label), instances };
+  });
+}
+
 export interface MetricStat {
   key: string;
   label: string;
@@ -135,38 +181,96 @@ function buildStat(
   };
 }
 
+/** Résumé d'UNE séance pour un type d'exercice donné : combien de
+ *  répétitions, et la meilleure valeur par métrique connue au sein de
+ *  CETTE séance uniquement (ex. l'allure la plus rapide des 8 répétitions
+ *  de "400m" ce jour-là). Alimente la liste "Historique" de
+ *  SegmentAnalysisSheet — un point par séance, jamais un point par
+ *  répétition. */
+export interface SegmentSessionSummary {
+  workoutId: string;
+  date: string;
+  repCount: number;
+  metrics: Record<string, number>;
+}
+
 export interface SegmentStats {
   displayLabel: string;
-  /** Nombre de réalisations (occurrences complétées, toutes séances confondues). */
-  occurrences: number;
+  /** Nombre de séances où cet exercice a été réalisé (pas le nombre de
+   *  répétitions — une séance de fractionné à 8 répétitions compte pour 1). */
+  sessionCount: number;
+  /** Nombre total de répétitions réalisées, toutes séances confondues. */
+  totalReps: number;
   firstDate: string | null;
   lastDate: string | null;
   metrics: MetricStat[];
-  /** Durée estimée (distance réelle × allure réelle) — PAS un chrono mesuré. */
+  /** Durée estimée (distance réelle × allure réelle, sommée sur les
+   *  répétitions d'une séance qui portent les deux métriques) — PAS un
+   *  chrono mesuré. */
   estimatedDuration: MetricStat | null;
+  /** Un point par séance (répétitions déjà agrégées) — source de la
+   *  liste "Historique" affichée dans la fiche. */
+  sessions: SegmentSessionSummary[];
 }
 
-/** Calcule les statistiques d'un type de segment à partir de toutes ses
- *  occurrences réelles (toutes séances Course terminées confondues). */
+/** Calcule les statistiques d'un type de segment (= exercice de course) à
+ *  partir de toutes ses occurrences réelles, regroupées par séance
+ *  (toutes séances Course terminées confondues). */
 export function computeSegmentStats(
   displayLabel: string,
   instances: SegmentInstance[],
 ): SegmentStats {
   const realized = instances.filter((i) => i.completed);
-  const byMetric = new Map<string, Array<{ date: string; value: number }>>();
-  const durationPoints: Array<{ date: string; value: number }> = [];
 
+  // 1) Regroupe les répétitions réalisées par séance (workout_id) : une
+  // séance = une réalisation de l'exercice, quel que soit son nombre de
+  // répétitions internes.
+  const byWorkout = new Map<string, SegmentInstance[]>();
   for (const inst of realized) {
-    for (const [key, raw] of Object.entries(inst.metrics)) {
-      if (typeof raw !== "number") continue;
-      if (!SEGMENT_METRIC_CONFIG[key]) continue;
-      if (!byMetric.has(key)) byMetric.set(key, []);
-      byMetric.get(key)!.push({ date: inst.date, value: raw });
+    if (!byWorkout.has(inst.workoutId)) byWorkout.set(inst.workoutId, []);
+    byWorkout.get(inst.workoutId)!.push(inst);
+  }
+
+  const sessions: SegmentSessionSummary[] = [];
+  const durationPoints: Array<{ date: string; value: number }> = [];
+  for (const [workoutId, reps] of byWorkout) {
+    const date = reps[0].date;
+    const metrics: Record<string, number> = {};
+    for (const [key, config] of Object.entries(SEGMENT_METRIC_CONFIG)) {
+      const values = reps
+        .map((r) => r.metrics[key])
+        .filter((v): v is number => typeof v === "number");
+      if (values.length === 0) continue;
+      metrics[key] = config.direction === "min" ? Math.min(...values) : Math.max(...values);
     }
-    const distance = inst.metrics.distance_m;
-    const pace = inst.metrics.pace_min_per_km;
-    if (typeof distance === "number" && typeof pace === "number") {
-      durationPoints.push({ date: inst.date, value: (distance / 1000) * pace });
+    sessions.push({ workoutId, date, repCount: reps.length, metrics });
+
+    // Durée estimée de CETTE séance : somme, sur les répétitions qui
+    // portent à la fois une distance et une allure réelles, de
+    // distance/1000 * allure. Jamais de combinaison entre répétitions
+    // différentes (pas de "meilleure distance" × "meilleure allure").
+    let totalDuration = 0;
+    let anyDuration = false;
+    for (const r of reps) {
+      const distance = r.metrics.distance_m;
+      const pace = r.metrics.pace_min_per_km;
+      if (typeof distance === "number" && typeof pace === "number") {
+        totalDuration += (distance / 1000) * pace;
+        anyDuration = true;
+      }
+    }
+    if (anyDuration) durationPoints.push({ date, value: totalDuration });
+  }
+  sessions.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+  durationPoints.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+
+  // 2) Un point de progression par séance (pas par répétition) : le
+  // meilleur/dernier/tendance reflètent l'exercice au fil des séances.
+  const byMetric = new Map<string, Array<{ date: string; value: number }>>();
+  for (const session of sessions) {
+    for (const [key, value] of Object.entries(session.metrics)) {
+      if (!byMetric.has(key)) byMetric.set(key, []);
+      byMetric.get(key)!.push({ date: session.date, value });
     }
   }
 
@@ -190,15 +294,17 @@ export function computeSegmentStats(
     durationPoints,
   );
 
-  const dates = realized.map((i) => i.date).sort();
+  const totalReps = sessions.reduce((acc, s) => acc + s.repCount, 0);
 
   return {
     displayLabel,
-    occurrences: realized.length,
-    firstDate: dates[0] ?? null,
-    lastDate: dates[dates.length - 1] ?? null,
+    sessionCount: sessions.length,
+    totalReps,
+    firstDate: sessions[0]?.date ?? null,
+    lastDate: sessions[sessions.length - 1]?.date ?? null,
     metrics,
     estimatedDuration,
+    sessions,
   };
 }
 
@@ -207,14 +313,15 @@ export function computeSegmentStats(
  *  contenu par défaut pour la section "Analyse" tant qu'aucune analyse
  *  IA dédiée aux segments course n'existe (voir SegmentAnalysisSheet). */
 export function buildSegmentNarrative(stats: SegmentStats): string {
-  if (stats.occurrences === 0) {
-    return "Pas encore réalisé — les statistiques apparaîtront après ta première séance incluant ce segment.";
+  if (stats.sessionCount === 0) {
+    return "Pas encore réalisé — les statistiques apparaîtront après ta première séance incluant cet exercice.";
   }
-  if (stats.occurrences === 1) {
-    return `Réalisé 1 fois pour l'instant, le ${stats.firstDate}. Reviens ici après ta prochaine séance pour voir ta progression.`;
+  const repWord = (n: number) => `${n} répétition${n > 1 ? "s" : ""}`;
+  if (stats.sessionCount === 1) {
+    return `Réalisé 1 fois pour l'instant (${repWord(stats.totalReps)}), le ${stats.firstDate}. Reviens ici après ta prochaine séance pour voir ta progression.`;
   }
   const trending = stats.metrics.find((m) => m.trend === "up" || m.trend === "down");
-  const base = `Réalisé ${stats.occurrences} fois entre le ${stats.firstDate} et le ${stats.lastDate}.`;
+  const base = `Réalisé ${stats.sessionCount} fois (${repWord(stats.totalReps)} au total) entre le ${stats.firstDate} et le ${stats.lastDate}.`;
   if (!trending || trending.progressionPct == null) return base;
   const pct = Math.abs(trending.progressionPct).toFixed(0);
   const sens = trending.trend === "up" ? "meilleure" : "moins bonne";

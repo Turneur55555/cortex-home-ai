@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   segmentBaseLabel,
   segmentTypeKey,
+  groupByExerciseLabel,
   computeSegmentStats,
   buildSegmentNarrative,
   type SegmentInstance,
@@ -24,13 +25,44 @@ describe("segmentBaseLabel / segmentTypeKey", () => {
   });
 });
 
+describe("groupByExerciseLabel", () => {
+  it("regroupe les répétitions d'un même exercice sous une seule carte", () => {
+    const items = [
+      { label: "400m allure 5 km 1/8" },
+      { label: "Récupération trottinée" },
+      { label: "400m allure 5 km 2/8" },
+      { label: "Récupération trottinée" },
+      { label: "Retour au calme" },
+    ];
+    const groups = groupByExerciseLabel(items);
+    expect(groups).toHaveLength(3);
+    expect(groups[0].displayLabel).toBe("400m allure 5 km");
+    expect(groups[0].instances).toHaveLength(2);
+    expect(groups[1].displayLabel).toBe("Récupération trottinée");
+    expect(groups[1].instances).toHaveLength(2);
+    expect(groups[2].displayLabel).toBe("Retour au calme");
+    expect(groups[2].instances).toHaveLength(1);
+  });
+
+  it("conserve l'ordre de première apparition de chaque groupe", () => {
+    const items = [{ label: "B 1/2" }, { label: "A" }, { label: "B 2/2" }];
+    const groups = groupByExerciseLabel(items);
+    expect(groups.map((g) => g.displayLabel)).toEqual(["B", "A"]);
+  });
+
+  it("ne casse pas sur une liste vide", () => {
+    expect(groupByExerciseLabel([])).toEqual([]);
+  });
+});
+
 describe("computeSegmentStats", () => {
   const make = (
     date: string,
     metrics: Record<string, number | string>,
     completed = true,
+    workoutId?: string,
   ): SegmentInstance => ({
-    workoutId: `w-${date}`,
+    workoutId: workoutId ?? `w-${date}`,
     date,
     label: "400m allure 5 km 1/8",
     metrics,
@@ -39,10 +71,12 @@ describe("computeSegmentStats", () => {
 
   it("retourne des stats vides sans données fictives quand aucune occurrence", () => {
     const stats = computeSegmentStats("400m allure 5 km", []);
-    expect(stats.occurrences).toBe(0);
+    expect(stats.sessionCount).toBe(0);
+    expect(stats.totalReps).toBe(0);
     expect(stats.metrics).toEqual([]);
     expect(stats.estimatedDuration).toBeNull();
     expect(stats.firstDate).toBeNull();
+    expect(stats.sessions).toEqual([]);
   });
 
   it("ignore les segments non complétés dans le comptage", () => {
@@ -50,7 +84,25 @@ describe("computeSegmentStats", () => {
       make("2026-07-01", { distance_m: 1000 }, false),
       make("2026-07-02", { distance_m: 2000 }, true),
     ]);
-    expect(stats.occurrences).toBe(1);
+    expect(stats.sessionCount).toBe(1);
+  });
+
+  it("regroupe plusieurs répétitions de la MÊME séance en UNE seule réalisation", () => {
+    // 8 répétitions d'un fractionné, toutes dans la même séance (même
+    // workoutId) — doit compter comme 1 séance, 8 répétitions au total,
+    // exactement comme musculation compte 1 exercice avec 8 séries (pas
+    // 8 exercices). Correction 2026-07-11.
+    const reps = Array.from({ length: 8 }, (_, i) =>
+      make("2026-07-10", { pace_min_per_km: 4.5 - i * 0.05 }, true, "w-fractionne-1"),
+    );
+    const stats = computeSegmentStats("400m allure 5 km", reps);
+    expect(stats.sessionCount).toBe(1);
+    expect(stats.totalReps).toBe(8);
+    expect(stats.sessions).toHaveLength(1);
+    expect(stats.sessions[0].repCount).toBe(8);
+    // Meilleure allure de la séance = la plus rapide (min) des 8 répétitions.
+    const pace = stats.metrics.find((m) => m.key === "pace_min_per_km")!;
+    expect(pace.best).toBeCloseTo(4.5 - 7 * 0.05, 5);
   });
 
   it("calcule le meilleur/dernier/progression pour l'allure (min = meilleur)", () => {
@@ -91,6 +143,15 @@ describe("computeSegmentStats", () => {
     expect(stats.estimatedDuration!.latest).toBeCloseTo(1.6, 5);
   });
 
+  it("additionne la durée estimée de toutes les répétitions d'une même séance", () => {
+    const stats = computeSegmentStats("400m allure 5 km", [
+      make("2026-07-01", { distance_m: 400, pace_min_per_km: 4.0 }, true, "w-1"),
+      make("2026-07-01", { distance_m: 400, pace_min_per_km: 5.0 }, true, "w-1"),
+    ]);
+    // (0.4*4.0) + (0.4*5.0) = 1.6 + 2.0 = 3.6
+    expect(stats.estimatedDuration!.latest).toBeCloseTo(3.6, 5);
+  });
+
   it("ne calcule pas de durée estimée si une seule des deux métriques est présente", () => {
     const stats = computeSegmentStats("Tempo", [make("2026-07-01", { distance_m: 5000 })]);
     expect(stats.estimatedDuration).toBeNull();
@@ -103,7 +164,7 @@ describe("buildSegmentNarrative", () => {
     expect(buildSegmentNarrative(stats)).toMatch(/Pas encore réalisé/);
   });
 
-  it("mentionne la progression réelle quand elle existe", () => {
+  it("mentionne le nombre de séances (pas de répétitions) et la progression réelle", () => {
     const stats = computeSegmentStats("400m allure 5 km", [
       {
         workoutId: "1",
