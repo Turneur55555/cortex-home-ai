@@ -6,8 +6,10 @@ DROP POLICY IF EXISTS "Authenticated can delete catalog" ON public.exercise_cata
 
 CREATE POLICY "Service role can insert catalog"
   ON public.exercise_catalog FOR INSERT TO service_role WITH CHECK (true);
+DROP POLICY IF EXISTS "Service role can update catalog" ON public.exercise_catalog;
 CREATE POLICY "Service role can update catalog"
   ON public.exercise_catalog FOR UPDATE TO service_role USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Service role can delete catalog" ON public.exercise_catalog;
 CREATE POLICY "Service role can delete catalog"
   ON public.exercise_catalog FOR DELETE TO service_role USING (true);
 
