@@ -81,6 +81,7 @@ export function ActiveGenericSessionView({
       label,
       metrics,
       position: sortedSegments.length,
+      discipline: workout.discipline,
     });
     setNewLabel("");
     setNewDistance("");
@@ -267,6 +268,7 @@ export function ActiveGenericSessionView({
               key={g.key}
               group={g}
               workoutId={workout.id}
+              discipline={workout.discipline}
               nextPosition={sortedSegments.length}
               onOpenStats={setStatsLabel}
             />

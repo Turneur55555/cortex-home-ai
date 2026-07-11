@@ -7,6 +7,7 @@ import {
   useReorderGenericSegment,
   useUpdateGenericSegment,
 } from "@/hooks/useGenericActiveSession";
+import type { DisciplineId } from "@/lib/fitness/engines/types";
 import type { LabelGroup } from "@/lib/fitness/segmentStats";
 import {
   ExerciseCardContainer,
@@ -47,11 +48,15 @@ import { ActiveSegmentCard } from "./ActiveSegmentCard";
 export function ActiveCourseExerciseCard({
   group,
   workoutId,
+  discipline,
   nextPosition,
   onOpenStats,
 }: {
   group: LabelGroup<ActiveGenericSegment>;
   workoutId: string;
+  /** Discipline de la séance active (Phase 3 — résolution exercise_id sur
+   *  les nouvelles répétitions, voir services/exerciseResolution.ts). */
+  discipline: DisciplineId;
   /** Position à utiliser pour une nouvelle répétition ajoutée à ce
    *  groupe — les positions sont globales à la séance, pas propres au
    *  groupe (voir en-tête ci-dessus). */
@@ -74,6 +79,7 @@ export function ActiveCourseExerciseCard({
       metrics: {},
       metricKey: group.instances[0]?.metricKey ?? undefined,
       position: nextPosition,
+      discipline,
     });
   };
 
