@@ -23,7 +23,7 @@ import { segmentTypeKey, type SegmentInstance } from "@/lib/fitness/segmentStats
  *  séances terminées confondues), mises en cache une seule fois par
  *  utilisateur — plusieurs fiches segment ouvertes successivement
  *  partagent ce fetch au lieu de le relancer par type. */
-function useUserCourseSegmentInstances(userId: string | undefined) {
+export function useUserCourseSegmentInstances(userId: string | undefined) {
   return useQuery({
     queryKey: ["course_segment_instances_raw", userId],
     enabled: !!userId,
