@@ -335,7 +335,7 @@ export function NutritionTab() {
         </motion.button>
       )}
 
-      {/* ─── Carte Calories premium ─────────────────────────────────────── */}
+      {/* ─── Carte Calories premium — barre de progression horizontale ───── */}
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
@@ -346,46 +346,76 @@ export function NutritionTab() {
           aria-hidden
           className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-primary/10 blur-3xl"
         />
-        <div className="relative flex items-center gap-4">
-          <CaloriesRing consumed={Math.round(totals.calories)} target={goals?.calories ?? 0} />
-          <div className="min-w-0 flex-1">
-            {goals?.calories ? (
-              <>
-                <p className="text-base font-bold leading-tight text-primary">
-                  {Math.max(0, goals.calories - Math.round(totals.calories))}{" "}
-                  <span className="text-xs font-medium text-primary/80">kcal restantes</span>
-                </p>
-                <div className="mt-2 flex items-center gap-2">
-                  <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{
-                        width: `${Math.min(100, (totals.calories / goals.calories) * 100)}%`,
-                      }}
-                      transition={TRANSITION}
-                      className="h-full rounded-full bg-gradient-primary"
-                    />
-                  </div>
-                  <span className="shrink-0 text-xs font-bold text-primary">
+        <div className="relative">
+          {goals?.calories ? (
+            <>
+              <div className="flex items-end justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-muted-foreground">Calories consommées</p>
+                  <p className="mt-0.5 text-2xl font-bold tracking-tight text-foreground">
+                    {Math.round(totals.calories)}
+                    <span className="ml-1 text-sm font-medium text-muted-foreground">
+                      / {goals.calories} kcal
+                    </span>
+                  </p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="text-base font-bold leading-tight text-primary">
+                    {Math.max(0, goals.calories - Math.round(totals.calories))}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">kcal restantes</p>
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <div className="h-3 w-full overflow-hidden rounded-full bg-muted">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{
+                      width: `${Math.min(100, (totals.calories / goals.calories) * 100)}%`,
+                    }}
+                    transition={TRANSITION}
+                    className="h-full rounded-full bg-gradient-primary"
+                  />
+                </div>
+                <div className="mt-1.5 flex items-center justify-between">
+                  <span
+                    className={`text-[10px] font-medium ${
+                      totals.calories > goals.calories
+                        ? "text-destructive"
+                        : "text-muted-foreground"
+                    }`}
+                  >
+                    {totals.calories > goals.calories
+                      ? `+${Math.round(totals.calories - goals.calories)} kcal`
+                      : "Objectif quotidien"}
+                  </span>
+                  <span className="text-xs font-bold text-primary">
                     {Math.round((totals.calories / goals.calories) * 100)}%
                   </span>
                 </div>
-              </>
-            ) : (
-              <>
+              </div>
+            </>
+          ) : (
+            <div className="flex items-center justify-between gap-3">
+              <div>
                 <p className="text-xs leading-snug text-muted-foreground">Aucun objectif défini</p>
-                <motion.button
-                  whileTap={PRESS_SMALL}
-                  type="button"
-                  onClick={() => setGoalsOpen(true)}
-                  className="mt-2.5 inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary"
-                >
-                  <Target className="h-3 w-3" />
-                  Définir un objectif
-                </motion.button>
-              </>
-            )}
-          </div>
+                <p className="mt-0.5 text-2xl font-bold tracking-tight text-foreground">
+                  {Math.round(totals.calories)}
+                  <span className="ml-1 text-sm font-medium text-muted-foreground">kcal</span>
+                </p>
+              </div>
+              <motion.button
+                whileTap={PRESS_SMALL}
+                type="button"
+                onClick={() => setGoalsOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary"
+              >
+                <Target className="h-3 w-3" />
+                Définir un objectif
+              </motion.button>
+            </div>
+          )}
         </div>
       </motion.div>
 
