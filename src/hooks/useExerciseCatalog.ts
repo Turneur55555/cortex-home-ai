@@ -19,7 +19,7 @@ export function useExerciseCatalog() {
     queryKey: CACHE_KEY,
     queryFn: async (): Promise<DbCatalogRow[]> => {
       const { data, error } = await supabase
-        .from("exercise_catalog")
+        .from("exercise_reference")
         .select("*")
         .order("group_name")
         .order("sort_order")
@@ -38,7 +38,7 @@ export function useFullExerciseCatalog() {
     queryFn: async (): Promise<DbCatalogRow[]> => {
       const [catalogResult, customResult] = await Promise.all([
         supabase
-          .from("exercise_catalog")
+          .from("exercise_reference")
           .select("*")
           .order("group_name")
           .order("sort_order")
@@ -87,7 +87,7 @@ export function useAddExercise() {
   return useMutation({
     mutationFn: async ({ name, group_name }: { name: string; group_name: string }) => {
       const { error } = await supabase
-        .from("exercise_catalog")
+        .from("exercise_reference")
         .insert({ name: name.trim(), group_name });
       if (error) throw error;
     },
@@ -103,7 +103,7 @@ export function useDeleteExercise() {
   return useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase
-        .from("exercise_catalog")
+        .from("exercise_reference")
         .delete()
         .eq("id", id);
       if (error) throw error;
@@ -128,7 +128,7 @@ export function useUpdateExercise() {
       group_name: string;
     }) => {
       const { error } = await supabase
-        .from("exercise_catalog")
+        .from("exercise_reference")
         .update({ name: name.trim(), group_name })
         .eq("id", id);
       if (error) throw error;
@@ -146,7 +146,7 @@ export function usePromoteExercise() {
   return useMutation({
     mutationFn: async ({ name, group_name }: { name: string; group_name: string }) => {
       const { error } = await supabase
-        .from("exercise_catalog")
+        .from("exercise_reference")
         .insert({ name: name.trim(), group_name });
       if (error && !error.message.includes("duplicate")) throw error;
     },
