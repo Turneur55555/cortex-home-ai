@@ -8,21 +8,24 @@
 // registre AVANT de retomber sur le rendu générique
 // (SessionSummaryCard + SessionSegmentList, alimentés par
 // engine.toSessionView()). Une discipline qui n'a pas d'entrée ici
-// utilise entièrement le rendu générique — c'est le cas des 5
-// disciplines actuelles : leur résumé/segments génériques suffisent
-// déjà à les rendre identifiables (icône + couleur d'accent, voir
+// utilise entièrement le rendu générique — c'est le cas de HYROX/Cardio/
+// mobilité/récupération : leur résumé/segments génériques suffisent déjà
+// à les rendre identifiables (icône + couleur d'accent, voir
 // DisciplineIcon.tsx) sans avoir besoin d'une mise en page bespoke.
 //
-// Demain, si une discipline a besoin d'un affichage vraiment différent
-// (ex: une frise de postes pour HYROX), il suffit d'ajouter UNE entrée
-// ici — zéro modification de GenericHistoryCard ni de SeancesTab.
+// Course à pied a désormais une entrée (2026-07-10) : segments cliquables
+// ouvrant une fiche détaillée par type de segment (voir
+// CourseHistoryContent.tsx / SegmentAnalysisSheet.tsx) — ajout d'UNE
+// entrée ici, zéro modification de GenericHistoryCard ni de
+// SessionSegmentList, donc zéro impact sur les autres disciplines.
 // ============================================================
 
 import type { ReactElement } from "react";
 import type { DisciplineId, SessionView } from "@/lib/fitness/engines/types";
+import { CourseHistoryContent } from "./CourseHistoryContent";
 
 export type HistoryContentRenderer = (props: { view: SessionView }) => ReactElement;
 
 export const HISTORY_CONTENT_RENDERERS: Partial<Record<DisciplineId, HistoryContentRenderer>> = {
-  // Volontairement vide aujourd'hui — voir en-tête de fichier.
+  course: CourseHistoryContent,
 };
