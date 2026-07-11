@@ -11,6 +11,26 @@ import type {
   WorkoutRecordDraft,
 } from "@/lib/fitness/engines/types";
 import type { Tables } from "@/integrations/supabase/types";
+import { resolveExerciseId } from "@/services/exerciseResolution";
+
+// Phase 3 (exercice-central) — Étape 2, double écriture : résout/crée
+// exercise_id en plus du libellé existant sur workout_segments. Ne doit
+// jamais bloquer l'écriture principale du segment (voir
+// services/exerciseResolution.ts).
+async function resolveSegmentExerciseId(
+  discipline: DisciplineId,
+  label: string,
+): Promise<string | null> {
+  try {
+    return await resolveExerciseId(discipline, label);
+  } catch (e) {
+    console.error(
+      `[Phase3] resolveExerciseId(${discipline}) a échoué — écriture principale non bloquée`,
+      e,
+    );
+    return null;
+  }
+}
 
 // ============================================================
 // Séance active GÉNÉRIQUE — pendant de use-fitness.ts (useActiveWorkout /
@@ -178,6 +198,9 @@ export function useStartGenericActiveWorkout() {
       if (error) throw error;
 
       if (seedSegments.length > 0) {
+        const seedExerciseIds = await Promise.all(
+          seedSegments.map((seg) => resolveSegmentExerciseId(draft.discipline, seg.label)),
+        );
         const { error: segErr } = await supabase.from("workout_segments").insert(
           seedSegments.map((seg, i) => ({
             workout_id: workout.id,
@@ -187,6 +210,8 @@ export function useStartGenericActiveWorkout() {
             metric_key: seg.metricKey ?? null,
             metrics: seg.metrics as never,
             completed: false,
+            discipline: draft.discipline,
+            exercise_id: seedExerciseIds[i],
           })),
         );
         if (segErr) throw segErr;
@@ -220,17 +245,20 @@ export function useAddGenericSegment() {
       metrics = {},
       metricKey,
       position,
+      discipline,
     }: {
       workoutId: string;
       label: string;
       metrics?: Record<string, number | string>;
       metricKey?: string | null;
       position: number;
+      discipline: DisciplineId;
     }) => {
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
+      const exerciseId = await resolveSegmentExerciseId(discipline, label);
       const { error } = await supabase.from("workout_segments").insert({
         workout_id: workoutId,
         user_id: user.id,
@@ -239,6 +267,8 @@ export function useAddGenericSegment() {
         metric_key: metricKey ?? null,
         metrics: metrics as never,
         completed: false,
+        discipline,
+        exercise_id: exerciseId,
       });
       if (error) throw error;
     },

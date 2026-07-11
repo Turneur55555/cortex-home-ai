@@ -4,6 +4,23 @@ import { supabase } from "@/integrations/supabase/client";
 import { logActivity } from "@/lib/activity";
 import { localDateYMD } from "@/lib/dates";
 import type { DisciplineId } from "@/lib/fitness/engines/types";
+import { resolveExerciseId } from "@/services/exerciseResolution";
+
+// Phase 3 (exercice-central) — Étape 2, double écriture : résout/crée
+// exercise_reference_id en plus du libellé existant. Ne doit jamais
+// bloquer l'écriture principale de l'exercice (voir
+// services/exerciseResolution.ts).
+async function resolveMuscuExerciseReferenceId(name: string): Promise<string | null> {
+  try {
+    return await resolveExerciseId("muscu", name);
+  } catch (e) {
+    console.error(
+      "[Phase3] resolveExerciseId(muscu) a échoué — écriture principale non bloquée",
+      e,
+    );
+    return null;
+  }
+}
 
 // ---------- Domaines extraits (re-exports pour rétro-compat) ----------
 export type { NutritionGoals } from "./useNutritionGoals";
@@ -339,6 +356,7 @@ export function useAddExerciseToWorkout() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
+      const exerciseReferenceId = await resolveMuscuExerciseReferenceId(exercise.name);
       const { error } = await supabase.from("exercises").insert({
         user_id: user.id,
         workout_id: workoutId,
@@ -347,6 +365,7 @@ export function useAddExerciseToWorkout() {
         reps: exercise.reps ?? null,
         weight: exercise.weight ?? null,
         image_path: null,
+        exercise_reference_id: exerciseReferenceId,
       });
       if (error) throw error;
     },
@@ -662,10 +681,13 @@ export function useStartWorkoutFromTemplate() {
 
       const groupList = Array.from(groups.values());
       if (groupList.length > 0) {
+        const groupReferenceIds = await Promise.all(
+          groupList.map((g) => resolveMuscuExerciseReferenceId(g.name)),
+        );
         const { data: insertedExs, error: exErr } = await supabase
           .from("exercises")
           .insert(
-            groupList.map((g) => ({
+            groupList.map((g, i) => ({
               user_id: user.id,
               workout_id: workout.id,
               name: g.name,
@@ -673,6 +695,7 @@ export function useStartWorkoutFromTemplate() {
               reps: null,
               weight: null,
               image_path: g.image_path,
+              exercise_reference_id: groupReferenceIds[i],
             })),
           )
           .select("id");
@@ -713,6 +736,7 @@ export function useAddExerciseToActiveWorkout() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
+      const exerciseReferenceId = await resolveMuscuExerciseReferenceId(name);
       const { error } = await supabase.from("exercises").insert({
         user_id: user.id,
         workout_id: workoutId,
@@ -721,6 +745,7 @@ export function useAddExerciseToActiveWorkout() {
         reps: null,
         weight: null,
         image_path: null,
+        exercise_reference_id: exerciseReferenceId,
       });
       if (error) throw error;
     },
