@@ -157,7 +157,7 @@ export function ExerciseExplorerSheet({
   const fileRef = useRef<HTMLInputElement>(null);
 
   const items: BrowserExercise[] = useMemo(
-    () => (catalog ?? []).map((r) => ({ id: r.id, name: r.name, group: r.group_name })),
+    () => (catalog ?? []).map((r) => ({ id: r.id, name: r.name, group: r.category ?? "" })),
     [catalog],
   );
 
@@ -187,7 +187,7 @@ export function ExerciseExplorerSheet({
   const handleAdd = async () => {
     if (!newName.trim()) return;
     try {
-      await addExercise.mutateAsync({ name: newName.trim(), group_name: newGroup });
+      await addExercise.mutateAsync({ name: newName.trim(), category: newGroup });
       toast.success(`"${newName.trim()}" ajouté`);
       setNewName("");
       setShowAdd(false);
@@ -212,7 +212,7 @@ export function ExerciseExplorerSheet({
   const handleEditSave = async () => {
     if (!editingExercise || !editName.trim()) return;
     try {
-      await updateExercise.mutateAsync({ id: editingExercise.id, name: editName.trim(), group_name: editGroup });
+      await updateExercise.mutateAsync({ id: editingExercise.id, name: editName.trim(), category: editGroup });
       toast.success("Exercice modifié");
       setEditingExercise(null);
     } catch (e) {
@@ -223,7 +223,7 @@ export function ExerciseExplorerSheet({
   const handlePromote = async () => {
     if (!promotingExercise) return;
     try {
-      await promoteExercise.mutateAsync({ name: promotingExercise.name, group_name: promoteGroup });
+      await promoteExercise.mutateAsync({ name: promotingExercise.name, category: promoteGroup });
       toast.success(`"${promotingExercise.name}" ajouté au catalogue`);
       setPromotingExercise(null);
     } catch (e) {
@@ -234,11 +234,11 @@ export function ExerciseExplorerSheet({
   const openEdit = (row: DbCatalogRow) => {
     setEditingExercise(row);
     setEditName(row.name);
-    setEditGroup(row.group_name);
+    setEditGroup(row.category ?? "");
   };
 
   const openPromote = (ex: BrowserExercise) => {
-    setPromotingExercise({ id: ex.id, name: ex.name, group_name: ex.group, sort_order: 999, created_at: "" });
+    setPromotingExercise({ id: ex.id, name: ex.name, category: ex.group, sort_order: 999, created_at: "" });
     setPromoteGroup(CATALOG_GROUPS[0]);
   };
 
