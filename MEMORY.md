@@ -1,7 +1,15 @@
 # Mémoire projet — cortex-home-ai
 
 ## Dernière mise à jour
-2026-07-10
+2026-07-11
+
+## Nutrition → refonte de la zone haute : cercle remplacé par une barre de progression (2026-07-11)
+Refonte UI strictement locale à `src/routes/_authenticated/fitness/NutritionTab.tsx` — aucune logique métier, hook, requête Supabase ou Sheet modifiée.
+- **Suppression complète du `CaloriesRing`** (grand cercle de calories) et de son composant local.
+- **Nouvelle carte calories** : affichage horizontal premium avec le total consommé `/ objectif`, les calories restantes en surimpression, une grande barre de progression épaisse (`h-3`) avec remplissage animé `bg-gradient-primary`, et le pourcentage atteint.
+- **Hiérarchie visuelle** respectée : barre calories → 3 cartes macros (Protéines/Glucides/Lipides) → Repas → Compléments.
+- **Design system préservé** : même token `CARD`, même halo `bg-primary/10 blur-3xl`, même courbe d'animation `TRANSITION`/`EASE`, pas de couleur littérale, pas de quatrième carte Calories, pas de redondance.
+- Validé : `npx tsc --noEmit` 0 erreur, `eslint --fix` clean, `npm run test` **230/230 verts**, `npm run build` OK. Test navigateur impossible (pas de session active, `LOVABLE_BROWSER_AUTH_STATUS=signed_out`).
 
 ## Fix global : la barre de nav flottante / le "+" ne recouvrent plus le contenu (2026-07-10, branche `claude/nutrition-ui-simplify-hr2nop`)
 Signalé en testant Nutrition, mais le bug était en réalité dans le layout partagé (`AppShell`/`BottomNav`, utilisés par **toutes** les pages authentifiées) — corrigé au bon niveau plutôt qu'en rustine locale à Nutrition.
