@@ -17,6 +17,8 @@ import { TemplateEditorSheet } from "@/components/fitness/templates/TemplateEdit
 import { ActiveWorkoutView } from "@/components/fitness/ActiveWorkoutView";
 import { ActiveGenericSessionView } from "@/components/fitness/session/ActiveGenericSessionView";
 import { ExerciseCatalogSheet } from "@/components/fitness/ExerciseCatalogSheet";
+import { ForgeDisciplineChooser } from "@/components/fitness/ForgeDisciplineChooser";
+import { DisciplineExerciseLibrarySheet } from "@/components/fitness/DisciplineExerciseLibrarySheet";
 import { PostWorkoutAnalysisSheet } from "@/components/fitness/PostWorkoutAnalysisSheet";
 import { SectionReveal } from "@/components/fitness/SectionReveal";
 import {
@@ -88,6 +90,16 @@ export function SeancesTab() {
   const [coachInitialMuscles, setCoachInitialMuscles] = useState<string[] | undefined>(undefined);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [catalogOpen, setCatalogOpen] = useState(false);
+  // Phase 1 multi-discipline (2026-07-11) : une seule Forge, avec un choix
+  // de discipline avant d'ouvrir soit le catalogue muscu existant
+  // (inchangé), soit la nouvelle bibliothèque générique par discipline.
+  const [forgeChooserOpen, setForgeChooserOpen] = useState(false);
+  const [libraryDiscipline, setLibraryDiscipline] = useState<DisciplineId | null>(null);
+  const handleForgePick = (discipline: DisciplineId) => {
+    setForgeChooserOpen(false);
+    if (discipline === "muscu") setCatalogOpen(true);
+    else setLibraryDiscipline(discipline);
+  };
 
   const { prByName, histByName, volByName, prByGym, histByGym, nameByKey, topExercises } = useMemo(
     () => computePRs(data ?? []),
@@ -244,7 +256,7 @@ export function SeancesTab() {
 
       {/* ── La Forge — atelier de sélection des techniques ──────────── */}
       <SectionReveal delay={0.05}>
-        <LaForgeCard onClick={() => setCatalogOpen(true)} />
+        <LaForgeCard onClick={() => setForgeChooserOpen(true)} />
       </SectionReveal>
 
       {error && !isLoading && (
@@ -453,6 +465,20 @@ export function SeancesTab() {
           histByName={histByName}
           volByName={volByName}
           prByName={prByName}
+        />
+      )}
+
+      {forgeChooserOpen && (
+        <ForgeDisciplineChooser
+          onClose={() => setForgeChooserOpen(false)}
+          onPick={handleForgePick}
+        />
+      )}
+
+      {libraryDiscipline && (
+        <DisciplineExerciseLibrarySheet
+          discipline={libraryDiscipline}
+          onClose={() => setLibraryDiscipline(null)}
         />
       )}
 
