@@ -18,14 +18,27 @@
 // CourseHistoryContent.tsx / SegmentAnalysisSheet.tsx) — ajout d'UNE
 // entrée ici, zéro modification de GenericHistoryCard ni de
 // SessionSegmentList, donc zéro impact sur les autres disciplines.
+//
+// PHASE 1 MULTI-DISCIPLINE (2026-07-11) : Cardio/HYROX/Guided rejoignent
+// Course avec le même mécanisme (segments cliquables → fiche détaillée),
+// via createDisciplineHistoryContent (DisciplineHistoryContent.tsx) —
+// généralisation de CourseHistoryContent qui lit `workouts.metadata.
+// segments` au lieu de `workout_segments` (solution transitoire, voir
+// useDisciplineSegmentHistory.ts). "autre" (Freeform) reste volontairement
+// absent : contenu 100% texte libre généré par IA, sans vocabulaire
+// d'exercice stable à cataloguer — hors périmètre Phase 1.
 // ============================================================
 
 import type { ReactElement } from "react";
 import type { DisciplineId, SessionView } from "@/lib/fitness/engines/types";
 import { CourseHistoryContent } from "./CourseHistoryContent";
+import { createDisciplineHistoryContent } from "./DisciplineHistoryContent";
 
 export type HistoryContentRenderer = (props: { view: SessionView }) => ReactElement;
 
 export const HISTORY_CONTENT_RENDERERS: Partial<Record<DisciplineId, HistoryContentRenderer>> = {
   course: CourseHistoryContent,
+  cardio: createDisciplineHistoryContent("cardio"),
+  hyrox: createDisciplineHistoryContent("hyrox"),
+  guided: createDisciplineHistoryContent("guided"),
 };

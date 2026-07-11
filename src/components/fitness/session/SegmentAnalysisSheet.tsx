@@ -12,6 +12,8 @@ import {
   YAxis,
 } from "recharts";
 import { useSegmentHistory } from "@/hooks/useSegmentHistory";
+import { useDisciplineSegmentHistory } from "@/hooks/useDisciplineSegmentHistory";
+import type { DisciplineId } from "@/lib/fitness/engines/types";
 import {
   SEGMENT_METRIC_CONFIG,
   buildSegmentNarrative,
@@ -60,22 +62,46 @@ import { SectionCard, StatTileMini, TrendIcon } from "../ExerciseAnalysisPrimiti
 //   valeurs historiques (buildSegmentNarrative) — pas d'appel IA, pour
 //   rester strictement dans le périmètre "pilote Course" sans toucher
 //   au backend Sensei.
+//
+// GÉNÉRALISATION PHASE 1 MULTI-DISCIPLINE (2026-07-11) : `discipline`
+// (nouveau prop, défaut "course" — AUCUN appelant existant n'a besoin de
+// changer) choisit la source d'historique : Course lit `workout_segments`
+// (useSegmentHistory, table dédiée, édition live), toute autre discipline
+// lit `workouts.metadata.segments` (useDisciplineSegmentHistory, solution
+// TRANSITOIRE — voir en-tête de ce hook). Les deux renvoient le même
+// contrat `SegmentInstance[]`, donc `computeSegmentStats` et TOUT le
+// reste de cette fiche (graphique, stats, historique) restent
+// strictement inchangés — un seul mécanisme d'affichage pour toutes les
+// disciplines, conformément à la demande de Nathan. Ceci n'est PAS une
+// fusion avec ExerciseAnalysisSheet (musculation, non touchée) : cette
+// fiche reste dédiée aux disciplines à base de "segments", la fusion
+// éventuelle des deux est une décision explicitement reportée à la
+// Phase 3.
 // ============================================================
 
 export function SegmentAnalysisSheet({
   rawLabel,
+  discipline = "course",
   onClose,
 }: {
   rawLabel: string;
+  discipline?: DisciplineId;
   onClose: () => void;
 }) {
   const displayLabel = segmentBaseLabel(rawLabel);
-  const { data: instances } = useSegmentHistory(rawLabel);
+  const isCourse = discipline === "course";
+  const { data: courseInstances } = useSegmentHistory(isCourse ? rawLabel : undefined);
+  const { data: otherInstances } = useDisciplineSegmentHistory(
+    discipline,
+    isCourse ? undefined : rawLabel,
+  );
+  const instances = isCourse ? courseInstances : otherInstances;
   const stats = useMemo(
     () => computeSegmentStats(displayLabel, instances ?? []),
     [displayLabel, instances],
   );
   const narrative = useMemo(() => buildSegmentNarrative(stats), [stats]);
+  const repWord = isCourse ? "répétition" : "occurrence";
 
   const chartableMetrics = stats.metrics.filter((m) => m.history.length > 0);
   const [metricKey, setMetricKey] = useState<string | undefined>(chartableMetrics[0]?.key);
@@ -265,7 +291,7 @@ export function SegmentAnalysisSheet({
               >
                 <p className="text-[11.5px] leading-relaxed text-muted-foreground">
                   Bientôt disponible. Cette fiche est prête à l'accueillir dès qu'un algorithme de
-                  recommandation sera construit pour la course à pied.
+                  recommandation sera construit pour cette discipline.
                 </p>
               </SectionCard>
 
@@ -290,7 +316,8 @@ export function SegmentAnalysisSheet({
                             : "Date inconnue"}
                         </p>
                         <span className="shrink-0 text-[10px] font-medium text-muted-foreground">
-                          {s.repCount} répétition{s.repCount > 1 ? "s" : ""}
+                          {s.repCount} {repWord}
+                          {s.repCount > 1 ? "s" : ""}
                         </span>
                       </div>
                       <div className="flex flex-wrap gap-1.5">
