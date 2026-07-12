@@ -509,7 +509,7 @@ export function useActiveWorkout() {
       const { data, error } = await supabase
         .from("workouts")
         .select(
-          "id, name, gym_location, created_at, exercises(id, name, image_path, sets, reps, weight, exercise_sets(id, set_number, reps, weight, completed))",
+          "id, name, gym_location, created_at, exercises(id, name, image_path, sets, reps, weight, exercise_reference_id, exercise_sets(id, set_number, reps, weight, completed))",
         )
         .eq("user_id", user.id)
         .eq("status", "active")
