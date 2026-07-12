@@ -14,7 +14,7 @@ export const Route = createFileRoute("/reset-password")({
   head: () => ({
     meta: [
       { title: "Réinitialisation — ICORTEX" },
-      { name: "description", content: "Choisissez un nouveau mot de passe ICORTEX." },
+      { name: "description", content: "Choisissez un nouveau mot de passe ICORTEX. La performance commence ici." },
     ],
   }),
   component: ResetPasswordPage,
