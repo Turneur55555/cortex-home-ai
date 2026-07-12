@@ -48,6 +48,16 @@ export interface SegmentInstance {
   label: string;
   metrics: Record<string, number | string>;
   completed: boolean;
+  /**
+   * Identité métier stable (Phase 3, Étape 4) — présente uniquement pour les
+   * sources capables de la fournir (`workout_segments.exercise_id`, voir
+   * useSegmentHistory.ts). Absente (undefined) pour les sources qui n'ont
+   * pas encore cette colonne (`workouts.metadata.segments`, voir
+   * useDisciplineSegmentHistory.ts — limitation connue, non résolue à cette
+   * étape). Champ additif, purement interne à la sélection par identité ;
+   * n'est pas utilisé par `computeSegmentStats`/`groupByExerciseLabel`.
+   */
+  exerciseId?: string | null;
 }
 
 type MetricDirection = "min" | "max";
