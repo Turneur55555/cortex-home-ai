@@ -14,18 +14,22 @@ GRANT ALL ON public.exercise_reference TO service_role;
 
 ALTER TABLE public.exercise_reference ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "exercise_reference readable by everyone" ON public.exercise_reference;
 CREATE POLICY "exercise_reference readable by everyone"
   ON public.exercise_reference FOR SELECT
   USING (true);
 
+DROP POLICY IF EXISTS "exercise_reference authenticated insert" ON public.exercise_reference;
 CREATE POLICY "exercise_reference authenticated insert"
   ON public.exercise_reference FOR INSERT
   TO authenticated WITH CHECK (true);
 
+DROP POLICY IF EXISTS "exercise_reference authenticated update" ON public.exercise_reference;
 CREATE POLICY "exercise_reference authenticated update"
   ON public.exercise_reference FOR UPDATE
   TO authenticated USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "exercise_reference authenticated delete" ON public.exercise_reference;
 CREATE POLICY "exercise_reference authenticated delete"
   ON public.exercise_reference FOR DELETE
   TO authenticated USING (true);
