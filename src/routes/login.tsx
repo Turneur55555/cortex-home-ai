@@ -16,7 +16,7 @@ export const Route = createFileRoute("/login")({
   head: () => ({
     meta: [
       { title: "Connexion — ICORTEX" },
-      { name: "description", content: "Connectez-vous à votre maison intelligente ICORTEX." },
+      { name: "description", content: "Connectez-vous à ICORTEX, votre plateforme premium de fitness et nutrition propulsée par l'IA." },
     ],
   }),
   beforeLoad: async () => {
