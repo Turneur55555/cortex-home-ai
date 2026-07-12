@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { FullscreenSheet as Sheet } from "@/components/shared/FormComponents";
-import { MEAL_LABELS, clampMacroSet, isMealSlug } from "@/lib/nutrition/meals";
+import { MEAL_LABELS, clampMacroSet, isMealSlug, per100FromTotal } from "@/lib/nutrition/meals";
 import { formatDecimal, parseDecimal } from "@/lib/nutrition/portions";
 import { useAddNutritionBatch } from "@/hooks/use-fitness";
 
@@ -14,6 +14,8 @@ interface ParsedItem {
   proteins: number;
   carbs: number;
   fats: number;
+  /** Masse estimée en grammes (absente si l'IA n'a pas pu estimer un poids fiable). */
+  grams?: number;
 }
 
 interface ParseResult {
@@ -183,20 +185,31 @@ export function VoiceLogSheet({ date, onClose }: VoiceLogSheetProps) {
       items.map((item) => {
         // B9 : borne aux contraintes DB avant insertion (l'IA peut halluciner).
         const m = clampMacroSet(item);
+        const calories = Math.round(m.calories);
+        const proteins = Math.round(m.proteins * 10) / 10;
+        const carbs = Math.round(m.carbs * 10) / 10;
+        const fats = Math.round(m.fats * 10) / 10;
+        // Quand l'IA a fourni un poids fiable : on stocke la portion en grammes
+        // (base_* redevient des valeurs /100 g, comme partout ailleurs dans l'app —
+        // manuel, code-barres, repas enregistrés) plutôt qu'un total figé en "1 portion".
+        const grams = item.grams && item.grams > 0 ? item.grams : null;
         return {
           date,
           meal,
           name: item.name,
-          calories: Math.round(m.calories),
-          proteins: Math.round(m.proteins * 10) / 10,
-          carbs: Math.round(m.carbs * 10) / 10,
-          fats: Math.round(m.fats * 10) / 10,
-          base_calories: Math.round(m.calories),
-          base_proteins: Math.round(m.proteins * 10) / 10,
-          base_carbs: Math.round(m.carbs * 10) / 10,
-          base_fats: Math.round(m.fats * 10) / 10,
+          calories,
+          proteins,
+          carbs,
+          fats,
+          base_calories: grams ? per100FromTotal(calories, grams) : calories,
+          base_proteins: grams ? per100FromTotal(proteins, grams) : proteins,
+          base_carbs: grams ? per100FromTotal(carbs, grams) : carbs,
+          base_fats: grams ? per100FromTotal(fats, grams) : fats,
           serving_count: 1,
           percentage_consumed: 100,
+          consumed_quantity: grams ?? 1,
+          consumed_unit: grams ? "g" : "portion",
+          consumed_grams_per_unit: grams ? 1 : null,
         };
       }),
       { onSuccess: () => onClose() },
@@ -358,6 +371,7 @@ export function VoiceLogSheet({ date, onClose }: VoiceLogSheetProps) {
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium">{item.name}</p>
                         <p className="text-[11px] text-muted-foreground">
+                          {item.grams ? `${Math.round(item.grams)} g · ` : ""}
                           {Math.round(item.calories)} kcal · P
                           {Math.round(item.proteins * 10) / 10} G
                           {Math.round(item.carbs * 10) / 10} L

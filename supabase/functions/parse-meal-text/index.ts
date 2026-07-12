@@ -24,6 +24,7 @@ interface ParsedItem {
   proteins: number;
   carbs: number;
   fats: number;
+  grams?: number;
 }
 
 interface ParseResult {
@@ -68,6 +69,13 @@ const MEAL_TOOL = {
               proteins: { type: "number", description: "Protéines en g" },
               carbs:    { type: "number", description: "Glucides en g" },
               fats:     { type: "number", description: "Lipides en g" },
+              grams: {
+                type: "number",
+                description:
+                  "Masse en grammes de la portion : la quantité exacte mentionnée si précisée (ex: '100 g de saumon' → 100), " +
+                  "sinon l'estimation de la portion standard utilisée pour calculer les macros ci-dessus. " +
+                  "Toujours la fournir quand une estimation réaliste est possible ; ne l'omettre que si aucune n'est possible.",
+              },
             },
             required: ["name", "calories", "proteins", "carbs", "fats"],
             additionalProperties: false,
@@ -89,6 +97,7 @@ Règles :
 - Si aucune quantité n'est précisée, utilise une portion standard raisonnable.
 - Applique les valeurs nutritionnelles /100 g de la table CIQUAL.
 - Calcule kcal + protéines + glucides + lipides pour chaque portion.
+- Renseigne toujours le champ grams avec la masse (précisée ou estimée) utilisée pour ce calcul — c'est la valeur par défaut utilisée par l'app, ne l'omets que si aucune estimation réaliste n'est possible.
 - Tout le texte en FRANÇAIS.
 - Retourne STRICTEMENT via tool calling, jamais de texte libre.`;
 
@@ -204,12 +213,18 @@ Deno.serve(async (req) => {
     const safeNum = (v: unknown, fallback = 0) =>
       typeof v === "number" && isFinite(v) && v >= 0 ? Math.round(v * 10) / 10 : fallback;
 
+    // Masse en grammes : bornée [1, 5000] g, absente si non fournie ou non plausible
+    // (l'app retombe alors sur une unité générique plutôt que d'inventer un poids).
+    const safeGrams = (v: unknown): number | undefined =>
+      typeof v === "number" && isFinite(v) && v >= 1 && v <= 5000 ? Math.round(v) : undefined;
+
     const items: ParsedItem[] = parsed.items.map((item) => ({
       name:     typeof item.name === "string" ? item.name.slice(0, 200) : "Aliment",
       calories: safeNum(item.calories),
       proteins: safeNum(item.proteins),
       carbs:    safeNum(item.carbs),
       fats:     safeNum(item.fats),
+      grams: safeGrams(item.grams),
     }));
 
     const result: ParseResult = {

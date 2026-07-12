@@ -20,6 +20,10 @@ export function isMealSlug(v: string | null | undefined): v is MealSlug {
 export const scalePer100 = (v: number | null, grams: number): number | null =>
   v == null ? null : Math.round(((v * grams) / 100) * 10) / 10;
 
+/** Valeur /100 g à partir d'un total mesuré sur `grams` g (inverse de scalePer100). */
+export const per100FromTotal = (total: number | null, grams: number): number | null =>
+  total == null || grams <= 0 ? null : Math.round(((total * 100) / grams) * 10) / 10;
+
 // Bornes DB (contraintes CHECK de public.nutrition).
 export const MAX_CALORIES = 10000;
 export const MAX_MACRO = 1000;

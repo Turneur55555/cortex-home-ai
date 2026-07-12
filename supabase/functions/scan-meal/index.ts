@@ -27,6 +27,7 @@ interface ScanItem {
   proteins: number;
   carbs: number;
   fats: number;
+  grams?: number;
 }
 
 interface ScanResult {
@@ -73,6 +74,13 @@ const MEAL_TOOL = {
               proteins: { type: "number", description: "Protéines en g" },
               carbs:    { type: "number", description: "Glucides en g" },
               fats:     { type: "number", description: "Lipides en g" },
+              grams: {
+                type: "number",
+                description:
+                  "Masse estimée en grammes de la portion visible (l'estimation déjà faite à l'étape 1 de la méthode). " +
+                  "Toujours la fournir quand une estimation réaliste est possible (quasiment tous les aliments solides/liquides). " +
+                  "Ne l'omettre que si aucune estimation fiable n'est possible (ex: assaisonnement en trace).",
+              },
             },
             required: ["name", "calories", "proteins", "carbs", "fats"],
             additionalProperties: false,
@@ -98,6 +106,7 @@ Méthode par aliment :
 1. Estime la masse en grammes (repères : assiette ~25 cm, fourchette ~20 cm).
 2. Applique les valeurs /100 g de la table CIQUAL.
 3. Calcule kcal + protéines + glucides + lipides pour cette portion.
+4. Renseigne le champ grams avec la masse estimée à l'étape 1 — c'est la valeur par défaut utilisée par l'app, ne l'omets que si aucune estimation réaliste n'est possible.
 
 Si un aliment est ambigu, prends la valeur moyenne et baisse confidence.
 Retourne STRICTEMENT du JSON via tool calling. Tout le texte en FRANÇAIS.`;
@@ -351,12 +360,18 @@ Deno.serve(async (req) => {
     const safeNum = (v: unknown, fallback = 0) =>
       typeof v === "number" && isFinite(v) && v >= 0 ? Math.round(v * 10) / 10 : fallback;
 
+    // Masse en grammes : bornée [1, 5000] g, absente si non fournie ou non plausible
+    // (l'app retombe alors sur une unité générique plutôt que d'inventer un poids).
+    const safeGrams = (v: unknown): number | undefined =>
+      typeof v === "number" && isFinite(v) && v >= 1 && v <= 5000 ? Math.round(v) : undefined;
+
     const items: ScanItem[] = parsed.items.map((item) => ({
       name:     typeof item.name === "string" ? item.name.slice(0, 200) : "Aliment",
       calories: safeNum(item.calories),
       proteins: safeNum(item.proteins),
       carbs:    safeNum(item.carbs),
       fats:     safeNum(item.fats),
+      grams: safeGrams(item.grams),
     }));
 
     const result: ScanResult = {
