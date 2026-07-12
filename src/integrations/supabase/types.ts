@@ -1247,6 +1247,7 @@ export type Database = {
         Row: {
           created_at: string
           exercise_name: string
+          exercise_reference_id: string | null
           id: string
           storage_path: string
           updated_at: string
@@ -1255,6 +1256,7 @@ export type Database = {
         Insert: {
           created_at?: string
           exercise_name: string
+          exercise_reference_id?: string | null
           id?: string
           storage_path: string
           updated_at?: string
@@ -1263,12 +1265,21 @@ export type Database = {
         Update: {
           created_at?: string
           exercise_name?: string
+          exercise_reference_id?: string | null
           id?: string
           storage_path?: string
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "user_exercise_illustrations_exercise_reference_id_fkey"
+            columns: ["exercise_reference_id"]
+            isOneToOne: false
+            referencedRelation: "exercise_reference"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_pdfs: {
         Row: {
