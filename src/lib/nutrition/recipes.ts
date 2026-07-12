@@ -76,3 +76,26 @@ export function scaleServings(perServingMacros: MacroTotals, servings: number | 
     fat: r1(perServingMacros.fat * s),
   };
 }
+
+export interface RecipeIngredientGrams {
+  grams: number | null | undefined;
+}
+
+/**
+ * Masse totale de la recette (g) — UNIQUEMENT si CHAQUE ingrédient a une masse
+ * connue (grams non null). Un seul ingrédient sans masse rend le total non
+ * fiable (recipeMacros() traite déjà silencieusement ce cas comme une
+ * contribution nulle) : on retourne alors `null` plutôt que d'inventer un
+ * poids ou d'ignorer l'ingrédient manquant dans le total.
+ */
+export function totalRecipeGrams(
+  ingredients: ReadonlyArray<RecipeIngredientGrams> | null | undefined,
+): number | null {
+  if (!ingredients || ingredients.length === 0) return null;
+  let total = 0;
+  for (const ing of ingredients) {
+    if (ing.grams == null) return null;
+    total += ing.grams;
+  }
+  return total > 0 ? total : null;
+}

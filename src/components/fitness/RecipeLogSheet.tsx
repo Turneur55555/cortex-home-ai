@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { Loader2, Utensils } from "lucide-react";
 import { FullscreenSheet as Sheet } from "@/components/shared/FormComponents";
-import { MEAL_LABELS } from "@/lib/nutrition/meals";
+import { MEAL_LABELS, per100FromTotal } from "@/lib/nutrition/meals";
 import { useRecipes, useRecipe } from "@/hooks/useRecipes";
 import { useAddNutritionBatch } from "@/hooks/use-fitness";
-import { scaleServings } from "@/lib/nutrition/recipes";
+import { scaleServings, totalRecipeGrams } from "@/lib/nutrition/recipes";
 
 interface Props {
   date: string;
@@ -22,28 +22,51 @@ export function RecipeLogSheet({ date, onClose }: Props) {
   const perS = recipeDetail?.perServingMacros;
   const scaled = perS ? scaleServings(perS, servings) : null;
 
+  // Masse totale de la recette (g), uniquement si tous les ingrédients ont une
+  // masse connue — sinon `null` (jamais un poids inventé). Voir totalRecipeGrams().
+  const recipeGrams = recipeDetail ? totalRecipeGrams(recipeDetail.ingredients) : null;
+  const gramsPerServing =
+    recipeGrams != null && recipeDetail && recipeDetail.servings > 0
+      ? recipeGrams / recipeDetail.servings
+      : null;
+  const gramsConsumed = gramsPerServing != null ? gramsPerServing * servings : null;
+
   const confirm = () => {
     if (!recipeDetail || !scaled) return;
+    const calories = Math.round(scaled.calories);
+    const proteins = Math.round(scaled.protein * 10) / 10;
+    const carbs = Math.round(scaled.carbs * 10) / 10;
+    const fats = Math.round(scaled.fat * 10) / 10;
+    const grams =
+      gramsConsumed != null && gramsConsumed > 0 ? Math.round(gramsConsumed * 10) / 10 : null;
     addBatch.mutate(
       [
         {
           date,
           meal,
           name: recipeDetail.name + (servings !== 1 ? ` ×${servings}` : ""),
-          calories: Math.round(scaled.calories),
-          proteins: Math.round(scaled.protein * 10) / 10,
-          carbs: Math.round(scaled.carbs * 10) / 10,
-          fats: Math.round(scaled.fat * 10) / 10,
-          base_calories: Math.round(perS!.calories),
-          base_proteins: Math.round(perS!.protein * 10) / 10,
-          base_carbs: Math.round(perS!.carbs * 10) / 10,
-          base_fats: Math.round(perS!.fat * 10) / 10,
+          calories,
+          proteins,
+          carbs,
+          fats,
+          // Quand la masse de la recette est connue avec certitude (tous les
+          // ingrédients ont un poids) : base_* redevient des valeurs /100 g,
+          // comme partout ailleurs dans l'app (scan IA, code-barres, manuel,
+          // repas enregistrés). Sinon comportement inchangé (base_* = par portion).
+          base_calories: grams ? per100FromTotal(calories, grams) : Math.round(perS!.calories),
+          base_proteins: grams
+            ? per100FromTotal(proteins, grams)
+            : Math.round(perS!.protein * 10) / 10,
+          base_carbs: grams ? per100FromTotal(carbs, grams) : Math.round(perS!.carbs * 10) / 10,
+          base_fats: grams ? per100FromTotal(fats, grams) : Math.round(perS!.fat * 10) / 10,
           serving_count: servings,
           percentage_consumed: 100,
           // B3 : sans ces champs, l'édition de portion retombait sur 1 portion
-          // et écrasait les macros réelles (÷N).
-          consumed_quantity: servings,
-          consumed_unit: "portion",
+          // et écrasait les macros réelles (÷N). Grammes quand fiables, sinon
+          // portions comme avant.
+          consumed_quantity: grams ?? servings,
+          consumed_unit: grams ? "g" : "portion",
+          consumed_grams_per_unit: grams ? 1 : null,
         },
       ],
       { onSuccess: () => onClose() },
@@ -136,6 +159,7 @@ export function RecipeLogSheet({ date, onClose }: Props) {
                         {scaled && (
                           <span className="ml-2 text-xs text-muted-foreground">
                             = {Math.round(scaled.calories)} kcal
+                            {gramsConsumed != null ? ` · ${Math.round(gramsConsumed)} g` : ""}
                           </span>
                         )}
                       </div>
