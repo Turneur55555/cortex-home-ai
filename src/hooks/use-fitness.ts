@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { logActivity } from "@/lib/activity";
 import { localDateYMD } from "@/lib/dates";
-import type { DisciplineId } from "@/lib/fitness/engines/types";
+import type { DisciplineId, SessionSegment } from "@/lib/fitness/engines/types";
 import { resolveExerciseId } from "@/services/exerciseResolution";
 
 // Phase 3 (exercice-central) — Étape 2, double écriture : résout/crée
@@ -20,6 +20,37 @@ async function resolveMuscuExerciseReferenceId(name: string): Promise<string | n
     );
     return null;
   }
+}
+
+// Phase 3 (exercice-central) — Étape 4 (suite) : résolution centralisée
+// pour TOUS les segments/exercices sauvegardés via `useAddWorkout`, le
+// SEUL point d'entrée commun aux disciplines (musculation via
+// WorkoutSheet, Cardio/HYROX/Guided/Autre via GenericSessionReviewSheet
+// — voir cortex-phase3-progress-2026-07.md, analyse du 2026-07-12).
+// Aucune branche par discipline ici : un même mécanisme générique,
+// dédoublonné par libellé exact pour éviter des upserts redondants
+// (ex: une simulation HYROX répète les mêmes stations). Jamais bloquant
+// — un échec de résolution pour un libellé donné retombe sur `null`
+// (filet de compatibilité par libellé conservé côté lecture).
+async function resolveExerciseIdsByLabel(
+  discipline: DisciplineId,
+  labels: string[],
+): Promise<Map<string, string | null>> {
+  const unique = Array.from(new Set(labels));
+  const resolved = await Promise.all(
+    unique.map(async (label): Promise<[string, string | null]> => {
+      try {
+        return [label, await resolveExerciseId(discipline, label)];
+      } catch (e) {
+        console.error(
+          `[Phase3] resolveExerciseId(${discipline}) a échoué pour "${label}" — écriture principale non bloquée`,
+          e,
+        );
+        return [label, null];
+      }
+    }),
+  );
+  return new Map(resolved);
 }
 
 // ---------- Domaines extraits (re-exports pour rétro-compat) ----------
@@ -81,6 +112,33 @@ export function useAddWorkout() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
+
+      const discipline = input.discipline ?? "muscu";
+
+      // Phase 3, Étape 4 (centralisation, 2026-07-12) — résolution
+      // exercise_id pour les segments génériques (Cardio/HYROX/Guided/
+      // Autre), AVANT l'insertion, pour que `metadata.segments` porte
+      // l'identité dès l'écriture (voir SessionSegment.exerciseId,
+      // types.ts). Ne concerne que les disciplines qui stockent leur
+      // contenu dans `metadata.segments` — la musculation (exercises[])
+      // est résolue séparément ci-dessous, même mécanisme générique.
+      const rawSegments = Array.isArray(
+        (input.metadata as { segments?: unknown } | undefined)?.segments,
+      )
+        ? (input.metadata as { segments: SessionSegment[] }).segments
+        : null;
+      let enrichedSegments: SessionSegment[] | null = null;
+      if (rawSegments && rawSegments.length > 0) {
+        const idsByLabel = await resolveExerciseIdsByLabel(
+          discipline,
+          rawSegments.map((s) => s.label),
+        );
+        enrichedSegments = rawSegments.map((s) => ({
+          ...s,
+          exerciseId: idsByLabel.get(s.label) ?? null,
+        }));
+      }
+
       const { data: workout, error } = await supabase
         .from("workouts")
         .insert({
@@ -90,13 +148,25 @@ export function useAddWorkout() {
           duration_minutes: input.duration_minutes ?? null,
           notes: input.notes ?? null,
           gym_location: input.gym_location ?? "Salle inconnue",
-          discipline: input.discipline ?? "muscu",
-          metadata: (input.metadata ?? {}) as never,
+          discipline,
+          metadata: {
+            ...(input.metadata ?? {}),
+            ...(enrichedSegments ? { segments: enrichedSegments } : {}),
+          } as never,
         })
         .select()
         .single();
       if (error) throw error;
       if (input.exercises.length > 0) {
+        // Même centralisation pour le chemin musculation (WorkoutSheet —
+        // séance générée par Sensei puis relue avant enregistrement) :
+        // gap identifié le 2026-07-12, ce chemin ne résolvait jusqu'ici
+        // aucun `exercise_reference_id`, contrairement aux 4 autres
+        // chemins d'écriture muscu câblés à l'Étape 2b.
+        const exerciseIdsByName = await resolveExerciseIdsByLabel(
+          "muscu",
+          input.exercises.map((e) => e.name),
+        );
         const { data: insertedExercises, error: exErr } = await supabase
           .from("exercises")
           .insert(
@@ -123,6 +193,7 @@ export function useAddWorkout() {
                 reps: top ? top.reps : (e.reps ?? null),
                 weight: top ? top.weight : (e.weight ?? null),
                 image_path: e.image_path ?? null,
+                exercise_reference_id: exerciseIdsByName.get(e.name) ?? null,
               };
             }),
           )
