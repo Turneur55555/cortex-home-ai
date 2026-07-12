@@ -147,3 +147,40 @@ export async function resolveExerciseId(
   if (error) throw error;
   return data?.id ?? null;
 }
+
+/**
+ * Résout par lot (dédoublonné par libellé exact) un ensemble de libellés
+ * pour UNE discipline, jamais bloquant : un échec de résolution pour un
+ * libellé donné retombe sur `null` dans la map retournée plutôt que de
+ * lever une exception (l'écriture principale — insert `exercises` ou
+ * `metadata.segments` — ne doit jamais être empêchée par un incident de
+ * résolution, voir tête de fichier).
+ *
+ * Centralisé ici (Étape 4.5) plutôt que dupliqué dans chaque hook
+ * appelant : `useAddWorkout` (use-fitness.ts, musculation + segments
+ * génériques) et `useStartWorkoutFromSavedTemplate`
+ * (useWorkoutTemplates.ts, démarrage depuis un modèle sauvegardé)
+ * partagent désormais le même point d'entrée, conformément au principe
+ * "une seule logique de résolution" (voir
+ * cortex-exercice-referentiel-principes).
+ */
+export async function resolveExerciseIdsByLabel(
+  discipline: DisciplineId,
+  labels: string[],
+): Promise<Map<string, string | null>> {
+  const unique = Array.from(new Set(labels));
+  const resolved = await Promise.all(
+    unique.map(async (label): Promise<[string, string | null]> => {
+      try {
+        return [label, await resolveExerciseId(discipline, label)];
+      } catch (e) {
+        console.error(
+          `[Phase3] resolveExerciseId(${discipline}) a échoué pour "${label}" — écriture principale non bloquée`,
+          e,
+        );
+        return [label, null];
+      }
+    }),
+  );
+  return new Map(resolved);
+}
