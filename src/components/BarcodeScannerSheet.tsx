@@ -462,10 +462,12 @@ export function BarcodeScannerSheet({ onClose }: { onClose: () => void }) {
         proteins:            macros.proteins,
         carbs:               macros.carbs,
         fats:                macros.fats,
+        fiber: macros.fiber,
         base_calories:       baseMacros.calories,
         base_proteins:       baseMacros.proteins,
         base_carbs:          baseMacros.carbs,
         base_fats:           baseMacros.fats,
+        base_fiber: baseMacros.fiber,
         consumed_quantity:   portionQty,
         consumed_unit:       portionUnit,
         // computeMacros() traite déjà portionQty comme un équivalent-grammes quel

@@ -17,6 +17,8 @@ interface ScanItem {
   fats: number;
   /** Masse estimée en grammes (absente si l'IA n'a pas pu estimer un poids fiable). */
   grams?: number;
+  /** Fibres en g pour la portion (absente si l'IA n'a pas d'estimation fiable). */
+  fiber?: number | null;
 }
 
 interface ScanResponse {
@@ -141,6 +143,7 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
         // (base_* redevient des valeurs /100 g, comme partout ailleurs dans l'app —
         // manuel, code-barres, repas enregistrés) plutôt qu'un total figé en "1 portion".
         const grams = item.grams && item.grams > 0 ? item.grams : null;
+        const fiber = m.fiber ?? null;
         return {
           date,
           meal,
@@ -149,10 +152,12 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
           proteins,
           carbs,
           fats,
+          fiber,
           base_calories: grams ? per100FromTotal(calories, grams) : calories,
           base_proteins: grams ? per100FromTotal(proteins, grams) : proteins,
           base_carbs: grams ? per100FromTotal(carbs, grams) : carbs,
           base_fats: grams ? per100FromTotal(fats, grams) : fats,
+          base_fiber: grams ? per100FromTotal(fiber, grams) : fiber,
           serving_count: 1,
           percentage_consumed: 100,
           consumed_quantity: grams ?? 1,

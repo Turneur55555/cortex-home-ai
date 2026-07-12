@@ -6,6 +6,7 @@ export interface ProductNutriments {
   proteins_100g?: number;
   carbohydrates_100g?: number;
   fat_100g?: number;
+  fiber_100g?: number;
   "energy-kcal_serving"?: number;
   proteins_serving?: number;
   carbohydrates_serving?: number;
@@ -18,6 +19,7 @@ export type MacroValues = {
   proteins: number | null;
   carbs: number | null;
   fats: number | null;
+  fiber: number | null;
 };
 
 /**
@@ -40,5 +42,6 @@ export function computeMacros(
     proteins: r1(nutriments?.proteins_100g),
     carbs:    r1(nutriments?.carbohydrates_100g),
     fats:     r1(nutriments?.fat_100g),
+    fiber: r1(nutriments?.fiber_100g),
   };
 }

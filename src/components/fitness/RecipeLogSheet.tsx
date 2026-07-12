@@ -37,6 +37,7 @@ export function RecipeLogSheet({ date, onClose }: Props) {
     const proteins = Math.round(scaled.protein * 10) / 10;
     const carbs = Math.round(scaled.carbs * 10) / 10;
     const fats = Math.round(scaled.fat * 10) / 10;
+    const fiber = Math.round(scaled.fiber * 10) / 10;
     const grams =
       gramsConsumed != null && gramsConsumed > 0 ? Math.round(gramsConsumed * 10) / 10 : null;
     addBatch.mutate(
@@ -49,6 +50,7 @@ export function RecipeLogSheet({ date, onClose }: Props) {
           proteins,
           carbs,
           fats,
+          fiber,
           // Quand la masse de la recette est connue avec certitude (tous les
           // ingrédients ont un poids) : base_* redevient des valeurs /100 g,
           // comme partout ailleurs dans l'app (scan IA, code-barres, manuel,
@@ -59,6 +61,7 @@ export function RecipeLogSheet({ date, onClose }: Props) {
             : Math.round(perS!.protein * 10) / 10,
           base_carbs: grams ? per100FromTotal(carbs, grams) : Math.round(perS!.carbs * 10) / 10,
           base_fats: grams ? per100FromTotal(fats, grams) : Math.round(perS!.fat * 10) / 10,
+          base_fiber: grams ? per100FromTotal(fiber, grams) : Math.round(perS!.fiber * 10) / 10,
           serving_count: servings,
           percentage_consumed: 100,
           // B3 : sans ces champs, l'édition de portion retombait sur 1 portion

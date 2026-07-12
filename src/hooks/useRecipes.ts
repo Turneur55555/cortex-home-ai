@@ -41,6 +41,7 @@ interface RecipeIngredient {
     protein_per_100g: number | null;
     carbs_per_100g: number | null;
     fat_per_100g: number | null;
+    fiber_per_100g: number | null;
   } | null;
 }
 
@@ -59,6 +60,7 @@ const toMacroInput = (ing: RecipeIngredient) => ({
   proteinPer100g: ing.items?.protein_per_100g,
   carbsPer100g: ing.items?.carbs_per_100g,
   fatPer100g: ing.items?.fat_per_100g,
+  fiberPer100g: ing.items?.fiber_per_100g,
 });
 
 export function useRecipes() {
@@ -83,7 +85,9 @@ export function useRecipe(id: string | null | undefined) {
       if (error) throw error;
       const { data: ings, error: ingErr } = await db
         .from("recipe_ingredients")
-        .select("*, items(calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g)")
+        .select(
+          "*, items(calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, fiber_per_100g)",
+        )
         .eq("recipe_id", id)
         .order("sort_order", { ascending: true });
       if (ingErr) throw ingErr;

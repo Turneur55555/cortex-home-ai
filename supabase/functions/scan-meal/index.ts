@@ -28,6 +28,7 @@ interface ScanItem {
   carbs: number;
   fats: number;
   grams?: number;
+  fiber?: number;
 }
 
 interface ScanResult {
@@ -81,6 +82,12 @@ const MEAL_TOOL = {
                   "Toujours la fournir quand une estimation réaliste est possible (quasiment tous les aliments solides/liquides). " +
                   "Ne l'omettre que si aucune estimation fiable n'est possible (ex: assaisonnement en trace).",
               },
+              fiber: {
+                type: "number",
+                description:
+                  "Fibres en g pour la portion visible, d'après la table CIQUAL (comme les autres macros). " +
+                  "Fournir quand une estimation raisonnable est possible ; omettre si l'aliment n'a pas de valeur fibre connue.",
+              },
             },
             required: ["name", "calories", "proteins", "carbs", "fats"],
             additionalProperties: false,
@@ -104,8 +111,8 @@ Exemples corrects :
 
 Méthode par aliment :
 1. Estime la masse en grammes (repères : assiette ~25 cm, fourchette ~20 cm).
-2. Applique les valeurs /100 g de la table CIQUAL.
-3. Calcule kcal + protéines + glucides + lipides pour cette portion.
+2. Applique les valeurs /100 g de la table CIQUAL (kcal, protéines, glucides, lipides, fibres).
+3. Calcule kcal + protéines + glucides + lipides + fibres pour cette portion.
 4. Renseigne le champ grams avec la masse estimée à l'étape 1 — c'est la valeur par défaut utilisée par l'app, ne l'omets que si aucune estimation réaliste n'est possible.
 
 Si un aliment est ambigu, prends la valeur moyenne et baisse confidence.
@@ -365,6 +372,12 @@ Deno.serve(async (req) => {
     const safeGrams = (v: unknown): number | undefined =>
       typeof v === "number" && isFinite(v) && v >= 1 && v <= 5000 ? Math.round(v) : undefined;
 
+    // Fibres : optionnelles comme grams, jamais inventées si absentes/non plausibles.
+    const safeFiber = (v: unknown): number | undefined =>
+      typeof v === "number" && isFinite(v) && v >= 0 && v <= 1000
+        ? Math.round(v * 10) / 10
+        : undefined;
+
     const items: ScanItem[] = parsed.items.map((item) => ({
       name:     typeof item.name === "string" ? item.name.slice(0, 200) : "Aliment",
       calories: safeNum(item.calories),
@@ -372,6 +385,7 @@ Deno.serve(async (req) => {
       carbs:    safeNum(item.carbs),
       fats:     safeNum(item.fats),
       grams: safeGrams(item.grams),
+      fiber: safeFiber(item.fiber),
     }));
 
     const result: ScanResult = {

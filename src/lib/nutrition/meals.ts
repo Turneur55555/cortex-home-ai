@@ -33,15 +33,27 @@ export interface MacroSet {
   proteins: number;
   carbs: number;
   fats: number;
+  /** Optionnel : absent chez les appelants qui ne connaissent pas encore les fibres. */
+  fiber?: number | null;
 }
 
-/** Borne un set de macros aux contraintes DB (≥ 0, kcal ≤ 10000, macros ≤ 1000 g). */
+/**
+ * Borne un set de macros aux contraintes DB (≥ 0, kcal ≤ 10000, macros ≤ 1000 g).
+ * `fiber` n'est inclus dans le résultat que si `m.fiber` était fourni (pas
+ * `undefined`) — un appelant qui ignore fiber (ex: édition manuelle des 4
+ * macros) ne doit jamais écraser une valeur fiber déjà présente ailleurs
+ * via un spread `{...item, ...clampMacroSet(...)}`.
+ */
 export function clampMacroSet(m: MacroSet): MacroSet {
   const safe = (v: number) => (Number.isFinite(v) ? Math.max(0, v) : 0);
-  return {
+  const result: MacroSet = {
     calories: Math.min(MAX_CALORIES, safe(m.calories)),
     proteins: Math.min(MAX_MACRO, safe(m.proteins)),
     carbs: Math.min(MAX_MACRO, safe(m.carbs)),
     fats: Math.min(MAX_MACRO, safe(m.fats)),
   };
+  if (m.fiber !== undefined) {
+    result.fiber = m.fiber == null ? null : Math.min(MAX_MACRO, safe(m.fiber));
+  }
+  return result;
 }

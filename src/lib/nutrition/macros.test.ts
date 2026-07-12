@@ -108,4 +108,16 @@ describe("computeMacros", () => {
     expect(result.calories).toBe(270);
     expect(result.fats).toBe(30);
   });
+
+  it("calcule les fibres comme les autres macros quand fournies", () => {
+    const withFiber: ProductNutriments = { ...standard, fiber_100g: 8 };
+    const result = computeMacros(withFiber, 150);
+    // 8 * 150 / 100 = 12
+    expect(result.fiber).toBe(12);
+  });
+
+  it("retourne null pour fiber si absente des nutriments", () => {
+    const result = computeMacros(standard, 100);
+    expect(result.fiber).toBeNull();
+  });
 });

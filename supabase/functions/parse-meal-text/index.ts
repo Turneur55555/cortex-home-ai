@@ -25,6 +25,7 @@ interface ParsedItem {
   carbs: number;
   fats: number;
   grams?: number;
+  fiber?: number;
 }
 
 interface ParseResult {
@@ -76,6 +77,12 @@ const MEAL_TOOL = {
                   "sinon l'estimation de la portion standard utilisée pour calculer les macros ci-dessus. " +
                   "Toujours la fournir quand une estimation réaliste est possible ; ne l'omettre que si aucune n'est possible.",
               },
+              fiber: {
+                type: "number",
+                description:
+                  "Fibres en g pour la portion donnée, d'après la table CIQUAL (comme les autres macros). " +
+                  "Fournir quand une estimation raisonnable est possible ; omettre si l'aliment n'a pas de valeur fibre connue.",
+              },
             },
             required: ["name", "calories", "proteins", "carbs", "fats"],
             additionalProperties: false,
@@ -95,8 +102,8 @@ Identifie CHAQUE aliment séparément avec ses macros pour la portion mentionné
 Règles :
 - Si une quantité est précisée (ex: "100 g de saumon"), utilise-la exactement.
 - Si aucune quantité n'est précisée, utilise une portion standard raisonnable.
-- Applique les valeurs nutritionnelles /100 g de la table CIQUAL.
-- Calcule kcal + protéines + glucides + lipides pour chaque portion.
+- Applique les valeurs nutritionnelles /100 g de la table CIQUAL (kcal, protéines, glucides, lipides, fibres).
+- Calcule kcal + protéines + glucides + lipides + fibres pour chaque portion.
 - Renseigne toujours le champ grams avec la masse (précisée ou estimée) utilisée pour ce calcul — c'est la valeur par défaut utilisée par l'app, ne l'omets que si aucune estimation réaliste n'est possible.
 - Tout le texte en FRANÇAIS.
 - Retourne STRICTEMENT via tool calling, jamais de texte libre.`;
@@ -218,6 +225,12 @@ Deno.serve(async (req) => {
     const safeGrams = (v: unknown): number | undefined =>
       typeof v === "number" && isFinite(v) && v >= 1 && v <= 5000 ? Math.round(v) : undefined;
 
+    // Fibres : optionnelles comme grams, jamais inventées si absentes/non plausibles.
+    const safeFiber = (v: unknown): number | undefined =>
+      typeof v === "number" && isFinite(v) && v >= 0 && v <= 1000
+        ? Math.round(v * 10) / 10
+        : undefined;
+
     const items: ParsedItem[] = parsed.items.map((item) => ({
       name:     typeof item.name === "string" ? item.name.slice(0, 200) : "Aliment",
       calories: safeNum(item.calories),
@@ -225,6 +238,7 @@ Deno.serve(async (req) => {
       carbs:    safeNum(item.carbs),
       fats:     safeNum(item.fats),
       grams: safeGrams(item.grams),
+      fiber: safeFiber(item.fiber),
     }));
 
     const result: ParseResult = {

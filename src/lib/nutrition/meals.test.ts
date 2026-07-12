@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { per100FromTotal, scalePer100 } from "./meals";
+import { clampMacroSet, per100FromTotal, scalePer100 } from "./meals";
 
 describe("per100FromTotal", () => {
   it("est l'inverse de scalePer100", () => {
@@ -21,5 +21,27 @@ describe("per100FromTotal", () => {
   it("retourne null si grams est nul ou négatif", () => {
     expect(per100FromTotal(100, 0)).toBeNull();
     expect(per100FromTotal(100, -10)).toBeNull();
+  });
+});
+
+describe("clampMacroSet", () => {
+  it("n'inclut pas la clé fiber quand elle est absente de l'entrée", () => {
+    const result = clampMacroSet({ calories: 100, proteins: 10, carbs: 10, fats: 5 });
+    expect("fiber" in result).toBe(false);
+  });
+
+  it("borne fiber comme les autres macros quand elle est fournie", () => {
+    const result = clampMacroSet({ calories: 100, proteins: 10, carbs: 10, fats: 5, fiber: 2500 });
+    expect(result.fiber).toBe(1000);
+  });
+
+  it("préserve fiber: null explicite (distinct de l'absence de la clé)", () => {
+    const result = clampMacroSet({ calories: 100, proteins: 10, carbs: 10, fats: 5, fiber: null });
+    expect(result.fiber).toBeNull();
+  });
+
+  it("borne les 4 macros existantes sans régression", () => {
+    const result = clampMacroSet({ calories: -5, proteins: 2000, carbs: -1, fats: NaN });
+    expect(result).toEqual({ calories: 0, proteins: 1000, carbs: 0, fats: 0 });
   });
 });

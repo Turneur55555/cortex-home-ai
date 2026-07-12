@@ -11,6 +11,8 @@ export interface MacroTotals {
   protein: number;
   carbs: number;
   fat: number;
+  /** Même convention que calories/protein/carbs/fat : 0 si aucune donnée fibre pour l'ingrédient. */
+  fiber: number;
 }
 
 export interface IngredientMacroInput {
@@ -20,12 +22,13 @@ export interface IngredientMacroInput {
   proteinPer100g?: number | null;
   carbsPer100g?: number | null;
   fatPer100g?: number | null;
+  fiberPer100g?: number | null;
 }
 
 const num = (v: number | null | undefined): number => (v != null && Number.isFinite(v) && v > 0 ? v : 0);
 const r1 = (v: number) => Math.round(v * 10) / 10;
 
-export const EMPTY_MACROS: MacroTotals = { calories: 0, protein: 0, carbs: 0, fat: 0 };
+export const EMPTY_MACROS: MacroTotals = { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 };
 
 /** Macros d'un seul ingrédient (per_100g × grams / 100). */
 function ingredientMacros(input: IngredientMacroInput): MacroTotals {
@@ -37,6 +40,7 @@ function ingredientMacros(input: IngredientMacroInput): MacroTotals {
     protein: r1(num(input.proteinPer100g) * f),
     carbs: r1(num(input.carbsPer100g) * f),
     fat: r1(num(input.fatPer100g) * f),
+    fiber: r1(num(input.fiberPer100g) * f),
   };
 }
 
@@ -49,9 +53,16 @@ export function recipeMacros(ingredients: ReadonlyArray<IngredientMacroInput> | 
     acc.protein += m.protein;
     acc.carbs += m.carbs;
     acc.fat += m.fat;
+    acc.fiber += m.fiber;
     return acc;
   }, { ...EMPTY_MACROS });
-  return { calories: r1(total.calories), protein: r1(total.protein), carbs: r1(total.carbs), fat: r1(total.fat) };
+  return {
+    calories: r1(total.calories),
+    protein: r1(total.protein),
+    carbs: r1(total.carbs),
+    fat: r1(total.fat),
+    fiber: r1(total.fiber),
+  };
 }
 
 /** Macros par portion : total / nombre de portions. */
@@ -63,6 +74,7 @@ export function perServing(total: MacroTotals, servings: number | null | undefin
     protein: r1(total.protein / s),
     carbs: r1(total.carbs / s),
     fat: r1(total.fat / s),
+    fiber: r1(total.fiber / s),
   };
 }
 
@@ -74,6 +86,7 @@ export function scaleServings(perServingMacros: MacroTotals, servings: number | 
     protein: r1(perServingMacros.protein * s),
     carbs: r1(perServingMacros.carbs * s),
     fat: r1(perServingMacros.fat * s),
+    fiber: r1(perServingMacros.fiber * s),
   };
 }
 
