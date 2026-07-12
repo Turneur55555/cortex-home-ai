@@ -178,6 +178,16 @@ export interface SessionSegment {
    *  disciplines, ce champ (et son adaptateur de lecture) deviendra
    *  inutile et sera retiré — ne pas le considérer comme définitif. */
   metrics?: Record<string, number>;
+  /** Phase 3, Étape 4 (suite) — identité métier résolue via
+   *  `ExerciseResolutionService` au moment de l'écriture (voir
+   *  `useAddWorkout`, seul point d'entrée commun des sauvegardes de
+   *  séance toutes disciplines confondues). Additif et optionnel :
+   *  absent pour toute séance enregistrée avant ce câblage (filet de
+   *  compatibilité par libellé conservé côté lecture tant que le backfill
+   *  historique n'est pas passé — voir useDisciplineSegmentHistory.ts).
+   *  Jamais lu par l'affichage (stats/metrics restent la seule source),
+   *  uniquement par la bascule de lecture historique/stats. */
+  exerciseId?: string | null;
 }
 
 // ---- Édition live générique (phase pilote Course, 2026-07-09) ----
