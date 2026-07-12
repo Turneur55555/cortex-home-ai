@@ -8,9 +8,8 @@ import {
   type TemplateExerciseInput,
   type WorkoutTemplateRow,
 } from "@/hooks/useWorkoutTemplates";
-import { normalize } from "@/lib/fitness/exerciseCatalog";
 import { exerciseIllustration } from "@/lib/fitness/exerciseIllustrations";
-import { computeRecentExercises } from "@/lib/fitness/recentExercises";
+import { computeRecentExercises, identityKey } from "@/lib/fitness/recentExercises";
 import { computeSupersetGroups, type TemplateSeedExercise } from "@/lib/fitness/workoutTemplates";
 import { AddExerciseButton } from "../exerciseCard/ExerciseCardPrimitives";
 import { ExercisePickerSheet, type PickedExercise } from "../ExercisePickerSheet";
@@ -219,8 +218,13 @@ export function TemplateEditorSheet({
             ) : (
               <div className="mb-3 flex flex-col gap-3">
                 {exercises.map((row, i) => {
+                  // Étape 4.5 : un exercice de modèle n'a pas de FK vers
+                  // exercise_reference (structure du modèle = nom/notes/
+                  // superset uniquement) — filet de compatibilité par nom
+                  // uniquement ici, comportement inchangé.
                   const image =
-                    userPhotos?.get(normalize(row.name)) ?? exerciseIllustration(row.name);
+                    userPhotos?.get(identityKey({ name: row.name })) ??
+                    exerciseIllustration(row.name);
                   return (
                     <TemplateExerciseCard
                       key={row.key}
