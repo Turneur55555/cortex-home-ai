@@ -257,85 +257,29 @@ export type Database = {
         }
         Relationships: []
       }
-      disciplines: {
+      exercise_catalog: {
         Row: {
-          accent_class: string
           created_at: string
-          icon: string
+          group_name: string
           id: string
-          label: string
-          sort_order: number
-        }
-        Insert: {
-          accent_class: string
-          created_at?: string
-          icon: string
-          id: string
-          label: string
-          sort_order?: number
-        }
-        Update: {
-          accent_class?: string
-          created_at?: string
-          icon?: string
-          id?: string
-          label?: string
-          sort_order?: number
-        }
-        Relationships: []
-      }
-      exercise_reference: {
-        Row: {
-          aliases: string[] | null
-          config: Json | null
-          created_at: string
-          created_by: string | null
-          description: string | null
-          discipline_id: string
-          category: string | null
-          id: string
-          is_active: boolean
-          media: Json | null
           name: string
           sort_order: number
         }
         Insert: {
-          aliases?: string[] | null
-          config?: Json | null
           created_at?: string
-          created_by?: string | null
-          description?: string | null
-          discipline_id?: string
-          category?: string | null
+          group_name: string
           id?: string
-          is_active?: boolean
-          media?: Json | null
           name: string
           sort_order?: number
         }
         Update: {
-          aliases?: string[] | null
-          config?: Json | null
           created_at?: string
-          created_by?: string | null
-          description?: string | null
-          discipline_id?: string
-          category?: string | null
+          group_name?: string
           id?: string
-          is_active?: boolean
-          media?: Json | null
           name?: string
           sort_order?: number
         }
-        Relationships: [
-          {
-            foreignKeyName: "exercise_reference_discipline_id_fkey"
-            columns: ["discipline_id"]
-            isOneToOne: false
-            referencedRelation: "disciplines"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       exercise_sets: {
         Row: {
@@ -389,7 +333,6 @@ export type Database = {
       }
       exercises: {
         Row: {
-          exercise_reference_id: string | null
           id: string
           image_path: string | null
           muscle_groups: string[] | null
@@ -403,7 +346,6 @@ export type Database = {
           workout_id: string
         }
         Insert: {
-          exercise_reference_id?: string | null
           id?: string
           image_path?: string | null
           muscle_groups?: string[] | null
@@ -417,7 +359,6 @@ export type Database = {
           workout_id: string
         }
         Update: {
-          exercise_reference_id?: string | null
           id?: string
           image_path?: string | null
           muscle_groups?: string[] | null
@@ -431,13 +372,6 @@ export type Database = {
           workout_id?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "exercises_exercise_reference_id_fkey"
-            columns: ["exercise_reference_id"]
-            isOneToOne: false
-            referencedRelation: "exercise_reference"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "exercises_workout_id_fkey"
             columns: ["workout_id"]
@@ -1462,8 +1396,6 @@ export type Database = {
         Row: {
           completed: boolean
           created_at: string
-          discipline: string | null
-          exercise_id: string | null
           id: string
           label: string
           metric_key: string | null
@@ -1476,8 +1408,6 @@ export type Database = {
         Insert: {
           completed?: boolean
           created_at?: string
-          discipline?: string | null
-          exercise_id?: string | null
           id?: string
           label: string
           metric_key?: string | null
@@ -1490,8 +1420,6 @@ export type Database = {
         Update: {
           completed?: boolean
           created_at?: string
-          discipline?: string | null
-          exercise_id?: string | null
           id?: string
           label?: string
           metric_key?: string | null
@@ -1502,20 +1430,6 @@ export type Database = {
           workout_id?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "workout_segments_discipline_fkey"
-            columns: ["discipline"]
-            isOneToOne: false
-            referencedRelation: "disciplines"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "workout_segments_exercise_id_fkey"
-            columns: ["exercise_id"]
-            isOneToOne: false
-            referencedRelation: "exercise_reference"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "workout_segments_workout_id_fkey"
             columns: ["workout_id"]
