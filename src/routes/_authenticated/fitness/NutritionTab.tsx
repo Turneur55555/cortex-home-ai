@@ -184,6 +184,13 @@ export function NutritionTab() {
     proteins: number | null;
     carbs: number | null;
     fats: number | null;
+    base_calories: number | null;
+    base_proteins: number | null;
+    base_carbs: number | null;
+    base_fats: number | null;
+    consumed_quantity: number | null;
+    consumed_unit: string | null;
+    consumed_grams_per_unit: number | null;
   }) => {
     addFav.mutate({
       name: m.name ?? "Repas",
@@ -192,6 +199,15 @@ export function NutritionTab() {
       proteins: m.proteins,
       carbs: m.carbs,
       fats: m.fats,
+      // Préserve le modèle grammes/unité de l'entrée d'origine s'il existe
+      // (scan IA, code-barres, manuel…) ; sinon null, comme avant cette évolution.
+      base_calories: m.base_calories ?? m.calories,
+      base_proteins: m.base_proteins ?? m.proteins,
+      base_carbs: m.base_carbs ?? m.carbs,
+      base_fats: m.base_fats ?? m.fats,
+      consumed_quantity: m.consumed_quantity ?? null,
+      consumed_unit: m.consumed_unit ?? null,
+      consumed_grams_per_unit: m.consumed_grams_per_unit ?? null,
     });
   };
 
@@ -242,10 +258,12 @@ export function NutritionTab() {
                 proteins: m.proteins,
                 carbs: m.carbs,
                 fats: m.fats,
+                fiber: m.fiber,
                 base_calories: m.base_calories ?? m.calories,
                 base_proteins: m.base_proteins ?? m.proteins ?? null,
                 base_carbs: m.base_carbs ?? m.carbs ?? null,
                 base_fats: m.base_fats ?? m.fats ?? null,
+                base_fiber: m.base_fiber ?? m.fiber ?? null,
                 serving_count: m.serving_count ?? 1,
                 percentage_consumed: m.percentage_consumed ?? 100,
                 consumed_quantity: m.consumed_quantity ?? null,
@@ -642,10 +660,12 @@ export function NutritionTab() {
                                           proteins: m.proteins,
                                           carbs: m.carbs,
                                           fats: m.fats,
+                                          fiber: m.fiber,
                                           base_calories: m.base_calories ?? m.calories,
                                           base_proteins: m.base_proteins ?? m.proteins ?? null,
                                           base_carbs: m.base_carbs ?? m.carbs ?? null,
                                           base_fats: m.base_fats ?? m.fats ?? null,
+                                          base_fiber: m.base_fiber ?? m.fiber ?? null,
                                           serving_count: m.serving_count ?? 1,
                                           percentage_consumed: 100,
                                           consumed_quantity: m.consumed_quantity ?? null,

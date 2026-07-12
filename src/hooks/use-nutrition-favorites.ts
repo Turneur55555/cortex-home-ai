@@ -13,6 +13,16 @@ export type NutritionFavorite = {
   proteins: number | null;
   carbs: number | null;
   fats: number | null;
+  // Grammes/unité de la portion utilisée à la création du favori — absents
+  // (null) pour les favoris créés avant cette colonne, comportement "portion"
+  // inchangé pour eux. base_* = valeurs pour 100 g (comme public.nutrition).
+  base_calories: number | null;
+  base_proteins: number | null;
+  base_carbs: number | null;
+  base_fats: number | null;
+  consumed_quantity: number | null;
+  consumed_unit: string | null;
+  consumed_grams_per_unit: number | null;
 };
 
 export type NewFavorite = Omit<NutritionFavorite, "id">;
@@ -24,7 +34,9 @@ export function useNutritionFavorites() {
     queryFn: async (): Promise<NutritionFavorite[]> => {
       const { data, error } = await supabase
         .from("nutrition_favorites")
-        .select("id, name, meal, calories, proteins, carbs, fats")
+        .select(
+          "id, name, meal, calories, proteins, carbs, fats, base_calories, base_proteins, base_carbs, base_fats, consumed_quantity, consumed_unit, consumed_grams_per_unit",
+        )
         .order("created_at", { ascending: false })
         .limit(30);
       if (error) throw error;

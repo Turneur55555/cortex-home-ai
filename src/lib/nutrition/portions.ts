@@ -240,5 +240,6 @@ export function per100FromFood(food: FoodSuggestion) {
     proteins: food.proteins,
     carbs: food.carbs,
     fats: food.fats,
+    fiber: food.fiber ?? null,
   };
 }

@@ -24,6 +24,7 @@ export interface PortionChange {
   proteins: number | null;
   carbs: number | null;
   fats: number | null;
+  fiber: number | null;
 }
 
 interface Props {
@@ -105,6 +106,7 @@ export function PortionSelector({ food, onChange, initial, quickScale = true }: 
       proteins: calc.proteins,
       carbs: calc.carbs,
       fats: calc.fats,
+      fiber: calc.fiber,
     });
   }, [qtyInput, unit, reference, food, onChange, gramsPerUnit]);
 

@@ -90,6 +90,7 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
     unit: PortionUnit;
     grams: number;
     gramsPerUnit: number | null;
+    fiber: number | null;
   } | null>(null);
 
   const [form, setForm] = useState({
@@ -112,8 +113,11 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
   const handlePortionChange = useCallback(
     (r: { quantity: number; unit: PortionUnit; grams: number; gramsPerUnit: number | null;
           calories: number | null; proteins: number | null;
-          carbs: number | null; fats: number | null }) => {
-      setPortion({ quantity: r.quantity, unit: r.unit, grams: r.grams, gramsPerUnit: r.gramsPerUnit });
+          carbs: number | null; fats: number | null; fiber: number | null }) => {
+      setPortion({
+        quantity: r.quantity, unit: r.unit, grams: r.grams, gramsPerUnit: r.gramsPerUnit,
+        fiber: r.fiber,
+      });
       setForm((f) => ({
         ...f,
         calories: r.calories != null ? String(r.calories) : "",
@@ -176,6 +180,10 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
         base_proteins: isFood ? baseFood!.proteins : per100 ? per100.proteins : proteins,
         base_carbs: isFood ? baseFood!.carbs : per100 ? per100.carbs : carbs,
         base_fats: isFood ? baseFood!.fats : per100 ? per100.fats : fats,
+        // Fibres : uniquement quand un aliment du catalogue fournit une valeur
+        // réelle (jamais inventées pour une saisie manuelle sans source).
+        fiber: isFood ? (portion?.fiber ?? null) : null,
+        base_fiber: isFood ? (baseFood!.fiber ?? null) : null,
         serving_count: 1,
         percentage_consumed: 100,
         consumed_quantity: isFood ? portion!.quantity : manualWithGrams ? mGrams! : 1,

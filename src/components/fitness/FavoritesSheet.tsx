@@ -47,6 +47,10 @@ export function FavoritesSheet({
 
   const logFavorite = (fav: NutritionFavorite) => {
     const meal = mealByFav[fav.id] ?? fav.meal ?? "collation";
+    // Favoris créés depuis cette évolution : grammes/unité connus (base_* = /100 g,
+    // consumed_* = portion réelle) → éditable en mode grammes ensuite. Favoris
+    // legacy (colonnes NULL) : comportement strictement inchangé (mode "portion").
+    const hasGrams = fav.consumed_unit != null && fav.consumed_quantity != null;
     addMeal.mutate({
       date,
       name: fav.name,
@@ -55,12 +59,15 @@ export function FavoritesSheet({
       proteins: fav.proteins,
       carbs: fav.carbs,
       fats: fav.fats,
-      base_calories: fav.calories,
-      base_proteins: fav.proteins,
-      base_carbs: fav.carbs,
-      base_fats: fav.fats,
+      base_calories: hasGrams ? fav.base_calories : fav.calories,
+      base_proteins: hasGrams ? fav.base_proteins : fav.proteins,
+      base_carbs: hasGrams ? fav.base_carbs : fav.carbs,
+      base_fats: hasGrams ? fav.base_fats : fav.fats,
       serving_count: 1,
       percentage_consumed: 100,
+      consumed_quantity: hasGrams ? fav.consumed_quantity : 1,
+      consumed_unit: hasGrams ? fav.consumed_unit : "portion",
+      consumed_grams_per_unit: hasGrams ? fav.consumed_grams_per_unit : null,
     });
   };
 
@@ -83,6 +90,14 @@ export function FavoritesSheet({
         proteins: scale(picked.proteins, g),
         carbs: scale(picked.carbs, g),
         fats: scale(picked.fats, g),
+        // picked.* est déjà /100 g (FoodSuggestion) — aucune conversion nécessaire.
+        base_calories: picked.calories,
+        base_proteins: picked.proteins,
+        base_carbs: picked.carbs,
+        base_fats: picked.fats,
+        consumed_quantity: g,
+        consumed_unit: "g",
+        consumed_grams_per_unit: 1,
       },
       { onSuccess: resetAdd },
     );

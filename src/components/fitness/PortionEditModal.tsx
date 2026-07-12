@@ -29,6 +29,7 @@ export function PortionEditModal({ item, date, onClose }: PortionEditModalProps)
       proteins: item.base_proteins,
       carbs: item.base_carbs,
       fats: item.base_fats,
+      fiber: item.base_fiber,
       source: "custom",
       default_serving:
         item.consumed_grams_per_unit && unit !== "g" && unit !== "ml"
@@ -47,6 +48,7 @@ export function PortionEditModal({ item, date, onClose }: PortionEditModalProps)
     proteins: item.base_proteins ?? item.proteins ?? 0,
     carbs: item.base_carbs ?? item.carbs ?? 0,
     fats: item.base_fats ?? item.fats ?? 0,
+    fiber: item.base_fiber ?? item.fiber ?? null,
   };
   const [count, setCount] = useState<number>(item.consumed_quantity ?? 1);
   const portionPreview = useMemo(
@@ -55,8 +57,9 @@ export function PortionEditModal({ item, date, onClose }: PortionEditModalProps)
       proteins: Math.round(basePer.proteins * count * 10) / 10,
       carbs: Math.round(basePer.carbs * count * 10) / 10,
       fats: Math.round(basePer.fats * count * 10) / 10,
+      fiber: basePer.fiber != null ? Math.round(basePer.fiber * count * 10) / 10 : null,
     }),
-    [basePer.calories, basePer.proteins, basePer.carbs, basePer.fats, count],
+    [basePer.calories, basePer.proteins, basePer.carbs, basePer.fats, basePer.fiber, count],
   );
 
   const preview = gramBased
@@ -65,6 +68,7 @@ export function PortionEditModal({ item, date, onClose }: PortionEditModalProps)
         proteins: calc?.proteins ?? item.proteins ?? 0,
         carbs: calc?.carbs ?? item.carbs ?? 0,
         fats: calc?.fats ?? item.fats ?? 0,
+        fiber: calc?.fiber ?? item.fiber ?? null,
       }
     : portionPreview;
 
@@ -75,6 +79,7 @@ export function PortionEditModal({ item, date, onClose }: PortionEditModalProps)
           proteins: calc?.proteins ?? item.proteins,
           carbs: calc?.carbs ?? item.carbs,
           fats: calc?.fats ?? item.fats,
+          fiber: calc?.fiber ?? item.fiber,
           consumed_quantity: calc?.quantity ?? item.consumed_quantity,
           consumed_unit: calc?.unit ?? item.consumed_unit,
           consumed_grams_per_unit: calc?.gramsPerUnit ?? item.consumed_grams_per_unit,
@@ -85,12 +90,14 @@ export function PortionEditModal({ item, date, onClose }: PortionEditModalProps)
           base_proteins: item.base_proteins,
           base_carbs: item.base_carbs,
           base_fats: item.base_fats,
+          base_fiber: item.base_fiber,
         }
       : {
           calories: portionPreview.calories,
           proteins: portionPreview.proteins,
           carbs: portionPreview.carbs,
           fats: portionPreview.fats,
+          fiber: portionPreview.fiber,
           consumed_quantity: count,
           consumed_unit: "portion",
           consumed_grams_per_unit: null,
@@ -100,6 +107,7 @@ export function PortionEditModal({ item, date, onClose }: PortionEditModalProps)
           base_proteins: basePer.proteins,
           base_carbs: basePer.carbs,
           base_fats: basePer.fats,
+          base_fiber: basePer.fiber,
         };
     await update.mutateAsync({ id: item.id, date, patch });
     onClose();

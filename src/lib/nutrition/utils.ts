@@ -19,10 +19,12 @@ export interface NutritionEntry {
   base_proteins: number | null;
   base_carbs: number | null;
   base_fats: number | null;
+  base_fiber: number | null;
   calories: number | null;
   proteins: number | null;
   carbs: number | null;
   fats: number | null;
+  fiber: number | null;
   consumed_quantity: number | null;
   consumed_unit: string | null;
   consumed_grams_per_unit: number | null;

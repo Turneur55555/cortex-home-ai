@@ -13,6 +13,8 @@ export interface FoodSuggestion {
   proteins: number | null;
   carbs: number | null;
   fats: number | null;
+  /** Fibres pour 100 g — absent si non fourni par la source (jamais inventé). */
+  fiber?: number | null;
   source?: "local" | "usda" | "icortex" | "custom";
   quality_score?: number;
   default_serving?: { label: string; unit: string; quantity: number; grams: number } | null;
@@ -28,6 +30,7 @@ function toSuggestion(r: FoodResult): FoodSuggestion {
     proteins: r.proteins,
     carbs: r.carbs,
     fats: r.fats,
+    fiber: r.fiber,
     source: r.source,
     quality_score: r.quality_score,
     default_serving: r.default_serving ?? null,

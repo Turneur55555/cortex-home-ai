@@ -1020,6 +1020,7 @@ export type Database = {
           base_calories: number | null
           base_carbs: number | null
           base_fats: number | null
+          base_fiber: number | null
           base_proteins: number | null
           calories: number | null
           carbs: number | null
@@ -1029,6 +1030,7 @@ export type Database = {
           created_at: string
           date: string
           fats: number | null
+          fiber: number | null
           id: string
           meal: string | null
           name: string
@@ -1041,6 +1043,7 @@ export type Database = {
           base_calories?: number | null
           base_carbs?: number | null
           base_fats?: number | null
+          base_fiber?: number | null
           base_proteins?: number | null
           calories?: number | null
           carbs?: number | null
@@ -1050,6 +1053,7 @@ export type Database = {
           created_at?: string
           date: string
           fats?: number | null
+          fiber?: number | null
           id?: string
           meal?: string | null
           name: string
@@ -1062,6 +1066,7 @@ export type Database = {
           base_calories?: number | null
           base_carbs?: number | null
           base_fats?: number | null
+          base_fiber?: number | null
           base_proteins?: number | null
           calories?: number | null
           carbs?: number | null
@@ -1071,6 +1076,7 @@ export type Database = {
           created_at?: string
           date?: string
           fats?: number | null
+          fiber?: number | null
           id?: string
           meal?: string | null
           name?: string
