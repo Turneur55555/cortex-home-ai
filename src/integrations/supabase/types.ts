@@ -281,6 +281,33 @@ export type Database = {
         }
         Relationships: []
       }
+      exercise_reference: {
+        Row: {
+          category: string | null
+          created_at: string
+          discipline_id: string
+          id: string
+          name: string
+          sort_order: number
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          discipline_id?: string
+          id?: string
+          name: string
+          sort_order?: number
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          discipline_id?: string
+          id?: string
+          name?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
       exercise_sets: {
         Row: {
           completed: boolean
@@ -333,6 +360,7 @@ export type Database = {
       }
       exercises: {
         Row: {
+          exercise_reference_id: string | null
           id: string
           image_path: string | null
           muscle_groups: string[] | null
@@ -346,6 +374,7 @@ export type Database = {
           workout_id: string
         }
         Insert: {
+          exercise_reference_id?: string | null
           id?: string
           image_path?: string | null
           muscle_groups?: string[] | null
@@ -359,6 +388,7 @@ export type Database = {
           workout_id: string
         }
         Update: {
+          exercise_reference_id?: string | null
           id?: string
           image_path?: string | null
           muscle_groups?: string[] | null
@@ -372,6 +402,13 @@ export type Database = {
           workout_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "exercises_exercise_reference_id_fkey"
+            columns: ["exercise_reference_id"]
+            isOneToOne: false
+            referencedRelation: "exercise_reference"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "exercises_workout_id_fkey"
             columns: ["workout_id"]
