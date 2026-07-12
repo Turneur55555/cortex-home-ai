@@ -29,11 +29,16 @@ import {
   type DbCatalogRow,
 } from "@/hooks/useExerciseCatalog";
 import { useUserExercisePhotos } from "@/hooks/useUserExercisePhotos";
-import { useActiveWorkout, useAddExerciseToActiveWorkout, useStartWorkoutFromTemplate } from "@/hooks/use-fitness";
+import {
+  useActiveWorkout,
+  useAddExerciseToActiveWorkout,
+  useStartWorkoutFromTemplate,
+} from "@/hooks/use-fitness";
 import { ExerciseListBrowser, type BrowserExercise } from "./ExerciseListBrowser";
 import { ExerciseActionsMenu, type ExerciseMenuAction } from "./ExerciseActionsMenu";
 import { ExerciseAnalysisSheet, type ExerciseAnalysisActions } from "./ExerciseAnalysisSheet";
 import type { RecentExercise } from "@/lib/fitness/recentExercises";
+import { identityKey } from "@/lib/fitness/recentExercises";
 
 export type { RecentExercise };
 
@@ -164,9 +169,18 @@ export function ExerciseExplorerSheet({
   const isCustom = (id: string) => id.startsWith("custom__");
   const findRow = (id: string): DbCatalogRow | undefined => catalog?.find((r) => r.id === id);
 
-  const getPhoto = (name: string) => {
+  // Étape 4.5 — identité en priorité : l'id du catalogue EST déjà
+  // l'exercise_reference_id (la liste `items` vient directement de
+  // `exercise_reference`, discipline muscu), sauf pour les entrées
+  // "custom__" (résultat de recherche libre sans correspondance catalogue
+  // encore créée) où l'on reste sur le filet de compatibilité par nom.
+  const getPhoto = (name: string, id?: string) => {
     if (userPhotos) {
-      const userUrl = userPhotos.get(normalize(name));
+      const key =
+        id && !isCustom(id)
+          ? identityKey({ name, exercise_reference_id: id })
+          : identityKey({ name });
+      const userUrl = userPhotos.get(key);
       if (userUrl) return userUrl;
     }
     return exerciseIllustration(name);
@@ -179,7 +193,8 @@ export function ExerciseExplorerSheet({
   }, [recentExercises, normQuery]);
 
   const exactMatchExists =
-    filteredRecents.some((e) => normalize(e.name) === normQuery) || items.some((e) => normalize(e.name) === normQuery);
+    filteredRecents.some((e) => normalize(e.name) === normQuery) ||
+    items.some((e) => normalize(e.name) === normQuery);
   const showCreateNew = mode === "picker" && Boolean(normQuery && !exactMatchExists);
 
   // ── Gestion du catalogue (identique dans les deux modes) ───────────────────
@@ -212,7 +227,11 @@ export function ExerciseExplorerSheet({
   const handleEditSave = async () => {
     if (!editingExercise || !editName.trim()) return;
     try {
-      await updateExercise.mutateAsync({ id: editingExercise.id, name: editName.trim(), category: editGroup });
+      await updateExercise.mutateAsync({
+        id: editingExercise.id,
+        name: editName.trim(),
+        category: editGroup,
+      });
       toast.success("Exercice modifié");
       setEditingExercise(null);
     } catch (e) {
@@ -238,7 +257,13 @@ export function ExerciseExplorerSheet({
   };
 
   const openPromote = (ex: BrowserExercise) => {
-    setPromotingExercise({ id: ex.id, name: ex.name, category: ex.group, sort_order: 999, created_at: "" });
+    setPromotingExercise({
+      id: ex.id,
+      name: ex.name,
+      category: ex.group,
+      sort_order: 999,
+      created_at: "",
+    });
     setPromoteGroup(CATALOG_GROUPS[0]);
   };
 
@@ -252,7 +277,11 @@ export function ExerciseExplorerSheet({
   // mais l'action sous-jacente en mode picker reste toujours "sélectionner".
   const handleStartSession = async (name: string) => {
     try {
-      await startFromTemplate.mutateAsync({ name: defaultWorkoutName(), gym_location: null, exercises: [{ name }] });
+      await startFromTemplate.mutateAsync({
+        name: defaultWorkoutName(),
+        gym_location: null,
+        exercises: [{ name }],
+      });
       onClose();
     } catch {
       // erreur déjà notifiée par le hook (toast.error)
@@ -296,7 +325,12 @@ export function ExerciseExplorerSheet({
     const row = findRow(ex.id);
     const custom = isCustom(ex.id);
     const actions: ExerciseMenuAction[] = [
-      { key: "open", label: "Voir la fiche", icon: <BookOpen className="h-4 w-4" />, onClick: () => setOpenExercise(ex) },
+      {
+        key: "open",
+        label: "Voir la fiche",
+        icon: <BookOpen className="h-4 w-4" />,
+        onClick: () => setOpenExercise(ex),
+      },
     ];
     if (activeWorkout) {
       actions.push({
@@ -322,7 +356,12 @@ export function ExerciseExplorerSheet({
       });
     } else if (row) {
       actions.push(
-        { key: "edit", label: "Modifier", icon: <Pencil className="h-4 w-4" />, onClick: () => openEdit(row) },
+        {
+          key: "edit",
+          label: "Modifier",
+          icon: <Pencil className="h-4 w-4" />,
+          onClick: () => openEdit(row),
+        },
         {
           key: "delete",
           label: "Supprimer",
@@ -348,7 +387,10 @@ export function ExerciseExplorerSheet({
   };
 
   const similarFor = (ex: BrowserExercise) =>
-    findSimilarExercises({ name: ex.name, group: ex.group }, items.map((i) => ({ name: i.name, group: i.group })));
+    findSimilarExercises(
+      { name: ex.name, group: ex.group },
+      items.map((i) => ({ name: i.name, group: i.group })),
+    );
 
   // ── Scan caméra IA (picker uniquement) ─────────────────────────────────────
 
@@ -371,13 +413,21 @@ export function ExerciseExplorerSheet({
     try {
       const { base64, mime } = await fileToCompressedBase64(file);
       const { data, error } = await supabase.functions.invoke("scan-exercise", {
-        body: { image_base64: base64, mime_type: mime, catalog: items.map((i) => ({ name: i.name, group: i.group })) },
+        body: {
+          image_base64: base64,
+          mime_type: mime,
+          catalog: items.map((i) => ({ name: i.name, group: i.group })),
+        },
       });
       if (error) {
         toast.error(error.message ?? "Erreur lors du scan.");
         return;
       }
-      const payload = data as { error?: string; suggestions?: Suggestion[]; detected_machine?: string };
+      const payload = data as {
+        error?: string;
+        suggestions?: Suggestion[];
+        detected_machine?: string;
+      };
       if (payload?.error) {
         toast.error(payload.error);
         return;
@@ -442,7 +492,9 @@ export function ExerciseExplorerSheet({
         {/* Add form — identique dans les deux modes */}
         {showAdd && (
           <div className="mx-4 mb-3 shrink-0 rounded-2xl border border-primary/30 bg-primary/5 p-4">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-primary">Nouvel exercice</p>
+            <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-primary">
+              Nouvel exercice
+            </p>
             <input
               autoFocus
               type="text"
@@ -482,7 +534,11 @@ export function ExerciseExplorerSheet({
                 disabled={!newName.trim() || addExercise.isPending}
                 className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-50"
               >
-                {addExercise.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                {addExercise.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Plus className="h-4 w-4" />
+                )}
                 Ajouter
               </button>
             </div>
@@ -501,7 +557,9 @@ export function ExerciseExplorerSheet({
             highlightGroups={new Set(["Mes exercices"])}
             getPhoto={getPhoto}
             onRowTap={handleRowTap}
-            renderRowMenu={(ex) => <ExerciseActionsMenu title={ex.name} actions={buildMenuActions(ex)} />}
+            renderRowMenu={(ex) => (
+              <ExerciseActionsMenu title={ex.name} actions={buildMenuActions(ex)} />
+            )}
             emptyLabel={query ? "Aucun résultat." : "Catalogue vide — ajoutez des exercices."}
             trailingSearchSlot={
               enableScan ? (
@@ -512,7 +570,11 @@ export function ExerciseExplorerSheet({
                   aria-label="Scanner une machine"
                   className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-2xl border border-primary/30 bg-primary/10 text-primary transition-colors active:bg-primary/20 disabled:opacity-50"
                 >
-                  {scanning ? <Loader2 className="h-5 w-5 animate-spin" /> : <Camera className="h-5 w-5" />}
+                  {scanning ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  ) : (
+                    <Camera className="h-5 w-5" />
+                  )}
                 </button>
               ) : undefined
             }
@@ -548,7 +610,9 @@ export function ExerciseExplorerSheet({
                             <button
                               type="button"
                               onClick={() => {
-                                const recent = recentExercises.find((r) => normalize(r.name) === normalize(s.name));
+                                const recent = recentExercises.find(
+                                  (r) => normalize(r.name) === normalize(s.name),
+                                );
                                 handlePrimaryUseAction(s.name, recent);
                               }}
                               className="flex w-full items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/10 px-4 py-3 text-left transition-colors active:bg-primary/20"
@@ -583,7 +647,9 @@ export function ExerciseExplorerSheet({
                       </span>
                       <div>
                         <span className="block text-sm font-semibold">Créer "{query.trim()}"</span>
-                        <span className="text-[11px] text-muted-foreground">Exercice personnalisé</span>
+                        <span className="text-[11px] text-muted-foreground">
+                          Exercice personnalisé
+                        </span>
                       </div>
                     </button>
                   )}
@@ -633,7 +699,14 @@ export function ExerciseExplorerSheet({
         </div>
 
         {enableScan && (
-          <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFile} />
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={handleFile}
+          />
         )}
       </div>
 
@@ -644,7 +717,7 @@ export function ExerciseExplorerSheet({
           weightHistory={histByName.get(normalize(openExercise.name)) ?? []}
           volumeHistory={volByName.get(normalize(openExercise.name)) ?? []}
           pr={prByName.get(normalize(openExercise.name))}
-          imageUrl={getPhoto(openExercise.name)}
+          imageUrl={getPhoto(openExercise.name, openExercise.id)}
           onClose={() => setOpenExercise(null)}
           actions={analysisActionsFor(openExercise)}
           similarExercises={similarFor(openExercise)}
@@ -709,7 +782,9 @@ function EditExerciseSheet({
         className="relative w-full max-w-[430px] rounded-t-3xl border-t border-border bg-card p-5 pb-[calc(2rem+env(safe-area-inset-bottom))] shadow-elevated"
         onClick={(e) => e.stopPropagation()}
       >
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-primary">Modifier l'exercice</p>
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-primary">
+          Modifier l'exercice
+        </p>
         <input
           autoFocus
           type="text"
@@ -725,7 +800,9 @@ function EditExerciseSheet({
               type="button"
               onClick={() => onGroupChange(g)}
               className={`rounded-lg border px-2 py-1.5 text-[11px] font-semibold transition-colors ${
-                group === g ? "border-primary bg-primary/20 text-primary" : "border-border bg-card/50 text-muted-foreground"
+                group === g
+                  ? "border-primary bg-primary/20 text-primary"
+                  : "border-border bg-card/50 text-muted-foreground"
               }`}
             >
               {g}
@@ -733,7 +810,11 @@ function EditExerciseSheet({
           ))}
         </div>
         <div className="flex gap-2">
-          <button type="button" onClick={onCancel} className="flex-1 rounded-xl border border-border py-2.5 text-sm font-semibold text-muted-foreground">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="flex-1 rounded-xl border border-border py-2.5 text-sm font-semibold text-muted-foreground"
+          >
             Annuler
           </button>
           <button
@@ -773,7 +854,9 @@ function PromoteExerciseSheet({
         className="relative w-full max-w-[430px] rounded-t-3xl border-t border-border bg-card p-5 pb-[calc(2rem+env(safe-area-inset-bottom))] shadow-elevated"
         onClick={(e) => e.stopPropagation()}
       >
-        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-primary">Ajouter "{name}" au catalogue</p>
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-primary">
+          Ajouter "{name}" au catalogue
+        </p>
         <div className="mb-4 grid grid-cols-2 gap-1.5">
           {CATALOG_GROUPS.map((g) => (
             <button
@@ -781,7 +864,9 @@ function PromoteExerciseSheet({
               type="button"
               onClick={() => onGroupChange(g)}
               className={`rounded-lg border px-2 py-1.5 text-[11px] font-semibold transition-colors ${
-                group === g ? "border-primary bg-primary/20 text-primary" : "border-border bg-card/50 text-muted-foreground"
+                group === g
+                  ? "border-primary bg-primary/20 text-primary"
+                  : "border-border bg-card/50 text-muted-foreground"
               }`}
             >
               {g}
@@ -789,7 +874,11 @@ function PromoteExerciseSheet({
           ))}
         </div>
         <div className="flex gap-2">
-          <button type="button" onClick={onCancel} className="flex-1 rounded-xl border border-border py-2.5 text-sm font-semibold text-muted-foreground">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="flex-1 rounded-xl border border-border py-2.5 text-sm font-semibold text-muted-foreground"
+          >
             Annuler
           </button>
           <button

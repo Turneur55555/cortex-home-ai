@@ -18,7 +18,7 @@ import { AddExerciseButton } from "./exerciseCard/ExerciseCardPrimitives";
 import { exerciseIllustration } from "@/lib/fitness/exerciseIllustrations";
 import { computePRs } from "@/utils/fitness/exercise-stats";
 import { ExercisePickerSheet, type PickedExercise } from "./ExercisePickerSheet";
-import { computeRecentExercises } from "@/lib/fitness/recentExercises";
+import { computeRecentExercises, identityKey } from "@/lib/fitness/recentExercises";
 import { normalize } from "@/lib/fitness/exerciseCatalog";
 import { useLastExerciseSessions } from "@/hooks/useLastExerciseSession";
 import { RestTimerBar } from "./RestTimerBar";
@@ -63,8 +63,13 @@ export function ActiveWorkoutView({
   );
 
   // Dernières séances de TOUS les exercices (groupé : fin du N+1).
+  // Étape 4.5 : identité (exercise_reference_id) transmise en plus du nom,
+  // pour une correspondance par id en priorité côté hook.
   const lastSessions = useLastExerciseSessions(
-    (workout.exercises ?? []).map((e) => e.name),
+    (workout.exercises ?? []).map((e) => ({
+      name: e.name,
+      exerciseReferenceId: e.exercise_reference_id,
+    })),
     workout.id,
   );
 
@@ -281,14 +286,14 @@ export function ActiveWorkoutView({
           {(workout.exercises ?? []).map((ex) => {
             const exImage =
               (ex.image_path ? imageUrls?.get(ex.image_path) : null) ??
-              userPhotos?.get(normalize(ex.name)) ??
+              userPhotos?.get(identityKey(ex)) ??
               exerciseIllustration(ex.name);
             return (
               <ActiveExerciseCard
                 key={ex.id}
                 exercise={ex}
                 imageUrl={exImage}
-                lastSession={lastSessions.get(normalize(ex.name)) ?? null}
+                lastSession={lastSessions.get(identityKey(ex)) ?? null}
                 pr={prByName.get(normalize(ex.name)) ?? null}
                 recoveryMap={recoveryMap}
                 onOpenStats={() =>
