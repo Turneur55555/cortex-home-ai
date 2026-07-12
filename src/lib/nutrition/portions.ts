@@ -33,7 +33,18 @@ export function formatDecimal(value: number | null | undefined, maxFrac = 2): st
 
 // ─── Portions ───────────────────────────────────────────────────────────────
 
-export type PortionUnit = "g" | "ml" | "scoop" | "unite" | "pot" | "tranche" | "sachet" | "cas" | "cac";
+export type PortionUnit =
+  | "g"
+  | "ml"
+  | "scoop"
+  | "unite"
+  | "pot"
+  | "tranche"
+  | "sachet"
+  | "cas"
+  | "cac"
+  | "bouteille"
+  | "canette";
 
 export interface PortionPreset {
   /** Libellé affiché ex. « 1 scoop », « 1/2 œuf » */

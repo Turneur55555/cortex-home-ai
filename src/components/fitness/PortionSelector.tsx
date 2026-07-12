@@ -44,7 +44,19 @@ interface Props {
  *  - macros recalculés en direct via calculateNutritionFromPortion
  */
 export function PortionSelector({ food, onChange, initial, quickScale = true }: Props) {
-  const KNOWN_UNITS = ["g", "ml", "scoop", "unite", "pot", "tranche", "sachet", "cas", "cac"];
+  const KNOWN_UNITS = [
+    "g",
+    "ml",
+    "scoop",
+    "unite",
+    "pot",
+    "tranche",
+    "sachet",
+    "cas",
+    "cac",
+    "bouteille",
+    "canette",
+  ];
 
   const reference: PortionReference | null = useMemo(() => {
     // Édition : si une référence (grammes/unité) est fournie, elle prime.

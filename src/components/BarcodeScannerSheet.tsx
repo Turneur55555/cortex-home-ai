@@ -23,6 +23,7 @@ import { useAddNutrition } from "@/hooks/use-fitness";
 import { FullscreenSheet as Sheet } from "@/components/shared/FormComponents";
 import { format } from "date-fns";
 import { computeMacros, type ProductNutriments } from "@/lib/nutrition/macros";
+import type { PortionUnit } from "@/lib/nutrition/portions";
 import { lookupBarcode } from "@/services/foodCatalog";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -55,7 +56,20 @@ const NUTRISCORES: Record<string, { color: string }> = {
   e: { color: "#d73027" },
 };
 
-const UNITS = ["g", "ml", "portion", "unité", "bouteille", "canette", "pot", "sachet"] as const;
+// Sous-ensemble de PortionUnit (portions.ts) — typé explicitement pour que le
+// compilateur signale toute valeur non canonique ajoutée ici par erreur.
+// "portion" reste le sentinel spécial partagé avec PortionEditModal
+// ("pas de grammes fiables", cf. unit !== "portion").
+const UNITS: ReadonlyArray<PortionUnit | "portion"> = [
+  "g",
+  "ml",
+  "portion",
+  "unite",
+  "bouteille",
+  "canette",
+  "pot",
+  "sachet",
+];
 type Unit = (typeof UNITS)[number];
 
 const PRESETS_KEY = (barcode: string) => `cortex_portion_${barcode}`;
@@ -454,6 +468,12 @@ export function BarcodeScannerSheet({ onClose }: { onClose: () => void }) {
         base_fats:           baseMacros.fats,
         consumed_quantity:   portionQty,
         consumed_unit:       portionUnit,
+        // computeMacros() traite déjà portionQty comme un équivalent-grammes quel
+        // que soit l'unité affichée (même logique, non modifiée) — exposer ce
+        // facteur 1:1 permet à PortionEditModal/PortionSelector de rééditer la
+        // portion plus tard sans "Conversion impossible", pour toute unité sauf
+        // le sentinel "portion" (mode ×N portions, indépendant des grammes).
+        consumed_grams_per_unit: portionUnit === "portion" ? null : 1,
         serving_count:       portionCount,
         percentage_consumed: 100,
       });
