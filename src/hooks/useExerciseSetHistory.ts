@@ -6,10 +6,21 @@ import { normalize } from "@/lib/fitness/exerciseCatalog";
 /**
  * Historique des séries détaillées (exercise_sets) d'un exercice, agrégé par séance.
  *
- * Recherche tous les exercices de l'utilisateur portant ce nom (insensible à la
- * casse), récupère leurs séries puis les regroupe par séance (workout + date),
- * triées par date croissante. Sert à alimenter les courbes de progression
- * (1RM, tonnage) et le détail série-par-série dans ExerciseAnalysisSheet.
+ * Phase 3, Étape 4 — bascule lecture par exercise_id : l'identification des
+ * instances appartenant à "cet exercice" se fait désormais PRIORITAIREMENT
+ * via `exercise_reference_id` (l'identité métier stable, voir
+ * cortex-exercice-referentiel-principes) plutôt que par comparaison de nom
+ * normalisé. Le nom reste utilisé pour (a) retrouver quel `exercise_reference_id`
+ * correspond au libellé demandé par l'appelant (qui continue de passer un nom,
+ * aucun changement de signature nécessaire — double lecture transparente pour
+ * tous les appelants), et (b) filet de compatibilité pour d'éventuelles lignes
+ * historiques non liées (`exercise_reference_id IS NULL`, ne devrait plus
+ * arriver après le backfill de l'Étape 3, mais on ne suppose jamais une
+ * migration 100% complète en toute circonstance — voir Étape 7 pour la
+ * contrainte NOT NULL finale qui rendra ce filet inutile).
+ *
+ * Sert à alimenter les courbes de progression (1RM, tonnage) et le détail
+ * série-par-série dans ExerciseAnalysisSheet.
  */
 
 export interface ExerciseSessionSet {
@@ -31,6 +42,7 @@ interface ExerciseInstanceRow {
   reps: number | null;
   weight: number | null;
   sets: number | null;
+  exercise_reference_id: string | null;
 }
 
 /**
@@ -47,12 +59,58 @@ function useUserExerciseInstances(userId: string | undefined) {
     queryFn: async (): Promise<ExerciseInstanceRow[]> => {
       const { data, error } = await supabase
         .from("exercises")
-        .select("id, workout_id, name, reps, weight, sets")
+        .select("id, workout_id, name, reps, weight, sets, exercise_reference_id")
         .eq("user_id", userId!);
       if (error) throw error;
       return (data ?? []) as ExerciseInstanceRow[];
     },
   });
+}
+
+/**
+ * Sélectionne les instances appartenant à l'exercice demandé.
+ *
+ * Priorité à `exercise_reference_id` : parmi les instances dont le nom
+ * normalisé correspond au libellé demandé, si elles pointent toutes vers
+ * une seule et même référence, c'est CETTE référence qui fait foi — le
+ * filtrage final se fait par id, pas par nom (capture ainsi toute instance
+ * liée à la même référence même si son libellé brut diffère légèrement).
+ *
+ * Filet de compatibilité : si aucune instance liée par nom n'a de référence
+ * (`exercise_reference_id` encore NULL) ou si plusieurs références
+ * distinctes coexistent pour le même nom normalisé (incohérence de données,
+ * ne devrait pas arriver après le backfill de l'Étape 3 — signalé en
+ * console pour investigation), on retombe sur l'ancien comportement
+ * (comparaison de nom normalisé), pour ne jamais faire disparaître des
+ * données réelles pendant la transition.
+ */
+function selectInstancesForExercise(
+  instances: ExerciseInstanceRow[],
+  exerciseName: string,
+): ExerciseInstanceRow[] {
+  const target = normalize(exerciseName);
+  const byName = instances.filter((e) => normalize(e.name) === target);
+  if (byName.length === 0) return [];
+
+  const refIds = new Set(
+    byName.map((e) => e.exercise_reference_id).filter((id): id is string => !!id),
+  );
+
+  if (refIds.size === 1) {
+    const [refId] = refIds;
+    return instances.filter((e) => e.exercise_reference_id === refId);
+  }
+
+  if (refIds.size > 1) {
+    console.error(
+      "[useExerciseSetHistory] Incohérence : plusieurs exercise_reference_id distincts pour le même nom normalisé, repli sur la comparaison par nom.",
+      { exerciseName, refIds: Array.from(refIds) },
+    );
+  }
+
+  // refIds.size === 0 (aucune instance encore liée) ou > 1 (incohérence) :
+  // filet de compatibilité, comportement identique à avant l'Étape 4.
+  return byName;
 }
 
 export function useExerciseSetHistory(exerciseName: string | null | undefined) {
@@ -66,9 +124,9 @@ export function useExerciseSetHistory(exerciseName: string | null | undefined) {
     queryFn: async (): Promise<ExerciseSession[]> => {
       if (!exerciseName) return [];
 
-      // 1. Instances de l'exercice (identité accent-insensible via normalize)
-      const target = normalize(exerciseName);
-      const exs = (instances.data ?? []).filter((e) => normalize(e.name) === target);
+      // 1. Instances de l'exercice (identité par exercise_reference_id,
+      // filet de compatibilité par nom normalisé — voir selectInstancesForExercise)
+      const exs = selectInstancesForExercise(instances.data ?? [], exerciseName);
       if (exs.length === 0) return [];
 
       const exIds = exs.map((e) => e.id);
