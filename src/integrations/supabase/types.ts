@@ -1433,6 +1433,8 @@ export type Database = {
         Row: {
           completed: boolean
           created_at: string
+          discipline: string | null
+          exercise_id: string | null
           id: string
           label: string
           metric_key: string | null
@@ -1445,6 +1447,8 @@ export type Database = {
         Insert: {
           completed?: boolean
           created_at?: string
+          discipline?: string | null
+          exercise_id?: string | null
           id?: string
           label: string
           metric_key?: string | null
@@ -1457,6 +1461,8 @@ export type Database = {
         Update: {
           completed?: boolean
           created_at?: string
+          discipline?: string | null
+          exercise_id?: string | null
           id?: string
           label?: string
           metric_key?: string | null
@@ -1467,6 +1473,13 @@ export type Database = {
           workout_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "workout_segments_exercise_id_fkey"
+            columns: ["exercise_id"]
+            isOneToOne: false
+            referencedRelation: "exercise_reference"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "workout_segments_workout_id_fkey"
             columns: ["workout_id"]
