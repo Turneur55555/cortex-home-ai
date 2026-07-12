@@ -171,7 +171,7 @@ function LoginPage() {
             className="mx-auto mb-4 h-14 w-14 rounded-2xl shadow-glow"
           />
           <h1 className="text-3xl font-bold tracking-tight">ICORTEX</h1>
-          <p className="mt-2 text-sm text-muted-foreground">Votre maison, plus intelligente.</p>
+          <p className="mt-2 text-sm text-muted-foreground">La performance commence ici.</p>
         </div>
 
         {/* Onglets Connexion / Inscription */}
