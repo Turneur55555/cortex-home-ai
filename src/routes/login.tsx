@@ -165,9 +165,11 @@ function LoginPage() {
     <AppShell>
       <main className="flex flex-1 flex-col px-6 pb-10 pt-16">
         <div className="mb-10 text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-primary shadow-glow">
-            <span className="text-2xl font-bold text-primary-foreground">⬡</span>
-          </div>
+          <img
+            src="/icons/icon-192.png"
+            alt="ICORTEX"
+            className="mx-auto mb-4 h-14 w-14 rounded-2xl shadow-glow"
+          />
           <h1 className="text-3xl font-bold tracking-tight">ICORTEX</h1>
           <p className="mt-2 text-sm text-muted-foreground">Votre maison, plus intelligente.</p>
         </div>
