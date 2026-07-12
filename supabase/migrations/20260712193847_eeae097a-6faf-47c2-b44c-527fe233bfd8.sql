@@ -5,14 +5,17 @@ DROP POLICY IF EXISTS "exercise_reference authenticated delete" ON public.exerci
 
 REVOKE INSERT, UPDATE, DELETE ON public.exercise_reference FROM authenticated;
 
+DROP POLICY IF EXISTS "exercise_reference service_role insert" ON public.exercise_reference;
 CREATE POLICY "exercise_reference service_role insert"
   ON public.exercise_reference FOR INSERT
   TO service_role WITH CHECK (true);
 
+DROP POLICY IF EXISTS "exercise_reference service_role update" ON public.exercise_reference;
 CREATE POLICY "exercise_reference service_role update"
   ON public.exercise_reference FOR UPDATE
   TO service_role USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "exercise_reference service_role delete" ON public.exercise_reference;
 CREATE POLICY "exercise_reference service_role delete"
   ON public.exercise_reference FOR DELETE
   TO service_role USING (true);
