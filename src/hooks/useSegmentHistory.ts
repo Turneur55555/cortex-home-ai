@@ -17,6 +17,18 @@ import { segmentTypeKey, type SegmentInstance } from "@/lib/fitness/segmentStats
 // ni aucune autre discipline, ni le module musculation. `workout_segments`
 // n'est JAMAIS écrit ici (lecture seule) — frontière feedsRankEngine
 // inchangée (voir migration 20260709220000_generic_workout_segments.sql).
+//
+// Phase 3, Étape 4 — bascule lecture par exercise_id : `workout_segments`
+// porte une colonne `exercise_id` (renseignée par ExerciseResolutionService
+// depuis l'Étape 2, backfillée à l'Étape 3). La sélection du "type de
+// segment" demandé se fait désormais PRIORITAIREMENT par cet id — même
+// principe que useExerciseSetHistory.ts (selectInstancesForExercise) :
+// parmi les occurrences dont le libellé correspond (via segmentTypeKey),
+// si elles pointent toutes vers un seul exercise_id, c'est CET id qui fait
+// foi pour le filtrage final. Filet de compatibilité par libellé si aucune
+// occurrence liée n'existe encore, ou si une incohérence est détectée
+// (journalisée en console pour investigation) — aucune rupture tant que le
+// backfill/la résolution n'ont pas 100% couvert les données.
 // ============================================================
 
 /** Toutes les occurrences de segments Course de l'utilisateur (toutes
@@ -43,7 +55,7 @@ export function useUserCourseSegmentInstances(userId: string | undefined) {
 
       const { data: segments, error: e2 } = await supabase
         .from("workout_segments")
-        .select("workout_id, label, metrics, completed")
+        .select("workout_id, label, metrics, completed, exercise_id")
         .in("workout_id", ids);
       if (e2) throw e2;
 
@@ -53,9 +65,54 @@ export function useUserCourseSegmentInstances(userId: string | undefined) {
         label: s.label,
         metrics: (s.metrics ?? {}) as Record<string, number | string>,
         completed: s.completed,
+        exerciseId: s.exercise_id,
       }));
     },
   });
+}
+
+/**
+ * Sélectionne les occurrences appartenant au type de segment demandé.
+ *
+ * Priorité à `exerciseId` : parmi les occurrences dont le libellé
+ * correspond (via segmentTypeKey), si elles pointent toutes vers un seul
+ * exercise_id, c'est CET id qui fait foi pour le filtrage final (capture
+ * ainsi toute occurrence liée à la même référence même si son libellé brut
+ * diffère — ex. suffixe de répétition différent).
+ *
+ * Filet de compatibilité : si aucune occurrence liée par libellé n'a
+ * d'exercise_id (colonne encore NULL — ne devrait plus arriver après le
+ * backfill de l'Étape 3, mais on ne suppose jamais une couverture 100%
+ * garantie en toute circonstance) ou si plusieurs exercise_id distincts
+ * coexistent pour le même type de segment (incohérence de données,
+ * signalée en console), on retombe sur l'ancien comportement (comparaison
+ * par segmentTypeKey), pour ne jamais faire disparaître des données
+ * réelles pendant la transition.
+ */
+function selectInstancesForSegmentType(
+  instances: SegmentInstance[],
+  key: string,
+): SegmentInstance[] {
+  const byLabel = instances.filter((i) => segmentTypeKey(i.label) === key);
+  if (byLabel.length === 0) return [];
+
+  const ids = new Set(byLabel.map((i) => i.exerciseId).filter((id): id is string => !!id));
+
+  if (ids.size === 1) {
+    const [exerciseId] = ids;
+    return instances.filter((i) => i.exerciseId === exerciseId);
+  }
+
+  if (ids.size > 1) {
+    console.error(
+      "[useSegmentHistory] Incohérence : plusieurs exercise_id distincts pour le même type de segment, repli sur la comparaison par libellé.",
+      { key, ids: Array.from(ids) },
+    );
+  }
+
+  // ids.size === 0 (aucune occurrence encore liée) ou > 1 (incohérence) :
+  // filet de compatibilité, comportement identique à avant l'Étape 4.
+  return byLabel;
 }
 
 /** Historique de toutes les occurrences d'un type de segment (identifié
@@ -71,7 +128,7 @@ export function useSegmentHistory(rawLabel: string | null | undefined) {
     queryKey: ["segment_history", key, user?.id],
     enabled: key.length > 0 && !!user && !!instances.data,
     queryFn: async (): Promise<SegmentInstance[]> => {
-      return (instances.data ?? []).filter((i) => segmentTypeKey(i.label) === key);
+      return selectInstancesForSegmentType(instances.data ?? [], key);
     },
   });
 }
