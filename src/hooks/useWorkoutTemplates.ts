@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { localDateYMD } from "@/lib/dates";
 import type { TablesInsert } from "@/integrations/supabase/types";
+import { resolveExerciseIdsByLabel } from "@/services/exerciseResolution";
 
 // ============================================================
 // Modèles de séance ("Utiliser une séance sauvegardée") — module Nouvelle
@@ -18,6 +19,13 @@ import type { TablesInsert } from "@/integrations/supabase/types";
 // présente (reprise des charges précédentes, charge suggérée, PR,
 // recommandations) est keyée par nom normalisé et s'applique donc
 // automatiquement, sans aucun câblage supplémentaire ici.
+//
+// Étape 4.5 (2026-07-12) — gap identifié lors de l'audit architectural :
+// ce chemin n'appelait jusqu'ici aucune résolution `exercise_reference_id`,
+// contrairement aux 6 autres chemins d'écriture muscu déjà câblés
+// (Étape 2b/Étape 4 centralisation useAddWorkout). Corrigé en réutilisant
+// `resolveExerciseIdsByLabel` (désormais centralisé dans
+// services/exerciseResolution.ts, partagé avec use-fitness.ts).
 // ============================================================
 
 const TEMPLATES_KEY = ["workout_templates"];
@@ -283,6 +291,10 @@ export function useStartWorkoutFromSavedTemplate() {
       const orderedExercises = [...template.exercises].sort((a, b) => a.position - b.position);
       if (orderedExercises.length === 0) return workout.id;
 
+      const exerciseIdsByName = await resolveExerciseIdsByLabel(
+        "muscu",
+        orderedExercises.map((e) => e.name),
+      );
       const { data: insertedExs, error: exErr } = await supabase
         .from("exercises")
         .insert(
@@ -295,6 +307,7 @@ export function useStartWorkoutFromSavedTemplate() {
             sets: null,
             reps: null,
             weight: null,
+            exercise_reference_id: exerciseIdsByName.get(e.name) ?? null,
           })),
         )
         .select("id");

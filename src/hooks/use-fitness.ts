@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { logActivity } from "@/lib/activity";
 import { localDateYMD } from "@/lib/dates";
 import type { DisciplineId, SessionSegment } from "@/lib/fitness/engines/types";
-import { resolveExerciseId } from "@/services/exerciseResolution";
+import { resolveExerciseId, resolveExerciseIdsByLabel } from "@/services/exerciseResolution";
 
 // Phase 3 (exercice-central) — Étape 2, double écriture : résout/crée
 // exercise_reference_id en plus du libellé existant. Ne doit jamais
@@ -22,36 +22,10 @@ async function resolveMuscuExerciseReferenceId(name: string): Promise<string | n
   }
 }
 
-// Phase 3 (exercice-central) — Étape 4 (suite) : résolution centralisée
-// pour TOUS les segments/exercices sauvegardés via `useAddWorkout`, le
-// SEUL point d'entrée commun aux disciplines (musculation via
-// WorkoutSheet, Cardio/HYROX/Guided/Autre via GenericSessionReviewSheet
-// — voir cortex-phase3-progress-2026-07.md, analyse du 2026-07-12).
-// Aucune branche par discipline ici : un même mécanisme générique,
-// dédoublonné par libellé exact pour éviter des upserts redondants
-// (ex: une simulation HYROX répète les mêmes stations). Jamais bloquant
-// — un échec de résolution pour un libellé donné retombe sur `null`
-// (filet de compatibilité par libellé conservé côté lecture).
-async function resolveExerciseIdsByLabel(
-  discipline: DisciplineId,
-  labels: string[],
-): Promise<Map<string, string | null>> {
-  const unique = Array.from(new Set(labels));
-  const resolved = await Promise.all(
-    unique.map(async (label): Promise<[string, string | null]> => {
-      try {
-        return [label, await resolveExerciseId(discipline, label)];
-      } catch (e) {
-        console.error(
-          `[Phase3] resolveExerciseId(${discipline}) a échoué pour "${label}" — écriture principale non bloquée`,
-          e,
-        );
-        return [label, null];
-      }
-    }),
-  );
-  return new Map(resolved);
-}
+// Phase 3 (exercice-central) — Étape 4.5 : `resolveExerciseIdsByLabel`
+// déplacée dans `src/services/exerciseResolution.ts` (source unique,
+// partagée avec `useStartWorkoutFromSavedTemplate` dans
+// useWorkoutTemplates.ts). Voir ce fichier pour la documentation complète.
 
 // ---------- Domaines extraits (re-exports pour rétro-compat) ----------
 export type { NutritionGoals } from "./useNutritionGoals";
@@ -495,6 +469,10 @@ export type ActiveExercise = {
   sets: number | null;
   reps: number | null;
   weight: number | null;
+  /** Étape 4.5 — identité métier résolue (voir ExerciseResolutionService).
+   *  Additif : peut être `null` pour un exercice créé avant le câblage de
+   *  la résolution, ou si la résolution a échoué sans bloquer l'écriture. */
+  exercise_reference_id: string | null;
   exercise_sets: ActiveSet[];
 };
 
@@ -555,6 +533,7 @@ export function useActiveWorkout() {
           sets: ex.sets ?? null,
           reps: ex.reps ?? null,
           weight: ex.weight ?? null,
+          exercise_reference_id: ex.exercise_reference_id ?? null,
           exercise_sets: (ex.exercise_sets ?? []).map((s: any) => ({
             id: s.id,
             set_number: s.set_number,

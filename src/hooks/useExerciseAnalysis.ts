@@ -43,14 +43,43 @@ export function useExerciseAnalysis(
   );
 
   // Muscles résolus par l'IA pour cet exercice (repli exercices personnalisés).
+  //
+  // Étape 4.5 (2026-07-12) — bascule identité, même schéma que
+  // `selectInstancesForExercise` (useExerciseSetHistory.ts) : parmi les
+  // occurrences dont le nom normalisé correspond, si elles partagent toutes
+  // un seul `exercise_reference_id`, on élargit la recherche à TOUTES les
+  // occurrences liées à cet id (pas seulement celles qui correspondent
+  // encore au nom exact) — un exercice renommé/reformulé retrouve donc les
+  // muscle_groups déjà analysés sous une autre variante du libellé. Filet
+  // de compatibilité : si aucune occurrence liée n'a de référence, ou si
+  // plusieurs références distinctes coexistent (incohérence, journalisée),
+  // repli sur la comparaison par nom normalisé — comportement identique à
+  // avant cette étape.
   const aiMuscleGroups = useMemo(() => {
     if (!exerciseName || !workouts) return null;
     const target = normalize(exerciseName);
-    for (const w of workouts as any[]) {
-      for (const ex of w.exercises ?? []) {
-        if (normalize(ex.name) === target && Array.isArray(ex.muscle_groups) && ex.muscle_groups.length) {
-          return ex.muscle_groups as string[];
-        }
+    const allExercises = (workouts as any[]).flatMap((w) => w.exercises ?? []);
+    const byName = allExercises.filter((ex) => normalize(ex.name) === target);
+    if (byName.length === 0) return null;
+
+    const refIds = new Set(
+      byName.map((ex) => ex.exercise_reference_id).filter((id): id is string => !!id),
+    );
+
+    let candidates = byName;
+    if (refIds.size === 1) {
+      const [refId] = refIds;
+      candidates = allExercises.filter((ex) => ex.exercise_reference_id === refId);
+    } else if (refIds.size > 1) {
+      console.error(
+        "[useExerciseAnalysis] Incohérence : plusieurs exercise_reference_id distincts pour le même nom normalisé, repli sur la comparaison par nom.",
+        { exerciseName, refIds: Array.from(refIds) },
+      );
+    }
+
+    for (const ex of candidates) {
+      if (Array.isArray(ex.muscle_groups) && ex.muscle_groups.length) {
+        return ex.muscle_groups as string[];
       }
     }
     return null;

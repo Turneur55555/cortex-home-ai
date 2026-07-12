@@ -1,10 +1,21 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { normalize } from "@/lib/fitness/exerciseCatalog";
+import { identityKey } from "@/lib/fitness/recentExercises";
 
 /**
- * Dernières séances terminées par exercice (identité accent-insensible via
- * normalize()), en excluant la séance active courante.
+ * Dernières séances terminées par exercice, en excluant la séance active
+ * courante.
+ *
+ * Étape 4.5 (2026-07-12) — bascule identité : chaque exercice de la séance
+ * active porte désormais (quand disponible) son `exerciseReferenceId`
+ * (`exercises.exercise_reference_id`, résolu via ExerciseResolutionService).
+ * La correspondance avec l'historique se fait en priorité par cet id
+ * (`identityKey`, même fonction que `recentExercises.ts` — une seule
+ * logique d'identité partagée). Filet de compatibilité : si l'exercice
+ * n'a pas encore de référence résolue, repli sur le nom normalisé, comme
+ * avant. Contrat public élargi (l'appelant doit désormais fournir
+ * `exerciseReferenceId` en plus du nom — un seul appelant, ActiveWorkoutView).
  *
  * Version groupée : une seule passe de requêtes pour TOUS les exercices de la
  * séance active (3 requêtes au total au lieu de 3 par carte → fin du N+1).
@@ -22,14 +33,26 @@ export interface LastSession {
   sets: LastSessionSet[];
 }
 
+export interface LastExerciseSessionQuery {
+  name: string;
+  exerciseReferenceId?: string | null;
+}
+
 const EMPTY = new Map<string, LastSession>();
 
 export function useLastExerciseSessions(
-  exerciseNames: string[],
+  exercises: LastExerciseSessionQuery[],
   excludeWorkoutId: string | null | undefined,
 ): Map<string, LastSession> {
+  // Dédoublonnage par identité (id en priorité, nom normalisé en filet) ;
+  // les entrées sans id ET sans nom exploitable (chaîne vide après trim) ne
+  // correspondront jamais à rien en base, on les écarte donc en amont.
   const keys = Array.from(
-    new Set(exerciseNames.map((n) => normalize(n)).filter((k) => k.length > 0)),
+    new Set(
+      exercises
+        .filter((e) => !!e.exerciseReferenceId || normalize(e.name).length > 0)
+        .map((e) => identityKey({ name: e.name, exercise_reference_id: e.exerciseReferenceId })),
+    ),
   ).sort();
 
   const q = useQuery({
@@ -43,19 +66,22 @@ export function useLastExerciseSessions(
       const result = new Map<string, LastSession>();
       if (!user) return result;
 
-      // 1. Exercices de l'utilisateur correspondant aux noms (accent-insensible)
+      // 1. Tous les exercices musculation de l'utilisateur (id + référence +
+      // nom) — le filtrage par identité (id en priorité, nom en filet) se
+      // fait ensuite en mémoire, comme pour les autres hooks migrés.
       const keySet = new Set(keys);
       const { data: allExs, error: e1 } = await supabase
         .from("exercises")
-        .select("id, workout_id, name")
+        .select("id, workout_id, name, exercise_reference_id")
         .eq("user_id", user.id);
       if (e1) throw e1;
       const exs = (allExs ?? [])
-        .map((e) => ({ id: e.id, workoutId: e.workout_id, key: normalize(e.name) }))
-        .filter(
-          (e) =>
-            keySet.has(e.key) && !!e.workoutId && e.workoutId !== excludeWorkoutId,
-        );
+        .map((e) => ({
+          id: e.id,
+          workoutId: e.workout_id,
+          key: identityKey({ name: e.name, exercise_reference_id: e.exercise_reference_id }),
+        }))
+        .filter((e) => keySet.has(e.key) && !!e.workoutId && e.workoutId !== excludeWorkoutId);
       if (exs.length === 0) return result;
 
       // 2. Dates des séances concernées
