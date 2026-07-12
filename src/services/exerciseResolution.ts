@@ -17,26 +17,36 @@
 // Concurrence : s'appuie sur la contrainte unique (discipline_id, name)
 // posée sur exercise_reference en Étape 0. L'upsert ciblé sur ces deux
 // colonnes est donc idempotent : deux appels concurrents pour le même
-// (discipline, libellé exact) convergent vers la même ligne sans
-// dupliquer, et aucune autre colonne (description/media/config/aliases/
-// is_active/category) n'est jamais écrasée par un appel de résolution.
+// (discipline, libellé canonique exact) convergent vers la même ligne
+// sans dupliquer, et aucune autre colonne (description/media/config/
+// aliases/is_active/category) n'est jamais écrasée par un appel de
+// résolution.
 //
 // Étape 3 — règle de normalisation anti-doublon de casse : avant de créer
 // une nouvelle référence, on cherche d'abord une référence existante dans
 // la même discipline dont le nom est identique À LA CASSE PRÈS (ex.
 // "squat" doit retrouver "Squat", pas créer une seconde ligne). Si elle
 // existe, elle est réutilisée telle quelle (jamais renommée). Sinon, une
-// nouvelle référence est créée avec le libellé tel que saisi. Cette même
-// règle est appliquée par le script de backfill historique
+// nouvelle référence est créée avec le libellé canonique (voir ci-dessous).
+// Cette même règle est appliquée par le script de backfill historique
 // (supabase/scripts/phase3_step3_backfill_historique.sql) — voir
 // docs/phase3-backfill-log.md pour le détail et la justification.
 //
-// Limite connue : fenêtre de course résiduelle entre la recherche
-// insensible à la casse et la création, en cas d'écritures concurrentes
-// quasi simultanées portant sur un exercice réellement nouveau avec deux
-// casses différentes. Risque jugé négligeable (écritures utilisateur
-// individuelles) et non traité pour rester proportionné — voir
-// docs/phase3-backfill-log.md.
+// Étape 4 (sous-étape) — canonicalisation vers l'exercice de base : un
+// moteur de discipline peut générer plusieurs occurrences d'UN SEUL
+// exercice avec des libellés d'affichage distincts par contexte
+// (numéro de répétition, de série, etc.) — ex. "Fractionné 1/8" /
+// "Fractionné 2/8", ou "Farmer Carry série 1" / "Farmer Carry série 2".
+// Le libellé AFFICHÉ (stocké tel quel sur exercises.name /
+// workout_segments.label pour chaque occurrence) peut contenir cette
+// information de contexte ; la RÉSOLUTION, elle, doit toujours porter sur
+// le libellé canonique de l'exercice de base, pour que toutes les
+// occurrences d'un même exercice partagent un seul exercise_id — c'est le
+// principe "un exercice = une identité" (voir
+// cortex-exercice-referentiel-principes). Cette canonicalisation est
+// centralisée ici (canonicalizeExerciseLabel), pas dans les moteurs de
+// discipline, afin qu'elle s'applique automatiquement à toute discipline
+// future générant ce type de variantes, sans logique dispersée.
 // ============================================================
 
 import { supabase } from "@/integrations/supabase/client";
@@ -52,6 +62,53 @@ function escapeForIlike(value: string): string {
 }
 
 /**
+ * Suffixes de contexte reconnus, retirés un par un (dans cet ordre, en
+ * boucle) pour remonter au libellé canonique de l'exercice de base. Chaque
+ * motif est ancré en fin de chaîne (`$`) pour ne jamais toucher le début
+ * ou le milieu d'un nom d'exercice légitime.
+ *
+ * Liste volontairement explicite et documentée plutôt qu'une règle
+ * générique "retirer tout nombre final" (trop risquée : un nom d'exercice
+ * pourrait légitimement se terminer par un nombre). Ajouter ici toute
+ * nouvelle variante d'affichage rencontrée (nouvelle discipline, nouveau
+ * moteur) plutôt que de dupliquer une logique de normalisation ailleurs.
+ */
+const CONTEXT_SUFFIX_PATTERNS: RegExp[] = [
+  // "Fractionné 1/8", "Sprint 3 / 10", "(1/8)"
+  /\s*\(?\d+\s*\/\s*\d+\)?\s*$/,
+  // "Farmer Carry série 1", "... serie 2", "... set 3", "... tour 4",
+  // "... rep 5" / "répétition 6" (accents optionnels, singulier/pluriel)
+  /\s+(?:s[ée]ries?|sets?|tours?|reps?|r[ée]p[ée]titions?)\.?\s*n?°?\s*\d+\s*$/i,
+  // "Exercice #3"
+  /\s*#\s*\d+\s*$/,
+];
+
+/**
+ * Réduit un libellé d'affichage à l'exercice de base qu'il représente, en
+ * retirant tout suffixe de contexte reconnu (répétition, série, etc.).
+ * Boucle sur les motifs jusqu'à stabilisation pour gérer les suffixes
+ * composés (ex. "Sprint 1/8 - série 2"). Ne renvoie jamais une chaîne vide
+ * : si le retrait des suffixes épuiserait le libellé, la version trimée
+ * d'origine est conservée (filet de sécurité).
+ */
+export function canonicalizeExerciseLabel(rawLabel: string): string {
+  const original = rawLabel.trim();
+  let current = original;
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const pattern of CONTEXT_SUFFIX_PATTERNS) {
+      const next = current.replace(pattern, "").trim();
+      if (next !== current) {
+        current = next;
+        changed = true;
+      }
+    }
+  }
+  return current || original;
+}
+
+/**
  * Résout (ou crée) l'exercise_id correspondant à `label` pour `discipline`.
  * Retourne `null` si le libellé est vide après trim (rien à résoudre).
  * Lève une erreur Supabase en cas d'échec réseau/RLS — à la charge de
@@ -62,7 +119,9 @@ export async function resolveExerciseId(
   discipline: DisciplineId,
   label: string,
 ): Promise<string | null> {
-  const name = label.trim();
+  const trimmed = label.trim();
+  if (!trimmed) return null;
+  const name = canonicalizeExerciseLabel(trimmed);
   if (!name) return null;
 
   // 1) Recherche insensible à la casse : ne jamais créer de doublon d'un
@@ -76,7 +135,7 @@ export async function resolveExerciseId(
   if (lookupError) throw lookupError;
   if (existing?.id) return existing.id;
 
-  // 2) Aucune correspondance : création avec le libellé tel que saisi.
+  // 2) Aucune correspondance : création avec le libellé canonique.
   const { data, error } = await supabase
     .from("exercise_reference")
     .upsert(
