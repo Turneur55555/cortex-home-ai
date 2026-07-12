@@ -18,6 +18,8 @@
     "test:e2e:ui": "playwright test --ui",
     "validate:supabase": "node scripts/validate-supabase.mjs",
     "validate:supabase:fix": "node scripts/validate-supabase.mjs --fix",
+    "phase4:backfill-segments": "node scripts/phase4_backfill_generic_segments.mjs",
+    "phase4:backfill-segments:apply": "node scripts/phase4_backfill_generic_segments.mjs --apply",
     "prepare": "husky",
     "analyze": "ANALYZE=true vite build"
   },
