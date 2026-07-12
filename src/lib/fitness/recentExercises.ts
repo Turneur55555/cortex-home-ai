@@ -47,7 +47,15 @@ export interface WorkoutLike {
 
 /** Clé d'identité d'une occurrence : priorité à `exercise_reference_id`
  *  (source de vérité), repli sur le nom normalisé si absent. */
-function identityKey(ex: WorkoutExerciseLike): string {
+/**
+ * Clé d'identité d'un exercice : priorité à `exercise_reference_id` (identité
+ * métier stable, voir ExerciseResolutionService), repli sur le nom normalisé
+ * si l'exercice n'a pas encore de référence résolue (filet de compatibilité).
+ * Exportée (Étape 4.5) pour être réutilisée par tout hook de lecture ayant
+ * besoin de regrouper/faire correspondre des exercices par identité plutôt
+ * que par libellé — voir useLastExerciseSession.ts.
+ */
+export function identityKey(ex: { name: string; exercise_reference_id?: string | null }): string {
   if (ex.exercise_reference_id) return `id:${ex.exercise_reference_id}`;
   return `name:${normalize(ex.name)}`;
 }
