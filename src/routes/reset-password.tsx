@@ -76,7 +76,7 @@ function ResetPasswordPage() {
             className="mx-auto mb-4 h-14 w-14 rounded-2xl shadow-glow"
           />
           <h1 className="text-3xl font-bold tracking-tight">Nouveau mot de passe</h1>
-          <p className="mt-2 text-sm text-muted-foreground">Sécurisez votre compte ICORTEX.</p>
+          <p className="mt-2 text-sm text-muted-foreground">La performance commence ici.</p>
         </div>
 
         {!ready ? (
