@@ -7,12 +7,15 @@
 // ============================================================
 
 import { normalize, CATALOG_GROUPS, EXERCISE_CATALOG } from "@/lib/fitness/exerciseCatalog";
+import { identityKey } from "@/lib/fitness/recentExercises";
 
 export interface WorkoutExerciseLike {
   name: string;
   weight: number | null;
   sets: number | null;
   reps: number | null;
+  /** Étape 4.6 : priorité d'identité (voir identityKey), additif. */
+  exercise_reference_id?: string | null;
 }
 
 export interface WorkoutLike {
@@ -103,8 +106,11 @@ export function computeBroadActivity(
     months.add(monthKey(w.date));
     weeks.add(weekKey(w.date));
     for (const ex of w.exercises ?? []) {
-      const key = normalize(ex.name);
-      if (!key) continue;
+      if (!ex.name.trim()) continue;
+      // Étape 4.6 : même identité que computePRs (id en priorité, filet nom)
+      // — indispensable pour que broadExercises et topExercises partagent le
+      // même espace de clés en aval (ProfileRPGData/progression.tsx).
+      const key = identityKey({ name: ex.name, exercise_reference_id: ex.exercise_reference_id });
       if (!nameByKey.has(key)) nameByKey.set(key, ex.name.trim());
       exerciseKeys.add(key);
       freq.set(key, (freq.get(key) ?? 0) + 1);
