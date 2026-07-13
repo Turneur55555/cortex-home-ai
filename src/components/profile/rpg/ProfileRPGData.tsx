@@ -23,6 +23,8 @@ export interface ProfileRPGDataValue {
       weight: number | null;
       sets: number | null;
       reps: number | null;
+      /** Étape 4.6 : priorité d'identité (voir identityKey), additif. */
+      exercise_reference_id: string | null;
     }>;
   }>;
   bestPR: { name: string; weight: number } | null;
@@ -58,6 +60,7 @@ export function ProfileRPGData({
           weight: ex.weight,
           sets: ex.sets,
           reps: ex.reps,
+          exercise_reference_id: ex.exercise_reference_id ?? null,
         })),
       })),
     [workouts],
@@ -66,11 +69,26 @@ export function ProfileRPGData({
   // Liste élargie (jusqu'à 8 exercices) pour une Progression RPG qui reflète
   // vraiment "toutes les données existantes", pas seulement le top 3 utilisé
   // historiquement pour les highlights de la fiche.
-  const broadExerciseKeys = useMemo(
-    () => computeBroadActivity(workoutsSample, 8).broadExercises,
+  const broadActivityProbe = useMemo(
+    () => computeBroadActivity(workoutsSample, 8),
     [workoutsSample],
   );
-  const probeExerciseNames = broadExerciseKeys.length > 0 ? broadExerciseKeys : topExercises;
+
+  // Étape 4.6 : `broadExerciseKeys`/`topExercises` sont désormais des
+  // `identityKey` (id-priority), pas des noms — `RankAggregator` (donc
+  // `useExerciseProgression`/`useExerciseSetHistory`) attend un VRAI nom
+  // d'exercice pour faire son propre matching. On résout donc chaque clé en
+  // nom réel via le `nameByKey` correspondant (celui de `computeBroadActivity`
+  // pour les clés `broadExercises`, celui de `computePRs` pour `topExercises`)
+  // avant de les passer à RankAggregator — sinon la sonde ne trouverait plus
+  // aucun historique (régression silencieuse, voir rapport d'audit Étape 4.6).
+  const probeExerciseNames = useMemo(() => {
+    const useBroad = broadActivityProbe.broadExercises.length > 0;
+    const keys = useBroad ? broadActivityProbe.broadExercises : topExercises;
+    const resolver = useBroad ? broadActivityProbe.nameByKey : nameByKey;
+    const names = keys.map((k) => resolver.get(k)).filter((n): n is string => !!n);
+    return names;
+  }, [broadActivityProbe, topExercises, nameByKey]);
 
   const bestPR = useMemo(() => {
     let bestKey: string | null = null;
