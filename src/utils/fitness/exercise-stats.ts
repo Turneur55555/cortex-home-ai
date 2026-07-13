@@ -1,4 +1,4 @@
-import { normalize } from "@/lib/fitness/exerciseCatalog";
+import { identityKey } from "@/lib/fitness/recentExercises";
 
 type WorkoutWithExercises = {
   id: string;
@@ -12,6 +12,8 @@ type WorkoutWithExercises = {
     sets: number | null;
     reps: number | null;
     image_path?: string | null;
+    /** Étape 4.6 : priorité d'identité (voir identityKey), additif. */
+    exercise_reference_id?: string | null;
   }> | null;
 };
 
@@ -20,10 +22,7 @@ export function computePRs(workouts: WorkoutWithExercises[] | null | undefined) 
   const histByName = new Map<string, Array<{ date: string; weight: number }>>();
   const volByName = new Map<string, Array<{ date: string; volume: number }>>();
   const prByGym = new Map<string, Map<string, number>>();
-  const histByGym = new Map<
-    string,
-    Map<string, Array<{ date: string; weight: number }>>
-  >();
+  const histByGym = new Map<string, Map<string, Array<{ date: string; weight: number }>>>();
   const freq = new Map<string, number>();
   const nameByKey = new Map<string, string>();
 
@@ -44,13 +43,15 @@ export function computePRs(workouts: WorkoutWithExercises[] | null | undefined) 
     const gym = (w.gym_location ?? "Salle inconnue") || "Salle inconnue";
 
     for (const ex of w.exercises ?? []) {
-      const key = normalize(ex.name);
-      if (!key) continue;
+      if (!ex.name.trim()) continue;
+      // Étape 4.6 : identité par exercise_reference_id en priorité (même
+      // fonction que les hooks déjà migrés), filet par nom normalisé sinon.
+      const key = identityKey({ name: ex.name, exercise_reference_id: ex.exercise_reference_id });
       if (!nameByKey.has(key)) nameByKey.set(key, ex.name.trim());
       freq.set(key, (freq.get(key) ?? 0) + 1);
       const hasExplicitWeight = ex.weight != null;
       const reps = hasExplicitWeight ? ex.reps : (ex.sets ?? ex.reps);
-      const weight = hasExplicitWeight ? ex.weight : (ex.sets != null ? ex.reps : null);
+      const weight = hasExplicitWeight ? ex.weight : ex.sets != null ? ex.reps : null;
       if (weight != null) {
         if (!sessionMax.has(key) || weight > sessionMax.get(key)!) sessionMax.set(key, weight);
         if (!prByName.has(key) || weight > prByName.get(key)!) prByName.set(key, weight);
