@@ -5,6 +5,7 @@ import { logActivity } from "@/lib/activity";
 import { localDateYMD } from "@/lib/dates";
 import type { DisciplineId, SessionSegment } from "@/lib/fitness/engines/types";
 import { resolveExerciseId, resolveExerciseIdsByLabel } from "@/services/exerciseResolution";
+import { identityKey } from "@/lib/fitness/recentExercises";
 
 // Phase 3 (exercice-central) — Étape 2, double écriture : résout/crée
 // exercise_reference_id en plus du libellé existant. Ne doit jamais
@@ -650,6 +651,11 @@ export type RepeatSourceWorkout = {
     sets?: number | null;
     reps?: number | null;
     weight?: number | null;
+    /** Etape 4.6c (2026-07-13) : deja porte par les lignes source
+     *  (`useWorkouts()` selectionne `exercises(*)`) - additif, permet au
+     *  regroupement ci-dessous de fusionner par identite reelle plutot
+     *  que par nom quand elle est disponible. */
+    exercise_reference_id?: string | null;
     exercise_sets?: Array<{
       set_number: number | null;
       reps: number | null;
@@ -697,23 +703,38 @@ export function useStartWorkoutFromTemplate() {
         .single();
       if (error) throw error;
 
-      // Déduplique les exercices par nom (les séances legacy ont 1 ligne/série).
+      // Etape 4.6c (2026-07-13) : deduplique par identite (identityKey -
+      // exercise_reference_id en priorite, repli nom normalise documente)
+      // au lieu du seul nom brut - deux occurrences du meme exercice a
+      // libelle legerement different (accents/casse/renommage) fusionnent
+      // desormais correctement des que l'id est connu ; le repli nom ne
+      // reste actif que pour des lignes source sans reference resolue
+      // (donnees anterieures au backfill de l'Etape 3).
       const groups = new Map<
         string,
         {
           name: string;
           image_path: string | null;
+          exerciseReferenceId: string | null;
           setRows: Array<{ reps: number | null; weight: number | null }>;
         }
       >();
       for (const ex of source.exercises ?? []) {
-        const key = ex.name.trim().toLowerCase();
-        if (!key) continue;
+        if (!ex.name.trim()) continue;
+        const key = identityKey({ name: ex.name, exercise_reference_id: ex.exercise_reference_id });
         if (!groups.has(key)) {
-          groups.set(key, { name: ex.name, image_path: ex.image_path ?? null, setRows: [] });
+          groups.set(key, {
+            name: ex.name,
+            image_path: ex.image_path ?? null,
+            exerciseReferenceId: ex.exercise_reference_id ?? null,
+            setRows: [],
+          });
         }
         const g = groups.get(key)!;
         if (!g.image_path && ex.image_path) g.image_path = ex.image_path;
+        if (!g.exerciseReferenceId && ex.exercise_reference_id) {
+          g.exerciseReferenceId = ex.exercise_reference_id;
+        }
         const detailed = [...(ex.exercise_sets ?? [])].sort(
           (a, b) => (a.set_number ?? 0) - (b.set_number ?? 0),
         );
@@ -731,8 +752,16 @@ export function useStartWorkoutFromTemplate() {
 
       const groupList = Array.from(groups.values());
       if (groupList.length > 0) {
+        // Filet de compatibilite : ne resout par nom que les groupes qui
+        // n'ont encore aucune reference connue (lignes source anterieures
+        // au backfill) - un groupe deja identifie par id ne repasse jamais
+        // par une resolution nom -> id supplementaire.
         const groupReferenceIds = await Promise.all(
-          groupList.map((g) => resolveMuscuExerciseReferenceId(g.name)),
+          groupList.map((g) =>
+            g.exerciseReferenceId
+              ? Promise.resolve(g.exerciseReferenceId)
+              : resolveMuscuExerciseReferenceId(g.name),
+          ),
         );
         const { data: insertedExs, error: exErr } = await supabase
           .from("exercises")
