@@ -262,9 +262,9 @@ export function NutritionTab() {
   const dateLabel = format(parseISO(date), "d MMMM yyyy", { locale: fr });
 
   return (
-    <section className="flex flex-col gap-4">
+    <section className="flex flex-col gap-5">
       {/* ─── Barre date premium ─────────────────────────────────────────── */}
-      <div className="flex items-center gap-2">
+      <div className="grid grid-cols-[auto_1fr_auto] items-center gap-2">
         <motion.button
           whileTap={PRESS_SMALL}
           type="button"
@@ -275,7 +275,7 @@ export function NutritionTab() {
           <ChevronLeft className="h-4 w-4" />
         </motion.button>
 
-        <div className="relative flex-1">
+        <div className="relative">
           <button
             type="button"
             onClick={() => setDatePickerOpen((o) => !o)}

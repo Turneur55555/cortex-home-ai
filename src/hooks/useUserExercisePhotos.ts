@@ -30,20 +30,19 @@ export function useUserExercisePhotos() {
       } = await supabase.auth.getUser();
       if (!user) return new Map<string, string>();
 
-      const { data, error } = await supabase
+      const { data: rawData, error } = await supabase
         .from("user_exercise_illustrations")
-        .select("exercise_name, storage_path, exercise_reference_id");
+        .select("*");
       if (error) throw error;
 
-      if (!data || data.length === 0) return new Map<string, string>();
+      if (!rawData || rawData.length === 0) return new Map<string, string>();
 
-      const paths = (
-        data as Array<{
-          storage_path: string;
-          exercise_name: string;
-          exercise_reference_id: string | null;
-        }>
-      ).map((r) => r.storage_path);
+      const data = rawData as unknown as Array<{
+        storage_path: string;
+        exercise_name: string;
+        exercise_reference_id: string | null;
+      }>;
+      const paths = data.map((r) => r.storage_path);
       const { data: signed, error: signErr } = await supabase.storage
         .from("exercise-images")
         .createSignedUrls(paths, 60 * 60);
@@ -116,7 +115,7 @@ export function useUpsertExercisePhoto() {
           exercise_name: exerciseName,
           storage_path: path,
           exercise_reference_id: exerciseReferenceId,
-        },
+        } as any,
         { onConflict: "user_id,exercise_name" },
       );
       if (upsErr) throw upsErr;
