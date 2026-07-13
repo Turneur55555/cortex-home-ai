@@ -1,5 +1,9 @@
 # Architecture technique
 
+## Documents de référence
+
+- [`docs/architecture/exercise-central-architecture.md`](architecture/exercise-central-architecture.md) — architecture officielle du domaine Fitness (référentiel `exercise_reference`, identité `exercise_id`/`exercise_reference_id`/`identityKey`, services centraux, flux d'écriture/lecture, invariants, principes d'évolution, vision long terme). À consulter avant toute évolution touchant aux exercices, aux disciplines, à Sensei ou aux statistiques.
+
 ## Chemin des données
 CoachSheet (sélection UI)
   → resolveMuscleSlugs()
