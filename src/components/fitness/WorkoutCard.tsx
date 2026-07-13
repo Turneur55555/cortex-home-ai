@@ -34,7 +34,7 @@ import { WorkoutDeleteDialog } from "./WorkoutDeleteDialog";
 import { ExerciseAnalysisSheet } from "./ExerciseAnalysisSheet";
 import { StatTile } from "./StatTile";
 import { AddExerciseModal } from "./AddExerciseModal";
-import { normalize } from "@/lib/fitness/exerciseCatalog";
+import { identityKey } from "@/lib/fitness/recentExercises";
 import { estimate1RM, formatTonnage, workoutTonnage } from "@/lib/fitness/strength";
 import { estimateWorkoutCalories } from "@/lib/fitness/calories";
 import { useLatestBodyWeight } from "@/hooks/useLatestBodyWeight";
@@ -107,8 +107,10 @@ function expandToSeries(rows: ExerciseRow[]): SerieView[] {
 function buildGroups(rows: ExerciseRow[]): ExerciseGroup[] {
   const byKey = new Map<string, ExerciseRow[]>();
   for (const r of rows) {
-    const key = normalize(r.name);
-    if (!key) continue;
+    if (!r.name.trim()) continue;
+    // Étape 4.6 : identité par exercise_reference_id en priorité (même
+    // fonction que le reste de la base), filet par nom normalisé sinon.
+    const key = identityKey({ name: r.name, exercise_reference_id: r.exercise_reference_id });
     if (!byKey.has(key)) byKey.set(key, []);
     byKey.get(key)!.push(r);
   }

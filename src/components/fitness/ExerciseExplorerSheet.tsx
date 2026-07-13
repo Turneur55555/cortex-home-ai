@@ -174,13 +174,16 @@ export function ExerciseExplorerSheet({
   // `exercise_reference`, discipline muscu), sauf pour les entrées
   // "custom__" (résultat de recherche libre sans correspondance catalogue
   // encore créée) où l'on reste sur le filet de compatibilité par nom.
+  // Étape 4.6 : clé d'identité partagée (photos + PR/historique) — l'id du
+  // catalogue EST l'exercise_reference_id pour une entrée normale, sauf
+  // préfixe "custom__" (résultat de recherche libre sans correspondance
+  // catalogue encore créée), où l'on reste sur le filet de compatibilité nom.
+  const keyForBrowserExercise = (name: string, id?: string) =>
+    id && !isCustom(id) ? identityKey({ name, exercise_reference_id: id }) : identityKey({ name });
+
   const getPhoto = (name: string, id?: string) => {
     if (userPhotos) {
-      const key =
-        id && !isCustom(id)
-          ? identityKey({ name, exercise_reference_id: id })
-          : identityKey({ name });
-      const userUrl = userPhotos.get(key);
+      const userUrl = userPhotos.get(keyForBrowserExercise(name, id));
       if (userUrl) return userUrl;
     }
     return exerciseIllustration(name);
@@ -714,9 +717,13 @@ export function ExerciseExplorerSheet({
       {openExercise && (
         <ExerciseAnalysisSheet
           exerciseName={openExercise.name}
-          weightHistory={histByName.get(normalize(openExercise.name)) ?? []}
-          volumeHistory={volByName.get(normalize(openExercise.name)) ?? []}
-          pr={prByName.get(normalize(openExercise.name))}
+          weightHistory={
+            histByName.get(keyForBrowserExercise(openExercise.name, openExercise.id)) ?? []
+          }
+          volumeHistory={
+            volByName.get(keyForBrowserExercise(openExercise.name, openExercise.id)) ?? []
+          }
+          pr={prByName.get(keyForBrowserExercise(openExercise.name, openExercise.id))}
           imageUrl={getPhoto(openExercise.name, openExercise.id)}
           onClose={() => setOpenExercise(null)}
           actions={analysisActionsFor(openExercise)}

@@ -1,14 +1,6 @@
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import {
-  Camera,
-  ChevronDown,
-  Loader2,
-  Minus,
-  Plus,
-  SlidersHorizontal,
-  X,
-} from "lucide-react";
+import { Camera, ChevronDown, Loader2, Minus, Plus, SlidersHorizontal, X } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useAddWorkout, useExerciseImageUrls, useWorkouts } from "@/hooks/use-fitness";
@@ -20,6 +12,8 @@ import {
   type RecentExercise,
 } from "./ExercisePickerSheet";
 import { normalize } from "@/lib/fitness/exerciseCatalog";
+import { identityKey } from "@/lib/fitness/recentExercises";
+import { resolveExerciseIdsByLabel } from "@/services/exerciseResolution";
 import { summarizeSets, type WorkingSet } from "@/lib/fitness/sets";
 import { formatTonnage } from "@/lib/fitness/strength";
 import { GYMS } from "@/lib/fitness/config";
@@ -148,18 +142,14 @@ export function WorkoutSheet({
 
   const addSetRow = (exIdx: number) => {
     setExercises((arr) =>
-      arr.map((e, idx) =>
-        idx === exIdx ? { ...e, setRows: [...e.setRows, emptySetRow()] } : e,
-      ),
+      arr.map((e, idx) => (idx === exIdx ? { ...e, setRows: [...e.setRows, emptySetRow()] } : e)),
     );
   };
 
   const removeSetRow = (exIdx: number, setIdx: number) => {
     setExercises((arr) =>
       arr.map((e, idx) =>
-        idx === exIdx
-          ? { ...e, setRows: e.setRows.filter((_, j) => j !== setIdx) }
-          : e,
+        idx === exIdx ? { ...e, setRows: e.setRows.filter((_, j) => j !== setIdx) } : e,
       ),
     );
   };
@@ -287,11 +277,19 @@ export function WorkoutSheet({
     })();
 
     if (priorPRs) {
+      // Étape 4.6 : priorPRs (= prByName de computePRs) est maintenant keyé
+      // par identityKey (id en priorité). On résout donc les mêmes ids que
+      // useAddWorkout vient de résoudre pour l'insertion (même service,
+      // idempotent — aucune nouvelle référence créée ici), pour comparer
+      // dans le même espace de clé plutôt que par nom seul (qui ne
+      // matcherait plus rien dès qu'un historique a déjà une référence).
+      const idsByName = await resolveExerciseIdsByLabel(
+        "muscu",
+        payloadExercises.map((e) => e.name),
+      );
       for (const ex of payloadExercises) {
         if (ex.weight == null) continue;
-        // H5 : même normalisation que computePRs (accents/ponctuation), sinon
-        // le PR précédent n'est jamais trouvé → faux « Nouveau PR » systématique.
-        const key = normalize(ex.name);
+        const key = identityKey({ name: ex.name, exercise_reference_id: idsByName.get(ex.name) });
         const prev = priorPRs.get(key) ?? null;
         if (prev == null || ex.weight > prev) {
           toast.success(
@@ -379,18 +377,11 @@ export function WorkoutSheet({
                 const recent = ex.name
                   ? recentExercises.find((r) => normalize(r.name) === normalize(ex.name))
                   : null;
-                const hasHint =
-                  recent &&
-                  (recent.lastSets || recent.lastReps || recent.lastWeight);
-                const summary = ex.detailed
-                  ? summarizeSets(toWorkingSets(ex.setRows))
-                  : null;
+                const hasHint = recent && (recent.lastSets || recent.lastReps || recent.lastWeight);
+                const summary = ex.detailed ? summarizeSets(toWorkingSets(ex.setRows)) : null;
 
                 return (
-                  <div
-                    key={i}
-                    className="rounded-2xl border border-border bg-surface p-3"
-                  >
+                  <div key={i} className="rounded-2xl border border-border bg-surface p-3">
                     {/* Top row: photo + name picker + delete */}
                     <div className="flex gap-2">
                       <label
@@ -442,9 +433,7 @@ export function WorkoutSheet({
                       {exercises.length > 1 && (
                         <button
                           type="button"
-                          onClick={() =>
-                            setExercises((a) => a.filter((_, idx) => idx !== i))
-                          }
+                          onClick={() => setExercises((a) => a.filter((_, idx) => idx !== i))}
                           className="flex h-10 w-10 items-center justify-center rounded-xl text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                         >
                           <X className="h-4 w-4" />
@@ -600,7 +589,6 @@ export function WorkoutSheet({
                       <SlidersHorizontal className="h-3.5 w-3.5" />
                       {ex.detailed ? "Mode simple" : "Détailler les séries"}
                     </button>
-
                   </div>
                 );
               })}
@@ -625,7 +613,6 @@ export function WorkoutSheet({
           initialQuery={exercises[pickerIndex]?.name ?? ""}
         />
       )}
-
     </>
   );
 }

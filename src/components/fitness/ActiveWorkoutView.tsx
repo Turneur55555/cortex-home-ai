@@ -19,7 +19,6 @@ import { exerciseIllustration } from "@/lib/fitness/exerciseIllustrations";
 import { computePRs } from "@/utils/fitness/exercise-stats";
 import { ExercisePickerSheet, type PickedExercise } from "./ExercisePickerSheet";
 import { computeRecentExercises, identityKey } from "@/lib/fitness/recentExercises";
-import { normalize } from "@/lib/fitness/exerciseCatalog";
 import { useLastExerciseSessions } from "@/hooks/useLastExerciseSession";
 import { RestTimerBar } from "./RestTimerBar";
 import { ExerciseAnalysisSheet } from "./ExerciseAnalysisSheet";
@@ -294,11 +293,11 @@ export function ActiveWorkoutView({
                 exercise={ex}
                 imageUrl={exImage}
                 lastSession={lastSessions.get(identityKey(ex)) ?? null}
-                pr={prByName.get(normalize(ex.name)) ?? null}
+                pr={prByName.get(identityKey(ex)) ?? null}
                 recoveryMap={recoveryMap}
                 onOpenStats={() =>
                   setStatsTarget({
-                    key: normalize(ex.name),
+                    key: identityKey(ex),
                     name: ex.name,
                     imageUrl: exImage,
                   })

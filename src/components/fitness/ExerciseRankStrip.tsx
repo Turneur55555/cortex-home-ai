@@ -3,9 +3,9 @@ import { motion } from "framer-motion";
 import { ExerciseRankBadge } from "./ExerciseRankBadge";
 import { ExerciseAnalysisSheet } from "./ExerciseAnalysisSheet";
 import { useExerciseProgression } from "@/hooks/useExerciseProgression";
-import { normalize } from "@/lib/fitness/exerciseCatalog";
 
 function MiniRankTile({
+  exerciseKey,
   exerciseName,
   displayName,
   onOpen,
@@ -14,9 +14,12 @@ function MiniRankTile({
   prByName,
   fixedWidth,
 }: {
+  /** Clé identityKey (id-priority) — utilisée pour retrouver hist/vol/PR,
+   *  jamais reconstruite par re-normalisation du nom affiché (Étape 4.6). */
+  exerciseKey: string;
   exerciseName: string;
   displayName: string;
-  onOpen: (name: string) => void;
+  onOpen: (key: string) => void;
   histByName: Map<string, Array<{ date: string; weight: number }>>;
   volByName: Map<string, Array<{ date: string; volume: number }>>;
   prByName: Map<string, number>;
@@ -30,7 +33,7 @@ function MiniRankTile({
 
   return (
     <button
-      onClick={() => onOpen(exerciseName)}
+      onClick={() => onOpen(exerciseKey)}
       className={`flex flex-col items-center gap-2 rounded-2xl border p-3 text-left transition-transform hover:scale-[1.02] ${
         fixedWidth ? "w-[150px] shrink-0" : "w-full"
       }`}
@@ -80,7 +83,7 @@ export function ExerciseRankStrip({
    *  dizaines/centaines de maîtrises sans logique de swipe. */
   layout?: "carousel" | "grid";
 }) {
-  const [openExercise, setOpenExercise] = useState<string | null>(null);
+  const [openKey, setOpenKey] = useState<string | null>(null);
 
   if (topExercises.length === 0) return null;
 
@@ -98,9 +101,10 @@ export function ExerciseRankStrip({
           return (
             <MiniRankTile
               key={key}
+              exerciseKey={key}
               exerciseName={display}
               displayName={display}
-              onOpen={setOpenExercise}
+              onOpen={setOpenKey}
               histByName={histByName}
               volByName={volByName}
               prByName={prByName}
@@ -110,13 +114,13 @@ export function ExerciseRankStrip({
         })}
       </div>
 
-      {openExercise && (
+      {openKey && (
         <ExerciseAnalysisSheet
-          exerciseName={openExercise}
-          weightHistory={histByName.get(normalize(openExercise)) ?? []}
-          volumeHistory={volByName.get(normalize(openExercise)) ?? []}
-          pr={prByName.get(normalize(openExercise))}
-          onClose={() => setOpenExercise(null)}
+          exerciseName={nameByKey.get(openKey) ?? openKey}
+          weightHistory={histByName.get(openKey) ?? []}
+          volumeHistory={volByName.get(openKey) ?? []}
+          pr={prByName.get(openKey)}
+          onClose={() => setOpenKey(null)}
         />
       )}
     </div>
