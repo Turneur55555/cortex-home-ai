@@ -115,7 +115,7 @@ export function useUpsertExercisePhoto() {
           exercise_name: exerciseName,
           storage_path: path,
           exercise_reference_id: exerciseReferenceId,
-        },
+        } as any,
         { onConflict: "user_id,exercise_name" },
       );
       if (upsErr) throw upsErr;
