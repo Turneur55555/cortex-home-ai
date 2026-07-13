@@ -736,3 +736,79 @@ describe("buildSenseiExplanation", () => {
     expect(explanation).toEqual([]);
   });
 });
+
+describe("inferSenseiAutoProfile — identité par exercise_reference_id (Étape 4.6b)", () => {
+  it("fusionne deux instances portant le même exercise_reference_id malgré des libellés texte différents", () => {
+    const result = inferSenseiAutoProfile([
+      workout("2026-06-01", [
+        { name: "Curl barre EZ", exercise_sets: [set(8, 30)], exercise_reference_id: "ref-1" },
+      ]),
+      workout("2026-06-08", [
+        {
+          name: "curl barre ez (variante saisie)",
+          exercise_sets: [set(8, 32)],
+          exercise_reference_id: "ref-1",
+        },
+      ]),
+      workout("2026-06-15", [
+        { name: "Curl barre EZ", exercise_sets: [set(8, 34)], exercise_reference_id: "ref-1" },
+      ]),
+    ]);
+    const curl = result.exerciseProgress.find((e) => e.name === "Curl barre EZ");
+    expect(curl).toBeDefined();
+    expect(curl?.sessionsTracked).toBe(3);
+    expect(curl?.lastWeight).toBe(34);
+    expect(curl?.personalRecord).toBe(34);
+    // Une seule entrée fusionnée, pas deux exercices distincts créés par la
+    // variation de libellé.
+    expect(
+      result.exerciseProgress.filter((e) => e.name.toLowerCase().includes("curl")),
+    ).toHaveLength(1);
+  });
+
+  it("ne fusionne pas deux exercise_reference_id distincts même si le nom normalisé coïncide", () => {
+    const result = inferSenseiAutoProfile([
+      workout("2026-06-01", [
+        { name: "Rowing", exercise_sets: [set(8, 50)], exercise_reference_id: "ref-a" },
+      ]),
+      workout("2026-06-01", [
+        { name: "Rowing", exercise_sets: [set(8, 60)], exercise_reference_id: "ref-b" },
+      ]),
+    ]);
+    const rowingEntries = result.exerciseProgress.filter((e) => e.name === "Rowing");
+    // Deux exercices distincts (id différent) doivent rester séparés : 2
+    // entrées avec sessionsTracked=1 chacune, pas une seule fusionnée.
+    expect(rowingEntries).toHaveLength(2);
+    for (const e of rowingEntries) {
+      expect(e.sessionsTracked).toBe(1);
+    }
+  });
+
+  it("filet de compatibilité : sans exercise_reference_id, retombe sur le nom normalisé comme avant", () => {
+    const result = inferSenseiAutoProfile([
+      workout("2026-06-01", [{ name: "Squat", exercise_sets: [set(8, 100)] }]),
+      workout("2026-06-08", [{ name: "squat", exercise_sets: [set(8, 110)] }]),
+    ]);
+    const squat = result.exerciseProgress.find((e) => e.name === "Squat");
+    expect(squat?.sessionsTracked).toBe(2);
+    expect(squat?.lastWeight).toBe(110);
+  });
+
+  it("le matching 'jamais pratiqué' (catalogue) reste par nom, indépendant de l'identityKey", () => {
+    // Un exercice pratiqué avec un exercise_reference_id ne doit plus
+    // apparaître dans neverDoneExercises, même si son identité interne est
+    // désormais une clé `id:...` et non plus `name:...`.
+    const result = inferSenseiAutoProfile([
+      workout("2026-06-01", [
+        { name: "Squat barre", exercise_sets: [set(8, 100)], exercise_reference_id: "ref-squat" },
+      ]),
+      workout("2026-06-08", [
+        { name: "Squat barre", exercise_sets: [set(8, 105)], exercise_reference_id: "ref-squat" },
+      ]),
+      workout("2026-06-15", [
+        { name: "Squat barre", exercise_sets: [set(8, 110)], exercise_reference_id: "ref-squat" },
+      ]),
+    ]);
+    expect(result.neverDoneExercises.every((e) => e.name !== "Squat barre")).toBe(true);
+  });
+});

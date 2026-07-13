@@ -34,10 +34,29 @@
 // a été supprimée le 02/07/2026 ("pas de RPE dans l'app", voir
 // 20260702100030_seances_status_completed_drop_rpe.sql) : aucune
 // donnée n'existe pour ce signal.
+//
+// Étape 4.6b (2026-07-13) : l'identité interne par exercice
+// (historyByExercise, et donc exerciseProgress/mémoire à long terme)
+// est désormais fondée sur `identityKey` (exercise_reference_id en
+// priorité, filet nom normalisé) au lieu de `normalize(name)` seul —
+// voir identityKey() dans recentExercises.ts, même convention que
+// computePRs/computeBroadActivity (Étape 4.6a). Toutes les valeurs de
+// SORTIE restent de VRAIS noms d'exercice (name réel, jamais une clé) :
+// aucun consommateur (StrengthWorkoutEngine, edge coach-workout,
+// buildSenseiExplanation) n'a besoin de changer, ils ne font que lire
+// ou transmettre des noms tels quels. Seule exception assumée : le
+// matching "exercices jamais pratiqués" (neverDoneExercises) reste par
+// nom normalisé, car EXERCISE_CATALOG (exerciseCatalog.ts) est une
+// liste statique frontend SANS aucun identifiant — il n'existe rien à
+// quoi rattacher un exercise_reference_id côté catalogue. C'est un
+// usage sémantique de suggestion assumé (voir cortex-phase3-gouvernance,
+// catégorie "suggestions" explicitement acceptée par Nathan), pas un
+// gap d'identité — documenté ici pour l'audit de clôture de l'Étape 4.6.
 // ============================================================
 
 import { normalize, EXERCISE_CATALOG } from "@/lib/fitness/exerciseCatalog";
 import { exerciseToMuscles, MUSCLE_META, type MuscleId } from "@/lib/fitness/muscleMapping";
+import { identityKey } from "@/lib/fitness/recentExercises";
 
 export type AutoLevel = "débutant" | "intermédiaire" | "avancé";
 export type AutoGoal = "hypertrophie" | "force" | "endurance" | "perte de poids";
@@ -61,6 +80,9 @@ export interface AutoProfileExercise {
   reps?: number | null;
   weight?: number | null;
   sets?: number | null;
+  /** Étape 4.6b : identité par exercise_reference_id en priorité (voir
+   *  identityKey, en-tête de fichier) — additif, optionnel. */
+  exercise_reference_id?: string | null;
 }
 
 export interface AutoProfileWorkout {
@@ -144,7 +166,7 @@ export interface SenseiAutoProfile {
   /** null si aucune série n'a de rest_seconds renseigné (donnée optionnelle). */
   avgRestSeconds: number | null;
   /** Volume hebdomadaire total (tous muscles) observé dans les semaines qui
-   *  ont précédé un record personnel chez cet utilisateur — null s'il n'y a
+   *  ont précédé un nouveau record personnel chez cet utilisateur — null s'il n'y a
    *  pas assez de records datés pour dégager une tendance fiable. */
   optimalWeeklyVolume: number | null;
   /** Nombre de blocs de progression déjà vécus (≥3 semaines consécutives de
@@ -375,12 +397,19 @@ export function inferSenseiAutoProfile(
   const weeklyTonnage = new Map<string, number>();
   const weeklyMuscleTonnage = new Map<string, Map<MuscleId, number>>();
   // Historique chronologique par exercice — alimente surcharge progressive,
-  // records personnels et charges/séries suggérées.
+  // records personnels et charges/séries suggérées. Étape 4.6b : clé
+  // `identityKey` (exercise_reference_id en priorité, filet nom), pas
+  // `normalize(name)` seul — voir en-tête de fichier.
   const historyByExercise = new Map<string, { name: string; entries: ExerciseHistoryEntry[] }>();
   const recentSessions: RecentSession[] = [];
   // Semaine → nouveau record atteint cette semaine-là (pour optimalWeeklyVolume).
   const prWeeks = new Set<string>();
   const runningMaxByExercise = new Map<string, number>();
+  // Étape 4.6b : ensemble SÉPARÉ, par nom normalisé — uniquement pour le
+  // matching "jamais pratiqué" contre EXERCISE_CATALOG (liste statique sans
+  // exercise_reference_id, voir en-tête de fichier). Ne doit jamais être
+  // confondu avec les clés `identityKey` de historyByExercise.
+  const trackedExerciseNames = new Set<string>();
 
   for (const w of sessions) {
     if (w.duration_minutes != null && w.duration_minutes > 0) {
@@ -433,7 +462,8 @@ export function inferSenseiAutoProfile(
       }
 
       if (topWeight > 0) {
-        const key = normalize(ex.name);
+        const key = identityKey({ name: ex.name, exercise_reference_id: ex.exercise_reference_id });
+        trackedExerciseNames.add(normalize(ex.name));
         const entry = historyByExercise.get(key) ?? { name: ex.name.trim(), entries: [] };
         entry.entries.push({ date: w.date, weight: topWeight, setCount: validSets.length });
         historyByExercise.set(key, entry);
@@ -475,8 +505,14 @@ export function inferSenseiAutoProfile(
 
   // ---- Progression individuelle par exercice (fenêtre récente vs antérieure,
   // pas juste premier-vs-dernier sur tout l'historique) ----
-  const exerciseProgress: ExerciseProgress[] = [];
-  const trackedExerciseKeys = new Set<string>();
+  // Étape 4.6b : chaque entrée porte sa clé `identityKey` en interne (champ
+  // `__key`, jamais exposé dans la sortie publique `ExerciseProgress`) —
+  // permet aux calculs de mémoire à long terme ci-dessous de retrouver
+  // weeklyRateByKey/lastSeenDateByKey sans recalculer/deviner une clé
+  // depuis le nom (fragile si deux exercices distincts partagent un nom
+  // affiché identique).
+  type InternalProgress = ExerciseProgress & { __key: string };
+  const internalProgress: InternalProgress[] = [];
   // Mémoire à long terme : données internes non exposées telles quelles dans
   // ExerciseProgress (weeklyRate précis, dernière date), utiles uniquement
   // pour classer bestProgressingExercises/abandonedExercises ci-dessous.
@@ -485,7 +521,6 @@ export function inferSenseiAutoProfile(
   const mostRecentSessionDate = sessions[sessions.length - 1].date;
 
   for (const [key, { name, entries }] of historyByExercise) {
-    trackedExerciseKeys.add(key);
     const sessionsTracked = entries.length;
     const lastWeight = entries[entries.length - 1].weight;
     const personalRecord = Math.max(...entries.map((e) => e.weight));
@@ -498,7 +533,8 @@ export function inferSenseiAutoProfile(
     lastSeenDateByKey.set(key, entries[entries.length - 1].date);
     if (trendResult.weeklyRate != null) weeklyRateByKey.set(key, trendResult.weeklyRate);
 
-    exerciseProgress.push({
+    internalProgress.push({
+      __key: key,
       name,
       muscles: exerciseToMuscles(name),
       trend: trendResult.trend,
@@ -511,45 +547,50 @@ export function inferSenseiAutoProfile(
       suggestedSets,
     });
   }
-  exerciseProgress.sort((a, b) => b.sessionsTracked - a.sessionsTracked);
-  const trackedExerciseProgress = exerciseProgress.slice(0, MAX_TRACKED_EXERCISES);
+  internalProgress.sort((a, b) => b.sessionsTracked - a.sessionsTracked);
+  // Sortie publique : jamais `__key`, uniquement les champs de ExerciseProgress.
+  const trackedExerciseProgress: ExerciseProgress[] = internalProgress
+    .slice(0, MAX_TRACKED_EXERCISES)
+    .map(({ __key, ...rest }) => rest);
 
-  const withTrend = exerciseProgress.filter((e) => e.trend !== "nouveau");
+  const withTrend = internalProgress.filter((e) => e.trend !== "nouveau");
   const progressingCount = withTrend.filter((e) => e.trend === "progression").length;
   const regressingCount = withTrend.filter((e) => e.trend === "regression").length;
-  const recentPRCount = exerciseProgress.filter(
+  const recentPRCount = internalProgress.filter(
     (e) => e.sessionsTracked >= 2 && e.lastWeight >= e.personalRecord,
   ).length;
   const progressionRatio = withTrend.length > 0 ? progressingCount / withTrend.length : 0;
 
   // ---- Mémoire à long terme : apprend des habitudes en repassant sur les
   // mêmes signaux (trend/pace/stagnantWeeks/fréquence) déjà calculés
-  // ci-dessus, pas un état séparé — voir en-tête de fichier. ----
-  const bestProgressingExercises = exerciseProgress
+  // ci-dessus, pas un état séparé — voir en-tête de fichier. Étape 4.6b :
+  // classement interne par `__key` (même clé `identityKey` que
+  // historyByExercise) pour retrouver weeklyRateByKey/lastSeenDateByKey,
+  // la sortie reste `name` (vrai nom). ----
+  const bestProgressingExercises = internalProgress
     .filter((e) => e.trend === "progression")
-    .map((e) => ({ name: e.name, key: normalize(e.name) }))
-    .sort((a, b) => (weeklyRateByKey.get(b.key) ?? 0) - (weeklyRateByKey.get(a.key) ?? 0))
+    .sort((a, b) => (weeklyRateByKey.get(b.__key) ?? 0) - (weeklyRateByKey.get(a.__key) ?? 0))
     .slice(0, MAX_MEMORY_ITEMS)
     .map((e) => e.name);
 
-  const chronicStagnationExercises = exerciseProgress
+  const chronicStagnationExercises = internalProgress
     .filter((e) => e.trend === "stagnation" && (e.stagnantWeeks ?? 0) >= CHRONIC_STAGNATION_WEEKS)
     .sort((a, b) => (b.stagnantWeeks ?? 0) - (a.stagnantWeeks ?? 0))
     .slice(0, MAX_MEMORY_ITEMS)
     .map((e) => e.name);
 
-  const abandonedExercises = exerciseProgress
+  const abandonedExercises = internalProgress
     .filter((e) => e.sessionsTracked >= 3)
     .map((e) => ({
       name: e.name,
-      gapWeeks: daysBetween(lastSeenDateByKey.get(normalize(e.name))!, mostRecentSessionDate) / 7,
+      gapWeeks: daysBetween(lastSeenDateByKey.get(e.__key)!, mostRecentSessionDate) / 7,
     }))
     .filter((e) => e.gapWeeks >= ABANDONED_GAP_WEEKS)
     .sort((a, b) => b.gapWeeks - a.gapWeeks)
     .slice(0, MAX_MEMORY_ITEMS)
     .map((e) => e.name);
 
-  const mostFrequentExercises = exerciseProgress.slice(0, MAX_MEMORY_ITEMS).map((e) => e.name);
+  const mostFrequentExercises = internalProgress.slice(0, MAX_MEMORY_ITEMS).map((e) => e.name);
 
   // Variantes : exercices ciblant EXACTEMENT les mêmes muscles (le seul
   // regroupement fiable sans référentiel externe de "familles de mouvement")
@@ -560,8 +601,8 @@ export function inferSenseiAutoProfile(
     nouveau: 1,
     regression: 0,
   };
-  const byMuscleSignature = new Map<string, ExerciseProgress[]>();
-  for (const e of exerciseProgress) {
+  const byMuscleSignature = new Map<string, InternalProgress[]>();
+  for (const e of internalProgress) {
     if (e.muscles.length === 0) continue;
     const signature = [...e.muscles].sort().join(",");
     const group = byMuscleSignature.get(signature) ?? [];
@@ -630,7 +671,7 @@ export function inferSenseiAutoProfile(
   // sur ce muscle — union bornée, jamais un remplacement brutal du
   // programme (juste un signal de priorité "un peu plus" pour le prompt). ----
   const progressByMuscle = new Map<MuscleId, { progressing: number; total: number }>();
-  for (const e of exerciseProgress) {
+  for (const e of internalProgress) {
     if (e.trend === "nouveau") continue;
     for (const muscle of e.muscles) {
       const acc = progressByMuscle.get(muscle) ?? { progressing: 0, total: 0 };
@@ -730,14 +771,16 @@ export function inferSenseiAutoProfile(
   if (runLength >= 3) progressionCyclesCompleted += 1;
 
   // ---- Exercices jamais pratiqués mais pertinents : candidats du catalogue
-  // qui touchent des muscles négligés/sous-entraînés en priorité. ----
+  // qui touchent des muscles négligés/sous-entraînés en priorité. Étape 4.6b :
+  // comparaison par NOM normalisé assumée (trackedExerciseNames), voir
+  // en-tête de fichier — EXERCISE_CATALOG n'a pas d'identité migrable. ----
   const priorityMuscles = new Set(
     muscleVolume
       .filter((m) => m.status === "neglige" || m.status === "sous-entraine")
       .map((m) => m.muscle),
   );
   const neverDoneExercises: NeverDoneExercise[] = EXERCISE_CATALOG.filter(
-    (c) => !trackedExerciseKeys.has(normalize(c.name)),
+    (c) => !trackedExerciseNames.has(normalize(c.name)),
   )
     .map((c) => ({ name: c.name, muscles: exerciseToMuscles(c.name) }))
     .filter((c) => c.muscles.length > 0)
@@ -810,7 +853,13 @@ export function inferSenseiAutoProfile(
  *  demande explicite Nathan "basé uniquement sur les données réelles").
  *  Compare les noms d'exercices réellement retenus par l'IA aux signaux du
  *  profil pour ne citer que ce qui s'est vraiment produit. Bornée à 4
- *  raisons, chacune une phrase courte. */
+ *  raisons, chacune une phrase courte.
+ *
+ *  Comparaison par NOM normalisé assumée (pas identityKey) : l'IA renvoie du
+ *  texte libre (generatedExerciseNames) sans notion d'exercise_reference_id
+ *  — il n'existe rien de plus fiable à comparer ici, voir en-tête de
+ *  fichier / cortex-phase3-gouvernance (catégorie "traitements sémantiques
+ *  IA" explicitement acceptée par Nathan). */
 export function buildSenseiExplanation(
   profile: SenseiAutoProfile,
   generatedExerciseNames: ReadonlyArray<string>,
