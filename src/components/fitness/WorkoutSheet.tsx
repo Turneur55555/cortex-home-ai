@@ -11,8 +11,7 @@ import {
   type PickedExercise,
   type RecentExercise,
 } from "./ExercisePickerSheet";
-import { normalize } from "@/lib/fitness/exerciseCatalog";
-import { identityKey } from "@/lib/fitness/recentExercises";
+import { computeRecentExercises, identityKey } from "@/lib/fitness/recentExercises";
 import { resolveExerciseIdsByLabel } from "@/services/exerciseResolution";
 import { summarizeSets, type WorkingSet } from "@/lib/fitness/sets";
 import { formatTonnage } from "@/lib/fitness/strength";
@@ -79,29 +78,15 @@ export function WorkoutSheet({
   const [uploading, setUploading] = useState<number | null>(null);
   const [pickerIndex, setPickerIndex] = useState<number | null>(null);
 
-  // Derive recent exercises from cached workouts (most recent first, deduplicated)
-  const recentExercises = useMemo<RecentExercise[]>(() => {
-    if (!workouts) return [];
-    const seen = new Map<
-      string,
-      { name: string; lastSets: number | null; lastReps: number | null; lastWeight: number | null }
-    >();
-    for (const w of workouts) {
-      for (const ex of w.exercises ?? []) {
-        if (!ex.name.trim()) continue;
-        const key = normalize(ex.name);
-        if (!seen.has(key)) {
-          seen.set(key, {
-            name: ex.name,
-            lastSets: ex.sets ?? null,
-            lastReps: ex.reps ?? null,
-            lastWeight: ex.weight ?? null,
-          });
-        }
-      }
-    }
-    return Array.from(seen.values()).slice(0, 25);
-  }, [workouts]);
+  // Etape 4.6c (2026-07-13) : reutilise la logique partagee
+  // computeRecentExercises (identite par exercise_reference_id en
+  // priorite, repli nom documente) au lieu d'un dedoublonnage local par
+  // normalize(name) - meme fonction que ActiveWorkoutView/TemplateEditorSheet,
+  // evite une 2e implementation divergente de "exercices recents".
+  const recentExercises = useMemo<RecentExercise[]>(
+    () => computeRecentExercises(workouts, 25),
+    [workouts],
+  );
 
   const updateEx = (
     i: number,
@@ -375,7 +360,9 @@ export function WorkoutSheet({
               {exercises.map((ex, i) => {
                 const imgUrl = ex.image_path ? exImageUrls?.get(ex.image_path) : null;
                 const recent = ex.name
-                  ? recentExercises.find((r) => normalize(r.name) === normalize(ex.name))
+                  ? recentExercises.find(
+                      (r) => identityKey({ name: r.name }) === identityKey({ name: ex.name }),
+                    )
                   : null;
                 const hasHint = recent && (recent.lastSets || recent.lastReps || recent.lastWeight);
                 const summary = ex.detailed ? summarizeSets(toWorkingSets(ex.setRows)) : null;

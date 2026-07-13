@@ -1,7 +1,7 @@
 import { type FormEvent, useMemo, useState } from "react";
 import { Loader2, X } from "lucide-react";
 import { useWorkouts, useAddExerciseToWorkout } from "@/hooks/use-fitness";
-import { normalize } from "@/lib/fitness/exerciseCatalog";
+import { computeRecentExercises } from "@/lib/fitness/recentExercises";
 import {
   ExercisePickerSheet,
   type PickedExercise,
@@ -21,25 +21,15 @@ export function AddExerciseModal({
   const [picked, setPicked] = useState<PickedExercise | null>(null);
   const [form, setForm] = useState({ sets: "", reps: "", weight: "" });
 
-  const recentExercises = useMemo<RecentExercise[]>(() => {
-    if (!workouts) return [];
-    const seen = new Map<string, RecentExercise>();
-    for (const w of workouts) {
-      for (const ex of w.exercises ?? []) {
-        if (!ex.name.trim()) continue;
-        const key = normalize(ex.name);
-        if (!seen.has(key)) {
-          seen.set(key, {
-            name: ex.name,
-            lastSets: ex.sets ?? null,
-            lastReps: ex.reps ?? null,
-            lastWeight: ex.weight ?? null,
-          });
-        }
-      }
-    }
-    return Array.from(seen.values()).slice(0, 25);
-  }, [workouts]);
+  // Etape 4.6c (2026-07-13) : reutilise la logique partagee
+  // computeRecentExercises (identite par exercise_reference_id en
+  // priorite, repli nom documente) au lieu d'un dedoublonnage local par
+  // normalize(name) - meme fonction que ActiveWorkoutView/TemplateEditorSheet,
+  // evite une 2e implementation divergente de "exercices recents".
+  const recentExercises = useMemo<RecentExercise[]>(
+    () => computeRecentExercises(workouts, 25),
+    [workouts],
+  );
 
   const handlePick = (ex: PickedExercise) => {
     setPicked(ex);
