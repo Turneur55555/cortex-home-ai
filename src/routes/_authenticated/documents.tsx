@@ -292,7 +292,6 @@ function ResultCard({
   result: AnalysisResult;
   onDismiss: () => void;
 }) {
-  const items = result.extracted_items ?? [];
   const detected = doc.module as DocModule;
 
   return (
