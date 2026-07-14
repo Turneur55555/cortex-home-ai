@@ -121,6 +121,13 @@ export function SeancesTab() {
   const repeatLive = useCallback(
     (w: WorkoutRow) => {
       if (startFromTemplate.isPending) return;
+      // Étape 0.3 (U3, confirmation légère) : « Refaire en live » démarre
+      // immédiatement une séance active — une confirmation de minimis évite
+      // un déclenchement accidentel (double-tap, clic hâtif dans la liste
+      // repliée). Centralisé ici : couvre les deux points d'entrée (↻ de la
+      // liste repliée ci-dessous, et WorkoutCard.tsx dont le bouton/menu
+      // "Refaire" appelle ce même callback via onRepeatLive).
+      if (!window.confirm(`Refaire « ${w.name || "cette séance"} » en live ?`)) return;
       startFromTemplate.mutate({
         name: w.name,
         gym_location: (w as { gym_location?: string | null }).gym_location ?? null,
@@ -311,30 +318,43 @@ export function SeancesTab() {
             {!historyOpen && (
               <div className="px-5 pb-5">
                 <ul className="space-y-2">
-                  {recentWorkouts.map((w) => (
-                    <li
-                      key={w.id}
-                      className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.05] bg-white/[0.02] px-3 py-2.5"
-                    >
-                      <div className="flex min-w-0 items-center gap-3">
-                        <span className="w-9 shrink-0 text-center text-[10px] font-semibold uppercase tracking-wide text-primary">
-                          {weekdayLabel(w.date)}
-                        </span>
-                        <span className="truncate text-xs font-semibold text-white/90">
-                          {w.name || "Séance"}
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => repeatLive(w)}
-                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/5 text-muted-foreground transition-all active:scale-90 hover:bg-primary/15 hover:text-primary"
-                        title="Refaire cette séance"
-                        aria-label="Refaire cette séance"
+                  {recentWorkouts.map((w) => {
+                    // Étape 0.3 (U3) : "Refaire" (repeatLive) passe par
+                    // useStartWorkoutFromTemplate (use-fitness.ts), un
+                    // parcours muscu-only (exercises, pas de segments/
+                    // discipline) — même convention de détection que
+                    // ligne 355 ci-dessous (routage WorkoutCard vs carte
+                    // générique). Le bouton ↻ ne doit donc apparaître que
+                    // pour les séances muscu ; les autres disciplines
+                    // restent visibles dans la liste, simplement sans ↻.
+                    const isMuscu = ((w.discipline as DisciplineId | null) ?? "muscu") === "muscu";
+                    return (
+                      <li
+                        key={w.id}
+                        className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.05] bg-white/[0.02] px-3 py-2.5"
                       >
-                        <Repeat className="h-3.5 w-3.5" />
-                      </button>
-                    </li>
-                  ))}
+                        <div className="flex min-w-0 items-center gap-3">
+                          <span className="w-9 shrink-0 text-center text-[10px] font-semibold uppercase tracking-wide text-primary">
+                            {weekdayLabel(w.date)}
+                          </span>
+                          <span className="truncate text-xs font-semibold text-white/90">
+                            {w.name || "Séance"}
+                          </span>
+                        </div>
+                        {isMuscu && (
+                          <button
+                            type="button"
+                            onClick={() => repeatLive(w)}
+                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/5 text-muted-foreground transition-all active:scale-90 hover:bg-primary/15 hover:text-primary"
+                            title="Refaire cette séance"
+                            aria-label="Refaire cette séance"
+                          >
+                            <Repeat className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             )}
