@@ -417,7 +417,6 @@ function DocCard({ doc, onDelete }: { doc: Tables<"documents">; onDelete: () => 
 
       {/* ── Actions — toujours visibles ───────────────────────────────────── */}
       <div className="mt-3 flex flex-col gap-2 border-t border-border pt-3">
-        <TransferPanel items={extracted} defaultTarget={toTransferTarget(detected)} />
         <div className="flex justify-end">
           <Button
             type="button"
