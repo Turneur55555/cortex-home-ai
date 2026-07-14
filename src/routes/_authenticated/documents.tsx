@@ -60,9 +60,6 @@ const STAGE_LABELS: Record<UploadStage, string> = {
   error: "Erreur",
 };
 
-function toTransferTarget(module: DocModule): TransferTarget {
-  return module === "documents" ? "nutrition" : (module as TransferTarget);
-}
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
