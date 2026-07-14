@@ -6,7 +6,7 @@ import { exerciseToMuscles } from "@/lib/fitness/muscleMapping";
 import { resolveExerciseId } from "@/services/exerciseResolution";
 import { identityKey } from "@/lib/fitness/recentExercises";
 
-const PHOTOS_KEY = ["user-exercise-photos"] as const;
+const PHOTOS_KEY = ["fitness", "user-exercise-photos"] as const;
 
 // ── Read ──────────────────────────────────────────────────────────────────────
 
@@ -132,10 +132,13 @@ export function useUpsertExercisePhoto() {
       return path;
     },
     onSuccess: () => {
+      // Étape 0.2 : clés renommées sous le préfixe fitness (voir
+      // activeWorkoutGuard commentaire équivalent — use-fitness.ts /
+      // useExerciseImageUrls pour "exercise-image-urls").
       qc.invalidateQueries({ queryKey: PHOTOS_KEY });
-      qc.invalidateQueries({ queryKey: ["exercise-image-urls"] });
-      qc.invalidateQueries({ queryKey: ["workouts"] });
-      qc.invalidateQueries({ queryKey: ["active_workout"] });
+      qc.invalidateQueries({ queryKey: ["fitness", "exercise-image-urls"] });
+      qc.invalidateQueries({ queryKey: ["fitness", "workouts"] });
+      qc.invalidateQueries({ queryKey: ["fitness", "active_workout"] });
     },
     onError: (e: Error) => toast.error(`Erreur upload : ${e.message}`),
   });

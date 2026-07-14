@@ -47,7 +47,7 @@ interface StoredSegment {
 
 function useUserDisciplineSegmentInstances(discipline: DisciplineId, userId: string | undefined) {
   return useQuery({
-    queryKey: ["discipline_segment_instances_raw", discipline, userId],
+    queryKey: ["fitness", "discipline_segment_instances_raw", discipline, userId],
     enabled: !!userId,
     staleTime: 30_000,
     queryFn: async (): Promise<SegmentInstance[]> => {
@@ -125,7 +125,7 @@ export function useDisciplineSegmentHistory(
   const instances = useUserDisciplineSegmentInstances(discipline, user?.id);
 
   return useQuery({
-    queryKey: ["discipline_segment_history", discipline, key, user?.id],
+    queryKey: ["fitness", "discipline_segment_history", discipline, key, user?.id],
     enabled: key.length > 0 && !!user && !!instances.data,
     queryFn: async (): Promise<SegmentInstance[]> => {
       return selectInstancesForSegmentType(instances.data ?? [], key);

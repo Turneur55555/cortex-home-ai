@@ -10,8 +10,8 @@ export type DbCatalogRow = {
   created_at: string;
 };
 
-const CACHE_KEY = ["exercise-catalog"] as const;
-const FULL_CACHE_KEY = ["exercise-catalog-full"] as const;
+const CACHE_KEY = ["fitness", "exercise-catalog"] as const;
+const FULL_CACHE_KEY = ["fitness", "exercise-catalog-full"] as const;
 
 // ── Catalogue DB (pour le picker) ─────────────────────────────────────────────
 // Filtré sur discipline_id="muscu" : depuis Phase 3 (exercice-central),

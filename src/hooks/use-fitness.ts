@@ -6,6 +6,10 @@ import { localDateYMD } from "@/lib/dates";
 import type { DisciplineId, SessionSegment } from "@/lib/fitness/engines/types";
 import { resolveExerciseId, resolveExerciseIdsByLabel } from "@/services/exerciseResolution";
 import { identityKey } from "@/lib/fitness/recentExercises";
+import {
+  ACTIVE_WORKOUT_CONFLICT_MESSAGE,
+  isActiveWorkoutConflict,
+} from "@/lib/fitness/activeWorkoutGuard";
 
 // Phase 3 (exercice-central) — Étape 2, double écriture : résout/crée
 // exercise_reference_id en plus du libellé existant. Ne doit jamais
@@ -40,7 +44,7 @@ export {
 // ---------- Workouts ----------
 export function useWorkouts() {
   return useQuery({
-    queryKey: ["workouts"],
+    queryKey: ["fitness", "workouts"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("workouts")
@@ -202,7 +206,7 @@ export function useAddWorkout() {
     },
     onSuccess: () => {
       toast.success("Séance enregistrée");
-      qc.invalidateQueries({ queryKey: ["workouts"] });
+      qc.invalidateQueries({ queryKey: WORKOUTS_KEY });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -226,7 +230,7 @@ export function useDeleteWorkout() {
     },
     onSuccess: () => {
       toast.success("Séance supprimée");
-      qc.invalidateQueries({ queryKey: ["workouts"] });
+      qc.invalidateQueries({ queryKey: WORKOUTS_KEY });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -262,7 +266,7 @@ export function useUpdateWorkoutName() {
     },
     onSuccess: () => {
       toast.success("Nom modifié");
-      qc.invalidateQueries({ queryKey: ["workouts"] });
+      qc.invalidateQueries({ queryKey: WORKOUTS_KEY });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -285,8 +289,8 @@ type WorkoutsCache = Array<{
   [k: string]: unknown;
 }>;
 
-const WORKOUTS_KEY = ["workouts"] as const;
-const ACTIVE_KEY = ["active_workout"] as const;
+const WORKOUTS_KEY = ["fitness", "workouts"] as const;
+const ACTIVE_KEY = ["fitness", "active_workout"] as const;
 
 function patchWorkoutsCache(
   qc: ReturnType<typeof useQueryClient>,
@@ -557,6 +561,22 @@ export function useStartWorkout() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
+
+      // Étape 0.1 : garde manquante — seul point de démarrage qui n'en
+      // avait aucune (voir activeWorkoutGuard.ts). Check-then-insert, même
+      // convention que les 3 autres points de démarrage ; l'index unique
+      // `workouts_one_active_per_user` reste le garde-fou final (23505
+      // mappé ci-dessous).
+      const { data: existing, error: existingErr } = await supabase
+        .from("workouts")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("status", "active")
+        .limit(1)
+        .maybeSingle();
+      if (existingErr) throw existingErr;
+      if (existing) throw new Error(ACTIVE_WORKOUT_CONFLICT_MESSAGE);
+
       const today = localDateYMD();
       const { error } = await supabase.from("workouts").insert({
         user_id: user.id,
@@ -565,7 +585,10 @@ export function useStartWorkout() {
         gym_location,
         status: "active",
       });
-      if (error) throw error;
+      if (error) {
+        if (isActiveWorkoutConflict(error)) throw new Error(ACTIVE_WORKOUT_CONFLICT_MESSAGE);
+        throw error;
+      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ACTIVE_KEY });
@@ -614,8 +637,12 @@ export function useFinishWorkout() {
     onSuccess: (_d, workout) => {
       toast.success("Séance terminée 💪");
       logActivity("workout", `Séance terminée : ${workout.name}`, { workout_id: workout.id });
-      qc.invalidateQueries({ queryKey: ACTIVE_KEY });
-      qc.invalidateQueries({ queryKey: WORKOUTS_KEY });
+      // Étape 0.2 (INV-4 fraîcheur) : invalidation par préfixe — couvre
+      // tout le domaine fitness (historiques, catalogue, photos...), pas
+      // seulement active/workouts. Sur-invalidation assumée et documentée
+      // (voir cortex-refonte-seances-phase0). Clés transverses hors
+      // domaine (user_activity/activity_streak) invalidées séparément.
+      qc.invalidateQueries({ queryKey: ["fitness"] });
       qc.invalidateQueries({ queryKey: ["user_activity"] });
       qc.invalidateQueries({ queryKey: ["activity_streak"] });
     },
@@ -634,8 +661,8 @@ export function useCancelWorkout() {
     },
     onSuccess: () => {
       toast.success("Séance annulée");
-      qc.invalidateQueries({ queryKey: ACTIVE_KEY });
-      qc.invalidateQueries({ queryKey: WORKOUTS_KEY });
+      // Étape 0.2 : idem useFinishWorkout — invalidation par préfixe fitness.
+      qc.invalidateQueries({ queryKey: ["fitness"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -687,7 +714,7 @@ export function useStartWorkoutFromTemplate() {
         .eq("status", "active")
         .limit(1)
         .maybeSingle();
-      if (existing) throw new Error("Une séance est déjà en cours.");
+      if (existing) throw new Error(ACTIVE_WORKOUT_CONFLICT_MESSAGE);
 
       const today = localDateYMD();
       const { data: workout, error } = await supabase
@@ -701,7 +728,10 @@ export function useStartWorkoutFromTemplate() {
         })
         .select("id")
         .single();
-      if (error) throw error;
+      if (error) {
+        if (isActiveWorkoutConflict(error)) throw new Error(ACTIVE_WORKOUT_CONFLICT_MESSAGE);
+        throw error;
+      }
 
       // Etape 4.6c (2026-07-13) : deduplique par identite (identityKey -
       // exercise_reference_id en priorite, repli nom normalise documente)
@@ -1004,7 +1034,7 @@ export function useDeleteExerciseSet() {
 export function useExerciseImageUrls(paths: Array<string | null | undefined>) {
   const key = paths.filter(Boolean).sort().join("|");
   return useQuery({
-    queryKey: ["exercise-image-urls", key],
+    queryKey: ["fitness", "exercise-image-urls", key],
     enabled: key.length > 0,
     staleTime: 1000 * 60 * 30,
     queryFn: async () => {

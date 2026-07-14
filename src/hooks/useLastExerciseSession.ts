@@ -56,7 +56,7 @@ export function useLastExerciseSessions(
   ).sort();
 
   const q = useQuery({
-    queryKey: ["last_exercise_sessions", keys.join("|"), excludeWorkoutId ?? ""],
+    queryKey: ["fitness", "last_exercise_sessions", keys.join("|"), excludeWorkoutId ?? ""],
     enabled: keys.length > 0,
     staleTime: 60 * 1000,
     queryFn: async (): Promise<Map<string, LastSession>> => {

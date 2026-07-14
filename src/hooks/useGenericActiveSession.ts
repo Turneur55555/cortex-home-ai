@@ -12,6 +12,10 @@ import type {
 } from "@/lib/fitness/engines/types";
 import type { Tables } from "@/integrations/supabase/types";
 import { resolveExerciseId } from "@/services/exerciseResolution";
+import {
+  ACTIVE_WORKOUT_CONFLICT_MESSAGE,
+  isActiveWorkoutConflict,
+} from "@/lib/fitness/activeWorkoutGuard";
 
 // Phase 3 (exercice-central) — Étape 2, double écriture : résout/crée
 // exercise_id en plus du libellé existant sur workout_segments. Ne doit
@@ -67,6 +71,13 @@ export type ActiveGenericSegment = {
   metricKey: string | null;
   completed: boolean;
   position: number;
+  /** Étape 0.4 (refonte Séances — Phase 0) : identité métier du segment
+   *  (résolue à l'écriture, voir resolveSegmentExerciseId ci-dessus),
+   *  relue depuis `workout_segments.exercise_id` pour être propagée dans
+   *  le snapshot de clôture (`metadata.segments[].exerciseId`, voir
+   *  useFinishGenericActiveWorkout) — contrat du moteur (LiveSegmentRow /
+   *  formatLiveSegment) inchangé (RA-1), le spread se fait après l'appel. */
+  exerciseId: string | null;
 };
 
 export type ActiveGenericWorkout = {
@@ -77,7 +88,7 @@ export type ActiveGenericWorkout = {
   segments: ActiveGenericSegment[];
 };
 
-const GENERIC_ACTIVE_KEY = ["active_generic_workout"] as const;
+const GENERIC_ACTIVE_KEY = ["fitness", "active_generic_workout"] as const;
 
 type SegmentRowDb = Tables<"workout_segments">;
 
@@ -89,6 +100,7 @@ function toActiveSegment(row: SegmentRowDb): ActiveGenericSegment {
     metricKey: row.metric_key,
     completed: row.completed,
     position: row.position,
+    exerciseId: row.exercise_id ?? null,
   };
 }
 
@@ -162,7 +174,7 @@ export function useStartGenericActiveWorkout() {
         .limit(1)
         .maybeSingle();
       if (existingErr) throw existingErr;
-      if (existing) throw new Error("Une séance est déjà en cours.");
+      if (existing) throw new Error(ACTIVE_WORKOUT_CONFLICT_MESSAGE);
 
       const today = localDateYMD();
       // metadata sans `segments` : les segments live vivent dans
@@ -195,7 +207,10 @@ export function useStartGenericActiveWorkout() {
         })
         .select("id")
         .single();
-      if (error) throw error;
+      if (error) {
+        if (isActiveWorkoutConflict(error)) throw new Error(ACTIVE_WORKOUT_CONFLICT_MESSAGE);
+        throw error;
+      }
 
       if (seedSegments.length > 0) {
         const seedExerciseIds = await Promise.all(
@@ -437,10 +452,19 @@ export function useFinishGenericActiveWorkout() {
 
       const formattedSegments =
         engine?.formatLiveSegment != null
-          ? workout.segments
+          ? // Étape 0.4 (F4) : `[...segments].sort(...)` — copie avant tri,
+            // `.sort()` mute le tableau en place et `workout.segments`
+            // référence potentiellement le cache React Query (ne jamais
+            // muter une donnée de cache directement).
+            [...workout.segments]
               .sort((a, b) => a.position - b.position)
-              .map((seg) =>
-                engine.formatLiveSegment!({
+              .map((seg) => ({
+                // Étape 0.4 : contrat du moteur inchangé (RA-1) —
+                // `formatLiveSegment` ne connaît toujours pas exerciseId ;
+                // on le propage après coup dans le snapshot de clôture
+                // (metadata.segments[].exerciseId), SessionSegment le
+                // supporte déjà en optionnel (voir engines/types.ts).
+                ...engine.formatLiveSegment!({
                   id: seg.id,
                   label: seg.label,
                   metrics: seg.metrics,
@@ -448,7 +472,8 @@ export function useFinishGenericActiveWorkout() {
                   completed: seg.completed,
                   position: seg.position,
                 }),
-              )
+                exerciseId: seg.exerciseId,
+              }))
           : [];
 
       const { error } = await supabase
@@ -464,8 +489,9 @@ export function useFinishGenericActiveWorkout() {
     onSuccess: (_d, workout) => {
       toast.success("Séance terminée 💪");
       logActivity("workout", `Séance terminée : ${workout.name}`, { workout_id: workout.id });
-      qc.invalidateQueries({ queryKey: GENERIC_ACTIVE_KEY });
-      qc.invalidateQueries({ queryKey: ["workouts"] });
+      // Étape 0.2 (INV-4 fraîcheur) : invalidation par préfixe fitness —
+      // voir commentaire équivalent dans use-fitness.ts (useFinishWorkout).
+      qc.invalidateQueries({ queryKey: ["fitness"] });
       qc.invalidateQueries({ queryKey: ["user_activity"] });
       qc.invalidateQueries({ queryKey: ["activity_streak"] });
     },
@@ -483,8 +509,7 @@ export function useCancelGenericActiveWorkout() {
     },
     onSuccess: () => {
       toast.success("Séance annulée");
-      qc.invalidateQueries({ queryKey: GENERIC_ACTIVE_KEY });
-      qc.invalidateQueries({ queryKey: ["workouts"] });
+      qc.invalidateQueries({ queryKey: ["fitness"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });

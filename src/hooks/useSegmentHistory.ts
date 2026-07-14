@@ -37,7 +37,7 @@ import { segmentTypeKey, type SegmentInstance } from "@/lib/fitness/segmentStats
  *  partagent ce fetch au lieu de le relancer par type. */
 export function useUserCourseSegmentInstances(userId: string | undefined) {
   return useQuery({
-    queryKey: ["course_segment_instances_raw", userId],
+    queryKey: ["fitness", "course_segment_instances_raw", userId],
     enabled: !!userId,
     staleTime: 30_000,
     queryFn: async (): Promise<SegmentInstance[]> => {
@@ -125,7 +125,7 @@ export function useSegmentHistory(rawLabel: string | null | undefined) {
   const instances = useUserCourseSegmentInstances(user?.id);
 
   return useQuery({
-    queryKey: ["segment_history", key, user?.id],
+    queryKey: ["fitness", "segment_history", key, user?.id],
     enabled: key.length > 0 && !!user && !!instances.data,
     queryFn: async (): Promise<SegmentInstance[]> => {
       return selectInstancesForSegmentType(instances.data ?? [], key);

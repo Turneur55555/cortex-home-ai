@@ -53,7 +53,7 @@ interface ExerciseInstanceRow {
  */
 function useUserExerciseInstances(userId: string | undefined) {
   return useQuery({
-    queryKey: ["exercise_instances_raw", userId],
+    queryKey: ["fitness", "exercise_instances_raw", userId],
     enabled: !!userId,
     staleTime: 30_000,
     queryFn: async (): Promise<ExerciseInstanceRow[]> => {
@@ -119,7 +119,7 @@ export function useExerciseSetHistory(exerciseName: string | null | undefined) {
   const instances = useUserExerciseInstances(user?.id);
 
   return useQuery({
-    queryKey: ["exercise_set_history", key, user?.id],
+    queryKey: ["fitness", "exercise_set_history", key, user?.id],
     enabled: key.length > 0 && !!user && !!instances.data,
     queryFn: async (): Promise<ExerciseSession[]> => {
       if (!exerciseName) return [];

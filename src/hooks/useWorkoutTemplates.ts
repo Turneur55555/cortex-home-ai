@@ -4,6 +4,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { localDateYMD } from "@/lib/dates";
 import type { TablesInsert } from "@/integrations/supabase/types";
 import { resolveExerciseIdsByLabel } from "@/services/exerciseResolution";
+import {
+  ACTIVE_WORKOUT_CONFLICT_MESSAGE,
+  isActiveWorkoutConflict,
+} from "@/lib/fitness/activeWorkoutGuard";
 
 // ============================================================
 // Modèles de séance ("Utiliser une séance sauvegardée") — module Nouvelle
@@ -28,8 +32,8 @@ import { resolveExerciseIdsByLabel } from "@/services/exerciseResolution";
 // services/exerciseResolution.ts, partagé avec use-fitness.ts).
 // ============================================================
 
-const TEMPLATES_KEY = ["workout_templates"];
-const ACTIVE_KEY = ["active_workout"];
+const TEMPLATES_KEY = ["fitness", "workout_templates"];
+const ACTIVE_KEY = ["fitness", "active_workout"];
 
 export interface WorkoutTemplateExerciseRow {
   id: string;
@@ -272,7 +276,7 @@ export function useStartWorkoutFromSavedTemplate() {
         .eq("status", "active")
         .limit(1)
         .maybeSingle();
-      if (existing) throw new Error("Une séance est déjà en cours.");
+      if (existing) throw new Error(ACTIVE_WORKOUT_CONFLICT_MESSAGE);
 
       const today = localDateYMD();
       const { data: workout, error } = await supabase
@@ -286,7 +290,10 @@ export function useStartWorkoutFromSavedTemplate() {
         })
         .select("id")
         .single();
-      if (error) throw error;
+      if (error) {
+        if (isActiveWorkoutConflict(error)) throw new Error(ACTIVE_WORKOUT_CONFLICT_MESSAGE);
+        throw error;
+      }
 
       const orderedExercises = [...template.exercises].sort((a, b) => a.position - b.position);
       if (orderedExercises.length === 0) return workout.id;
