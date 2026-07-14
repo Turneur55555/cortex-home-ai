@@ -43,12 +43,6 @@ export function ResultCard({
           ))}
         </ul>
       )}
-      <TransferPanel
-        items={items}
-        defaultTarget={toTransferTarget(detected)}
-        onSuccess={onDismiss}
-        className="mt-4"
-      />
       <div className="mt-3 flex justify-end">
         <Button
           type="button"
