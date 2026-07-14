@@ -361,7 +361,7 @@ function DocCard({ doc, onDelete }: { doc: Tables<"documents">; onDelete: () => 
     () => (Array.isArray(doc.alerts) ? (doc.alerts as string[]) : []),
     [doc.alerts],
   );
-  const extracted = useMemo(() => parseDocAnalysis(doc.analysis), [doc.analysis]);
+  
 
   const [open, setOpen] = useState(false);
   const detected = doc.module as DocModule;
