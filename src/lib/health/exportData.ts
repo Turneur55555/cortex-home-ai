@@ -27,7 +27,6 @@ const TABLES = [
   "weekly_reports",
   "workout_analyses",
   "reminders",
-  "items",
   "shopping_list",
 ] as const;
 

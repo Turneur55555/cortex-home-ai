@@ -2,9 +2,7 @@ import { useMemo, useState } from "react";
 import { AlertTriangle, Check, FileImage, Sparkles, Trash2 } from "lucide-react";
 import { MODULE_LABELS, type DocModule } from "@/hooks/use-documents";
 import type { Tables } from "@/integrations/supabase/types";
-import { TransferPanel } from "@/features/transfer/components/TransferPanel";
-import { parseDocAnalysis } from "@/features/transfer/utils/detectContent";
-import { toTransferTarget } from "./helpers";
+
 
 export function DocCard({
   doc,
@@ -21,7 +19,7 @@ export function DocCard({
     () => (Array.isArray(doc.alerts) ? (doc.alerts as string[]) : []),
     [doc.alerts],
   );
-  const extracted = useMemo(() => parseDocAnalysis(doc.analysis), [doc.analysis]);
+  
   const [open, setOpen] = useState(false);
   const detected = doc.module as DocModule;
   const isImageDoc = /\.(jpe?g|png|webp|heic|heif|jpg)$/i.test(doc.storage_path);
@@ -65,7 +63,7 @@ export function DocCard({
       )}
 
       <div className="mx-4 mb-3 flex flex-col gap-2">
-        <TransferPanel items={extracted} defaultTarget={toTransferTarget(detected)} />
+        
         <div className="flex justify-end">
           <button
             type="button"

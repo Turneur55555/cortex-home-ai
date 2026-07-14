@@ -34,9 +34,6 @@ import {
 } from "@/hooks/use-documents";
 import { useImageUpload, isImageFile, type UploadStage } from "@/hooks/useImageUpload";
 import type { Tables } from "@/integrations/supabase/types";
-import { TransferPanel } from "@/features/transfer/components/TransferPanel";
-import { parseDocAnalysis } from "@/features/transfer/utils/detectContent";
-import type { TransferTarget } from "@/features/transfer/types";
 
 export const Route = createFileRoute("/_authenticated/documents")({
   head: () => ({
@@ -63,9 +60,6 @@ const STAGE_LABELS: Record<UploadStage, string> = {
   error: "Erreur",
 };
 
-function toTransferTarget(module: DocModule): TransferTarget {
-  return module === "documents" ? "nutrition" : (module as TransferTarget);
-}
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -298,7 +292,6 @@ function ResultCard({
   result: AnalysisResult;
   onDismiss: () => void;
 }) {
-  const items = result.extracted_items ?? [];
   const detected = doc.module as DocModule;
 
   return (
@@ -338,13 +331,8 @@ function ResultCard({
         </ul>
       )}
 
-      {/* Transfer panel */}
-      <TransferPanel
-        items={items}
-        defaultTarget={toTransferTarget(detected)}
-        onSuccess={onDismiss}
-        className="mt-4"
-      />
+
+
 
       {/* Dismiss */}
       <div className="mt-3 flex justify-end">
@@ -373,7 +361,7 @@ function DocCard({ doc, onDelete }: { doc: Tables<"documents">; onDelete: () => 
     () => (Array.isArray(doc.alerts) ? (doc.alerts as string[]) : []),
     [doc.alerts],
   );
-  const extracted = useMemo(() => parseDocAnalysis(doc.analysis), [doc.analysis]);
+  
 
   const [open, setOpen] = useState(false);
   const detected = doc.module as DocModule;
@@ -429,7 +417,6 @@ function DocCard({ doc, onDelete }: { doc: Tables<"documents">; onDelete: () => 
 
       {/* ── Actions — toujours visibles ───────────────────────────────────── */}
       <div className="mt-3 flex flex-col gap-2 border-t border-border pt-3">
-        <TransferPanel items={extracted} defaultTarget={toTransferTarget(detected)} />
         <div className="flex justify-end">
           <Button
             type="button"

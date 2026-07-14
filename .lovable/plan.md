@@ -1,423 +1,107 @@
-# Système RPG de progression par exercice
 
-Je veux créer un système de progression entièrement nouveau pour iCortex, inspiré des meilleurs RPG et de la mythologie grecque.
+# Audit du module Maison
+
+## Constat
+
+Le module Maison a déjà été partiellement démantelé lors de sessions précédentes : aucune route (`/maison`, `/stocks`, `/pieces`...), aucun composant `HomeXxx`, aucun onglet dans `BottomNav`. Seuls des vestiges backend + une chaîne de code d'import (TransferPanel) subsistent.
+
+Note importante : le mot « Maison » apparaît aussi dans `src/lib/fitness/config.ts` et `strengthEngine.ts` comme **lieu d'entraînement** (`GYMS = ["Maison", "Keep Cool", ...]`). Ce **n'est pas** le module Maison → à conserver (appartient au module Séance, hors périmètre).
+
+## Vestiges à supprimer
+
+### 1. Backend Supabase
+- Table `home_categories` (+ policies, grants, trigger)
+- Table `home_subcategories` (+ policies, grants, trigger)
+- Table `items` (24 colonnes — stocks/inventaire Maison ; catégories `alimentation`, `pharmacie`, `habits`, `menager`)
+- Fonction `ensure_home_categories_for_me()`
+- Seed correspondant dans `handle_new_user()` s'il subsiste (à vérifier — la version actuelle ne seed que `users_profiles`)
+
+Sauvegarde SQL du schéma + dump CSV des 3 tables dans `/mnt/documents/maison-backup-<date>/` avant `DROP`.
+
+### 2. Code frontend (feature Transfer = ingestion Maison)
+Le seul consommateur restant des tables Maison côté client est la feature Transfer, qui écrit dans `items` depuis :
+- `src/features/transfer/**` (tout le dossier)
+- `src/routes/_authenticated/documents.tsx` — 3 usages de `TransferPanel`
+- `src/components/profile/pdf/ResultCard.tsx` — usage `TransferPanel`
+- `src/components/profile/pdf/DocCard.tsx` — usage `TransferPanel` + `parseDocAnalysis`
+- `src/components/profile/pdf/helpers.ts` — import de `TransferTarget`
+
+Plan : retirer les `TransferPanel` de ces composants (Documents affiche juste l'analyse OCR sans bouton « Ajouter au stock »), supprimer `src/features/transfer/` entier, nettoyer `helpers.ts`.
+
+À vérifier avant suppression : que Documents/PDF conservent leur affichage d'analyse (texte, JSON) — seule la partie « transférer vers stocks » disparaît.
+
+### 3. Nettoyage cosmétique
+- `src/services/README.md` : ligne 40 mentionne `homeCategories.ts` (fichier déjà inexistant)
+- `src/components/BarcodeScannerSheet.tsx` : commentaires "Maison/stocks module deleted" (déjà nettoyé fonctionnellement, on peut retirer les commentaires morts)
+- `src/components/fitness/NutritionSheet.tsx` : idem
+- `src/hooks/useMealPlan.ts` : idem
+- `src/lib/health/exportData.ts` : retirer `"items"` de la liste des tables exportées
+
+### 4. Régénération auto
+- `src/integrations/supabase/types.ts` sera régénéré après migration (tables retirées)
+
+## Fichiers concernés
+
+**À supprimer (10 fichiers) :**
+```
+src/features/transfer/components/TransferPanel.tsx
+src/features/transfer/hooks/useTransfer.ts
+src/features/transfer/services/transferService.ts
+src/features/transfer/types/index.ts
+src/features/transfer/utils/detectContent.ts
+```
+
+**À modifier (~8 fichiers) :**
+```
+src/routes/_authenticated/documents.tsx        (retirer TransferPanel, imports)
+src/components/profile/pdf/ResultCard.tsx      (retirer TransferPanel)
+src/components/profile/pdf/DocCard.tsx         (retirer TransferPanel)
+src/components/profile/pdf/helpers.ts          (retirer TransferTarget)
+src/components/BarcodeScannerSheet.tsx         (nettoyer commentaires)
+src/components/fitness/NutritionSheet.tsx      (nettoyer commentaires)
+src/hooks/useMealPlan.ts                       (nettoyer commentaires)
+src/lib/health/exportData.ts                   (retirer "items")
+src/services/README.md                         (retirer ligne homeCategories)
+```
+
+**Migration Supabase (1 fichier) :**
+```
+supabase/migrations/<date>_drop_maison_module.sql
+  DROP FUNCTION public.ensure_home_categories_for_me();
+  DROP TABLE public.items CASCADE;
+  DROP TABLE public.home_subcategories CASCADE;
+  DROP TABLE public.home_categories CASCADE;
+```
+
+## Tables Supabase supprimées
+- `home_categories`
+- `home_subcategories`
+- `items`
+
+Aucune FK entrante depuis d'autres tables (à confirmer via `read_query` avant `DROP` — si une FK existe on utilisera `CASCADE` de façon contrôlée).
+
+## Edge Functions
+Aucune edge function n'est propre au module Maison (`chat` et `coach-workout` mentionnent « maison » comme contexte texte uniquement — pas de lecture des tables). Rien à supprimer.
+
+## Ordre d'exécution
+
+1. Backup SQL + CSV des 3 tables → `/mnt/documents/maison-backup-<date>/`
+2. Modifier le code frontend (retirer TransferPanel + imports, nettoyer commentaires)
+3. Vérifier build + typecheck sur le code frontend seul
+4. Créer la migration `DROP TABLE`
+5. Après approbation & exécution de la migration, `types.ts` est régénéré
+6. Dernier build/typecheck de contrôle
+
+## Contraintes respectées
+
+- **Aucun commit / merge** ne sera poussé — j'attends votre validation
+- **Modules Séance, Nutrition, Progression, Dashboard, Auth, Profils, RPG** : aucun fichier touché
+- **`fitness/config.ts` & `strengthEngine.ts`** : conservés tels quels (« Maison » = lieu d'entraînement, pas le module)
+- **Historique entraînements/nutrition** : intact
+- La feature Transfer alimentait exclusivement les tables Maison → suppression légitime
 
-L'objectif est de transformer chaque exercice en une véritable aventure où l'utilisateur progresse au fil des entraînements grâce à son travail, ses records et sa régularité.
+## Ce que je ferai ensuite (après votre GO)
 
-Le système doit être premium, motivant, évolutif et devenir une fonctionnalité emblématique de l'application.
+Étape par étape avec `lint` / `typecheck` / `build` entre chaque, et rapport final listant : fichiers supprimés, fichiers modifiés, tables droppées, résultats des tests.
 
----
-
-# Principe
-
-Chaque exercice possède sa propre progression indépendante.
-
-Exemples :
-
-- Développé couché → Titan II
-
-- Squat → Olympien I
-
-- Tractions → Héros IV
-
-- Curl incliné → Guerrier III
-
-Chaque exercice possède :
-
-- son niveau
-
-- son XP
-
-- ses records
-
-- son historique
-
-- ses statistiques
-
-- ses badges
-
-Aucune XP n'est partagée entre les exercices.
-
-Chaque mouvement raconte sa propre histoire.
-
----
-
-# Hiérarchie des rangs
-
-Créer les rangs suivants.
-
-## Mortel
-
-I
-
-II
-
-III
-
-IV
-
-V
-
-Couleurs :
-
-Pierre - Gris
-
----
-
-## Guerrier
-
-I
-
-II
-
-III
-
-IV
-
-V
-
-Couleurs :
-
-Bronze
-
----
-
-## Héros
-
-I
-
-II
-
-III
-
-IV
-
-V
-
-Couleurs :
-
-Argent
-
----
-
-## Titan
-
-I
-
-II
-
-III
-
-IV
-
-V
-
-Couleurs :
-
-Rouge profond
-
----
-
-## Olympien
-
-I
-
-II
-
-III
-
-IV
-
-V
-
-Couleurs :
-
-Bleu électrique et Or
-
----
-
-## Primordial
-
-I
-
-II
-
-III
-
-IV
-
-V
-
-Couleurs :
-
-Noir cosmique
-
-Violet
-
-Blanc lumineux
-
-Le rang Primordial représente le niveau ultime.
-
----
-
-# Calcul de l'XP
-
-L'XP doit récompenser la progression réelle.
-
-Prendre en compte :
-
-- augmentation du poids
-
-- augmentation des répétitions
-
-- augmentation du volume
-
-- amélioration du 1RM estimé
-
-- nouveaux records
-
-- régularité des entraînements
-
-- difficulté de l'exercice
-
-- progression par rapport aux séances précédentes
-
-Une séance identique rapporte très peu d'XP.
-
-Le système doit empêcher tout "farm" d'XP.
-
----
-
-# Difficulté des exercices
-
-Chaque exercice possède un coefficient.
-
-Exemple :
-
-Isolation → ×1
-
-Machines → ×1.1
-
-Machines convergentes → ×1.2
-
-Polyarticulaires → ×1.4
-
-Tractions → ×1.6
-
-Développé couché → ×1.6
-
-Squat → ×1.8
-
-Soulevé de terre → ×2
-
----
-
-# Carte de progression
-
-Chaque exercice affiche une carte premium contenant :
-
-- Badge du rang
-
-- Nom du rang
-
-- Niveau
-
-- Barre de progression animée
-
-- Pourcentage
-
-- XP actuelle
-
-- XP restante
-
-Sous la barre, afficher dynamiquement plusieurs objectifs permettant d'atteindre le niveau suivant.
-
-Exemple :
-
-Titan III
-
-██████████░░░░░░ 68 %
-
-Pour atteindre Titan IV :
-
-• +2 répétitions à 135 kg
-
-ou
-
-• 137,5 kg × 8
-
-ou
-
-• Nouveau record de volume
-
-L'utilisateur doit toujours savoir quoi faire pour progresser.
-
----
-
-# Animations
-
-Lors d'un passage de niveau :
-
-- vibration
-
-- barre qui se remplit
-
-- halo lumineux
-
-- particules
-
-- animation du badge
-
-- son discret
-
-- pluie de confettis légère
-
-Afficher :
-
-"Félicitations !
-
-Vous êtes devenu Olympien II"
-
-L'animation doit durer environ deux secondes.
-
----
-
-# Badges
-
-Chaque rang possède :
-
-- un emblème unique
-
-- une bordure unique
-
-- une palette de couleurs dédiée
-
-- des effets lumineux
-
-- une animation spécifique
-
-L'inspiration doit venir de la mythologie grecque moderne.
-
-Utiliser :
-
-- couronnes de laurier
-
-- colonnes antiques
-
-- éclairs
-
-- flammes
-
-- ailes
-
-- boucliers
-
-- casques
-
-- lances
-
-- marbre
-
-- bronze
-
-- or
-
-- obsidienne
-
-Le rendu doit être digne d'un jeu AAA.
-
----
-
-# Historique
-
-Créer une timeline retraçant tous les niveaux obtenus pour chaque exercice.
-
-Exemple :
-
-Mortel III
-
-↓
-
-Guerrier II
-
-↓
-
-Héros V
-
-↓
-
-Titan III
-
-↓
-
-Olympien I
-
----
-
-# Statistiques
-
-Ajouter :
-
-- exercice le plus avancé
-
-- moyenne des niveaux
-
-- XP totale
-
-- niveaux gagnés
-
-- progression hebdomadaire
-
-- progression mensuelle
-
-- nombre de records battus
-
-- meilleur exercice
-
----
-
-# Architecture technique
-
-Créer un système entièrement configurable.
-
-Chaque rang est défini dans une configuration contenant :
-
-- nom
-
-- couleur
-
-- icône
-
-- animation
-
-- seuil d'XP
-
-- effets visuels
-
-Le calcul de l'XP doit être centralisé dans un service unique.
-
-Aucune valeur ne doit être codée en dur.
-
-Le système doit être facilement extensible.
-
----
-
-# Expérience utilisateur
-
-Je veux que cette fonctionnalité donne l'impression de jouer à un RPG.
-
-À chaque séance, l'utilisateur doit avoir envie de :
-
-- battre un record
-
-- gagner de l'XP
-
-- monter de niveau
-
-- débloquer un nouveau badge
-
-- faire progresser chacun de ses exercices
-
-L'expérience doit être fluide, moderne, premium et extrêmement gratifiante.
-
-Cette fonctionnalité doit devenir l'un des éléments les plus différenciants d'iCortex.
+**Validez-vous ce plan ?**
