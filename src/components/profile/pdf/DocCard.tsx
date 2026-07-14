@@ -19,7 +19,7 @@ export function DocCard({
     () => (Array.isArray(doc.alerts) ? (doc.alerts as string[]) : []),
     [doc.alerts],
   );
-  const extracted = useMemo(() => parseDocAnalysis(doc.analysis), [doc.analysis]);
+  
   const [open, setOpen] = useState(false);
   const detected = doc.module as DocModule;
   const isImageDoc = /\.(jpe?g|png|webp|heic|heif|jpg)$/i.test(doc.storage_path);
