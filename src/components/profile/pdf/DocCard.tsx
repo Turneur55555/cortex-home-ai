@@ -2,9 +2,7 @@ import { useMemo, useState } from "react";
 import { AlertTriangle, Check, FileImage, Sparkles, Trash2 } from "lucide-react";
 import { MODULE_LABELS, type DocModule } from "@/hooks/use-documents";
 import type { Tables } from "@/integrations/supabase/types";
-import { TransferPanel } from "@/features/transfer/components/TransferPanel";
-import { parseDocAnalysis } from "@/features/transfer/utils/detectContent";
-import { toTransferTarget } from "./helpers";
+
 
 export function DocCard({
   doc,
