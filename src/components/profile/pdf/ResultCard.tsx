@@ -2,8 +2,6 @@ import { AlertTriangle, Check, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MODULE_LABELS, type AnalysisResult, type DocModule } from "@/hooks/use-documents";
 import type { Tables } from "@/integrations/supabase/types";
-import { TransferPanel } from "@/features/transfer/components/TransferPanel";
-import { toTransferTarget } from "./helpers";
 
 export function ResultCard({
   doc,
@@ -14,7 +12,6 @@ export function ResultCard({
   result: AnalysisResult;
   onDismiss: () => void;
 }) {
-  const items = result.extracted_items ?? [];
   const detected = doc.module as DocModule;
 
   return (
