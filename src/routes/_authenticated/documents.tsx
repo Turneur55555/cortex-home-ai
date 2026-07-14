@@ -34,9 +34,6 @@ import {
 } from "@/hooks/use-documents";
 import { useImageUpload, isImageFile, type UploadStage } from "@/hooks/useImageUpload";
 import type { Tables } from "@/integrations/supabase/types";
-import { TransferPanel } from "@/features/transfer/components/TransferPanel";
-import { parseDocAnalysis } from "@/features/transfer/utils/detectContent";
-import type { TransferTarget } from "@/features/transfer/types";
 
 export const Route = createFileRoute("/_authenticated/documents")({
   head: () => ({
