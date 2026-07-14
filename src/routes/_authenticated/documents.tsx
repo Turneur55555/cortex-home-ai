@@ -332,13 +332,8 @@ function ResultCard({
         </ul>
       )}
 
-      {/* Transfer panel */}
-      <TransferPanel
-        items={items}
-        defaultTarget={toTransferTarget(detected)}
-        onSuccess={onDismiss}
-        className="mt-4"
-      />
+
+
 
       {/* Dismiss */}
       <div className="mt-3 flex justify-end">
