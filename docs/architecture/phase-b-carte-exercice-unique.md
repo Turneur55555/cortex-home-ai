@@ -224,3 +224,174 @@ dégradation explicite et déjà actée (§6.4), pas une régression.
   reste global et partagé — cohérent avec le choix déjà fait pour `distance_m` (partagé Course/HYROX/
   Cardio). Si une vraie divergence d'importance apparaît un jour entre disciplines pour la MÊME clé,
   ce sera une vraie décision produit à soumettre, pas une extension mécanique.
+
+## 8. Addendum 3 — audit exhaustif de convergence UX (2026-07-15, retour de Nathan)
+
+Nouveau recadrage de Nathan après l'addendum 2 : la densité de l'historique est corrigée, mais ce
+n'était qu'UN symptôme. Demande explicite d'un audit complet, discipline par discipline, du
+parcours entier (création → séance active → clôture → historique → fiche exercice), sur 24
+dimensions, en comparant systématiquement à la Musculation (modèle de référence). Toute différence
+qui n'est pas une différence de CAPACITÉ (métriques, champs, calculs) mais une différence de
+FINITION (vide, pauvre, plus simple, moins abouti) est un écart à corriger — "spécifique à cette
+discipline" n'est plus une réponse acceptable en soi, seulement un fait à documenter puis à
+traiter.
+
+### 8.1 Méthode
+
+Audit fait par lecture de code complète (moteurs, vues de séance active, cartes d'historique,
+fiches exercice, dialogues de confirmation, système de records) ET par test live réel : les 3
+disciplines sans aucune séance en base (Course, HYROX, Autre — vérifié par requête SQL directe,
+`select discipline, count(*) from workouts where status='completed' group by discipline` ne
+retournait que muscu/guided/cardio) ont chacune reçu une séance de test générée via Sensei,
+terminée (jamais annulée), pour pouvoir auditer réellement leur historique — pas seulement
+supposer son comportement depuis le code. Musculation/Cardio/Guidé avaient déjà des séances
+réelles, réutilisées telles quelles.
+
+### 8.2 Régression critique découverte pendant l'audit — corrigée immédiatement
+
+`StatTileRow` (addendum 2) rend les colonnes en largeur égale stricte (`repeat(n, 1fr)`) sans
+plancher de largeur ni retour à la ligne du texte. Sur une séance Course à 5 tuiles avec des
+valeurs longues ("Type de séance : Endurance fondamentale", "Récupération estimée : ~24h avant une
+séance intense"), le texte déborde visuellement d'une tuile sur l'autre (mots non coupables,
+`StatTile` sans `overflow-hidden`/`break-words`) — capture live sur `cortex-home-ai.lovable.app`,
+tuiles "Endurance", "1 min", "fondamentale" se chevauchent littéralement. HYROX (3 tuiles) et Autre
+(4 tuiles) n'ont pas ce problème — la cause est la combinaine "beaucoup de colonnes + texte long",
+pas la logique de comptage en elle-même. **Corrigé dans ce même lot** (voir 8.5) : `StatTile`
+tronque/coupe proprement, `StatTileRow` plafonne à 4 colonnes par ligne (au-delà, une 2e ligne).
+
+### 8.3 Constats par dimension (Musculation = référence)
+
+Format : dimension — état pour les 5 autres disciplines par rapport à la musculation.
+
+- **Structure de la carte (historique)** — convergente (GenericHistoryCard = même gabarit que
+  WorkoutCard : header, titre éditable, tuiles, liste d'exercices, menu). OK pour les 5.
+- **Densité visuelle (répétitions)** — convergente depuis l'addendum 2 (tableau dense quand des
+  métriques primary existent : Cardio, Course, HYROX). Guidé et Autre n'ont pas de métrique
+  numérique primary déclarée → restent en rendu "puces" — dégradation ASSUMÉE, pas un oubli
+  (Guidé/Autre sont majoritairement narratifs, pas quantitatifs), mais reste à re-questionner si
+  Nathan considère que même ce cas doit converger visuellement (voir 8.6).
+- **Hiérarchie visuelle** — convergente (même structure header > tuiles > liste).
+- **Répétitions / Exercices (vocabulaire)** — convergent (Phase A + addendum 1 : "exercice"/
+  "répétition" partout, plus de "segment" visible).
+- **Ajout d'exercice (séance active)** — convergent depuis Phase B core (même `ExercisePickerSheet`
+  pour les 6 disciplines) **sauf** : le bouton "Ouvrir le catalogue" (icône livre, bibliothèque de
+  référence complète) existe uniquement dans `ActiveWorkoutView` (muscu). Les 5 autres n'ont que le
+  bouton picker seul — `DisciplineExerciseLibrarySheet` existe déjà, paramétré par discipline, non
+  câblé dans `ActiveGenericSessionView`. Écart mécanique, peu coûteux (8.5).
+- **Ajout de répétition (séance active)** — convergent (même bouton "Ajouter une répétition"/série
+  selon le kind, vérifié live sur Course/HYROX/Autre).
+- **Édition (séance active)** — convergente pour les champs de métriques (mêmes primitives). Édition
+  d'une répétition déjà validée depuis la FICHE EXERCICE (pas juste la carte active) : possible en
+  musculation (`ExerciseAnalysisSheet` a des icônes Pencil/Trash2), absente de `SegmentAnalysisSheet`
+  (aucune icône d'édition/suppression). Écart réel, non corrigé dans ce lot (surface plus large,
+  voir 8.6).
+- **Suppression** — convergente au niveau séance (`WorkoutDeleteDialog`, même dialogue) et exercice
+  en séance active (icône corbeille sur la carte, les 6 disciplines). Pas convergente au niveau
+  "une répétition passée depuis l'historique" (voir point Édition ci-dessus).
+- **Reprise ("Refaire en live")** — convergente mécaniquement depuis l'addendum 1
+  (`useStartGenericActiveWorkout`, même garde-fous que muscu) ; clic non re-testable dans cette
+  session (boîte `window.confirm()` native bloque l'outillage de test Chrome utilisé — limite de
+  l'outil, pas du code, déjà signalée).
+- **Progression (tendance meilleure/dernière valeur)** — partiellement convergente : le calcul
+  existe pour les 6 (`computeSegmentStats`/`buildStat` avec tendance up/down/flat, ou l'équivalent
+  musculation `progression.ts`), mais son AFFICHAGE dans la fiche exercice est moins riche côté
+  générique (pas de graphique de tendance équivalent pour toutes les métriques simultanément —
+  `SegmentAnalysisSheet` trace UNE métrique à la fois).
+- **Historique (carte)** — convergent depuis addendum 1+2.
+- **Fiche exercice** — partiellement convergente : mêmes primitives visuelles
+  (`SectionCard`/`StatTileMini`/`TrendIcon`), mais 3 sections absentes côté générique et
+  explicitement documentées comme telles dans le code (`SegmentAnalysisSheet.tsx`, commentaire
+  d'en-tête) : pas de section Rang/Maîtrise (système scopé musculation, non dupliqué), pas de
+  recommandation de surcharge progressive (algorithme non écrit pour les autres disciplines,
+  emplacement "Bientôt disponible" honnête), pas d'analyse IA à la demande
+  (`useDeepExerciseAI`/`useExerciseAnalysis` n'existent que côté muscu). Ce sont les 3 plus gros
+  écarts de "finition perçue" restants (voir 8.6).
+- **Graphiques** — convergents dans leur PRINCIPE (recharts `LineChart`, mêmes composants visuels)
+  mais moins nombreux côté générique (1 métrique à la fois vs plusieurs vues muscu).
+- **Records / PR** — écart réel et significatif. Musculation : badge "Nouveau record !"/"Record X
+  kg" (Trophy) affiché EN SÉANCE ACTIVE (carte exercice) ET dans l'historique, alimenté par
+  `computePRs`. Les 5 autres disciplines : aucun badge équivalent, ni en séance active ni dans
+  l'historique — seule la ligne méta "Distance : 2.00 km" (addendum 2) montre une valeur, sans
+  jamais la qualifier de record. Partiellement mécanique à corriger (8.5 : badge basé sur
+  `computeSegmentStats`, sans toucher au moteur de Rang musculation) ; la fusion complète avec le
+  système de Rang/Maîtrise reste hors scope (invariant 9.9, déjà acté deux fois).
+- **Badges (discipline)** — convergent (`DisciplineBadge`, une icône+couleur par discipline, déjà
+  généralisé Phase 7 antérieure).
+- **Animations / transitions** — convergentes par construction : accordéons (`maxHeight`/`opacity`
+  transition identique), confirmations (mêmes classes `animate-in`/`fade-in` là où elles existent).
+  **Exception majeure** : l'écran de clôture de séance (voir Résumé de séance ci-dessous) — muscu a
+  une animation confetti + slide-in, les 5 autres n'ont AUCUNE animation à la clôture (juste un
+  toast). C'est la plus grosse différence d'"impression de produit fini" trouvée dans cet audit.
+- **Boutons** — convergents (mêmes composants `ExerciseCardPillButton`/`ExerciseCardIconButton`,
+  mêmes tailles/couleurs/`active:scale-90`).
+- **Confirmations** — convergentes dans leur FORME (mêmes dialogues custom `fixed inset-0`) sauf un
+  écran entier manquant (voir Résumé de séance).
+- **Résumé de séance (clôture)** — ÉCART MAJEUR confirmé en live. Musculation :
+  `WorkoutSummaryOverlay` — confetti animé, emoji, 4 tuiles de stats (Durée/Séries/Tonnage/Meilleur
+  1RM), bouton "Clore 🏆". Les 5 autres disciplines : `window.confirm`-style "Terminer la séance ?
+  X/Y réalisé(s)" (aucune tuile, aucune animation), puis un simple toast "Séance terminée 💪" au
+  retour à la liste — testé en live sur Course/HYROX/Autre, confirmé identique à la lecture de code
+  (`ActiveGenericSessionView` n'a pas d'équivalent de `WorkoutSummaryOverlay`). C'est l'écart le
+  plus visible et le plus simple à corriger mécaniquement (8.5).
+- **Statistiques (post-séance, analyse IA)** — ÉCART MAJEUR. `PostWorkoutAnalysisSheet` (analyse IA
+  complète : muscles sollicités, récupération, PRs, recommandation séance suivante) ne se déclenche
+  QUE pour muscu (`ActiveGenericSessionView` appelle `onFinished={() => {}}`, un no-op — vérifié
+  dans `SeancesTab.tsx`). Aucune analyse post-séance, aucune forme, pour les 5 autres disciplines.
+  Écart réel mais PAS mécanique : le contenu de l'analyse actuelle est structurellement lié au
+  vocabulaire musculation (muscles, tonnage, 1RM) — une version générique nécessite soit une
+  nouvelle fonction Edge (nouveau prompt IA basé sur `SessionView`), soit une décision de portée
+  (quel niveau de richesse pour un premier jet). Non traité dans ce lot, proposé comme prochaine
+  étape (8.6).
+- **Cohérence du vocabulaire** — convergente (Phase A + addendum 1, "exercice"/"répétition"
+  partout, plus aucune trace de "segment" en UI).
+- **Responsive** — convergent par construction (mêmes classes Tailwind, mêmes breakpoints, aucun
+  style discipline-spécifique trouvé dans le code qui casserait le responsive) ; non re-testé sur
+  un vrai petit viewport dans cette session (limite de temps, risque jugé faible car code partagé).
+
+### 8.4 Tableau de synthèse
+
+| Dimension | Muscu (référence) | Cardio | Course | HYROX | Guidé | Autre |
+|---|---|---|---|---|---|---|
+| Structure carte historique | ref | OK | OK | OK | OK | OK |
+| Densité répétitions | ref | OK | OK | OK | dégradé (assumé) | dégradé (assumé) |
+| Ajout exercice (picker) | ref | OK | OK | OK | OK | OK |
+| Ajout exercice (catalogue) | ref | **écart** | **écart** | **écart** | **écart** | **écart** |
+| Édition répétition passée | ref | **écart** | **écart** | **écart** | **écart** | **écart** |
+| Reprise ("Refaire en live") | ref | OK (méca.) | OK (méca.) | OK (méca.) | OK (méca.) | OK (méca.) |
+| Records / PR (badge) | ref | **écart** | **écart** | **écart** | **écart** | **écart** |
+| Résumé de séance (clôture) | ref | **écart majeur** | **écart majeur** | **écart majeur** | **écart majeur** | **écart majeur** |
+| Analyse IA post-séance | ref | **écart majeur** | **écart majeur** | **écart majeur** | **écart majeur** | **écart majeur** |
+| Fiche exercice (Rang/surcharge/IA) | ref | dégradé (documenté) | dégradé (documenté) | dégradé (documenté) | dégradé (documenté) | dégradé (documenté) |
+| Vocabulaire / Animations / Boutons / Badges discipline | ref | OK | OK | OK | OK | OK |
+
+### 8.5 Corrections mécaniques engagées dans ce lot (sans décision produit nouvelle)
+
+1. Fix régression `StatTileRow`/`StatTile` (8.2).
+2. Résumé de séance générique (`GenericWorkoutSummaryOverlay` ou équivalent) — mêmes stats tiles
+   (Durée/Exos/Réalisés + 1 métrique-phare si disponible), même animation confetti, réutilise
+   `WorkoutSummaryOverlay` comme référence visuelle stricte.
+3. Badge "Record" générique sur la carte exercice (séance active + historique), basé sur
+   `computeSegmentStats`/`bestMetricValue` déjà existants — jamais touché au moteur de Rang muscu.
+4. Bouton "Ouvrir le catalogue" dans `ActiveGenericSessionView` (le sheet existe déjà, juste pas
+   câblé).
+5. Badge streak dans le header de séance active générique (`useFitnessStreak` déjà générique,
+   simplement pas appelé côté `ActiveGenericSessionView`).
+
+### 8.6 Explicitement hors scope de ce lot (documenté, pas un motif d'arrêt)
+
+- **Analyse IA post-séance générique** : nécessite une nouvelle fonction Edge (prompt IA sur
+  `SessionView` au lieu de `exercises`/`exercise_sets`) — changement backend, pas seulement
+  présentationnel. Proposé comme prochaine étape dédiée.
+- **Édition/suppression d'une répétition passée depuis la fiche exercice générique** : mécanisme
+  d'écriture rétroactive sur `workouts.metadata.segments`/`workout_segments` à concevoir (même
+  famille de limite déjà documentée en addendum 1, §6.4, pour "ajouter un exercice rétroactif").
+- **Recommandation de surcharge progressive générique** et **section Rang/Maîtrise générique** :
+  déjà explicitement actées hors scope à deux reprises (code `SegmentAnalysisSheet.tsx`, addendum 1
+  §6.4) — nécessitent soit d'étendre le moteur de Rang existant (interdit sans validation, invariant
+  9.9 d'`exercise-central-architecture.md`), soit d'en concevoir un nouveau. Vraie décision produit,
+  pas une extension mécanique.
+- **Densité "Guidé"/"Autre" sans métrique primary** : ces deux disciplines sont structurellement
+  narratives (texte libre ou groupes musculaires sollicités), pas quantitatives — le tableau dense
+  n'a pas de sens sans données numériques. Le rendu "puces" actuel reste correct FONCTIONNELLEMENT ;
+  reste à évaluer si Nathan veut malgré tout un habillage visuel plus riche que de simples puces pour
+  ces deux cas (question ouverte, pas encore tranchée).
