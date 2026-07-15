@@ -132,7 +132,7 @@ function RlsStatusPage() {
   const overallOk = latest?.status === "completed" && latest?.conclusion === "success";
 
   return (
-    <div className="mx-auto w-full max-w-[430px] space-y-4 px-4 pb-24 pt-6">
+    <div className="mx-auto w-full max-w-[430px] space-y-4 px-4 pb-24 pt-[max(1.75rem,calc(env(safe-area-inset-top)+0.5rem))]">
       <header className="space-y-1">
         <div className="flex items-center gap-2">
           <ShieldCheck className="h-5 w-5 text-primary" />
