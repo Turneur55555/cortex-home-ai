@@ -1,7 +1,16 @@
 # Mémoire projet — cortex-home-ai
 
 ## Dernière mise à jour
-2026-07-11
+2026-07-15
+
+## Phase C — conception convergence UX finale (2026-07-15, branche `claude/exercise-central-governance-0qvidl`, AUCUN CODE)
+Document de conception unique demandé par Nathan (gouvernance : pas de nouvelle architecture, Musculation = référence produit, équivalence jamais identité, partir de l'expérience jamais des composants) : `docs/architecture/phase-c-convergence-ux-finale.md`. Contenu : problèmes P0→P3, 8 maquettes conceptuelles décrites, plan en 6 lots (C0-C6), ordre exact des 19 développements, 2 portes de décision (schéma modèles multi-disciplines ; Maîtrise par exercice). **Le développement ne commence qu'après validation de ce document — rien n'a été implémenté dans cette session.**
+- Constats nouveaux vérifiés dans le code pendant l'audit (au-delà de la §8.6 Phase B) :
+  - **P0-1 (bug)** : `ActiveGenericSessionView.tsx` monte `SegmentAnalysisSheet` SANS prop `discipline` → défaut "course" → la fiche exercice ouverte depuis une séance active Cardio/HYROX/Guidé/Autre lit le mauvais historique ("Pas encore réalisé" mensonger). `GenericHistoryExerciseList`/`DisciplineExerciseLibrarySheet` la transmettent, eux, correctement.
+  - **P1-2** : la branche `GenericExerciseCard` d'`ActiveExerciseCard.tsx` charge déjà `useDisciplineSegmentHistory` (pour le badge Record) mais n'affiche aucun repère "dernière fois" ni reprise de valeurs — écart de finition pur vs muscu (lastSession/suggestion/restauration).
+  - **P1-5** : `GenericSessionReviewSheet` est orphelin depuis la Phase A (tous les moteurs ont `supportsLiveTracking=true` → `handleCoachResult` ne route plus jamais vers `setGenericDraft`) — réutilisable tel quel pour "consigner une séance passée" générique.
+  - `window.confirm()` natif utilisé par les DEUX chemins "Refaire en live" (`SeancesTab.repeatLive` muscu + `GenericHistoryCard.handleRepeatLive`) — hors charte, avait bloqué les onglets de test Phase B.
+  - Commentaire périmé probable : "récents Course non couverts" (`recentSegmentLabels.ts`) — depuis la Phase A la Course fige aussi `metadata.segments` à la clôture (à re-vérifier au lot C4).
 
 ## Nutrition → refonte de la zone haute : cercle remplacé par une barre de progression (2026-07-11)
 Refonte UI strictement locale à `src/routes/_authenticated/fitness/NutritionTab.tsx` — aucune logique métier, hook, requête Supabase ou Sheet modifiée.
