@@ -1,28 +1,42 @@
 // ============================================================
-// Carte d'historique générique — pour toute discipline dont
+// Carte d'historique — pour toute discipline dont
 // historyPresentation.cardVariant !== 'strength'. La musculation garde
-// WorkoutCard tel quel (intouché) ; cette carte sert HYROX, Course,
-// Cardio et Activités accompagnées sans qu'aucune de ces phases n'ait
-// à créer sa propre carte.
+// WorkoutCard tel quel (intouché) ; cette carte sert Cardio/HYROX/
+// Course/Guidé/Autre sans qu'aucune de ces disciplines n'ait à créer sa
+// propre carte.
 //
-// Même charte visuelle que WorkoutCard (surface, rayon, ombre) pour ne
-// pas introduire de rupture de cohérence dans l'historique.
+// ADDENDUM PHASE B (2026-07-15, retour de Nathan) : convergence complète
+// avec WorkoutCard — titre éditable dans le header (même mécanisme
+// générique useUpdateWorkoutName), grille de tuiles de stats (StatTile,
+// alimentée par Exos calculé + view.summaryStats déclarés par la
+// discipline — c'est la discipline qui injecte ses capacités dans la
+// même architecture, pas un module à part), liste d'exercices au même
+// gabarit visuel (GenericHistoryExerciseList, pendant direct de la
+// liste d'exercices de WorkoutCard), et "Refaire en live" ajouté au menu
+// (nouvelle capacité générique, voir docs/architecture/
+// phase-b-carte-exercice-unique.md section 6.3 — équivalent exact du
+// repeatLive musculation, mêmes garde-fous).
 // ============================================================
 
 import { useState } from "react";
+import { Clock, Layers, MoreVertical, Repeat, Sparkles, Trash2 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
-import { MoreVertical, Trash2 } from "lucide-react";
-import { toast } from "sonner";
-import { useDeleteWorkout } from "@/hooks/use-fitness";
+import { useDeleteWorkout, useUpdateWorkoutName } from "@/hooks/use-fitness";
+import { useStartGenericActiveWorkout } from "@/hooks/useGenericActiveSession";
 import { ENGINE_REGISTRY } from "@/lib/fitness/engines/registry";
-import { isReadyEngine, type DisciplineId } from "@/lib/fitness/engines/types";
+import {
+  isReadyEngine,
+  type DisciplineId,
+  type LiveSegmentSeed,
+} from "@/lib/fitness/engines/types";
 import { adaptWorkoutRow, type PersistedWorkoutRow } from "@/lib/fitness/engines/adaptRow";
+import { groupByExerciseLabel } from "@/lib/fitness/segmentStats";
 import { WorkoutDeleteDialog } from "@/components/fitness/WorkoutDeleteDialog";
-import { SessionSummaryCard } from "./SessionSummaryCard";
-import { SessionSegmentList } from "./SessionSegmentList";
+import { EditableText } from "@/components/fitness/EditableText";
+import { StatTile } from "@/components/fitness/StatTile";
+import { GenericHistoryExerciseList } from "./GenericHistoryExerciseList";
 import { DisciplineBadge } from "./DisciplineIcon";
-import { HISTORY_CONTENT_RENDERERS } from "./historyContentRenderers";
 
 export function GenericHistoryCard({
   workout,
@@ -32,6 +46,8 @@ export function GenericHistoryCard({
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const del = useDeleteWorkout();
+  const updateName = useUpdateWorkoutName();
+  const repeatLive = useStartGenericActiveWorkout();
 
   const entry = ENGINE_REGISTRY[workout.discipline as DisciplineId];
   const engine = entry && isReadyEngine(entry) ? entry : null;
@@ -43,6 +59,17 @@ export function GenericHistoryCard({
   const view = engine.toSessionView(draft);
   const dateLabel = format(parseISO(workout.date), "EEEE d MMMM • HH'h'mm", { locale: fr });
   const gymLocation = workout.gym_location || "Salle inconnue";
+  const exoCount = groupByExerciseLabel(view.segments).length;
+
+  const handleRepeatLive = () => {
+    if (repeatLive.isPending) return;
+    if (!window.confirm(`Refaire « ${workout.name || "cette séance"} » en live ?`)) return;
+    const seedSegments: LiveSegmentSeed[] = view.segments.map((seg) => ({
+      label: seg.label,
+      metrics: seg.metrics ?? {},
+    }));
+    repeatLive.mutate({ draft, seedSegments });
+  };
 
   return (
     <li className="overflow-hidden rounded-3xl border border-white/5 bg-gradient-to-b from-card/95 to-card/70 shadow-[0_10px_40px_-15px_rgba(0,0,0,0.6)] backdrop-blur-xl">
@@ -66,8 +93,23 @@ export function GenericHistoryCard({
                 accentClassName={engine.accentClassName}
               />
             </p>
+            <EditableText
+              value={workout.name}
+              onSave={(name) => updateName.mutate({ id: workout.id, name })}
+              className="mt-1 text-xl font-bold leading-tight tracking-tight"
+            />
           </div>
           <div className="relative flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              onClick={handleRepeatLive}
+              disabled={repeatLive.isPending}
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-white/5 text-muted-foreground transition-all active:scale-90 hover:bg-primary/15 hover:text-primary disabled:opacity-50"
+              title="Refaire cette séance (live)"
+              aria-label="Refaire cette séance (live)"
+            >
+              <Repeat className="h-4 w-4" />
+            </button>
             <button
               type="button"
               onClick={() => setMenuOpen((v) => !v)}
@@ -82,29 +124,46 @@ export function GenericHistoryCard({
                   type="button"
                   onClick={() => {
                     setMenuOpen(false);
+                    handleRepeatLive();
+                  }}
+                  className="flex w-full items-center gap-3 px-4 py-3 text-sm font-medium transition-colors hover:bg-white/5"
+                >
+                  <Repeat className="h-4 w-4 text-muted-foreground" />
+                  Refaire en live
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
                     setConfirmDelete(true);
                   }}
-                  className="flex w-full items-center gap-3 px-4 py-3 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10"
+                  className="flex w-full items-center gap-3 border-t border-border px-4 py-3 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10"
                 >
                   <Trash2 className="h-4 w-4" />
-                  Supprimer
+                  Supprimer la séance
                 </button>
               </div>
             )}
           </div>
         </div>
 
-        <div className="relative mt-3 space-y-3">
-          {(() => {
-            const Custom = HISTORY_CONTENT_RENDERERS[engine.id];
-            if (Custom) return <Custom view={view} />;
-            return (
-              <>
-                <SessionSummaryCard view={view} />
-                <SessionSegmentList segments={view.segments} />
-              </>
-            );
-          })()}
+        {/* Tuiles de stats — Exos calculé + capacités déclarées par la discipline (view.summaryStats) */}
+        <div className="relative mt-4 grid grid-cols-4 gap-2">
+          <StatTile icon={<Layers className="h-3.5 w-3.5" />} label="Exos" value={`${exoCount}`} />
+          {view.summaryStats.map((s, i) => (
+            <StatTile
+              key={`${s.label}-${i}`}
+              icon={
+                i === 0 ? <Clock className="h-3.5 w-3.5" /> : <Sparkles className="h-3.5 w-3.5" />
+              }
+              label={s.label}
+              value={s.value}
+            />
+          ))}
+        </div>
+
+        <div className="relative mt-4">
+          <GenericHistoryExerciseList view={view} discipline={engine.id} />
         </div>
       </div>
 
@@ -114,9 +173,7 @@ export function GenericHistoryCard({
           onCancel={() => setConfirmDelete(false)}
           onConfirm={() => {
             setConfirmDelete(false);
-            del.mutate(workout.id, {
-              onError: () => toast.error("Suppression impossible"),
-            });
+            del.mutate(workout.id);
           }}
         />
       )}
