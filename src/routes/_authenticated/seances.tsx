@@ -13,7 +13,7 @@ export const Route = createFileRoute("/_authenticated/seances")({
 
 function SeancesPage() {
   return (
-    <main className="flex flex-1 flex-col px-5 pb-6 pt-10">
+    <main className="flex flex-1 flex-col px-5 pb-6 pt-[max(2.5rem,env(safe-area-inset-top))]">
       <SeancesTab />
     </main>
   );

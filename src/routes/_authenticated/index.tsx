@@ -30,7 +30,7 @@ function HomePage() {
   const [editOpen, setEditOpen] = useState(false);
 
   return (
-    <main className="flex flex-1 flex-col px-5 pb-6 pt-12">
+    <main className="flex flex-1 flex-col px-5 pb-6 pt-[max(2.75rem,calc(env(safe-area-inset-top)+0.75rem))]">
       <ProfileRPGData>
         {(rpg) => (
           <HomeHub

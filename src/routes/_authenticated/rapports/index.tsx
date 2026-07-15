@@ -31,7 +31,7 @@ function RapportsPage() {
   const { mutate: generate, isPending } = useGenerateReport();
 
   return (
-    <main className="flex flex-1 flex-col px-5 pb-6 pt-12">
+    <main className="flex flex-1 flex-col px-5 pb-6 pt-[max(2.75rem,calc(env(safe-area-inset-top)+0.75rem))]">
       {/* Header */}
       <header className="mb-5 flex items-center justify-between">
         <div>

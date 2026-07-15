@@ -141,7 +141,7 @@ function DocumentsPage() {
   };
 
   return (
-    <main className="flex flex-1 flex-col gap-4 px-4 pt-5">
+    <main className="flex flex-1 flex-col gap-4 px-4 pt-[max(1.75rem,calc(env(safe-area-inset-top)+0.5rem))]">
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <header className="flex items-end justify-between">
         <div>

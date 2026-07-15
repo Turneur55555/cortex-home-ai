@@ -90,7 +90,7 @@ export function ReportDetail({ id }: { id: string }) {
   }
 
   return (
-    <div className="flex flex-1 flex-col pb-6 pt-12">
+    <div className="flex flex-1 flex-col pb-6 pt-[max(2.75rem,calc(env(safe-area-inset-top)+0.75rem))]">
       {/* Header */}
       <header className="mb-4 flex items-center justify-between px-5">
         <div className="flex items-center gap-3">
