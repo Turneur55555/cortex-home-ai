@@ -60,6 +60,7 @@ export function CoachSheet({
   onResult,
   initialMuscles,
   recoveryMap,
+  initialDiscipline,
 }: {
   onClose: () => void;
   /** `draft` porte déjà `discipline` — SeancesTab route sur cardVariant
@@ -68,6 +69,12 @@ export function CoachSheet({
   onResult: (template: WorkoutTemplate, draft: WorkoutRecordDraft) => void;
   initialMuscles?: string[];
   recoveryMap?: Map<MuscleId, MuscleRecovery>;
+  /** Phase A (15/07/2026) — discipline déjà choisie par NewSessionSheet en
+   *  amont : saute l'étape "discipline" de ce composant pour ne pas la
+   *  faire choisir deux fois. Sans effet sur les appelants existants qui
+   *  ne passent pas cette prop (BodyMap → initialMuscles reste prioritaire
+   *  et continue de forcer "muscu", comportement inchangé). */
+  initialDiscipline?: DisciplineId;
 }) {
   const recovery = useMemo(() => recoveryMap ?? new Map<MuscleId, MuscleRecovery>(), [recoveryMap]);
   const hasInitialMuscles = Boolean(initialMuscles && initialMuscles.length > 0);
@@ -120,17 +127,32 @@ export function CoachSheet({
   // saute directement dans le flux Musculation — comme aujourd'hui, où le
   // mode par défaut était déjà "muscu". L'utilisateur peut revenir en
   // arrière vers le choix de discipline via "Précédent".
-  const [step, setStep] = useState<Step>(hasInitialMuscles ? "question" : "discipline");
+  const hasInitialDiscipline = Boolean(initialDiscipline) && !hasInitialMuscles;
+  const [step, setStep] = useState<Step>(
+    hasInitialMuscles || hasInitialDiscipline ? "question" : "discipline",
+  );
   const [disciplineId, setDisciplineId] = useState<DisciplineId | null>(
-    hasInitialMuscles ? "muscu" : null,
+    hasInitialMuscles ? "muscu" : (initialDiscipline ?? null),
   );
   const [answers, setAnswers] = useState<SenseiAnswers>(() => {
-    if (!hasInitialMuscles) return {};
-    const defaults: SenseiAnswers = {};
-    for (const q of ENGINE_REGISTRY.muscu.questions ?? []) {
-      if (q.defaultValue !== undefined) defaults[q.id] = q.defaultValue;
+    if (hasInitialMuscles) {
+      const defaults: SenseiAnswers = {};
+      for (const q of ENGINE_REGISTRY.muscu.questions ?? []) {
+        if (q.defaultValue !== undefined) defaults[q.id] = q.defaultValue;
+      }
+      return { ...defaults, muscles: initialMuscles };
     }
-    return { ...defaults, muscles: initialMuscles };
+    if (hasInitialDiscipline) {
+      const candidate = ENGINE_REGISTRY[initialDiscipline as DisciplineId];
+      const defaults: SenseiAnswers = {};
+      if (isReadyEngine(candidate)) {
+        for (const q of candidate.questions) {
+          if (q.defaultValue !== undefined) defaults[q.id] = q.defaultValue;
+        }
+      }
+      return defaults;
+    }
+    return {};
   });
   const [questionIndex, setQuestionIndex] = useState(0);
 

@@ -1,7 +1,6 @@
 import { useMemo, useState, useCallback } from "react";
 import { Dumbbell, Loader2, AlertCircle, ChevronDown, Trophy, Repeat } from "lucide-react";
 import { SeancesHero } from "@/components/fitness/SeancesHero";
-import { SenseiIACard } from "@/components/fitness/SenseiIACard";
 import { ChoisirEpreuveCard } from "@/components/fitness/ChoisirEpreuveCard";
 import { LaForgeCard } from "@/components/fitness/LaForgeCard";
 import { BodyMap } from "@/components/fitness/BodyMap";
@@ -11,7 +10,7 @@ import { GenericHistoryCard } from "@/components/fitness/session/GenericHistoryC
 import { GenericSessionReviewSheet } from "@/components/fitness/session/GenericSessionReviewSheet";
 import { WorkoutProgressCharts } from "@/components/fitness/WorkoutProgressCharts";
 import { StartWorkoutSheet } from "@/components/fitness/StartWorkoutSheet";
-import { NewSessionChoiceSheet } from "@/components/fitness/templates/NewSessionChoiceSheet";
+import { NewSessionSheet } from "@/components/fitness/templates/NewSessionSheet";
 import { SavedTemplatesSheet } from "@/components/fitness/templates/SavedTemplatesSheet";
 import { TemplateEditorSheet } from "@/components/fitness/templates/TemplateEditorSheet";
 import { ActiveWorkoutView } from "@/components/fitness/ActiveWorkoutView";
@@ -67,10 +66,12 @@ export function SeancesTab() {
   const recentWorkouts = useMemo(() => (data ?? []).slice(0, 5), [data]);
 
   const [startOpen, setStartOpen] = useState(false);
-  // Nouveau parcours "Nouvelle séance" : choix vide/modèle avant d'ouvrir
-  // StartWorkoutSheet (inchangé) ou la liste des modèles sauvegardés. Ne
-  // concerne pas Sensei (SenseiIACard/CoachSheet, séparés plus bas).
-  const [newSessionChoiceOpen, setNewSessionChoiceOpen] = useState(false);
+  // Phase A (15/07/2026) — porte d'entrée unique "Nouvelle séance" :
+  // remplace l'ancien choix "Choisir une épreuve" (NewSessionChoiceSheet,
+  // musculation uniquement) par un écran discipline -> mode couvrant les 6
+  // disciplines (voir NewSessionSheet.tsx). NewSessionChoiceSheet.tsx
+  // n'est pas supprimé (A.7), simplement plus monté depuis cet écran.
+  const [newSessionSheetOpen, setNewSessionSheetOpen] = useState(false);
   const [savedTemplatesOpen, setSavedTemplatesOpen] = useState(false);
   const [open, setOpen] = useState(false);
   // C2 : le snapshot de la séance clôturée vit ici pour que la fiche d'analyse
@@ -87,7 +88,12 @@ export function SeancesTab() {
   } | null>(null);
   const [genericDraft, setGenericDraft] = useState<WorkoutRecordDraft | null>(null);
   const [coachOpen, setCoachOpen] = useState(false);
-  const [coachInitialMuscles, setCoachInitialMuscles] = useState<string[] | undefined>(undefined);
+  // Phase A (15/07/2026) : discipline déjà choisie par NewSessionSheet
+  // avant d'ouvrir CoachSheet en mode "Coach IA" — évite de la choisir
+  // deux fois.
+  const [coachInitialDiscipline, setCoachInitialDiscipline] = useState<DisciplineId | undefined>(
+    undefined,
+  );
   const [historyOpen, setHistoryOpen] = useState(false);
   const [catalogOpen, setCatalogOpen] = useState(false);
   // Phase 1 multi-discipline (2026-07-11) : une seule Forge, avec un choix
@@ -190,8 +196,13 @@ export function SeancesTab() {
     [startGenericActive],
   );
 
-  const openCoach = useCallback((initial?: string[]) => {
-    setCoachInitialMuscles(initial?.length ? initial : undefined);
+  // Phase A (15/07/2026) : ouvre CoachSheet directement sur la discipline
+  // choisie dans NewSessionSheet, sans repasser par son étape interne de
+  // choix. Remplace l'ancien `openCoach()` (déclencheur retiré avec
+  // SenseiIACard, qui l'appelait déjà systématiquement sans argument —
+  // aucune fonctionnalité réelle perdue par ce nettoyage).
+  const openCoachForDiscipline = useCallback((discipline: DisciplineId) => {
+    setCoachInitialDiscipline(discipline);
     setCoachOpen(true);
   }, []);
 
@@ -255,11 +266,8 @@ export function SeancesTab() {
       {/* ── Hero — respiration d'ambiance ───────────────────────────── */}
       <SeancesHero />
 
-      {/* ── Sensei^IA ───────────────────────────────────────────────── */}
-      <SenseiIACard onClick={() => openCoach()} />
-
-      {/* ── Choisir une épreuve — action principale ─────────────────── */}
-      <ChoisirEpreuveCard onClick={() => setNewSessionChoiceOpen(true)} />
+      {/* ── Nouvelle séance — porte d'entrée unique (Phase A, A.1) ───── */}
+      <ChoisirEpreuveCard onClick={() => setNewSessionSheetOpen(true)} />
 
       {/* ── La Forge — atelier de sélection des techniques ──────────── */}
       <SectionReveal delay={0.05}>
@@ -421,17 +429,12 @@ export function SeancesTab() {
         </SectionReveal>
       )}
 
-      {newSessionChoiceOpen && (
-        <NewSessionChoiceSheet
-          onClose={() => setNewSessionChoiceOpen(false)}
-          onChooseBlank={() => {
-            setNewSessionChoiceOpen(false);
-            setStartOpen(true);
-          }}
-          onChooseSaved={() => {
-            setNewSessionChoiceOpen(false);
-            setSavedTemplatesOpen(true);
-          }}
+      {newSessionSheetOpen && (
+        <NewSessionSheet
+          onClose={() => setNewSessionSheetOpen(false)}
+          onChooseBlankMuscu={() => setStartOpen(true)}
+          onChooseSavedMuscu={() => setSavedTemplatesOpen(true)}
+          onChooseCoach={openCoachForDiscipline}
         />
       )}
 
@@ -465,9 +468,12 @@ export function SeancesTab() {
 
       {coachOpen && (
         <CoachSheet
-          onClose={() => setCoachOpen(false)}
+          onClose={() => {
+            setCoachOpen(false);
+            setCoachInitialDiscipline(undefined);
+          }}
           onResult={handleCoachResult}
-          initialMuscles={coachInitialMuscles}
+          initialDiscipline={coachInitialDiscipline}
         />
       )}
 

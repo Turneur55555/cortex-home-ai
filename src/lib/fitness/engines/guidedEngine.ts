@@ -51,7 +51,12 @@
 // ============================================================
 
 import { durationQuestion, gymLocationQuestion, levelQuestion } from "./sharedQuestions";
-import { baseSummaryStats, segmentsFromMetadata } from "./sessionViewHelpers";
+import {
+  baseSummaryStats,
+  genericBuildLiveSegments,
+  genericFormatLiveSegment,
+  segmentsFromMetadata,
+} from "./sessionViewHelpers";
 import type {
   SenseiAnswers,
   SenseiContext,
@@ -130,6 +135,9 @@ export const GuidedActivityEngine: WorkoutEngine = {
   feedsRankEngine: false,
   icon: "Sparkles",
   accentClassName: "text-violet-400",
+  // Phase A (15/07/2026) : extension du live-tracking générique
+  // (pilote Course, 09/07/2026) — voir sessionViewHelpers.ts.
+  supportsLiveTracking: true,
   questions: QUESTIONS,
 
   async generate(answers: SenseiAnswers, _context?: SenseiContext): Promise<WorkoutTemplate> {
@@ -210,6 +218,9 @@ export const GuidedActivityEngine: WorkoutEngine = {
       notes: record.notes,
     };
   },
+
+  buildLiveSegments: genericBuildLiveSegments,
+  formatLiveSegment: genericFormatLiveSegment,
 
   historyPresentation: {
     cardVariant: "guided-session",
