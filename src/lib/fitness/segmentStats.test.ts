@@ -5,6 +5,8 @@ import {
   groupByExerciseLabel,
   computeSegmentStats,
   buildSegmentNarrative,
+  primaryColumnsForInstances,
+  bestMetricValue,
   type SegmentInstance,
 } from "./segmentStats";
 
@@ -184,5 +186,54 @@ describe("buildSegmentNarrative", () => {
     const text = buildSegmentNarrative(stats);
     expect(text).toMatch(/Réalisé 2 fois/);
     expect(text).toMatch(/meilleure/);
+  });
+});
+
+describe("primaryColumnsForInstances", () => {
+  it("ne retient que les métriques 'primary' réellement présentes, ordonnées par order", () => {
+    const instances: Array<{ metrics: Record<string, number> }> = [
+      { metrics: { pace_min_per_km: 5, incline_pct: 8 } },
+      { metrics: { distance_m: 3000 } },
+    ];
+    const columns = primaryColumnsForInstances(instances);
+    // distance_m (order 1) avant pace_min_per_km (order 2) ; incline_pct
+    // (secondary) n'apparaît jamais comme colonne.
+    expect(columns.map((c) => c.key)).toEqual(["distance_m", "pace_min_per_km"]);
+    expect(columns[0].label).toBe("Distance");
+  });
+
+  it("retourne [] quand aucune métrique n'est primary (ex. Autre, texte libre)", () => {
+    expect(primaryColumnsForInstances([{ metrics: { incline_pct: 5 } }])).toEqual([]);
+    expect(primaryColumnsForInstances([{}])).toEqual([]);
+    expect(primaryColumnsForInstances([])).toEqual([]);
+  });
+});
+
+describe("bestMetricValue", () => {
+  it("retient le minimum pour une métrique 'min' (allure)", () => {
+    const instances = [
+      { metrics: { pace_min_per_km: 5.2 } },
+      { metrics: { pace_min_per_km: 4.8 } },
+    ];
+    expect(bestMetricValue(instances, "pace_min_per_km")).toEqual({
+      value: 4.8,
+      formatted: "4:48 min/km",
+    });
+  });
+
+  it("retient le maximum pour une métrique 'max' (distance)", () => {
+    const instances = [{ metrics: { distance_m: 1000 } }, { metrics: { distance_m: 3000 } }];
+    const result = bestMetricValue(instances, "distance_m");
+    expect(result?.value).toBe(3000);
+    expect(result?.formatted).toBe("3.00 km");
+  });
+
+  it("retourne null sans donnée inventée quand la métrique est absente partout", () => {
+    expect(bestMetricValue([{ metrics: { distance_m: 1000 } }], "pace_min_per_km")).toBeNull();
+    expect(bestMetricValue([{}], "distance_m")).toBeNull();
+  });
+
+  it("retourne null pour une clé de métrique inconnue", () => {
+    expect(bestMetricValue([{ metrics: { foo: 1 } }], "foo")).toBeNull();
   });
 });

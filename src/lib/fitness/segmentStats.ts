@@ -62,10 +62,22 @@ export interface SegmentInstance {
 
 type MetricDirection = "min" | "max";
 
+/** Addendum 2 (2026-07-15) : deux champs déclaratifs pilotent le layout
+ *  générique (`GenericHistoryExerciseList.tsx`) sans qu'aucun composant
+ *  n'ait besoin de connaître le vocabulaire d'une discipline particulière.
+ *  `order` : ordre d'affichage stable (remplace la dépendance implicite à
+ *  l'ordre d'insertion JS, non garanti comme contrat). `importance` :
+ *  "primary" = mérite sa propre colonne de tableau (dense, comme
+ *  Reps/Kg en musculation) ; "secondary" = détail contextuel affiché en
+ *  ligne compacte, uniquement si présent — jamais d'espace réservé sinon. */
+type MetricImportance = "primary" | "secondary";
+
 interface MetricConfig {
   label: string;
   direction: MetricDirection;
   format: (value: number) => string;
+  order: number;
+  importance: MetricImportance;
 }
 
 function formatPaceValue(v: number): string {
@@ -92,69 +104,95 @@ export const SEGMENT_METRIC_CONFIG: Record<string, MetricConfig> = {
     label: "Distance",
     direction: "max",
     format: (v) => `${(v / 1000).toFixed(2)} km`,
+    order: 1,
+    importance: "primary",
   },
   pace_min_per_km: {
     label: "Allure",
     direction: "min",
     format: formatPaceValue,
+    order: 2,
+    importance: "primary",
   },
   elevation_m: {
     label: "Dénivelé+",
     direction: "max",
     format: (v) => `${Math.round(v)} m`,
+    order: 10,
+    importance: "secondary",
   },
   // ---- Cardio ----
   speed_kmh: {
     label: "Vitesse",
     direction: "max",
     format: (v) => `${v} km/h`,
+    order: 2,
+    importance: "primary",
   },
   incline_pct: {
     label: "Inclinaison",
     direction: "max",
     format: (v) => `${v} %`,
+    order: 11,
+    importance: "secondary",
   },
   escalier_level: {
     label: "Niveau (escalier)",
     direction: "max",
     format: (v) => String(v),
+    order: 12,
+    importance: "secondary",
   },
   resistance: {
     label: "Résistance",
     direction: "max",
     format: (v) => String(v),
+    order: 13,
+    importance: "secondary",
   },
   cadence_rpm: {
     label: "Cadence",
     direction: "max",
     format: (v) => `${v} rpm`,
+    order: 14,
+    importance: "secondary",
   },
   // ---- HYROX ----
   charge_kg: {
     label: "Charge",
     direction: "max",
     format: (v) => `${v} kg`,
+    order: 3,
+    importance: "primary",
   },
   reps: {
     label: "Répétitions",
     direction: "max",
     format: (v) => String(v),
+    order: 3,
+    importance: "primary",
   },
   rounds: {
     label: "Tours",
     direction: "max",
     format: (v) => String(v),
+    order: 4,
+    importance: "primary",
   },
   // ---- Guided ----
   duration_min: {
     label: "Durée",
     direction: "max",
     format: (v) => `${Math.round(v)} min`,
+    order: 1,
+    importance: "primary",
   },
   calories_estimate: {
     label: "Calories estimées",
     direction: "max",
     format: (v) => `~${Math.round(v)} kcal`,
+    order: 15,
+    importance: "secondary",
   },
 };
 
@@ -202,6 +240,53 @@ export function groupByExerciseLabel<T extends { label: string }>(items: T[]): L
     const instances = byKey.get(key)!;
     return { key, displayLabel: segmentBaseLabel(instances[0].label), instances };
   });
+}
+
+export interface PrimaryColumn {
+  key: string;
+  label: string;
+  format: (value: number) => string;
+}
+
+/** Détermine les colonnes de tableau ("primary") réellement présentes dans
+ *  au moins une occurrence du groupe, ordonnées par `order` déclaré dans
+ *  SEGMENT_METRIC_CONFIG. Retourne [] si aucune métrique primary n'est
+ *  présente — le composant garde alors le rendu en puces existant (cf.
+ *  addendum 2, §7.2, ex. "Autre" dont les blocs sont du texte libre).
+ *  Générique sur T pour servir aussi bien SessionSegment (historique) que
+ *  ActiveGenericSegment (séance en cours), même principe que
+ *  groupByExerciseLabel ci-dessus. */
+export function primaryColumnsForInstances<T extends { metrics?: Record<string, number> }>(
+  instances: T[],
+): PrimaryColumn[] {
+  const present = new Set<string>();
+  for (const inst of instances) {
+    for (const key of Object.keys(inst.metrics ?? {})) {
+      if (SEGMENT_METRIC_CONFIG[key]?.importance === "primary") present.add(key);
+    }
+  }
+  return Array.from(present)
+    .map((key) => ({ key, config: SEGMENT_METRIC_CONFIG[key] }))
+    .sort((a, b) => a.config.order - b.config.order)
+    .map(({ key, config }) => ({ key, label: config.label, format: config.format }));
+}
+
+/** Meilleure valeur d'une métrique (selon sa direction déclarée) à travers
+ *  toutes les occurrences d'un groupe qui la portent. `null` si aucune
+ *  occurrence ne porte cette métrique — jamais de donnée inventée, jamais
+ *  de faux "—" traité comme un zéro. */
+export function bestMetricValue(
+  instances: Array<{ metrics?: Record<string, number> }>,
+  key: string,
+): { value: number; formatted: string } | null {
+  const config = SEGMENT_METRIC_CONFIG[key];
+  if (!config) return null;
+  const values = instances
+    .map((inst) => inst.metrics?.[key])
+    .filter((v): v is number => typeof v === "number");
+  if (values.length === 0) return null;
+  const value = config.direction === "min" ? Math.min(...values) : Math.max(...values);
+  return { value, formatted: config.format(value) };
 }
 
 export interface MetricStat {

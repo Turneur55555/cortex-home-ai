@@ -14,6 +14,7 @@
 // fonctions, seulement du transport de données.
 // ============================================================
 
+import { SEGMENT_METRIC_CONFIG } from "@/lib/fitness/segmentStats";
 import type {
   LiveSegmentMetricValue,
   LiveSegmentRow,
@@ -81,8 +82,21 @@ export function genericFormatLiveSegment(segment: LiveSegmentRow): SessionSegmen
   const metrics: Record<string, number> = {};
   const raw = segment.metrics ?? {};
 
+  // Addendum 2 (2026-07-15, retour de Nathan) : passe systématiquement par
+  // SEGMENT_METRIC_CONFIG (label + format) quand la clé est connue, au lieu
+  // d'afficher la clé brute ("distance_m") — sinon un segment généré par
+  // Sensei affiche "Distance" mais le même segment reformaté après une
+  // séance live affichait "distance_m", rompant "même comportement" entre
+  // les deux chemins. Fallback sur la clé brute uniquement si vraiment
+  // inconnue (robustesse conservée pour une métrique future non encore
+  // déclarée dans la table).
   for (const [key, value] of Object.entries(raw)) {
-    stats.push({ label: key, value: String(value) });
+    const config = typeof value === "number" ? SEGMENT_METRIC_CONFIG[key] : undefined;
+    if (config) {
+      stats.push({ label: config.label, value: config.format(value as number) });
+    } else {
+      stats.push({ label: key, value: String(value) });
+    }
     if (typeof value === "number") metrics[key] = value;
   }
   if (segment.completed) stats.push({ label: "Statut", value: "Réalisé" });

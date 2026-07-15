@@ -771,14 +771,23 @@ function buildLiveSegmentsForSession(
  *  affichée telle quelle (robuste à un futur ajout de métrique). */
 function formatLiveSegmentImpl(segment: LiveSegmentRow): SessionSegment {
   const stats: SessionStat[] = [];
+  // Addendum 2 (2026-07-15, retour de Nathan) : miroir numérique complété
+  // ici aussi — jusqu'ici seul `stats` (texte) était rempli à cet endroit
+  // précis, contrairement à generate() et aux 4 autres moteurs génériques.
+  // Sans ce miroir, une séance Course relancée en live puis reclôturée
+  // perdait sa colonne de tableau dans l'historique (GenericHistoryExerciseList,
+  // voir segmentStats.ts primaryColumnsForInstances).
+  const metrics: Record<string, number> = {};
   const m = segment.metrics ?? {};
   const known = new Set(["distance_m", "pace_min_per_km", "zone", "elevation_m", "max_heart_rate"]);
 
   if (typeof m.distance_m === "number") {
     stats.push({ label: "Distance", value: `${(m.distance_m / 1000).toFixed(2)} km` });
+    metrics.distance_m = m.distance_m;
   }
   if (typeof m.pace_min_per_km === "number") {
     stats.push({ label: "Allure", value: formatPace(m.pace_min_per_km) });
+    metrics.pace_min_per_km = m.pace_min_per_km;
   }
   if (typeof m.zone === "number") {
     const maxHr = typeof m.max_heart_rate === "number" ? m.max_heart_rate : undefined;
@@ -786,6 +795,7 @@ function formatLiveSegmentImpl(segment: LiveSegmentRow): SessionSegment {
   }
   if (typeof m.elevation_m === "number") {
     stats.push({ label: "Dénivelé+", value: `${m.elevation_m} m` });
+    metrics.elevation_m = m.elevation_m;
   }
   for (const [key, value] of Object.entries(m)) {
     if (known.has(key)) continue;
@@ -793,7 +803,7 @@ function formatLiveSegmentImpl(segment: LiveSegmentRow): SessionSegment {
   }
   if (segment.completed) stats.push({ label: "Statut", value: "Réalisé" });
 
-  return { label: segment.label, stats };
+  return { label: segment.label, stats, metrics };
 }
 
 export const CourseWorkoutEngine: WorkoutEngine = {

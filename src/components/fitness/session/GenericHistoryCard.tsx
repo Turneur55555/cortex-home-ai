@@ -34,7 +34,7 @@ import { adaptWorkoutRow, type PersistedWorkoutRow } from "@/lib/fitness/engines
 import { groupByExerciseLabel } from "@/lib/fitness/segmentStats";
 import { WorkoutDeleteDialog } from "@/components/fitness/WorkoutDeleteDialog";
 import { EditableText } from "@/components/fitness/EditableText";
-import { StatTile } from "@/components/fitness/StatTile";
+import { StatTileRow, type StatTileSpec } from "@/components/fitness/StatTileRow";
 import { GenericHistoryExerciseList } from "./GenericHistoryExerciseList";
 import { DisciplineBadge } from "./DisciplineIcon";
 
@@ -147,19 +147,36 @@ export function GenericHistoryCard({
           </div>
         </div>
 
-        {/* Tuiles de stats — Exos calculé + capacités déclarées par la discipline (view.summaryStats) */}
-        <div className="relative mt-4 grid grid-cols-4 gap-2">
-          <StatTile icon={<Layers className="h-3.5 w-3.5" />} label="Exos" value={`${exoCount}`} />
-          {view.summaryStats.map((s, i) => (
-            <StatTile
-              key={`${s.label}-${i}`}
-              icon={
-                i === 0 ? <Clock className="h-3.5 w-3.5" /> : <Sparkles className="h-3.5 w-3.5" />
-              }
-              label={s.label}
-              value={s.value}
-            />
-          ))}
+        {/* Tuiles de stats — Exos calculé + capacités déclarées par la discipline
+            (view.summaryStats), layout auto-adaptatif (StatTileRow) : plus jamais
+            de case vide (Cardio n'a que 3 tuiles réelles) ni de 2e ligne quasi
+            vide (Guided peut en déclarer jusqu'à 5) — voir addendum 2, §7.1/7.3. */}
+        <div className="relative mt-4">
+          <StatTileRow
+            tiles={
+              [
+                {
+                  key: "exos",
+                  icon: <Layers className="h-3.5 w-3.5" />,
+                  label: "Exos",
+                  value: `${exoCount}`,
+                },
+                ...view.summaryStats.map(
+                  (s, i): StatTileSpec => ({
+                    key: `${s.label}-${i}`,
+                    icon:
+                      i === 0 ? (
+                        <Clock className="h-3.5 w-3.5" />
+                      ) : (
+                        <Sparkles className="h-3.5 w-3.5" />
+                      ),
+                    label: s.label,
+                    value: s.value,
+                  }),
+                ),
+              ] satisfies StatTileSpec[]
+            }
+          />
         </div>
 
         <div className="relative mt-4">

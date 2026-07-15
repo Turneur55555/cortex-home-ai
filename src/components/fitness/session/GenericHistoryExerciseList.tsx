@@ -7,19 +7,67 @@
 // composant pour toutes, "Autre" inclus désormais — ses segments ont un
 // label groupable comme les autres, voir freeformEngine.ts).
 //
-// Même ligne exercice que WorkoutCard : icône, méta "N répétitions",
-// chevron, accordéon des répétitions (métriques via SessionStatChip),
-// bouton Statistiques → SegmentAnalysisSheet. Seule différence "capacité" :
-// pas de photo (pas de notion de photo d'exercice hors musculation) ni de
-// badge PR (pas de système de records générique — voir addendum 6.4).
+// ADDENDUM 2 (2026-07-15, retour de Nathan) : le rendu en puces
+// (SessionStatChip, flex-wrap) laissait une boîte quasi vide dès qu'une
+// répétition n'avait qu'1-2 métriques — écart de densité avec le vrai
+// TABLEAU de WorkoutCard (grid Série/Reps/Kg, toujours plein largeur).
+// Ici : dès qu'au moins une métrique "primary" (SEGMENT_METRIC_CONFIG,
+// voir segmentStats.ts) est présente dans le groupe, on rend un tableau
+// dense (colonnes = métriques primary présentes, ordonnées par `order`
+// déclaré) — même principe visuel que Série/Reps/Kg, piloté par les
+// données plutôt que codé en dur. Les groupes sans métrique primary
+// (ex. "Autre", blocs texte libre) gardent le rendu en puces d'origine —
+// dégradation explicite et déjà actée (§6.4/§7.2 du document), pas une
+// régression.
 // ============================================================
 
 import { useMemo, useState } from "react";
 import { BarChart3, ChevronRight, Repeat } from "lucide-react";
-import type { DisciplineId, SessionView } from "@/lib/fitness/engines/types";
-import { groupByExerciseLabel } from "@/lib/fitness/segmentStats";
+import type { DisciplineId, SessionSegment, SessionView } from "@/lib/fitness/engines/types";
+import {
+  bestMetricValue,
+  groupByExerciseLabel,
+  primaryColumnsForInstances,
+  type PrimaryColumn,
+} from "@/lib/fitness/segmentStats";
 import { SessionStatChip } from "./SessionStatChip";
 import { SegmentAnalysisSheet } from "./SegmentAnalysisSheet";
+
+/** Ligne "méta" enrichie sous le titre de chaque exercice — même esprit
+ *  que "N séries · max X kg · Y kg total" en musculation : le nombre de
+ *  répétitions puis, pour les 1-2 premières colonnes primary, la
+ *  meilleure valeur atteinte (direction déjà déclarée dans
+ *  SEGMENT_METRIC_CONFIG, jamais recalculée ici). */
+function buildMetaLine(
+  repCount: number,
+  doneCount: number,
+  instances: SessionSegment[],
+  columns: PrimaryColumn[],
+): string {
+  const parts = [`${repCount} répétition${repCount > 1 ? "s" : ""}`];
+  if (doneCount > 0 && doneCount < repCount) {
+    parts.push(`${doneCount} réalisée${doneCount > 1 ? "s" : ""}`);
+  }
+  for (const col of columns.slice(0, 2)) {
+    const best = bestMetricValue(instances, col.key);
+    if (best) parts.push(`${col.label} : ${best.formatted}`);
+  }
+  return parts.join(" · ");
+}
+
+/** Libellés déjà représentés par une colonne "primary" (+ "Statut", géré
+ *  séparément via l'opacité de la ligne) — le reste des `stats` textuels
+ *  d'une répétition devient la note secondaire compacte, uniquement
+ *  quand non vide (aucun espace réservé sinon). */
+function secondaryNote(seg: SessionSegment, columnLabels: Set<string>): string | null {
+  const rest = seg.stats.filter((s) => s.label !== "Statut" && !columnLabels.has(s.label));
+  if (rest.length === 0) return null;
+  return rest.map((s) => `${s.label} ${s.value}`).join(" · ");
+}
+
+function isNotCompleted(seg: SessionSegment): boolean {
+  return seg.stats.some((s) => s.label === "Statut" && s.value !== "Réalisé");
+}
 
 export function GenericHistoryExerciseList({
   view,
@@ -42,6 +90,9 @@ export function GenericHistoryExerciseList({
           const doneCount = g.instances.filter((seg) =>
             seg.stats.some((s) => s.label === "Statut" && s.value === "Réalisé"),
           ).length;
+          const columns = primaryColumnsForInstances(g.instances);
+          const columnLabels = new Set(columns.map((c) => c.label));
+          const metaLine = buildMetaLine(repCount, doneCount, g.instances, columns);
           const isOpen = expandedKeys.has(g.key);
           return (
             <li
@@ -66,14 +117,8 @@ export function GenericHistoryExerciseList({
                   <h3 className="text-[15px] font-bold leading-tight tracking-tight break-words">
                     {g.displayLabel}
                   </h3>
-                  <p className="mt-0.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/80">
-                    {repCount} répétition{repCount > 1 ? "s" : ""}
-                    {doneCount > 0 && doneCount < repCount && (
-                      <>
-                        {" "}
-                        · {doneCount} réalisée{doneCount > 1 ? "s" : ""}
-                      </>
-                    )}
+                  <p className="mt-0.5 truncate text-[11px] font-medium uppercase tracking-wider text-muted-foreground/80">
+                    {metaLine}
                   </p>
                 </div>
 
@@ -98,24 +143,78 @@ export function GenericHistoryExerciseList({
                 className="overflow-hidden transition-all duration-300 ease-out"
                 style={{ maxHeight: isOpen ? "800px" : "0px", opacity: isOpen ? 1 : 0 }}
               >
-                <div className="mx-3 mb-3 space-y-2">
-                  {g.instances.map((seg, i) => (
+                {columns.length > 0 ? (
+                  // Tableau dense — colonnes pilotées par les données (voir
+                  // primaryColumnsForInstances), même gabarit que le tableau
+                  // Série/Reps/Kg de WorkoutCard.
+                  <div className="mx-3 mb-3 overflow-hidden rounded-xl border border-white/5 bg-black/20">
                     <div
-                      key={`${g.key}-${i}`}
-                      className="rounded-xl border border-white/5 bg-black/20 p-2.5"
+                      className="grid border-b border-white/5 bg-white/[0.02] py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80"
+                      style={{ gridTemplateColumns: `48px repeat(${columns.length}, 1fr)` }}
                     >
-                      {seg.stats.length > 0 ? (
-                        <div className="flex flex-wrap gap-1.5">
-                          {seg.stats.map((s, j) => (
-                            <SessionStatChip key={`${s.label}-${j}`} stat={s} />
-                          ))}
+                      <div className="text-center">Rép.</div>
+                      {columns.map((c) => (
+                        <div key={c.key} className="text-center">
+                          {c.label}
                         </div>
-                      ) : (
-                        <p className="text-xs text-muted-foreground/60">Répétition {i + 1}</p>
-                      )}
+                      ))}
                     </div>
-                  ))}
-                </div>
+                    <ul className="divide-y divide-white/5">
+                      {g.instances.map((seg, i) => {
+                        const note = secondaryNote(seg, columnLabels);
+                        const dimmed = isNotCompleted(seg);
+                        return (
+                          <li key={`${g.key}-${i}`} className={dimmed ? "opacity-60" : undefined}>
+                            <div
+                              className="grid items-center py-2.5 text-sm tabular-nums"
+                              style={{ gridTemplateColumns: `48px repeat(${columns.length}, 1fr)` }}
+                            >
+                              <div className="flex items-center justify-center">
+                                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/15 text-[11px] font-bold text-primary">
+                                  {i + 1}
+                                </span>
+                              </div>
+                              {columns.map((c) => {
+                                const raw = seg.metrics?.[c.key];
+                                return (
+                                  <div key={c.key} className="text-center font-semibold">
+                                    {typeof raw === "number" ? c.format(raw) : "—"}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            {note && (
+                              <p className="px-3 pb-2 text-[11px] text-muted-foreground/70">
+                                {note}
+                              </p>
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                ) : (
+                  // Fallback puces — aucune métrique primary déclarée pour ce
+                  // groupe (ex. "Autre", blocs texte libre : voir freeformEngine.ts).
+                  <div className="mx-3 mb-3 space-y-2">
+                    {g.instances.map((seg, i) => (
+                      <div
+                        key={`${g.key}-${i}`}
+                        className="rounded-xl border border-white/5 bg-black/20 p-2.5"
+                      >
+                        {seg.stats.length > 0 ? (
+                          <div className="flex flex-wrap gap-1.5">
+                            {seg.stats.map((s, j) => (
+                              <SessionStatChip key={`${s.label}-${j}`} stat={s} />
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground/60">Répétition {i + 1}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </li>
           );

@@ -103,10 +103,16 @@ describe("genericFormatLiveSegment", () => {
       completed: true,
       position: 0,
     };
+    // Addendum 2 (2026-07-15) : une clé connue de SEGMENT_METRIC_CONFIG passe
+    // par son label/format déclarés ("Distance"/"0.85 km"), jamais la clé
+    // brute — sinon le même segment affiche "Distance" avant sauvegarde et
+    // "distance_m" après une séance live, rompant "même comportement". Une
+    // clé inconnue ("note", pas une métrique de performance déclarée) garde
+    // le fallback brut (robustesse pour une métrique future non déclarée).
     expect(genericFormatLiveSegment(row)).toEqual({
       label: "Rameur",
       stats: [
-        { label: "distance_m", value: "850" },
+        { label: "Distance", value: "0.85 km" },
         { label: "note", value: "dur" },
         { label: "Statut", value: "Réalisé" },
       ],

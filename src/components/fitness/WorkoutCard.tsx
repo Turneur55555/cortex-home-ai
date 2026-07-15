@@ -32,7 +32,7 @@ import { EditableText } from "./EditableText";
 import { PhotoModal } from "./PhotoModal";
 import { WorkoutDeleteDialog } from "./WorkoutDeleteDialog";
 import { ExerciseAnalysisSheet } from "./ExerciseAnalysisSheet";
-import { StatTile } from "./StatTile";
+import { StatTileRow, type StatTileSpec } from "./StatTileRow";
 import { AddExerciseModal } from "./AddExerciseModal";
 import { identityKey } from "@/lib/fitness/recentExercises";
 import { estimate1RM, formatTonnage, workoutTonnage } from "@/lib/fitness/strength";
@@ -385,40 +385,46 @@ export function WorkoutCard({
           </div>
         </div>
 
-        {/* Tuiles de stats — calculs réels */}
-        <div className="relative mt-4 grid grid-cols-4 gap-2">
-          <StatTile
-            icon={<Clock className="h-3.5 w-3.5" />}
-            label="Durée"
-            value={stats.duration > 0 ? `${stats.duration}` : "—"}
-            unit={stats.duration > 0 ? "min" : undefined}
-          />
-          <StatTile
-            icon={
-              stats.volumeMismatch ? (
-                <AlertTriangle className="h-3.5 w-3.5 text-warning" />
-              ) : (
-                <TrendingUp className="h-3.5 w-3.5" />
-              )
+        {/* Tuiles de stats — calculs réels, layout auto-adaptatif (StatTileRow) */}
+        <div className="relative mt-4">
+          <StatTileRow
+            tiles={
+              [
+                {
+                  key: "duree",
+                  icon: <Clock className="h-3.5 w-3.5" />,
+                  label: "Durée",
+                  value: stats.duration > 0 ? `${stats.duration}` : "—",
+                  unit: stats.duration > 0 ? "min" : undefined,
+                },
+                {
+                  key: "tonnage",
+                  icon: stats.volumeMismatch ? (
+                    <AlertTriangle className="h-3.5 w-3.5 text-warning" />
+                  ) : (
+                    <TrendingUp className="h-3.5 w-3.5" />
+                  ),
+                  label: "Tonnage",
+                  value: stats.volume > 0 ? formatTonnage(stats.volume) : "—",
+                  title: stats.volumeMismatch
+                    ? "Écart détecté — valeur recalculée depuis la base affichée"
+                    : undefined,
+                },
+                {
+                  key: "calories",
+                  icon: <Flame className="h-3.5 w-3.5" />,
+                  label: "Calories",
+                  value: stats.calories != null ? `${stats.calories}` : "—",
+                  unit: stats.calories != null ? "kcal" : undefined,
+                },
+                {
+                  key: "exos",
+                  icon: <Layers className="h-3.5 w-3.5" />,
+                  label: "Exos",
+                  value: `${stats.exoCount}`,
+                },
+              ] satisfies StatTileSpec[]
             }
-            label="Tonnage"
-            value={stats.volume > 0 ? formatTonnage(stats.volume) : "—"}
-            title={
-              stats.volumeMismatch
-                ? "Écart détecté — valeur recalculée depuis la base affichée"
-                : undefined
-            }
-          />
-          <StatTile
-            icon={<Flame className="h-3.5 w-3.5" />}
-            label="Calories"
-            value={stats.calories != null ? `${stats.calories}` : "—"}
-            unit={stats.calories != null ? "kcal" : undefined}
-          />
-          <StatTile
-            icon={<Layers className="h-3.5 w-3.5" />}
-            label="Exos"
-            value={`${stats.exoCount}`}
           />
         </div>
       </div>
