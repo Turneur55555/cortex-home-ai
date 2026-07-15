@@ -300,6 +300,7 @@ export function CorpsTab() {
           onClose={() => setQuickField(null)}
         />
       )}
+      {historyOpen && <BodyHistorySheet onClose={() => setHistoryOpen(false)} />}
     </section>
   );
 }
