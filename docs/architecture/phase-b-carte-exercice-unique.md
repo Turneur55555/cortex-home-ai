@@ -137,3 +137,90 @@ convergence, pas comme une décision produit à part.
   ("la fusion éventuelle des deux est une décision explicitement reportée à la Phase 3") — non
   rouverte ici, les deux fiches restent cohérentes visuellement (mêmes primitives
   `SectionCard`/`StatTileMini`/`TrendIcon`) sans être le même fichier.
+
+## 7. Addendum 2 — densité générique pilotée par les métriques (2026-07-15, retour de Nathan)
+
+Retour après vérification live de l'addendum 6 : la convergence structurelle (header, tuiles,
+carte exercice, accordéon) est en place, mais le résultat perçu reste une "adaptation minimale".
+La carte Cardio ne donne pas la même impression de produit fini que la carte Musculation, à
+cause d'un déficit de DENSITÉ, pas de structure. Cible reformulée par Nathan : un seul composant
+intelligent, où la discipline déclare metrics + ordre + type + format + importance, et où le
+composant décide seul du layout (colonnes, lignes, groupes, responsive) — jamais l'inverse.
+
+### 7.1 Constat précis (code réel, pas supposition)
+
+- Grille de tuiles (`WorkoutCard`/`GenericHistoryCard`) : `grid-cols-4` figé. La musculation a
+  toujours exactement 4 tuiles (Durée/Tonnage/Calories/Exos) donc ça ne se voit jamais. Cardio
+  n'a que 3 tuiles réelles (Exos + `baseSummaryStats` = Durée + Activité) → une case vide dans la
+  grille à chaque séance Cardio. Vérifié dans `cardioEngine.ts` (`buildStats` ne pousse
+  qu'"Activité") et `sessionViewHelpers.ts` (`baseSummaryStats` ajoute systématiquement "Durée").
+- Accordéon de répétition (`GenericHistoryExerciseList.tsx`) : rendu en puces (`SessionStatChip`,
+  `flex flex-wrap`) dans une boîte `rounded-xl` — pour une répétition à 1-2 métriques (cas courant
+  Cardio/Guided), la boîte reste presque vide car les puces ne remplissent jamais la largeur.
+  `WorkoutCard`, à l'inverse, rend un vrai TABLEAU (`grid-cols-[56px_1fr_1fr]`, en-tête Série/
+  Reps/Kg) qui occupe toujours la largeur disponible, quel que soit le nombre de séries — c'est
+  précisément l'écart de "densité d'information" signalé.
+  - "Refaire en live" générique testé lors du retour précédent avait ouvert un `window.confirm()`
+    natif qui a bloqué les deux onglets Chrome utilisés — non résolu, aucune tentative de
+    contournement (l'outil de test n'autorise pas de cliquer une boîte native) ; le clic vers la
+    boîte fonctionne (vérifié en base : aucune séance active créée par erreur), reste à re-tester
+    depuis un onglet frais.
+- `genericFormatLiveSegment` (sessionViewHelpers.ts) affiche la clé brute (`distance_m`) comme
+  libellé au lieu de passer par `SEGMENT_METRIC_CONFIG["distance_m"].label` ("Distance") — un
+  segment généré par Sensei affiche "Distance", le même segment reformaté après une séance live
+  affiche "distance_m". Incohérence directe avec "même comportement" — pas juste un manque de
+  densité, un vrai bug de convergence.
+- `SEGMENT_METRIC_CONFIG` (`segmentStats.ts`) porte déjà `label`/`direction`/`format` — donc DÉJÀ
+  la table déclarative unique demandée par Nathan pour le vocabulaire de métriques. Il manque
+  seulement deux champs déclaratifs pour piloter le layout : l'ORDRE d'affichage explicite (repose
+  aujourd'hui sur l'ordre d'insertion dans l'objet, non documenté comme contrat) et l'IMPORTANCE
+  (aujourd'hui aucune métrique n'est distinguée "colonne de tableau" vs "détail secondaire").
+
+### 7.2 Principe retenu
+
+`SEGMENT_METRIC_CONFIG` reste la SEULE source déclarative (aucun nouveau fichier de config par
+discipline — un moteur qui introduit une nouvelle métrique numérique n'a qu'à ajouter UNE entrée
+ici, jamais toucher un composant). Deux champs ajoutés par entrée :
+- `order: number` — ordre d'affichage stable, remplace la dépendance implicite à l'ordre
+  d'insertion JS.
+- `importance: "primary" | "secondary"` — `primary` = mérite sa propre colonne de tableau (ex.
+  Distance, Allure, Charge, Répétitions, Tours, Durée) ; `secondary` = détail contextuel affiché en
+  ligne compacte seulement s'il est présent (ex. Dénivelé+, Inclinaison, Cadence, Résistance,
+  Calories estimées) — jamais d'espace réservé si absent.
+
+Le composant (`GenericHistoryExerciseList.tsx`) lit `seg.metrics` (miroir numérique déjà posé
+Phase 1, déjà rempli par `cardioEngine`/`hyroxEngine`/`courseEngine`/`genericFormatLiveSegment`)
+pour classer chaque valeur via `SEGMENT_METRIC_CONFIG` : les clés `primary` présentes dans AU MOINS
+UNE répétition du groupe deviennent les colonnes du tableau (ordonnées par `order`), le reste
+s'affiche en ligne secondaire compacte, uniquement quand non vide. Un groupe sans aucune métrique
+`primary` (ex. "Autre" : blocs texte libre, `freeformEngine.ts`) garde le rendu en puces actuel —
+dégradation explicite et déjà actée (§6.4), pas une régression.
+
+### 7.3 Cible précise
+
+1. Grille de tuiles auto-adaptative — nouveau composant `StatTileRow.tsx` (colonnes = nombre réel
+   de tuiles passées, jamais de case vide), utilisé par `WorkoutCard.tsx` ET `GenericHistoryCard.tsx`
+   (musculation garde exactement 4 tuiles → zéro changement visuel, vérifié par construction).
+2. Tableau dense par groupe d'exercice dans `GenericHistoryExerciseList.tsx`, remplace les puces
+   flottantes quand des métriques `primary` sont présentes — en-tête "Rép." + colonnes déclarées,
+   une ligne par répétition, valeurs déjà formatées via `SEGMENT_METRIC_CONFIG[key].format`.
+3. Ligne méta enrichie sous le titre de chaque exercice (meilleure valeur des 1-2 premières
+   colonnes `primary`, calculée via `direction`) — même esprit que "N séries · max X kg" en
+   musculation.
+4. Correction `genericFormatLiveSegment` : libellé et valeur toujours dérivés de
+   `SEGMENT_METRIC_CONFIG` quand la clé est connue (fallback sur la clé brute uniquement si
+   vraiment inconnue — robustesse conservée pour une métrique future non encore déclarée).
+5. Complète le miroir `metrics` de `courseEngine.formatLiveSegmentImpl` (aujourd'hui seul `stats`
+   est rempli à cet endroit précis, contrairement à `generate()` et aux 4 autres moteurs) — sans
+   ce miroir, une séance Course relancée en live puis reclôturée perdrait sa colonne de tableau.
+
+### 7.4 Explicitement hors scope (documenté, pas un motif d'arrêt)
+
+- Introduire un système de records/PR générique (au-delà de "meilleure valeur" affichée dans la
+  ligne méta, qui est un simple max/min instantané, pas un PR persistant avec badge). Rappel de
+  l'invariant déjà posé (§6.4, addendum 1) : la fusion avec le moteur de Rang/PR musculation reste
+  hors scope.
+- Rendre `importance`/`order` configurables par discipline (surcharge locale). `SEGMENT_METRIC_CONFIG`
+  reste global et partagé — cohérent avec le choix déjà fait pour `distance_m` (partagé Course/HYROX/
+  Cardio). Si une vraie divergence d'importance apparaît un jour entre disciplines pour la MÊME clé,
+  ce sera une vraie décision produit à soumettre, pas une extension mécanique.
