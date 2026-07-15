@@ -142,8 +142,8 @@ export function ActiveGenericSessionView({
 
           <div className="mt-3 flex gap-3 text-[11px] text-muted-foreground">
             <span>
-              <strong className="text-foreground">{sortedSegments.length}</strong> segment
-              {sortedSegments.length > 1 ? "s" : ""}
+              <strong className="text-foreground">{groups.length}</strong> exercice
+              {groups.length > 1 ? "s" : ""}
             </span>
             <span>·</span>
             <span>
@@ -203,7 +203,7 @@ export function ActiveGenericSessionView({
           <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-lg">
             <h3 className="text-lg font-bold">Terminer la séance ?</h3>
             <p className="mt-1 text-sm text-muted-foreground">
-              {completedCount}/{sortedSegments.length} segment(s) marqué(s) réalisé(s).
+              {completedCount}/{sortedSegments.length} réalisé(s).
             </p>
             <div className="mt-4 flex gap-2">
               <button
@@ -258,7 +258,7 @@ export function ActiveGenericSessionView({
       {groups.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border bg-card/50 p-8 text-center">
           <p className="text-sm font-medium text-muted-foreground">
-            Aucun segment — ajoutez-en un ci-dessous
+            Aucun exercice — ajoutez-en un ci-dessous
           </p>
         </div>
       ) : (
@@ -283,7 +283,7 @@ export function ActiveGenericSessionView({
             autoFocus
             value={newLabel}
             onChange={(e) => setNewLabel(e.target.value)}
-            placeholder="Nom du segment (ex: Sprint côte)"
+            placeholder="Nom de l'exercice (ex: Sprint côte)"
             className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary"
           />
           <div className="mt-2 flex flex-wrap gap-2">
@@ -331,7 +331,7 @@ export function ActiveGenericSessionView({
           className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-white/10 bg-white/[0.02] py-4 text-sm font-semibold text-primary transition-all active:scale-[0.99] hover:border-primary/40 hover:bg-primary/5"
         >
           <Plus className="h-4 w-4" />
-          Ajouter un segment
+          Ajouter un exercice
         </button>
       )}
 

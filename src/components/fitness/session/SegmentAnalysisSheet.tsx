@@ -101,7 +101,10 @@ export function SegmentAnalysisSheet({
     [displayLabel, instances],
   );
   const narrative = useMemo(() => buildSegmentNarrative(stats), [stats]);
-  const repWord = isCourse ? "répétition" : "occurrence";
+  // Vocabulaire harmonisé (15/07/2026) : "répétition" pour toutes les
+  // disciplines, jamais "occurrence" (mot technique qui avait fuité ici
+  // avant l'harmonisation demandée par Nathan).
+  const repWord = "répétition";
 
   const chartableMetrics = stats.metrics.filter((m) => m.history.length > 0);
   const [metricKey, setMetricKey] = useState<string | undefined>(chartableMetrics[0]?.key);

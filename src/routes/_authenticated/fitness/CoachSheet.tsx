@@ -27,6 +27,7 @@ import type {
   DisciplineId,
   SenseiAnswerValue,
   SenseiAnswers,
+  WorkoutEngine,
   WorkoutRecordDraft,
   WorkoutTemplate,
 } from "@/lib/fitness/engines/types";
@@ -52,6 +53,20 @@ export type { WorkoutTemplate } from "@/lib/fitness/engines/types";
 // sienne (EngineDescriptor.icon, voir types.ts), résolue par le même
 // composant que l'historique (DisciplineIcon.tsx). Ajouter une
 // discipline ne touche plus ce fichier, même pour son icône.
+
+/** Retire de `answers` les réponses dont la question est masquée par son
+ *  `when()` pour l'état final des réponses (ex: incline_pct pour "Marche
+ *  inclinée" alors que "Rameur" a été choisi) — voir le commentaire dans
+ *  `generate` ci-dessous pour le contexte complet. Générique : ne connaît
+ *  aucun vocabulaire de discipline, ne lit que `engine.questions`. */
+function effectiveAnswers(engine: WorkoutEngine, answers: SenseiAnswers): SenseiAnswers {
+  const result: SenseiAnswers = {};
+  for (const q of engine.questions) {
+    if (q.when && !q.when(answers)) continue;
+    if (answers[q.id] !== undefined) result[q.id] = answers[q.id];
+  }
+  return result;
+}
 
 type Step = "discipline" | "question" | "summary";
 
@@ -221,8 +236,19 @@ export function CoachSheet({
         workouts: senseiHistory,
       };
       const context = DISCIPLINE_CONTEXT_BUILDERS[engine.id]?.(answers, runtimeInputs) ?? {};
-      const template = await engine.generate(answers, context);
-      const draft = engine.toWorkoutRecord(template, answers);
+      // Correction 15/07/2026 (retour de Nathan) : `answers` porte encore les
+      // valeurs par défaut de TOUTES les questions du moteur, y compris
+      // celles masquées par leur `when()` pour la discipline/activité
+      // choisie (ex: incline_pct reste rempli même en choisissant "Rameur"
+      // côté Cardio) — pré-remplies dès `selectDiscipline`/le seed initial
+      // pour que les champs numériques affichent une valeur par défaut dès
+      // qu'une question devient visible. Sans ce filtre, le moteur reçoit
+      // des métriques hors sujet qui remontent ensuite jusqu'à l'affichage
+      // (chips de la répétition en séance active). Un seul point de
+      // correction pour toutes les disciplines, pas un fix par moteur.
+      const cleanAnswers = effectiveAnswers(engine, answers);
+      const template = await engine.generate(cleanAnswers, context);
+      const draft = engine.toWorkoutRecord(template, cleanAnswers);
       return { template, draft };
     },
     onSuccess: ({ template, draft }: { template: WorkoutTemplate; draft: WorkoutRecordDraft }) => {

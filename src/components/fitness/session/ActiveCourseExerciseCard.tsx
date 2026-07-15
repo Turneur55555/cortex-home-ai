@@ -37,6 +37,12 @@ import { ActiveSegmentCard } from "./ActiveSegmentCard";
 // fiche que celle utilisée depuis l'historique (voir
 // CourseHistoryContent.tsx) : aucune deuxième implémentation de fiche.
 //
+// MISE À JOUR (15/07/2026) : ActiveSegmentCard.tsx a été généralisé (métriques
+// génériques pilotées par SEGMENT_METRIC_CONFIG, plus seulement distance/allure
+// Course) — ce fichier lui fournit désormais `knownKeys` (union des clés de
+// métriques du groupe) pour qu'une répétition fraîchement ajoutée affiche les
+// mêmes champs que ses sœurs.
+//
 // Les positions restent globales à la séance (voir
 // useReorderGenericSegment, qui échange la position avec le voisin
 // immédiat au sein du tableau qu'on lui passe) : en passant SEULEMENT
@@ -71,6 +77,10 @@ export function ActiveCourseExerciseCard({
   const [collapsed, setCollapsed] = useState(false);
 
   const doneCount = group.instances.filter((s) => s.completed).length;
+  // Union des clés de métriques déjà utilisées par ce groupe — permet
+  // à une répétition fraîchement ajoutée (metrics vide) d'afficher les
+  // mêmes champs que ses sœurs (voir ActiveSegmentCard.tsx).
+  const knownKeys = Array.from(new Set(group.instances.flatMap((s) => Object.keys(s.metrics))));
 
   const handleAddRep = () => {
     addSegment.mutate({
@@ -118,6 +128,7 @@ export function ActiveCourseExerciseCard({
               <ActiveSegmentCard
                 key={segment.id}
                 segment={segment}
+                knownKeys={knownKeys}
                 isFirst={i === 0}
                 isLast={i === group.instances.length - 1}
                 onUpdate={(fields) => updateSegment.mutate({ id: segment.id, ...fields })}
