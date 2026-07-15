@@ -256,7 +256,7 @@ export interface PrimaryColumn {
  *  Générique sur T pour servir aussi bien SessionSegment (historique) que
  *  ActiveGenericSegment (séance en cours), même principe que
  *  groupByExerciseLabel ci-dessus. */
-export function primaryColumnsForInstances<T extends { metrics?: Record<string, number> }>(
+export function primaryColumnsForInstances<T extends { metrics?: Record<string, number | string> }>(
   instances: T[],
 ): PrimaryColumn[] {
   const present = new Set<string>();
@@ -290,6 +290,39 @@ export function bestMetricValue(
   if (values.length === 0) return null;
   const value = config.direction === "min" ? Math.min(...values) : Math.max(...values);
   return { value, formatted: config.format(value) };
+}
+
+/** Phase C, lot V2 (P3-1) : nombre d'exercices de la séance dont la
+ *  métrique principale bat STRICTEMENT le meilleur historique — alimente
+ *  la tuile "Records" du résumé de clôture générique, pendant du
+ *  "Meilleur 1RM" musculation. Volontairement plus exigeant que le badge
+ *  Record de la carte exercice (qui s'affiche aussi à égalité ou sans
+ *  historique) : au moment de la célébration, on ne compte que les vraies
+ *  améliorations — jamais un "record" gonflé par l'absence d'historique.
+ *  `history` = toutes les occurrences passées de la discipline
+ *  (useUserDisciplineSegmentInstances) ; correspondance par
+ *  segmentTypeKey, même identité d'affichage que groupByExerciseLabel. */
+export function countNewRecords(
+  segments: Array<{ label: string; metrics: Record<string, number | string> }>,
+  history: Array<{ label: string; metrics?: Record<string, number | string> }>,
+): number {
+  let count = 0;
+  for (const group of groupByExerciseLabel(segments)) {
+    const column = primaryColumnsForInstances(group.instances)[0];
+    if (!column) continue;
+    const currentBest = bestMetricValue(group.instances, column.key);
+    if (!currentBest) continue;
+    const pastInstances = history.filter((h) => segmentTypeKey(h.label) === group.key);
+    const historicalBest = bestMetricValue(pastInstances, column.key);
+    if (!historicalBest) continue;
+    const direction = SEGMENT_METRIC_CONFIG[column.key].direction;
+    const beats =
+      direction === "min"
+        ? currentBest.value < historicalBest.value
+        : currentBest.value > historicalBest.value;
+    if (beats) count += 1;
+  }
+  return count;
 }
 
 export interface MetricStat {

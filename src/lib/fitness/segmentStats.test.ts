@@ -7,6 +7,7 @@ import {
   buildSegmentNarrative,
   primaryColumnsForInstances,
   bestMetricValue,
+  countNewRecords,
   type SegmentInstance,
 } from "./segmentStats";
 
@@ -235,5 +236,56 @@ describe("bestMetricValue", () => {
 
   it("retourne null pour une clé de métrique inconnue", () => {
     expect(bestMetricValue([{ metrics: { foo: 1 } }], "foo")).toBeNull();
+  });
+});
+
+describe("countNewRecords (Phase C, lot V2 — tuile Records de clôture)", () => {
+  it("compte un exercice qui bat strictement le meilleur historique (direction max)", () => {
+    const segments = [{ label: "Rameur", metrics: { distance_m: 2500 } }];
+    const history = [
+      { label: "Rameur", metrics: { distance_m: 2000 } },
+      { label: "Rameur", metrics: { distance_m: 2400 } },
+    ];
+    expect(countNewRecords(segments, history)).toBe(1);
+  });
+
+  it("respecte la direction min (allure : plus petit = meilleur)", () => {
+    const segments = [{ label: "Tempo", metrics: { pace_min_per_km: 4.5 } }];
+    expect(countNewRecords(segments, [{ label: "Tempo", metrics: { pace_min_per_km: 5 } }])).toBe(
+      1,
+    );
+    expect(countNewRecords(segments, [{ label: "Tempo", metrics: { pace_min_per_km: 4 } }])).toBe(
+      0,
+    );
+  });
+
+  it("ne compte JAMAIS une égalité ni un exercice sans historique (pas de record gonflé)", () => {
+    const segments = [
+      { label: "Rameur", metrics: { distance_m: 2000 } },
+      { label: "Vélo", metrics: { distance_m: 10000 } },
+    ];
+    const history = [{ label: "Rameur", metrics: { distance_m: 2000 } }];
+    expect(countNewRecords(segments, history)).toBe(0);
+  });
+
+  it("regroupe les répétitions par type (suffixe i/n, accents/casse) avant comparaison", () => {
+    const segments = [
+      { label: "400m allure 5 km 1/2", metrics: { distance_m: 400 } },
+      { label: "400m allure 5 km 2/2", metrics: { distance_m: 450 } },
+    ];
+    const history = [{ label: "400M ALLURE 5 KM 3/8", metrics: { distance_m: 420 } }];
+    expect(countNewRecords(segments, history)).toBe(1);
+  });
+
+  it("ignore les groupes sans métrique primary et les valeurs non numériques", () => {
+    const segments: Array<{ label: string; metrics: Record<string, number | string> }> = [
+      { label: "Yoga", metrics: { note: "zen" } },
+      { label: "Rameur", metrics: { distance_m: 2500 } },
+    ];
+    const history: Array<{ label: string; metrics: Record<string, number | string> }> = [
+      { label: "Yoga", metrics: { note: "zen" } },
+      { label: "Rameur", metrics: { distance_m: 2000 } },
+    ];
+    expect(countNewRecords(segments, history)).toBe(1);
   });
 });

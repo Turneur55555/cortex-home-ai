@@ -45,7 +45,10 @@ export function ActiveGenericSessionView({
   onFinished,
 }: {
   workout: ActiveGenericWorkout;
-  onFinished: () => void;
+  /** Phase C, lot V2 (P0-2) : reçoit le snapshot de la séance clôturée —
+   *  même contrat que ActiveWorkoutView (muscu), pour que la fiche de
+   *  bilan IA survive au démontage de cette vue (voir SeancesTab). */
+  onFinished: (finished: ActiveGenericWorkout) => void;
 }) {
   const entry = ENGINE_REGISTRY[workout.discipline];
 
@@ -100,7 +103,7 @@ export function ActiveGenericSessionView({
   const handleFinish = async () => {
     setConfirmFinish(false);
     await finish.mutateAsync(workout);
-    onFinished();
+    onFinished(workout);
   };
 
   const handleCancel = async () => {

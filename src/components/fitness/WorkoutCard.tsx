@@ -13,6 +13,7 @@ import {
   MoreVertical,
   Plus,
   Repeat,
+  Sparkles,
   Trash2,
   Trophy,
   TrendingUp,
@@ -40,6 +41,8 @@ import { estimateWorkoutCalories } from "@/lib/fitness/calories";
 import { useLatestBodyWeight } from "@/hooks/useLatestBodyWeight";
 import { ENGINE_REGISTRY } from "@/lib/fitness/engines/registry";
 import { DisciplineBadge } from "./session/DisciplineIcon";
+import { useWorkoutAnalysisIndex } from "@/hooks/useWorkoutAnalyses";
+import { StoredWorkoutAnalysisSheet } from "./StoredWorkoutAnalysisSheet";
 
 export type WorkoutRow = NonNullable<ReturnType<typeof useWorkouts>["data"]>[number];
 type ExerciseRow = NonNullable<WorkoutRow["exercises"]>[number];
@@ -186,6 +189,13 @@ export function WorkoutCard({
 
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  // Phase C, lot V2 : "Revoir le bilan" — le bilan IA de clôture est
+  // persisté (workout_analyses) depuis le 29/06 mais n'était jamais relu.
+  // L'entrée n'apparaît que si un bilan existe (index partagé, une seule
+  // requête pour toutes les cartes) — jamais d'entrée de menu morte.
+  const { data: analysisIndex } = useWorkoutAnalysisIndex();
+  const hasAnalysis = !!(w.id && analysisIndex?.has(w.id));
+  const [analysisOpen, setAnalysisOpen] = useState(false);
   const [confirmDeleteGroup, setConfirmDeleteGroup] = useState<ExerciseGroup | null>(null);
   const [statsTarget, setStatsTarget] = useState<{ key: string; name: string } | null>(null);
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
@@ -336,13 +346,29 @@ export function WorkoutCard({
             </button>
             {menuOpen && (
               <div className="absolute right-0 top-10 z-20 min-w-[180px] overflow-hidden rounded-2xl border border-border bg-card shadow-elevated">
+                {hasAnalysis && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setAnalysisOpen(true);
+                    }}
+                    className="flex w-full items-center gap-3 px-4 py-3 text-sm font-medium transition-colors hover:bg-white/5"
+                  >
+                    <Sparkles className="h-4 w-4 text-primary" />
+                    Revoir le bilan
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => {
                     setMenuOpen(false);
                     onRepeatLive(w);
                   }}
-                  className="flex w-full items-center gap-3 px-4 py-3 text-sm font-medium transition-colors hover:bg-white/5"
+                  className={
+                    "flex w-full items-center gap-3 px-4 py-3 text-sm font-medium transition-colors hover:bg-white/5" +
+                    (hasAnalysis ? " border-t border-border" : "")
+                  }
                 >
                   <Repeat className="h-4 w-4 text-muted-foreground" />
                   Refaire en live
@@ -689,6 +715,15 @@ export function WorkoutCard({
       )}
 
       {showAddModal && <AddExerciseModal workoutId={w.id} onClose={() => setShowAddModal(false)} />}
+
+      {analysisOpen && w.id && (
+        <StoredWorkoutAnalysisSheet
+          workoutId={w.id}
+          workoutName={w.name || "Séance"}
+          variant="muscu"
+          onClose={() => setAnalysisOpen(false)}
+        />
+      )}
 
       {uploadingExId && (
         <div className="pointer-events-none fixed inset-x-0 bottom-20 z-50 flex justify-center">

@@ -34,6 +34,8 @@ import { adaptWorkoutRow, type PersistedWorkoutRow } from "@/lib/fitness/engines
 import { groupByExerciseLabel } from "@/lib/fitness/segmentStats";
 import { WorkoutDeleteDialog } from "@/components/fitness/WorkoutDeleteDialog";
 import { RepeatLiveConfirmDialog } from "@/components/fitness/RepeatLiveConfirmDialog";
+import { useWorkoutAnalysisIndex } from "@/hooks/useWorkoutAnalyses";
+import { StoredWorkoutAnalysisSheet } from "@/components/fitness/StoredWorkoutAnalysisSheet";
 import { EditableText } from "@/components/fitness/EditableText";
 import { StatTileRow, type StatTileSpec } from "@/components/fitness/StatTileRow";
 import { GenericHistoryExerciseList } from "./GenericHistoryExerciseList";
@@ -47,6 +49,11 @@ export function GenericHistoryCard({
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmRepeat, setConfirmRepeat] = useState(false);
+  // Phase C, lot V2 : "Revoir le bilan" — même mécanisme (et même index
+  // partagé) que WorkoutCard côté musculation, voir useWorkoutAnalyses.ts.
+  const { data: analysisIndex } = useWorkoutAnalysisIndex();
+  const hasAnalysis = !!analysisIndex?.has(workout.id);
+  const [analysisOpen, setAnalysisOpen] = useState(false);
   const del = useDeleteWorkout();
   const updateName = useUpdateWorkoutName();
   const repeatLive = useStartGenericActiveWorkout();
@@ -129,13 +136,29 @@ export function GenericHistoryCard({
             </button>
             {menuOpen && (
               <div className="absolute right-0 top-10 z-20 min-w-[180px] overflow-hidden rounded-2xl border border-border bg-card shadow-elevated">
+                {hasAnalysis && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      setAnalysisOpen(true);
+                    }}
+                    className="flex w-full items-center gap-3 px-4 py-3 text-sm font-medium transition-colors hover:bg-white/5"
+                  >
+                    <Sparkles className="h-4 w-4 text-primary" />
+                    Revoir le bilan
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => {
                     setMenuOpen(false);
                     handleRepeatLive();
                   }}
-                  className="flex w-full items-center gap-3 px-4 py-3 text-sm font-medium transition-colors hover:bg-white/5"
+                  className={
+                    "flex w-full items-center gap-3 px-4 py-3 text-sm font-medium transition-colors hover:bg-white/5" +
+                    (hasAnalysis ? " border-t border-border" : "")
+                  }
                 >
                   <Repeat className="h-4 w-4 text-muted-foreground" />
                   Refaire en live
@@ -196,6 +219,15 @@ export function GenericHistoryCard({
           />
         </div>
       </div>
+
+      {analysisOpen && (
+        <StoredWorkoutAnalysisSheet
+          workoutId={workout.id}
+          workoutName={workout.name || "Séance"}
+          variant="generic"
+          onClose={() => setAnalysisOpen(false)}
+        />
+      )}
 
       {confirmRepeat && (
         <RepeatLiveConfirmDialog

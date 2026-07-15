@@ -13,9 +13,12 @@
 import { useMemo } from "react";
 import { Loader2 } from "lucide-react";
 import type { ActiveGenericWorkout } from "@/hooks/useGenericActiveSession";
+import { useAuth } from "@/hooks/use-auth";
+import { useUserDisciplineSegmentInstances } from "@/hooks/useDisciplineSegmentHistory";
 import { ENGINE_REGISTRY } from "@/lib/fitness/engines/registry";
 import {
   bestMetricValue,
+  countNewRecords,
   groupByExerciseLabel,
   primaryColumnsForInstances,
 } from "@/lib/fitness/segmentStats";
@@ -57,6 +60,18 @@ export function GenericWorkoutSummaryOverlay({
 
   const engineLabel = ENGINE_REGISTRY[workout.discipline]?.label ?? workout.discipline;
 
+  // Phase C, lot V2 (P3-1) : nombre de records STRICTEMENT battus dans
+  // cette séance (countNewRecords, testé) — pendant du "Meilleur 1RM"
+  // musculation au même moment de célébration. L'historique de la
+  // discipline est déjà en cache (badge Record des cartes exercice) ; la
+  // séance en cours n'y figure pas encore (séances terminées uniquement).
+  const { user } = useAuth();
+  const { data: pastInstances } = useUserDisciplineSegmentInstances(workout.discipline, user?.id);
+  const recordsCount = useMemo(
+    () => countNewRecords(workout.segments, pastInstances ?? []),
+    [workout.segments, pastInstances],
+  );
+
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 px-4 pb-safe-or-6">
       <Confetti />
@@ -80,7 +95,15 @@ export function GenericWorkoutSummaryOverlay({
             }
           />
           <StatTile label="Exercices" value={`${groups.length}`} />
-          {topMetric ? (
+          {/* 4e tuile par valeur émotionnelle décroissante : records battus
+              aujourd'hui > métrique-phare > discipline (dernier recours). */}
+          {recordsCount > 0 ? (
+            <StatTile
+              label={recordsCount > 1 ? "Records 🏆" : "Record 🏆"}
+              value={`${recordsCount}`}
+              sub={recordsCount > 1 ? "battus aujourd'hui" : "battu aujourd'hui"}
+            />
+          ) : topMetric ? (
             <StatTile label={topMetric.label} value={topMetric.formatted} sub="meilleure valeur" />
           ) : (
             <StatTile label="Discipline" value={engineLabel} />

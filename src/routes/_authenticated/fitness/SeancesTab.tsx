@@ -20,6 +20,7 @@ import { ExerciseCatalogSheet } from "@/components/fitness/ExerciseCatalogSheet"
 import { ForgeDisciplineChooser } from "@/components/fitness/ForgeDisciplineChooser";
 import { DisciplineExerciseLibrarySheet } from "@/components/fitness/DisciplineExerciseLibrarySheet";
 import { PostWorkoutAnalysisSheet } from "@/components/fitness/PostWorkoutAnalysisSheet";
+import { GenericPostWorkoutAnalysisSheet } from "@/components/fitness/session/GenericPostWorkoutAnalysisSheet";
 import { SectionReveal } from "@/components/fitness/SectionReveal";
 import {
   useExerciseImageUrls,
@@ -31,6 +32,7 @@ import {
 import {
   useActiveGenericWorkout,
   useStartGenericActiveWorkout,
+  type ActiveGenericWorkout,
 } from "@/hooks/useGenericActiveSession";
 import { useRecoveryMap } from "@/hooks/useRecoveryMap";
 
@@ -78,6 +80,11 @@ export function SeancesTab() {
   // C2 : le snapshot de la séance clôturée vit ici pour que la fiche d'analyse
   // IA survive au démontage d'ActiveWorkoutView.
   const [finishedSnapshot, setFinishedSnapshot] = useState<ActiveWorkout | null>(null);
+  // Phase C, lot V2 (P0-2) : pendant générique — le bilan IA se déclenche
+  // désormais aussi à la clôture des 5 autres disciplines (l'ancien
+  // onFinished était un no-op, AUCUN retour après le confetti).
+  const [finishedGenericSnapshot, setFinishedGenericSnapshot] =
+    useState<ActiveGenericWorkout | null>(null);
   const [template, setTemplate] = useState<WorkoutTemplate | null>(null);
   // "Enregistrer comme séance sauvegardée" (menu ⋮) : ouvre l'éditeur de
   // modèle déjà développé (Module 2) en mode CRÉATION, pré-rempli depuis la
@@ -232,7 +239,15 @@ export function SeancesTab() {
   if (!activeWorkout && activeGeneric) {
     return (
       <section className="flex flex-col gap-4">
-        <ActiveGenericSessionView workout={activeGeneric} onFinished={() => {}} />
+        <ActiveGenericSessionView workout={activeGeneric} onFinished={setFinishedGenericSnapshot} />
+        {/* Lot V2 : monté aussi ici (comme le pendant muscu ci-dessous) pour
+            survivre à la transition séance active → vue historique. */}
+        {finishedGenericSnapshot && (
+          <GenericPostWorkoutAnalysisSheet
+            workout={finishedGenericSnapshot}
+            onClose={() => setFinishedGenericSnapshot(null)}
+          />
+        )}
       </section>
     );
   }
@@ -536,6 +551,14 @@ export function SeancesTab() {
           previousWorkouts={data ?? []}
           recoveryMap={recoveryMap}
           onClose={() => setFinishedSnapshot(null)}
+        />
+      )}
+
+      {/* Lot V2 : bilan IA générique — rendu aussi hors séance active */}
+      {finishedGenericSnapshot && (
+        <GenericPostWorkoutAnalysisSheet
+          workout={finishedGenericSnapshot}
+          onClose={() => setFinishedGenericSnapshot(null)}
         />
       )}
     </section>
