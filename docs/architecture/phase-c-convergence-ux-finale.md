@@ -468,7 +468,110 @@ suivant ; les deux portes de décision sont les seuls points d'arrêt planifiés
 
 ---
 
+## 8. Addendum — épreuve de la vision (2026-07-15, demande de Nathan après validation du principe)
+
+Nathan valide le principe général et impose un dernier exercice avant développement : oublier
+les P0/P1/P2, imaginer le produit terminé dans 2 ans, puis vérifier que chaque lot sert
+réellement cette expérience — et **réordonner la phase par valeur utilisateur, jamais par
+facilité technique**. Cet addendum fait cet exercice ; **son ordre (§8.4) remplace celui du §7.**
+
+### 8.1 Le produit dans 2 ans — l'utilisateur aux six pratiques
+
+Il pratique Musculation, Lagree, Marche inclinée, Tapis de course, Rameur et Vélo. Mardi soir,
+après son Rameur, il ouvre l'app — et le rituel est exactement celui de sa muscu de lundi et de
+son Lagree de mercredi. Quatre moments, toujours les mêmes, toujours tenus :
+
+- **Ouvrir** — en moins de 3 secondes il sait où il en est : sa flamme, sa dernière séance, ce
+  qui l'attend. Aucun écran ne demande de réfléchir.
+- **S'entraîner** — chaque carte d'exercice est un duel contre la dernière fois. La cible est
+  visible avant l'effort, le record surgit pendant. Il n'a jamais besoin de se souvenir : l'app
+  se souvient pour lui.
+- **Clore** — confetti, puis le bilan : ce que la séance lui a apporté, ce qu'elle change, quoi
+  viser ensuite. C'est la récompense cognitive — la raison de clore dans l'app plutôt que de
+  poser le téléphone.
+- **Relire** — les Chroniques ne sont pas un log, ce sont des pages : chaque séance close garde
+  son bilan, ses records, son histoire. Il lui arrive de les rouvrir *pour le plaisir*, comme on
+  relit un carnet de voyage.
+
+**L'identité propre** n'est pas à inventer : elle est déjà dans la langue de l'app (les
+Chroniques, la Forge, le Sensei, le Scan des Titans, "ta première légende t'attend"). Hevy est
+un carnet de gym, Strava un réseau social de la performance, Garmin un tableau de bord de
+capteurs. ICORTEX est **le chroniqueur d'une légende personnelle**. Quatre piliers en découlent,
+qui servent de test à chaque lot :
+
+1. **Le duel contre soi-même** — chaque écran confronte à son propre passé (dernière fois,
+   record, tendance). Jamais de comparaison sociale.
+2. **La chronique comme saga** — l'historique se relit ; une séance close n'est jamais une ligne
+   morte, c'est une page avec son récit.
+3. **Le mentor** — le Sensei explique le *pourquoi*, jamais seulement le quoi ; chaque chiffre
+   important a une phrase.
+4. **Une seule langue** — exercice, répétition, duel, chronique : la grammaire est identique
+   dans les six pratiques ; seules les métriques changent de vocabulaire.
+
+### 8.2 Découverte faite pendant cet exercice — la chronique ne se rouvre jamais, même en muscu
+
+En vérifiant "plaisir de rouvrir ses anciennes séances" contre le code réel : le bilan IA
+post-séance musculation est **déjà persisté en production** (table `workout_analyses`, upsert
+par la fonction Edge `analyze-workout` à chaque clôture) mais **jamais relu nulle part dans
+l'app** (seul l'export de données référence la table). Autrement dit : même pour la discipline
+de référence, le bilan est à usage unique — fermé, perdu. La promesse "les chroniques deviennent
+une récompense en elles-mêmes" a donc un prérequis qui manque *aussi* à la Musculation, et la
+donnée pour le tenir dort déjà en base. Correction intégrée au lot Bilan (§8.4, V2) : **le bilan
+devient une page de la chronique**, re-ouvrable depuis la carte d'historique — muscu comprise.
+C'est le seul point où cette phase touche à la Musculation : non pour la copier, mais parce que
+la vision a révélé qu'elle-même n'était pas au niveau.
+
+### 8.3 Chaque lot à l'épreuve de la vision
+
+| Lot (§6) | Ce qu'il apporte aux 5 axes (fluidité / satisfaction / motivation / compréhension / plaisir des chroniques) | Verdict |
+|---|---|---|
+| C0.1 — vérité de la fiche (P0-1) | Une chronique qui ment ("Pas encore réalisé" sur un exercice pratiqué dix fois) détruit la confiance, donc tout le plaisir de relire. Pas un lot "technique" : le préalable du pilier 2. | **Maintenu en tête** |
+| C0.2 — confirmation custom (P1-6) | Un dialogue natif au milieu d'une app soignée casse l'immersion (et a réellement bloqué des onglets). Fluidité pure. | **Maintenu en tête** (minuscule) |
+| C0.3 — ↻ liste compacte (P2-5) | Confort mineur, n'alimente fortement aucun axe. | **Repoussé** (lot polish) |
+| C1 — bilan de séance générique (P0-2) | Satisfaction et motivation maximales : LE moment de récompense. Mais tel que spécifié en §6, le bilan restait éphémère — la vision impose qu'il se relise (§8.2). | **Remonté et élargi** : bilan + sa page dans la chronique (toutes disciplines, muscu incluse) |
+| C2 — duel en séance (P1-2) | Motivation quotidienne, compréhension immédiate : on sait ce qu'on doit battre, à chaque répétition. Pilier 1 incarné. | **Maintenu haut** |
+| C3 — fiche exercice v2 (P1-1, P1-3, P3-2) | "Les fiches racontent une histoire" : prochaine cible = progression évidente sans réfléchir ; analyse IA = le mentor ; découverte = donner envie d'essayer. | **Maintenu** (juste après le duel) |
+| C5.3 — fiche de cours Guidé/Autre (P2-2) | Lagree est l'une des six pratiques de la vision et sa chronique est aujourd'hui la plus pauvre des six (puces plates). Forte valeur perçue, petite surface. | **Remonté nettement** (sort du lot C5) |
+| C4 — consigner une séance passée (P1-5) | Une saga avec des trous ne se relit pas : la complétude de la chronique est une condition du plaisir de relecture. | **Maintenu milieu** |
+| C4 — édition rétroactive (P1-4) | De la confiance (corriger une faute de frappe), pas de la joie. Assurance nécessaire, émotion faible — et la surface d'écriture la plus risquée. | **Descendu** (après consigner) |
+| C5.1/5.2 — modèles multi-disciplines (P2-1) | Fluidité réelle pour les routines Rameur/Vélo/Marche, mais valeur rituelle, pas émotionnelle. Porte de décision inchangée. | **Maintenu tard** |
+| C5.4 — explication Sensei générique (P2-3) | Pilier 3 mais micro-surface (un toast). | **Repoussé** (lot polish) |
+| C6 — Maîtrise par exercice (P2-4) | Très aligné (identité, progression évidente, fiches vivantes) — c'est même le lot le plus "vision" de tous. Mais gated par une vraie décision produit. | **Décision remontée** (à trancher dès la fin de V2, pour que le concept soit prêt) ; implémentation planifiée après les fiches (V5) si validée tôt, sinon en dernier |
+| P3-3 — hygiène documentaire | N'apporte rien à l'expérience. | **Repoussé** : au fil de l'eau dans les lots qui touchent ces fichiers, jamais un lot dédié |
+
+Aucun lot n'est supprimé : la vision confirme la liste, elle en change la hiérarchie — et elle a
+ajouté un élément (la relecture du bilan) qu'aucune analyse P0/P1 n'avait vu, parce qu'il
+manquait aussi à la référence.
+
+### 8.4 Ordre définitif des développements (remplace le §7)
+
+1. **V1 — La confiance** : vérité de la fiche en séance active (P0-1) + confirmation "Refaire
+   en live" custom partagée (P1-6).
+2. **V2 — La récompense qui reste** : bilan de séance générique (P0-2) **+ le bilan devient une
+   page re-ouvrable de la chronique, toutes disciplines muscu comprise** (lecture de
+   `workout_analyses` existante + persistance du bilan générique) + tuile "Records du jour" à la
+   clôture (P3-1). → *Dès la fin de V2 : porte de décision Maîtrise (§5.8) soumise à Nathan.*
+3. **V3 — Le duel** : ligne "Dernière fois" + reprise des valeurs sur la carte exercice active
+   générique (P1-2).
+4. **V4 — Les fiches qui racontent** : prochaine cible calculée (P1-1), analyse IA à la demande
+   (P1-3), état Découverte (P3-2).
+5. **V5 — La fiche de cours** : écrin narratif Guidé/Autre (P2-2) — la chronique Lagree au
+   niveau des autres.
+6. **V6 — La Maîtrise** (P2-4) — *si et seulement si* la porte de décision ouverte en V2 est
+   validée ; sinon ce créneau glisse aux lots suivants et la Maîtrise sort de la phase.
+7. **V7 — La chronique sans trous** : consigner une séance passée (P1-5).
+8. **V8 — Corriger le passé** : édition rétroactive des séances génériques (P1-4).
+9. **[PORTE DE DÉCISION — schéma modèles]** puis **V9 — Les modèles pour tous** (P2-1).
+10. **V10 — Polish** : ↻ générique liste compacte (P2-5), explication Sensei générique (P2-3),
+    tuile de secours du résumé, hygiène P3-3 résiduelle.
+
+Le contenu détaillé de chaque lot (fichiers, risques, vérifications) reste celui du §6 — seuls
+la hiérarchie, le découpage de C5 et l'élargissement du lot Bilan (§8.2) changent.
+
+---
+
 *Document produit le 2026-07-15 sur la branche `claude/exercise-central-governance-0qvidl`, à
-partir de l'état réel du code (tip incluant la clôture de la Phase B, commit `5d20370`). Aucune
-ligne de code de cette phase n'a été écrite : le développement commencera après validation de ce
-document par Nathan.*
+partir de l'état réel du code (tip incluant la clôture de la Phase B, commit `5d20370`).
+Addendum §8 (épreuve de la vision, réordonnancement par valeur utilisateur) ajouté le même jour
+après validation du principe général par Nathan. Aucune ligne de code de cette phase n'a été
+écrite : le développement commencera après validation de ce document par Nathan.*
