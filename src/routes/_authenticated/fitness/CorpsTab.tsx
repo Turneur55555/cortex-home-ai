@@ -51,6 +51,7 @@ export function CorpsTab() {
   const [focusField, setFocusField] = useState<MeasurementField | null>(null);
   const [quickField, setQuickField] = useState<{ key: AllBodyField; label: string; unit: string } | null>(null);
   const [period, setPeriod] = useState<"semaine" | "mois" | "trimestre">("trimestre");
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const openWithFocus = (f: MeasurementField | null) => {
     setFocusField(f);
