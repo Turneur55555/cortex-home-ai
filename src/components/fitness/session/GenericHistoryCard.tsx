@@ -33,6 +33,7 @@ import {
 import { adaptWorkoutRow, type PersistedWorkoutRow } from "@/lib/fitness/engines/adaptRow";
 import { groupByExerciseLabel } from "@/lib/fitness/segmentStats";
 import { WorkoutDeleteDialog } from "@/components/fitness/WorkoutDeleteDialog";
+import { RepeatLiveConfirmDialog } from "@/components/fitness/RepeatLiveConfirmDialog";
 import { EditableText } from "@/components/fitness/EditableText";
 import { StatTileRow, type StatTileSpec } from "@/components/fitness/StatTileRow";
 import { GenericHistoryExerciseList } from "./GenericHistoryExerciseList";
@@ -45,6 +46,7 @@ export function GenericHistoryCard({
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmRepeat, setConfirmRepeat] = useState(false);
   const del = useDeleteWorkout();
   const updateName = useUpdateWorkoutName();
   const repeatLive = useStartGenericActiveWorkout();
@@ -61,9 +63,16 @@ export function GenericHistoryCard({
   const gymLocation = workout.gym_location || "Salle inconnue";
   const exoCount = groupByExerciseLabel(view.segments).length;
 
+  // Phase C, lot V1 (P1-6) : confirmation via le dialogue custom partagé
+  // (RepeatLiveConfirmDialog, même composant que le chemin musculation) —
+  // plus de window.confirm() natif, hors charte et bloquant en test.
   const handleRepeatLive = () => {
     if (repeatLive.isPending) return;
-    if (!window.confirm(`Refaire « ${workout.name || "cette séance"} » en live ?`)) return;
+    setConfirmRepeat(true);
+  };
+  const confirmRepeatLive = () => {
+    setConfirmRepeat(false);
+    if (repeatLive.isPending) return;
     const seedSegments: LiveSegmentSeed[] = view.segments.map((seg) => ({
       label: seg.label,
       metrics: seg.metrics ?? {},
@@ -187,6 +196,14 @@ export function GenericHistoryCard({
           />
         </div>
       </div>
+
+      {confirmRepeat && (
+        <RepeatLiveConfirmDialog
+          workoutName={workout.name || "cette séance"}
+          onConfirm={confirmRepeatLive}
+          onCancel={() => setConfirmRepeat(false)}
+        />
+      )}
 
       {confirmDelete && (
         <WorkoutDeleteDialog

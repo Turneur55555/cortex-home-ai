@@ -274,9 +274,12 @@ export function primaryColumnsForInstances<T extends { metrics?: Record<string, 
 /** Meilleure valeur d'une métrique (selon sa direction déclarée) à travers
  *  toutes les occurrences d'un groupe qui la portent. `null` si aucune
  *  occurrence ne porte cette métrique — jamais de donnée inventée, jamais
- *  de faux "—" traité comme un zéro. */
+ *  de faux "—" traité comme un zéro. Le type de `metrics` admet des valeurs
+ *  string (contrat de SegmentInstance) : le filtre `typeof === "number"`
+ *  ci-dessous les écarte déjà à l'exécution — la signature reflète
+ *  simplement ce que les appelants (historique) passent réellement. */
 export function bestMetricValue(
-  instances: Array<{ metrics?: Record<string, number> }>,
+  instances: Array<{ metrics?: Record<string, number | string> }>,
   key: string,
 ): { value: number; formatted: string } | null {
   const config = SEGMENT_METRIC_CONFIG[key];

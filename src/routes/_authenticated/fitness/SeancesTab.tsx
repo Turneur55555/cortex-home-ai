@@ -5,6 +5,7 @@ import { ChoisirEpreuveCard } from "@/components/fitness/ChoisirEpreuveCard";
 import { LaForgeCard } from "@/components/fitness/LaForgeCard";
 import { BodyMap } from "@/components/fitness/BodyMap";
 import { WorkoutCard, type WorkoutRow } from "@/components/fitness/WorkoutCard";
+import { RepeatLiveConfirmDialog } from "@/components/fitness/RepeatLiveConfirmDialog";
 import { WorkoutSheet } from "@/components/fitness/WorkoutSheet";
 import { GenericHistoryCard } from "@/components/fitness/session/GenericHistoryCard";
 import { GenericSessionReviewSheet } from "@/components/fitness/session/GenericSessionReviewSheet";
@@ -124,24 +125,33 @@ export function SeancesTab() {
 
   // H1 : « Refaire » démarre une séance LIVE pré-remplie.
   const startFromTemplate = useStartWorkoutFromTemplate();
+  // Étape 0.3 (U3, confirmation légère) : « Refaire en live » démarre
+  // immédiatement une séance active — une confirmation évite un
+  // déclenchement accidentel (double-tap, clic hâtif dans la liste
+  // repliée). Centralisé ici : couvre les deux points d'entrée (↻ de la
+  // liste repliée ci-dessous, et WorkoutCard.tsx dont le bouton/menu
+  // "Refaire" appelle ce même callback via onRepeatLive). Phase C, lot V1
+  // (P1-6) : le window.confirm() natif (hors charte, bloquait les onglets
+  // de test Phase B) cède la place au dialogue custom partagé
+  // RepeatLiveConfirmDialog — même comportement, même garde isPending.
+  const [repeatCandidate, setRepeatCandidate] = useState<WorkoutRow | null>(null);
   const repeatLive = useCallback(
     (w: WorkoutRow) => {
       if (startFromTemplate.isPending) return;
-      // Étape 0.3 (U3, confirmation légère) : « Refaire en live » démarre
-      // immédiatement une séance active — une confirmation de minimis évite
-      // un déclenchement accidentel (double-tap, clic hâtif dans la liste
-      // repliée). Centralisé ici : couvre les deux points d'entrée (↻ de la
-      // liste repliée ci-dessous, et WorkoutCard.tsx dont le bouton/menu
-      // "Refaire" appelle ce même callback via onRepeatLive).
-      if (!window.confirm(`Refaire « ${w.name || "cette séance"} » en live ?`)) return;
-      startFromTemplate.mutate({
-        name: w.name,
-        gym_location: (w as { gym_location?: string | null }).gym_location ?? null,
-        exercises: w.exercises ?? [],
-      });
+      setRepeatCandidate(w);
     },
     [startFromTemplate],
   );
+  const confirmRepeatLive = useCallback(() => {
+    const w = repeatCandidate;
+    setRepeatCandidate(null);
+    if (!w || startFromTemplate.isPending) return;
+    startFromTemplate.mutate({
+      name: w.name,
+      gym_location: (w as { gym_location?: string | null }).gym_location ?? null,
+      exercises: w.exercises ?? [],
+    });
+  }, [repeatCandidate, startFromTemplate]);
 
   // Saisie rétroactive (ancien « Refaire ») — accessible via le menu ⋮ d'une séance.
   const openFromTemplate = useCallback((w: WorkoutRow) => {
@@ -505,6 +515,16 @@ export function SeancesTab() {
         <DisciplineExerciseLibrarySheet
           discipline={libraryDiscipline}
           onClose={() => setLibraryDiscipline(null)}
+        />
+      )}
+
+      {/* Phase C, lot V1 (P1-6) : confirmation "Refaire en live" custom,
+          partagée avec GenericHistoryCard — plus aucun window.confirm. */}
+      {repeatCandidate && (
+        <RepeatLiveConfirmDialog
+          workoutName={repeatCandidate.name || "cette séance"}
+          onConfirm={confirmRepeatLive}
+          onCancel={() => setRepeatCandidate(null)}
         />
       )}
 

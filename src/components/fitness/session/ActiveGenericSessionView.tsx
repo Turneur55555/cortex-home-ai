@@ -310,7 +310,16 @@ export function ActiveGenericSessionView({
       )}
 
       {statsLabel && (
-        <SegmentAnalysisSheet rawLabel={statsLabel} onClose={() => setStatsLabel(null)} />
+        // Phase C, lot V1 (P0-1) : sans `discipline`, la fiche retombait sur
+        // sa valeur par défaut "course" et lisait le mauvais historique pour
+        // toute séance active Cardio/HYROX/Guidé/Autre ("Pas encore réalisé"
+        // mensonger sur un exercice pratiqué). Même transmission que
+        // GenericHistoryExerciseList/DisciplineExerciseLibrarySheet.
+        <SegmentAnalysisSheet
+          rawLabel={statsLabel}
+          discipline={workout.discipline}
+          onClose={() => setStatsLabel(null)}
+        />
       )}
     </div>
   );
