@@ -66,3 +66,26 @@ export function useDeleteBodyMeasurement() {
     onError: (e: Error) => toast.error(e.message),
   });
 }
+
+export function useUpdateBodyMeasurement() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, patch }: { id: string; patch: TablesUpdate<"body_tracking"> }) => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Non authentifié");
+      const { error } = await supabase
+        .from("body_tracking")
+        .update(patch)
+        .eq("id", id)
+        .eq("user_id", user.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Mesure mise à jour");
+      qc.invalidateQueries({ queryKey: ["body_tracking"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+}
