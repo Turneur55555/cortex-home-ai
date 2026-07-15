@@ -395,3 +395,48 @@ Format : dimension — état pour les 5 autres disciplines par rapport à la mus
   n'a pas de sens sans données numériques. Le rendu "puces" actuel reste correct FONCTIONNELLEMENT ;
   reste à évaluer si Nathan veut malgré tout un habillage visuel plus riche que de simples puces pour
   ces deux cas (question ouverte, pas encore tranchée).
+
+### 8.7 Corrections livrées, vérifiées et testées live (2026-07-15, commit 4f7d545)
+
+Les 5 corrections mécaniques de 8.5 sont livrées :
+
+1. **Régression StatTileRow/StatTile** — corrigée (`min-w-0`/`overflow-hidden`/`break-words`,
+   plafond `MAX_COLUMNS = 4`). Re-testé live sur la carte "Endurance fondamentale" (5 tuiles) :
+   plus aucun chevauchement, 4 tuiles en ligne 1 + 1 tuile seule en ligne 2, exactement le
+   comportement voulu.
+2. **Résumé de séance générique** (`GenericWorkoutSummaryOverlay` + `WorkoutCelebration.tsx`
+   partagé) — testé live sur une séance Cardio réelle (Tapis) : confetti, 4 tuiles (Durée/Réalisé/
+   Exercices/Discipline), boutons "Continuer"/"Clore 🏆" identiques à la version musculation.
+3. **Badge Record générique** — implémenté à la fois sur la carte EN SÉANCE (`ActiveExerciseCard`,
+   `GenericExerciseCard`) et dans l'HISTORIQUE (`GenericHistoryExerciseList`, nouveau
+   sous-composant `GenericHistoryExerciseRow` qui appelle `useDisciplineSegmentHistory` légalement
+   une fois par ligne — pas de hook dans un `.map` brut). Testé live : la carte historique
+   "Endurance fondamentale" affiche "🏆 Nouveau record", pixel-identique au badge "🏆 Nouveau PR !"
+   de musculation (même pill `bg-warning/15`/`text-warning`, même icône Trophy).
+4. **Bouton Catalogue** dans `ActiveGenericSessionView` — testé live, ouvre bien
+   `DisciplineExerciseLibrarySheet` en lecture seule sans erreur.
+5. **Badge streak** dans le header de séance active générique — testé live ("5 sem." affiché à
+   côté du chrono, séance Cardio réelle).
+
+**Vérifications avant publication** : tsc (projet entier, 0 erreur réelle, TS7016
+lucide-react/date-fns = artefact sandbox déjà documenté, voir [[regle-no-verify-2026-07-15]]).
+eslint = 0 erreur sur les fichiers touchés. vitest = 288/288 (29 `rls.test.ts` skips préexistants),
+suite complète vérifiée en 2 lots suite à une instabilité récurrente de `vitest run` en un seul lot
+dans le sandbox de cette session (OOM probable — non liée au diff, confirmé par des lots partiels
+tous verts).
+
+**Publié sur Lovable et vérifié via fetch direct du bundle** (`seances-lLsQwKJV.js`, nouveau hash
+différent de la version précédente `seances-CdQJ5rxc.js`) : présence confirmée de "Nouveau record"
+et "Catalogue" dans le bundle livré, puis comportement confirmé par interaction réelle sur
+https://cortex-home-ai.lovable.app (pas seulement lecture du bundle).
+
+**Une nouvelle séance de test Cardio a été créée et terminée** (jamais annulée) pour ce test live —
+cohérent avec la pratique déjà suivie en Phase A/B (séances de test toujours closes proprement,
+jamais supprimées).
+
+**État de la convergence après ce lot** : les 5 écarts mécaniques identifiés en 8.3/8.4 sont
+comblés. Restent, tels quels, les écarts déjà explicitement actés hors scope en 8.6 (analyse IA
+post-séance générique, édition rétroactive, Rang/surcharge progressive générique, densité
+Guidé/Autre) — aucun n'est une extension mécanique du système déclaratif existant, chacun
+nécessite soit du backend nouveau soit une décision produit. Convergence UX à revalider par Nathan
+avant toute ouverture de Phase C.
