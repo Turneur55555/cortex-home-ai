@@ -180,7 +180,11 @@ export function GenericHistoryCard({
         </div>
 
         <div className="relative mt-4">
-          <GenericHistoryExerciseList view={view} discipline={engine.id} />
+          <GenericHistoryExerciseList
+            view={view}
+            discipline={engine.id}
+            sessionDate={workout.date}
+          />
         </div>
       </div>
 

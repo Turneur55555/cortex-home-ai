@@ -30,12 +30,21 @@ export interface StatTileSpec {
   title?: string;
 }
 
+// Addendum 3 (2026-07-15) : plafonné à 4 colonnes par ligne (au-delà, retour à la
+// ligne automatique via `grid-auto-flow: row` — même gabarit de colonnes réutilisé
+// pour la/les lignes suivantes). Sans ce plafond, une séance à 5 tuiles (ex. Guided :
+// Exos+Durée+Intensité+Calories+Récupération) compressait chaque colonne à moins de
+// 20% de largeur, provoquant un débordement de texte (voir StatTile.tsx) même avec
+// la correction défensive — mieux vaut une 2e ligne que des colonnes trop étroites.
+const MAX_COLUMNS = 4;
+
 export function StatTileRow({ tiles }: { tiles: StatTileSpec[] }) {
   if (tiles.length === 0) return null;
+  const columns = Math.min(tiles.length, MAX_COLUMNS);
   return (
     <div
       className="grid gap-2"
-      style={{ gridTemplateColumns: `repeat(${tiles.length}, minmax(0, 1fr))` }}
+      style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
     >
       {tiles.map((t) => (
         <StatTile

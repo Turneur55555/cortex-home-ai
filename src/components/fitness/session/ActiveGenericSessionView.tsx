@@ -16,7 +16,7 @@
 // ============================================================
 
 import { useMemo, useState } from "react";
-import { CheckCircle2, Loader2, MoreVertical, XCircle } from "lucide-react";
+import { BookOpen, CheckCircle2, Flame, Loader2, MoreVertical, XCircle } from "lucide-react";
 import type { ActiveGenericWorkout } from "@/hooks/useGenericActiveSession";
 import {
   useAddGenericSegment,
@@ -32,6 +32,13 @@ import { AddExerciseButton } from "../exerciseCard/ExerciseCardPrimitives";
 import { ExercisePickerSheet, type PickedExercise } from "../ExercisePickerSheet";
 import { SegmentAnalysisSheet } from "./SegmentAnalysisSheet";
 import { DisciplineIcon } from "./DisciplineIcon";
+// Addendum 3 (2026-07-15) : résumé de clôture générique (confetti + tuiles),
+// remplace le confirm() nu qui laissait cette séance sans aucune célébration
+// contrairement à la musculation (WorkoutSummaryOverlay) — voir doc §8.5.
+import { GenericWorkoutSummaryOverlay } from "./GenericWorkoutSummaryOverlay";
+import { useFitnessStreak } from "@/hooks/useFitnessStreak";
+import { useWorkouts } from "@/hooks/use-fitness";
+import { DisciplineExerciseLibrarySheet } from "../DisciplineExerciseLibrarySheet";
 
 export function ActiveGenericSessionView({
   workout,
@@ -46,11 +53,17 @@ export function ActiveGenericSessionView({
   const finish = useFinishGenericActiveWorkout();
   const cancel = useCancelGenericActiveWorkout();
   const { data: recentLabels } = useRecentSegmentLabels(workout.discipline);
+  // Addendum 3 (2026-07-15) : streak déjà 100% générique (useFitnessStreak ne
+  // regarde que `date`, toutes disciplines confondues) — simplement jamais
+  // affiché ici jusqu'à présent, contrairement à ActiveWorkoutView (muscu).
+  const { data: allWorkouts } = useWorkouts();
+  const streak = useFitnessStreak(allWorkouts);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [confirmFinish, setConfirmFinish] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [catalogOpen, setCatalogOpen] = useState(false);
   const [statsLabel, setStatsLabel] = useState<string | null>(null);
 
   const sortedSegments = useMemo(
@@ -116,6 +129,13 @@ export function ActiveGenericSessionView({
                 </span>
                 {entry && (
                   <DisciplineIcon icon={entry.icon} className="h-3.5 w-3.5 text-muted-foreground" />
+                )}
+                {/* Addendum 3 : streak déjà générique, alignée sur ActiveWorkoutView (muscu). */}
+                {streak.current > 0 && (
+                  <span className="inline-flex items-center gap-0.5 rounded-full bg-orange-500/15 px-2 py-0.5 text-[10px] font-bold text-orange-400">
+                    <Flame className="h-3 w-3" />
+                    {streak.current} sem.
+                  </span>
                 )}
               </div>
               <h2 className="mt-1 text-xl font-bold leading-tight tracking-tight">
@@ -192,33 +212,15 @@ export function ActiveGenericSessionView({
         </div>
       </div>
 
-      {/* ── Confirm finish ── */}
+      {/* ── Résumé de clôture (Addendum 3) — remplace l'ancien confirm() nu,
+          même écran (confetti + tuiles) que WorkoutSummaryOverlay (muscu). ── */}
       {confirmFinish && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-          <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-lg">
-            <h3 className="text-lg font-bold">Terminer la séance ?</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {completedCount}/{sortedSegments.length} réalisé(s).
-            </p>
-            <div className="mt-4 flex gap-2">
-              <button
-                type="button"
-                onClick={() => setConfirmFinish(false)}
-                className="flex-1 rounded-xl border border-border py-2.5 text-sm font-medium"
-              >
-                Continuer
-              </button>
-              <button
-                type="button"
-                onClick={handleFinish}
-                disabled={finish.isPending}
-                className="flex-1 rounded-xl bg-gradient-primary py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-50"
-              >
-                Terminer
-              </button>
-            </div>
-          </div>
-        </div>
+        <GenericWorkoutSummaryOverlay
+          workout={workout}
+          onConfirm={handleFinish}
+          onCancel={() => setConfirmFinish(false)}
+          isPending={finish.isPending}
+        />
       )}
 
       {/* ── Confirm cancel ── */}
@@ -274,8 +276,22 @@ export function ActiveGenericSessionView({
 
       {/* ── Ajouter un exercice — même picker (récents/catalogue/recherche/
           création libre) que la musculation, création immédiate d'une
-          carte vide, aucun formulaire séparé (Phase B). ── */}
-      <AddExerciseButton onClick={() => setPickerOpen(true)} disabled={addSegment.isPending} />
+          carte vide, aucun formulaire séparé (Phase B). Bouton bibliothèque
+          (Addendum 3) : même capacité que le bouton Catalogue de
+          ActiveWorkoutView (muscu) — consultation de référence, pas un
+          chemin d'ajout (DisciplineExerciseLibrarySheet est déjà 100%
+          générique et déjà utilisée ailleurs, simplement pas câblée ici). ── */}
+      <div className="flex gap-2">
+        <AddExerciseButton onClick={() => setPickerOpen(true)} disabled={addSegment.isPending} />
+        <button
+          type="button"
+          onClick={() => setCatalogOpen(true)}
+          aria-label="Ouvrir la bibliothèque d'exercices"
+          className="flex shrink-0 items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-4 text-primary transition-all active:scale-[0.99] hover:border-primary/40 hover:bg-primary/5"
+        >
+          <BookOpen className="h-4 w-4" />
+        </button>
+      </div>
 
       {pickerOpen && (
         <ExercisePickerSheet
@@ -283,6 +299,13 @@ export function ActiveGenericSessionView({
           recentExercises={recentExercises}
           onSelect={handlePickExercise}
           onClose={() => setPickerOpen(false)}
+        />
+      )}
+
+      {catalogOpen && (
+        <DisciplineExerciseLibrarySheet
+          discipline={workout.discipline}
+          onClose={() => setCatalogOpen(false)}
         />
       )}
 

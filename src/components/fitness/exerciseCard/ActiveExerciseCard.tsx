@@ -63,7 +63,13 @@ import {
   useUpdateGenericSegment,
 } from "@/hooks/useGenericActiveSession";
 import type { DisciplineId } from "@/lib/fitness/engines/types";
-import type { LabelGroup } from "@/lib/fitness/segmentStats";
+import {
+  bestMetricValue,
+  primaryColumnsForInstances,
+  SEGMENT_METRIC_CONFIG,
+  type LabelGroup,
+} from "@/lib/fitness/segmentStats";
+import { useDisciplineSegmentHistory } from "@/hooks/useDisciplineSegmentHistory";
 import { ActiveSegmentCard } from "../session/ActiveSegmentCard";
 import {
   ExerciseCardConfirmDelete,
@@ -583,6 +589,31 @@ function GenericExerciseCard({
   const doneCount = group.instances.filter((s) => s.completed).length;
   const knownKeys = Array.from(new Set(group.instances.flatMap((s) => Object.keys(s.metrics))));
 
+  // Addendum 3 (2026-07-15, audit convergence UX) : badge "Nouveau record"
+  // générique — pendant du badge Trophy de MuscuExerciseCard (isPR/isNewPR),
+  // sans toucher au moteur de Rang/PR musculation (invariant 9.9, hors
+  // scope). Historique = séances PASSÉES uniquement (la séance active n'est
+  // pas encore sauvegardée) via le même hook que SegmentAnalysisSheet.
+  const numericInstances = group.instances.map((s) => ({
+    metrics: Object.fromEntries(
+      Object.entries(s.metrics).filter((e): e is [string, number] => typeof e[1] === "number"),
+    ),
+  }));
+  const primaryColumn = primaryColumnsForInstances(numericInstances)[0] ?? null;
+  const { data: historyInstances } = useDisciplineSegmentHistory(discipline, group.displayLabel);
+  const currentBest = primaryColumn ? bestMetricValue(numericInstances, primaryColumn.key) : null;
+  const historicalBest =
+    primaryColumn && historyInstances ? bestMetricValue(historyInstances, primaryColumn.key) : null;
+  const isRecord =
+    primaryColumn != null &&
+    currentBest != null &&
+    (historicalBest == null ||
+      (SEGMENT_METRIC_CONFIG[primaryColumn.key].direction === "min"
+        ? currentBest.value <= historicalBest.value
+        : currentBest.value >= historicalBest.value));
+  const isNewRecord =
+    isRecord && historicalBest != null && currentBest!.value !== historicalBest.value;
+
   const handleAddRep = () => {
     addSegment.mutate({
       workoutId,
@@ -593,6 +624,13 @@ function GenericExerciseCard({
       discipline,
     });
   };
+
+  const recordBadge = isRecord && (
+    <span className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-bold text-warning">
+      <Trophy className="h-3 w-3" />
+      {isNewRecord ? "Nouveau record" : `Record ${currentBest!.formatted}`}
+    </span>
+  );
 
   return (
     <ExerciseCardContainer>
@@ -613,6 +651,7 @@ function GenericExerciseCard({
             </span>
           </div>
         }
+        badges={recordBadge}
         actions={
           <ExerciseCardIconButton
             icon={BarChart3}
