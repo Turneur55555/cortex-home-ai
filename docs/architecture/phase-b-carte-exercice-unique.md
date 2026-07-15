@@ -69,3 +69,71 @@ Pour rendre ça possible sans dupliquer `ExerciseExplorerSheet` (904 lignes, dé
 ---
 
 *Document produit le 2026-07-15, avant implémentation, conformément à la règle de gouvernance permanente du projet.*
+
+---
+
+## 6. Addendum — convergence de l'historique (2026-07-15, retour de Nathan)
+
+Phase B jugée incomplète : la carte exercice de séance ACTIVE est unifiée, mais l'historique
+("Chroniques complètes") reste visuellement un module à part pour les disciplines non-muscu.
+Cible : même header, même grille de stats, même carte exercice (icône/meta/accordéon), mêmes
+actions de menu, chaque fois que l'existant le permet sans réécrire la musculation elle-même
+(qui reste le modèle, intouché).
+
+### 6.1 Constat précis
+
+- `WorkoutCard.tsx` (muscu) : titre éditable dans le header, grille de 4 tuiles de stats
+  (Durée/Tonnage/Calories/Exos), une carte par exercice (icône ou photo, méta "N séries",
+  badges PR, accordéon de séries), menu à 4 actions (Refaire en live, Enregistrer comme modèle,
+  Enregistrer comme séance passée, Supprimer).
+- `GenericHistoryCard.tsx` (5 autres disciplines) : PAS de titre dans le header (seulement date +
+  badges), contenu délégué à `SessionSummaryCard` (puces texte, pas de tuiles) puis soit
+  `CourseHistoryContent`/`DisciplineHistoryContent` (quasi-duplication : bouton plat par exercice,
+  aucun accordéon), soit `SessionSegmentList` (liste à plat, non groupée, pour "Autre" — seule
+  discipline sans entrée dans `HISTORY_CONTENT_RENDERERS`, alors que ses segments ont bien un
+  `label` groupable comme les autres, vérifié dans `freeformEngine.ts`). Menu à 1 seule action
+  (Supprimer) — "Refaire en live" n'existe pas pour ces disciplines (câblé en dur sur
+  `useStartWorkoutFromTemplate`, muscu-only).
+
+### 6.2 Cible et fichiers touchés
+
+- `CourseHistoryContent.tsx` + `DisciplineHistoryContent.tsx` fusionnés en UN
+  `GenericHistoryExerciseList.tsx`, utilisé par les 5 disciplines sans exception (Autre inclus) —
+  rendu aligné sur la ligne exercice de `WorkoutCard` (icône, méta "N répétitions", chevron,
+  accordéon des répétitions via `SessionStatChip`, bouton stats → `SegmentAnalysisSheet` avec la
+  bonne discipline). `historyContentRenderers.tsx` et son registre deviennent inutiles (un seul
+  rendu pour tous) — supprimés.
+- `GenericHistoryCard.tsx` : titre éditable (`EditableText` + `useUpdateWorkoutName`, déjà
+  générique) ajouté au header ; grille de tuiles (`StatTile`, déjà partagé) alimentée par Durée +
+  Exos (calculables génériquement) + `view.summaryStats` (déjà déclarés par chaque moteur — c'est
+  exactement le mécanisme "la discipline injecte ses capacités dans une architecture commune") ;
+  menu gagne "Refaire en live" via un nouveau hook générique (6.3) ; contenu délégué à
+  `GenericHistoryExerciseList` (remplace `SessionSummaryCard` dans cette carte — `SessionSummaryCard`
+  n'est pas supprimé, reste utilisé par l'écran de relecture avant sauvegarde).
+
+### 6.3 "Refaire en live" générique — nouvelle capacité, pas juste un déplacement visuel
+
+`repeatLiveGeneric(workout)` : construit un `WorkoutRecordDraft` (déjà fait via `adaptWorkoutRow`,
+disponible dans `GenericHistoryCard`) + des `LiveSegmentSeed[]` depuis `view.segments`
+(label + metrics, même format que `genericBuildLiveSegments`), puis appelle
+`useStartGenericActiveWorkout`. Équivalent fonctionnel exact du `repeatLive` muscu
+(`useStartWorkoutFromTemplate`), mêmes garde-fous (confirmation, séance active existante bloque).
+Judgment call : ceci est une capacité nouvelle (pas seulement une réorganisation visuelle), mais
+elle découle directement de la convergence demandée ("même comportement des boutons") et réutilise
+des hooks déjà existants sans toucher au chemin musculation — traité comme faisant partie de cette
+convergence, pas comme une décision produit à part.
+
+### 6.4 Explicitement hors scope (documenté, pas un motif d'arrêt)
+
+- **"Ajouter un exercice" rétroactif sur une séance générique déjà terminée.** Musculation permet
+  d'ajouter un exercice après coup à une séance passée (`AddExerciseModal`, écrit directement dans
+  `exercises`). Aucun mécanisme équivalent n'existe pour muter `workouts.metadata.segments` (JSON)
+  ou `workout_segments` d'une séance déjà `completed`. Ce n'est pas une différence d'interface mais
+  une vraie absence de chemin d'écriture pour des données historiques déjà closes — une décision de
+  conception (faut-il autoriser la mutation d'un historique clos ?) plutôt qu'une unification
+  mécanique. Reporté, signalé explicitement.
+- **Fusion fichier `ExerciseAnalysisSheet`/`SegmentAnalysisSheet`** : déjà explicitement reportée à
+  une phase ultérieure par une décision antérieure documentée dans `SegmentAnalysisSheet.tsx`
+  ("la fusion éventuelle des deux est une décision explicitement reportée à la Phase 3") — non
+  rouverte ici, les deux fiches restent cohérentes visuellement (mêmes primitives
+  `SectionCard`/`StatTileMini`/`TrendIcon`) sans être le même fichier.
