@@ -1,3 +1,31 @@
+// ============================================================
+// Carte exercice UNIQUE, en séance active — pour TOUTES les disciplines.
+// Phase B (2026-07-15, retour de Nathan) : il ne doit plus exister
+// plusieurs composants de haut niveau nommés par discipline
+// (ActiveCourseExerciseCard, "ActiveMusculationExerciseCard"...). Un seul
+// export, `ActiveExerciseCard`, appelé par ActiveWorkoutView.tsx
+// (musculation) et ActiveGenericSessionView.tsx (les 5 autres
+// disciplines) — voir docs/architecture/phase-b-carte-exercice-unique.md.
+//
+// En interne, `kind` sépare le rendu des lignes de répétition pour une
+// raison structurelle, pas une préférence de code : la ligne musculation
+// (poids/répétitions) porte une logique métier profonde sans équivalent
+// déclaré ailleurs (1RM live, tendance vs dernière séance, PR, suggestion
+// de charge liée à la récupération musculaire, photo d'exercice) — voir
+// le document de phase pour la décision explicite de ne pas fusionner
+// cette logique dans un système de capacités générique cette fois-ci.
+// La ligne générique (ActiveSegmentCard) reste, elle, déjà 100% pilotée
+// par configuration (SEGMENT_METRIC_CONFIG, segmentStats.ts) : c'est elle
+// qui porte concrètement le principe "les métriques sont déclarées par la
+// discipline" pour toute discipline hors musculation.
+//
+// Le conteneur, l'en-tête repliable, le bouton d'ajout et la confirmation
+// de suppression — c'est-à-dire l'architecture au sens où Nathan
+// l'entend — sont eux strictement partagés via ExerciseCardPrimitives,
+// et le sont déjà depuis la Phase A (rien de nouveau à ce niveau, juste
+// consolidé sous un seul nom désormais).
+// ============================================================
+
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowDown,
@@ -7,6 +35,7 @@ import {
   History,
   Minus,
   RotateCcw,
+  Repeat,
   Trash2,
   Trophy,
   Zap,
@@ -26,6 +55,16 @@ import { exerciseToMuscles } from "@/lib/fitness/muscleMapping";
 import type { MuscleRecovery } from "@/lib/fitness/recovery";
 import { recommendLoad } from "@/lib/fitness/loadRecommendation";
 import { estimate1RM } from "@/lib/fitness/strength";
+import type { ActiveGenericSegment } from "@/hooks/useGenericActiveSession";
+import {
+  useAddGenericSegment,
+  useDeleteGenericSegment,
+  useReorderGenericSegment,
+  useUpdateGenericSegment,
+} from "@/hooks/useGenericActiveSession";
+import type { DisciplineId } from "@/lib/fitness/engines/types";
+import type { LabelGroup } from "@/lib/fitness/segmentStats";
+import { ActiveSegmentCard } from "../session/ActiveSegmentCard";
 import {
   ExerciseCardConfirmDelete,
   ExerciseCardContainer,
@@ -36,9 +75,39 @@ import {
   ExerciseCardSetRow,
   ExerciseCardStatField,
   ExercisePhotoTile,
-} from "./exerciseCard/ExerciseCardPrimitives";
+} from "./ExerciseCardPrimitives";
 
-// ─── Comparaison série courante vs dernière séance ──────────────────────────
+// ─── Props publiques : un seul composant, discriminé par discipline ────────
+
+type MuscuCardProps = {
+  kind: "muscu";
+  exercise: ActiveExercise;
+  imageUrl: string | null;
+  lastSession: LastSession | null;
+  pr: number | null;
+  recoveryMap?: Map<MuscleId, MuscleRecovery>;
+  onOpenStats?: () => void;
+};
+
+type GenericCardProps = {
+  kind: "generic";
+  group: LabelGroup<ActiveGenericSegment>;
+  workoutId: string;
+  /** Discipline de la séance active (résolution exercise_id, voir
+   *  services/exerciseResolution.ts). */
+  discipline: DisciplineId;
+  /** Position à utiliser pour une nouvelle répétition ajoutée à ce
+   *  groupe — les positions sont globales à la séance. */
+  nextPosition: number;
+  onOpenStats: (rawLabel: string) => void;
+};
+
+export function ActiveExerciseCard(props: MuscuCardProps | GenericCardProps) {
+  if (props.kind === "muscu") return <MuscuExerciseCard {...props} />;
+  return <GenericExerciseCard {...props} />;
+}
+
+// ─── Branche musculation ─────────────────────────────────────────────────────
 
 function compareToLast(
   current: { reps: number | null; weight: number | null },
@@ -65,8 +134,6 @@ function TrendIcon({ trend }: { trend: "up" | "down" | "equal" | null }) {
   return <Minus className="h-3 w-3 text-muted-foreground/50" aria-label="Identique" />;
 }
 
-// ─── Ligne de série ──────────────────────────────────────────────────────────
-
 function SetRow({
   set,
   index,
@@ -88,8 +155,6 @@ function SetRow({
   const [weight, setWeight] = useState(set.weight != null ? String(set.weight) : "");
   const [confirmDel, setConfirmDel] = useState(false);
 
-  // #4 : resynchronise l'affichage si la donnée change hors saisie
-  // (ex. "Reprendre les charges précédentes" met à jour reps/weight).
   useEffect(() => {
     setReps(set.reps != null ? String(set.reps) : "");
   }, [set.reps]);
@@ -139,7 +204,6 @@ function SetRow({
 
   return (
     <ExerciseCardSetRow tone={done ? "success" : isMax ? "warning" : null}>
-      {/* Numéro (capsule) + 1RM live + tendance */}
       <ExerciseCardSetIndex>
         <span
           className={`text-sm font-extrabold tabular-nums leading-none ${
@@ -160,7 +224,6 @@ function SetRow({
         )}
       </ExerciseCardSetIndex>
 
-      {/* Poids */}
       <ExerciseCardStatField
         value={weight}
         onChange={setWeight}
@@ -170,7 +233,6 @@ function SetRow({
         step="0.5"
       />
 
-      {/* Reps */}
       <ExerciseCardStatField
         value={reps}
         onChange={setReps}
@@ -179,7 +241,6 @@ function SetRow({
         unit="reps"
       />
 
-      {/* Validation */}
       <button
         type="button"
         onClick={() => onToggleDone(!done)}
@@ -196,7 +257,6 @@ function SetRow({
         />
       </button>
 
-      {/* Suppression */}
       <button
         type="button"
         onClick={() => setConfirmDel(true)}
@@ -209,23 +269,14 @@ function SetRow({
   );
 }
 
-// ─── Carte exercice ───────────────────────────────────────────────────────────
-
-export function ActiveExerciseCard({
+function MuscuExerciseCard({
   exercise,
   imageUrl,
   lastSession,
   pr,
   recoveryMap,
   onOpenStats,
-}: {
-  exercise: ActiveExercise;
-  imageUrl: string | null;
-  lastSession: LastSession | null;
-  pr: number | null;
-  recoveryMap?: Map<MuscleId, MuscleRecovery>;
-  onOpenStats?: () => void;
-}) {
+}: Omit<MuscuCardProps, "kind">) {
   const addSet = useAddExerciseSet();
   const updateSet = useUpdateExerciseSet();
   const deleteSet = useDeleteExerciseSet();
@@ -272,7 +323,6 @@ export function ActiveExerciseCard({
 
   const volLabel = volume >= 1000 ? `${(volume / 1000).toFixed(1)}k` : `${volume}`;
 
-  // Muscles fatigués (status "fatigued") pour cet exercice
   const fatigued = useMemo(() => {
     if (!recoveryMap) return [];
     return exerciseToMuscles(exercise.name)
@@ -280,7 +330,6 @@ export function ActiveExerciseCard({
       .filter((rec): rec is MuscleRecovery => rec != null && rec.status === "fatigued");
   }, [exercise.name, recoveryMap]);
 
-  // Charge recommandée : dernière perf, modulée par la récupération musculaire.
   const suggestion = useMemo(() => {
     if (!lastSummary?.weight || !lastSummary?.reps) return null;
     let minFraction: number | null = null;
@@ -293,8 +342,6 @@ export function ActiveExerciseCard({
         }
       }
     }
-    // N'affiche la suggestion que si elle diffère de la dernière charge
-    // (sinon le badge « Dernière séance » suffit).
     const result = recommendLoad({
       last: { weight: lastSummary.weight, reps: lastSummary.reps },
       recoveryFraction: minFraction,
@@ -303,10 +350,6 @@ export function ActiveExerciseCard({
     return result.weight;
   }, [lastSummary, recoveryMap, exercise.name]);
 
-  // C2 : `addSet.isPending` retombe à `false` entre deux `await` de la boucle
-  // de restauration ci-dessous, ré-activant brièvement les deux boutons et
-  // permettant un double-ajout sur le même `set_number` (violation UNIQUE).
-  // `isBusy` couvre toute la durée de l'opération, boucle incluse.
   const [isBusy, setIsBusy] = useState(false);
 
   const handleAddSet = async () => {
@@ -314,8 +357,6 @@ export function ActiveExerciseCard({
     setIsBusy(true);
     try {
       const last = sortedSets[sortedSets.length - 1];
-      // C1 : max(set_number)+1 — `length+1` provoquait une violation UNIQUE
-      // après suppression d'une série intermédiaire.
       const nextNumber = sortedSets.reduce((m, st) => Math.max(m, st.set_number), 0) + 1;
       const fallback = lastSetsByNumber.get(sortedSets.length + 1) ?? lastSession?.sets[0];
       await addSet.mutateAsync({
@@ -365,7 +406,9 @@ export function ActiveExerciseCard({
       restTimer.startForExercise(exercise.id);
       try {
         navigator.vibrate?.(50);
-      } catch {}
+      } catch {
+        // Vibration API non supportée — dégradation silencieuse, sans impact fonctionnel.
+      }
     }
   };
 
@@ -453,7 +496,6 @@ export function ActiveExerciseCard({
         }
       />
 
-      {/* ── Confirmation suppression exercice ── */}
       {confirmDeleteEx && (
         <ExerciseCardConfirmDelete
           label={`Supprimer « ${exercise.name} » ?`}
@@ -463,10 +505,8 @@ export function ActiveExerciseCard({
         />
       )}
 
-      {/* ── Contenu repliable ── */}
       {!collapsed && (
         <div className="animate-in fade-in slide-in-from-top-1 duration-200">
-          {/* Reprendre les charges précédentes */}
           {lastSession && lastSession.sets.length > 0 && (
             <button
               type="button"
@@ -479,7 +519,6 @@ export function ActiveExerciseCard({
             </button>
           )}
 
-          {/* Charge recommandée (modulation récupération) */}
           {suggestion != null && (
             <div className="mt-2 flex items-center gap-2 rounded-xl bg-primary/[0.07] px-3 py-2 text-[12px]">
               <Zap className="h-3.5 w-3.5 shrink-0 text-primary" />
@@ -491,7 +530,6 @@ export function ActiveExerciseCard({
             </div>
           )}
 
-          {/* Séries */}
           <div className="mt-3">
             {sortedSets.length === 0 ? (
               <p className="rounded-2xl bg-white/[0.02] py-5 text-center text-xs text-muted-foreground/50">
@@ -514,13 +552,111 @@ export function ActiveExerciseCard({
               </ul>
             )}
 
-            {/* Ajouter une série */}
             <ExerciseCardPillButton
               label="Ajouter une série"
               onClick={handleAddSet}
               disabled={isBusy}
             />
           </div>
+        </div>
+      )}
+    </ExerciseCardContainer>
+  );
+}
+
+// ─── Branche générique (toutes les disciplines hors musculation) ───────────
+
+function GenericExerciseCard({
+  group,
+  workoutId,
+  discipline,
+  nextPosition,
+  onOpenStats,
+}: Omit<GenericCardProps, "kind">) {
+  const updateSegment = useUpdateGenericSegment();
+  const deleteSegment = useDeleteGenericSegment();
+  const reorderSegment = useReorderGenericSegment();
+  const addSegment = useAddGenericSegment();
+
+  const [collapsed, setCollapsed] = useState(false);
+
+  const doneCount = group.instances.filter((s) => s.completed).length;
+  const knownKeys = Array.from(new Set(group.instances.flatMap((s) => Object.keys(s.metrics))));
+
+  const handleAddRep = () => {
+    addSegment.mutate({
+      workoutId,
+      label: group.displayLabel,
+      metrics: {},
+      metricKey: group.instances[0]?.metricKey ?? undefined,
+      position: nextPosition,
+      discipline,
+    });
+  };
+
+  return (
+    <ExerciseCardContainer>
+      <ExerciseCardHeader
+        photo={
+          <div className="flex h-[72px] w-[72px] shrink-0 items-center justify-center rounded-2xl bg-black/25 ring-1 ring-white/10">
+            <Repeat className="h-6 w-6 text-primary/70" />
+          </div>
+        }
+        title={group.displayLabel}
+        collapsed={collapsed}
+        onToggleCollapse={() => setCollapsed((c) => !c)}
+        metaLine={
+          <div className="mt-1.5 flex items-center gap-1.5 text-[12px] text-muted-foreground">
+            <span className="tabular-nums">
+              {group.instances.length} répétition{group.instances.length > 1 ? "s" : ""}
+              {doneCount > 0 && <span className="text-success"> ({doneCount}✓)</span>}
+            </span>
+          </div>
+        }
+        actions={
+          <ExerciseCardIconButton
+            icon={BarChart3}
+            onClick={() => onOpenStats(group.instances[0].label)}
+            label="Statistiques de l'exercice"
+          />
+        }
+      />
+
+      {!collapsed && (
+        <div className="mt-3 animate-in fade-in slide-in-from-top-1 duration-200">
+          <ul className="flex flex-col gap-2">
+            {group.instances.map((segment, i) => (
+              <ActiveSegmentCard
+                key={segment.id}
+                segment={segment}
+                knownKeys={knownKeys}
+                isFirst={i === 0}
+                isLast={i === group.instances.length - 1}
+                onUpdate={(fields) => updateSegment.mutate({ id: segment.id, ...fields })}
+                onDelete={() => deleteSegment.mutate(segment.id)}
+                onMoveUp={() =>
+                  reorderSegment.mutate({
+                    segments: group.instances,
+                    id: segment.id,
+                    direction: "up",
+                  })
+                }
+                onMoveDown={() =>
+                  reorderSegment.mutate({
+                    segments: group.instances,
+                    id: segment.id,
+                    direction: "down",
+                  })
+                }
+              />
+            ))}
+          </ul>
+
+          <ExerciseCardPillButton
+            label="Ajouter une répétition"
+            onClick={handleAddRep}
+            disabled={addSegment.isPending}
+          />
         </div>
       )}
     </ExerciseCardContainer>

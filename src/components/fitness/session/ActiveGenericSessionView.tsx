@@ -1,39 +1,35 @@
 // ============================================================
 // Vue "séance en cours" GÉNÉRIQUE — pendant de ActiveWorkoutView
-// (musculation) pour toute discipline Sensei avec supportsLiveTracking=true
-// (phase pilote : Course à pied, 2026-07-09). Timer, liste d'exercices
-// (regroupés par type — voir ActiveCourseExerciseCard.tsx) avec leurs
-// répétitions éditables (ActiveSegmentCard), ajout d'un segment
-// personnalisé, menu Terminer/Annuler — même charte visuelle que la
-// séance active musculation, sans dépendre de son vocabulaire
-// exercices/séries.
+// (musculation) pour toute discipline Sensei avec supportsLiveTracking=true.
+// Timer, liste d'exercices (regroupés par type — voir groupByExerciseLabel,
+// segmentStats.ts) avec leurs répétitions éditables, ajout d'exercice via
+// picker, menu Terminer/Annuler — même charte visuelle que la séance
+// active musculation, sans dépendre de son vocabulaire exercices/séries.
 //
-// CORRECTION 2026-07-11 (retour de Nathan) : la liste de segments était
-// affichée à plat (une carte par répétition — jusqu'à 17 lignes pour un
-// fractionné à 8x400m). Nathan veut le même modèle qu'en musculation :
-// séance > exercice > répétitions, une seule carte par exercice avec ses
-// répétitions groupées à l'intérieur (cf. ActiveExerciseCard qui groupe
-// les séries). `groupByExerciseLabel` (segmentStats.ts) fait ce
-// regroupement ; `ActiveCourseExerciseCard` (nouveau) affiche chaque
-// groupe et réutilise ActiveSegmentCard tel quel pour chaque répétition
-// — aucune modification de ce composant. Le bouton "Ajouter un segment"
-// en bas reste inchangé (ajout d'un exercice entièrement nouveau, non
-// prévu par Sensei) ; chaque carte d'exercice a en plus son propre
-// "Ajouter une répétition".
+// Phase B (2026-07-15, retour de Nathan — voir
+// docs/architecture/phase-b-carte-exercice-unique.md) : la carte exercice
+// (ActiveExerciseCard, kind="generic") est désormais le MÊME composant de
+// haut niveau que la musculation — plus de ActiveCourseExerciseCard
+// séparé. L'ajout d'exercice ouvre le même picker (récents/catalogue/
+// recherche/création libre) que la musculation et crée immédiatement une
+// carte vide — plus de formulaire Distance/Allure codé en dur.
 // ============================================================
 
 import { useMemo, useState } from "react";
-import { CheckCircle2, Loader2, MoreVertical, Plus, XCircle } from "lucide-react";
+import { CheckCircle2, Loader2, MoreVertical, XCircle } from "lucide-react";
 import type { ActiveGenericWorkout } from "@/hooks/useGenericActiveSession";
 import {
   useAddGenericSegment,
   useCancelGenericActiveWorkout,
   useFinishGenericActiveWorkout,
 } from "@/hooks/useGenericActiveSession";
+import { useRecentSegmentLabels } from "@/hooks/useRecentSegmentLabels";
 import { ENGINE_REGISTRY } from "@/lib/fitness/engines/registry";
 import { groupByExerciseLabel } from "@/lib/fitness/segmentStats";
 import { WorkoutTimer } from "../WorkoutTimer";
-import { ActiveCourseExerciseCard } from "./ActiveCourseExerciseCard";
+import { ActiveExerciseCard } from "../exerciseCard/ActiveExerciseCard";
+import { AddExerciseButton } from "../exerciseCard/ExerciseCardPrimitives";
+import { ExercisePickerSheet, type PickedExercise } from "../ExercisePickerSheet";
 import { SegmentAnalysisSheet } from "./SegmentAnalysisSheet";
 import { DisciplineIcon } from "./DisciplineIcon";
 
@@ -49,14 +45,12 @@ export function ActiveGenericSessionView({
   const addSegment = useAddGenericSegment();
   const finish = useFinishGenericActiveWorkout();
   const cancel = useCancelGenericActiveWorkout();
+  const { data: recentLabels } = useRecentSegmentLabels(workout.discipline);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [confirmFinish, setConfirmFinish] = useState(false);
-  const [addingOpen, setAddingOpen] = useState(false);
-  const [newLabel, setNewLabel] = useState("");
-  const [newDistance, setNewDistance] = useState("");
-  const [newPace, setNewPace] = useState("");
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [statsLabel, setStatsLabel] = useState<string | null>(null);
 
   const sortedSegments = useMemo(
@@ -66,27 +60,28 @@ export function ActiveGenericSessionView({
   const completedCount = sortedSegments.filter((s) => s.completed).length;
   const groups = useMemo(() => groupByExerciseLabel(sortedSegments), [sortedSegments]);
 
-  const handleAddSegment = async () => {
-    const label = newLabel.trim();
-    if (!label) return;
-    const metrics: Record<string, number | string> = {};
-    const distanceKm = parseFloat(newDistance.replace(",", "."));
-    if (!Number.isNaN(distanceKm) && distanceKm > 0)
-      metrics.distance_m = Math.round(distanceKm * 1000);
-    const pace = parseFloat(newPace.replace(",", "."));
-    if (!Number.isNaN(pace) && pace > 0) metrics.pace_min_per_km = pace;
+  const recentExercises = useMemo(
+    () =>
+      (recentLabels ?? []).map((name) => ({
+        name,
+        lastSets: null,
+        lastReps: null,
+        lastWeight: null,
+      })),
+    [recentLabels],
+  );
 
+  const handlePickExercise = async (picked: PickedExercise) => {
+    setPickerOpen(false);
+    const label = picked.name.trim();
+    if (!label) return;
     await addSegment.mutateAsync({
       workoutId: workout.id,
       label,
-      metrics,
+      metrics: {},
       position: sortedSegments.length,
       discipline: workout.discipline,
     });
-    setNewLabel("");
-    setNewDistance("");
-    setNewPace("");
-    setAddingOpen(false);
   };
 
   const handleFinish = async () => {
@@ -264,7 +259,8 @@ export function ActiveGenericSessionView({
       ) : (
         <div className="flex flex-col gap-3">
           {groups.map((g) => (
-            <ActiveCourseExerciseCard
+            <ActiveExerciseCard
+              kind="generic"
               key={g.key}
               group={g}
               workoutId={workout.id}
@@ -276,63 +272,18 @@ export function ActiveGenericSessionView({
         </div>
       )}
 
-      {/* ── Add segment ── */}
-      {addingOpen ? (
-        <div className="rounded-2xl border border-dashed border-primary/40 bg-primary/5 p-3">
-          <input
-            autoFocus
-            value={newLabel}
-            onChange={(e) => setNewLabel(e.target.value)}
-            placeholder="Nom de l'exercice (ex: Sprint côte)"
-            className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary"
-          />
-          <div className="mt-2 flex flex-wrap gap-2">
-            <input
-              type="number"
-              step="0.1"
-              min="0"
-              value={newDistance}
-              onChange={(e) => setNewDistance(e.target.value)}
-              placeholder="Distance (km)"
-              className="w-32 rounded-lg border border-border bg-surface px-2 py-1.5 text-xs outline-none focus:border-primary"
-            />
-            <input
-              type="number"
-              step="0.1"
-              min="0"
-              value={newPace}
-              onChange={(e) => setNewPace(e.target.value)}
-              placeholder="Allure (min/km)"
-              className="w-32 rounded-lg border border-border bg-surface px-2 py-1.5 text-xs outline-none focus:border-primary"
-            />
-          </div>
-          <div className="mt-3 flex gap-2">
-            <button
-              type="button"
-              onClick={() => setAddingOpen(false)}
-              className="flex-1 rounded-xl border border-border py-2 text-xs font-medium"
-            >
-              Annuler
-            </button>
-            <button
-              type="button"
-              onClick={handleAddSegment}
-              disabled={addSegment.isPending || !newLabel.trim()}
-              className="flex-1 rounded-xl bg-gradient-primary py-2 text-xs font-semibold text-primary-foreground disabled:opacity-50"
-            >
-              {addSegment.isPending ? "Ajout…" : "Ajouter"}
-            </button>
-          </div>
-        </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setAddingOpen(true)}
-          className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-white/10 bg-white/[0.02] py-4 text-sm font-semibold text-primary transition-all active:scale-[0.99] hover:border-primary/40 hover:bg-primary/5"
-        >
-          <Plus className="h-4 w-4" />
-          Ajouter un exercice
-        </button>
+      {/* ── Ajouter un exercice — même picker (récents/catalogue/recherche/
+          création libre) que la musculation, création immédiate d'une
+          carte vide, aucun formulaire séparé (Phase B). ── */}
+      <AddExerciseButton onClick={() => setPickerOpen(true)} disabled={addSegment.isPending} />
+
+      {pickerOpen && (
+        <ExercisePickerSheet
+          discipline={workout.discipline}
+          recentExercises={recentExercises}
+          onSelect={handlePickExercise}
+          onClose={() => setPickerOpen(false)}
+        />
       )}
 
       {statsLabel && (

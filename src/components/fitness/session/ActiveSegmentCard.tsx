@@ -1,7 +1,7 @@
 // ============================================================
 // Carte d'UNE répétition, en séance active — pendant générique de
 // ActiveSet (musculation), regroupée par exercice dans
-// ActiveCourseExerciseCard.tsx. Édition inline (label + toutes les
+// exerciseCard/ActiveExerciseCard.tsx (kind="generic"). Édition inline (label + toutes les
 // métriques de la répétition), case "réalisée", réordonnancement flèches
 // haut/bas (pas de dnd-kit, retiré du projet le 2026-07-05) et
 // suppression.
@@ -16,7 +16,7 @@
 // `DISPLAY_TRANSFORMS` reste le seul point de connaissance spécifique
 // (aujourd'hui : distance_m stocké en mètres mais plus naturel à éditer
 // en km) — toute autre métrique s'édite directement dans son unité de
-// stockage. `knownKeys` (fourni par ActiveCourseExerciseCard) permet à
+// stockage. `knownKeys` (fourni par ActiveExerciseCard) permet à
 // une répétition nouvellement ajoutée (metrics vide) d'afficher les
 // mêmes champs que ses répétitions sœurs, prêts à remplir.
 //
@@ -52,7 +52,7 @@ export function ActiveSegmentCard({
 }: {
   segment: ActiveGenericSegment;
   /** Union des clés de métriques utilisées par les répétitions sœurs du
-   *  même exercice (voir ActiveCourseExerciseCard.tsx) — permet à une
+   *  même exercice (voir exerciseCard/ActiveExerciseCard.tsx (kind="generic")) — permet à une
    *  répétition fraîchement ajoutée (metrics vide) d'afficher les mêmes
    *  champs éditables que ses sœurs. Défaut : clés de cette répétition
    *  seule. */

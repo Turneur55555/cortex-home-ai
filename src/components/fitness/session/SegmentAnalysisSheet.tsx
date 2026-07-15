@@ -27,7 +27,7 @@ import { SectionCard, StatTileMini, TrendIcon } from "../ExerciseAnalysisPrimiti
 // "Récupération trottinée", "Tempo") — pendant de ExerciseAnalysisSheet
 // pour la musculation, ouverte en cliquant un exercice dans l'historique
 // des séances Course (voir CourseHistoryContent.tsx) ou depuis la séance
-// en cours (voir ActiveCourseExerciseCard.tsx). Réutilise les primitives
+// en cours (voir exerciseCard/ActiveExerciseCard.tsx (kind="generic")). Réutilise les primitives
 // visuelles génériques (SectionCard/StatTileMini/TrendIcon) pour rester
 // cohérente avec la fiche exercice, SANS réutiliser les sections propres
 // à la musculation (muscles sollicités, impact physique, rang RPG) qui

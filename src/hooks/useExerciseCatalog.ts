@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { EXERCISE_CATALOG, type CatalogExercise } from "@/lib/fitness/exerciseCatalog";
+import type { DisciplineId } from "@/lib/fitness/engines/types";
 
 export type DbCatalogRow = {
   id: string;
@@ -37,24 +38,32 @@ export function useExerciseCatalog() {
 }
 
 // ── Catalogue complet = DB + exercices custom (pour la sheet de gestion) ─────
-export function useFullExerciseCatalog() {
+// Phase B (2026-07-15) : paramétré par discipline (défaut "muscu",
+// comportement identique à avant pour tous les appelants existants) — voir
+// docs/architecture/phase-b-carte-exercice-unique.md. La fusion avec les
+// exercices "custom" de la table `exercises` (2e requête ci-dessous) reste
+// muscu-only : cette table ne contient QUE des occurrences musculation
+// (voir exercise-central-architecture.md section 2.3), aucun équivalent
+// pour les autres disciplines à ce jour.
+export function useFullExerciseCatalog(discipline: DisciplineId = "muscu") {
   return useQuery({
-    queryKey: FULL_CACHE_KEY,
+    queryKey: [...FULL_CACHE_KEY, discipline],
     queryFn: async (): Promise<DbCatalogRow[]> => {
-      const [catalogResult, customResult] = await Promise.all([
-        supabase
-          .from("exercise_reference")
-          .select("*")
-          .eq("discipline_id", "muscu")
-          .order("category")
-          .order("sort_order")
-          .order("name"),
-        supabase.from("exercises").select("name").order("name"),
-      ]);
+      const catalogResult = await supabase
+        .from("exercise_reference")
+        .select("*")
+        .eq("discipline_id", discipline)
+        .order("category")
+        .order("sort_order")
+        .order("name");
 
       if (catalogResult.error) throw catalogResult.error;
 
       const rows = (catalogResult.data ?? []) as DbCatalogRow[];
+
+      if (discipline !== "muscu") return rows;
+
+      const customResult = await supabase.from("exercises").select("name").order("name");
       const catalogNames = new Set(rows.map((r) => r.name.toLowerCase()));
 
       // Ajoute les exercices créés par l'utilisateur non encore dans le catalogue
@@ -85,13 +94,13 @@ export function dbRowsToCatalog(rows: DbCatalogRow[]): CatalogExercise[] {
 }
 
 // ── Mutations ─────────────────────────────────────────────────────────────────
-export function useAddExercise() {
+export function useAddExercise(discipline: DisciplineId = "muscu") {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ name, category }: { name: string; category: string | null }) => {
       const { error } = await supabase
         .from("exercise_reference")
-        .insert({ name: name.trim(), category, discipline_id: "muscu" });
+        .insert({ name: name.trim(), category, discipline_id: discipline });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -141,13 +150,13 @@ export function useUpdateExercise() {
 }
 
 // ── Ajouter un exercice custom au catalogue officiel ─────────────────────────
-export function usePromoteExercise() {
+export function usePromoteExercise(discipline: DisciplineId = "muscu") {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ name, category }: { name: string; category: string | null }) => {
       const { error } = await supabase
         .from("exercise_reference")
-        .insert({ name: name.trim(), category, discipline_id: "muscu" });
+        .insert({ name: name.trim(), category, discipline_id: discipline });
       if (error && !error.message.includes("duplicate")) throw error;
     },
     onSuccess: () => {

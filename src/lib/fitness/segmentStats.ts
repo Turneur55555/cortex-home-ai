@@ -183,7 +183,7 @@ export interface LabelGroup<T> {
  *  occurrence) et l'ordre interne des répétitions. Générique sur T pour
  *  servir à la fois SessionSegment (historique, voir
  *  CourseHistoryContent.tsx) et ActiveGenericSegment (séance en cours,
- *  voir ActiveGenericSessionView.tsx / ActiveCourseExerciseCard.tsx) sans
+ *  voir ActiveGenericSessionView.tsx / exerciseCard/ActiveExerciseCard.tsx (kind="generic")) sans
  *  dupliquer la logique de regroupement — une seule carte par exercice,
  *  jamais une par répétition (cf. en-tête de fichier, correction
  *  2026-07-11). */

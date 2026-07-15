@@ -13,7 +13,7 @@ import type { MuscleRecovery } from "@/lib/fitness/recovery";
 import { useFitnessStreak } from "@/hooks/useFitnessStreak";
 import { WorkoutTimer } from "./WorkoutTimer";
 import { WorkoutSummaryOverlay } from "./WorkoutSummaryOverlay";
-import { ActiveExerciseCard } from "./ActiveExerciseCard";
+import { ActiveExerciseCard } from "./exerciseCard/ActiveExerciseCard";
 import { AddExerciseButton } from "./exerciseCard/ExerciseCardPrimitives";
 import { exerciseIllustration } from "@/lib/fitness/exerciseIllustrations";
 import { computePRs } from "@/utils/fitness/exercise-stats";
@@ -289,6 +289,7 @@ export function ActiveWorkoutView({
               exerciseIllustration(ex.name);
             return (
               <ActiveExerciseCard
+                kind="muscu"
                 key={ex.id}
                 exercise={ex}
                 imageUrl={exImage}

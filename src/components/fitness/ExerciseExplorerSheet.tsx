@@ -15,6 +15,7 @@ import {
   Zap,
 } from "lucide-react";
 import { CATALOG_GROUPS, normalize } from "@/lib/fitness/exerciseCatalog";
+import type { DisciplineId } from "@/lib/fitness/engines/types";
 import { defaultWorkoutName } from "@/lib/fitness/config";
 import { findSimilarExercises } from "@/lib/fitness/exerciseSimilar";
 import { exerciseIllustration } from "@/lib/fitness/exerciseIllustrations";
@@ -101,6 +102,9 @@ export interface ExerciseExplorerSheetProps {
    *  deux modes : c'est le même écran, pas deux composants qui se
    *  ressemblent. */
   mode: "catalog" | "picker";
+  /** Discipline du catalogue interrogé (Phase B, 2026-07-15) — défaut
+   *  "muscu", comportement inchangé pour tous les appelants existants. */
+  discipline?: DisciplineId;
   onClose: () => void;
   /** Mode picker uniquement : sélection rapide (tap sur une ligne, un
    *  suggestion IA, un exercice récent, ou "créer x"). */
@@ -125,6 +129,7 @@ export interface ExerciseExplorerSheetProps {
  */
 export function ExerciseExplorerSheet({
   mode,
+  discipline = "muscu",
   onClose,
   onPick,
   recentExercises = [],
@@ -134,12 +139,12 @@ export function ExerciseExplorerSheet({
   volByName = new Map(),
   prByName = new Map(),
 }: ExerciseExplorerSheetProps) {
-  const { data: catalog, isLoading } = useFullExerciseCatalog();
+  const { data: catalog, isLoading } = useFullExerciseCatalog(discipline);
   const { data: userPhotos } = useUserExercisePhotos();
-  const addExercise = useAddExercise();
+  const addExercise = useAddExercise(discipline);
   const deleteExercise = useDeleteExercise();
   const updateExercise = useUpdateExercise();
-  const promoteExercise = usePromoteExercise();
+  const promoteExercise = usePromoteExercise(discipline);
   const { data: activeWorkout } = useActiveWorkout();
   const addToActiveWorkout = useAddExerciseToActiveWorkout();
   const startFromTemplate = useStartWorkoutFromTemplate();
