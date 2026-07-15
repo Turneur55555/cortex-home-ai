@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Minus, Ruler, Sparkles, TrendingDown, TrendingUp } from "lucide-react";
+import { History, Loader2, Minus, Ruler, Sparkles, TrendingDown, TrendingUp } from "lucide-react";
+import { BodyHistorySheet } from "@/components/fitness/BodyHistorySheet";
 import {
   Area,
   AreaChart,
