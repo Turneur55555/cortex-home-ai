@@ -570,8 +570,30 @@ la hiérarchie, le découpage de C5 et l'élargissement du lot Bilan (§8.2) cha
 
 ---
 
+## 9. Règles permanentes ajoutées à la validation (Nathan, 2026-07-15 — vision et ordre V1-V10 validés)
+
+Ces règles gouvernent TOUTE la Phase C, chaque lot, chaque décision de détail :
+
+1. **La question-filtre de tout développement** : *"Est-ce que cette évolution donne envie à
+   l'utilisateur de revenir dans ses Chroniques ?"* Si la réponse est non, ce n'est
+   probablement pas une priorité. Les Chroniques sont le cœur émotionnel du produit : une
+   séance n'est plus un enregistrement, c'est un **souvenir**, une **progression**, une
+   **histoire** — l'utilisateur doit avoir envie de rouvrir une séance réalisée il y a 6 mois.
+2. **Réutilisation avant création** : avant d'ajouter une fonctionnalité, toujours vérifier si
+   l'information existe déjà (exemple fondateur : le bilan IA, déjà persisté dans
+   `workout_analyses` et jamais relu — voir §8.2). Si elle existe, la réutiliser prime sur la
+   création d'une nouvelle donnée : enrichir le produit avec ce qu'il possède déjà avant
+   d'augmenter sa complexité.
+3. **Invariants de phase** : pas de régression sur la Musculation ; pas de nouvelle
+   architecture ; pas de duplication ; pas de dette technique volontaire. Chaque lot doit
+   augmenter la valeur perçue du produit.
+
+Le développement démarre au lot V1 (§8.4) sur autorisation explicite de Nathan.
+
+---
+
 *Document produit le 2026-07-15 sur la branche `claude/exercise-central-governance-0qvidl`, à
 partir de l'état réel du code (tip incluant la clôture de la Phase B, commit `5d20370`).
 Addendum §8 (épreuve de la vision, réordonnancement par valeur utilisateur) ajouté le même jour
-après validation du principe général par Nathan. Aucune ligne de code de cette phase n'a été
-écrite : le développement commencera après validation de ce document par Nathan.*
+après validation du principe général par Nathan ; §9 (règles permanentes) ajouté à la validation
+finale, qui autorise le démarrage du développement au lot V1.*
