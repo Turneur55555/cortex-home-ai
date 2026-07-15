@@ -39,6 +39,7 @@ export {
   useBodyMeasurements,
   useAddBodyMeasurement,
   useDeleteBodyMeasurement,
+  useUpdateBodyMeasurement,
 } from "./useBodyTracking";
 
 // ---------- Workouts ----------
