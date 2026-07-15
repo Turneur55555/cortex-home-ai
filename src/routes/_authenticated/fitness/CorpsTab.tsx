@@ -145,6 +145,26 @@ export function CorpsTab() {
         />
       </div>
 
+      <button
+        type="button"
+        onClick={() => setHistoryOpen(true)}
+        className="flex items-center justify-between gap-2 rounded-2xl border border-border bg-card px-4 py-3 shadow-card text-left active:opacity-80"
+      >
+        <span className="flex items-center gap-2">
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/15 text-primary">
+            <History className="h-4 w-4" />
+          </span>
+          <span>
+            <span className="block text-sm font-semibold">Historique des mesures</span>
+            <span className="block text-[11px] text-muted-foreground">
+              {data?.length ?? 0} entrée{(data?.length ?? 0) > 1 ? "s" : ""} · modifier ou supprimer
+            </span>
+          </span>
+        </span>
+        <span className="text-xs font-semibold text-primary">Ouvrir</span>
+      </button>
+
+
       <FormScoreCard score={formScore.score} plateau={plateau} count={data?.length ?? 0} />
 
       <div className="rounded-2xl border border-border bg-card p-4 shadow-card">
