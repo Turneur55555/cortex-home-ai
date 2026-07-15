@@ -137,3 +137,55 @@ sous-jacente est réutilisée, jamais dupliquée.
 À exécuter dans l'ordre fixé par Nathan : relecture, TypeScript, ESLint, Vitest, corrections,
 GitHub, Lovable, tests fonctionnels, nettoyage, rapport final. Résultats consignés dans le
 rapport final de la phase (mémoire de session + commit).
+
+## Addendum — harmonisation "exercice" (15/07/2026, retour de Nathan après premier test live)
+
+**Constat important avant de coder quoi que ce soit** : contrairement à ce que le retour laissait
+supposer, l'essentiel de l'architecture demandée existait déjà, posée le 11/07/2026 (session
+"CORRECTION 2026-07-11 (retour de Nathan)", non documentée dans ma mémoire jusqu'ici) :
+- `groupByExerciseLabel` (`segmentStats.ts`) regroupe déjà les répétitions par exercice, en séance
+  active (`ActiveCourseExerciseCard.tsx`, vocabulaire déjà "exercice"/"répétition") comme en
+  historique détaillé (`CourseHistoryContent.tsx`/`DisciplineHistoryContent.tsx`).
+- `SEGMENT_METRIC_CONFIG` (`segmentStats.ts`) est déjà une table déclarative libellé/format par
+  métrique, partagée par toutes les disciplines (Distance, Allure, Vitesse, Résistance, Cadence,
+  Charge, Tours, Durée, Calories...).
+- `SegmentAnalysisSheet.tsx` est déjà une fiche générique par exercice : analyse textuelle,
+  graphique (recharts), tuiles de meilleure valeur ("records"), progression/tendance, historique
+  par séance — déjà pilotée par `SEGMENT_METRIC_CONFIG`, déjà intitulée "Fiche exercice".
+
+Autrement dit, la demande "le moteur déclare les métriques/records/graphiques disponibles" est
+déjà largement satisfaite par ce mécanisme existant. Il ne s'agit donc pas de construire une
+nouvelle couche déclarative par moteur, mais de corriger deux vrais trous qui expliquent le
+symptôme observé pendant le test live (Cardio/Rameur affichait speed_kmh/incline_pct/
+escalier_level en plus de la distance) :
+
+1. **Root cause réelle — fuite de métriques à la source** : `CoachSheet.tsx` pré-remplit dès le
+   choix de discipline TOUTES les valeurs par défaut des questions du moteur, y compris celles
+   masquées par leur `when()` (ex: `incline_pct` n'existe que pour "Marche inclinée", mais sa
+   valeur par défaut atterrissait quand même dans `answers` même si l'utilisateur choisissait
+   "Rameur"). `engine.generate()`/`toWorkoutRecord()` transmettent ensuite `answers` tel quel.
+   Fix : filtrer `answers` par `question.when()` juste avant l'appel au moteur
+   (`effectiveAnswers`), dans `CoachSheet.tsx` — un seul point de correction pour toutes les
+   disciplines, pas un fix par moteur.
+2. **`ActiveSegmentCard.tsx` n'est pas générique** : écrit pour le pilote Course uniquement, il
+   n'expose que 2 champs éditables codés en dur (distance/allure) et une mini-table de 3 libellés
+   pour le reste (`zone`/`elevation_m`/`max_heart_rate`) — toute autre clé s'affichait en `snake_case`
+   brut. Fix : rendu générique piloté par `SEGMENT_METRIC_CONFIG` (déjà tous les libellés/formats
+   nécessaires), chaque métrique de la répétition devient éditable avec son vrai libellé.
+
+**Vocabulaire "segment" retiré de l'UI** (restait visible dans `aria-label`, textes de bouton et
+placeholders de `ActiveSegmentCard.tsx`/`ActiveGenericSessionView.tsx`, et l'incohérence
+"répétition"/"occurrence" de `SegmentAnalysisSheet.tsx`) — remplacé par "exercice"/"répétition",
+cohérent avec le vocabulaire déjà utilisé par `ActiveCourseExerciseCard.tsx` depuis le 11/07. Les
+identifiants techniques (`workout_segments`, `SessionSegment`, `useGenericSegment*`, commentaires)
+restent inchangés, conformément à la consigne de Nathan ("segment" reste un mot de code, pas un
+mot d'interface).
+
+**Explicitement HORS PÉRIMÈTRE de cette correction** (signalé, pas traité) : la carte
+`GenericHistoryCard.tsx` (liste compacte affichée directement dans "Chroniques complètes") utilise
+`SessionSegmentList.tsx`, qui affiche les répétitions à PLAT (pas groupées par exercice) —
+contrairement à la vue active et à la fiche détaillée d'historique qui, elles, groupent déjà. Ne
+montre aucun mot "segment" à l'utilisateur donc hors du périmètre strict de cette demande, mais
+reste une incohérence structurelle mineure pour une séance à répétitions multiples (ex. fractionné
+Course) consultée depuis la liste compacte. Candidat pour une prochaine passe si Nathan le
+souhaite.
