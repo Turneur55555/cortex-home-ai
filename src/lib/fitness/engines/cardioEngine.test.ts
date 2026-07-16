@@ -195,8 +195,17 @@ describe("CardioWorkoutEngine — modèle métier de la répétition (lot V4)", 
       "stroke_rate_spm",
       "heart_rate_bpm",
     ]);
-    expect(keys("Tapis de course")).toEqual(["speed_kmh", "incline_pct", "heart_rate_bpm"]);
+    // Lot V6 : le tapis a sa propre identité — vitesse/allure/FC au
+    // premier plan, l'inclinaison reste disponible mais en dernier.
+    expect(keys("Tapis de course")).toEqual([
+      "speed_kmh",
+      "pace_min_per_km",
+      "heart_rate_bpm",
+      "incline_pct",
+    ]);
     expect(keys("Marche inclinée 2/3")).toContain("incline_pct");
+    // "Marche sur tapis" reste une marche : l'inclinaison garde son rang.
+    expect(keys("Marche sur tapis")).toEqual(["speed_kmh", "incline_pct", "heart_rate_bpm"]);
     expect(keys("Vélo")).toContain("cadence_rpm");
     // Activité inconnue : repli honnête distance + durée, jamais rien.
     expect(keys("Machine mystère")).toEqual(["distance_m", "duration_min"]);

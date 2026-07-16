@@ -624,6 +624,14 @@ function GenericExerciseCard({
   // récompense. Détection 100% présentation (mêmes données, mêmes
   // mutations, mêmes moteurs — rien d'autre ne change).
   const isKmJourney = discipline === "cardio" && /marche|tapis|treadmill/i.test(group.displayLabel);
+  // Lot V6 (Tapis de course) : même voyage, identités distinctes — sur
+  // tapis la FC fait partie du récit du kilomètre et l'inclinaison n'est
+  // qu'un réglage secondaire, à l'inverse de la marche inclinée où
+  // l'inclinaison EST l'exercice. `/marche/` prioritaire : "Marche sur
+  // tapis" reste une marche (même règle que REP_MODELS, cardioEngine).
+  const kmJourneyFlavor: "marche" | "tapis" = /marche/i.test(group.displayLabel)
+    ? "marche"
+    : "tapis";
 
   // Addendum 3 (2026-07-15, audit convergence UX) : badge "Nouveau record"
   // générique — pendant du badge Trophy de MuscuExerciseCard (isPR/isNewPR),
@@ -873,6 +881,7 @@ function GenericExerciseCard({
               instances={group.instances}
               lastReps={lastSession?.reps ?? []}
               knownKeys={knownKeys}
+              flavor={kmJourneyFlavor}
               onUpdateRep={handleUpdateRep}
               onDeleteRep={(segment) => deleteSegment.mutate(segment.id)}
               onMoveUp={(segment) =>
@@ -948,6 +957,7 @@ type KmJourneyProps = {
   instances: ActiveGenericSegment[];
   lastReps: Array<{ metrics: Record<string, number | string> }>;
   knownKeys: string[];
+  flavor: "marche" | "tapis";
   onUpdateRep: (
     segment: ActiveGenericSegment,
     fields: { metrics?: Record<string, number | string>; completed?: boolean },
@@ -963,6 +973,7 @@ function KmJourneyBody({
   instances,
   lastReps,
   knownKeys,
+  flavor,
   onUpdateRep,
   onDeleteRep,
   onMoveUp,
@@ -981,7 +992,18 @@ function KmJourneyBody({
   const orderedKeys = [...knownKeys].sort(
     (a, b) => (SEGMENT_METRIC_CONFIG[a]?.order ?? 99) - (SEGMENT_METRIC_CONFIG[b]?.order ?? 99),
   );
-  const primaryKeys = orderedKeys.filter((k) => SEGMENT_METRIC_CONFIG[k]?.importance === "primary");
+  // SEGMENT_METRIC_CONFIG est GLOBALE à toutes les disciplines (incline_pct
+  // promue primary pour l'identité Marche inclinée, FC volontairement
+  // secondary partout) — le voyage tapis ajuste donc LOCALEMENT, sans
+  // toucher la table : la FC entre dans le récit du kilomètre (héros +
+  // résumé "✓ Km 1"), l'inclinaison redescend en réglage secondaire.
+  const promoted = flavor === "tapis" ? ["heart_rate_bpm"] : [];
+  const demoted = flavor === "tapis" ? ["incline_pct"] : [];
+  const primaryKeys = orderedKeys.filter(
+    (k) =>
+      !demoted.includes(k) &&
+      (promoted.includes(k) || SEGMENT_METRIC_CONFIG[k]?.importance === "primary"),
+  );
   const secondaryKeys = orderedKeys.filter((k) => !primaryKeys.includes(k));
 
   const summaryFor = (segment: ActiveGenericSegment) =>

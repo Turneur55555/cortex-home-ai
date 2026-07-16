@@ -179,7 +179,17 @@ const REP_MODELS: Array<{ pattern: RegExp; keys: string[] }> = [
       "heart_rate_bpm",
     ],
   },
-  { pattern: /marche|tapis|treadmill/i, keys: ["speed_kmh", "incline_pct", "heart_rate_bpm"] },
+  // Lot V6 (Tapis de course) : le tapis N'EST PAS une marche inclinée.
+  // Même unité métier (le kilomètre) mais identités distinctes — sur
+  // tapis, vitesse/allure/FC racontent le kilomètre et l'inclinaison
+  // n'est qu'un réglage occasionnel ; sur marche inclinée, l'inclinaison
+  // EST l'exercice. `/marche/` testé d'abord : "Marche sur tapis" reste
+  // une marche.
+  { pattern: /marche/i, keys: ["speed_kmh", "incline_pct", "heart_rate_bpm"] },
+  {
+    pattern: /tapis|treadmill/i,
+    keys: ["speed_kmh", "pace_min_per_km", "heart_rate_bpm", "incline_pct"],
+  },
   { pattern: /assault/i, keys: ["distance_m", "watts", "calories_estimate", "heart_rate_bpm"] },
   {
     pattern: /v[ée]lo|bike|cycl/i,
