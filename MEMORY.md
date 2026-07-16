@@ -3,6 +3,9 @@
 ## Dernière mise à jour
 2026-07-15
 
+## Phase C — lot V5 livré : « Premium Experience — Marche inclinée » (2026-07-16, branche seule, PAS poussé sur main)
+La carte Marche inclinée/Tapis n'est plus un formulaire mais un VOYAGE (UI uniquement — aucun moteur/donnée/backend touché, détection présentation `discipline==="cardio" && /marche|tapis|treadmill/` dans `GenericExerciseCard`) : Km terminés ✓ (lignes compactes célébrées, résumé vitesse·inclinaison, tap pour rouvrir), Km en cours ● en carte héros (nœud pulsant sur un rail vertical, grands cadrans 26px vitesse/inclinaison, bouton « Valider le kilomètre » gradient), Km à venir ○ fantômes ; CTA « Commencer le Km N+1 » devient primaire quand tout est validé ; toast de récompense à chaque km ; méta-ligne narrative (« 2 km au compteur · Km 3 en cours ») ; PAS de minuteur de repos entre kilomètres (effort continu — exception locale au déclenchement V3). Nouveaux composants locaux `KmJourneyBody`/`KmHeroCard` dans `ActiveExerciseCard.tsx` ; helpers de saisie exportés depuis `ActiveSegmentCard.tsx` (`inputUnit`/`metricLabel`/`toDisplayString`/`parseMetricInput`) — zéro duplication. Autres disciplines : rendu V3/V4 inchangé. tsc 0 erreur, eslint clean, vitest 307/307, build OK. Capture avant/après impossible depuis cet env (pas de session Lovable) — à juger par Nathan en live.
+
 ## Phase C — lot V4.1 livré : corrections du modèle métier avant push main (2026-07-16)
 Retour de Nathan sur V4, corrigé avant tout push main :
 - **Tapis/Marche inclinée** : le KILOMÈTRE est l'unité métier — SUPPRESSION de l'estimation durée×vitesse (explicitement refusée) ; la séance démarre sur "Km 1" seul (vitesse/inclinaison pré-remplies), l'utilisateur ajoute les kilomètres suivants. `cardioEngine.buildLiveSegmentsImpl` seed 1 répétition, plus de numérotation `i/n`.

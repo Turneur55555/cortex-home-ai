@@ -62,15 +62,25 @@ const INPUT_UNITS: Record<string, string> = {
   heart_rate_bpm: "bpm",
 };
 
-function metricLabel(key: string): string {
+export function metricLabel(key: string): string {
   return SEGMENT_METRIC_CONFIG[key]?.label ?? key;
 }
 
-function inputUnit(key: string): string {
+export function inputUnit(key: string): string {
   return INPUT_UNITS[key] ?? metricLabel(key).toLowerCase().slice(0, 7);
 }
 
-function toDisplayString(key: string, value: number | string | undefined | null): string {
+/** Saisie → valeur de stockage (virgule tolérée, transformation km→m si
+ *  déclarée). `null` si la saisie n'est pas un nombre. Partagé avec le
+ *  parcours kilomètre premium (lot V5, exerciseCard/ActiveExerciseCard). */
+export function parseMetricInput(key: string, raw: string): number | null {
+  const n = parseFloat(raw.replace(",", "."));
+  if (Number.isNaN(n)) return null;
+  const transform = DISPLAY_TRANSFORMS[key];
+  return transform ? transform.toStorage(n) : n;
+}
+
+export function toDisplayString(key: string, value: number | string | undefined | null): string {
   if (typeof value !== "number") return "";
   const transform = DISPLAY_TRANSFORMS[key];
   const displayed = transform ? transform.toDisplay(value) : value;
@@ -182,10 +192,9 @@ export function ActiveSegmentCard({
   }, [segment.metrics]);
 
   const commitMetric = (key: string, raw: string) => {
-    const n = parseFloat(raw.replace(",", "."));
-    if (Number.isNaN(n)) return;
-    const transform = DISPLAY_TRANSFORMS[key];
-    onUpdate({ metrics: { ...segment.metrics, [key]: transform ? transform.toStorage(n) : n } });
+    const stored = parseMetricInput(key, raw);
+    if (stored === null) return;
+    onUpdate({ metrics: { ...segment.metrics, [key]: stored } });
   };
 
   // Valeurs textuelles (rares) : affichées en lecture seule, jamais

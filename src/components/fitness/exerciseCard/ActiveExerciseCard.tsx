@@ -29,17 +29,25 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowDown,
+  ArrowRight,
   ArrowUp,
   BarChart3,
   Check,
+  ChevronDown,
+  ChevronRight,
+  ChevronUp,
   History,
+  Loader2,
   Minus,
+  Plus,
   RotateCcw,
   Repeat,
   Trash2,
   Trophy,
+  X,
   Zap,
 } from "lucide-react";
+import { toast } from "sonner";
 import type { ActiveExercise, ActiveSet } from "@/hooks/use-fitness";
 import {
   useAddExerciseSet,
@@ -71,7 +79,13 @@ import {
   type LabelGroup,
 } from "@/lib/fitness/segmentStats";
 import { useDisciplineSegmentHistory } from "@/hooks/useDisciplineSegmentHistory";
-import { ActiveSegmentCard } from "../session/ActiveSegmentCard";
+import {
+  ActiveSegmentCard,
+  inputUnit,
+  metricLabel,
+  parseMetricInput,
+  toDisplayString,
+} from "../session/ActiveSegmentCard";
 import {
   ExerciseCardConfirmDelete,
   ExerciseCardContainer,
@@ -602,6 +616,15 @@ function GenericExerciseCard({
     new Set([...engineRepKeys, ...group.instances.flatMap((s) => Object.keys(s.metrics))]),
   );
 
+  // Lot V5 (2026-07-16, "Premium Experience — Marche inclinée") : les
+  // activités dont l'unité métier est LE KILOMÈTRE (marche inclinée,
+  // tapis) ne se présentent plus comme une liste de répétitions mais
+  // comme un VOYAGE — Km terminés ✓ / Km en cours ● / Km à venir ○ sur un
+  // rail de progression, kilomètre courant en héros, validation-
+  // récompense. Détection 100% présentation (mêmes données, mêmes
+  // mutations, mêmes moteurs — rien d'autre ne change).
+  const isKmJourney = discipline === "cardio" && /marche|tapis|treadmill/i.test(group.displayLabel);
+
   // Addendum 3 (2026-07-15, audit convergence UX) : badge "Nouveau record"
   // générique — pendant du badge Trophy de MuscuExerciseCard (isPR/isNewPR),
   // sans toucher au moteur de Rang/PR musculation (invariant 9.9, hors
@@ -720,7 +743,10 @@ function GenericExerciseCard({
   ) => {
     updateSegment.mutate({ id: segment.id, ...fields });
     if (fields.completed) {
-      if (group.instances.length > 1) restTimer.startForExercise(group.key);
+      // Pas de minuteur de repos entre deux kilomètres (lot V5) : la
+      // marche/le tapis est un effort CONTINU — un repos automatique par
+      // km n'a aucun sens, contrairement aux intervalles/circuits.
+      if (group.instances.length > 1 && !isKmJourney) restTimer.startForExercise(group.key);
       try {
         navigator.vibrate?.(50);
       } catch {
@@ -764,18 +790,42 @@ function GenericExerciseCard({
         collapsed={collapsed}
         onToggleCollapse={() => setCollapsed((c) => !c)}
         metaLine={
-          <div className="mt-1.5 flex items-center gap-1.5 text-[12px] text-muted-foreground">
-            <span className="tabular-nums">
-              {group.instances.length} répétition{group.instances.length > 1 ? "s" : ""}
-              {doneCount > 0 && <span className="text-success"> ({doneCount}✓)</span>}
-            </span>
-            {currentBest && (
-              <>
-                <span className="text-muted-foreground/30">•</span>
-                <span className="tabular-nums">{currentBest.formatted}</span>
-              </>
-            )}
-          </div>
+          isKmJourney ? (
+            // Lot V5 — la progression est le personnage principal : le
+            // compteur de kilomètres raconte la séance, pas un compte de
+            // "répétitions".
+            <div className="mt-1.5 flex items-center gap-1.5 text-[12px]">
+              <span
+                key={doneCount}
+                className="font-bold tabular-nums text-foreground animate-in zoom-in-75 duration-300"
+              >
+                {doneCount > 0
+                  ? `${doneCount} km au compteur`
+                  : "Le tapis t'attend — Km 1 à valider"}
+              </span>
+              {doneCount > 0 && group.instances.some((s) => !s.completed) && (
+                <>
+                  <span className="text-muted-foreground/30">•</span>
+                  <span className="text-muted-foreground">
+                    Km {group.instances.findIndex((s) => !s.completed) + 1} en cours
+                  </span>
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="mt-1.5 flex items-center gap-1.5 text-[12px] text-muted-foreground">
+              <span className="tabular-nums">
+                {group.instances.length} répétition{group.instances.length > 1 ? "s" : ""}
+                {doneCount > 0 && <span className="text-success"> ({doneCount}✓)</span>}
+              </span>
+              {currentBest && (
+                <>
+                  <span className="text-muted-foreground/30">•</span>
+                  <span className="tabular-nums">{currentBest.formatted}</span>
+                </>
+              )}
+            </div>
+          )
         }
         badges={badges}
         actions={
@@ -818,43 +868,482 @@ function GenericExerciseCard({
             </button>
           )}
 
-          <ul className="flex flex-col gap-2">
-            {group.instances.map((segment, i) => (
-              <ActiveSegmentCard
-                key={segment.id}
-                segment={segment}
-                knownKeys={knownKeys}
-                index={i + 1}
-                lastRepMetrics={lastSession?.reps[i]?.metrics ?? null}
-                isFirst={i === 0}
-                isLast={i === group.instances.length - 1}
-                onUpdate={(fields) => handleUpdateRep(segment, fields)}
-                onDelete={() => deleteSegment.mutate(segment.id)}
-                onMoveUp={() =>
-                  reorderSegment.mutate({
-                    segments: group.instances,
-                    id: segment.id,
-                    direction: "up",
-                  })
-                }
-                onMoveDown={() =>
-                  reorderSegment.mutate({
-                    segments: group.instances,
-                    id: segment.id,
-                    direction: "down",
-                  })
-                }
-              />
-            ))}
-          </ul>
+          {isKmJourney ? (
+            <KmJourneyBody
+              instances={group.instances}
+              lastReps={lastSession?.reps ?? []}
+              knownKeys={knownKeys}
+              onUpdateRep={handleUpdateRep}
+              onDeleteRep={(segment) => deleteSegment.mutate(segment.id)}
+              onMoveUp={(segment) =>
+                reorderSegment.mutate({
+                  segments: group.instances,
+                  id: segment.id,
+                  direction: "up",
+                })
+              }
+              onMoveDown={(segment) =>
+                reorderSegment.mutate({
+                  segments: group.instances,
+                  id: segment.id,
+                  direction: "down",
+                })
+              }
+              onAddKm={handleAddRep}
+              addPending={addSegment.isPending}
+            />
+          ) : (
+            <>
+              <ul className="flex flex-col gap-2">
+                {group.instances.map((segment, i) => (
+                  <ActiveSegmentCard
+                    key={segment.id}
+                    segment={segment}
+                    knownKeys={knownKeys}
+                    index={i + 1}
+                    lastRepMetrics={lastSession?.reps[i]?.metrics ?? null}
+                    isFirst={i === 0}
+                    isLast={i === group.instances.length - 1}
+                    onUpdate={(fields) => handleUpdateRep(segment, fields)}
+                    onDelete={() => deleteSegment.mutate(segment.id)}
+                    onMoveUp={() =>
+                      reorderSegment.mutate({
+                        segments: group.instances,
+                        id: segment.id,
+                        direction: "up",
+                      })
+                    }
+                    onMoveDown={() =>
+                      reorderSegment.mutate({
+                        segments: group.instances,
+                        id: segment.id,
+                        direction: "down",
+                      })
+                    }
+                  />
+                ))}
+              </ul>
 
-          <ExerciseCardPillButton
-            label="Ajouter une répétition"
-            onClick={handleAddRep}
-            disabled={addSegment.isPending}
-          />
+              <ExerciseCardPillButton
+                label="Ajouter une répétition"
+                onClick={handleAddRep}
+                disabled={addSegment.isPending}
+              />
+            </>
+          )}
         </div>
       )}
     </ExerciseCardContainer>
+  );
+}
+
+// ─── Lot V5 — Le voyage kilomètre (Marche inclinée / Tapis) ─────────────────
+// La séance ne se lit plus comme un formulaire mais comme un chemin :
+// Km terminés ✓ (lignes compactes, célébrées), Km en cours ● (carte héros,
+// grands champs, bouton "Valider le kilomètre"), Km à venir ○ (fantômes),
+// reliés par un rail de progression vertical. Mêmes données, mêmes
+// mutations, mêmes moteurs — uniquement l'expérience.
+
+type KmJourneyProps = {
+  instances: ActiveGenericSegment[];
+  lastReps: Array<{ metrics: Record<string, number | string> }>;
+  knownKeys: string[];
+  onUpdateRep: (
+    segment: ActiveGenericSegment,
+    fields: { metrics?: Record<string, number | string>; completed?: boolean },
+  ) => void;
+  onDeleteRep: (segment: ActiveGenericSegment) => void;
+  onMoveUp: (segment: ActiveGenericSegment) => void;
+  onMoveDown: (segment: ActiveGenericSegment) => void;
+  onAddKm: () => void;
+  addPending: boolean;
+};
+
+function KmJourneyBody({
+  instances,
+  lastReps,
+  knownKeys,
+  onUpdateRep,
+  onDeleteRep,
+  onMoveUp,
+  onMoveDown,
+  onAddKm,
+  addPending,
+}: KmJourneyProps) {
+  // Le kilomètre "focalisé" : par défaut le premier non terminé (le Km en
+  // cours) ; taper un Km terminé/à venir le rouvre en héros pour l'éditer.
+  const [focusedId, setFocusedId] = useState<string | null>(null);
+
+  const firstOpenIdx = instances.findIndex((s) => !s.completed);
+  const doneCount = instances.filter((s) => s.completed).length;
+  const allDone = firstOpenIdx === -1;
+
+  const orderedKeys = [...knownKeys].sort(
+    (a, b) => (SEGMENT_METRIC_CONFIG[a]?.order ?? 99) - (SEGMENT_METRIC_CONFIG[b]?.order ?? 99),
+  );
+  const primaryKeys = orderedKeys.filter((k) => SEGMENT_METRIC_CONFIG[k]?.importance === "primary");
+  const secondaryKeys = orderedKeys.filter((k) => !primaryKeys.includes(k));
+
+  const summaryFor = (segment: ActiveGenericSegment) =>
+    primaryKeys
+      .map((k) => {
+        const v = segment.metrics[k];
+        return typeof v === "number" ? SEGMENT_METRIC_CONFIG[k].format(v) : null;
+      })
+      .filter((s): s is string => s !== null)
+      .join(" · ");
+
+  const handleValidate = (segment: ActiveGenericSegment, index: number) => {
+    onUpdateRep(segment, { completed: true });
+    setFocusedId(null);
+    // La récompense : chaque kilomètre validé fait avancer l'histoire.
+    toast.success(`Km ${index} terminé 💪`, {
+      description: `${doneCount + 1} km au compteur — le Km ${instances.length === index ? index + 1 : index + 1} t'attend.`,
+    });
+  };
+
+  return (
+    <div className="relative">
+      {/* Rail de progression — le chemin parcouru relie les kilomètres. */}
+      <div
+        aria-hidden
+        className="absolute bottom-16 left-[13px] top-2 w-[2px] rounded-full bg-white/[0.07]"
+      />
+
+      <ol className="flex flex-col gap-1.5">
+        {instances.map((segment, i) => {
+          const isCurrent = i === firstOpenIdx;
+          const isFocused = focusedId ? focusedId === segment.id : isCurrent;
+
+          if (isFocused) {
+            return (
+              <KmHeroCard
+                key={segment.id}
+                segment={segment}
+                index={i + 1}
+                dismissable={!isCurrent}
+                lastMetrics={lastReps[i]?.metrics ?? null}
+                primaryKeys={primaryKeys}
+                secondaryKeys={secondaryKeys}
+                isFirst={i === 0}
+                isLast={i === instances.length - 1}
+                onUpdate={(fields) => onUpdateRep(segment, fields)}
+                onValidate={() => handleValidate(segment, i + 1)}
+                onDelete={() => {
+                  setFocusedId(null);
+                  onDeleteRep(segment);
+                }}
+                onMoveUp={() => onMoveUp(segment)}
+                onMoveDown={() => onMoveDown(segment)}
+                onClose={() => setFocusedId(null)}
+              />
+            );
+          }
+
+          if (segment.completed) {
+            const summary = summaryFor(segment);
+            return (
+              <li
+                key={segment.id}
+                className="animate-in fade-in slide-in-from-bottom-1 duration-300"
+              >
+                <button
+                  type="button"
+                  onClick={() => setFocusedId(segment.id)}
+                  className="group/km flex w-full items-center gap-3 rounded-2xl py-2 pl-0.5 pr-2 text-left transition-colors hover:bg-white/[0.03]"
+                >
+                  <span className="z-[1] flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full bg-success text-success-foreground shadow-[0_0_0_4px_rgba(34,197,94,0.14)] animate-in zoom-in-50 duration-300">
+                    <Check className="h-3.5 w-3.5" strokeWidth={3.5} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-baseline gap-1.5">
+                      <span className="text-[13px] font-bold">Km {i + 1}</span>
+                      <span className="text-[9px] font-bold uppercase tracking-widest text-success/90">
+                        terminé
+                      </span>
+                    </span>
+                    {summary && (
+                      <span className="block truncate text-[12px] tabular-nums text-muted-foreground">
+                        {summary}
+                      </span>
+                    )}
+                  </span>
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/30 transition-transform group-hover/km:translate-x-0.5" />
+                </button>
+              </li>
+            );
+          }
+
+          return (
+            <li key={segment.id} className="animate-in fade-in duration-300">
+              <button
+                type="button"
+                onClick={() => setFocusedId(segment.id)}
+                className="flex w-full items-center gap-3 rounded-2xl py-2 pl-0.5 pr-2 text-left opacity-55 transition-opacity hover:opacity-100"
+              >
+                <span className="z-[1] flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full border-2 border-dashed border-white/20 bg-surface text-[11px] font-bold text-muted-foreground">
+                  {i + 1}
+                </span>
+                <span className="text-[13px] font-semibold text-muted-foreground">
+                  Km {i + 1} · à venir
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+
+      {/* Le prochain kilomètre — CTA principal quand tout est validé
+          (l'invitation à continuer), discret sinon. Reprend automatiquement
+          les valeurs du kilomètre précédent (voir handleAddRep). */}
+      <button
+        type="button"
+        onClick={onAddKm}
+        disabled={addPending}
+        className={
+          allDone
+            ? "mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-primary py-3.5 text-sm font-bold text-primary-foreground shadow-glow transition-transform active:scale-[0.98] disabled:opacity-50"
+            : "mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-white/10 bg-white/[0.02] py-3 text-[13px] font-semibold text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary disabled:opacity-50"
+        }
+      >
+        {addPending ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : allDone ? (
+          <>
+            Commencer le Km {instances.length + 1}
+            <ArrowRight className="h-4 w-4" />
+          </>
+        ) : (
+          <>
+            <Plus className="h-4 w-4" />
+            Préparer le Km {instances.length + 1}
+          </>
+        )}
+      </button>
+    </div>
+  );
+}
+
+function KmHeroCard({
+  segment,
+  index,
+  dismissable,
+  lastMetrics,
+  primaryKeys,
+  secondaryKeys,
+  isFirst,
+  isLast,
+  onUpdate,
+  onValidate,
+  onDelete,
+  onMoveUp,
+  onMoveDown,
+  onClose,
+}: {
+  segment: ActiveGenericSegment;
+  index: number;
+  dismissable: boolean;
+  lastMetrics: Record<string, number | string> | null;
+  primaryKeys: string[];
+  secondaryKeys: string[];
+  isFirst: boolean;
+  isLast: boolean;
+  onUpdate: (fields: { metrics?: Record<string, number | string>; completed?: boolean }) => void;
+  onValidate: () => void;
+  onDelete: () => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  onClose: () => void;
+}) {
+  const [inputs, setInputs] = useState<Record<string, string>>(() => {
+    const initial: Record<string, string> = {};
+    for (const key of [...primaryKeys, ...secondaryKeys]) {
+      initial[key] = toDisplayString(key, segment.metrics[key]);
+    }
+    return initial;
+  });
+  const [confirmDel, setConfirmDel] = useState(false);
+
+  useEffect(() => {
+    setInputs((prev) => {
+      const next = { ...prev };
+      for (const key of [...primaryKeys, ...secondaryKeys]) {
+        next[key] = toDisplayString(key, segment.metrics[key]);
+      }
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [segment.metrics]);
+
+  const commit = (key: string, raw: string) => {
+    const stored = parseMetricInput(key, raw);
+    if (stored === null) return;
+    onUpdate({ metrics: { ...segment.metrics, [key]: stored } });
+  };
+
+  return (
+    <li className="relative animate-in fade-in zoom-in-95 duration-300">
+      {/* Nœud du rail — pulse tant que le kilomètre est en cours. */}
+      <span className="absolute left-0 top-6 z-[1] flex h-[26px] w-[26px] items-center justify-center">
+        {!segment.completed && (
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-25" />
+        )}
+        <span
+          className={`relative flex h-[26px] w-[26px] items-center justify-center rounded-full text-[12px] font-extrabold ${
+            segment.completed
+              ? "bg-success text-success-foreground"
+              : "bg-primary text-primary-foreground shadow-glow"
+          }`}
+        >
+          {segment.completed ? <Check className="h-3.5 w-3.5" strokeWidth={3.5} /> : index}
+        </span>
+      </span>
+
+      <div className="ml-9 rounded-3xl border border-primary/20 bg-gradient-to-b from-primary/[0.09] to-primary/[0.02] p-4 shadow-[0_10px_36px_-16px_rgba(0,0,0,0.65)]">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-baseline gap-2">
+            <span className="text-[15px] font-extrabold tracking-tight">Km {index}</span>
+            {segment.completed ? (
+              <span className="text-[9px] font-bold uppercase tracking-widest text-success">
+                terminé
+              </span>
+            ) : (
+              <span className="text-[9px] font-bold uppercase tracking-widest text-primary">
+                en cours
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-0.5 text-muted-foreground/40">
+            <button
+              type="button"
+              onClick={onMoveUp}
+              disabled={isFirst}
+              aria-label="Monter"
+              className="flex h-7 w-7 items-center justify-center rounded-full transition-colors hover:text-foreground disabled:opacity-25"
+            >
+              <ChevronUp className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={onMoveDown}
+              disabled={isLast}
+              aria-label="Descendre"
+              className="flex h-7 w-7 items-center justify-center rounded-full transition-colors hover:text-foreground disabled:opacity-25"
+            >
+              <ChevronDown className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmDel(true)}
+              aria-label="Supprimer ce kilomètre"
+              className="flex h-7 w-7 items-center justify-center rounded-full transition-colors hover:text-destructive"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+            {dismissable && (
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Refermer"
+                className="flex h-7 w-7 items-center justify-center rounded-full transition-colors hover:text-foreground"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {confirmDel ? (
+          <div className="mt-3 rounded-2xl bg-destructive/10 p-3 animate-in fade-in zoom-in-95 duration-150">
+            <p className="text-xs font-semibold text-destructive">Supprimer le Km {index} ?</p>
+            <div className="mt-2 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDel(false)}
+                className="flex-1 rounded-xl border border-border py-1.5 text-xs font-medium"
+              >
+                Garder
+              </button>
+              <button
+                type="button"
+                onClick={onDelete}
+                className="flex-1 rounded-xl bg-destructive/20 py-1.5 text-xs font-bold text-destructive"
+              >
+                Supprimer
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Les grands cadrans — une saisie, pas un formulaire. */}
+            <div className="mt-3 flex gap-2">
+              {primaryKeys.map((key) => (
+                <label
+                  key={key}
+                  className="flex h-[68px] flex-1 flex-col items-center justify-center gap-1 rounded-2xl bg-black/25 ring-1 ring-white/10 transition-all focus-within:bg-primary/10 focus-within:ring-primary/50"
+                >
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.1"
+                    value={inputs[key] ?? ""}
+                    placeholder={toDisplayString(key, lastMetrics?.[key]) || "—"}
+                    onChange={(e) => setInputs((prev) => ({ ...prev, [key]: e.target.value }))}
+                    onBlur={() => commit(key, inputs[key] ?? "")}
+                    className="w-full bg-transparent text-center text-[26px] font-extrabold leading-none tabular-nums outline-none placeholder:text-muted-foreground/20"
+                  />
+                  <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground/55">
+                    {metricLabel(key)} · {inputUnit(key)}
+                  </span>
+                </label>
+              ))}
+            </div>
+
+            {secondaryKeys.length > 0 && (
+              <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                {secondaryKeys.map((key) => (
+                  <label
+                    key={key}
+                    className="flex items-center gap-1.5 text-[11px] text-muted-foreground/70"
+                  >
+                    {metricLabel(key)}
+                    <input
+                      type="number"
+                      step="0.1"
+                      inputMode="decimal"
+                      value={inputs[key] ?? ""}
+                      placeholder={toDisplayString(key, lastMetrics?.[key])}
+                      onChange={(e) => setInputs((prev) => ({ ...prev, [key]: e.target.value }))}
+                      onBlur={() => commit(key, inputs[key] ?? "")}
+                      className="w-14 rounded-lg border border-border bg-surface px-1.5 py-0.5 text-[11px] font-semibold text-foreground outline-none placeholder:text-muted-foreground/30 focus:border-primary"
+                    />
+                  </label>
+                ))}
+              </div>
+            )}
+
+            {segment.completed ? (
+              <button
+                type="button"
+                onClick={() => onUpdate({ completed: false })}
+                className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-success/15 text-[13px] font-bold text-success transition-transform active:scale-[0.98]"
+              >
+                <Check className="h-4 w-4" strokeWidth={3} />
+                Kilomètre validé — appuyer pour annuler
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onValidate}
+                className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-primary text-sm font-bold text-primary-foreground shadow-glow transition-transform active:scale-[0.98]"
+              >
+                <Check className="h-5 w-5" strokeWidth={3} />
+                Valider le kilomètre
+              </button>
+            )}
+          </>
+        )}
+      </div>
+    </li>
   );
 }
