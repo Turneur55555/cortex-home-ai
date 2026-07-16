@@ -585,6 +585,7 @@ function GenericExerciseCard({
   const addSegment = useAddGenericSegment();
 
   const [collapsed, setCollapsed] = useState(false);
+  const [confirmDeleteEx, setConfirmDeleteEx] = useState(false);
 
   const doneCount = group.instances.filter((s) => s.completed).length;
   const knownKeys = Array.from(new Set(group.instances.flatMap((s) => Object.keys(s.metrics))));
@@ -614,15 +615,102 @@ function GenericExerciseCard({
   const isNewRecord =
     isRecord && historicalBest != null && currentBest!.value !== historicalBest.value;
 
+  // Lot V3 — le duel : répétitions de la DERNIÈRE séance passée de cet
+  // exercice (même hook/cache que le badge Record, aucune requête en plus).
+  // Alimente le badge "Dernière fois", les placeholders/tendances des
+  // lignes, et "Reprendre les valeurs précédentes" — pendant exact de
+  // `lastSession` côté musculation, dans le vocabulaire de la discipline.
+  const lastSession = useMemo(() => {
+    const insts = historyInstances ?? [];
+    if (insts.length === 0) return null;
+    const byWorkout = new Map<string, { date: string; reps: typeof insts }>();
+    for (const inst of insts) {
+      const entry = byWorkout.get(inst.workoutId);
+      if (entry) entry.reps.push(inst);
+      else byWorkout.set(inst.workoutId, { date: inst.date, reps: [inst] });
+    }
+    let latest: { date: string; reps: typeof insts } | null = null;
+    for (const entry of byWorkout.values()) {
+      if (!latest || entry.date > latest.date) latest = entry;
+    }
+    return latest;
+  }, [historyInstances]);
+
+  const lastSummary = useMemo(() => {
+    if (!lastSession) return null;
+    const cols = primaryColumnsForInstances(lastSession.reps).slice(0, 2);
+    const parts = cols
+      .map((col) => bestMetricValue(lastSession.reps, col.key)?.formatted)
+      .filter((f): f is string => !!f);
+    return parts.length > 0 ? parts.join(" · ") : null;
+  }, [lastSession]);
+
+  const isBusy = addSegment.isPending || updateSegment.isPending;
+
   const handleAddRep = () => {
+    if (isBusy) return;
+    // Valeurs de départ : la répétition suivante de la dernière séance
+    // (même principe que handleAddSet muscu : dernière série sinon repère
+    // historique) — sinon champs vides, jamais une valeur inventée.
+    const ref = lastSession?.reps[group.instances.length];
     addSegment.mutate({
       workoutId,
       label: group.displayLabel,
-      metrics: {},
+      metrics: ref ? { ...ref.metrics } : {},
       metricKey: group.instances[0]?.metricKey ?? undefined,
       position: nextPosition,
       discipline,
     });
+  };
+
+  // "Reprendre les valeurs précédentes" — pendant exact du bouton muscu :
+  // recopie rang par rang les métriques de la dernière séance, crée les
+  // répétitions manquantes. Mutations existantes uniquement.
+  const handleRestoreLastSession = async () => {
+    if (isBusy || !lastSession) return;
+    const refs = lastSession.reps;
+    group.instances.forEach((segment, i) => {
+      const ref = refs[i];
+      if (!ref) return;
+      updateSegment.mutate({ id: segment.id, metrics: { ...ref.metrics } });
+    });
+    for (let i = group.instances.length; i < refs.length; i++) {
+      await addSegment.mutateAsync({
+        workoutId,
+        label: group.displayLabel,
+        metrics: { ...refs[i].metrics },
+        metricKey: group.instances[0]?.metricKey ?? undefined,
+        position: nextPosition + (i - group.instances.length),
+        discipline,
+      });
+    }
+  };
+
+  // Validation d'une répétition : mêmes retours que la série muscu —
+  // vibration, et minuteur de repos quand l'exercice a plusieurs
+  // répétitions (fractionné/circuits ; jamais pour un bloc unique type
+  // Rameur 2000m, où un repos automatique n'aurait aucun sens).
+  const handleUpdateRep = (
+    segment: ActiveGenericSegment,
+    fields: {
+      label?: string;
+      metrics?: Record<string, number | string>;
+      completed?: boolean;
+    },
+  ) => {
+    updateSegment.mutate({ id: segment.id, ...fields });
+    if (fields.completed) {
+      if (group.instances.length > 1) restTimer.startForExercise(group.key);
+      try {
+        navigator.vibrate?.(50);
+      } catch {
+        // Vibration API non supportée — dégradation silencieuse.
+      }
+    }
+  };
+
+  const handleDeleteExercise = () => {
+    for (const segment of group.instances) deleteSegment.mutate(segment.id);
   };
 
   const recordBadge = isRecord && (
@@ -630,6 +718,18 @@ function GenericExerciseCard({
       <Trophy className="h-3 w-3" />
       {isNewRecord ? "Nouveau record" : `Record ${currentBest!.formatted}`}
     </span>
+  );
+
+  const badges = (
+    <>
+      {recordBadge}
+      {lastSummary && (
+        <span className="inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+          <History className="h-3 w-3" />
+          {lastSummary}
+        </span>
+      )}
+    </>
   );
 
   return (
@@ -649,29 +749,66 @@ function GenericExerciseCard({
               {group.instances.length} répétition{group.instances.length > 1 ? "s" : ""}
               {doneCount > 0 && <span className="text-success"> ({doneCount}✓)</span>}
             </span>
+            {currentBest && (
+              <>
+                <span className="text-muted-foreground/30">•</span>
+                <span className="tabular-nums">{currentBest.formatted}</span>
+              </>
+            )}
           </div>
         }
-        badges={recordBadge}
+        badges={badges}
         actions={
-          <ExerciseCardIconButton
-            icon={BarChart3}
-            onClick={() => onOpenStats(group.instances[0].label)}
-            label="Statistiques de l'exercice"
-          />
+          <>
+            <ExerciseCardIconButton
+              icon={BarChart3}
+              onClick={() => onOpenStats(group.instances[0].label)}
+              label="Statistiques de l'exercice"
+            />
+            <ExerciseCardIconButton
+              icon={Trash2}
+              onClick={() => setConfirmDeleteEx(true)}
+              label="Supprimer l'exercice"
+              variant="destructive"
+            />
+          </>
         }
       />
 
+      {confirmDeleteEx && (
+        <ExerciseCardConfirmDelete
+          label={`Supprimer « ${group.displayLabel} » ?`}
+          detail="Toutes les répétitions associées seront supprimées."
+          onCancel={() => setConfirmDeleteEx(false)}
+          onConfirm={handleDeleteExercise}
+        />
+      )}
+
       {!collapsed && (
         <div className="mt-3 animate-in fade-in slide-in-from-top-1 duration-200">
+          {lastSession && lastSession.reps.length > 0 && (
+            <button
+              type="button"
+              onClick={handleRestoreLastSession}
+              disabled={isBusy}
+              className="mb-3 flex w-full items-center justify-center gap-1.5 rounded-xl bg-primary/[0.07] py-2.5 text-[12px] font-semibold text-primary transition-colors hover:bg-primary/[0.12] disabled:opacity-50"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Reprendre les valeurs précédentes
+            </button>
+          )}
+
           <ul className="flex flex-col gap-2">
             {group.instances.map((segment, i) => (
               <ActiveSegmentCard
                 key={segment.id}
                 segment={segment}
                 knownKeys={knownKeys}
+                index={i + 1}
+                lastRepMetrics={lastSession?.reps[i]?.metrics ?? null}
                 isFirst={i === 0}
                 isLast={i === group.instances.length - 1}
-                onUpdate={(fields) => updateSegment.mutate({ id: segment.id, ...fields })}
+                onUpdate={(fields) => handleUpdateRep(segment, fields)}
                 onDelete={() => deleteSegment.mutate(segment.id)}
                 onMoveUp={() =>
                   reorderSegment.mutate({
