@@ -11,6 +11,7 @@ import {
   useGenerateShoppingList,
   useSaveShoppingList,
 } from "@/hooks/useMealPlan";
+import { MEAL_OPTIONS } from "@/lib/nutrition/meals";
 
 /**
  * Nutrition V2 — planning de repas sur la semaine + génération de la liste de
@@ -20,12 +21,10 @@ import {
  * useRecipes (Supabase). Tokens sémantiques, mobile first.
  */
 
-const MEALS: { value: string; label: string }[] = [
-  { value: "petit-dej", label: "Petit-déj" },
-  { value: "dejeuner", label: "Déjeuner" },
-  { value: "diner", label: "Dîner" },
-  { value: "collation", label: "Collation" },
-];
+const MEALS: { value: string; label: string }[] = MEAL_OPTIONS.map((o) => ({
+  value: o.value,
+  label: o.label,
+}));
 
 const iso = (d: Date) => format(d, "yyyy-MM-dd");
 
