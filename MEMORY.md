@@ -3,6 +3,14 @@
 ## Dernière mise à jour
 2026-07-15
 
+## Phase C — lot V4.1 livré : corrections du modèle métier avant push main (2026-07-16)
+Retour de Nathan sur V4, corrigé avant tout push main :
+- **Tapis/Marche inclinée** : le KILOMÈTRE est l'unité métier — SUPPRESSION de l'estimation durée×vitesse (explicitement refusée) ; la séance démarre sur "Km 1" seul (vitesse/inclinaison pré-remplies), l'utilisateur ajoute les kilomètres suivants. `cardioEngine.buildLiveSegmentsImpl` seed 1 répétition, plus de numérotation `i/n`.
+- **"Ajouter une répétition"** (`GenericExerciseCard.handleAddRep`) : cascade muscu complète — copie d'abord la DERNIÈRE répétition de la séance EN COURS (Km 3 reprend vitesse/inclinaison du Km 2), sinon la répétition suivante de la dernière séance passée, sinon vide.
+- **Rameur** : intervalle libre (500/750/1000/2000 m) — le 1er bloc reprend la distance choisie au Sensei comme point de départ, jamais un format imposé ; champs métier complets toujours visibles.
+- **HYROX** : modèles exacts validés par Nathan — Burpees=[reps] (temps retiré) ; RowErg/Rameur=[distance,temps,allure/500,watts,cadence] séparé de SkiErg=[distance,temps,allure/500,watts] (sans cadence). Testé exhaustivement (`hyroxEngine.test.ts`, +2 tests).
+- Vérifié : tsc 0 erreur, eslint clean, vitest **307 passed / 29 skipped**, build OK. Poussé sur `main` à la demande explicite de Nathan (déclenche deploy-functions + sync Lovable).
+
 ## Phase C — lot V4 livré : « le modèle métier de la répétition » (2026-07-16, branche `claude/exercise-central-governance-0qvidl`)
 Recadrage Nathan après test du V3 : plus de répétitions génériques — chaque discipline doit posséder SA définition de ce qu'est une répétition (le composant reste partagé, le CONTENU devient spécifique). Implémenté via le point d'extension existant des moteurs (aucune nouvelle architecture) :
 - **Nouveau contrat moteur optionnel `repMetricKeysFor?(exerciseLabel): string[]`** (`engines/types.ts`) — LE modèle métier de la répétition : les clés de métriques que la carte de saisie propose même quand la répétition est vide. Consommé par `GenericExerciseCard` : `knownKeys = repMetricKeysFor(label) ∪ clés déjà saisies` — un Rameur ajouté au picker expose immédiatement distance/temps/allure/watts/cadence/FC, un Sled Push charge+distance, plus jamais une carte nue.

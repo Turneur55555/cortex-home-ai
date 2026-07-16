@@ -372,12 +372,17 @@ export const HyroxWorkoutEngine: WorkoutEngine = {
   // exercices tapés librement au picker pendant une séance HYROX.
   repMetricKeysFor(exerciseLabel: string): string[] {
     const label = exerciseLabel.toLowerCase();
+    // Modèles validés par Nathan (lot V4.1) : Sled Push/Pull et Farmer
+    // Carry = poids + distance (+ temps) ; Wall Balls = poids + reps ;
+    // Burpees = reps ; SkiErg = distance/temps/allure/watts ; RowErg =
+    // idem + cadence ; Running = distance + allure.
     if (/sled|farmer|sandbag|lunge|carry/.test(label))
       return ["charge_kg", "distance_m", "duration_s"];
     if (/wall ?ball/.test(label)) return ["charge_kg", "reps"];
-    if (/burpee/.test(label)) return ["reps", "duration_s"];
-    if (/ski ?erg|rameur|row/.test(label))
-      return ["distance_m", "duration_s", "pace_per_500m", "watts"];
+    if (/burpee/.test(label)) return ["reps"];
+    if (/rameur|row/.test(label))
+      return ["distance_m", "duration_s", "pace_per_500m", "watts", "stroke_rate_spm"];
+    if (/ski ?erg/.test(label)) return ["distance_m", "duration_s", "pace_per_500m", "watts"];
     if (/running|course|run/.test(label)) return ["distance_m", "pace_min_per_km"];
     return ["reps", "charge_kg"];
   },

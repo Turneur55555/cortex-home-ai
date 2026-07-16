@@ -194,13 +194,19 @@ function repMetricKeysForImpl(exerciseLabel: string): string[] {
   return model ? model.keys : ["distance_m", "duration_min"];
 }
 
-/** Seeds de séance live spécifiques Cardio (lot V4) :
- *  - Marche inclinée / Tapis : UNE RÉPÉTITION PAR KILOMÈTRE estimé
- *    (durée × vitesse), chacune avec vitesse/inclinaison pré-remplies —
- *    "Km 1 → vitesse, Km 2 → vitesse", jamais une répétition unique vide.
- *  - Autres activités : comportement générique inchangé (le bloc unique
- *    reste le bon modèle pour un Rameur 2000 m ou un Vélo 30 min — ce
- *    sont ses CHAMPS qui deviennent riches, via repMetricKeysFor). */
+/** Seeds de séance live spécifiques Cardio (lot V4.1, retour de Nathan) :
+ *  - Marche inclinée / Tapis : LE KILOMÈTRE EST L'UNITÉ MÉTIER — la
+ *    séance démarre sur la répétition "Km 1" (vitesse/inclinaison
+ *    pré-remplies depuis les réponses), et l'utilisateur AJOUTE
+ *    simplement un nouveau kilomètre à mesure qu'il avance. AUCUNE
+ *    estimation automatique, AUCUNE conversion durée → kilomètres
+ *    (l'ancienne heuristique durée × vitesse est supprimée sur demande
+ *    explicite). Le numéro de kilomètre = la capsule de la répétition.
+ *  - Rameur : une répétition = un intervalle LIBRE (500 m, 750 m,
+ *    2000 m...) — le premier bloc reprend la distance choisie au Sensei
+ *    comme point de départ, jamais un format imposé ; les intervalles
+ *    suivants s'ajoutent librement (mêmes champs, voir repMetricKeysFor).
+ *  - Autres activités : comportement générique inchangé. */
 function buildLiveSegmentsImpl(
   template: WorkoutTemplate,
   draft: WorkoutRecordDraft,
@@ -208,16 +214,10 @@ function buildLiveSegmentsImpl(
   const first = template.segments?.[0];
   if (first && /marche|tapis|treadmill/i.test(first.label)) {
     const metrics = first.metrics ?? {};
-    const speed = typeof metrics.speed_kmh === "number" ? metrics.speed_kmh : undefined;
-    const durationMin = draft.duration_minutes || 30;
-    const km = Math.min(30, Math.max(1, Math.round(((speed ?? 5) * durationMin) / 60)));
     const perKm: Record<string, number> = {};
     if (typeof metrics.speed_kmh === "number") perKm.speed_kmh = metrics.speed_kmh;
     if (typeof metrics.incline_pct === "number") perKm.incline_pct = metrics.incline_pct;
-    return Array.from({ length: km }, (_, i) => ({
-      label: `${first.label} ${i + 1}/${km}`,
-      metrics: { ...perKm },
-    }));
+    return [{ label: first.label, metrics: perKm }];
   }
   return genericBuildLiveSegments(template, draft);
 }

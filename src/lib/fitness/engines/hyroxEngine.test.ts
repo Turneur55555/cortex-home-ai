@@ -168,3 +168,27 @@ describe("HyroxWorkoutEngine.toWorkoutRecord / toSessionView", () => {
     );
   });
 });
+
+describe("HyroxWorkoutEngine.repMetricKeysFor — modèle métier par poste (lot V4.1, validé par Nathan)", () => {
+  it("chaque poste expose exactement ses champs métier", () => {
+    const keys = HyroxWorkoutEngine.repMetricKeysFor!;
+    expect(keys("Sled Push")).toEqual(["charge_kg", "distance_m", "duration_s"]);
+    expect(keys("Sled Pull")).toEqual(["charge_kg", "distance_m", "duration_s"]);
+    expect(keys("Farmer Carry")).toEqual(["charge_kg", "distance_m", "duration_s"]);
+    expect(keys("Wall Balls")).toEqual(["charge_kg", "reps"]);
+    expect(keys("Burpee Broad Jump")).toEqual(["reps"]);
+    expect(keys("SkiErg")).toEqual(["distance_m", "duration_s", "pace_per_500m", "watts"]);
+    expect(keys("Rameur")).toEqual([
+      "distance_m",
+      "duration_s",
+      "pace_per_500m",
+      "watts",
+      "stroke_rate_spm",
+    ]);
+    expect(keys("Running")).toEqual(["distance_m", "pace_min_per_km"]);
+  });
+
+  it("un exercice HYROX inconnu n'est jamais réduit à une ligne nue", () => {
+    expect(HyroxWorkoutEngine.repMetricKeysFor!("Exercice mystère").length).toBeGreaterThan(0);
+  });
+});

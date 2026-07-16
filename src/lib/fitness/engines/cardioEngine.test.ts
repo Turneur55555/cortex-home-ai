@@ -150,7 +150,7 @@ describe("CardioWorkoutEngine.toSessionView", () => {
 });
 
 describe("CardioWorkoutEngine — modèle métier de la répétition (lot V4)", () => {
-  it("Marche inclinée : une répétition par kilomètre estimé, vitesse + inclinaison pré-remplies", async () => {
+  it("Marche inclinée : le kilomètre est l'unité métier — Km 1 seedé, AUCUNE estimation durée→km", async () => {
     const answers: SenseiAnswers = {
       activity: "Marche inclinée",
       duration_minutes: 30,
@@ -161,16 +161,16 @@ describe("CardioWorkoutEngine — modèle métier de la répétition (lot V4)", 
     const draft = CardioWorkoutEngine.toWorkoutRecord(template, answers);
     const live = CardioWorkoutEngine.buildLiveSegments!(template, draft);
 
-    // 30 min à 5.5 km/h ≈ 2.75 km → 3 répétitions "Km i".
-    expect(live).toHaveLength(3);
-    expect(live[0].label).toBe("Marche inclinée 1/3");
-    for (const seg of live) {
-      expect(seg.metrics.speed_kmh).toBe(5.5);
-      expect(seg.metrics.incline_pct).toBe(10);
-    }
+    // V4.1 (retour Nathan) : un seul "Km 1" au départ, vitesse/inclinaison
+    // pré-remplies — l'utilisateur ajoute lui-même les kilomètres suivants,
+    // jamais de conversion automatique durée → kilomètres.
+    expect(live).toHaveLength(1);
+    expect(live[0].label).toBe("Marche inclinée");
+    expect(live[0].metrics.speed_kmh).toBe(5.5);
+    expect(live[0].metrics.incline_pct).toBe(10);
   });
 
-  it("Rameur : un bloc unique (le modèle du bloc), jamais découpé au kilomètre", async () => {
+  it("Rameur : un intervalle libre au départ (distance choisie), jamais un format imposé", async () => {
     const answers: SenseiAnswers = {
       activity: "Rameur",
       duration_minutes: 20,

@@ -661,14 +661,22 @@ function GenericExerciseCard({
 
   const handleAddRep = () => {
     if (isBusy) return;
-    // Valeurs de départ : la répétition suivante de la dernière séance
-    // (même principe que handleAddSet muscu : dernière série sinon repère
-    // historique) — sinon champs vides, jamais une valeur inventée.
+    // Valeurs de départ, même cascade que handleAddSet muscu : d'abord la
+    // DERNIÈRE répétition de la séance en cours (ajouter le Km 3 reprend
+    // vitesse/inclinaison du Km 2 — "l'utilisateur ajoute simplement un
+    // nouveau kilomètre", lot V4.1), sinon la répétition suivante de la
+    // dernière séance passée, sinon champs vides — jamais inventé.
+    const currentLast = group.instances[group.instances.length - 1];
     const ref = lastSession?.reps[group.instances.length];
     addSegment.mutate({
       workoutId,
       label: group.displayLabel,
-      metrics: ref ? { ...ref.metrics } : {},
+      metrics:
+        currentLast && Object.keys(currentLast.metrics).length > 0
+          ? { ...currentLast.metrics }
+          : ref
+            ? { ...ref.metrics }
+            : {},
       metricKey: group.instances[0]?.metricKey ?? undefined,
       position: nextPosition,
       discipline,
