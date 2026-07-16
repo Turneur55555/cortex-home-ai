@@ -37,6 +37,7 @@ import {
   useUpdateGenericSegment,
 } from "@/hooks/useGenericActiveSession";
 import { useRecentSegmentLabels } from "@/hooks/useRecentSegmentLabels";
+import { useDisciplineSegmentHistory } from "@/hooks/useDisciplineSegmentHistory";
 import { ENGINE_REGISTRY } from "@/lib/fitness/engines/registry";
 import {
   groupByExerciseLabel,
@@ -420,19 +421,16 @@ function isAtelierDone(group: LabelGroup<ActiveGenericSegment>): boolean {
  *  (SEGMENT_METRIC_CONFIG) : "1.00 km · 3:42 · 1:51 /500 m". Chaque poste
  *  garde SES métriques — jamais uniformisé. */
 function metricLine(metrics: Record<string, number | string>): string {
-  return Object.keys(metrics)
-    .filter((k) => typeof metrics[k] === "number" && SEGMENT_METRIC_CONFIG[k])
-    .sort((a, b) => SEGMENT_METRIC_CONFIG[a].order - SEGMENT_METRIC_CONFIG[b].order)
-    .slice(0, 4)
-    .map((k) => {
-      const v = metrics[k] as number;
-      // Les postes HYROX se jouent sur 50-200 m : "50 m" et jamais
-      // "0.05 km" (le format global reste pensé pour la course).
-      return k === "distance_m" && v < 1000
-        ? `${Math.round(v)} m`
-        : SEGMENT_METRIC_CONFIG[k].format(v);
-    })
-    .join(" · ");
+  return (
+    Object.keys(metrics)
+      .filter((k) => typeof metrics[k] === "number" && SEGMENT_METRIC_CONFIG[k])
+      .sort((a, b) => SEGMENT_METRIC_CONFIG[a].order - SEGMENT_METRIC_CONFIG[b].order)
+      .slice(0, 4)
+      // Lot V8.2 : le format distance est adaptatif ("50 m" / "1.00 km")
+      // directement dans SEGMENT_METRIC_CONFIG — plus de cas local ici.
+      .map((k) => SEGMENT_METRIC_CONFIG[k].format(metrics[k] as number))
+      .join(" · ")
+  );
 }
 
 function atelierSummary(group: LabelGroup<ActiveGenericSegment>): string {
@@ -607,6 +605,26 @@ function AtelierHero({
   // premier non validé ; taper un passage validé le rouvre en héros.
   const [focusedInstId, setFocusedInstId] = useState<string | null>(null);
 
+  // Lot V8.2 — placeholders "dernière fois" du héros : les valeurs de la
+  // dernière séance passée de ce poste, même hook/cache que la carte
+  // générique (GenericExerciseCard, lot V3) — aucune requête en plus.
+  const { data: historyInstances } = useDisciplineSegmentHistory(discipline, group.displayLabel);
+  const lastReps = useMemo(() => {
+    const insts = historyInstances ?? [];
+    if (insts.length === 0) return null;
+    const byWorkout = new Map<string, { date: string; reps: typeof insts }>();
+    for (const inst of insts) {
+      const entry = byWorkout.get(inst.workoutId);
+      if (entry) entry.reps.push(inst);
+      else byWorkout.set(inst.workoutId, { date: inst.date, reps: [inst] });
+    }
+    let latest: { date: string; reps: typeof insts } | null = null;
+    for (const entry of byWorkout.values()) {
+      if (!latest || entry.date > latest.date) latest = entry;
+    }
+    return latest?.reps ?? null;
+  }, [historyInstances]);
+
   const multi = group.instances.length > 1;
   // Champs du héros = modèle métier du poste ∪ clés déjà saisies — même
   // dérivation que le voyage kilomètre (GenericExerciseCard, lot V4).
@@ -670,8 +688,9 @@ function AtelierHero({
                     : group.displayLabel
                 }
                 wording={multi ? PASSAGE_WORDING : ATELIER_WORDING}
+                distanceInMeters
                 dismissable={dismissable}
-                lastMetrics={null}
+                lastMetrics={lastReps?.[k]?.metrics ?? null}
                 primaryKeys={primaryKeys}
                 secondaryKeys={secondaryKeys}
                 isFirst={k === 0}

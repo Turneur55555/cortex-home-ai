@@ -192,4 +192,28 @@ describe("HyroxWorkoutEngine.repMetricKeysFor — modèle métier par poste (lot
   it("un exercice HYROX inconnu n'est jamais réduit à une ligne nue", () => {
     expect(HyroxWorkoutEngine.repMetricKeysFor!("Exercice mystère").length).toBeGreaterThan(0);
   });
+
+  // Lot V8.2 : 100% des postes officiels ont leur modèle métier dédié —
+  // AUCUN ne tombe sur le repli générique [reps, charge_kg].
+  it("les 9 postes officiels (et l'alias RowErg) ont tous un modèle dédié", () => {
+    const keys = HyroxWorkoutEngine.repMetricKeysFor!;
+    const generic = keys("Exercice mystère");
+    for (const station of [
+      "Running",
+      "SkiErg",
+      "Rameur",
+      "RowErg",
+      "Sled Push",
+      "Sled Pull",
+      "Farmer Carry",
+      "Sandbag Lunges",
+      "Burpee Broad Jump",
+      "Wall Balls",
+    ]) {
+      expect(keys(station), station).not.toEqual(generic);
+    }
+    expect(keys("Sandbag Lunges")).toEqual(["charge_kg", "distance_m", "duration_s"]);
+    expect(keys("RowErg")).toEqual(keys("Rameur"));
+    expect(keys("Running")).toEqual(["distance_m", "pace_min_per_km"]);
+  });
 });

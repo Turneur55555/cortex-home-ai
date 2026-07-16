@@ -1236,6 +1236,7 @@ export function KmHeroCard({
   wording,
   title,
   onOpenStats,
+  distanceInMeters,
   dismissable,
   lastMetrics,
   primaryKeys,
@@ -1254,6 +1255,10 @@ export function KmHeroCard({
   wording: JourneyWording;
   title?: string;
   onOpenStats?: () => void;
+  /** Lot V8.2 : HYROX parle en MÈTRES (Sled 50 m, SkiErg 1000 m) — la
+   *  saisie/l'affichage de distance_m restent bruts quand l'appelant le
+   *  demande ; les voyages kilomètre gardent la conversion km. */
+  distanceInMeters?: boolean;
   dismissable: boolean;
   lastMetrics: Record<string, number | string> | null;
   primaryKeys: string[];
@@ -1267,10 +1272,17 @@ export function KmHeroCard({
   onMoveDown: () => void;
   onClose: () => void;
 }) {
+  const rawMeters = (key: string) => distanceInMeters === true && key === "distance_m";
+  const displayValue = (key: string, value: number | string | undefined | null) => {
+    if (!rawMeters(key)) return toDisplayString(key, value);
+    return typeof value === "number" ? String(Math.round(value * 100) / 100) : "";
+  };
+  const unitFor = (key: string) => (rawMeters(key) ? "m" : inputUnit(key));
+
   const [inputs, setInputs] = useState<Record<string, string>>(() => {
     const initial: Record<string, string> = {};
     for (const key of [...primaryKeys, ...secondaryKeys]) {
-      initial[key] = toDisplayString(key, segment.metrics[key]);
+      initial[key] = displayValue(key, segment.metrics[key]);
     }
     return initial;
   });
@@ -1280,7 +1292,7 @@ export function KmHeroCard({
     setInputs((prev) => {
       const next = { ...prev };
       for (const key of [...primaryKeys, ...secondaryKeys]) {
-        next[key] = toDisplayString(key, segment.metrics[key]);
+        next[key] = displayValue(key, segment.metrics[key]);
       }
       return next;
     });
@@ -1288,7 +1300,12 @@ export function KmHeroCard({
   }, [segment.metrics]);
 
   const commit = (key: string, raw: string) => {
-    const stored = parseMetricInput(key, raw);
+    const stored = rawMeters(key)
+      ? (() => {
+          const n = parseFloat(raw.replace(",", "."));
+          return Number.isNaN(n) ? null : n;
+        })()
+      : parseMetricInput(key, raw);
     if (stored === null) return;
     onUpdate({ metrics: { ...segment.metrics, [key]: stored } });
   };
@@ -1413,13 +1430,13 @@ export function KmHeroCard({
                     inputMode="decimal"
                     step="0.1"
                     value={inputs[key] ?? ""}
-                    placeholder={toDisplayString(key, lastMetrics?.[key]) || "—"}
+                    placeholder={displayValue(key, lastMetrics?.[key]) || "—"}
                     onChange={(e) => setInputs((prev) => ({ ...prev, [key]: e.target.value }))}
                     onBlur={() => commit(key, inputs[key] ?? "")}
                     className="w-full bg-transparent text-center text-[26px] font-extrabold leading-none tabular-nums outline-none placeholder:text-muted-foreground/20"
                   />
                   <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-muted-foreground/55">
-                    {metricLabel(key)} · {inputUnit(key)}
+                    {metricLabel(key)} · {unitFor(key)}
                   </span>
                 </label>
               ))}
@@ -1438,7 +1455,7 @@ export function KmHeroCard({
                       step="0.1"
                       inputMode="decimal"
                       value={inputs[key] ?? ""}
-                      placeholder={toDisplayString(key, lastMetrics?.[key])}
+                      placeholder={displayValue(key, lastMetrics?.[key])}
                       onChange={(e) => setInputs((prev) => ({ ...prev, [key]: e.target.value }))}
                       onBlur={() => commit(key, inputs[key] ?? "")}
                       className="w-14 rounded-lg border border-border bg-surface px-1.5 py-0.5 text-[11px] font-semibold text-foreground outline-none placeholder:text-muted-foreground/30 focus:border-primary"

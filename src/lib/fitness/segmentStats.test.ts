@@ -8,6 +8,7 @@ import {
   primaryColumnsForInstances,
   bestMetricValue,
   countNewRecords,
+  SEGMENT_METRIC_CONFIG,
   type SegmentInstance,
 } from "./segmentStats";
 
@@ -232,6 +233,15 @@ describe("bestMetricValue", () => {
     const result = bestMetricValue(instances, "distance_m");
     expect(result?.value).toBe(3000);
     expect(result?.formatted).toBe("3.00 km");
+  });
+
+  it("format distance adaptatif (lot V8.2) : mètres sous le kilomètre, jamais '0.05 km'", () => {
+    const fmt = SEGMENT_METRIC_CONFIG.distance_m.format;
+    expect(fmt(50)).toBe("50 m");
+    expect(fmt(200)).toBe("200 m");
+    expect(fmt(999)).toBe("999 m");
+    expect(fmt(1000)).toBe("1.00 km");
+    expect(fmt(12000)).toBe("12.00 km");
   });
 
   it("retourne null sans donnée inventée quand la métrique est absente partout", () => {

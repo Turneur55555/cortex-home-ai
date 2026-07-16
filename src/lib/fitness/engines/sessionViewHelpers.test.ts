@@ -109,10 +109,12 @@ describe("genericFormatLiveSegment", () => {
     // "distance_m" après une séance live, rompant "même comportement". Une
     // clé inconnue ("note", pas une métrique de performance déclarée) garde
     // le fallback brut (robustesse pour une métrique future non déclarée).
+    // Lot V8.2 : format distance adaptatif — sous le kilomètre on parle en
+    // mètres ("850 m"), le vocabulaire réel du rameur et des postes HYROX.
     expect(genericFormatLiveSegment(row)).toEqual({
       label: "Rameur",
       stats: [
-        { label: "Distance", value: "0.85 km" },
+        { label: "Distance", value: "850 m" },
         { label: "note", value: "dur" },
         { label: "Statut", value: "Réalisé" },
       ],

@@ -103,7 +103,11 @@ export const SEGMENT_METRIC_CONFIG: Record<string, MetricConfig> = {
   distance_m: {
     label: "Distance",
     direction: "max",
-    format: (v) => `${(v / 1000).toFixed(2)} km`,
+    // Lot V8.2 : format adaptatif — les postes HYROX (Sled 50 m, Farmer
+    // 200 m) et les blocs de rameur (500/750 m) se disent en MÈTRES,
+    // jamais "0.05 km" ; au kilomètre et au-delà, le format course
+    // reste inchangé.
+    format: (v) => (v < 1000 ? `${Math.round(v)} m` : `${(v / 1000).toFixed(2)} km`),
     order: 1,
     importance: "primary",
   },
