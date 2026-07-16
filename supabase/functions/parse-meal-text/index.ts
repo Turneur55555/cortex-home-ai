@@ -2,6 +2,7 @@
 // Utilise GEMINI_API_KEY (Gemini 2.5 Flash). Retourne TOUJOURS HTTP 200 — les erreurs sont dans { error: "..." }.
 import { createClient } from "@supabase/supabase-js";
 import { checkRateLimit, recordRateLimit } from "../_shared/rate-limit.ts";
+import { MEAL_SLUGS, isMealSlug } from "../_shared/meals.ts";
 
 function buildCors(req: Request) {
   const origin = req.headers.get("origin") ?? "";
@@ -43,7 +44,7 @@ const MEAL_TOOL = {
       properties: {
         meal: {
           type: "string",
-          enum: ["petit-dej", "dejeuner", "diner", "collation"],
+          enum: [...MEAL_SLUGS],
           description: "Type de repas le plus probable selon le contenu ou l'heure mentionnée",
         },
         confidence: {
@@ -214,7 +215,7 @@ Deno.serve(async (req) => {
 
     const result: ParseResult = {
       items,
-      meal:       ["petit-dej","dejeuner","diner","collation"].includes(parsed.meal ?? "") ? parsed.meal : undefined,
+      meal:       isMealSlug(parsed.meal) ? parsed.meal : undefined,
       confidence: safeNum(parsed.confidence, 0.8),
       details:    typeof parsed.details === "string" ? parsed.details.slice(0, 500) : undefined,
     };

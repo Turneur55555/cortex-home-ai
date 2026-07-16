@@ -4,6 +4,7 @@
 // Always returns JSON { success, ... } even on error
 import { createClient } from "@supabase/supabase-js";
 import { checkRateLimit, recordRateLimit } from "../_shared/rate-limit.ts";
+import { MEAL_SLUGS } from "../_shared/meals.ts";
 
 function buildCors(req: Request) {
   const origin = req.headers.get("origin") ?? "";
@@ -70,7 +71,7 @@ const MODULE_HINTS: Record<string, string> = {
   menager:
     "Produits ménagers. Pour chaque produit: name, category, quantity, unit.",
   nutrition:
-    "Données nutritionnelles. Pour chaque repas/aliment: name, meal (petit-dejeuner|dejeuner|diner|collation), calories, proteins, carbs, fats, date (YYYY-MM-DD).",
+    `Données nutritionnelles. Pour chaque repas/aliment: name, meal (${MEAL_SLUGS.join("|")}), calories, proteins, carbs, fats, date (YYYY-MM-DD).`,
   fitness:
     "Programme de séances. Pour chaque séance: name, date (YYYY-MM-DD), duration_minutes, exercises[] avec {name, sets, reps, weight}.",
   body:

@@ -4,6 +4,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { checkRateLimit, recordRateLimit } from "../_shared/rate-limit.ts";
 import { getCachedResult, setCachedResult } from "../_shared/ai-cache.ts";
+import { MEAL_SLUGS } from "../_shared/meals.ts";
 
 function buildCors(req: Request) {
   const origin = req.headers.get("origin") ?? "";
@@ -30,7 +31,7 @@ const MODULE_HINTS: Record<string, string> = {
   menager:
     "Produits ménagers. Pour chaque produit: name, category (entretien, hygiène, papier), quantity, unit.",
   nutrition:
-    "Données nutritionnelles. Pour chaque aliment / repas: name, meal (petit-dejeuner|dejeuner|diner|collation), calories, proteins, carbs, fats. date au format YYYY-MM-DD si présente.",
+    `Données nutritionnelles. Pour chaque aliment / repas: name, meal (${MEAL_SLUGS.join("|")}), calories, proteins, carbs, fats. date au format YYYY-MM-DD si présente.`,
   fitness:
     "Programme de séances. Pour chaque séance: name (séance), date YYYY-MM-DD si trouvée, duration_minutes, exercises[] avec {name, sets, reps, weight}.",
   body: "Mesures corporelles. Pour chaque relevé: date YYYY-MM-DD, weight, body_fat, muscle_mass, chest, waist, hips, left_arm, right_arm, left_thigh, right_thigh.",
