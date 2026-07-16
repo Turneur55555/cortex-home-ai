@@ -160,6 +160,68 @@ function buildMetrics(answers: SenseiAnswers): Record<string, number> {
   return metrics;
 }
 
+// ── Lot V4 (2026-07-16) — MODÈLE MÉTIER DE LA RÉPÉTITION par activité ──
+// "Une répétition de Tapis/Marche inclinée = 1 km (vitesse, inclinaison)",
+// "une répétition de Rameur = 1 bloc (distance, temps, allure /500 m,
+// watts, cadence, FC)"... Le composant de carte reste 100% partagé : c'est
+// CETTE table qui rend chaque activité spécifique. Correspondance par
+// motif sur le libellé (pas par enum) pour couvrir aussi les exercices
+// tapés librement au picker ("Tapis de course", "Rameur 2000m"...).
+const REP_MODELS: Array<{ pattern: RegExp; keys: string[] }> = [
+  {
+    pattern: /rameur|rowing|row\b/i,
+    keys: [
+      "distance_m",
+      "duration_s",
+      "pace_per_500m",
+      "watts",
+      "stroke_rate_spm",
+      "heart_rate_bpm",
+    ],
+  },
+  { pattern: /marche|tapis|treadmill/i, keys: ["speed_kmh", "incline_pct", "heart_rate_bpm"] },
+  { pattern: /assault/i, keys: ["distance_m", "watts", "calories_estimate", "heart_rate_bpm"] },
+  {
+    pattern: /v[ée]lo|bike|cycl/i,
+    keys: ["distance_m", "resistance", "cadence_rpm", "heart_rate_bpm"],
+  },
+  { pattern: /escalier|stair/i, keys: ["escalier_level", "duration_min", "heart_rate_bpm"] },
+  { pattern: /elliptique/i, keys: ["distance_m", "resistance", "heart_rate_bpm"] },
+];
+
+function repMetricKeysForImpl(exerciseLabel: string): string[] {
+  const model = REP_MODELS.find((m) => m.pattern.test(exerciseLabel));
+  return model ? model.keys : ["distance_m", "duration_min"];
+}
+
+/** Seeds de séance live spécifiques Cardio (lot V4) :
+ *  - Marche inclinée / Tapis : UNE RÉPÉTITION PAR KILOMÈTRE estimé
+ *    (durée × vitesse), chacune avec vitesse/inclinaison pré-remplies —
+ *    "Km 1 → vitesse, Km 2 → vitesse", jamais une répétition unique vide.
+ *  - Autres activités : comportement générique inchangé (le bloc unique
+ *    reste le bon modèle pour un Rameur 2000 m ou un Vélo 30 min — ce
+ *    sont ses CHAMPS qui deviennent riches, via repMetricKeysFor). */
+function buildLiveSegmentsImpl(
+  template: WorkoutTemplate,
+  draft: WorkoutRecordDraft,
+): ReturnType<typeof genericBuildLiveSegments> {
+  const first = template.segments?.[0];
+  if (first && /marche|tapis|treadmill/i.test(first.label)) {
+    const metrics = first.metrics ?? {};
+    const speed = typeof metrics.speed_kmh === "number" ? metrics.speed_kmh : undefined;
+    const durationMin = draft.duration_minutes || 30;
+    const km = Math.min(30, Math.max(1, Math.round(((speed ?? 5) * durationMin) / 60)));
+    const perKm: Record<string, number> = {};
+    if (typeof metrics.speed_kmh === "number") perKm.speed_kmh = metrics.speed_kmh;
+    if (typeof metrics.incline_pct === "number") perKm.incline_pct = metrics.incline_pct;
+    return Array.from({ length: km }, (_, i) => ({
+      label: `${first.label} ${i + 1}/${km}`,
+      metrics: { ...perKm },
+    }));
+  }
+  return genericBuildLiveSegments(template, draft);
+}
+
 export const CardioWorkoutEngine: WorkoutEngine = {
   id: "cardio",
   label: "Cardio",
@@ -210,8 +272,9 @@ export const CardioWorkoutEngine: WorkoutEngine = {
     };
   },
 
-  buildLiveSegments: genericBuildLiveSegments,
+  buildLiveSegments: buildLiveSegmentsImpl,
   formatLiveSegment: genericFormatLiveSegment,
+  repMetricKeysFor: repMetricKeysForImpl,
 
   historyPresentation: {
     cardVariant: "metric-grid",

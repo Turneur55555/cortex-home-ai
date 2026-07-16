@@ -364,6 +364,23 @@ export const HyroxWorkoutEngine: WorkoutEngine = {
   },
 
   buildLiveSegments: genericBuildLiveSegments,
+
+  // Lot V4 (2026-07-16) — MODÈLE MÉTIER DE LA RÉPÉTITION par poste :
+  // un Sled Push se décrit par charge + distance poussée, des Burpees
+  // par un nombre, des Wall Balls par charge + répétitions... Motifs sur
+  // le libellé (pas l'enum STATION_IDS seul) pour couvrir aussi les
+  // exercices tapés librement au picker pendant une séance HYROX.
+  repMetricKeysFor(exerciseLabel: string): string[] {
+    const label = exerciseLabel.toLowerCase();
+    if (/sled|farmer|sandbag|lunge|carry/.test(label))
+      return ["charge_kg", "distance_m", "duration_s"];
+    if (/wall ?ball/.test(label)) return ["charge_kg", "reps"];
+    if (/burpee/.test(label)) return ["reps", "duration_s"];
+    if (/ski ?erg|rameur|row/.test(label))
+      return ["distance_m", "duration_s", "pace_per_500m", "watts"];
+    if (/running|course|run/.test(label)) return ["distance_m", "pace_min_per_km"];
+    return ["reps", "charge_kg"];
+  },
   formatLiveSegment: genericFormatLiveSegment,
 
   historyPresentation: {

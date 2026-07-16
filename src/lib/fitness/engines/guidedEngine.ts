@@ -220,6 +220,17 @@ export const GuidedActivityEngine: WorkoutEngine = {
   },
 
   buildLiveSegments: genericBuildLiveSegments,
+
+  // Lot V4 (2026-07-16) — modèle métier de la répétition en activité
+  // accompagnée : un exercice Lagree se décrit par sa durée de tenue,
+  // ses répétitions et la résistance (ressorts) ; un enchaînement Yoga/
+  // Mobilité/Stretching par sa durée. Jamais de charge/1RM ici.
+  repMetricKeysFor(exerciseLabel: string): string[] {
+    if (/lagree|megaformer|pilates/i.test(exerciseLabel)) {
+      return ["duration_min", "reps", "resistance"];
+    }
+    return ["duration_min", "reps"];
+  },
   formatLiveSegment: genericFormatLiveSegment,
 
   historyPresentation: {

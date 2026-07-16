@@ -193,18 +193,23 @@ describe("buildSegmentNarrative", () => {
 describe("primaryColumnsForInstances", () => {
   it("ne retient que les métriques 'primary' réellement présentes, ordonnées par order", () => {
     const instances: Array<{ metrics: Record<string, number> }> = [
-      { metrics: { pace_min_per_km: 5, incline_pct: 8 } },
+      { metrics: { pace_min_per_km: 5, elevation_m: 80 } },
       { metrics: { distance_m: 3000 } },
     ];
     const columns = primaryColumnsForInstances(instances);
-    // distance_m (order 1) avant pace_min_per_km (order 2) ; incline_pct
+    // distance_m (order 1) avant pace_min_per_km (order 2) ; elevation_m
     // (secondary) n'apparaît jamais comme colonne.
     expect(columns.map((c) => c.key)).toEqual(["distance_m", "pace_min_per_km"]);
     expect(columns[0].label).toBe("Distance");
   });
 
+  it("incline_pct est primary depuis le lot V4 (modèle métier Marche inclinée)", () => {
+    const columns = primaryColumnsForInstances([{ metrics: { speed_kmh: 5.5, incline_pct: 10 } }]);
+    expect(columns.map((c) => c.key)).toEqual(["speed_kmh", "incline_pct"]);
+  });
+
   it("retourne [] quand aucune métrique n'est primary (ex. Autre, texte libre)", () => {
-    expect(primaryColumnsForInstances([{ metrics: { incline_pct: 5 } }])).toEqual([]);
+    expect(primaryColumnsForInstances([{ metrics: { elevation_m: 5 } }])).toEqual([]);
     expect(primaryColumnsForInstances([{}])).toEqual([]);
     expect(primaryColumnsForInstances([])).toEqual([]);
   });

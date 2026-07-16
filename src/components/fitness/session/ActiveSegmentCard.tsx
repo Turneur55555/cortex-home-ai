@@ -55,6 +55,11 @@ const INPUT_UNITS: Record<string, string> = {
   rounds: "tours",
   duration_min: "min",
   calories_estimate: "kcal",
+  duration_s: "sec",
+  pace_per_500m: "min/500m",
+  watts: "W",
+  stroke_rate_spm: "spm",
+  heart_rate_bpm: "bpm",
 };
 
 function metricLabel(key: string): string {

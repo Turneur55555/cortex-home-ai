@@ -148,3 +148,57 @@ describe("CardioWorkoutEngine.toSessionView", () => {
     expect(view.segments).toEqual([]);
   });
 });
+
+describe("CardioWorkoutEngine — modèle métier de la répétition (lot V4)", () => {
+  it("Marche inclinée : une répétition par kilomètre estimé, vitesse + inclinaison pré-remplies", async () => {
+    const answers: SenseiAnswers = {
+      activity: "Marche inclinée",
+      duration_minutes: 30,
+      speed_kmh: 5.5,
+      incline_pct: 10,
+    };
+    const template = await CardioWorkoutEngine.generate(answers);
+    const draft = CardioWorkoutEngine.toWorkoutRecord(template, answers);
+    const live = CardioWorkoutEngine.buildLiveSegments!(template, draft);
+
+    // 30 min à 5.5 km/h ≈ 2.75 km → 3 répétitions "Km i".
+    expect(live).toHaveLength(3);
+    expect(live[0].label).toBe("Marche inclinée 1/3");
+    for (const seg of live) {
+      expect(seg.metrics.speed_kmh).toBe(5.5);
+      expect(seg.metrics.incline_pct).toBe(10);
+    }
+  });
+
+  it("Rameur : un bloc unique (le modèle du bloc), jamais découpé au kilomètre", async () => {
+    const answers: SenseiAnswers = {
+      activity: "Rameur",
+      duration_minutes: 20,
+      distance_m: 2000,
+      intensity: "modérée",
+    };
+    const template = await CardioWorkoutEngine.generate(answers);
+    const draft = CardioWorkoutEngine.toWorkoutRecord(template, answers);
+    const live = CardioWorkoutEngine.buildLiveSegments!(template, draft);
+
+    expect(live).toHaveLength(1);
+    expect(live[0].metrics.distance_m).toBe(2000);
+  });
+
+  it("repMetricKeysFor décrit la répétition dans le vocabulaire de l'activité", () => {
+    const keys = CardioWorkoutEngine.repMetricKeysFor!;
+    expect(keys("Rameur")).toEqual([
+      "distance_m",
+      "duration_s",
+      "pace_per_500m",
+      "watts",
+      "stroke_rate_spm",
+      "heart_rate_bpm",
+    ]);
+    expect(keys("Tapis de course")).toEqual(["speed_kmh", "incline_pct", "heart_rate_bpm"]);
+    expect(keys("Marche inclinée 2/3")).toContain("incline_pct");
+    expect(keys("Vélo")).toContain("cadence_rpm");
+    // Activité inconnue : repli honnête distance + durée, jamais rien.
+    expect(keys("Machine mystère")).toEqual(["distance_m", "duration_min"]);
+  });
+});

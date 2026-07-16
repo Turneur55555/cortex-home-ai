@@ -129,12 +129,17 @@ export const SEGMENT_METRIC_CONFIG: Record<string, MetricConfig> = {
     order: 2,
     importance: "primary",
   },
+  // Lot V4 (2026-07-16) : promue "primary" — pour la Marche inclinée,
+  // l'inclinaison est une donnée de premier plan de chaque kilomètre
+  // (modèle métier déclaré par cardioEngine.repMetricKeysFor), pas un
+  // détail. Seul Cardio utilise cette clé : aucune autre discipline
+  // n'est affectée par la promotion.
   incline_pct: {
     label: "Inclinaison",
     direction: "max",
     format: (v) => `${v} %`,
-    order: 11,
-    importance: "secondary",
+    order: 3,
+    importance: "primary",
   },
   escalier_level: {
     label: "Niveau (escalier)",
@@ -178,6 +183,56 @@ export const SEGMENT_METRIC_CONFIG: Record<string, MetricConfig> = {
     format: (v) => String(v),
     order: 4,
     importance: "primary",
+  },
+  // ---- Rameur / ergomètres (lot V4 — modèle métier du bloc) ----
+  // `duration_s` : temps d'un bloc à distance fixe (500/1000/2000 m…) —
+  // plus bas = meilleur, contrairement à `duration_min` (Guided, durée
+  // d'activité où plus long = mieux). Deux notions distinctes, assumées.
+  duration_s: {
+    label: "Temps",
+    direction: "min",
+    format: (v) => {
+      const total = Math.round(v);
+      return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+    },
+    order: 5,
+    importance: "primary",
+  },
+  // Stockée en minutes décimales par 500 m (2.08 ≈ 2:05), même convention
+  // que pace_min_per_km — un seul modèle mental de saisie d'allure.
+  pace_per_500m: {
+    label: "Allure /500 m",
+    direction: "min",
+    format: (v) => {
+      const total = Math.round(v * 60);
+      return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")} /500 m`;
+    },
+    order: 6,
+    importance: "primary",
+  },
+  watts: {
+    label: "Puissance",
+    direction: "max",
+    format: (v) => `${Math.round(v)} W`,
+    order: 16,
+    importance: "secondary",
+  },
+  stroke_rate_spm: {
+    label: "Cadence",
+    direction: "max",
+    format: (v) => `${Math.round(v)} spm`,
+    order: 17,
+    importance: "secondary",
+  },
+  // FC moyenne d'un effort — donnée de contexte, jamais un "record" à
+  // maximiser : volontairement secondary (n'entre ni dans les colonnes de
+  // tableau ni dans le badge Record, qui ne lisent que les primary).
+  heart_rate_bpm: {
+    label: "FC moy.",
+    direction: "max",
+    format: (v) => `${Math.round(v)} bpm`,
+    order: 18,
+    importance: "secondary",
   },
   // ---- Guided ----
   duration_min: {

@@ -317,6 +317,17 @@ export interface WorkoutEngine extends EngineDescriptor {
    *  SessionSegment d'affichage, pour resynchroniser
    *  workouts.metadata.segments à la clôture de la séance. */
   formatLiveSegment?(segment: LiveSegmentRow): SessionSegment;
+  /** Phase C, lot V4 (2026-07-16) — LE MODÈLE MÉTIER DE LA RÉPÉTITION.
+   *  Décrit ce qu'EST une répétition de cet exercice dans cette
+   *  discipline : les clés de métriques (SEGMENT_METRIC_CONFIG) que la
+   *  carte de saisie doit proposer, même quand la répétition est encore
+   *  vide (exercice ajouté au picker, séance Libre). Ex. : un bloc Rameur
+   *  = distance/temps/allure/watts/cadence/FC ; un Sled Push = charge +
+   *  distance ; un km de Marche inclinée = vitesse + inclinaison. Le
+   *  composant reste 100% partagé — c'est cette réponse qui est
+   *  spécifique. Absente ⇒ comportement historique (champs = union des
+   *  clés déjà saisies). */
+  repMetricKeysFor?(exerciseLabel: string): string[];
   historyPresentation: HistoryPresentation;
 }
 

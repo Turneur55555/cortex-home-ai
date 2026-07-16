@@ -185,11 +185,19 @@ describe("CourseWorkoutEngine.buildLiveSegments / formatLiveSegment (édition li
     const draft = CourseWorkoutEngine.toWorkoutRecord(template, answers);
 
     const live = CourseWorkoutEngine.buildLiveSegments!(template, draft);
-    expect(live).toHaveLength(1);
-    expect(live[0].label).toBe("Endurance fondamentale");
-    expect(live[0].metrics.distance_m).toBeGreaterThan(0);
-    expect(live[0].metrics.pace_min_per_km).toBeGreaterThan(0);
-    expect(live[0].metricKey).toBe("distance_m");
+    // Lot V4 : une sortie continue = UNE RÉPÉTITION PAR KILOMÈTRE
+    // ("Km 1 → allure, Km 2 → allure..."), plus jamais un bloc unique.
+    // 40 min à 6:00/km ≈ 6,7 km → 6 km pleins + 1 partiel (≥ 200 m).
+    expect(live.length).toBeGreaterThan(1);
+    expect(live[0].label).toBe(`Endurance fondamentale 1/${live.length}`);
+    const totalMeters = live.reduce((sum, s) => sum + Number(s.metrics.distance_m ?? 0), 0);
+    expect(totalMeters).toBeGreaterThan(6000);
+    for (const seg of live) {
+      expect(Number(seg.metrics.distance_m)).toBeGreaterThan(0);
+      expect(Number(seg.metrics.distance_m)).toBeLessThanOrEqual(1000);
+      expect(seg.metrics.pace_min_per_km).toBeGreaterThan(0);
+      expect(seg.metricKey).toBe("distance_m");
+    }
   });
 
   it("produit des segments effort/récupération alternés pour une séance fractionnée", async () => {

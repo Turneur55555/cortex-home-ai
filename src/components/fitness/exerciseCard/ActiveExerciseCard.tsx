@@ -63,6 +63,7 @@ import {
   useUpdateGenericSegment,
 } from "@/hooks/useGenericActiveSession";
 import type { DisciplineId } from "@/lib/fitness/engines/types";
+import { ENGINE_REGISTRY } from "@/lib/fitness/engines/registry";
 import {
   bestMetricValue,
   primaryColumnsForInstances,
@@ -588,7 +589,18 @@ function GenericExerciseCard({
   const [confirmDeleteEx, setConfirmDeleteEx] = useState(false);
 
   const doneCount = group.instances.filter((s) => s.completed).length;
-  const knownKeys = Array.from(new Set(group.instances.flatMap((s) => Object.keys(s.metrics))));
+  // Lot V4 — le modèle métier de la répétition appartient à la discipline :
+  // les champs proposés = clés déclarées par le moteur pour CET exercice
+  // (repMetricKeysFor — un bloc Rameur expose distance/temps/allure/watts/
+  // cadence/FC même vide, un Sled Push charge+distance...) ∪ clés déjà
+  // saisies (rien n'est jamais perdu). Plus aucune répétition générique.
+  const engineRepKeys = useMemo(() => {
+    const entry = ENGINE_REGISTRY[discipline];
+    return entry?.repMetricKeysFor?.(group.displayLabel) ?? [];
+  }, [discipline, group.displayLabel]);
+  const knownKeys = Array.from(
+    new Set([...engineRepKeys, ...group.instances.flatMap((s) => Object.keys(s.metrics))]),
+  );
 
   // Addendum 3 (2026-07-15, audit convergence UX) : badge "Nouveau record"
   // générique — pendant du badge Trophy de MuscuExerciseCard (isPR/isNewPR),
