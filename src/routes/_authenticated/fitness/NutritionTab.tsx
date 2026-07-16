@@ -41,12 +41,15 @@ import {
   useDeleteNutritionMeal,
   useNutrition,
   useNutritionGoals,
+  useUpdateNutrition,
 } from "@/hooks/use-fitness";
 import { useNutritionTotals } from "@/hooks/useNutritionTotals";
 import { useAddFavorite } from "@/hooks/use-nutrition-favorites";
 import { useSupplements, useToggleSupplementLog } from "@/hooks/use-supplements";
 import { MealActionMenu } from "@/components/fitness/MealActionMenu";
 import { WorkoutDeleteDialog } from "@/components/fitness/WorkoutDeleteDialog";
+import { MoveMealMenu } from "@/components/fitness/MoveMealMenu";
+import type { MealSlug } from "@/lib/nutrition/meals";
 
 import { BarcodeScannerSheet } from "@/components/BarcodeScannerSheet";
 import { MealScanSheet } from "@/components/fitness/MealScanSheet";
@@ -80,6 +83,11 @@ const MEAL_VISUALS: Record<
     gradient: "from-amber-400/30 via-orange-500/20 to-orange-600/10",
     icon: Utensils,
     accent: "text-amber-400",
+  },
+  gouter: {
+    gradient: "from-yellow-400/30 via-yellow-500/20 to-amber-500/10",
+    icon: Clock,
+    accent: "text-yellow-400",
   },
   diner: {
     gradient: "from-violet-400/30 via-violet-500/20 to-purple-600/10",
@@ -115,10 +123,16 @@ export function NutritionTab() {
   const { data: goals } = useNutritionGoals();
   const del = useDeleteNutrition();
   const readd = useAddNutrition();
+  const update = useUpdateNutrition();
   const addFav = useAddFavorite();
   const copyDay = useCopyNutritionDay();
   const copyMeal = useCopyNutritionMeal();
   const deleteMeal = useDeleteNutritionMeal();
+
+  const handleMoveMeal = (item: NonNullable<typeof data>[number], target: MealSlug) => {
+    if (item.meal === target) return;
+    update.mutate({ id: item.id, patch: { meal: target }, date });
+  };
 
   const [confirmDeleteMeal, setConfirmDeleteMeal] = useState<{
     key: string;
@@ -673,6 +687,11 @@ export function NutritionTab() {
                                     >
                                       <Star className="h-4 w-4" />
                                     </motion.button>
+                                    <MoveMealMenu
+                                      currentMeal={m.meal}
+                                      onMove={(target) => handleMoveMeal(m, target)}
+                                      disabled={update.isPending}
+                                    />
                                   </div>
                                 </SwipeableNutritionItem>
                               );

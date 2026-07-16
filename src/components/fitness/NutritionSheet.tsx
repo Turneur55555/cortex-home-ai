@@ -15,11 +15,14 @@ import {
   type PortionUnit,
 } from "@/lib/nutrition/portions";
 
+import { MEAL_OPTIONS, type MealSlug } from "@/lib/nutrition/meals";
+
 // Détecte le repas selon l'heure courante pour pré-remplir le sélecteur.
-function detectMealFromHour(): string {
+function detectMealFromHour(): MealSlug {
   const h = new Date().getHours();
   if (h >= 6 && h < 11) return "petit-dej";
   if (h >= 11 && h < 15) return "dejeuner";
+  if (h >= 15 && h < 18) return "gouter";
   if (h >= 18 && h < 23) return "diner";
   return "collation";
 }
@@ -242,10 +245,9 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
             onChange={(e) => setForm({ ...form, meal: e.target.value })}
             className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary"
           >
-            <option value="petit-dej">Petit-déjeuner</option>
-            <option value="dejeuner">Déjeuner</option>
-            <option value="diner">Dîner</option>
-            <option value="collation">Collation</option>
+            {MEAL_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
           </select>
         </div>
         {!baseFood && (

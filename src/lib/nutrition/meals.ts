@@ -2,15 +2,20 @@
 // Source unique des slugs/labels de repas et des bornes de validation,
 // alignées sur les contraintes CHECK de la table `nutrition`.
 
-export const MEAL_SLUGS = ["petit-dej", "dejeuner", "diner", "collation"] as const;
+export const MEAL_SLUGS = ["petit-dej", "dejeuner", "gouter", "diner", "collation"] as const;
 export type MealSlug = (typeof MEAL_SLUGS)[number];
 
 export const MEAL_LABELS: Record<MealSlug, string> = {
   "petit-dej": "Petit-déjeuner",
   dejeuner: "Déjeuner",
+  gouter: "Goûter",
   diner: "Dîner",
   collation: "Collation",
 };
+
+/** Options d'un <select> repas — dérivées de la source de vérité unique. */
+export const MEAL_OPTIONS: ReadonlyArray<{ value: MealSlug; label: string }> =
+  MEAL_SLUGS.map((slug) => ({ value: slug, label: MEAL_LABELS[slug] }));
 
 export function isMealSlug(v: string | null | undefined): v is MealSlug {
   return v != null && (MEAL_SLUGS as readonly string[]).includes(v);
