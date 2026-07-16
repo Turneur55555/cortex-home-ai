@@ -361,7 +361,7 @@ Deno.serve(async (req) => {
 
     const result: ScanResult = {
       items,
-      meal:       ["petit-dej","dejeuner","diner","collation"].includes(parsed.meal ?? "") ? parsed.meal : "dejeuner",
+      meal:       ["petit-dej","dejeuner","gouter","diner","collation"].includes(parsed.meal ?? "") ? parsed.meal : "dejeuner",
       confidence: safeNum(parsed.confidence, 0.7),
       details:    typeof parsed.details === "string" ? parsed.details.slice(0, 500) : undefined,
     };
