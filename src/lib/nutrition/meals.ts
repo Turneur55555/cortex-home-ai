@@ -1,9 +1,14 @@
 // Repas — constantes et helpers partagés (zéro React).
-// Source unique des slugs/labels de repas et des bornes de validation,
-// alignées sur les contraintes CHECK de la table `nutrition`.
-
-export const MEAL_SLUGS = ["petit-dej", "dejeuner", "gouter", "diner", "collation"] as const;
-export type MealSlug = (typeof MEAL_SLUGS)[number];
+// Les slugs de repas (MEAL_SLUGS/MealSlug/isMealSlug) NE SONT PAS définis ici :
+// ce fichier les réexporte depuis la source unique et canonique côté Edge
+// Functions (supabase/functions/_shared/meals.ts), pour qu'il n'existe qu'UNE
+// seule liste dans tout le repo — voir docs/architecture/nutrition-meal-slugs.md.
+export {
+  MEAL_SLUGS,
+  isMealSlug,
+  type MealSlug,
+} from "../../../supabase/functions/_shared/meals.ts";
+import { MEAL_SLUGS, type MealSlug } from "../../../supabase/functions/_shared/meals.ts";
 
 export const MEAL_LABELS: Record<MealSlug, string> = {
   "petit-dej": "Petit-déjeuner",
@@ -14,12 +19,9 @@ export const MEAL_LABELS: Record<MealSlug, string> = {
 };
 
 /** Options d'un <select> repas — dérivées de la source de vérité unique. */
-export const MEAL_OPTIONS: ReadonlyArray<{ value: MealSlug; label: string }> =
-  MEAL_SLUGS.map((slug) => ({ value: slug, label: MEAL_LABELS[slug] }));
-
-export function isMealSlug(v: string | null | undefined): v is MealSlug {
-  return v != null && (MEAL_SLUGS as readonly string[]).includes(v);
-}
+export const MEAL_OPTIONS: ReadonlyArray<{ value: MealSlug; label: string }> = MEAL_SLUGS.map(
+  (slug) => ({ value: slug, label: MEAL_LABELS[slug] }),
+);
 
 /** Macros pour `grams` g à partir d'une valeur /100 g (arrondi 0,1 g). */
 export const scalePer100 = (v: number | null, grams: number): number | null =>

@@ -1,0 +1,58 @@
+name: Meal Slugs Sync Check
+
+# Empêche la régression du 16/07/2026 : le frontend, les Edge Functions et
+# la contrainte SQL nutrition_meal_check avaient chacun leur propre liste de
+# repas, qui ont divergé silencieusement (« Goûter » refusé en production,
+# code Postgres 23514). Voir docs/nutrition-meal-slugs.md.
+#
+# Ce workflow échoue si :
+#   - le frontend et les Edge Functions ne résolvent pas la même liste de slugs
+#   - MEAL_SLUGS contient une valeur non autorisée par la dernière migration
+#     qui définit nutrition_meal_check
+#   - une liste dupliquée de slugs de repas réapparaît ailleurs dans le repo
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/lib/nutrition/**'
+      - 'supabase/functions/_shared/meals.ts'
+      - 'supabase/functions/scan-meal/**'
+      - 'supabase/functions/parse-meal-text/**'
+      - 'supabase/functions/analyze-image/**'
+      - 'supabase/functions/analyze-pdf/**'
+      - 'supabase/migrations/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/lib/nutrition/**'
+      - 'supabase/functions/_shared/meals.ts'
+      - 'supabase/functions/scan-meal/**'
+      - 'supabase/functions/parse-meal-text/**'
+      - 'supabase/functions/analyze-image/**'
+      - 'supabase/functions/analyze-pdf/**'
+      - 'supabase/migrations/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  meal-slugs-check:
+    name: Frontend / Edge Functions / DB constraint parity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Typecheck (verifies the cross-boundary re-export resolves)
+        run: npm run typecheck
+
+      - name: Meal slugs sync tests
+        run: npx vitest run src/lib/nutrition/meals.test.ts src/lib/nutrition/meals.sync.test.ts

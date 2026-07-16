@@ -56,3 +56,19 @@ if command -v node >/dev/null 2>&1 && [ -f "scripts/validate-supabase.mjs" ]; th
 fi
 
 echo "✅ Migrations Supabase OK"
+
+# ── Slugs de repas : frontend / Edge Functions / contrainte SQL ──────────────
+# Ne tourne que si un commit touche un fichier lié aux repas — garde le hook
+# rapide le reste du temps. Voir docs/nutrition-meal-slugs.md.
+MEAL_FILES=$(git diff --cached --name-only \
+  | grep -E "^(src/lib/nutrition/|supabase/functions/(_shared/meals\.ts|scan-meal/|parse-meal-text/|analyze-image/|analyze-pdf/)|supabase/migrations/.*meal)" || true)
+
+if [ -n "$MEAL_FILES" ] && command -v node >/dev/null 2>&1; then
+  echo "🔍 Vérification synchro slugs de repas (frontend / Edge Functions / DB)..."
+  npx vitest run src/lib/nutrition/meals.test.ts src/lib/nutrition/meals.sync.test.ts
+  if [ $? -ne 0 ]; then
+    echo "❌ Les slugs de repas ont divergé. Voir docs/nutrition-meal-slugs.md."
+    exit 1
+  fi
+  echo "✅ Slugs de repas synchronisés"
+fi

@@ -36,6 +36,7 @@ jobs:
             recipe-assistant \
             scan-fridge \
             scan-meal \
+            parse-meal-text \
             generate-weekly-report \
             scheduled-weekly-report \
             --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
