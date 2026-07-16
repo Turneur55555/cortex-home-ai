@@ -15,11 +15,14 @@ import {
   type PortionUnit,
 } from "@/lib/nutrition/portions";
 
+import { MEAL_OPTIONS, type MealSlug } from "@/lib/nutrition/meals";
+
 // Détecte le repas selon l'heure courante pour pré-remplir le sélecteur.
-function detectMealFromHour(): string {
+function detectMealFromHour(): MealSlug {
   const h = new Date().getHours();
   if (h >= 6 && h < 11) return "petit-dej";
   if (h >= 11 && h < 15) return "dejeuner";
+  if (h >= 15 && h < 18) return "gouter";
   if (h >= 18 && h < 23) return "diner";
   return "collation";
 }
