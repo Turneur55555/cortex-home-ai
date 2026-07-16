@@ -245,10 +245,9 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
             onChange={(e) => setForm({ ...form, meal: e.target.value })}
             className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary"
           >
-            <option value="petit-dej">Petit-déjeuner</option>
-            <option value="dejeuner">Déjeuner</option>
-            <option value="diner">Dîner</option>
-            <option value="collation">Collation</option>
+            {MEAL_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
           </select>
         </div>
         {!baseFood && (
