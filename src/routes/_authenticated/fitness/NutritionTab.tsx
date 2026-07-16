@@ -41,6 +41,7 @@ import {
   useDeleteNutritionMeal,
   useNutrition,
   useNutritionGoals,
+  useUpdateNutrition,
 } from "@/hooks/use-fitness";
 import { useNutritionTotals } from "@/hooks/useNutritionTotals";
 import { useAddFavorite } from "@/hooks/use-nutrition-favorites";
