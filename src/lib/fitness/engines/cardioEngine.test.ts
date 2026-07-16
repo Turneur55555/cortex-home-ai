@@ -206,7 +206,22 @@ describe("CardioWorkoutEngine — modèle métier de la répétition (lot V4)", 
     expect(keys("Marche inclinée 2/3")).toContain("incline_pct");
     // "Marche sur tapis" reste une marche : l'inclinaison garde son rang.
     expect(keys("Marche sur tapis")).toEqual(["speed_kmh", "incline_pct", "heart_rate_bpm"]);
-    expect(keys("Vélo")).toContain("cadence_rpm");
+    // Lot V7 : le vélo raconte une sortie — vitesse/cadence/puissance/FC
+    // par kilomètre, la résistance en réglage, la distance portée par le
+    // numéro du km. L'Assault Bike (testé avant) garde son modèle propre.
+    expect(keys("Vélo")).toEqual([
+      "speed_kmh",
+      "cadence_rpm",
+      "watts",
+      "heart_rate_bpm",
+      "resistance",
+    ]);
+    expect(keys("Assault Bike")).toEqual([
+      "distance_m",
+      "watts",
+      "calories_estimate",
+      "heart_rate_bpm",
+    ]);
     // Activité inconnue : repli honnête distance + durée, jamais rien.
     expect(keys("Machine mystère")).toEqual(["distance_m", "duration_min"]);
   });

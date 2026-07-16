@@ -623,15 +623,25 @@ function GenericExerciseCard({
   // rail de progression, kilomètre courant en héros, validation-
   // récompense. Détection 100% présentation (mêmes données, mêmes
   // mutations, mêmes moteurs — rien d'autre ne change).
-  const isKmJourney = discipline === "cardio" && /marche|tapis|treadmill/i.test(group.displayLabel);
-  // Lot V6 (Tapis de course) : même voyage, identités distinctes — sur
-  // tapis la FC fait partie du récit du kilomètre et l'inclinaison n'est
-  // qu'un réglage secondaire, à l'inverse de la marche inclinée où
-  // l'inclinaison EST l'exercice. `/marche/` prioritaire : "Marche sur
-  // tapis" reste une marche (même règle que REP_MODELS, cardioEngine).
-  const kmJourneyFlavor: "marche" | "tapis" = /marche/i.test(group.displayLabel)
-    ? "marche"
-    : "tapis";
+  // Lot V7 (Rameur + Vélo) : le voyage s'étend — même rail, mêmes cartes,
+  // mêmes mutations ; seuls le storytelling et les métriques changent.
+  // Marche/tapis/vélo avancent kilomètre par kilomètre, le rameur bloc
+  // par bloc (500/750/1000/2000 m…). L'Assault Bike garde la liste
+  // générique (modèle calories/watts, pas une "sortie"). `/marche/`
+  // prioritaire : "Marche sur tapis" reste une marche (même règle que
+  // REP_MODELS, cardioEngine).
+  const kmJourneyFlavor = ((): JourneyFlavor | null => {
+    if (discipline !== "cardio") return null;
+    const label = group.displayLabel;
+    if (/assault/i.test(label)) return null;
+    if (/rameur|rowing|row\b/i.test(label)) return "rameur";
+    if (/v[ée]lo|bike|cycl/i.test(label)) return "velo";
+    if (/marche/i.test(label)) return "marche";
+    if (/tapis|treadmill/i.test(label)) return "tapis";
+    return null;
+  })();
+  const isKmJourney = kmJourneyFlavor !== null;
+  const journeyWording = kmJourneyFlavor ? JOURNEY_WORDING[kmJourneyFlavor] : null;
 
   // Addendum 3 (2026-07-15, audit convergence UX) : badge "Nouveau record"
   // générique — pendant du badge Trophy de MuscuExerciseCard (isPR/isNewPR),
@@ -752,9 +762,13 @@ function GenericExerciseCard({
     updateSegment.mutate({ id: segment.id, ...fields });
     if (fields.completed) {
       // Pas de minuteur de repos entre deux kilomètres (lot V5) : la
-      // marche/le tapis est un effort CONTINU — un repos automatique par
-      // km n'a aucun sens, contrairement aux intervalles/circuits.
-      if (group.instances.length > 1 && !isKmJourney) restTimer.startForExercise(group.key);
+      // marche/le tapis/le vélo est un effort CONTINU — un repos
+      // automatique par km n'a aucun sens. Le rameur, lui, enchaîne des
+      // BLOCS séparés par une vraie récupération (lot V7) : le minuteur
+      // revient dès que plusieurs blocs sont prévus — jamais entre deux
+      // coups de rame (un bloc unique ne déclenche rien).
+      if (group.instances.length > 1 && (!isKmJourney || kmJourneyFlavor === "rameur"))
+        restTimer.startForExercise(group.key);
       try {
         navigator.vibrate?.(50);
       } catch {
@@ -798,24 +812,23 @@ function GenericExerciseCard({
         collapsed={collapsed}
         onToggleCollapse={() => setCollapsed((c) => !c)}
         metaLine={
-          isKmJourney ? (
+          journeyWording ? (
             // Lot V5 — la progression est le personnage principal : le
-            // compteur de kilomètres raconte la séance, pas un compte de
-            // "répétitions".
+            // compteur de kilomètres (ou de blocs, lot V7) raconte la
+            // séance, pas un compte de "répétitions".
             <div className="mt-1.5 flex items-center gap-1.5 text-[12px]">
               <span
                 key={doneCount}
                 className="font-bold tabular-nums text-foreground animate-in zoom-in-75 duration-300"
               >
-                {doneCount > 0
-                  ? `${doneCount} km au compteur`
-                  : "Le tapis t'attend — Km 1 à valider"}
+                {doneCount > 0 ? journeyWording.counter(doneCount) : journeyWording.waiting}
               </span>
               {doneCount > 0 && group.instances.some((s) => !s.completed) && (
                 <>
                   <span className="text-muted-foreground/30">•</span>
                   <span className="text-muted-foreground">
-                    Km {group.instances.findIndex((s) => !s.completed) + 1} en cours
+                    {journeyWording.unit} {group.instances.findIndex((s) => !s.completed) + 1} en
+                    cours
                   </span>
                 </>
               )}
@@ -876,7 +889,7 @@ function GenericExerciseCard({
             </button>
           )}
 
-          {isKmJourney ? (
+          {kmJourneyFlavor ? (
             <KmJourneyBody
               instances={group.instances}
               lastReps={lastSession?.reps ?? []}
@@ -953,11 +966,59 @@ function GenericExerciseCard({
 // reliés par un rail de progression vertical. Mêmes données, mêmes
 // mutations, mêmes moteurs — uniquement l'expérience.
 
+// Lot V7 — le storytelling par activité : même voyage (rail, héros,
+// validation-récompense), mais chaque discipline parle sa langue — la
+// marche/le tapis/le vélo comptent des kilomètres, le rameur des blocs.
+// Côte à côte on reconnaît trois disciplines, une seule application.
+type JourneyFlavor = "marche" | "tapis" | "velo" | "rameur";
+
+type JourneyWording = {
+  unit: string;
+  counter: (n: number) => string;
+  waiting: string;
+  validate: string;
+  validated: string;
+  ctaStart: (n: number) => string;
+  ctaPrepare: (n: number) => string;
+};
+
+const KM_WORDING: JourneyWording = {
+  unit: "Km",
+  counter: (n) => `${n} km au compteur`,
+  waiting: "Le tapis t'attend — Km 1 à valider",
+  validate: "Valider le kilomètre",
+  validated: "Kilomètre validé — appuyer pour annuler",
+  ctaStart: (n) => `Commencer le Km ${n}`,
+  ctaPrepare: (n) => `Préparer le Km ${n}`,
+};
+
+const JOURNEY_WORDING: Record<JourneyFlavor, JourneyWording> = {
+  marche: KM_WORDING,
+  tapis: KM_WORDING,
+  // Le vélo raconte une SORTIE — "j'avance dans ma sortie", jamais
+  // "je remplis un formulaire".
+  velo: {
+    ...KM_WORDING,
+    counter: (n) => `${n} km dans la sortie`,
+    waiting: "La sortie commence — Km 1 à valider",
+  },
+  // Le rameur raconte des BLOCS (500/750/1000/2000 m…), pas des km.
+  rameur: {
+    unit: "Bloc",
+    counter: (n) => `${n} bloc${n > 1 ? "s" : ""} au compteur`,
+    waiting: "Le rameur t'attend — Bloc 1 à lancer",
+    validate: "Valider le bloc",
+    validated: "Bloc validé — appuyer pour annuler",
+    ctaStart: (n) => `Enchaîner le Bloc ${n}`,
+    ctaPrepare: (n) => `Préparer le Bloc ${n}`,
+  },
+};
+
 type KmJourneyProps = {
   instances: ActiveGenericSegment[];
   lastReps: Array<{ metrics: Record<string, number | string> }>;
   knownKeys: string[];
-  flavor: "marche" | "tapis";
+  flavor: JourneyFlavor;
   onUpdateRep: (
     segment: ActiveGenericSegment,
     fields: { metrics?: Record<string, number | string>; completed?: boolean },
@@ -994,11 +1055,19 @@ function KmJourneyBody({
   );
   // SEGMENT_METRIC_CONFIG est GLOBALE à toutes les disciplines (incline_pct
   // promue primary pour l'identité Marche inclinée, FC volontairement
-  // secondary partout) — le voyage tapis ajuste donc LOCALEMENT, sans
-  // toucher la table : la FC entre dans le récit du kilomètre (héros +
-  // résumé "✓ Km 1"), l'inclinaison redescend en réglage secondaire.
-  const promoted = flavor === "tapis" ? ["heart_rate_bpm"] : [];
-  const demoted = flavor === "tapis" ? ["incline_pct"] : [];
+  // secondary partout) — chaque saveur ajuste donc LOCALEMENT, sans
+  // toucher la table :
+  // - tapis : FC dans le récit du kilomètre, inclinaison en réglage ;
+  // - vélo : vitesse/cadence/puissance/FC en héros, la distance est
+  //   portée par le numéro du km, la résistance reste un réglage ;
+  // - rameur/marche : identité globale inchangée.
+  const promoted =
+    flavor === "tapis"
+      ? ["heart_rate_bpm"]
+      : flavor === "velo"
+        ? ["cadence_rpm", "watts", "heart_rate_bpm"]
+        : [];
+  const demoted = flavor === "tapis" ? ["incline_pct"] : flavor === "velo" ? ["distance_m"] : [];
   const primaryKeys = orderedKeys.filter(
     (k) =>
       !demoted.includes(k) &&
@@ -1006,8 +1075,16 @@ function KmJourneyBody({
   );
   const secondaryKeys = orderedKeys.filter((k) => !primaryKeys.includes(k));
 
+  // Le résumé d'un bloc de rameur terminé raconte TOUT le bloc sur une
+  // ligne — distance · temps · allure /500 m · watts · cadence (lot V7),
+  // même si watts/cadence restent des saisies discrètes dans le héros.
+  const summaryKeys =
+    flavor === "rameur" ? [...primaryKeys, "watts", "stroke_rate_spm"] : primaryKeys;
+
+  const wording = JOURNEY_WORDING[flavor];
+
   const summaryFor = (segment: ActiveGenericSegment) =>
-    primaryKeys
+    summaryKeys
       .map((k) => {
         const v = segment.metrics[k];
         return typeof v === "number" ? SEGMENT_METRIC_CONFIG[k].format(v) : null;
@@ -1018,9 +1095,9 @@ function KmJourneyBody({
   const handleValidate = (segment: ActiveGenericSegment, index: number) => {
     onUpdateRep(segment, { completed: true });
     setFocusedId(null);
-    // La récompense : chaque kilomètre validé fait avancer l'histoire.
-    toast.success(`Km ${index} terminé 💪`, {
-      description: `${doneCount + 1} km au compteur — le Km ${instances.length === index ? index + 1 : index + 1} t'attend.`,
+    // La récompense : chaque étape validée fait avancer l'histoire.
+    toast.success(`${wording.unit} ${index} terminé 💪`, {
+      description: `${wording.counter(doneCount + 1)} — le ${wording.unit} ${index + 1} t'attend.`,
     });
   };
 
@@ -1043,6 +1120,7 @@ function KmJourneyBody({
                 key={segment.id}
                 segment={segment}
                 index={i + 1}
+                wording={wording}
                 dismissable={!isCurrent}
                 lastMetrics={lastReps[i]?.metrics ?? null}
                 primaryKeys={primaryKeys}
@@ -1079,7 +1157,9 @@ function KmJourneyBody({
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="flex items-baseline gap-1.5">
-                      <span className="text-[13px] font-bold">Km {i + 1}</span>
+                      <span className="text-[13px] font-bold">
+                        {wording.unit} {i + 1}
+                      </span>
                       <span className="text-[9px] font-bold uppercase tracking-widest text-success/90">
                         terminé
                       </span>
@@ -1107,7 +1187,7 @@ function KmJourneyBody({
                   {i + 1}
                 </span>
                 <span className="text-[13px] font-semibold text-muted-foreground">
-                  Km {i + 1} · à venir
+                  {wording.unit} {i + 1} · à venir
                 </span>
               </button>
             </li>
@@ -1132,13 +1212,13 @@ function KmJourneyBody({
           <Loader2 className="h-4 w-4 animate-spin" />
         ) : allDone ? (
           <>
-            Commencer le Km {instances.length + 1}
+            {wording.ctaStart(instances.length + 1)}
             <ArrowRight className="h-4 w-4" />
           </>
         ) : (
           <>
             <Plus className="h-4 w-4" />
-            Préparer le Km {instances.length + 1}
+            {wording.ctaPrepare(instances.length + 1)}
           </>
         )}
       </button>
@@ -1149,6 +1229,7 @@ function KmJourneyBody({
 function KmHeroCard({
   segment,
   index,
+  wording,
   dismissable,
   lastMetrics,
   primaryKeys,
@@ -1164,6 +1245,7 @@ function KmHeroCard({
 }: {
   segment: ActiveGenericSegment;
   index: number;
+  wording: JourneyWording;
   dismissable: boolean;
   lastMetrics: Record<string, number | string> | null;
   primaryKeys: string[];
@@ -1224,7 +1306,9 @@ function KmHeroCard({
       <div className="ml-9 rounded-3xl border border-primary/20 bg-gradient-to-b from-primary/[0.09] to-primary/[0.02] p-4 shadow-[0_10px_36px_-16px_rgba(0,0,0,0.65)]">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-baseline gap-2">
-            <span className="text-[15px] font-extrabold tracking-tight">Km {index}</span>
+            <span className="text-[15px] font-extrabold tracking-tight">
+              {wording.unit} {index}
+            </span>
             {segment.completed ? (
               <span className="text-[9px] font-bold uppercase tracking-widest text-success">
                 terminé
@@ -1257,7 +1341,7 @@ function KmHeroCard({
             <button
               type="button"
               onClick={() => setConfirmDel(true)}
-              aria-label="Supprimer ce kilomètre"
+              aria-label={`Supprimer le ${wording.unit} ${index}`}
               className="flex h-7 w-7 items-center justify-center rounded-full transition-colors hover:text-destructive"
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -1277,7 +1361,9 @@ function KmHeroCard({
 
         {confirmDel ? (
           <div className="mt-3 rounded-2xl bg-destructive/10 p-3 animate-in fade-in zoom-in-95 duration-150">
-            <p className="text-xs font-semibold text-destructive">Supprimer le Km {index} ?</p>
+            <p className="text-xs font-semibold text-destructive">
+              Supprimer le {wording.unit} {index} ?
+            </p>
             <div className="mt-2 flex gap-2">
               <button
                 type="button"
@@ -1351,7 +1437,7 @@ function KmHeroCard({
                 className="mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-2xl bg-success/15 text-[13px] font-bold text-success transition-transform active:scale-[0.98]"
               >
                 <Check className="h-4 w-4" strokeWidth={3} />
-                Kilomètre validé — appuyer pour annuler
+                {wording.validated}
               </button>
             ) : (
               <button
@@ -1360,7 +1446,7 @@ function KmHeroCard({
                 className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-primary text-sm font-bold text-primary-foreground shadow-glow transition-transform active:scale-[0.98]"
               >
                 <Check className="h-5 w-5" strokeWidth={3} />
-                Valider le kilomètre
+                {wording.validate}
               </button>
             )}
           </>

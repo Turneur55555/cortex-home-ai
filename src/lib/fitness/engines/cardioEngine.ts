@@ -191,9 +191,14 @@ const REP_MODELS: Array<{ pattern: RegExp; keys: string[] }> = [
     keys: ["speed_kmh", "pace_min_per_km", "heart_rate_bpm", "incline_pct"],
   },
   { pattern: /assault/i, keys: ["distance_m", "watts", "calories_estimate", "heart_rate_bpm"] },
+  // Lot V7 (Vélo — la sortie) : chaque répétition = UN KILOMÈTRE de la
+  // sortie (le numéro du km porte la distance, distance_m devient
+  // redondante). Vitesse/cadence/puissance/FC racontent le kilomètre, la
+  // résistance reste un réglage. Testé APRÈS /assault/ : l'Assault Bike
+  // garde son modèle propre.
   {
     pattern: /v[ée]lo|bike|cycl/i,
-    keys: ["distance_m", "resistance", "cadence_rpm", "heart_rate_bpm"],
+    keys: ["speed_kmh", "cadence_rpm", "watts", "heart_rate_bpm", "resistance"],
   },
   { pattern: /escalier|stair/i, keys: ["escalier_level", "duration_min", "heart_rate_bpm"] },
   { pattern: /elliptique/i, keys: ["distance_m", "resistance", "heart_rate_bpm"] },
