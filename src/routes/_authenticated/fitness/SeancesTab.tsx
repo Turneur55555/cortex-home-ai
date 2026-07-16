@@ -21,6 +21,7 @@ import { ForgeDisciplineChooser } from "@/components/fitness/ForgeDisciplineChoo
 import { DisciplineExerciseLibrarySheet } from "@/components/fitness/DisciplineExerciseLibrarySheet";
 import { PostWorkoutAnalysisSheet } from "@/components/fitness/PostWorkoutAnalysisSheet";
 import { GenericPostWorkoutAnalysisSheet } from "@/components/fitness/session/GenericPostWorkoutAnalysisSheet";
+import { ChroniquePage } from "@/components/fitness/chronique/ChroniquePage";
 import { SectionReveal } from "@/components/fitness/SectionReveal";
 import {
   useExerciseImageUrls,
@@ -103,6 +104,11 @@ export function SeancesTab() {
     undefined,
   );
   const [historyOpen, setHistoryOpen] = useState(false);
+  // LOT C1 — module immersif « Chronique » : toucher une chronique de
+  // musculation ouvre une page plein écran dédiée (ChroniquePage). La liste
+  // des Chroniques ne change pas — seule l'action au clic ouvre ce module.
+  const [chronicleWorkout, setChronicleWorkout] = useState<WorkoutRow | null>(null);
+  const openChronicle = useCallback((w: WorkoutRow) => setChronicleWorkout(w), []);
   const [catalogOpen, setCatalogOpen] = useState(false);
   // Phase 1 multi-discipline (2026-07-11) : une seule Forge, avec un choix
   // de discipline avant d'ouvrir soit le catalogue muscu existant
@@ -285,6 +291,24 @@ export function SeancesTab() {
     );
   }
 
+  // ── VUE CHRONIQUE IMMERSIVE (LOT C1) ────────────────────────────────────────
+  // Ouverte depuis la liste des Chroniques (carte ou ligne compacte muscu).
+  // Rendue comme une vraie page (early-return, même pattern qu'ActiveWorkoutView) :
+  // aucun modal, aucun drawer. « Retour » referme, prev/next navigue.
+  if (chronicleWorkout) {
+    return (
+      <ChroniquePage
+        workout={chronicleWorkout}
+        allWorkouts={data ?? []}
+        prByName={prByName}
+        histByName={histByName}
+        nameByKey={nameByKey}
+        onBack={() => setChronicleWorkout(null)}
+        onNavigate={setChronicleWorkout}
+      />
+    );
+  }
+
   // ── VUE HISTORIQUE ─────────────────────────────────────────────────────────
   return (
     <section className="flex flex-col gap-5">
@@ -366,14 +390,30 @@ export function SeancesTab() {
                         key={w.id}
                         className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.05] bg-white/[0.02] px-3 py-2.5"
                       >
-                        <div className="flex min-w-0 items-center gap-3">
-                          <span className="w-9 shrink-0 text-center text-[10px] font-semibold uppercase tracking-wide text-primary">
-                            {weekdayLabel(w.date)}
-                          </span>
-                          <span className="truncate text-xs font-semibold text-white/90">
-                            {w.name || "Séance"}
-                          </span>
-                        </div>
+                        {isMuscu ? (
+                          <button
+                            type="button"
+                            onClick={() => openChronicle(w)}
+                            className="flex min-w-0 flex-1 items-center gap-3 text-left transition-opacity active:opacity-70"
+                            aria-label={`Ouvrir la chronique ${w.name || "Séance"}`}
+                          >
+                            <span className="w-9 shrink-0 text-center text-[10px] font-semibold uppercase tracking-wide text-primary">
+                              {weekdayLabel(w.date)}
+                            </span>
+                            <span className="truncate text-xs font-semibold text-white/90">
+                              {w.name || "Séance"}
+                            </span>
+                          </button>
+                        ) : (
+                          <div className="flex min-w-0 items-center gap-3">
+                            <span className="w-9 shrink-0 text-center text-[10px] font-semibold uppercase tracking-wide text-primary">
+                              {weekdayLabel(w.date)}
+                            </span>
+                            <span className="truncate text-xs font-semibold text-white/90">
+                              {w.name || "Séance"}
+                            </span>
+                          </div>
+                        )}
                         {isMuscu && (
                           <button
                             type="button"
@@ -427,6 +467,7 @@ export function SeancesTab() {
                         onRepeatLive={repeatLive}
                         onOpenFromTemplate={openFromTemplate}
                         onSaveAsTemplate={saveAsTemplate}
+                        onOpenChronicle={openChronicle}
                       />
                     );
                   })}

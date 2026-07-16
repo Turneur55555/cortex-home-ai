@@ -3,6 +3,7 @@ import { exerciseIllustration } from "@/lib/fitness/exerciseIllustrations";
 import { toast } from "sonner";
 import {
   BarChart3,
+  BookOpen,
   ChevronRight,
   ClipboardList,
   Clock,
@@ -35,8 +36,8 @@ import { WorkoutDeleteDialog } from "./WorkoutDeleteDialog";
 import { ExerciseAnalysisSheet } from "./ExerciseAnalysisSheet";
 import { StatTileRow, type StatTileSpec } from "./StatTileRow";
 import { AddExerciseModal } from "./AddExerciseModal";
-import { identityKey } from "@/lib/fitness/recentExercises";
-import { estimate1RM, formatTonnage, workoutTonnage } from "@/lib/fitness/strength";
+import { buildGroups, type ExerciseGroup } from "@/lib/fitness/workoutGrouping";
+import { formatTonnage, workoutTonnage } from "@/lib/fitness/strength";
 import { estimateWorkoutCalories } from "@/lib/fitness/calories";
 import { useLatestBodyWeight } from "@/hooks/useLatestBodyWeight";
 import { ENGINE_REGISTRY } from "@/lib/fitness/engines/registry";
@@ -45,111 +46,10 @@ import { useWorkoutAnalysisIndex } from "@/hooks/useWorkoutAnalyses";
 import { StoredWorkoutAnalysisSheet } from "./StoredWorkoutAnalysisSheet";
 
 export type WorkoutRow = NonNullable<ReturnType<typeof useWorkouts>["data"]>[number];
-type ExerciseRow = NonNullable<WorkoutRow["exercises"]>[number];
 
-type SerieView = {
-  index: number;
-  reps: number | null;
-  weight: number | null;
-  sourceId: string;
-};
-
-type ExerciseGroup = {
-  key: string;
-  name: string;
-  imagePath: string | null;
-  series: SerieView[];
-  totalSeries: number;
-  totalReps: number;
-  maxWeight: number | null;
-  best1RM: number | null;
-  volume: number;
-  sourceIds: string[];
-};
-
-// 1 ligne `exercises` en base = 1 série affichée.
-// Convention legacy : si `weight` est NULL, la colonne `sets` contient en réalité les reps
-// et la colonne `reps` contient la charge (kg). On reste fidèle aux enregistrements bruts
-// sans inventer de séries supplémentaires.
-// Séries détaillées éventuelles (table `exercise_sets`). Source de vérité quand présentes.
-type DetailedSetRow = {
-  id: string;
-  set_number: number | null;
-  reps: number | null;
-  weight: number | string | null;
-  completed?: boolean | null;
-};
-
-function rowToSeries(r: ExerciseRow): SerieView[] {
-  const detailed =
-    (r as unknown as { exercise_sets?: DetailedSetRow[] | null }).exercise_sets ?? [];
-  if (detailed.length > 0) {
-    // H3 : les séries explicitement non validées ne font pas partie de la séance.
-    return [...detailed]
-      .filter((sset) => sset.completed !== false)
-      .sort((a, b) => (a.set_number ?? 0) - (b.set_number ?? 0))
-      .map((sset, i) => ({
-        index: i + 1,
-        reps: sset.reps,
-        weight: sset.weight == null ? null : Number(sset.weight),
-        sourceId: r.id,
-      }));
-  }
-  // Legacy : 1 ligne `exercises` = 1 série. Si `weight` est NULL, la colonne `sets`
-  // contient en réalité les reps et `reps` la charge (kg).
-  const hasExplicitWeight = r.weight != null;
-  const reps = hasExplicitWeight ? r.reps : (r.sets ?? r.reps);
-  const weight = hasExplicitWeight ? r.weight : r.sets != null ? r.reps : null;
-  return [{ index: 1, reps, weight, sourceId: r.id }];
-}
-
-function expandToSeries(rows: ExerciseRow[]): SerieView[] {
-  return rows.flatMap((r) => rowToSeries(r)).map((sset, i) => ({ ...sset, index: i + 1 }));
-}
-
-function buildGroups(rows: ExerciseRow[]): ExerciseGroup[] {
-  const byKey = new Map<string, ExerciseRow[]>();
-  for (const r of rows) {
-    if (!r.name.trim()) continue;
-    // Étape 4.6 : identité par exercise_reference_id en priorité (même
-    // fonction que le reste de la base), filet par nom normalisé sinon.
-    const key = identityKey({ name: r.name, exercise_reference_id: r.exercise_reference_id });
-    if (!byKey.has(key)) byKey.set(key, []);
-    byKey.get(key)!.push(r);
-  }
-  const groups: ExerciseGroup[] = [];
-  for (const [key, list] of byKey) {
-    const series = expandToSeries(list);
-    let totalReps = 0;
-    let volume = 0;
-    let maxWeight: number | null = null;
-    let best1RM: number | null = null;
-    for (const s of series) {
-      if (s.reps != null) totalReps += s.reps;
-      if (s.weight != null) {
-        maxWeight = maxWeight == null ? s.weight : Math.max(maxWeight, s.weight);
-        if (s.reps != null) {
-          volume += s.reps * s.weight;
-          const rm = estimate1RM(s.weight, s.reps);
-          if (rm != null && (best1RM == null || rm > best1RM)) best1RM = rm;
-        }
-      }
-    }
-    groups.push({
-      key,
-      name: list[0].name,
-      imagePath: list.find((r) => r.image_path)?.image_path ?? null,
-      series,
-      totalSeries: series.length,
-      totalReps,
-      maxWeight,
-      best1RM,
-      volume,
-      sourceIds: Array.from(new Set(list.map((r) => r.id))),
-    });
-  }
-  return groups;
-}
+// Regroupement des séries : logique pure partagée avec le module Chronique
+// (src/lib/fitness/workoutGrouping.ts) — extraite sans changement de
+// comportement, plus aucune duplication.
 
 export function WorkoutCard({
   w,
@@ -163,6 +63,7 @@ export function WorkoutCard({
   onRepeatLive,
   onOpenFromTemplate,
   onSaveAsTemplate,
+  onOpenChronicle,
 }: {
   w: WorkoutRow;
   prByName: Map<string, number>;
@@ -180,6 +81,8 @@ export function WorkoutCard({
    *  depuis cette séance passée — crée un NOUVEAU modèle réutilisable, ne
    *  modifie ni ne remplace "Enregistrer comme séance passée". */
   onSaveAsTemplate: (w: WorkoutRow) => void;
+  /** LOT C1 : ouvre la chronique immersive (page plein écran) de cette séance. */
+  onOpenChronicle?: (w: WorkoutRow) => void;
 }) {
   const updateName = useUpdateWorkoutName();
   const updateEx = useUpdateExercise();
@@ -326,6 +229,17 @@ export function WorkoutCard({
             />
           </div>
           <div className="relative flex shrink-0 items-center gap-1.5">
+            {onOpenChronicle && (
+              <button
+                type="button"
+                onClick={() => onOpenChronicle(w)}
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-white/5 text-muted-foreground transition-all active:scale-90 hover:bg-primary/15 hover:text-primary"
+                title="Ouvrir la chronique"
+                aria-label="Ouvrir la chronique"
+              >
+                <BookOpen className="h-4 w-4" />
+              </button>
+            )}
             <button
               type="button"
               onClick={() => onRepeatLive(w)}
