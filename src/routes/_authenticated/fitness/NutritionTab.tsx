@@ -48,6 +48,8 @@ import { useAddFavorite } from "@/hooks/use-nutrition-favorites";
 import { useSupplements, useToggleSupplementLog } from "@/hooks/use-supplements";
 import { MealActionMenu } from "@/components/fitness/MealActionMenu";
 import { WorkoutDeleteDialog } from "@/components/fitness/WorkoutDeleteDialog";
+import { MoveMealMenu } from "@/components/fitness/MoveMealMenu";
+import type { MealSlug } from "@/lib/nutrition/meals";
 
 import { BarcodeScannerSheet } from "@/components/BarcodeScannerSheet";
 import { MealScanSheet } from "@/components/fitness/MealScanSheet";
