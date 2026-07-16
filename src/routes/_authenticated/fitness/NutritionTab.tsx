@@ -687,6 +687,11 @@ export function NutritionTab() {
                                     >
                                       <Star className="h-4 w-4" />
                                     </motion.button>
+                                    <MoveMealMenu
+                                      currentMeal={m.meal}
+                                      onMove={(target) => handleMoveMeal(m, target)}
+                                      disabled={update.isPending}
+                                    />
                                   </div>
                                 </SwipeableNutritionItem>
                               );
