@@ -81,6 +81,11 @@ const MEAL_VISUALS: Record<
     icon: Utensils,
     accent: "text-amber-400",
   },
+  gouter: {
+    gradient: "from-yellow-400/30 via-yellow-500/20 to-amber-500/10",
+    icon: Clock,
+    accent: "text-yellow-400",
+  },
   diner: {
     gradient: "from-violet-400/30 via-violet-500/20 to-purple-600/10",
     icon: Drumstick,
