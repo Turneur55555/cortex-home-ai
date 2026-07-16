@@ -16,16 +16,31 @@
 // ============================================================
 
 import { useMemo, useState } from "react";
-import { BookOpen, CheckCircle2, Flame, Loader2, MoreVertical, XCircle } from "lucide-react";
-import type { ActiveGenericWorkout } from "@/hooks/useGenericActiveSession";
+import {
+  BookOpen,
+  Check,
+  CheckCircle2,
+  ChevronRight,
+  Flame,
+  Loader2,
+  MoreVertical,
+  XCircle,
+} from "lucide-react";
+import { toast } from "sonner";
+import type { ActiveGenericSegment, ActiveGenericWorkout } from "@/hooks/useGenericActiveSession";
 import {
   useAddGenericSegment,
   useCancelGenericActiveWorkout,
   useFinishGenericActiveWorkout,
+  useUpdateGenericSegment,
 } from "@/hooks/useGenericActiveSession";
 import { useRecentSegmentLabels } from "@/hooks/useRecentSegmentLabels";
 import { ENGINE_REGISTRY } from "@/lib/fitness/engines/registry";
-import { groupByExerciseLabel } from "@/lib/fitness/segmentStats";
+import {
+  groupByExerciseLabel,
+  SEGMENT_METRIC_CONFIG,
+  type LabelGroup,
+} from "@/lib/fitness/segmentStats";
 import { WorkoutTimer } from "../WorkoutTimer";
 import { RestTimerBar } from "../RestTimerBar";
 import { ActiveExerciseCard } from "../exerciseCard/ActiveExerciseCard";
@@ -76,6 +91,16 @@ export function ActiveGenericSessionView({
   );
   const completedCount = sortedSegments.filter((s) => s.completed).length;
   const groups = useMemo(() => groupByExerciseLabel(sortedSegments), [sortedSegments]);
+
+  // Lot V8 — HYROX raconte une ÉPREUVE : l'en-tête et la liste ne parlent
+  // plus d'exercices/répétitions mais d'ateliers franchis, en cours, à
+  // venir (voir HyroxEpreuve en bas de fichier).
+  const isEpreuve = workout.discipline === "hyrox";
+  const ateliersDone = groups.filter(isAtelierDone).length;
+  const currentAtelier = groups.find((g) => !isAtelierDone(g)) ?? null;
+  const ateliersLeft = groups.length - ateliersDone - (currentAtelier ? 1 : 0);
+  const epreuvePct =
+    sortedSegments.length > 0 ? Math.round((completedCount / sortedSegments.length) * 100) : 0;
 
   const recentExercises = useMemo(
     () =>
@@ -159,17 +184,50 @@ export function ActiveGenericSessionView({
             </div>
           </div>
 
-          <div className="mt-3 flex gap-3 text-[11px] text-muted-foreground">
-            <span>
-              <strong className="text-foreground">{groups.length}</strong> exercice
-              {groups.length > 1 ? "s" : ""}
-            </span>
-            <span>·</span>
-            <span>
-              <strong className="text-foreground">{completedCount}</strong> réalisé
-              {completedCount > 1 ? "s" : ""}
-            </span>
-          </div>
+          {isEpreuve && groups.length > 0 ? (
+            // L'en-tête raconte l'épreuve, jamais "N répétitions".
+            <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-muted-foreground">
+              {currentAtelier ? (
+                <>
+                  <span>
+                    <strong className="text-foreground">{ateliersDone}</strong> atelier
+                    {ateliersDone > 1 ? "s" : ""} terminé{ateliersDone > 1 ? "s" : ""}
+                  </span>
+                  <span>·</span>
+                  <span>
+                    <strong className="text-foreground">{currentAtelier.displayLabel}</strong> en
+                    cours
+                  </span>
+                  {ateliersLeft > 0 && (
+                    <>
+                      <span>·</span>
+                      <span>
+                        {ateliersLeft} restant{ateliersLeft > 1 ? "s" : ""}
+                      </span>
+                    </>
+                  )}
+                  <span>·</span>
+                  <span className="tabular-nums">{epreuvePct} %</span>
+                </>
+              ) : (
+                <span className="font-semibold text-foreground">
+                  🏁 Ligne d'arrivée — {groups.length} ateliers franchis
+                </span>
+              )}
+            </div>
+          ) : (
+            <div className="mt-3 flex gap-3 text-[11px] text-muted-foreground">
+              <span>
+                <strong className="text-foreground">{groups.length}</strong> exercice
+                {groups.length > 1 ? "s" : ""}
+              </span>
+              <span>·</span>
+              <span>
+                <strong className="text-foreground">{completedCount}</strong> réalisé
+                {completedCount > 1 ? "s" : ""}
+              </span>
+            </div>
+          )}
 
           {menuOpen && (
             <div className="absolute right-4 top-14 z-20 min-w-[180px] overflow-hidden rounded-2xl border border-border bg-card shadow-elevated">
@@ -262,6 +320,14 @@ export function ActiveGenericSessionView({
             Aucun exercice — ajoutez-en un ci-dessous
           </p>
         </div>
+      ) : isEpreuve ? (
+        <HyroxEpreuve
+          groups={groups}
+          workoutId={workout.id}
+          discipline={workout.discipline}
+          nextPosition={sortedSegments.length}
+          onOpenStats={setStatsLabel}
+        />
       ) : (
         <div className="flex flex-col gap-3">
           {groups.map((g) => (
@@ -330,6 +396,221 @@ export function ActiveGenericSessionView({
           discipline={workout.discipline}
           onClose={() => setStatsLabel(null)}
         />
+      )}
+    </div>
+  );
+}
+
+// ─── Lot V8 — L'épreuve HYROX ────────────────────────────────────────────
+// Même philosophie que le voyage kilomètre (exerciseCard/ActiveExerciseCard,
+// lots V5-V7) mais à l'échelle de la SÉANCE : chaque atelier est une étape
+// de l'épreuve — ✓ franchis (résumé une ligne), ● en cours (la carte
+// exercice existante devient le héros, grand CTA "Terminer l'atelier"),
+// ○ à venir (annoncés avec leur objectif), reliés par le même rail
+// vertical. Mêmes cartes, mêmes mutations, aucun nouveau moteur —
+// uniquement la mise en scène de la compétition.
+
+/** Un atelier est franchi quand TOUTES ses répétitions/passages le sont
+ *  (un "Running" de simulation groupe les 8 footings sous une carte). */
+function isAtelierDone(group: LabelGroup<ActiveGenericSegment>): boolean {
+  return group.instances.length > 0 && group.instances.every((s) => s.completed);
+}
+
+/** Résumé une ligne d'un atelier, dans le vocabulaire déclaré par la
+ *  discipline (SEGMENT_METRIC_CONFIG) : "1.00 km · 3:42 · 1:51 /500 m".
+ *  Chaque poste garde SES métriques — jamais uniformisé. */
+function atelierSummary(group: LabelGroup<ActiveGenericSegment>): string {
+  const first = group.instances[0];
+  if (!first) return "";
+  const parts = Object.keys(first.metrics)
+    .filter((k) => typeof first.metrics[k] === "number" && SEGMENT_METRIC_CONFIG[k])
+    .sort((a, b) => SEGMENT_METRIC_CONFIG[a].order - SEGMENT_METRIC_CONFIG[b].order)
+    .slice(0, 4)
+    .map((k) => {
+      const v = first.metrics[k] as number;
+      // Les postes HYROX se jouent sur 50-200 m : "50 m" et jamais
+      // "0.05 km" (le format global reste pensé pour la course).
+      return k === "distance_m" && v < 1000
+        ? `${Math.round(v)} m`
+        : SEGMENT_METRIC_CONFIG[k].format(v);
+    });
+  const prefix = group.instances.length > 1 ? [`${group.instances.length} passages`] : [];
+  return [...prefix, ...parts].join(" · ");
+}
+
+function HyroxEpreuve({
+  groups,
+  workoutId,
+  discipline,
+  nextPosition,
+  onOpenStats,
+}: {
+  groups: LabelGroup<ActiveGenericSegment>[];
+  workoutId: string;
+  discipline: ActiveGenericWorkout["discipline"];
+  nextPosition: number;
+  onOpenStats: (label: string) => void;
+}) {
+  const updateSegment = useUpdateGenericSegment();
+  // L'atelier "focalisé" : par défaut le premier non franchi (l'atelier en
+  // cours) ; taper un atelier franchi/à venir le rouvre en héros.
+  const [focusedKey, setFocusedKey] = useState<string | null>(null);
+
+  const currentIdx = groups.findIndex((g) => !isAtelierDone(g));
+  const allDone = currentIdx === -1;
+
+  const finishAtelier = (group: LabelGroup<ActiveGenericSegment>, idx: number) => {
+    for (const s of group.instances) {
+      if (!s.completed) updateSegment.mutate({ id: s.id, completed: true });
+    }
+    setFocusedKey(null);
+    try {
+      navigator.vibrate?.(50);
+    } catch {
+      // Vibration API non supportée — dégradation silencieuse.
+    }
+    // La récompense : chaque atelier franchi rapproche de la ligne d'arrivée.
+    const next = groups.find((g, i) => i !== idx && !isAtelierDone(g));
+    toast.success(`${group.displayLabel} terminé 💪`, {
+      description: next
+        ? `Commencer le ${next.displayLabel} →`
+        : "Ligne d'arrivée — tous les ateliers sont franchis 🏁",
+    });
+  };
+
+  return (
+    <div className="relative">
+      {/* Rail de progression — le fil conducteur de l'épreuve. */}
+      <div
+        aria-hidden
+        className="absolute bottom-6 left-[13px] top-2 w-[2px] rounded-full bg-white/[0.07]"
+      />
+
+      <ol className="flex flex-col gap-1.5">
+        {groups.map((group, i) => {
+          const done = isAtelierDone(group);
+          const isCurrent = i === currentIdx;
+          const isFocused = focusedKey ? focusedKey === group.key : isCurrent;
+
+          if (isFocused) {
+            return (
+              <li key={group.key} className="relative animate-in fade-in zoom-in-95 duration-300">
+                {/* Nœud du rail — pulse tant que l'atelier est en cours. */}
+                <span className="absolute left-0 top-6 z-[1] flex h-[26px] w-[26px] items-center justify-center">
+                  {!done && (
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-25" />
+                  )}
+                  <span
+                    className={`relative flex h-[26px] w-[26px] items-center justify-center rounded-full text-[12px] font-extrabold ${
+                      done
+                        ? "bg-success text-success-foreground"
+                        : "bg-primary text-primary-foreground shadow-glow"
+                    }`}
+                  >
+                    {done ? <Check className="h-3.5 w-3.5" strokeWidth={3.5} /> : i + 1}
+                  </span>
+                </span>
+
+                <div className="ml-9 flex flex-col gap-2">
+                  <ActiveExerciseCard
+                    kind="generic"
+                    group={group}
+                    workoutId={workoutId}
+                    discipline={discipline}
+                    nextPosition={nextPosition}
+                    onOpenStats={onOpenStats}
+                  />
+                  {!done && (
+                    <button
+                      type="button"
+                      onClick={() => finishAtelier(group, i)}
+                      disabled={updateSegment.isPending}
+                      className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-primary text-sm font-bold text-primary-foreground shadow-glow transition-transform active:scale-[0.98] disabled:opacity-50"
+                    >
+                      <Check className="h-5 w-5" strokeWidth={3} />
+                      Terminer l'atelier
+                    </button>
+                  )}
+                  {focusedKey === group.key && (
+                    <button
+                      type="button"
+                      onClick={() => setFocusedKey(null)}
+                      className="self-center text-[11px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      Refermer
+                    </button>
+                  )}
+                </div>
+              </li>
+            );
+          }
+
+          if (done) {
+            const summary = atelierSummary(group);
+            return (
+              <li
+                key={group.key}
+                className="animate-in fade-in slide-in-from-bottom-1 duration-300"
+              >
+                <button
+                  type="button"
+                  onClick={() => setFocusedKey(group.key)}
+                  className="group/atelier flex w-full items-center gap-3 rounded-2xl py-2 pl-0.5 pr-2 text-left transition-colors hover:bg-white/[0.03]"
+                >
+                  <span className="z-[1] flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full bg-success text-success-foreground shadow-[0_0_0_4px_rgba(34,197,94,0.14)] animate-in zoom-in-50 duration-300">
+                    <Check className="h-3.5 w-3.5" strokeWidth={3.5} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-baseline gap-1.5">
+                      <span className="text-[13px] font-bold">{group.displayLabel}</span>
+                      <span className="text-[9px] font-bold uppercase tracking-widest text-success/90">
+                        franchi
+                      </span>
+                    </span>
+                    {summary && (
+                      <span className="block truncate text-[12px] tabular-nums text-muted-foreground">
+                        {summary}
+                      </span>
+                    )}
+                  </span>
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/30 transition-transform group-hover/atelier:translate-x-0.5" />
+                </button>
+              </li>
+            );
+          }
+
+          const target = atelierSummary(group);
+          return (
+            <li key={group.key} className="animate-in fade-in duration-300">
+              <button
+                type="button"
+                onClick={() => setFocusedKey(group.key)}
+                className="flex w-full items-center gap-3 rounded-2xl py-2 pl-0.5 pr-2 text-left opacity-55 transition-opacity hover:opacity-100"
+              >
+                <span className="z-[1] flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full border-2 border-dashed border-white/20 bg-surface text-[11px] font-bold text-muted-foreground">
+                  {i + 1}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[13px] font-semibold text-muted-foreground">
+                    {group.displayLabel} · à venir
+                  </span>
+                  {target && (
+                    <span className="block truncate text-[11px] tabular-nums text-muted-foreground/60">
+                      objectif {target}
+                    </span>
+                  )}
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+
+      {allDone && groups.length > 0 && (
+        <div className="mt-3 flex items-center justify-center gap-2 rounded-2xl bg-success/10 py-3 text-[13px] font-bold text-success animate-in fade-in zoom-in-95 duration-300">
+          🏁 Ligne d'arrivée — {groups.length} atelier{groups.length > 1 ? "s" : ""} franchi
+          {groups.length > 1 ? "s" : ""}
+        </div>
       )}
     </div>
   );

@@ -378,8 +378,11 @@ export const HyroxWorkoutEngine: WorkoutEngine = {
     // idem + cadence ; Running = distance + allure.
     if (/sled|farmer|sandbag|lunge|carry/.test(label))
       return ["charge_kg", "distance_m", "duration_s"];
-    if (/wall ?ball/.test(label)) return ["charge_kg", "reps"];
-    if (/burpee/.test(label)) return ["reps"];
+    // Lot V8 (l'épreuve) : + temps sur Wall Balls et Burpees — dans une
+    // épreuve chaque atelier se chronomètre ("✓ Wall Balls · 100 reps ·
+    // 9 kg · 4:51"), demande explicite de Nathan.
+    if (/wall ?ball/.test(label)) return ["charge_kg", "reps", "duration_s"];
+    if (/burpee/.test(label)) return ["reps", "duration_s"];
     if (/rameur|row/.test(label))
       return ["distance_m", "duration_s", "pace_per_500m", "watts", "stroke_rate_spm"];
     if (/ski ?erg/.test(label)) return ["distance_m", "duration_s", "pace_per_500m", "watts"];

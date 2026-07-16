@@ -175,8 +175,9 @@ describe("HyroxWorkoutEngine.repMetricKeysFor — modèle métier par poste (lot
     expect(keys("Sled Push")).toEqual(["charge_kg", "distance_m", "duration_s"]);
     expect(keys("Sled Pull")).toEqual(["charge_kg", "distance_m", "duration_s"]);
     expect(keys("Farmer Carry")).toEqual(["charge_kg", "distance_m", "duration_s"]);
-    expect(keys("Wall Balls")).toEqual(["charge_kg", "reps"]);
-    expect(keys("Burpee Broad Jump")).toEqual(["reps"]);
+    // Lot V8 : + temps — dans une épreuve, chaque atelier se chronomètre.
+    expect(keys("Wall Balls")).toEqual(["charge_kg", "reps", "duration_s"]);
+    expect(keys("Burpee Broad Jump")).toEqual(["reps", "duration_s"]);
     expect(keys("SkiErg")).toEqual(["distance_m", "duration_s", "pace_per_500m", "watts"]);
     expect(keys("Rameur")).toEqual([
       "distance_m",
