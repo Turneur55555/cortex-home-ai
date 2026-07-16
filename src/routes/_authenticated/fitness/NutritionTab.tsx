@@ -123,10 +123,16 @@ export function NutritionTab() {
   const { data: goals } = useNutritionGoals();
   const del = useDeleteNutrition();
   const readd = useAddNutrition();
+  const update = useUpdateNutrition();
   const addFav = useAddFavorite();
   const copyDay = useCopyNutritionDay();
   const copyMeal = useCopyNutritionMeal();
   const deleteMeal = useDeleteNutritionMeal();
+
+  const handleMoveMeal = (item: NonNullable<typeof data>[number], target: MealSlug) => {
+    if (item.meal === target) return;
+    update.mutate({ id: item.id, patch: { meal: target }, date });
+  };
 
   const [confirmDeleteMeal, setConfirmDeleteMeal] = useState<{
     key: string;
