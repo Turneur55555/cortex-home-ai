@@ -372,21 +372,33 @@ export const HyroxWorkoutEngine: WorkoutEngine = {
   // exercices tapés librement au picker pendant une séance HYROX.
   repMetricKeysFor(exerciseLabel: string): string[] {
     const label = exerciseLabel.toLowerCase();
-    // Modèles validés par Nathan (lot V4.1) : Sled Push/Pull et Farmer
-    // Carry = poids + distance (+ temps) ; Wall Balls = poids + reps ;
-    // Burpees = reps ; SkiErg = distance/temps/allure/watts ; RowErg =
-    // idem + cadence ; Running = distance + allure.
+    // Modèles validés par Nathan (lots V4.1, V8, V8.3 — les 9 cadrans de
+    // Hero Card) : chaque poste est immédiatement reconnaissable par ses
+    // cadrans — grands = clés "primary" de SEGMENT_METRIC_CONFIG, petits
+    // = "secondary" (watts/cadence/FC). Sled Push/Pull, Farmer Carry,
+    // Sandbag Lunges = distance (m) + charge + temps ; Wall Balls =
+    // répétitions + charge + temps ; Burpees = répétitions + temps ;
+    // SkiErg = distance/temps/allure /500 m (+ watts, FC) ; RowErg =
+    // idem + cadence ; Running = distance + allure (+ FC).
     if (/sled|farmer|sandbag|lunge|carry/.test(label))
       return ["charge_kg", "distance_m", "duration_s"];
-    // Lot V8 (l'épreuve) : + temps sur Wall Balls et Burpees — dans une
-    // épreuve chaque atelier se chronomètre ("✓ Wall Balls · 100 reps ·
-    // 9 kg · 4:51"), demande explicite de Nathan.
-    if (/wall ?ball/.test(label)) return ["charge_kg", "reps", "duration_s"];
+    // Répétitions AVANT charge : à ordre SEGMENT_METRIC_CONFIG égal,
+    // l'ordre du modèle décide des cadrans ("100 reps · 9 kg · 4:51").
+    if (/wall ?ball/.test(label)) return ["reps", "charge_kg", "duration_s"];
     if (/burpee/.test(label)) return ["reps", "duration_s"];
     if (/rameur|row/.test(label))
-      return ["distance_m", "duration_s", "pace_per_500m", "watts", "stroke_rate_spm"];
-    if (/ski ?erg/.test(label)) return ["distance_m", "duration_s", "pace_per_500m", "watts"];
-    if (/running|course|run/.test(label)) return ["distance_m", "pace_min_per_km"];
+      return [
+        "distance_m",
+        "duration_s",
+        "pace_per_500m",
+        "watts",
+        "stroke_rate_spm",
+        "heart_rate_bpm",
+      ];
+    if (/ski ?erg/.test(label))
+      return ["distance_m", "duration_s", "pace_per_500m", "watts", "heart_rate_bpm"];
+    if (/running|course|run/.test(label))
+      return ["distance_m", "pace_min_per_km", "heart_rate_bpm"];
     return ["reps", "charge_kg"];
   },
   formatLiveSegment: genericFormatLiveSegment,

@@ -176,17 +176,26 @@ describe("HyroxWorkoutEngine.repMetricKeysFor — modèle métier par poste (lot
     expect(keys("Sled Pull")).toEqual(["charge_kg", "distance_m", "duration_s"]);
     expect(keys("Farmer Carry")).toEqual(["charge_kg", "distance_m", "duration_s"]);
     // Lot V8 : + temps — dans une épreuve, chaque atelier se chronomètre.
-    expect(keys("Wall Balls")).toEqual(["charge_kg", "reps", "duration_s"]);
+    // Lot V8.3 : répétitions AVANT charge (cadran "100 reps" en premier).
+    expect(keys("Wall Balls")).toEqual(["reps", "charge_kg", "duration_s"]);
     expect(keys("Burpee Broad Jump")).toEqual(["reps", "duration_s"]);
-    expect(keys("SkiErg")).toEqual(["distance_m", "duration_s", "pace_per_500m", "watts"]);
+    // Lot V8.3 : + FC en petit cadran sur les ergomètres et le Running.
+    expect(keys("SkiErg")).toEqual([
+      "distance_m",
+      "duration_s",
+      "pace_per_500m",
+      "watts",
+      "heart_rate_bpm",
+    ]);
     expect(keys("Rameur")).toEqual([
       "distance_m",
       "duration_s",
       "pace_per_500m",
       "watts",
       "stroke_rate_spm",
+      "heart_rate_bpm",
     ]);
-    expect(keys("Running")).toEqual(["distance_m", "pace_min_per_km"]);
+    expect(keys("Running")).toEqual(["distance_m", "pace_min_per_km", "heart_rate_bpm"]);
   });
 
   it("un exercice HYROX inconnu n'est jamais réduit à une ligne nue", () => {
@@ -214,6 +223,6 @@ describe("HyroxWorkoutEngine.repMetricKeysFor — modèle métier par poste (lot
     }
     expect(keys("Sandbag Lunges")).toEqual(["charge_kg", "distance_m", "duration_s"]);
     expect(keys("RowErg")).toEqual(keys("Rameur"));
-    expect(keys("Running")).toEqual(["distance_m", "pace_min_per_km"]);
+    expect(keys("Running")).toEqual(["distance_m", "pace_min_per_km", "heart_rate_bpm"]);
   });
 });
