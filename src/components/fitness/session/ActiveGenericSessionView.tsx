@@ -31,7 +31,9 @@ import type { ActiveGenericSegment, ActiveGenericWorkout } from "@/hooks/useGene
 import {
   useAddGenericSegment,
   useCancelGenericActiveWorkout,
+  useDeleteGenericSegment,
   useFinishGenericActiveWorkout,
+  useReorderGenericSegment,
   useUpdateGenericSegment,
 } from "@/hooks/useGenericActiveSession";
 import { useRecentSegmentLabels } from "@/hooks/useRecentSegmentLabels";
@@ -43,7 +45,11 @@ import {
 } from "@/lib/fitness/segmentStats";
 import { WorkoutTimer } from "../WorkoutTimer";
 import { RestTimerBar } from "../RestTimerBar";
-import { ActiveExerciseCard } from "../exerciseCard/ActiveExerciseCard";
+import {
+  ActiveExerciseCard,
+  KmHeroCard,
+  type JourneyWording,
+} from "../exerciseCard/ActiveExerciseCard";
 import { AddExerciseButton } from "../exerciseCard/ExerciseCardPrimitives";
 import { ExercisePickerSheet, type PickedExercise } from "../ExercisePickerSheet";
 import { SegmentAnalysisSheet } from "./SegmentAnalysisSheet";
@@ -321,13 +327,7 @@ export function ActiveGenericSessionView({
           </p>
         </div>
       ) : isEpreuve ? (
-        <HyroxEpreuve
-          groups={groups}
-          workoutId={workout.id}
-          discipline={workout.discipline}
-          nextPosition={sortedSegments.length}
-          onOpenStats={setStatsLabel}
-        />
+        <HyroxEpreuve groups={groups} discipline={workout.discipline} onOpenStats={setStatsLabel} />
       ) : (
         <div className="flex flex-col gap-3">
           {groups.map((g) => (
@@ -404,10 +404,10 @@ export function ActiveGenericSessionView({
 // ─── Lot V8 — L'épreuve HYROX ────────────────────────────────────────────
 // Même philosophie que le voyage kilomètre (exerciseCard/ActiveExerciseCard,
 // lots V5-V7) mais à l'échelle de la SÉANCE : chaque atelier est une étape
-// de l'épreuve — ✓ franchis (résumé une ligne), ● en cours (la carte
-// exercice existante devient le héros, grand CTA "Terminer l'atelier"),
-// ○ à venir (annoncés avec leur objectif), reliés par le même rail
-// vertical. Mêmes cartes, mêmes mutations, aucun nouveau moteur —
+// de l'épreuve — ✓ franchis (résumé une ligne), ● en cours (LA carte héros
+// du voyage, KmHeroCard, au nom du poste, CTA "Terminer l'atelier"
+// intégré), ○ à venir (annoncés avec leur objectif), reliés par le même
+// rail vertical. Mêmes cartes, mêmes mutations, aucun nouveau moteur —
 // uniquement la mise en scène de la compétition.
 
 /** Un atelier est franchi quand TOUTES ses répétitions/passages le sont
@@ -416,67 +416,48 @@ function isAtelierDone(group: LabelGroup<ActiveGenericSegment>): boolean {
   return group.instances.length > 0 && group.instances.every((s) => s.completed);
 }
 
-/** Résumé une ligne d'un atelier, dans le vocabulaire déclaré par la
- *  discipline (SEGMENT_METRIC_CONFIG) : "1.00 km · 3:42 · 1:51 /500 m".
- *  Chaque poste garde SES métriques — jamais uniformisé. */
-function atelierSummary(group: LabelGroup<ActiveGenericSegment>): string {
-  const first = group.instances[0];
-  if (!first) return "";
-  const parts = Object.keys(first.metrics)
-    .filter((k) => typeof first.metrics[k] === "number" && SEGMENT_METRIC_CONFIG[k])
+/** Résumé une ligne, dans le vocabulaire déclaré par la discipline
+ *  (SEGMENT_METRIC_CONFIG) : "1.00 km · 3:42 · 1:51 /500 m". Chaque poste
+ *  garde SES métriques — jamais uniformisé. */
+function metricLine(metrics: Record<string, number | string>): string {
+  return Object.keys(metrics)
+    .filter((k) => typeof metrics[k] === "number" && SEGMENT_METRIC_CONFIG[k])
     .sort((a, b) => SEGMENT_METRIC_CONFIG[a].order - SEGMENT_METRIC_CONFIG[b].order)
     .slice(0, 4)
     .map((k) => {
-      const v = first.metrics[k] as number;
+      const v = metrics[k] as number;
       // Les postes HYROX se jouent sur 50-200 m : "50 m" et jamais
       // "0.05 km" (le format global reste pensé pour la course).
       return k === "distance_m" && v < 1000
         ? `${Math.round(v)} m`
         : SEGMENT_METRIC_CONFIG[k].format(v);
-    });
-  const prefix = group.instances.length > 1 ? [`${group.instances.length} passages`] : [];
-  return [...prefix, ...parts].join(" · ");
+    })
+    .join(" · ");
+}
+
+function atelierSummary(group: LabelGroup<ActiveGenericSegment>): string {
+  const first = group.instances[0];
+  if (!first) return "";
+  const line = metricLine(first.metrics);
+  const prefix = group.instances.length > 1 ? `${group.instances.length} passages` : "";
+  return [prefix, line].filter(Boolean).join(" · ");
 }
 
 function HyroxEpreuve({
   groups,
-  workoutId,
   discipline,
-  nextPosition,
   onOpenStats,
 }: {
   groups: LabelGroup<ActiveGenericSegment>[];
-  workoutId: string;
   discipline: ActiveGenericWorkout["discipline"];
-  nextPosition: number;
   onOpenStats: (label: string) => void;
 }) {
-  const updateSegment = useUpdateGenericSegment();
   // L'atelier "focalisé" : par défaut le premier non franchi (l'atelier en
   // cours) ; taper un atelier franchi/à venir le rouvre en héros.
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
 
   const currentIdx = groups.findIndex((g) => !isAtelierDone(g));
   const allDone = currentIdx === -1;
-
-  const finishAtelier = (group: LabelGroup<ActiveGenericSegment>, idx: number) => {
-    for (const s of group.instances) {
-      if (!s.completed) updateSegment.mutate({ id: s.id, completed: true });
-    }
-    setFocusedKey(null);
-    try {
-      navigator.vibrate?.(50);
-    } catch {
-      // Vibration API non supportée — dégradation silencieuse.
-    }
-    // La récompense : chaque atelier franchi rapproche de la ligne d'arrivée.
-    const next = groups.find((g, i) => i !== idx && !isAtelierDone(g));
-    toast.success(`${group.displayLabel} terminé 💪`, {
-      description: next
-        ? `Commencer le ${next.displayLabel} →`
-        : "Ligne d'arrivée — tous les ateliers sont franchis 🏁",
-    });
-  };
 
   return (
     <div className="relative">
@@ -494,54 +475,18 @@ function HyroxEpreuve({
 
           if (isFocused) {
             return (
-              <li key={group.key} className="relative animate-in fade-in zoom-in-95 duration-300">
-                {/* Nœud du rail — pulse tant que l'atelier est en cours. */}
-                <span className="absolute left-0 top-6 z-[1] flex h-[26px] w-[26px] items-center justify-center">
-                  {!done && (
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-25" />
-                  )}
-                  <span
-                    className={`relative flex h-[26px] w-[26px] items-center justify-center rounded-full text-[12px] font-extrabold ${
-                      done
-                        ? "bg-success text-success-foreground"
-                        : "bg-primary text-primary-foreground shadow-glow"
-                    }`}
-                  >
-                    {done ? <Check className="h-3.5 w-3.5" strokeWidth={3.5} /> : i + 1}
-                  </span>
-                </span>
-
-                <div className="ml-9 flex flex-col gap-2">
-                  <ActiveExerciseCard
-                    kind="generic"
-                    group={group}
-                    workoutId={workoutId}
-                    discipline={discipline}
-                    nextPosition={nextPosition}
-                    onOpenStats={onOpenStats}
-                  />
-                  {!done && (
-                    <button
-                      type="button"
-                      onClick={() => finishAtelier(group, i)}
-                      disabled={updateSegment.isPending}
-                      className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-primary text-sm font-bold text-primary-foreground shadow-glow transition-transform active:scale-[0.98] disabled:opacity-50"
-                    >
-                      <Check className="h-5 w-5" strokeWidth={3} />
-                      Terminer l'atelier
-                    </button>
-                  )}
-                  {focusedKey === group.key && (
-                    <button
-                      type="button"
-                      onClick={() => setFocusedKey(null)}
-                      className="self-center text-[11px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
-                    >
-                      Refermer
-                    </button>
-                  )}
-                </div>
-              </li>
+              <AtelierHero
+                key={group.key}
+                group={group}
+                atelierIndex={i + 1}
+                dismissable={focusedKey === group.key}
+                nextAtelierLabel={
+                  groups.find((g, j) => j !== i && !isAtelierDone(g))?.displayLabel ?? null
+                }
+                discipline={discipline}
+                onClose={() => setFocusedKey(null)}
+                onOpenStats={onOpenStats}
+              />
             );
           }
 
@@ -613,5 +558,191 @@ function HyroxEpreuve({
         </div>
       )}
     </div>
+  );
+}
+
+// L'atelier en héros — LA carte héros du voyage kilomètre (KmHeroCard,
+// lot V5), au nom du poste : nœud pulsant sur le rail, grands cadrans
+// dans le vocabulaire de l'atelier (repMetricKeysFor, lot V4), CTA
+// "Terminer l'atelier" intégré à la carte. Un atelier multi-passages
+// (le Running d'une simulation) déroule ses passages comme des
+// kilomètres : ✓ validés (résumé), ● en cours (héros), ○ à venir.
+const ATELIER_WORDING: JourneyWording = {
+  unit: "Passage",
+  counter: (n) => `${n} passages`,
+  waiting: "",
+  validate: "Terminer l'atelier",
+  validated: "Atelier franchi — appuyer pour annuler",
+  ctaStart: () => "",
+  ctaPrepare: () => "",
+};
+
+const PASSAGE_WORDING: JourneyWording = {
+  ...ATELIER_WORDING,
+  validate: "Valider le passage",
+  validated: "Passage validé — appuyer pour annuler",
+};
+
+function AtelierHero({
+  group,
+  atelierIndex,
+  dismissable,
+  nextAtelierLabel,
+  discipline,
+  onClose,
+  onOpenStats,
+}: {
+  group: LabelGroup<ActiveGenericSegment>;
+  atelierIndex: number;
+  dismissable: boolean;
+  nextAtelierLabel: string | null;
+  discipline: ActiveGenericWorkout["discipline"];
+  onClose: () => void;
+  onOpenStats: (label: string) => void;
+}) {
+  const updateSegment = useUpdateGenericSegment();
+  const deleteSegment = useDeleteGenericSegment();
+  const reorderSegment = useReorderGenericSegment();
+  // Passage "focalisé" dans l'atelier (multi-passages) : par défaut le
+  // premier non validé ; taper un passage validé le rouvre en héros.
+  const [focusedInstId, setFocusedInstId] = useState<string | null>(null);
+
+  const multi = group.instances.length > 1;
+  // Champs du héros = modèle métier du poste ∪ clés déjà saisies — même
+  // dérivation que le voyage kilomètre (GenericExerciseCard, lot V4).
+  const engineKeys = ENGINE_REGISTRY[discipline]?.repMetricKeysFor?.(group.displayLabel) ?? [];
+  const orderedKeys = Array.from(
+    new Set([...engineKeys, ...group.instances.flatMap((s) => Object.keys(s.metrics))]),
+  ).sort(
+    (a, b) => (SEGMENT_METRIC_CONFIG[a]?.order ?? 99) - (SEGMENT_METRIC_CONFIG[b]?.order ?? 99),
+  );
+  const primaryKeys = orderedKeys.filter((k) => SEGMENT_METRIC_CONFIG[k]?.importance === "primary");
+  const secondaryKeys = orderedKeys.filter((k) => !primaryKeys.includes(k));
+
+  const firstOpenIdx = group.instances.findIndex((s) => !s.completed);
+  const heroIdx = focusedInstId
+    ? Math.max(
+        0,
+        group.instances.findIndex((s) => s.id === focusedInstId),
+      )
+    : firstOpenIdx === -1
+      ? 0
+      : firstOpenIdx;
+
+  const handleValidate = (segment: ActiveGenericSegment, passageNo: number) => {
+    updateSegment.mutate({ id: segment.id, completed: true });
+    setFocusedInstId(null);
+    try {
+      navigator.vibrate?.(50);
+    } catch {
+      // Vibration API non supportée — dégradation silencieuse.
+    }
+    // La récompense : chaque atelier franchi rapproche de la ligne d'arrivée.
+    const remaining = group.instances.filter((s) => !s.completed && s.id !== segment.id).length;
+    if (remaining === 0) {
+      toast.success(`${group.displayLabel} terminé 💪`, {
+        description: nextAtelierLabel
+          ? `Commencer le ${nextAtelierLabel} →`
+          : "Ligne d'arrivée — tous les ateliers sont franchis 🏁",
+      });
+    } else {
+      toast.success(`Passage ${passageNo} validé 💪`, {
+        description: `${remaining} passage${remaining > 1 ? "s" : ""} restant${
+          remaining > 1 ? "s" : ""
+        } sur ${group.displayLabel}.`,
+      });
+    }
+  };
+
+  return (
+    <li className="animate-in fade-in zoom-in-95 duration-300">
+      <ul className="flex flex-col gap-1.5">
+        {group.instances.map((segment, k) => {
+          if (k === heroIdx) {
+            return (
+              <KmHeroCard
+                key={segment.id}
+                segment={segment}
+                index={atelierIndex}
+                title={
+                  multi
+                    ? `${group.displayLabel} · Passage ${k + 1}/${group.instances.length}`
+                    : group.displayLabel
+                }
+                wording={multi ? PASSAGE_WORDING : ATELIER_WORDING}
+                dismissable={dismissable}
+                lastMetrics={null}
+                primaryKeys={primaryKeys}
+                secondaryKeys={secondaryKeys}
+                isFirst={k === 0}
+                isLast={k === group.instances.length - 1}
+                onUpdate={(fields) => updateSegment.mutate({ id: segment.id, ...fields })}
+                onValidate={() => handleValidate(segment, k + 1)}
+                onDelete={() => {
+                  setFocusedInstId(null);
+                  deleteSegment.mutate(segment.id);
+                }}
+                onMoveUp={() =>
+                  reorderSegment.mutate({
+                    segments: group.instances,
+                    id: segment.id,
+                    direction: "up",
+                  })
+                }
+                onMoveDown={() =>
+                  reorderSegment.mutate({
+                    segments: group.instances,
+                    id: segment.id,
+                    direction: "down",
+                  })
+                }
+                onOpenStats={() => onOpenStats(segment.label)}
+                onClose={onClose}
+              />
+            );
+          }
+
+          // Les autres passages de l'atelier (multi uniquement) — mêmes
+          // codes que les kilomètres : ✓ validé (résumé) / ○ à venir.
+          if (segment.completed) {
+            const line = metricLine(segment.metrics);
+            return (
+              <li key={segment.id} className="ml-9">
+                <button
+                  type="button"
+                  onClick={() => setFocusedInstId(segment.id)}
+                  className="flex w-full items-center gap-2 rounded-xl px-2 py-1.5 text-left transition-colors hover:bg-white/[0.03]"
+                >
+                  <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-success text-success-foreground">
+                    <Check className="h-3 w-3" strokeWidth={3.5} />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-[12px] tabular-nums text-muted-foreground">
+                    <span className="font-bold text-foreground">Passage {k + 1}</span>
+                    {line && <> · {line}</>}
+                  </span>
+                </button>
+              </li>
+            );
+          }
+
+          return (
+            <li key={segment.id} className="ml-9">
+              <button
+                type="button"
+                onClick={() => setFocusedInstId(segment.id)}
+                className="flex w-full items-center gap-2 rounded-xl px-2 py-1.5 text-left opacity-55 transition-opacity hover:opacity-100"
+              >
+                <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border-2 border-dashed border-white/20 text-[9px] font-bold text-muted-foreground">
+                  {k + 1}
+                </span>
+                <span className="text-[12px] font-semibold text-muted-foreground">
+                  Passage {k + 1} · à venir
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </li>
   );
 }

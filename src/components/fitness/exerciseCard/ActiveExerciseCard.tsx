@@ -972,7 +972,7 @@ function GenericExerciseCard({
 // Côte à côte on reconnaît trois disciplines, une seule application.
 type JourneyFlavor = "marche" | "tapis" | "velo" | "rameur";
 
-type JourneyWording = {
+export type JourneyWording = {
   unit: string;
   counter: (n: number) => string;
   waiting: string;
@@ -1226,10 +1226,16 @@ function KmJourneyBody({
   );
 }
 
-function KmHeroCard({
+// Lot V8 : exportée — l'épreuve HYROX (ActiveGenericSessionView) réutilise
+// exactement cette carte héros pour l'atelier en cours ; `title` remplace
+// alors "Km N" par le nom du poste, `onOpenStats` garde l'accès à la
+// fiche statistiques. Rien ne change pour les voyages kilomètre/bloc.
+export function KmHeroCard({
   segment,
   index,
   wording,
+  title,
+  onOpenStats,
   dismissable,
   lastMetrics,
   primaryKeys,
@@ -1246,6 +1252,8 @@ function KmHeroCard({
   segment: ActiveGenericSegment;
   index: number;
   wording: JourneyWording;
+  title?: string;
+  onOpenStats?: () => void;
   dismissable: boolean;
   lastMetrics: Record<string, number | string> | null;
   primaryKeys: string[];
@@ -1307,7 +1315,7 @@ function KmHeroCard({
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-baseline gap-2">
             <span className="text-[15px] font-extrabold tracking-tight">
-              {wording.unit} {index}
+              {title ?? `${wording.unit} ${index}`}
             </span>
             {segment.completed ? (
               <span className="text-[9px] font-bold uppercase tracking-widest text-success">
@@ -1320,6 +1328,16 @@ function KmHeroCard({
             )}
           </div>
           <div className="flex items-center gap-0.5 text-muted-foreground/40">
+            {onOpenStats && (
+              <button
+                type="button"
+                onClick={onOpenStats}
+                aria-label="Statistiques de l'exercice"
+                className="flex h-7 w-7 items-center justify-center rounded-full transition-colors hover:text-foreground"
+              >
+                <BarChart3 className="h-3.5 w-3.5" />
+              </button>
+            )}
             <button
               type="button"
               onClick={onMoveUp}
