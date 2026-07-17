@@ -8,6 +8,8 @@ import {
   computeSpecializations,
   computeBadges,
   computeLongestStreak,
+  projectVolumeToRankTier,
+  computeBadgeCollection,
   type WorkoutLike,
 } from "./chronicles";
 
@@ -145,5 +147,55 @@ describe("computeLongestStreak / computeBadges", () => {
     expect(ids).not.toContain("streak-3"); // séances espacées d'une semaine
     expect(ids).not.toContain("prs-3"); // max 1 PR par séance
     expect(computeBadges([])).toHaveLength(0);
+  });
+});
+
+describe("projectVolumeToRankTier", () => {
+  it("projette un volume sur l'échelle à 30 paliers, croissante et bornée", () => {
+    expect(projectVolumeToRankTier(0)).toEqual({ tierIndex: 0, masteryPercent: 0 });
+    expect(projectVolumeToRankTier(-5)).toEqual({ tierIndex: 0, masteryPercent: 0 });
+    const small = projectVolumeToRankTier(1000); // 10^3 → bas du tier 0
+    expect(small.tierIndex).toBe(0);
+    const mid = projectVolumeToRankTier(1_000_000); // 10^6 → ~tier 20 (Olympien I)
+    expect(mid.tierIndex).toBe(20);
+    const huge = projectVolumeToRankTier(1e12);
+    expect(huge.tierIndex).toBe(29);
+    expect(huge.masteryPercent).toBe(100);
+    // Monotonie
+    expect(projectVolumeToRankTier(50_000).tierIndex).toBeGreaterThanOrEqual(
+      projectVolumeToRankTier(5_000).tierIndex,
+    );
+    expect(mid.masteryPercent).toBeGreaterThanOrEqual(0);
+    expect(mid.masteryPercent).toBeLessThanOrEqual(100);
+  });
+});
+
+describe("computeBadgeCollection", () => {
+  it("catégorise en paliers verrouillés/débloqués depuis les données réelles", () => {
+    const coll = computeBadgeCollection(HISTORY);
+    const force = coll.categories.find((c) => c.id === "force")!;
+    // Série la plus lourde = 100 kg → 60 kg et « Premier 100 kg » débloqués,
+    // 200 et 300 verrouillés.
+    expect(force.tiers.find((t) => t.id === "force-100")!.unlocked).toBe(true);
+    expect(force.tiers.find((t) => t.id === "force-200")!.unlocked).toBe(false);
+    expect(force.nextHint).toContain("200 kg");
+    expect(force.current).toBe("100 kg");
+
+    const volume = coll.categories.find((c) => c.id === "volume")!;
+    // Tonnage carrière = 1300 (w1) + 720 (w2) + 600+500 (w3)… > 1 t.
+    expect(volume.tiers.find((t) => t.id === "volume-1000")!.unlocked).toBe(true);
+    expect(volume.tiers.find((t) => t.id === "volume-100000")!.unlocked).toBe(false);
+
+    // Cohérence des totaux globaux.
+    const sumUnlocked = coll.categories.reduce((s, c) => s + c.unlockedCount, 0);
+    expect(coll.unlocked).toBe(sumUnlocked);
+    expect(coll.total).toBe(coll.categories.reduce((s, c) => s + c.tiers.length, 0));
+  });
+
+  it("sur un historique vide, tout est verrouillé mais visible", () => {
+    const coll = computeBadgeCollection([]);
+    expect(coll.unlocked).toBe(0);
+    expect(coll.total).toBeGreaterThan(0);
+    expect(coll.categories.every((c) => c.tiers.every((t) => !t.unlocked))).toBe(true);
   });
 });

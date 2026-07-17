@@ -20,6 +20,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { motion, useInView, animate } from "framer-motion";
 import {
   Award,
+  BadgeCheck,
   BookOpen,
   ChevronLeft,
   Clock,
@@ -28,10 +29,10 @@ import {
   Flame,
   Heart,
   History,
+  Hourglass,
   Layers,
   Medal,
   Sparkles,
-  Star,
   TrendingUp,
   Trophy,
   Zap,
@@ -50,12 +51,13 @@ import {
   computeForgotten,
   computePlateaus,
   computeSpecializations,
-  computeBadges,
-  type LegendLevel,
+  computeBadgeCollection,
 } from "@/lib/fitness/chronicles";
 import { useLatestBodyWeight } from "@/hooks/useLatestBodyWeight";
 import { ENGINE_REGISTRY } from "@/lib/fitness/engines/registry";
 import { isReadyEngine, type DisciplineId } from "@/lib/fitness/engines/types";
+import { Sheen, PopIn, MasteryGauge, RankPill, BadgeTile } from "./livreParts";
+import { RARITY, legendMasteryPercent, specRankFromVolume } from "./livreData";
 
 // ── Compteur animé ────────────────────────────────────────────────────────────
 // Micro-interaction demandée par le lot : les grands chiffres comptent
@@ -138,28 +140,7 @@ function GoldCard({
   );
 }
 
-const LEVEL_STYLE: Record<LegendLevel, string> = {
-  Légendaire: "bg-amber-400/15 text-amber-300 border-amber-400/30",
-  Maîtrisé: "bg-primary/15 text-primary border-primary/30",
-  Confirmé: "bg-cyan-400/10 text-cyan-300 border-cyan-400/25",
-  "En apprentissage": "bg-white/[0.06] text-white/60 border-white/10",
-};
-
-function StarsRow({ stars }: { stars: number }) {
-  return (
-    <div className="flex items-center gap-0.5">
-      {Array.from({ length: 5 }, (_, i) => (
-        <Star
-          key={i}
-          className={
-            "h-3.5 w-3.5 " +
-            (i < stars ? "fill-amber-400 text-amber-400" : "fill-transparent text-white/20")
-          }
-        />
-      ))}
-    </div>
-  );
-}
+const MEDAL_TONE = ["text-amber-300", "text-slate-200", "text-orange-300"];
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
@@ -202,9 +183,44 @@ export function LivreChroniquesPage({
   const forgotten = useMemo(() => computeForgotten(workouts), [workouts]);
   const plateaus = useMemo(() => computePlateaus(workouts), [workouts]);
   const specializations = useMemo(() => computeSpecializations(workouts), [workouts]);
-  const badges = useMemo(() => computeBadges(workouts), [workouts]);
+  const badgeCollection = useMemo(() => computeBadgeCollection(workouts), [workouts]);
 
   const dateOf = (iso: string) => format(parseISO(iso), "d MMM yyyy", { locale: fr });
+
+  // Vibration discrète au déblocage d'un NOUVEAU badge (cosmétique, 100 %
+  // client) : on mémorise les paliers déjà vus en localStorage — aucune
+  // écriture Supabase, aucun hook, aucune donnée métier. Silencieux au tout
+  // premier chargement (rien à comparer).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const KEY = "cortex_chronique_seen_badges";
+    const unlockedIds = badgeCollection.categories
+      .flatMap((c) => c.tiers)
+      .filter((t) => t.unlocked)
+      .map((t) => t.id);
+    let seen: string[] = [];
+    try {
+      seen = JSON.parse(window.localStorage.getItem(KEY) ?? "[]");
+    } catch {
+      seen = [];
+    }
+    const hadRecord = seen.length > 0;
+    const fresh = unlockedIds.filter((id) => !seen.includes(id));
+    if (hadRecord && fresh.length > 0) {
+      try {
+        window.navigator.vibrate?.([12, 40, 20]);
+      } catch {
+        /* vibration best-effort */
+      }
+    }
+    if (fresh.length > 0 || !hadRecord) {
+      try {
+        window.localStorage.setItem(KEY, JSON.stringify(unlockedIds));
+      } catch {
+        /* stockage best-effort */
+      }
+    }
+  }, [badgeCollection]);
 
   return (
     <motion.section
@@ -304,144 +320,197 @@ export function LivreChroniquesPage({
               Hall of Fame
             </SectionTitle>
             <div className="flex flex-col gap-3">
-              {/* Pièce maîtresse — pleine largeur, glow */}
+              {/* Pièce maîtresse — halo doré animé, trophée brillant, médaille */}
               {hof.bestTonnage && (
-                <GoldCard glow>
+                <PopIn>
                   <div
-                    aria-hidden
-                    className="pointer-events-none absolute inset-x-8 top-0 h-px"
+                    className="relative overflow-hidden rounded-3xl border border-amber-400/25 p-5 backdrop-blur-xl"
                     style={{
                       background:
-                        "linear-gradient(90deg, transparent, rgba(234,179,8,0.7), transparent)",
+                        "radial-gradient(120% 100% at 30% 0%, rgba(234,179,8,0.18) 0%, transparent 60%), linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.01) 100%)",
+                      boxShadow: "0 0 46px -12px rgba(234,179,8,0.5)",
                     }}
-                  />
-                  <div className="relative flex items-center gap-4 p-5">
-                    <div
-                      className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl"
+                  >
+                    {/* Halo doré qui respire */}
+                    <motion.div
+                      aria-hidden
+                      className="pointer-events-none absolute -inset-10"
                       style={{
-                        background: "linear-gradient(140deg,#78350f 0%,#eab308 50%,#451a03 100%)",
-                        boxShadow: "0 6px 24px -8px rgba(234,179,8,0.7)",
+                        background:
+                          "radial-gradient(45% 60% at 22% 40%, rgba(234,179,8,0.22) 0%, transparent 70%)",
                       }}
-                    >
-                      <Trophy className="h-6 w-6 text-white drop-shadow" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300">
-                        Plus gros tonnage
-                      </p>
-                      <AnimatedNumber
-                        value={hof.bestTonnage.value}
-                        format={(n) => formatTonnage(Math.round(n))}
-                        className="mt-0.5 block font-serif text-[30px] font-semibold italic leading-none text-white"
-                      />
-                      <p className="mt-1 truncate text-[11px] text-white/50">
-                        Record absolu · {hof.bestTonnage.workoutName} ·{" "}
-                        {dateOf(hof.bestTonnage.date)}
-                      </p>
+                      animate={{ opacity: [0.45, 0.85, 0.45] }}
+                      transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+                    />
+                    <Sheen />
+                    <div
+                      aria-hidden
+                      className="pointer-events-none absolute inset-x-8 top-0 h-px"
+                      style={{
+                        background:
+                          "linear-gradient(90deg, transparent, rgba(234,179,8,0.8), transparent)",
+                      }}
+                    />
+                    <div className="relative flex items-center gap-4">
+                      <div className="relative h-16 w-16 shrink-0">
+                        {/* Éclat tournant derrière le trophée */}
+                        <motion.div
+                          aria-hidden
+                          className="absolute -inset-2 rounded-full"
+                          style={{
+                            background:
+                              "conic-gradient(from 0deg, transparent, rgba(253,224,71,0.5), transparent 45%)",
+                          }}
+                          animate={{ rotate: 360 }}
+                          transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+                        />
+                        <div
+                          className="relative flex h-16 w-16 items-center justify-center rounded-2xl"
+                          style={{
+                            background:
+                              "linear-gradient(140deg,#78350f 0%,#eab308 50%,#451a03 100%)",
+                            boxShadow:
+                              "inset 0 1px 0 rgba(255,255,255,0.3), 0 6px 24px -8px rgba(234,179,8,0.8)",
+                          }}
+                        >
+                          <Trophy className="h-7 w-7 text-white drop-shadow" />
+                        </div>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300">
+                            Plus gros tonnage
+                          </p>
+                          <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/40 bg-amber-400/15 px-2 py-0.5 text-[9px] font-bold text-amber-300">
+                            <Medal className="h-2.5 w-2.5" />
+                            Record absolu
+                          </span>
+                        </div>
+                        <AnimatedNumber
+                          value={hof.bestTonnage.value}
+                          format={(n) => formatTonnage(Math.round(n))}
+                          className="mt-0.5 block font-serif text-[34px] font-semibold italic leading-none text-white"
+                        />
+                        <p className="mt-1 truncate text-[11px] text-white/50">
+                          {hof.bestTonnage.workoutName} · {dateOf(hof.bestTonnage.date)}
+                        </p>
+                      </div>
                     </div>
                   </div>
-                </GoldCard>
+                </PopIn>
               )}
 
               <div className="grid grid-cols-2 gap-3">
                 {hof.bestCalories && (
-                  <GoldCard>
-                    <div className="p-4">
-                      <Medal className="h-4 w-4 text-amber-300" />
-                      <p className="mt-2 text-[10px] font-bold uppercase tracking-wider text-white/50">
-                        Plus grosse séance
-                      </p>
-                      <p className="mt-0.5 text-xl font-bold tabular-nums text-white">
-                        <AnimatedNumber value={hof.bestCalories.value} />{" "}
-                        <span className="text-[11px] font-medium text-white/50">kcal</span>
-                      </p>
-                      <p className="mt-0.5 truncate text-[10px] text-white/40">
-                        {dateOf(hof.bestCalories.date)}
-                      </p>
-                    </div>
-                  </GoldCard>
+                  <PopIn delay={0.04}>
+                    <GoldCard glow>
+                      <div className="p-4">
+                        <Medal className="h-4 w-4 text-amber-300" />
+                        <p className="mt-2 text-[10px] font-bold uppercase tracking-wider text-white/50">
+                          Plus grosse séance
+                        </p>
+                        <p className="mt-0.5 text-xl font-bold tabular-nums text-white">
+                          <AnimatedNumber value={hof.bestCalories.value} />{" "}
+                          <span className="text-[11px] font-medium text-white/50">kcal</span>
+                        </p>
+                        <p className="mt-0.5 truncate text-[10px] text-white/40">
+                          {dateOf(hof.bestCalories.date)}
+                        </p>
+                      </div>
+                    </GoldCard>
+                  </PopIn>
                 )}
                 {hof.bestIntensity && (
-                  <GoldCard>
-                    <div className="p-4">
-                      <Zap className="h-4 w-4 text-amber-300" />
-                      <p className="mt-2 text-[10px] font-bold uppercase tracking-wider text-white/50">
-                        Plus haute intensité
-                      </p>
-                      <p className="mt-0.5 text-xl font-bold tabular-nums text-white">
-                        <AnimatedNumber value={hof.bestIntensity.value} />{" "}
-                        <span className="text-[11px] font-medium text-white/50">kg/min</span>
-                      </p>
-                      <p className="mt-0.5 truncate text-[10px] text-white/40">
-                        {dateOf(hof.bestIntensity.date)}
-                      </p>
-                    </div>
-                  </GoldCard>
+                  <PopIn delay={0.08}>
+                    <GoldCard glow>
+                      <div className="p-4">
+                        <Zap className="h-4 w-4 text-amber-300" />
+                        <p className="mt-2 text-[10px] font-bold uppercase tracking-wider text-white/50">
+                          Plus haute intensité
+                        </p>
+                        <p className="mt-0.5 text-xl font-bold tabular-nums text-white">
+                          <AnimatedNumber value={hof.bestIntensity.value} />{" "}
+                          <span className="text-[11px] font-medium text-white/50">kg/min</span>
+                        </p>
+                        <p className="mt-0.5 truncate text-[10px] text-white/40">
+                          {dateOf(hof.bestIntensity.date)}
+                        </p>
+                      </div>
+                    </GoldCard>
+                  </PopIn>
                 )}
                 {hof.heaviestSet && (
-                  <GoldCard>
-                    <div className="p-4">
-                      <Flame className="h-4 w-4 text-amber-300" />
-                      <p className="mt-2 text-[10px] font-bold uppercase tracking-wider text-white/50">
-                        Série la plus lourde
-                      </p>
-                      <p className="mt-0.5 truncate text-xs font-semibold text-white/80">
-                        {hof.heaviestSet.exercise}
-                      </p>
-                      <p className="text-xl font-bold tabular-nums text-white">
-                        <AnimatedNumber value={hof.heaviestSet.weight} />{" "}
-                        <span className="text-[11px] font-medium text-white/50">kg</span>
-                      </p>
-                    </div>
-                  </GoldCard>
+                  <PopIn delay={0.12}>
+                    <GoldCard glow>
+                      <div className="p-4">
+                        <Flame className="h-4 w-4 text-amber-300" />
+                        <p className="mt-2 text-[10px] font-bold uppercase tracking-wider text-white/50">
+                          Série la plus lourde
+                        </p>
+                        <p className="mt-0.5 truncate text-xs font-semibold text-white/80">
+                          {hof.heaviestSet.exercise}
+                        </p>
+                        <p className="text-xl font-bold tabular-nums text-white">
+                          <AnimatedNumber value={hof.heaviestSet.weight} />{" "}
+                          <span className="text-[11px] font-medium text-white/50">kg</span>
+                        </p>
+                      </div>
+                    </GoldCard>
+                  </PopIn>
                 )}
                 {hof.longestSet && (
-                  <GoldCard>
-                    <div className="p-4">
-                      <Crown className="h-4 w-4 text-amber-300" />
-                      <p className="mt-2 text-[10px] font-bold uppercase tracking-wider text-white/50">
-                        Plus longue série
-                      </p>
-                      <p className="mt-0.5 truncate text-xs font-semibold text-white/80">
-                        {hof.longestSet.exercise}
-                      </p>
-                      <p className="text-xl font-bold tabular-nums text-white">
-                        <AnimatedNumber value={hof.longestSet.reps} />{" "}
-                        <span className="text-[11px] font-medium text-white/50">reps</span>
-                      </p>
-                    </div>
-                  </GoldCard>
+                  <PopIn delay={0.16}>
+                    <GoldCard glow>
+                      <div className="p-4">
+                        <Crown className="h-4 w-4 text-amber-300" />
+                        <p className="mt-2 text-[10px] font-bold uppercase tracking-wider text-white/50">
+                          Plus longue série
+                        </p>
+                        <p className="mt-0.5 truncate text-xs font-semibold text-white/80">
+                          {hof.longestSet.exercise}
+                        </p>
+                        <p className="text-xl font-bold tabular-nums text-white">
+                          <AnimatedNumber value={hof.longestSet.reps} />{" "}
+                          <span className="text-[11px] font-medium text-white/50">reps</span>
+                        </p>
+                      </div>
+                    </GoldCard>
+                  </PopIn>
                 )}
                 {hof.longestSession && (
-                  <GoldCard>
-                    <div className="p-4">
-                      <Clock className="h-4 w-4 text-amber-300" />
-                      <p className="mt-2 text-[10px] font-bold uppercase tracking-wider text-white/50">
-                        Plus longue séance
-                      </p>
-                      <p className="mt-0.5 text-xl font-bold tabular-nums text-white">
-                        <AnimatedNumber value={hof.longestSession.minutes} />{" "}
-                        <span className="text-[11px] font-medium text-white/50">min</span>
-                      </p>
-                      <p className="mt-0.5 truncate text-[10px] text-white/40">
-                        {dateOf(hof.longestSession.date)}
-                      </p>
-                    </div>
-                  </GoldCard>
+                  <PopIn delay={0.2}>
+                    <GoldCard glow>
+                      <div className="p-4">
+                        <Clock className="h-4 w-4 text-amber-300" />
+                        <p className="mt-2 text-[10px] font-bold uppercase tracking-wider text-white/50">
+                          Plus longue séance
+                        </p>
+                        <p className="mt-0.5 text-xl font-bold tabular-nums text-white">
+                          <AnimatedNumber value={hof.longestSession.minutes} />{" "}
+                          <span className="text-[11px] font-medium text-white/50">min</span>
+                        </p>
+                        <p className="mt-0.5 truncate text-[10px] text-white/40">
+                          {dateOf(hof.longestSession.date)}
+                        </p>
+                      </div>
+                    </GoldCard>
+                  </PopIn>
                 )}
                 {hof.career.series > 0 && (
-                  <GoldCard>
-                    <div className="p-4">
-                      <Layers className="h-4 w-4 text-amber-300" />
-                      <p className="mt-2 text-[10px] font-bold uppercase tracking-wider text-white/50">
-                        Séries au total
-                      </p>
-                      <p className="mt-0.5 text-xl font-bold tabular-nums text-white">
-                        <AnimatedNumber value={hof.career.series} />
-                      </p>
-                      <p className="mt-0.5 truncate text-[10px] text-white/40">Toute carrière</p>
-                    </div>
-                  </GoldCard>
+                  <PopIn delay={0.24}>
+                    <GoldCard glow>
+                      <div className="p-4">
+                        <Layers className="h-4 w-4 text-amber-300" />
+                        <p className="mt-2 text-[10px] font-bold uppercase tracking-wider text-white/50">
+                          Séries au total
+                        </p>
+                        <p className="mt-0.5 text-xl font-bold tabular-nums text-white">
+                          <AnimatedNumber value={hof.career.series} />
+                        </p>
+                        <p className="mt-0.5 truncate text-[10px] text-white/40">Toute carrière</p>
+                      </div>
+                    </GoldCard>
+                  </PopIn>
                 )}
               </div>
             </div>
@@ -459,63 +528,107 @@ export function LivreChroniquesPage({
             >
               Les Légendes
             </SectionTitle>
+            <p className="mb-3 text-[11px] text-muted-foreground">
+              Ta collection personnelle — complète-la, fais-la monter en rareté.
+            </p>
             <div className="flex flex-col gap-3">
               {legends.map((l, rank) => {
                 const imgUrl =
                   (l.imagePath ? imageUrls?.get(l.imagePath) : null) ??
                   exerciseIllustration(l.name);
+                const rarity = RARITY[l.level];
+                const mastery = legendMasteryPercent(l.level, l.sessions);
                 return (
-                  <GoldCard key={l.key} glow={rank === 0}>
-                    <div className="flex items-center gap-4 p-4">
-                      {imgUrl ? (
-                        <div className="h-16 w-16 shrink-0 overflow-hidden rounded-2xl ring-1 ring-amber-400/20">
-                          <img
-                            src={imgUrl}
-                            alt={l.name}
-                            className="h-full w-full object-cover"
-                            loading="lazy"
-                          />
-                        </div>
-                      ) : (
-                        <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400/15 to-amber-400/5 text-amber-300/70">
-                          <Dumbbell className="h-6 w-6" />
-                        </div>
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[11px] font-bold tabular-nums text-amber-300/80">
-                            #{rank + 1}
-                          </span>
-                          <h3 className="truncate text-sm font-bold text-white/90">{l.name}</h3>
-                        </div>
-                        <span
-                          className={
-                            "mt-1 inline-flex rounded-full border px-2 py-0.5 text-[10px] font-bold " +
-                            LEVEL_STYLE[l.level]
-                          }
-                        >
-                          {l.level}
-                        </span>
-                        <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-white/60">
-                          <span className="font-semibold text-white/85">PR {l.pr} kg</span>
-                          {l.progressionPct != null && l.progressionPct !== 0 && (
-                            <span
+                  <PopIn key={l.key} delay={rank * 0.05}>
+                    <div
+                      className={
+                        "relative overflow-hidden rounded-3xl border bg-gradient-to-b from-white/[0.05] to-white/[0.01] backdrop-blur-xl " +
+                        rarity.border
+                      }
+                      style={{ boxShadow: rarity.glow }}
+                    >
+                      {/* Contour évolutif — filet de rareté en haut */}
+                      <div
+                        aria-hidden
+                        className="pointer-events-none absolute inset-x-6 top-0 h-px opacity-80"
+                        style={{ background: rarity.gradient }}
+                      />
+                      {l.level === "Légendaire" && <Sheen delay={rank * 0.4} />}
+                      <div className="relative flex items-center gap-4 p-4">
+                        <div className="relative shrink-0">
+                          {imgUrl ? (
+                            <div
                               className={
-                                l.progressionPct > 0 ? "text-emerald-400" : "text-white/50"
+                                "h-16 w-16 overflow-hidden rounded-2xl ring-1 " + rarity.ring
                               }
                             >
-                              {l.progressionPct > 0 ? "+" : ""}
-                              {l.progressionPct} %
-                            </span>
+                              <img
+                                src={imgUrl}
+                                alt={l.name}
+                                className="h-full w-full object-cover"
+                                loading="lazy"
+                              />
+                            </div>
+                          ) : (
+                            <div
+                              className={
+                                "flex h-16 w-16 items-center justify-center rounded-2xl bg-white/[0.04] ring-1 " +
+                                rarity.ring
+                              }
+                            >
+                              <Dumbbell className="h-6 w-6 text-white/50" />
+                            </div>
                           )}
-                          <span>
-                            {l.sessions} séance{l.sessions > 1 ? "s" : ""}
+                          {/* Médaille de classement */}
+                          <span
+                            className={
+                              "absolute -left-1.5 -top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-[10px] font-bold ring-1 ring-white/10 " +
+                              (rank < 3 ? MEDAL_TONE[rank] : "text-white/60")
+                            }
+                          >
+                            {rank < 3 ? <Medal className="h-3.5 w-3.5" /> : `#${rank + 1}`}
                           </span>
-                          <span className="text-white/40">{dateOf(l.lastUsed)}</span>
-                        </p>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <h3 className="truncate text-sm font-bold text-white/90">{l.name}</h3>
+                            <span
+                              className={
+                                "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold " +
+                                rarity.chip
+                              }
+                            >
+                              {rarity.label}
+                            </span>
+                          </div>
+                          <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-white/60">
+                            <span className="font-semibold text-white/85">PR {l.pr} kg</span>
+                            {l.progressionPct != null && l.progressionPct !== 0 && (
+                              <span
+                                className={
+                                  l.progressionPct > 0 ? "text-emerald-400" : "text-white/50"
+                                }
+                              >
+                                {l.progressionPct > 0 ? "+" : ""}
+                                {l.progressionPct} %
+                              </span>
+                            )}
+                            <span>
+                              {l.sessions} séance{l.sessions > 1 ? "s" : ""}
+                            </span>
+                            <span className="text-white/40">{dateOf(l.lastUsed)}</span>
+                          </p>
+                          {/* Jauge de maîtrise vers le niveau supérieur */}
+                          <div className="mt-2 flex items-center gap-2">
+                            <MasteryGauge percent={mastery} gradient={rarity.gradient} />
+                            <span className="shrink-0 text-[10px] font-semibold tabular-nums text-white/50">
+                              {mastery}%
+                            </span>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </GoldCard>
+                  </PopIn>
                 );
               })}
             </div>
@@ -534,31 +647,49 @@ export function LivreChroniquesPage({
               Techniques oubliées
             </SectionTitle>
             <div className="flex flex-col gap-3">
-              {forgotten.map((f) => (
-                <GoldCard key={f.key} className="border-orange-400/15">
-                  <div className="p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <h3 className="truncate text-sm font-bold text-white/90">{f.name}</h3>
-                      <span className="shrink-0 rounded-full bg-orange-500/10 px-2.5 py-1 text-[11px] font-bold tabular-nums text-orange-300">
-                        {f.daysSince} jours
-                      </span>
-                    </div>
-                    <p className="mt-1 text-[11px] text-white/50">
-                      Dernière utilisation : {dateOf(f.lastUsed)} · {f.sessions} séances jouées
-                    </p>
-                    {f.impact.length > 0 && (
-                      <p className="mt-1.5 text-[11px] text-orange-200/80">
-                        Impact : {f.impact.join(", ").toLowerCase()} moins stimulé
-                        {f.impact.length > 1 ? "s" : ""}.
-                      </p>
-                    )}
-                    <p className="mt-1 flex items-center gap-1.5 text-[11px] font-medium text-primary">
-                      <Sparkles className="h-3 w-3" />
-                      Suggestion : le réintroduire à ta prochaine séance.
-                    </p>
-                  </div>
-                </GoldCard>
-              ))}
+              {forgotten.map((f, i) => {
+                const lastPr = prByName.get(f.key) ?? null;
+                const mainMuscle = f.impact[0] ?? null;
+                return (
+                  <PopIn key={f.key} delay={i * 0.05}>
+                    <GoldCard className="border-orange-400/15">
+                      <div className="p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <h3 className="truncate text-sm font-bold text-white/90">{f.name}</h3>
+                          <span className="flex shrink-0 items-center gap-1 rounded-full bg-orange-500/10 px-2.5 py-1 text-[11px] font-bold tabular-nums text-orange-300">
+                            <Hourglass className="h-3 w-3" />
+                            {f.daysSince} j
+                          </span>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {mainMuscle && (
+                            <span className="rounded-full bg-white/[0.05] px-2 py-0.5 text-[10px] font-semibold text-white/70">
+                              {mainMuscle}
+                            </span>
+                          )}
+                          {lastPr != null && (
+                            <span className="rounded-full bg-amber-400/10 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
+                              Dernier PR {lastPr} kg
+                            </span>
+                          )}
+                          <span className="rounded-full bg-white/[0.05] px-2 py-0.5 text-[10px] font-medium text-white/50">
+                            Vu {dateOf(f.lastUsed)}
+                          </span>
+                        </div>
+                        {mainMuscle && (
+                          <p className="mt-2 text-[11px] text-orange-200/80">
+                            Impact : {mainMuscle.toLowerCase()} moins stimulé.
+                          </p>
+                        )}
+                        <p className="mt-1 flex items-center gap-1.5 text-[11px] font-medium text-primary">
+                          <Sparkles className="h-3 w-3" />
+                          Suggestion : le réintroduire à ta prochaine séance.
+                        </p>
+                      </div>
+                    </GoldCard>
+                  </PopIn>
+                );
+              })}
             </div>
           </div>
         </SectionReveal>
@@ -575,25 +706,64 @@ export function LivreChroniquesPage({
               Le potentiel caché
             </SectionTitle>
             <div className="flex flex-col gap-3">
-              {plateaus.map((p) => (
-                <GoldCard key={p.key} className="border-cyan-400/15">
-                  <div className="p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <h3 className="truncate text-sm font-bold text-white/90">{p.name}</h3>
-                      <span className="shrink-0 rounded-full bg-cyan-400/10 px-2.5 py-1 text-[11px] font-bold text-cyan-300">
-                        Plateau · {p.weeksSinceImprovement} sem.
-                      </span>
-                    </div>
-                    <p className="mt-1 text-[11px] text-white/50">
-                      {p.stalledSessions} séances sans dépasser le PR de {p.pr} kg.
-                    </p>
-                    <p className="mt-1 flex items-center gap-1.5 text-[11px] font-medium text-primary">
-                      <Sparkles className="h-3 w-3" />
-                      Suggestion : varier les reps ou baisser la charge pour relancer.
-                    </p>
-                  </div>
-                </GoldCard>
-              ))}
+              {plateaus.map((p, i) => {
+                // Niveau d'urgence & confiance — dérivés des données déjà
+                // calculées (semaines de plateau, séances bloquées), aucun
+                // nouveau calcul métier.
+                const urgency =
+                  p.weeksSinceImprovement >= 6
+                    ? { label: "Urgent", cls: "bg-red-500/10 text-red-300 border-red-400/30" }
+                    : p.weeksSinceImprovement >= 3
+                      ? {
+                          label: "À surveiller",
+                          cls: "bg-amber-500/10 text-amber-300 border-amber-400/30",
+                        }
+                      : { label: "Léger", cls: "bg-cyan-400/10 text-cyan-300 border-cyan-400/25" };
+                const confidence =
+                  p.stalledSessions >= 5
+                    ? "Confiance élevée"
+                    : p.stalledSessions >= 4
+                      ? "Confiance modérée"
+                      : "Confiance correcte";
+                return (
+                  <PopIn key={p.key} delay={i * 0.05}>
+                    <GoldCard className="border-cyan-400/15">
+                      <div className="p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <h3 className="truncate text-sm font-bold text-white/90">{p.name}</h3>
+                          <span
+                            className={
+                              "shrink-0 rounded-full border px-2.5 py-1 text-[10px] font-bold " +
+                              urgency.cls
+                            }
+                          >
+                            {urgency.label}
+                          </span>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          <span className="rounded-full bg-cyan-400/10 px-2 py-0.5 text-[10px] font-semibold text-cyan-300">
+                            Plateau confirmé
+                          </span>
+                          <span className="flex items-center gap-1 rounded-full bg-white/[0.05] px-2 py-0.5 text-[10px] font-semibold text-white/70">
+                            <BadgeCheck className="h-3 w-3" />
+                            {confidence}
+                          </span>
+                          <span className="rounded-full bg-white/[0.05] px-2 py-0.5 text-[10px] font-medium text-white/50">
+                            Depuis {p.weeksSinceImprovement} sem.
+                          </span>
+                        </div>
+                        <p className="mt-2 text-[11px] text-white/50">
+                          {p.stalledSessions} séances sans dépasser le PR de {p.pr} kg.
+                        </p>
+                        <p className="mt-1 flex items-center gap-1.5 text-[11px] font-medium text-primary">
+                          <Sparkles className="h-3 w-3" />
+                          Suggestion : varier les reps ou baisser la charge pour relancer.
+                        </p>
+                      </div>
+                    </GoldCard>
+                  </PopIn>
+                );
+              })}
             </div>
           </div>
         </SectionReveal>
@@ -605,60 +775,117 @@ export function LivreChroniquesPage({
           <div>
             <SectionTitle
               icon={<Award className="h-4 w-4" />}
-              hint="Là où ton volume de travail parle pour toi."
+              hint="Des branches RPG indépendantes — mêmes rangs que ton profil."
             >
               Spécialisations
             </SectionTitle>
-            <div className="grid grid-cols-2 gap-3">
-              {specializations.map((s) => (
-                <GoldCard key={s.id}>
-                  <div className="p-4">
-                    <h3 className="font-serif text-[15px] font-semibold italic text-white/90">
-                      {s.title}
-                    </h3>
-                    <div className="mt-1.5">
-                      <StarsRow stars={s.stars} />
+            <div className="flex flex-col gap-3">
+              {specializations.map((s, i) => {
+                const sr = specRankFromVolume(s.volume);
+                const pct = sr.rank.xp; // maîtrise 0..100 dans le tier courant
+                return (
+                  <PopIn key={s.id} delay={i * 0.05}>
+                    <div
+                      className="relative overflow-hidden rounded-3xl border border-white/[0.07] bg-gradient-to-b from-white/[0.05] to-white/[0.01] p-4 backdrop-blur-xl"
+                      style={{ boxShadow: `0 0 30px -16px ${sr.glow}` }}
+                    >
+                      <div
+                        aria-hidden
+                        className="pointer-events-none absolute inset-x-6 top-0 h-px opacity-70"
+                        style={{ background: sr.gradient }}
+                      />
+                      <div className="flex items-center justify-between gap-2">
+                        <h3 className="truncate font-serif text-[15px] font-semibold italic text-white/90">
+                          {s.title}
+                        </h3>
+                        <RankPill rank={sr.rank} />
+                      </div>
+                      <div className="mt-2.5 flex items-center gap-2">
+                        <MasteryGauge percent={pct} gradient={sr.gradient} height="h-2" />
+                        <span className="shrink-0 text-[11px] font-bold tabular-nums text-white/70">
+                          {pct}%
+                        </span>
+                      </div>
+                      <div className="mt-2 flex items-center justify-between">
+                        <p className="text-[10px] text-white/45">
+                          {formatTonnage(s.volume)} · {s.sets} séries
+                        </p>
+                        {sr.nextName && (
+                          <p className="text-[10px] font-medium text-amber-300/80">
+                            Encore {Math.max(0, 100 - pct)} % avant {sr.nextName}
+                          </p>
+                        )}
+                      </div>
                     </div>
-                    <p className="mt-1.5 text-[10px] text-white/40">
-                      {formatTonnage(s.volume)} · {s.sets} séries
-                    </p>
-                  </div>
-                </GoldCard>
-              ))}
+                  </PopIn>
+                );
+              })}
             </div>
           </div>
         </SectionReveal>
       )}
 
-      {/* ── 8. GALERIE DES RECORDS ─────────────────────────────────────── */}
-      {badges.length > 0 && (
+      {/* ── 8. GALERIE DES RECORDS — salle des trophées ────────────────── */}
+      {badgeCollection.total > 0 && (
         <SectionReveal>
           <div>
             <SectionTitle
               icon={<Medal className="h-4 w-4" />}
-              hint="Les jalons déjà gravés dans le Livre."
+              hint="Ta salle des trophées — débloque chaque palier."
             >
               Galerie des Records
             </SectionTitle>
-            <div className="grid grid-cols-2 gap-3">
-              {badges.map((b, i) => (
-                <motion.div
-                  key={b.id}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  whileInView={{ opacity: 1, scale: 1 }}
-                  viewport={{ once: true, margin: "-40px" }}
-                  transition={{ duration: 0.35, delay: i * 0.06, ease: [0.16, 1, 0.3, 1] }}
-                >
-                  <GoldCard>
-                    <div className="flex items-center gap-3 p-4">
-                      <span className="text-2xl leading-none drop-shadow">{b.emoji}</span>
-                      <div className="min-w-0">
-                        <p className="truncate text-xs font-bold text-white/90">{b.label}</p>
-                        <p className="truncate text-[10px] text-white/45">{b.detail}</p>
-                      </div>
-                    </div>
-                  </GoldCard>
-                </motion.div>
+
+            {/* Progression globale de la collection */}
+            <GoldCard className="mb-3" glow>
+              <div className="flex items-center gap-3 p-4">
+                <Trophy className="h-5 w-5 shrink-0 text-amber-300" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-white/60">
+                      Trophées débloqués
+                    </p>
+                    <p className="text-[11px] font-bold tabular-nums text-amber-300">
+                      {badgeCollection.unlocked}/{badgeCollection.total}
+                    </p>
+                  </div>
+                  <div className="mt-1.5">
+                    <MasteryGauge
+                      percent={(badgeCollection.unlocked / badgeCollection.total) * 100}
+                      gradient="linear-gradient(90deg,#b45309,#f59e0b,#fde68a)"
+                    />
+                  </div>
+                </div>
+              </div>
+            </GoldCard>
+
+            <div className="flex flex-col gap-4">
+              {badgeCollection.categories.map((cat) => (
+                <div key={cat.id}>
+                  <div className="mb-2 flex items-center justify-between">
+                    <p className="flex items-center gap-1.5 text-xs font-bold text-white/85">
+                      <span className="text-base leading-none">{cat.emoji}</span>
+                      {cat.title}
+                    </p>
+                    <p className="text-[10px] font-medium tabular-nums text-white/40">
+                      {cat.unlockedCount}/{cat.tiers.length} · {cat.current}
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-4 gap-2">
+                    {cat.tiers.map((t, i) => (
+                      <BadgeTile
+                        key={t.id}
+                        emoji={cat.emoji}
+                        label={t.label}
+                        unlocked={t.unlocked}
+                        index={i}
+                      />
+                    ))}
+                  </div>
+                  {cat.nextHint && (
+                    <p className="mt-1.5 text-[10px] text-amber-300/70">{cat.nextHint}</p>
+                  )}
+                </div>
               ))}
             </div>
           </div>

@@ -16,6 +16,7 @@
 import { buildGroups, sessionMuscleActivation } from "./workoutGrouping";
 import type { ExerciseLike } from "./workoutGrouping";
 import { estimateWorkoutCalories } from "./calories";
+import { formatTonnage } from "./strength";
 import { MUSCLE_META, type MuscleId } from "./muscleMapping";
 
 /** Forme minimale d'une séance consommée par ce module (sur-ensemble
@@ -578,4 +579,196 @@ export function computeBadges(workouts: WorkoutLike[]): ChronicleBadge[] {
   }
 
   return badges;
+}
+
+// ─── LOT C3 — Projection sur l'échelle de rangs RPG existante ─────────────────
+//
+// Purement PRÉSENTATIONNELLE : projette un volume cumulé sur la MÊME échelle
+// à 30 paliers (6 rangs × 5 niveaux : Mortel → Primordial) que le profil
+// principal. Ne recalcule AUCUN rang du moteur RPG (rank/engine.ts) — le
+// résultat est destiné à être passé tel quel à `toRankState` (le builder
+// d'affichage déjà utilisé par le Profil), pour habiller les spécialisations
+// dans le même univers visuel. Échelle logarithmique : ~1 t = bas de Mortel,
+// ~1 000 t cumulées ≈ Olympien I, Primordial reste une aspiration lointaine.
+
+export function projectVolumeToRankTier(volumeKg: number): {
+  tierIndex: number;
+  masteryPercent: number;
+} {
+  if (!(volumeKg > 0)) return { tierIndex: 0, masteryPercent: 0 };
+  const BASE_LOG = 3; // 10^3 = 1 000 kg → bas du tier 0 (Mortel I)
+  const STEP = 0.15; // 10^6 kg cumulés ≈ tier 20 (Olympien I)
+  const raw = (Math.log10(volumeKg) - BASE_LOG) / STEP;
+  const clamped = Math.max(0, Math.min(29, raw));
+  const tierIndex = Math.floor(clamped);
+  return {
+    tierIndex,
+    masteryPercent: tierIndex >= 29 ? 100 : Math.round((clamped - tierIndex) * 100),
+  };
+}
+
+// ─── LOT C3 — Galerie des Records : collections à paliers ─────────────────────
+//
+// Salle des trophées : chaque catégorie est une échelle de paliers, chacun
+// débloqué ou non selon les MÊMES métriques déjà dérivées (série la plus
+// lourde, tonnage carrière, séances, streak, PR/séance, séries). Aucune
+// nouvelle métrique métier — uniquement un re-seuillage pour l'affichage
+// (paliers verrouillés visibles mais assombris + progression globale).
+
+export type BadgeTier = {
+  id: string;
+  label: string;
+  unlocked: boolean;
+};
+
+export type BadgeCategory = {
+  id: string;
+  title: string;
+  emoji: string;
+  /** Valeur actuelle formatée (ex. "182 kg", "37 t", "42 séances"). */
+  current: string;
+  /** Phrase de progression vers le prochain palier verrouillé (null si tout est débloqué). */
+  nextHint: string | null;
+  tiers: BadgeTier[];
+  unlockedCount: number;
+};
+
+export type BadgeCollection = {
+  categories: BadgeCategory[];
+  unlocked: number;
+  total: number;
+};
+
+function buildCategory(
+  id: string,
+  title: string,
+  emoji: string,
+  value: number,
+  currentLabel: string,
+  tiers: Array<{ threshold: number; label: string }>,
+  remaining: (missing: number, nextLabel: string) => string,
+): BadgeCategory {
+  const rows: BadgeTier[] = tiers.map((t) => ({
+    id: `${id}-${t.threshold}`,
+    label: t.label,
+    unlocked: value >= t.threshold,
+  }));
+  const unlockedCount = rows.filter((r) => r.unlocked).length;
+  const next = tiers.find((t) => value < t.threshold);
+  const nextHint = next ? remaining(next.threshold - value, next.label) : null;
+  return { id, title, emoji, current: currentLabel, nextHint, tiers: rows, unlockedCount };
+}
+
+export function computeBadgeCollection(workouts: WorkoutLike[]): BadgeCollection {
+  const muscu = workouts.filter(isMuscu);
+  const recordsBySession = computeRecordsBySession(muscu);
+
+  let heaviestSet = 0;
+  let careerTonnage = 0;
+  let totalSeries = 0;
+  let maxPrsOneSession = 0;
+
+  for (const w of muscu) {
+    for (const g of buildGroups(w.exercises ?? [])) {
+      careerTonnage += g.volume;
+      totalSeries += g.totalSeries;
+      for (const s of g.series) {
+        if (s.weight != null && s.weight > heaviestSet) heaviestSet = s.weight;
+      }
+    }
+    const prs = (recordsBySession.get(w.id) ?? []).filter((r) => !r.isNew).length;
+    if (prs > maxPrsOneSession) maxPrsOneSession = prs;
+  }
+
+  const totalSessions = workouts.length;
+  const streak = computeLongestStreak(workouts);
+
+  const categories: BadgeCategory[] = [
+    buildCategory(
+      "force",
+      "Force",
+      "🏋️",
+      heaviestSet,
+      heaviestSet > 0 ? `${heaviestSet} kg` : "—",
+      [
+        { threshold: 60, label: "60 kg" },
+        { threshold: 100, label: "Premier 100 kg" },
+        { threshold: 200, label: "200 kg" },
+        { threshold: 300, label: "300 kg" },
+      ],
+      (missing, next) => `Encore ${missing} kg avant « ${next} ».`,
+    ),
+    buildCategory(
+      "volume",
+      "Volume",
+      "🏔️",
+      careerTonnage,
+      careerTonnage > 0 ? formatTonnage(careerTonnage) : "—",
+      [
+        { threshold: 1_000, label: "Première tonne" },
+        { threshold: 10_000, label: "10 tonnes" },
+        { threshold: 50_000, label: "50 tonnes" },
+        { threshold: 100_000, label: "100 tonnes" },
+      ],
+      (missing, next) => `Encore ${formatTonnage(missing)} avant « ${next} ».`,
+    ),
+    buildCategory(
+      "discipline",
+      "Discipline",
+      "🎖️",
+      totalSessions,
+      `${totalSessions} séances`,
+      [
+        { threshold: 10, label: "10 séances" },
+        { threshold: 50, label: "50 séances" },
+        { threshold: 100, label: "100 séances" },
+        { threshold: 200, label: "200 séances" },
+      ],
+      (missing, next) => `Plus que ${missing} séances avant « ${next} ».`,
+    ),
+    buildCategory(
+      "regularite",
+      "Régularité",
+      "🔥",
+      streak,
+      streak > 0 ? `${streak} jours d'affilée` : "—",
+      [
+        { threshold: 3, label: "3 jours d'affilée" },
+        { threshold: 7, label: "7 jours d'affilée" },
+        { threshold: 14, label: "14 jours d'affilée" },
+        { threshold: 30, label: "30 jours d'affilée" },
+      ],
+      (missing, next) => `Encore ${missing} jours enchaînés avant « ${next} ».`,
+    ),
+    buildCategory(
+      "intensite",
+      "Intensité",
+      "⚡",
+      maxPrsOneSession,
+      maxPrsOneSession > 0 ? `${maxPrsOneSession} PR en une séance` : "—",
+      [
+        { threshold: 2, label: "2 PR en une séance" },
+        { threshold: 3, label: "3 PR en une séance" },
+        { threshold: 5, label: "5 PR en une séance" },
+      ],
+      (missing, next) => `Encore ${missing} PR dans la même séance avant « ${next} ».`,
+    ),
+    buildCategory(
+      "endurance",
+      "Endurance",
+      "💪",
+      totalSeries,
+      `${totalSeries} séries`,
+      [
+        { threshold: 100, label: "100 séries" },
+        { threshold: 500, label: "500 séries" },
+        { threshold: 1_000, label: "1000 séries" },
+      ],
+      (missing, next) => `Encore ${missing} séries avant « ${next} ».`,
+    ),
+  ];
+
+  const unlocked = categories.reduce((s, c) => s + c.unlockedCount, 0);
+  const total = categories.reduce((s, c) => s + c.tiers.length, 0);
+  return { categories, unlocked, total };
 }
