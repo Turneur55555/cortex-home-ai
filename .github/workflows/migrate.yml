@@ -302,6 +302,22 @@ jobs:
             fi
           fi
 
+      # ── 4b. Vérifier que types.ts correspond à la base (post-migration) ───
+      # Les migrations viennent d'être appliquées : la base contient désormais
+      # les nouvelles tables. types.ts committé DOIT correspondre — sinon on a
+      # oublié de régénérer (`npm run gen:types`). Échec visible, aucun commit.
+      - name: Setup Node (vérif types)
+        if: steps.push.outputs.success == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Vérifier que types.ts correspond à la base
+        if: steps.push.outputs.success == 'true'
+        env:
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: node scripts/check-supabase-types.mjs
+
       # ── 5. GitHub Step Summary ────────────────────────────────────────────
       - name: Generate summary
         if: always()

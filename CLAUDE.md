@@ -26,6 +26,14 @@ CORTEX vise à être **le plus beau RPG de progression du fitness**, pas une app
   aurait-il envie d'en faire une capture d'écran et de la partager ? »* Si non, on continue d'itérer.
   Mieux vaut plusieurs itérations sur un écran exceptionnel qu'un écran « correct ».
 
+## Types Supabase — la base est la source de vérité (validé par Nathan, 17/07/2026)
+- **Ne JAMAIS éditer `src/integrations/supabase/types.ts` à la main.** C'est un artefact généré.
+- Pour ajouter/modifier une table : écrire une migration → merger (migrate.yml applique) → régénérer
+  via `npm run gen:types` → committer les types. La base fait foi, jamais l'inverse.
+- La CI **échoue** (sans corriger) si `types.ts` ne correspond plus à la base (`supabase-types.yml`,
+  étape finale de `migrate.yml`) + garde-fou `tsc` sur toute PR (`typecheck.yml`).
+- Détail : `docs/architecture/supabase-types-source-of-truth.md`.
+
 ## Avant chaque modification, lire obligatoirement :
 1. MEMORY.md
 2. /docs/architecture.md

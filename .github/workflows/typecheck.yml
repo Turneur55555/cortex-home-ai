@@ -1,0 +1,36 @@
+name: Typecheck
+
+# Filet de sécurité : le typecheck TypeScript tourne sur TOUTE PR et sur
+# chaque push main (plus seulement les chemins migrations/repas). Toute
+# régression de types — notamment une table disparue de types.ts et utilisée
+# par du code — casse immédiatement la CI, de façon visible.
+#
+# Ce n'est PAS la solution principale (voir supabase-types.yml + la génération
+# officielle depuis la base) : c'est le garde-fou côté code.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  typecheck:
+    name: TypeScript (tsc)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
