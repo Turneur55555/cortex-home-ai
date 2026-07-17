@@ -1,15 +1,13 @@
 import { useMemo, useState, useCallback } from "react";
-import { Dumbbell, Loader2, AlertCircle, ChevronDown, Trophy, Repeat } from "lucide-react";
+import { Dumbbell, Loader2, AlertCircle } from "lucide-react";
 import { SeancesHero } from "@/components/fitness/SeancesHero";
 import { ChoisirEpreuveCard } from "@/components/fitness/ChoisirEpreuveCard";
 import { LaForgeCard } from "@/components/fitness/LaForgeCard";
 import { BodyMap } from "@/components/fitness/BodyMap";
-import { WorkoutCard, type WorkoutRow } from "@/components/fitness/WorkoutCard";
+import { type WorkoutRow } from "@/components/fitness/WorkoutCard";
 import { RepeatLiveConfirmDialog } from "@/components/fitness/RepeatLiveConfirmDialog";
 import { WorkoutSheet } from "@/components/fitness/WorkoutSheet";
-import { GenericHistoryCard } from "@/components/fitness/session/GenericHistoryCard";
 import { GenericSessionReviewSheet } from "@/components/fitness/session/GenericSessionReviewSheet";
-import { WorkoutProgressCharts } from "@/components/fitness/WorkoutProgressCharts";
 import { StartWorkoutSheet } from "@/components/fitness/StartWorkoutSheet";
 import { NewSessionSheet } from "@/components/fitness/templates/NewSessionSheet";
 import { SavedTemplatesSheet } from "@/components/fitness/templates/SavedTemplatesSheet";
@@ -22,6 +20,8 @@ import { DisciplineExerciseLibrarySheet } from "@/components/fitness/DisciplineE
 import { PostWorkoutAnalysisSheet } from "@/components/fitness/PostWorkoutAnalysisSheet";
 import { GenericPostWorkoutAnalysisSheet } from "@/components/fitness/session/GenericPostWorkoutAnalysisSheet";
 import { ChroniquePage } from "@/components/fitness/chronique/ChroniquePage";
+import { LivreChroniquesCard } from "@/components/fitness/chronique/LivreChroniquesCard";
+import { LivreChroniquesPage } from "@/components/fitness/chronique/LivreChroniquesPage";
 import { SectionReveal } from "@/components/fitness/SectionReveal";
 import {
   useExerciseImageUrls,
@@ -47,14 +47,6 @@ import {
 } from "@/lib/fitness/engines/types";
 import { workoutToTemplateSeed, type TemplateSeedExercise } from "@/lib/fitness/workoutTemplates";
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function weekdayLabel(iso: string) {
-  return new Date(iso + "T00:00:00")
-    .toLocaleDateString("fr-FR", { weekday: "short" })
-    .replace(".", "");
-}
-
 // ── Composant principal ─────────────────────────────────────────────────────────
 
 export function SeancesTab() {
@@ -66,8 +58,6 @@ export function SeancesTab() {
   const { data: activeGeneric, isLoading: activeGenericLoading } = useActiveGenericWorkout();
   const startGenericActive = useStartGenericActiveWorkout();
   const recoveryMap = useRecoveryMap(data);
-
-  const recentWorkouts = useMemo(() => (data ?? []).slice(0, 5), [data]);
 
   const [startOpen, setStartOpen] = useState(false);
   // Phase A (15/07/2026) — porte d'entrée unique "Nouvelle séance" :
@@ -103,10 +93,13 @@ export function SeancesTab() {
   const [coachInitialDiscipline, setCoachInitialDiscipline] = useState<DisciplineId | undefined>(
     undefined,
   );
-  const [historyOpen, setHistoryOpen] = useState(false);
+  // LOT C2 — « Le Livre des Chroniques » : troisième pilier de la page,
+  // ouvert par la Hero Card (l'accordéon historique est supprimé). Page
+  // plein écran (early-return, même système qu'ActiveWorkoutView).
+  const [bookOpen, setBookOpen] = useState(false);
   // LOT C1 — module immersif « Chronique » : toucher une chronique de
-  // musculation ouvre une page plein écran dédiée (ChroniquePage). La liste
-  // des Chroniques ne change pas — seule l'action au clic ouvre ce module.
+  // musculation (désormais depuis la Chronologie du Livre) ouvre une page
+  // plein écran dédiée (ChroniquePage).
   const [chronicleWorkout, setChronicleWorkout] = useState<WorkoutRow | null>(null);
   const openChronicle = useCallback((w: WorkoutRow) => setChronicleWorkout(w), []);
   const [catalogOpen, setCatalogOpen] = useState(false);
@@ -121,17 +114,17 @@ export function SeancesTab() {
     else setLibraryDiscipline(discipline);
   };
 
-  const { prByName, histByName, volByName, prByGym, histByGym, nameByKey, topExercises } = useMemo(
+  const { prByName, histByName, volByName, prByGym, histByGym, nameByKey } = useMemo(
     () => computePRs(data ?? []),
     [data],
   );
 
+  // Les URLs signées des photos d'exercices ne sont résolues que quand le
+  // Livre est ouvert (même optimisation que l'ancien accordéon déplié).
   const allImagePaths = useMemo(
     () =>
-      historyOpen
-        ? (data ?? []).flatMap((w) => (w.exercises ?? []).map((ex) => ex.image_path))
-        : [],
-    [data, historyOpen],
+      bookOpen ? (data ?? []).flatMap((w) => (w.exercises ?? []).map((ex) => ex.image_path)) : [],
+    [data, bookOpen],
   );
   const { data: listImageUrls } = useExerciseImageUrls(allImagePaths);
   const latestDate = useMemo(() => data?.[0]?.date ?? "", [data]);
@@ -291,10 +284,37 @@ export function SeancesTab() {
     );
   }
 
+  // ── VUE « LE LIVRE DES CHRONIQUES » (LOT C2) ────────────────────────────────
+  // Ouverte par la Hero Card. Vraie page plein écran (early-return, même
+  // système qu'ActiveWorkoutView) — Hall of Fame, Légendes, Techniques
+  // oubliées, Potentiel caché, Spécialisations, Galerie des Records, puis la
+  // Chronologie (les cartes de séances, chacune ouvre la Chronique immersive
+  // du C1). Vérifiée AVANT la Chronique : ouvrir une chronique se fait depuis
+  // le Livre, on doit donc pouvoir revenir au Livre, pas à la page Séances.
+  if (bookOpen && !chronicleWorkout) {
+    return (
+      <LivreChroniquesPage
+        workouts={data ?? []}
+        prByName={prByName}
+        histByName={histByName}
+        volByName={volByName}
+        prByGym={prByGym}
+        histByGym={histByGym}
+        imageUrls={listImageUrls}
+        latestDate={latestDate}
+        onRepeatLive={repeatLive}
+        onOpenFromTemplate={openFromTemplate}
+        onSaveAsTemplate={saveAsTemplate}
+        onOpenChronicle={openChronicle}
+        onBack={() => setBookOpen(false)}
+      />
+    );
+  }
+
   // ── VUE CHRONIQUE IMMERSIVE (LOT C1) ────────────────────────────────────────
-  // Ouverte depuis la liste des Chroniques (carte ou ligne compacte muscu).
-  // Rendue comme une vraie page (early-return, même pattern qu'ActiveWorkoutView) :
-  // aucun modal, aucun drawer. « Retour » referme, prev/next navigue.
+  // Ouverte depuis la Chronologie du Livre. Rendue comme une vraie page
+  // (early-return, même pattern qu'ActiveWorkoutView) : aucun modal, aucun
+  // drawer. « Retour » revient au Livre (bookOpen reste vrai), prev/next navigue.
   if (chronicleWorkout) {
     return (
       <ChroniquePage
@@ -343,138 +363,12 @@ export function SeancesTab() {
         </div>
       )}
 
-      {/* ── CHRONIQUES COMPLÈTES — source unique de l'historique : vue
-          compacte (dernières séances) repliée, vue détaillée (graphes
-          + historique complet) dépliée. ─────────────────────────────── */}
-      {data && !isLoading && data.length > 0 && (
-        <SectionReveal>
-          <div className="overflow-hidden rounded-3xl border border-white/[0.06] bg-gradient-to-b from-white/[0.04] to-white/[0.01] shadow-card backdrop-blur-xl">
-            <button
-              type="button"
-              onClick={() => setHistoryOpen((v) => !v)}
-              className="flex w-full items-center justify-between gap-2 px-5 py-4 text-left"
-              aria-expanded={historyOpen}
-            >
-              <span className="flex items-center gap-2">
-                <Trophy className="h-4 w-4 text-amber-400" />
-                <span className="font-serif text-[13px] font-semibold italic text-white/90">
-                  Chroniques complètes
-                </span>
-                <span className="rounded-full bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-semibold text-white/70">
-                  {data.length}
-                </span>
-              </span>
-              <ChevronDown
-                className={
-                  "h-4 w-4 text-muted-foreground transition-transform " +
-                  (historyOpen ? "rotate-180" : "")
-                }
-              />
-            </button>
-
-            {!historyOpen && (
-              <div className="px-5 pb-5">
-                <ul className="space-y-2">
-                  {recentWorkouts.map((w) => {
-                    // Étape 0.3 (U3) : "Refaire" (repeatLive) passe par
-                    // useStartWorkoutFromTemplate (use-fitness.ts), un
-                    // parcours muscu-only (exercises, pas de segments/
-                    // discipline) — même convention de détection que
-                    // ligne 355 ci-dessous (routage WorkoutCard vs carte
-                    // générique). Le bouton ↻ ne doit donc apparaître que
-                    // pour les séances muscu ; les autres disciplines
-                    // restent visibles dans la liste, simplement sans ↻.
-                    const isMuscu = ((w.discipline as DisciplineId | null) ?? "muscu") === "muscu";
-                    return (
-                      <li
-                        key={w.id}
-                        className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.05] bg-white/[0.02] px-3 py-2.5"
-                      >
-                        {isMuscu ? (
-                          <button
-                            type="button"
-                            onClick={() => openChronicle(w)}
-                            className="flex min-w-0 flex-1 items-center gap-3 text-left transition-opacity active:opacity-70"
-                            aria-label={`Ouvrir la chronique ${w.name || "Séance"}`}
-                          >
-                            <span className="w-9 shrink-0 text-center text-[10px] font-semibold uppercase tracking-wide text-primary">
-                              {weekdayLabel(w.date)}
-                            </span>
-                            <span className="truncate text-xs font-semibold text-white/90">
-                              {w.name || "Séance"}
-                            </span>
-                          </button>
-                        ) : (
-                          <div className="flex min-w-0 items-center gap-3">
-                            <span className="w-9 shrink-0 text-center text-[10px] font-semibold uppercase tracking-wide text-primary">
-                              {weekdayLabel(w.date)}
-                            </span>
-                            <span className="truncate text-xs font-semibold text-white/90">
-                              {w.name || "Séance"}
-                            </span>
-                          </div>
-                        )}
-                        {isMuscu && (
-                          <button
-                            type="button"
-                            onClick={() => repeatLive(w)}
-                            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-white/5 text-muted-foreground transition-all active:scale-90 hover:bg-primary/15 hover:text-primary"
-                            title="Refaire cette séance"
-                            aria-label="Refaire cette séance"
-                          >
-                            <Repeat className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            )}
-
-            {historyOpen && (
-              <div className="px-3 pb-4">
-                <WorkoutProgressCharts
-                  topExercises={topExercises}
-                  histByName={histByName}
-                  prByName={prByName}
-                  nameByKey={nameByKey}
-                />
-                <ul className="mt-3 space-y-3">
-                  {data.map((w) => {
-                    // Musculation garde WorkoutCard tel quel (intouché) ; toute
-                    // autre discipline route vers la carte générique — décision
-                    // prise une seule fois ici, jamais dupliquée par discipline.
-                    const entry = ENGINE_REGISTRY[(w.discipline as DisciplineId | null) ?? "muscu"];
-                    const isStrength =
-                      !entry ||
-                      !isReadyEngine(entry) ||
-                      entry.historyPresentation.cardVariant === "strength";
-                    if (!isStrength) {
-                      return <GenericHistoryCard key={w.id} workout={w} />;
-                    }
-                    return (
-                      <WorkoutCard
-                        key={w.id}
-                        w={w}
-                        prByName={prByName}
-                        histByName={histByName}
-                        volByName={volByName}
-                        prByGym={prByGym}
-                        histByGym={histByGym}
-                        imageUrls={listImageUrls}
-                        latestDate={latestDate}
-                        onRepeatLive={repeatLive}
-                        onOpenFromTemplate={openFromTemplate}
-                        onSaveAsTemplate={saveAsTemplate}
-                        onOpenChronicle={openChronicle}
-                      />
-                    );
-                  })}
-                </ul>
-              </div>
-            )}
-          </div>
+      {/* ── LE LIVRE DES CHRONIQUES — troisième pilier (LOT C2) : plus
+          d'accordéon ni de liste ici, une Hero Card au même poids visuel
+          que l'Arène et La Forge, qui ouvre le module plein écran. ──── */}
+      {data && !isLoading && (
+        <SectionReveal delay={0.1}>
+          <LivreChroniquesCard onClick={() => setBookOpen(true)} />
         </SectionReveal>
       )}
 

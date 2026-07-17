@@ -44,6 +44,9 @@ import { StatTileRow, type StatTileSpec } from "@/components/fitness/StatTileRow
 import { DisciplineBadge } from "@/components/fitness/session/DisciplineIcon";
 import { ENGINE_REGISTRY } from "@/lib/fitness/engines/registry";
 import { buildGroups, sessionMuscleActivation } from "@/lib/fitness/workoutGrouping";
+// Records tombés par séance : logique pure partagée avec le Livre des
+// Chroniques (LOT C2) — déplacée dans chronicles.ts, comportement identique.
+import { computeRecordsBySession } from "@/lib/fitness/chronicles";
 import { formatTonnage, workoutTonnage } from "@/lib/fitness/strength";
 import { estimateWorkoutCalories, deriveIntensity } from "@/lib/fitness/calories";
 import { MUSCLE_META, type MuscleId } from "@/lib/fitness/muscleMapping";
@@ -70,40 +73,6 @@ function metricOf(w: WorkoutRow, bodyWeightKg: number | null) {
   });
   const intensity = deriveIntensity(volume, duration);
   return { volume, duration, calories, intensity };
-}
-
-// Records tombés par séance : un seul balayage chronologique de tout
-// l'historique muscu. Un exercice jamais vu = « nouvel exercice » ; un
-// exercice dont la charge max dépasse STRICTEMENT le meilleur passé = PR.
-// Aucune donnée inventée — uniquement la comparaison des charges réelles.
-type SessionRecord = { key: string; name: string; weight: number; isNew: boolean };
-
-function computeRecordsBySession(muscuWorkouts: WorkoutRow[]) {
-  const sorted = [...muscuWorkouts].sort((a, b) => {
-    if (a.date !== b.date) return a.date.localeCompare(b.date);
-    const ca = (a as { created_at?: string }).created_at ?? "";
-    const cb = (b as { created_at?: string }).created_at ?? "";
-    return ca.localeCompare(cb);
-  });
-  const runningMax = new Map<string, number>();
-  const bySession = new Map<string, SessionRecord[]>();
-  for (const w of sorted) {
-    const groups = buildGroups(w.exercises ?? []);
-    const records: SessionRecord[] = [];
-    for (const g of groups) {
-      if (g.maxWeight == null) continue;
-      const prev = runningMax.get(g.key);
-      if (prev == null) {
-        records.push({ key: g.key, name: g.name, weight: g.maxWeight, isNew: true });
-        runningMax.set(g.key, g.maxWeight);
-      } else if (g.maxWeight > prev) {
-        records.push({ key: g.key, name: g.name, weight: g.maxWeight, isNew: false });
-        runningMax.set(g.key, g.maxWeight);
-      }
-    }
-    bySession.set(w.id, records);
-  }
-  return bySession;
 }
 
 function activationToRecoveryMap(
