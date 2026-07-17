@@ -1523,6 +1523,112 @@ export type Database = {
           },
         ]
       }
+      seasons: {
+        Row: {
+          created_at: string
+          ends_at: string
+          id: string
+          index: number
+          name: string
+          slug: string
+          starts_at: string
+          status: string
+          theme: string | null
+        }
+        Insert: {
+          created_at?: string
+          ends_at: string
+          id?: string
+          index: number
+          name: string
+          slug: string
+          starts_at: string
+          status?: string
+          theme?: string | null
+        }
+        Update: {
+          created_at?: string
+          ends_at?: string
+          id?: string
+          index?: number
+          name?: string
+          slug?: string
+          starts_at?: string
+          status?: string
+          theme?: string | null
+        }
+        Relationships: []
+      }
+      sp_events: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          season_id: string
+          source: string
+          user_id: string
+          workout_id: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          season_id: string
+          source: string
+          user_id: string
+          workout_id?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          season_id?: string
+          source?: string
+          user_id?: string
+          workout_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sp_events_season_id_fkey"
+            columns: ["season_id"]
+            isOneToOne: false
+            referencedRelation: "seasons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_season_progress: {
+        Row: {
+          ps: number
+          season_id: string
+          tier: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ps?: number
+          season_id: string
+          tier?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ps?: number
+          season_id?: string
+          tier?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_season_progress_season_id_fkey"
+            columns: ["season_id"]
+            isOneToOne: false
+            referencedRelation: "seasons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

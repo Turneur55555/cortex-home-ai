@@ -21,6 +21,21 @@
 5. **Saisons à identité forte** (nommées et thématisées : *Saison I — L'Ascension*, *II — Le Colosse*,
    *III — Le Panthéon*, *IV — L'Héritage*…), pour que les Chroniques deviennent, au fil des années, le
    **livre de la progression du joueur** — ouvrable dans 5 ans pour revoir chaque saison traversée.
+6. **Objectifs quotidiens centrés muscu.** Des rappels bien-être (hydratation, sommeil, récupération)
+   sont tolérés mais **ne rapportent JAMAIS de Points de Saison** — les PS restent 100 % musculation
+   pour préserver une identité claire.
+7. **Courbe du track calibrée sur données réelles pendant S0**, pas figée théoriquement — placeholder
+   simple au départ, ajusté ensuite via les statistiques d'usage.
+
+## Ligne directrice permanente — les 4 piliers (Nathan)
+
+> **Chaque nouvelle fonctionnalité doit renforcer au moins un de ces piliers :**
+> 1. donner envie de revenir **aujourd'hui** ;
+> 2. donner envie de revenir **cette semaine** ;
+> 3. donner envie **d'aller au bout de la saison** ;
+> 4. **enrichir les Chroniques** pour qu'on ait envie de les relire des années plus tard.
+>
+> Si une fonctionnalité ne renforce aucun de ces quatre piliers, elle n'est probablement pas prioritaire.
 
 ## 1. Rôle dans l'écosystème RPG
 
