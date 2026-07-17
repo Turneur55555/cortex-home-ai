@@ -7,6 +7,8 @@ import { toast } from "sonner";
 import { MasteryBar } from "@/components/fitness/MasteryBar";
 import { RankAmbientParticles } from "@/components/fitness/RankAmbientParticles";
 import { getRankVisual } from "@/lib/fitness/rankVisuals";
+import { useUserStats } from "@/hooks/useUserStats";
+import { characterLevelProgress } from "@/lib/fitness/rpg/characterLevel";
 import type { RankAggregate } from "@/components/fitness/RankAggregator";
 
 interface Props {
@@ -100,6 +102,8 @@ export function ProfileHeroCard({
   achievementsTotal,
 }: Props) {
   const { user } = useAuth();
+  const { data: userStats } = useUserStats();
+  const levelInfo = characterLevelProgress(userStats?.xp ?? 0);
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const initial = pseudo[0]?.toUpperCase() ?? "?";
@@ -214,14 +218,19 @@ export function ProfileHeroCard({
         </div>
 
         <div className="min-w-0 flex-1">
-          <button
-            type="button"
-            onClick={onEdit}
-            className="block max-w-full text-left"
-            aria-label="Modifier le pseudo"
-          >
-            <h1 className="truncate text-2xl font-bold tracking-tight text-white">{pseudo}</h1>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onEdit}
+              className="block min-w-0 flex-1 text-left"
+              aria-label="Modifier le pseudo"
+            >
+              <h1 className="truncate text-2xl font-bold tracking-tight text-white">{pseudo}</h1>
+            </button>
+            <span className="shrink-0 rounded-full bg-black/30 px-2 py-0.5 text-[11px] font-black text-white ring-1 ring-white/15">
+              Niv. {levelInfo.level}
+            </span>
+          </div>
           <p
             className="mt-0.5 truncate font-serif text-[13px] italic tracking-wide"
             style={{ color: colors.secondary }}
@@ -230,8 +239,14 @@ export function ProfileHeroCard({
           </p>
 
           <div className="mt-2.5">
+            <div className="mb-1 flex items-center justify-between text-[9px] font-semibold uppercase tracking-wider text-white/45">
+              <span>Niveau de personnage</span>
+              <span>
+                {levelInfo.xpIntoLevel} / {levelInfo.xpForLevelSpan} XP
+              </span>
+            </div>
             <MasteryBar
-              percent={bestRank ? bestRank.progress * 100 : 0}
+              percent={levelInfo.progress * 100}
               colors={colors}
               segments={5}
               height={8}

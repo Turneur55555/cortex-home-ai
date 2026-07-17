@@ -169,70 +169,77 @@ fragile de chiffres :
 - **Nutrition = multiplicateur, jamais source autonome.** Sans musculation, le multiplicateur
   s'applique à ~0 → impossible de progresser via la seule nutrition.
 
-### 8.2 Barème proposé (config ajustable, comme `rank/config.ts`)
+### 8.2 Barème final (validé par Nathan — config ajustable, comme `rank/config.ts`)
+
+> Philosophie : **CORTEX est un RPG de musculation.** La musculation est la source primaire et
+> largement dominante ; toutes les autres disciplines sont du soutien. La nutrition est un module
+> indépendant qui améliore les performances mais **ne fait pas progresser directement le personnage**.
 
 | Source | Rôle | XP |
 |---|---|---|
-| **Séance musculation complétée** | Primaire | **100** (× multiplicateur nutrition) |
-| Nouveau PR musculation | Récompense ponctuelle | +50 *(différé R1.1 — détection PR serveur)* |
+| **Séance musculation complétée** | Primaire (non plafonné) | **100** |
+| Nouveau PR musculation (record de charge strict) | Récompense ponctuelle | **+50**, 1×/séance |
+| Streak — séance muscu avec activité la veille | Fidélité (muscu) | **+15**, 1×/séance |
+| **Séance de soutien** (HYROX / Course / Cardio / Guidé / autres) | Soutien | **25** |
+| **Plafond hebdomadaire soutien** | Garde-fou | **75 XP / semaine** (au-delà : 0) |
+| **Nutrition** | — | **0 XP, aucun multiplicateur, aucun bonus caché** |
 | Montée de rang de spécialité | Récompense ponctuelle | +200 *(versé par R2)* |
-| **Séance de soutien** (HYROX / Course / Cardio / Guidé) | Soutien | **40**, plafonné |
-| **Plafond hebdomadaire soutien** | Garde-fou | **150 XP / semaine** (au-delà : 0) |
-| Streak — jour d'activité consécutif | Fidélité | +15 *(différé R1.1)*, dans le plafond soutien |
-| Journée nutrition (objectif protéines atteint) | Multiplicateur | **pas d'XP propre** → voir §8.3 |
 | Objectif (quête) complété | Ponctuel | inchangé (`xp_reward` existant) |
 | Badge débloqué | Ponctuel | inchangé (`xp_reward` existant) |
 
-### 8.3 Le multiplicateur nutrition (mécanisme anti-abus clé)
+### 8.3 Nutrition : hors économie XP (décision explicite)
 
-La régularité nutritionnelle **n'octroie pas d'XP en propre** ; elle **multiplie l'XP des séances
-musculation** :
+La nutrition est **entièrement retirée** de l'économie XP : aucun XP propre, aucun multiplicateur,
+aucun bonus caché. Elle reste un module indépendant qui améliore les performances réelles de
+l'utilisateur, sans jamais faire progresser directement le personnage RPG.
 
-- 0–2 jours d'objectif protéines sur les 7 derniers → ×1.00
-- 3–6 jours → **×1.05**
-- 7/7 jours → **×1.10**
+### 8.4 Invariant garanti (preuve d'ordre — béton, pas équilibrage)
 
-Conséquence structurelle : un utilisateur « nutrition parfaite mais zéro muscu » multiplie une XP
-muscu nulle ⇒ gagne ~0 XP de sa nutrition. La nutrition **récompense l'assiduité de l'athlète**,
-elle ne **remplace jamais** l'entraînement.
-
-### 8.4 Invariant garanti (preuve d'ordre)
+Le streak étant attaché aux séances **muscu** et le soutien étant plafonné **sous** la valeur d'une
+seule séance muscu, l'invariant tient même dans le pire cas :
 
 ```
-XP_hebdo(muscu régulier)   ≈ 3–4 séances × 100 × (≤1.10) + ponctuels
-                            ≈ 330–500+ XP/sem      ── NON plafonné
-XP_hebdo(soutien seul)     ≤ plafond soutien (150) + streak borné
-                            ≈ 150–250 XP/sem       ── PLAFONNÉ
-XP_hebdo(nutrition seule)  ≈ 0                      ── multiplicateur × 0 muscu
+XP_hebdo(soutien seul)      ≤ plafond soutien (75)          ── PLAFONNÉ, sans streak
+XP_hebdo(≥1 séance muscu)   ≥ 100                            ── NON plafonné
+XP_hebdo(nutrition seule)   = 0                              ── hors économie
 
-⇒  muscu_régulier  >  soutien_seul  >  nutrition_seule   (garanti par construction)
+⇒  même UNE seule séance muscu (100) > une semaine entière de soutien maxée (75)
+⇒  muscu-only  >  soutien-only  >  nutrition-only   (garanti par construction)
 ```
+
+Le plafond soutien (75 < 100) est le mécanisme clé : *« une vraie séance de musculation vaut plus
+qu'une semaine entière de tout le reste »*.
 
 ### 8.5 Architecture technique (additive, ne casse rien)
 
-1. **Verseur central** `award_character_xp(_user_id, _source, _base_amount)` — `SECURITY DEFINER`,
-   factorise l'`INSERT … ON CONFLICT` + recalcul du niveau des 2 triggers existants. Applique le
-   multiplicateur nutrition et le plafond de soutien selon `_source`. Les triggers badge/objectif
-   actuels l'appellent (zéro régression).
-2. **Table `xp_events(user_id, source, amount, created_at)`** — RLS lecture seule client. Nécessaire
-   pour (a) faire respecter le plafond hebdo de soutien (sommer l'XP soutien de la semaine) et
-   (b) alimenter le futur « journal d'XP » / feedback de contribution (R2).
-3. **Trigger sur `workouts`** (AFTER INSERT, séance complétée) :
-   - `discipline = 'muscu'` → `award_character_xp(user, 'workout_muscu', 100)` (× mult. nutrition).
-   - sinon → `award_character_xp(user, 'workout_support', 40)` (borné au plafond hebdo soutien).
+1. **Verseur central** `award_character_xp(_user_id, _source, _amount, _workout_id)` — `SECURITY
+   DEFINER`, factorise l'`INSERT … ON CONFLICT` sur `user_stats` + recalcul du niveau + trace dans
+   `xp_events` + **idempotence** (au plus un event par `(workout_id, source)`).
+2. **Table `xp_events(user_id, source, amount, workout_id, created_at)`** — RLS lecture seule client.
+   Nécessaire pour (a) faire respecter le plafond hebdo de soutien (sommer l'XP soutien de la
+   semaine), (b) garantir l'idempotence, (c) alimenter le futur « journal d'XP » (R2).
+3. **Trigger sur `workouts`** (`AFTER INSERT OR UPDATE OF status`, à la transition vers `completed`) :
+   - `discipline = 'muscu'` → `workout_muscu` (100) ; + `pr_muscu` (50) si nouveau record de charge ;
+     + `streak` (15) si une séance complétée existe la veille.
+   - sinon → `workout_support` (25), borné au plafond hebdo soutien (75).
+   - Le trigger vise la transition `active → completed` (les séances sont insérées `active` au
+     démarrage, passées `completed` à la clôture — muscu comme générique).
 4. **Réconciliation de la courbe** : garder `sqrt(xp/50)+1` côté serveur (n'invalide aucune XP déjà
-   gagnée) ; corriger le client (`badges.ts` / nouveau `characterLevel.ts`) pour afficher le **même**
-   niveau. Source unique.
-5. **UI Accueil** : `ProfileHeroCard` réaffiche le **Niveau de Personnage** (barre XP vers le niveau
-   suivant) comme chiffre-roi, sous le titre de rang mythologique (anti-doublon : le rang reste un
-   sous-titre, le Niveau devient la barre principale). `useUserStats` fournit déjà `xp/level`.
+   gagnée) ; nouveau module client testé `src/lib/fitness/rpg/characterLevel.ts` qui **miroir** cette
+   courbe pour l'affichage. `badges.ts:xpForLevel` (formule divergente) est **inutilisé** dans tout le
+   code → laissé tel quel, non réintroduit ; `characterLevel.ts` devient la source unique d'affichage.
+5. **UI Accueil** : `ProfileHeroCard` affiche le **Niveau de Personnage** (barre XP vers le niveau
+   suivant) comme chiffre-roi, le rang mythologique restant le sous-titre atmosphérique (anti-doublon,
+   apparaît une seule fois, dans le Hero). `useUserStats` fournit déjà `xp/level`.
 
 ### 8.6 Périmètre R1 (v1) vs différé
 
-- **Dans R1 v1** : `xp_events` + `award_character_xp` + multiplicateur nutrition + plafond soutien +
-  trigger `workouts` (muscu vs soutien) + réconciliation courbe + réaffichage Niveau sur l'Accueil.
-- **Différé R1.1 / R2** : bonus PR (détection serveur), bonus streak, bonus montée de rang (naturel
-  avec R2 « RankUp à la clôture »).
+- **Dans R1 v1** : `xp_events` + `award_character_xp` + trigger `workouts` (muscu 100 / soutien 25
+  plafonné 75 / PR muscu +50 / streak muscu +15) + `characterLevel.ts` testé + affichage du Niveau
+  sur l'Accueil. Nutrition **hors économie**.
+- **Différé** : bonus montée de rang (+200, versé par R2 « RankUp à la clôture ») ; unification des
+  triggers badge/objectif via le verseur central (ils restent sur leur chemin légué en R1 pour ne
+  rien casser) ; journal d'XP visible.
 
 ### 8.7 Invariants de non-régression
 
