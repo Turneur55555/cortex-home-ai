@@ -1,5 +1,17 @@
 # Claude Code Rules — cortex-home-ai
 
+## Piliers RPG — règle de conception permanente (validée par Nathan, 17/07/2026)
+Toute nouvelle fonctionnalité doit renforcer **au moins un** de ces quatre piliers :
+1. donner envie de revenir **aujourd'hui** ;
+2. donner envie de revenir **cette semaine** ;
+3. donner envie **d'aller au bout de la saison** ;
+4. **enrichir les Chroniques** pour qu'on ait envie de les relire des années plus tard.
+
+Si une fonctionnalité ne renforce aucun de ces piliers, elle n'est probablement pas prioritaire.
+Rappels structurants : la progression vient **toujours** de l'entraînement (muscu-primaire) ; les
+Saisons **racontent** la progression, elles ne donnent aucun avantage de puissance. Vision détaillée :
+`docs/architecture/rpg-vision-et-r1-niveau-personnage.md` et `docs/architecture/rpg-saisons.md`.
+
 ## Avant chaque modification, lire obligatoirement :
 1. MEMORY.md
 2. /docs/architecture.md

@@ -1274,6 +1274,38 @@ export type Database = {
         }
         Relationships: []
       }
+      workout_analyses: {
+        Row: {
+          created_at: string
+          id: string
+          summary: Json
+          user_id: string
+          workout_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          summary: Json
+          user_id: string
+          workout_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          summary?: Json
+          user_id?: string
+          workout_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workout_analyses_workout_id_fkey"
+            columns: ["workout_id"]
+            isOneToOne: true
+            referencedRelation: "workouts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       workout_segments: {
         Row: {
           completed: boolean
@@ -1455,6 +1487,147 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      xp_events: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          source: string
+          user_id: string
+          workout_id: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          source: string
+          user_id: string
+          workout_id?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          source?: string
+          user_id?: string
+          workout_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "xp_events_workout_id_fkey"
+            columns: ["workout_id"]
+            isOneToOne: false
+            referencedRelation: "workouts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      seasons: {
+        Row: {
+          created_at: string
+          ends_at: string
+          id: string
+          index: number
+          name: string
+          slug: string
+          starts_at: string
+          status: string
+          theme: string | null
+        }
+        Insert: {
+          created_at?: string
+          ends_at: string
+          id?: string
+          index: number
+          name: string
+          slug: string
+          starts_at: string
+          status?: string
+          theme?: string | null
+        }
+        Update: {
+          created_at?: string
+          ends_at?: string
+          id?: string
+          index?: number
+          name?: string
+          slug?: string
+          starts_at?: string
+          status?: string
+          theme?: string | null
+        }
+        Relationships: []
+      }
+      sp_events: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          season_id: string
+          source: string
+          user_id: string
+          workout_id: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          id?: string
+          season_id: string
+          source: string
+          user_id: string
+          workout_id?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          season_id?: string
+          source?: string
+          user_id?: string
+          workout_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sp_events_season_id_fkey"
+            columns: ["season_id"]
+            isOneToOne: false
+            referencedRelation: "seasons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_season_progress: {
+        Row: {
+          ps: number
+          season_id: string
+          tier: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ps?: number
+          season_id: string
+          tier?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ps?: number
+          season_id?: string
+          tier?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_season_progress_season_id_fkey"
+            columns: ["season_id"]
+            isOneToOne: false
+            referencedRelation: "seasons"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
