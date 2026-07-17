@@ -247,19 +247,52 @@ export function ProfileHeroCard({
       <div className="relative mt-3 flex flex-col items-center text-center">
         <Blason rank={rank} size={150} variant="hero" revealDelay={0.1} />
 
-        <motion.h1
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: ranked ? 1 : 0.65, y: 0 }}
-          transition={{ duration: 0.6, delay: stagger(1), ease: EASE_OUT }}
-          className="mt-3 text-[34px] font-black uppercase leading-none tracking-[0.12em]"
-          style={{
-            fontFamily: SERIF,
-            color: colors.text,
-            textShadow: `0 0 26px ${colors.glow}, 0 2px 8px rgba(0,0,0,0.6)`,
-          }}
+        {/* Nom de RANG monumental : lettrage serif, métal dégradé, halo, reflet. */}
+        <motion.div
+          initial={{ opacity: 0, y: 12, scale: 0.94 }}
+          animate={{ opacity: ranked ? 1 : 0.6, y: 0, scale: 1 }}
+          transition={{ duration: 0.7, delay: stagger(1), ease: EASE_OUT }}
+          className="relative mt-3 flex flex-col items-center"
         >
-          {rank.rank.label}
-        </motion.h1>
+          {/* Halo diffus du nom */}
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-0 flex items-center justify-center text-[42px] font-black uppercase leading-none tracking-[0.1em] blur-[12px]"
+            style={{ fontFamily: SERIF, color: colors.glow, opacity: 0.8 }}
+          >
+            {rank.rank.label}
+          </span>
+          {/* Nom rempli d'un dégradé métallique */}
+          <h1
+            className="relative bg-clip-text text-[42px] font-black uppercase leading-none tracking-[0.1em] text-transparent"
+            style={{
+              fontFamily: SERIF,
+              backgroundImage: `linear-gradient(180deg, #ffffff 0%, ${colors.secondary} 46%, ${colors.primary} 100%)`,
+              WebkitBackgroundClip: "text",
+              backgroundClip: "text",
+              filter: "drop-shadow(0 2px 6px rgba(0,0,0,0.55))",
+            }}
+          >
+            {rank.rank.label}
+          </h1>
+          {/* Reflet en miroir sous le nom */}
+          <span
+            aria-hidden
+            className="pointer-events-none -mt-1 bg-clip-text text-[42px] font-black uppercase leading-none tracking-[0.1em] text-transparent"
+            style={{
+              fontFamily: SERIF,
+              backgroundImage: `linear-gradient(180deg, ${colors.primary} 0%, transparent 70%)`,
+              WebkitBackgroundClip: "text",
+              backgroundClip: "text",
+              transform: "scaleY(-1)",
+              opacity: 0.22,
+              maskImage: "linear-gradient(black, transparent 55%)",
+              WebkitMaskImage: "linear-gradient(black, transparent 55%)",
+            }}
+          >
+            {rank.rank.label}
+          </span>
+        </motion.div>
 
         <motion.div
           initial={{ opacity: 0 }}
