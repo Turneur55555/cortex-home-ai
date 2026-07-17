@@ -250,3 +250,55 @@ qu'une semaine entière de tout le reste »*.
 - `lib/` reste sans couleur ni React ; logique métier hors composants Lovable.
 - Migration déployée via le flux normal (fichier `supabase/migrations/` → CI), pas appliquée en
   direct sur la prod depuis une session.
+
+---
+
+## 9. Lot R2 — L'écran de récompense de fin de séance (livré)
+
+> Vision Nathan : **un seul écran premium** à la clôture, qui récapitule toute la progression RPG
+> obtenue pendant la séance, avec animation soignée et fort impact émotionnel. **Pas** de succession
+> de toasts/pop-ups. C'est le moment qui doit donner envie de revenir s'entraîner demain.
+
+### 9.1 Principe
+
+À la clôture d'une séance (muscu **et** générique), un unique écran `SessionRewardScreen` s'affiche
+**avant** tout le reste. Le bilan IA détaillé (`PostWorkoutAnalysisSheet` / générique), qui
+s'ouvrait automatiquement jusqu'ici, devient **opt-in** (bouton « Voir le bilan détaillé ») — plus
+jamais empilé automatiquement.
+
+### 9.2 Contenu (progression RPG, pas les stats brutes déjà vues à la confirmation)
+
+Toutes les valeurs sont **lues** (aucun calcul d'économie côté client ; règle « donnée absente →
+section masquée, jamais inventée ») :
+- **XP totale gagnée** (grand nombre animé) + **détail des sources** ordonné muscu-primaire
+  (`+100 Séance`, `+50 Record`, `+15 Série`) — lus depuis `xp_events` de la séance.
+- **Niveau de Personnage** : barre XP + flourish « NIVEAU +N » si passage de niveau (transition
+  calculée depuis l'XP totale `user_stats` et l'XP de la séance).
+- **Record (PR)** et **badge débloqué pendant la séance** — affichés seulement si présents.
+- Confetti + révélation étagée (framer-motion). 2 CTA : **Continuer** / **Voir le bilan détaillé**.
+
+### 9.3 Architecture
+
+- **`src/lib/fitness/rpg/sessionReward.ts`** (pur, +11 tests) : `totalSessionXp`, `buildXpBreakdown`
+  (agrégé + ordonné), `buildLevelTransition` (niveau avant/après, `leveledUp`, `levelsGained`).
+- **`src/hooks/useSessionReward.ts`** : lit `xp_events?workout_id` + `user_stats` ; déduit l'XP
+  d'avant sans snapshot (`xpAfter − Σ events`). `hasXp` false (ex. migration R1 non déployée) →
+  l'écran reste affichable, section XP masquée.
+- **`src/components/fitness/session/SessionRewardScreen.tsx`** : l'écran, réutilise `Confetti`,
+  `AnimatedNumber`, `MasteryBar`. Palette « trésor » or/ambre dédiée à l'XP.
+- **`SeancesTab`** : état `analysisRequested` + 2 blocs `muscuPostClose`/`genericPostClose`
+  (récompense d'abord, bilan opt-in), branchés sur les 4 points de montage existants. `types.ts` :
+  bloc `xp_events` ajouté à la main (même approche chirurgicale que `workout_analyses`).
+
+### 9.4 Différé R2.1
+
+- **Rangs** : flourish de montée de rang par exercice — nécessite un snapshot de rang au DÉBUT de
+  séance (mini-feature à part) pour une détection fiable ; slot prévu dans l'écran.
+- **Quêtes** : deltas de progression d'objectifs pendant la séance.
+- Le bonus d'XP de montée de rang (+200) sera versé quand la détection de rang de séance existera.
+
+### 9.5 Dépendance de déploiement
+
+L'écran lit `xp_events`, alimentée par le trigger R1 — **tant que la migration R1 n'est pas mergée
+et déployée**, la section XP affiche 0 (état honnête). Les sections PR/badge/niveau fonctionnent
+dès que l'XP réelle circule. À valider en live par Nathan après merge+deploy de R1.

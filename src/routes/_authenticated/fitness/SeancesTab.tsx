@@ -19,6 +19,7 @@ import { ForgeDisciplineChooser } from "@/components/fitness/ForgeDisciplineChoo
 import { DisciplineExerciseLibrarySheet } from "@/components/fitness/DisciplineExerciseLibrarySheet";
 import { PostWorkoutAnalysisSheet } from "@/components/fitness/PostWorkoutAnalysisSheet";
 import { GenericPostWorkoutAnalysisSheet } from "@/components/fitness/session/GenericPostWorkoutAnalysisSheet";
+import { SessionRewardScreen } from "@/components/fitness/session/SessionRewardScreen";
 import { ChroniquePage } from "@/components/fitness/chronique/ChroniquePage";
 import { LivreChroniquesCard } from "@/components/fitness/chronique/LivreChroniquesCard";
 import { LivreChroniquesPage } from "@/components/fitness/chronique/LivreChroniquesPage";
@@ -76,6 +77,10 @@ export function SeancesTab() {
   // onFinished était un no-op, AUCUN retour après le confetti).
   const [finishedGenericSnapshot, setFinishedGenericSnapshot] =
     useState<ActiveGenericWorkout | null>(null);
+  // R2 : à la clôture, l'écran de récompense (SessionRewardScreen) s'affiche
+  // d'abord ; le bilan IA détaillé n'apparaît que si l'utilisateur le demande
+  // (jamais empilé automatiquement — « un seul écran »).
+  const [analysisRequested, setAnalysisRequested] = useState(false);
   const [template, setTemplate] = useState<WorkoutTemplate | null>(null);
   // "Enregistrer comme séance sauvegardée" (menu ⋮) : ouvre l'éditeur de
   // modèle déjà développé (Module 2) en mode CRÉATION, pré-rempli depuis la
@@ -230,6 +235,55 @@ export function SeancesTab() {
     );
   }
 
+  // ── Post-clôture (R2) : écran de récompense premium, puis bilan IA opt-in ──
+  // Un seul écran à la clôture (SessionRewardScreen) ; le bilan IA détaillé
+  // n'apparaît QUE si l'utilisateur tape « Voir le bilan », jamais empilé
+  // automatiquement. Rendu identique en séance active et en vue historique
+  // (survit à la transition active → historique — un seul des deux montages
+  // est actif à la fois car les branches sont des early-returns).
+  const muscuPostClose = finishedSnapshot ? (
+    !analysisRequested ? (
+      <SessionRewardScreen
+        workoutId={finishedSnapshot.id}
+        title={finishedSnapshot.name}
+        createdAtISO={finishedSnapshot.created_at}
+        onContinue={() => setFinishedSnapshot(null)}
+        onViewAnalysis={() => setAnalysisRequested(true)}
+      />
+    ) : (
+      <PostWorkoutAnalysisSheet
+        workout={finishedSnapshot}
+        workoutId={finishedSnapshot.id}
+        previousWorkouts={data ?? []}
+        recoveryMap={recoveryMap}
+        onClose={() => {
+          setFinishedSnapshot(null);
+          setAnalysisRequested(false);
+        }}
+      />
+    )
+  ) : null;
+
+  const genericPostClose = finishedGenericSnapshot ? (
+    !analysisRequested ? (
+      <SessionRewardScreen
+        workoutId={finishedGenericSnapshot.id}
+        title={finishedGenericSnapshot.name}
+        createdAtISO={finishedGenericSnapshot.created_at}
+        onContinue={() => setFinishedGenericSnapshot(null)}
+        onViewAnalysis={() => setAnalysisRequested(true)}
+      />
+    ) : (
+      <GenericPostWorkoutAnalysisSheet
+        workout={finishedGenericSnapshot}
+        onClose={() => {
+          setFinishedGenericSnapshot(null);
+          setAnalysisRequested(false);
+        }}
+      />
+    )
+  ) : null;
+
   // ── VUE SÉANCE ACTIVE GÉNÉRIQUE (phase pilote Course, 2026-07-09) ────────
   // Vérifiée AVANT activeWorkout : les deux requêtes sont mutuellement
   // exclusives (garde côté useStartGenericActiveWorkout/useStartWorkout),
@@ -238,15 +292,16 @@ export function SeancesTab() {
   if (!activeWorkout && activeGeneric) {
     return (
       <section className="flex flex-col gap-4">
-        <ActiveGenericSessionView workout={activeGeneric} onFinished={setFinishedGenericSnapshot} />
-        {/* Lot V2 : monté aussi ici (comme le pendant muscu ci-dessous) pour
-            survivre à la transition séance active → vue historique. */}
-        {finishedGenericSnapshot && (
-          <GenericPostWorkoutAnalysisSheet
-            workout={finishedGenericSnapshot}
-            onClose={() => setFinishedGenericSnapshot(null)}
-          />
-        )}
+        <ActiveGenericSessionView
+          workout={activeGeneric}
+          onFinished={(w) => {
+            setAnalysisRequested(false);
+            setFinishedGenericSnapshot(w);
+          }}
+        />
+        {/* R2 : récompense puis bilan opt-in — monté aussi ici (comme le
+            pendant muscu) pour survivre à la transition active → historique. */}
+        {genericPostClose}
       </section>
     );
   }
@@ -258,18 +313,13 @@ export function SeancesTab() {
         <ActiveWorkoutView
           workout={activeWorkout}
           recoveryMap={recoveryMap}
-          onFinished={setFinishedSnapshot}
+          onFinished={(w) => {
+            setAnalysisRequested(false);
+            setFinishedSnapshot(w);
+          }}
           onOpenCatalog={() => setCatalogOpen(true)}
         />
-        {finishedSnapshot && (
-          <PostWorkoutAnalysisSheet
-            workout={finishedSnapshot}
-            workoutId={finishedSnapshot.id}
-            previousWorkouts={data ?? []}
-            recoveryMap={recoveryMap}
-            onClose={() => setFinishedSnapshot(null)}
-          />
-        )}
+        {muscuPostClose}
         {/* Catalogue accessible aussi pendant une séance active — bibliothèque
             de référence du module Exercices, atteignable partout dans l'app. */}
         {catalogOpen && (
@@ -478,24 +528,10 @@ export function SeancesTab() {
         />
       )}
 
-      {/* C2 : fiche d'analyse IA — rendue aussi hors séance active */}
-      {finishedSnapshot && (
-        <PostWorkoutAnalysisSheet
-          workout={finishedSnapshot}
-          workoutId={finishedSnapshot.id}
-          previousWorkouts={data ?? []}
-          recoveryMap={recoveryMap}
-          onClose={() => setFinishedSnapshot(null)}
-        />
-      )}
-
-      {/* Lot V2 : bilan IA générique — rendu aussi hors séance active */}
-      {finishedGenericSnapshot && (
-        <GenericPostWorkoutAnalysisSheet
-          workout={finishedGenericSnapshot}
-          onClose={() => setFinishedGenericSnapshot(null)}
-        />
-      )}
+      {/* R2 : écran de récompense puis bilan IA opt-in — rendus aussi hors
+          séance active (survit à la transition active → historique). */}
+      {muscuPostClose}
+      {genericPostClose}
     </section>
   );
 }
