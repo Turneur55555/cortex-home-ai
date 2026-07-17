@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Apple, BarChart3, ChevronRight } from "lucide-react";
+import { Apple, BarChart3, ChevronRight, HeartPulse } from "lucide-react";
 import { ProfileRPGData } from "@/components/profile/rpg/ProfileRPGData";
 import { QuestsPreview } from "@/components/profile/rpg/QuestsPreview";
 import { BodyStatusCard } from "@/components/profile/BodyStatusCard";
@@ -41,6 +41,11 @@ function ProfilPage() {
             to="/preferences-alimentaires"
             icon={<Apple className="h-4 w-4" />}
             label="Préférences alim."
+          />
+          <SpaceLink
+            to="/sante-nutritionnelle"
+            icon={<HeartPulse className="h-4 w-4" />}
+            label="Santé nutritionnelle"
           />
           <SpaceLink
             to="/rapports"
