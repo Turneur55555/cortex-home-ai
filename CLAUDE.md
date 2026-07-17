@@ -12,6 +12,20 @@ Rappels structurants : la progression vient **toujours** de l'entraînement (mus
 Saisons **racontent** la progression, elles ne donnent aucun avantage de puissance. Vision détaillée :
 `docs/architecture/rpg-vision-et-r1-niveau-personnage.md` et `docs/architecture/rpg-saisons.md`.
 
+## Standard premium — direction artistique (validé par Nathan, 17/07/2026)
+CORTEX vise à être **le plus beau RPG de progression du fitness**, pas une app de suivi gamifiée.
+- **Le Rang est la star** (Titan, Olympien…). Le joueur retient son RANG, jamais son niveau. Le
+  Niveau/XP ne fait que raconter le chemin vers le prochain Rang — toujours au service du Rang.
+- **Chaque famille de Rang est un univers** (matière, lumière, particules propres), pas une couleur.
+- **Signature visuelle partagée** : réutiliser `src/components/rpg/` (Blason, RankSigil, premium/tokens,
+  premium/rankUniverse) sur TOUS les écrans premium (récompenses, montées de rang, Chroniques, Saisons,
+  Reliques, trophées) pour un univers cohérent.
+- **Deux questions avant d'ajouter** : (1) renforce-t-elle la boucle entraîner→progresser→récompenser→
+  revenir ? (2) crée-t-elle un vrai effet « Waouh » ? Si non aux deux → pas prioritaire.
+- **Test de chaque itération premium** : *« Si un utilisateur ouvrait cet écran pour la première fois,
+  aurait-il envie d'en faire une capture d'écran et de la partager ? »* Si non, on continue d'itérer.
+  Mieux vaut plusieurs itérations sur un écran exceptionnel qu'un écran « correct ».
+
 ## Avant chaque modification, lire obligatoirement :
 1. MEMORY.md
 2. /docs/architecture.md
