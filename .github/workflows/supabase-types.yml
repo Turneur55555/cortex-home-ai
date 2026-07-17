@@ -1,0 +1,71 @@
+name: Supabase Types Sync
+
+# La BASE DE DONNÉES est la source de vérité unique des types.
+# Ce workflow régénère les types officiels depuis la base (supabase gen types)
+# et ÉCHOUE si `src/integrations/supabase/types.ts` committé ne correspond plus
+# (table/colonne manquante ou en trop). Aucune correction automatique, aucun
+# commit : une erreur visible et explicite, jamais une réparation silencieuse.
+#
+# Objectif : rendre IMPOSSIBLE une régression silencieuse des types (ex. une
+# régénération Lovable qui efface des tables). Voir
+# docs/architecture/supabase-types-source-of-truth.md
+#
+# Cas des PR ajoutant une migration : la nouvelle table n'existe pas encore en
+# base tant que la migration n'est pas appliquée (au merge, par migrate.yml).
+# On ne lance donc PAS ce check sur les PR (le garde-fou tsc de typecheck.yml
+# les couvre) ; la conformité base⇄types est vérifiée sur main, APRÈS
+# application des migrations (étape finale de migrate.yml), et ici pour les
+# pushs main qui ne touchent que types.ts (typiquement les régénérations
+# Lovable poussées directement).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/integrations/supabase/types.ts"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: types.ts conforme à la base
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Si ce push modifie AUSSI des migrations, c'est migrate.yml qui vérifie
+      # la conformité APRÈS les avoir appliquées (sinon la base est en retard
+      # sur types.ts → faux écart). On se retire donc de ce cas.
+      - name: Déléguer à migrate.yml si des migrations changent
+        id: guard
+        run: |
+          BEFORE="${{ github.event.before }}"
+          if [ -z "$BEFORE" ] || ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          elif git diff --name-only "$BEFORE" "${{ github.sha }}" -- 'supabase/migrations/**' | grep -q .; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Des migrations changent dans ce push → vérification déléguée à migrate.yml."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: supabase/setup-cli@v1
+        if: steps.guard.outputs.skip == 'false'
+        with:
+          version: "2.109.1"
+
+      - uses: actions/setup-node@v4
+        if: steps.guard.outputs.skip == 'false'
+        with:
+          node-version: "20"
+
+      - name: Vérifier que types.ts correspond à la base
+        if: steps.guard.outputs.skip == 'false'
+        run: node scripts/check-supabase-types.mjs
