@@ -113,7 +113,7 @@ jobs:
           # ── Appel CLI avec capture complète (stdout + stderr) ──────────
           set +e
           RAW=$(supabase migration list \
-            --project-ref "$PROJECT_REF" \
+            --linked \
             --output json 2>&1)
           SUPABASE_EXIT=$?
           set -e
@@ -176,7 +176,7 @@ jobs:
               echo "   → $VERSION"
               set +e
               supabase migration repair \
-                --project-ref "$PROJECT_REF" \
+                --linked \
                 --status reverted \
                 "$VERSION"
               REPAIR_EXIT=$?
@@ -190,9 +190,19 @@ jobs:
           fi
 
       # ── 3. Push avec retry exponentiel ────────────────────────────────────
+      #
+      # BUG CORRIGÉ (audit du 2026-07-18) : `db push` n'accepte PAS
+      # `--project-ref` (seul `--linked` existe dans le CLI 2.109.1 — le
+      # projet est déjà lié par `supabase link` ci-dessus) : la commande
+      # échouait systématiquement et silencieusement, ET `if cmd | tee f;
+      # then` vérifiait le code retour de `tee` (toujours 0) plutôt que
+      # celui de `cmd`, faisant état d'un faux succès à chaque run. Aucune
+      # migration n'a donc jamais été réellement poussée par ce job.
+      # `set -o pipefail` restaure la propagation du code retour réel.
       - name: Push migrations (with retry)
         id: push
         run: |
+          set -o pipefail
           MAX=3
           DELAY=10
           for attempt in $(seq 1 $MAX); do
@@ -202,7 +212,7 @@ jobs:
 
             # Capturer stdout + stderr dans un fichier de log
             if supabase db push --yes --include-all \
-                 --project-ref "$PROJECT_REF" \
+                 --linked \
                  2>&1 | tee /tmp/push_output.txt; then
               echo "✅ Push réussi (tentative $attempt)"
               echo "success=true" >> "$GITHUB_OUTPUT"
@@ -223,7 +233,7 @@ jobs:
               if [ -n "$ORPHAN" ]; then
                 echo "🔧 Auto-repair migration orpheline : $ORPHAN"
                 supabase migration repair \
-                  --project-ref "$PROJECT_REF" \
+                  --linked \
                   --status reverted \
                   "$ORPHAN" || true
                 DELAY=2
@@ -301,6 +311,33 @@ jobs:
               exit 1
             fi
           fi
+
+      # ── 4b. Vérifier que types.ts correspond à la base (post-migration) ───
+      # Les migrations viennent d'être appliquées : la base contient désormais
+      # les nouvelles tables. types.ts committé DOIT correspondre — sinon on a
+      # oublié de régénérer (`npm run gen:types`). Échec visible, aucun commit.
+      - name: Setup Node (vérif types)
+        if: steps.push.outputs.success == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Vérifier que types.ts correspond à la base
+        if: steps.push.outputs.success == 'true'
+        env:
+          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: node scripts/check-supabase-types.mjs
+
+      # ── 4c. Audit : détecter les dérives Git ↔ Supabase (post-migration) ──
+      # Après application des migrations, vérifier qu'il n'y a pas de dérives
+      # (migrations orphelines en base, migrations supprimées en Git mais toujours
+      # appliquées, etc.). Cet audit détecte les incohérences d'état.
+      - name: Audit - Detect Git ↔ Supabase drift
+        if: steps.push.outputs.success == 'true'
+        id: audit
+        run: node scripts/audit-migration-drift.mjs || true
+        # Note: `|| true` pour ne pas échouer le job — l'audit est informatif.
+        # En cas de dérive réelle, l'étape "summary" l'inclura dans le rapport.
 
       # ── 5. GitHub Step Summary ────────────────────────────────────────────
       - name: Generate summary

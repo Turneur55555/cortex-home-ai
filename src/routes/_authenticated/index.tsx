@@ -7,6 +7,7 @@ import { useActivityStreak } from "@/hooks/useActivityStreak";
 import { buildAchievementCollection } from "@/lib/profile/achievements/collection";
 import { ProfileRPGData, type ProfileRPGDataValue } from "@/components/profile/rpg/ProfileRPGData";
 import { ProfileHeroCard } from "@/components/profile/ProfileHeroCard";
+import { SeasonTrackCard } from "@/components/profile/rpg/SeasonTrackCard";
 import { RPGProgressionSection } from "@/components/profile/rpg/RPGProgressionSection";
 import { ClassCard } from "@/components/profile/ClassCard";
 import { TrophyRoomPreview } from "@/components/profile/rpg/TrophyRoomPreview";
@@ -103,6 +104,8 @@ function HomeHub({
         achievementsUnlocked={collection.unlockedCount}
         achievementsTotal={collection.total}
       />
+
+      <SeasonTrackCard />
 
       <RPGProgressionSection
         rankAggregate={rankAggregate}

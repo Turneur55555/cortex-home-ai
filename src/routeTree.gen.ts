@@ -18,6 +18,7 @@ import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedTropheesRouteImport } from './routes/_authenticated/trophees'
 import { Route as AuthenticatedSupplementsRouteImport } from './routes/_authenticated/supplements'
 import { Route as AuthenticatedSeancesRouteImport } from './routes/_authenticated/seances'
+import { Route as AuthenticatedSanteNutritionnelleRouteImport } from './routes/_authenticated/sante-nutritionnelle'
 import { Route as AuthenticatedRlsStatusRouteImport } from './routes/_authenticated/rls-status'
 import { Route as AuthenticatedQuetesRouteImport } from './routes/_authenticated/quetes'
 import { Route as AuthenticatedProgressionRouteImport } from './routes/_authenticated/progression'
@@ -75,6 +76,12 @@ const AuthenticatedSeancesRoute = AuthenticatedSeancesRouteImport.update({
   path: '/seances',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedSanteNutritionnelleRoute =
+  AuthenticatedSanteNutritionnelleRouteImport.update({
+    id: '/sante-nutritionnelle',
+    path: '/sante-nutritionnelle',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedRlsStatusRoute = AuthenticatedRlsStatusRouteImport.update({
   id: '/rls-status',
   path: '/rls-status',
@@ -149,6 +156,7 @@ export interface FileRoutesByFullPath {
   '/progression': typeof AuthenticatedProgressionRoute
   '/quetes': typeof AuthenticatedQuetesRoute
   '/rls-status': typeof AuthenticatedRlsStatusRoute
+  '/sante-nutritionnelle': typeof AuthenticatedSanteNutritionnelleRoute
   '/seances': typeof AuthenticatedSeancesRoute
   '/supplements': typeof AuthenticatedSupplementsRoute
   '/trophees': typeof AuthenticatedTropheesRoute
@@ -169,6 +177,7 @@ export interface FileRoutesByTo {
   '/progression': typeof AuthenticatedProgressionRoute
   '/quetes': typeof AuthenticatedQuetesRoute
   '/rls-status': typeof AuthenticatedRlsStatusRoute
+  '/sante-nutritionnelle': typeof AuthenticatedSanteNutritionnelleRoute
   '/seances': typeof AuthenticatedSeancesRoute
   '/supplements': typeof AuthenticatedSupplementsRoute
   '/trophees': typeof AuthenticatedTropheesRoute
@@ -192,6 +201,7 @@ export interface FileRoutesById {
   '/_authenticated/progression': typeof AuthenticatedProgressionRoute
   '/_authenticated/quetes': typeof AuthenticatedQuetesRoute
   '/_authenticated/rls-status': typeof AuthenticatedRlsStatusRoute
+  '/_authenticated/sante-nutritionnelle': typeof AuthenticatedSanteNutritionnelleRoute
   '/_authenticated/seances': typeof AuthenticatedSeancesRoute
   '/_authenticated/supplements': typeof AuthenticatedSupplementsRoute
   '/_authenticated/trophees': typeof AuthenticatedTropheesRoute
@@ -216,6 +226,7 @@ export interface FileRouteTypes {
     | '/progression'
     | '/quetes'
     | '/rls-status'
+    | '/sante-nutritionnelle'
     | '/seances'
     | '/supplements'
     | '/trophees'
@@ -236,6 +247,7 @@ export interface FileRouteTypes {
     | '/progression'
     | '/quetes'
     | '/rls-status'
+    | '/sante-nutritionnelle'
     | '/seances'
     | '/supplements'
     | '/trophees'
@@ -258,6 +270,7 @@ export interface FileRouteTypes {
     | '/_authenticated/progression'
     | '/_authenticated/quetes'
     | '/_authenticated/rls-status'
+    | '/_authenticated/sante-nutritionnelle'
     | '/_authenticated/seances'
     | '/_authenticated/supplements'
     | '/_authenticated/trophees'
@@ -338,6 +351,13 @@ declare module '@tanstack/react-router' {
       path: '/seances'
       fullPath: '/seances'
       preLoaderRoute: typeof AuthenticatedSeancesRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/sante-nutritionnelle': {
+      id: '/_authenticated/sante-nutritionnelle'
+      path: '/sante-nutritionnelle'
+      fullPath: '/sante-nutritionnelle'
+      preLoaderRoute: typeof AuthenticatedSanteNutritionnelleRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/rls-status': {
@@ -429,6 +449,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedProgressionRoute: typeof AuthenticatedProgressionRoute
   AuthenticatedQuetesRoute: typeof AuthenticatedQuetesRoute
   AuthenticatedRlsStatusRoute: typeof AuthenticatedRlsStatusRoute
+  AuthenticatedSanteNutritionnelleRoute: typeof AuthenticatedSanteNutritionnelleRoute
   AuthenticatedSeancesRoute: typeof AuthenticatedSeancesRoute
   AuthenticatedSupplementsRoute: typeof AuthenticatedSupplementsRoute
   AuthenticatedTropheesRoute: typeof AuthenticatedTropheesRoute
@@ -448,6 +469,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedProgressionRoute: AuthenticatedProgressionRoute,
   AuthenticatedQuetesRoute: AuthenticatedQuetesRoute,
   AuthenticatedRlsStatusRoute: AuthenticatedRlsStatusRoute,
+  AuthenticatedSanteNutritionnelleRoute: AuthenticatedSanteNutritionnelleRoute,
   AuthenticatedSeancesRoute: AuthenticatedSeancesRoute,
   AuthenticatedSupplementsRoute: AuthenticatedSupplementsRoute,
   AuthenticatedTropheesRoute: AuthenticatedTropheesRoute,

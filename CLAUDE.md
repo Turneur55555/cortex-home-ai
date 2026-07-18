@@ -1,5 +1,39 @@
 # Claude Code Rules — cortex-home-ai
 
+## Piliers RPG — règle de conception permanente (validée par Nathan, 17/07/2026)
+Toute nouvelle fonctionnalité doit renforcer **au moins un** de ces quatre piliers :
+1. donner envie de revenir **aujourd'hui** ;
+2. donner envie de revenir **cette semaine** ;
+3. donner envie **d'aller au bout de la saison** ;
+4. **enrichir les Chroniques** pour qu'on ait envie de les relire des années plus tard.
+
+Si une fonctionnalité ne renforce aucun de ces piliers, elle n'est probablement pas prioritaire.
+Rappels structurants : la progression vient **toujours** de l'entraînement (muscu-primaire) ; les
+Saisons **racontent** la progression, elles ne donnent aucun avantage de puissance. Vision détaillée :
+`docs/architecture/rpg-vision-et-r1-niveau-personnage.md` et `docs/architecture/rpg-saisons.md`.
+
+## Standard premium — direction artistique (validé par Nathan, 17/07/2026)
+CORTEX vise à être **le plus beau RPG de progression du fitness**, pas une app de suivi gamifiée.
+- **Le Rang est la star** (Titan, Olympien…). Le joueur retient son RANG, jamais son niveau. Le
+  Niveau/XP ne fait que raconter le chemin vers le prochain Rang — toujours au service du Rang.
+- **Chaque famille de Rang est un univers** (matière, lumière, particules propres), pas une couleur.
+- **Signature visuelle partagée** : réutiliser `src/components/rpg/` (Blason, RankSigil, premium/tokens,
+  premium/rankUniverse) sur TOUS les écrans premium (récompenses, montées de rang, Chroniques, Saisons,
+  Reliques, trophées) pour un univers cohérent.
+- **Deux questions avant d'ajouter** : (1) renforce-t-elle la boucle entraîner→progresser→récompenser→
+  revenir ? (2) crée-t-elle un vrai effet « Waouh » ? Si non aux deux → pas prioritaire.
+- **Test de chaque itération premium** : *« Si un utilisateur ouvrait cet écran pour la première fois,
+  aurait-il envie d'en faire une capture d'écran et de la partager ? »* Si non, on continue d'itérer.
+  Mieux vaut plusieurs itérations sur un écran exceptionnel qu'un écran « correct ».
+
+## Types Supabase — la base est la source de vérité (validé par Nathan, 17/07/2026)
+- **Ne JAMAIS éditer `src/integrations/supabase/types.ts` à la main.** C'est un artefact généré.
+- Pour ajouter/modifier une table : écrire une migration → merger (migrate.yml applique) → régénérer
+  via `npm run gen:types` → committer les types. La base fait foi, jamais l'inverse.
+- La CI **échoue** (sans corriger) si `types.ts` ne correspond plus à la base (`supabase-types.yml`,
+  étape finale de `migrate.yml`) + garde-fou `tsc` sur toute PR (`typecheck.yml`).
+- Détail : `docs/architecture/supabase-types-source-of-truth.md`.
+
 ## Avant chaque modification, lire obligatoirement :
 1. MEMORY.md
 2. /docs/architecture.md
