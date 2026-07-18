@@ -10,6 +10,11 @@ on:
     paths:
       - 'supabase/migrations/**'
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Simulation (supabase db push --dry-run) : valide le pipeline et les accès SANS appliquer aucune migration"
+        type: boolean
+        default: true
 
 permissions:
   contents: write   # auto-commit des corrections idempotentes
@@ -65,7 +70,11 @@ jobs:
     name: Push migrations to Supabase
     runs-on: ubuntu-latest
     needs: validate
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    # main (push réel) OU dispatch manuel (permet de valider le pipeline depuis
+    # une branche, typiquement en dry-run, sans merger sur main).
+    if: >-
+      github.event_name != 'pull_request' &&
+      (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
 
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -201,6 +210,16 @@ jobs:
           DELAY=10
           SUCCESS=false
 
+          # Mode simulation : `--dry-run` exerce réellement la commande et la
+          # connexion (valide les accès CI + prouve l'absence de faux positif)
+          # mais n'applique AUCUNE migration. Actif uniquement via dispatch
+          # manuel avec dry_run=true (défaut). Un push sur main applique bien.
+          DRY=""
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            DRY="--dry-run"
+            echo "🧪 MODE DRY-RUN — aucune migration ne sera appliquée."
+          fi
+
           for attempt in $(seq 1 $MAX); do
             echo "════════════════════════════════════════"
             echo "Tentative $attempt/$MAX — $(date -u '+%H:%M:%S UTC')"
@@ -210,7 +229,7 @@ jobs:
             # --project-ref (flag INVALIDE pour `db push`, provoquait un dump
             # d'aide + exit 0 = faux succès). On cible le projet lié.
             set +e
-            supabase db push --linked --include-all --yes 2>&1 | tee /tmp/push_output.txt
+            supabase db push --linked --include-all --yes $DRY 2>&1 | tee /tmp/push_output.txt
             PUSH_EXIT=${PIPESTATUS[0]}
             set -e
 
@@ -277,8 +296,9 @@ jobs:
           fi
 
       # ── 4. Créer le bucket pdfs (idempotent) ──────────────────────────────
+      #      Sauté en dry-run (rien n'a été appliqué, aucun effet attendu).
       - name: Ensure storage bucket pdfs
-        if: steps.push.outputs.success == 'true'
+        if: steps.push.outputs.success == 'true' && github.event.inputs.dry_run != 'true'
         run: |
           SERVICE_KEY=$(supabase projects api-keys \
             --project-ref "$PROJECT_REF" \
@@ -332,13 +352,13 @@ jobs:
       # les nouvelles tables. types.ts committé DOIT correspondre — sinon on a
       # oublié de régénérer (`npm run gen:types`). Échec visible, aucun commit.
       - name: Setup Node (vérif types)
-        if: steps.push.outputs.success == 'true'
+        if: steps.push.outputs.success == 'true' && github.event.inputs.dry_run != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: "20"
 
       - name: Vérifier que types.ts correspond à la base
-        if: steps.push.outputs.success == 'true'
+        if: steps.push.outputs.success == 'true' && github.event.inputs.dry_run != 'true'
         env:
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: node scripts/check-supabase-types.mjs
