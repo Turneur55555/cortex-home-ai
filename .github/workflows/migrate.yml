@@ -113,7 +113,7 @@ jobs:
           # ── Appel CLI avec capture complète (stdout + stderr) ──────────
           set +e
           RAW=$(supabase migration list \
-            --project-ref "$PROJECT_REF" \
+            --linked \
             --output json 2>&1)
           SUPABASE_EXIT=$?
           set -e
@@ -176,7 +176,7 @@ jobs:
               echo "   → $VERSION"
               set +e
               supabase migration repair \
-                --project-ref "$PROJECT_REF" \
+                --linked \
                 --status reverted \
                 "$VERSION"
               REPAIR_EXIT=$?
@@ -193,28 +193,47 @@ jobs:
       - name: Push migrations (with retry)
         id: push
         run: |
+          # bash -eo pipefail est déjà le shell par défaut des runners GitHub,
+          # mais on capture le code retour de `db push` explicitement via
+          # PIPESTATUS pour ne JAMAIS dépendre du comportement du pipe `| tee`.
+          set -uo pipefail
           MAX=3
           DELAY=10
+          SUCCESS=false
+
           for attempt in $(seq 1 $MAX); do
             echo "════════════════════════════════════════"
             echo "Tentative $attempt/$MAX — $(date -u '+%H:%M:%S UTC')"
             echo "════════════════════════════════════════"
 
-            # Capturer stdout + stderr dans un fichier de log
-            if supabase db push --yes --include-all \
-                 --project-ref "$PROJECT_REF" \
-                 2>&1 | tee /tmp/push_output.txt; then
+            # Projet déjà lié (étape « Link Supabase project ») → pas de
+            # --project-ref (flag INVALIDE pour `db push`, provoquait un dump
+            # d'aide + exit 0 = faux succès). On cible le projet lié.
+            set +e
+            supabase db push --linked --include-all --yes 2>&1 | tee /tmp/push_output.txt
+            PUSH_EXIT=${PIPESTATUS[0]}
+            set -e
+
+            OUTPUT=$(cat /tmp/push_output.txt)
+
+            # ── Garde-fou anti-faux-succès ───────────────────────────────
+            # Certaines erreurs d'arguments font sortir la CLI en code 0 tout
+            # en affichant l'aide. On force l'échec si l'aide/le rejet de flag
+            # apparaît, quel que soit le code retour.
+            if echo "$OUTPUT" | grep -qiE "Unrecognized flag|Help requested|^Usage:|Try rerunning the command with --debug"; then
+              echo "❌ La CLI a rejeté la commande (flag invalide / aide affichée) — traité comme ÉCHEC."
+              PUSH_EXIT=1
+            fi
+
+            if [ "$PUSH_EXIT" -eq 0 ]; then
               echo "✅ Push réussi (tentative $attempt)"
-              echo "success=true" >> "$GITHUB_OUTPUT"
+              SUCCESS=true
               break
             fi
 
-            echo "❌ Tentative $attempt échouée"
-            cat /tmp/push_output.txt
+            echo "❌ Tentative $attempt échouée (exit $PUSH_EXIT)"
 
             # ── Détection automatique des causes connues ─────────────────
-            OUTPUT=$(cat /tmp/push_output.txt)
-
             # Cause : migration orpheline détectée en cours de push
             if echo "$OUTPUT" | grep -q "Remote migration versions not found"; then
               ORPHAN=$(echo "$OUTPUT" \
@@ -223,7 +242,7 @@ jobs:
               if [ -n "$ORPHAN" ]; then
                 echo "🔧 Auto-repair migration orpheline : $ORPHAN"
                 supabase migration repair \
-                  --project-ref "$PROJECT_REF" \
+                  --linked \
                   --status reverted \
                   "$ORPHAN" || true
                 DELAY=2
@@ -241,15 +260,21 @@ jobs:
             fi
 
             if [ "$attempt" -eq "$MAX" ]; then
-              echo "success=false" >> "$GITHUB_OUTPUT"
-              echo "::error::Push Supabase échoué après $MAX tentatives"
-              exit 1
+              break
             fi
 
             echo "⏳ Attente ${DELAY}s avant la prochaine tentative..."
             sleep "$DELAY"
             DELAY=$((DELAY * 2))
           done
+
+          if [ "$SUCCESS" = "true" ]; then
+            echo "success=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "success=false" >> "$GITHUB_OUTPUT"
+            echo "::error::Push Supabase échoué après $MAX tentatives"
+            exit 1
+          fi
 
       # ── 4. Créer le bucket pdfs (idempotent) ──────────────────────────────
       - name: Ensure storage bucket pdfs
