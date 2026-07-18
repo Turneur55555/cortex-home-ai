@@ -65,7 +65,9 @@ function loadGitMigrations() {
 // ─── Récupérer les migrations Supabase ────────────────────────────────────────
 function loadRemoteMigrations() {
   try {
-    const output = execFileSync('supabase', ['migration', 'list', '--linked', '--output', 'json'], {
+    // Essayer d'abord avec --json (Supabase CLI <= 2.109.1)
+    // Si ce flag n'existe pas, le CLI affiche un avertissement mais peut continuer
+    const output = execFileSync('supabase', ['migration', 'list', '--linked', '--json'], {
       encoding: 'utf8',
       maxBuffer: 64 * 1024 * 1024,
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -101,6 +103,9 @@ function loadRemoteMigrations() {
       console.error('❌ Format inattendu de supabase migration list (pas un array)');
       console.error('   Type : ' + typeof migrations);
       console.error('   Réponse : ' + output.slice(0, 200));
+      console.error('');
+      console.error('   💡 Note: Vérifiez que le Supabase CLI supporte --json');
+      console.error('   Commande essayée : supabase migration list --linked --json');
       process.exit(2);
     }
 
