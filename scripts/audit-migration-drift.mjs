@@ -65,16 +65,52 @@ function loadGitMigrations() {
 // ─── Récupérer les migrations Supabase ────────────────────────────────────────
 function loadRemoteMigrations() {
   try {
-    const output = execFileSync('supabase', ['migration', 'list', '--linked', '--output', 'json'], {
-      encoding: 'utf8',
-      maxBuffer: 64 * 1024 * 1024,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
+    let output;
 
-    const migrations = JSON.parse(output);
+    try {
+      // Utiliser shell pour rediriger stderr vers stdout
+      output = execSync('supabase migration list --linked --output json 2>&1', {
+        encoding: 'utf8',
+        maxBuffer: 64 * 1024 * 1024,
+        shell: true,
+      });
+    } catch (e) {
+      // execSync lance une erreur si le processus retourne un code non-zéro
+      output = e.stdout || e.message || '';
+    }
+
+    // Extraire la partie JSON si la réponse contient du texte avant
+    let jsonPart = output;
+    const jsonMatch = output.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
+      jsonPart = jsonMatch[0];
+    }
+
+    // Valider et parser le JSON
+    let migrations;
+    try {
+      migrations = JSON.parse(jsonPart);
+    } catch (parseErr) {
+      // Si le JSON n'est pas valide, afficher un diagnostic
+      if (output.includes('not linked')) {
+        console.error('❌ Aucun projet Supabase lié');
+        console.error('   Exécute : supabase link --project-ref ' + PROJECT_REF);
+        process.exit(2);
+      }
+      if (output.includes('Invalid access token') || output.includes('401')) {
+        console.error('❌ Token Supabase invalide ou expiré');
+        console.error('   Vérifie SUPABASE_ACCESS_TOKEN');
+        process.exit(2);
+      }
+      console.error('❌ Impossible de récupérer les migrations Supabase');
+      console.error('   Réponse du CLI (premières 300 caractères):');
+      console.error('   ' + output.slice(0, 300).replace(/\n/g, '\n   '));
+      process.exit(2);
+    }
+
     if (!Array.isArray(migrations)) {
       console.error('❌ Format inattendu de supabase migration list');
-      console.error('   Réponse : ' + output.slice(0, 200));
+      console.error('   Réponse : ' + JSON.stringify(migrations).slice(0, 200));
       process.exit(2);
     }
 
@@ -93,16 +129,11 @@ function loadRemoteMigrations() {
     return byVersion.size;
   } catch (e) {
     if (e.code === 'ENOENT') {
-      console.error('❌ CLI Supabase non disponible (supabase gen types fonctionne-t-il ?)');
-      process.exit(2);
-    }
-    if (e.stderr?.includes('not linked')) {
-      console.error('❌ Aucun projet Supabase lié');
-      console.error('   Exécute : supabase link --project-ref ' + PROJECT_REF);
+      console.error('❌ CLI Supabase non disponible');
       process.exit(2);
     }
     console.error('❌ Impossible de récupérer les migrations Supabase');
-    console.error('   ' + (e.stderr?.toString?.() || e.message || e));
+    console.error('   ' + (e.message || e));
     process.exit(2);
   }
 }
