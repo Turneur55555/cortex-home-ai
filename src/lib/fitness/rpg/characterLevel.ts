@@ -3,9 +3,14 @@
 //
 // MIROIR EXACT de la courbe serveur `compute_level_from_xp` :
 //     level = FLOOR(SQRT(xp / 50)) + 1
-// (migration 20260529061501). Le serveur reste la seule autorité qui
-// ÉCRIT `user_stats.level` ; ce module ne fait que DÉRIVER la même valeur
-// et la progression intra-niveau pour l'affichage (barre XP de l'Accueil).
+// Formule canonique restaurée par la migration `20260718120000` (l'historique
+// avait fait diverger la fonction serveur vers /100 sans +1 — voir cette
+// migration pour l'audit complet). Un trigger serveur
+// (`trg_enforce_level_from_xp`) garantit désormais que `user_stats.level`
+// est TOUJOURS dérivé de `user_stats.xp` par cette même formule, quel que
+// soit l'écrivain. Le serveur reste la seule autorité qui ÉCRIT
+// `user_stats.level` ; ce module ne fait que DÉRIVER la même valeur et la
+// progression intra-niveau pour l'affichage (barre XP de l'Accueil).
 //
 // ⚠️ `lib/fitness/badges.ts:xpForLevel` utilise une AUTRE formule
 // (level²·100) mais n'est appelé nulle part — ce module est la source

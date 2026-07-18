@@ -7,6 +7,7 @@ import {
   totalSessionXp,
   buildXpBreakdown,
   buildLevelTransition,
+  buildLevelTransitionFromServer,
   type SessionXpEvent,
   type XpBreakdownLine,
   type LevelTransition,
@@ -25,12 +26,21 @@ export interface SessionRewardData {
   hasXp: boolean;
 }
 
+interface WorkoutRewardSnapshot {
+  xp_before: number | null;
+  xp_after: number | null;
+  level_before: number | null;
+  level_after: number | null;
+}
+
 /**
  * Récapitulatif d'XP d'une séance pour l'écran de récompense de fin de séance.
- * Lit `xp_events` (versés par le trigger serveur à la clôture) + l'XP totale
- * courante (`user_stats`). L'XP d'avant la séance se déduit sans snapshot :
- * `xpAfter − Σ(events de la séance)`. Lecture seule, aucun calcul d'économie
- * côté client (le serveur est l'autorité).
+ * Lit `xp_events` (détail par source) + les compteurs AUTORITATIFS versés par
+ * le serveur sur la séance elle-même (`workouts.xp_before/xp_after/
+ * level_before/level_after`, migration `20260718120000`). Le serveur est
+ * l'unique autorité : plus de reconstruction `xpAfter − events` côté client.
+ * Repli sur `user_stats.xp` uniquement pour les séances antérieures à la
+ * migration (colonnes NULL).
  */
 export function useSessionReward(workoutId: string | null | undefined): SessionRewardData {
   const { user } = useAuth();
@@ -47,22 +57,49 @@ export function useSessionReward(workoutId: string | null | undefined): SessionR
         .eq("workout_id", workoutId!);
       if (error) throw error;
       return (data ?? []) as SessionXpEvent[];
+    },
+  });
 
+  const { data: snapshot, isLoading: snapshotLoading } = useQuery({
+    queryKey: ["session_reward_snapshot", workoutId],
+    enabled: !!user && !!workoutId,
+    staleTime: 15_000,
+    queryFn: async (): Promise<WorkoutRewardSnapshot | null> => {
+      const { data, error } = await (supabase as any)
+        .from("workouts")
+        .select("xp_before, xp_after, level_before, level_after")
+        .eq("id", workoutId!)
+        .maybeSingle();
+      if (error) throw error;
+      return (data ?? null) as WorkoutRewardSnapshot | null;
     },
   });
 
   return useMemo(() => {
     const totalXp = totalSessionXp(events);
     const breakdown = buildXpBreakdown(events);
-    const xpAfter = userStats?.xp ?? 0;
-    const xpBefore = Math.max(0, xpAfter - totalXp);
-    const level = buildLevelTransition(xpBefore, xpAfter);
+
+    const hasServerSnapshot =
+      snapshot?.xp_before != null &&
+      snapshot?.xp_after != null &&
+      snapshot?.level_before != null &&
+      snapshot?.level_after != null;
+
+    const level = hasServerSnapshot
+      ? buildLevelTransitionFromServer(
+          snapshot!.xp_before!,
+          snapshot!.xp_after!,
+          snapshot!.level_before!,
+          snapshot!.level_after!,
+        )
+      : buildLevelTransition(Math.max(0, (userStats?.xp ?? 0) - totalXp), userStats?.xp ?? 0);
+
     return {
-      isLoading: statsLoading || eventsLoading,
+      isLoading: statsLoading || eventsLoading || snapshotLoading,
       totalXp,
       breakdown,
       level,
       hasXp: totalXp > 0,
     };
-  }, [events, userStats, statsLoading, eventsLoading]);
+  }, [events, snapshot, userStats, statsLoading, eventsLoading, snapshotLoading]);
 }

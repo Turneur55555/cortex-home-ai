@@ -84,8 +84,11 @@ export interface LevelTransition {
 
 /**
  * Transition de niveau entre l'XP d'avant la séance et celle d'après.
- * `xpAfter` est l'XP totale (autoritative, depuis `user_stats`) ; `xpBefore`
- * s'en déduit en retirant l'XP gagnée pendant la séance.
+ * Utilisé en repli uniquement (séances antérieures à la migration
+ * `20260718120000`, sans `xp_before`/`xp_after` stockés côté serveur) —
+ * `xpBefore` y est reconstruit en retirant l'XP de la séance de `xpAfter`,
+ * ce qui suppose qu'aucune autre source d'XP n'a été versée depuis. Le
+ * niveau est recalculé depuis l'XP (miroir serveur), jamais transmis tel quel.
  */
 export function buildLevelTransition(xpBefore: number, xpAfter: number): LevelTransition {
   const before = Math.max(0, Math.floor(xpBefore));
@@ -104,5 +107,32 @@ export function buildLevelTransition(xpBefore: number, xpAfter: number): LevelTr
     levelsGained: Math.max(0, levelAfter - levelBefore),
     progressBefore,
     progressAfter,
+  };
+}
+
+/**
+ * Transition de niveau à partir des compteurs AUTORITATIFS versés côté
+ * serveur (`workouts.xp_before/xp_after/level_before/level_after`, migration
+ * `20260718120000`). Chemin nominal de l'écran de récompense : aucune
+ * reconstruction côté client, seulement une dérivation de la progression
+ * d'affichage (barre XP) à partir des valeurs serveur.
+ */
+export function buildLevelTransitionFromServer(
+  xpBefore: number,
+  xpAfter: number,
+  levelBefore: number,
+  levelAfter: number,
+): LevelTransition {
+  const before = Math.max(0, Math.floor(xpBefore));
+  const after = Math.max(before, Math.floor(xpAfter));
+  return {
+    xpBefore: before,
+    xpAfter: after,
+    levelBefore,
+    levelAfter,
+    leveledUp: levelAfter > levelBefore,
+    levelsGained: Math.max(0, levelAfter - levelBefore),
+    progressBefore: characterLevelProgress(before).progress,
+    progressAfter: characterLevelProgress(after).progress,
   };
 }
