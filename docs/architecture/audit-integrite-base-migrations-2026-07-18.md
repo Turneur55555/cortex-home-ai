@@ -391,7 +391,7 @@ irréversible** : non exécuté sans confirmation explicite. Confirmé par dry-r
 (run `29639556315`, 18/07 09:41) : ce sont **les deux seules** migrations qu'un
 `db push` réel appliquerait désormais — tout le reste est propre.
 
-### 10.5 Validation post-réconciliation
+### 10.5 Validation post-réconciliation (avant les 2 DROP)
 - Dry-run CI (`29639556315`) : `Push migrations to Supabase` → **success**. Détecte
   et lie exactement les 2 migrations retenues, zéro erreur d'orpheline.
 - TachePaie : row counts inchangés (`dossiers=44, dsn=44, ca_praticiens=627,
@@ -399,3 +399,36 @@ irréversible** : non exécuté sans confirmation explicite. Confirmé par dry-r
 - CORTEX : `reminders=5, items=11, home_categories=33` — **confirmé intact** (rien
   supprimé sans confirmation).
 - Tests : 391 pass. Typecheck : 0 erreur (hors artefacts sandbox `html-to-image`).
+
+### 10.6 Décision utilisateur reçue + exécution finale (18/07, suite)
+Nathan confirme explicitement la suppression définitive des deux migrations
+retenues (§10.4) — features retirées du code, aucune donnée à conserver.
+
+Exécuté (`apply_migration`, contenu exact des fichiers repo) :
+- `20260619195942` : `DROP TABLE reminders CASCADE` + `DROP TABLE calendar_tokens CASCADE`.
+- `20260714145745` : `DROP FUNCTION ensure_home_categories_for_me` +
+  `DROP TABLE items/home_subcategories/home_categories CASCADE`.
+
+Versions d'historique alignées sur les fichiers repo. Vérifié immédiatement après :
+`to_regclass` → `null` pour les 5 tables (confirmé supprimées) ; TachePaie
+inchangée (`dossiers=44, dsn=44, ca_praticiens=627, controle_lignes=929`).
+
+**`total_applied = 162` = nombre exact de fichiers dans `supabase/migrations/`.
+Historique 100% aligné code ⇄ base.**
+
+### 10.7 Validation finale — `supabase db push` propre
+Nouveau dry-run CI (run `29639663462`, 18/07 09:45) :
+```
+DRY RUN: migrations will *not* be pushed to the database.
+Connecting to remote database...
+Remote database is up to date.
+✅ Push réussi (tentative 1)
+```
+**Zéro migration en attente, zéro orpheline, zéro conflit.** `db push` ne renvoie
+plus aucune erreur. Tests : 391 pass. Typecheck : 0 erreur (hors artefacts sandbox).
+
+**CORTEX est maintenant 100% cohérent entre code, migrations, base et CI** — la
+dette technique historique (types.ts + pipeline de migrations cassé + RPG jamais
+déployé + historique divergent) est **définitivement clôturée**. Reste hors
+périmètre, en feuille de route : séparation TachePaie vers un projet Supabase
+dédié (décision prise, non urgente).
