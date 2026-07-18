@@ -3,20 +3,21 @@ import { motion } from "framer-motion";
 import type { RankState } from "@/lib/fitness/exerciseRanks";
 import { getRankVisual } from "@/lib/fitness/rankVisuals";
 import { EASE_IN_OUT, EASE_OUT, HALO_BREATH } from "./premium/tokens";
-import { discTierFor, type DiscSurface } from "./premium/discUniverse";
+import { discTierFor, type DiscTier } from "./premium/discUniverse";
 
 // ============================================================
 // LE DISQUE — symbole officiel de CORTEX, relique unique du joueur.
 //
-// UNE seule silhouette, immuable : jante biseautée → gorge gravée → champ →
-// cœur d'énergie, avec le NOM DU RANG gravé en arc (jamais de chiffre, jamais
-// de poids). Ce n'est pas un disque de musculation : c'est un artefact
-// mythique qui absorbe la puissance du joueur. Ce qui évolue d'un rang à
-// l'autre (diamètre, épaisseur, matière, gravures, cœur, énergie, environnement)
-// vient de `discUniverse.ts` ; les couleurs/matières de `rankVisuals.ts`.
+// Objectif de rendu : un OBJET RÉEL forgé, pas une icône UI. Métal réaliste
+// (texture de forge procédurale via feTurbulence + éclairage feDiffuse/
+// feSpecular), relief profond, jante massive, gravures sculptées en creux,
+// usure (micro-rayures, éclats), lumière cinématographique (key light + rim
+// light + vignette), cœur d'énergie crédible, ombre de contact lourde.
 //
-// Réutilisable partout (Hero, montée de rang, Chroniques, Reliques…).
-// `variant="hero"` = pleine mise en scène ; `variant="emblem"` = la pièce seule.
+// UNE seule silhouette immuable (jante → gorge → champ → cœur, nom gravé en
+// arc). Ce qui évolue vient de `discUniverse.ts` ; les couleurs de
+// `rankVisuals.ts`. Le fond participe (poussière/braises/éclats), avec
+// sobriété : les effets servent le disque, jamais l'inverse.
 // ============================================================
 
 interface RankDiscProps {
@@ -30,252 +31,153 @@ interface RankDiscProps {
 // Géométrie de base (viewBox 200×200, centre 100,100) — CONSTANTE tous rangs.
 const C = 100;
 const OUTER = 94;
+// Une seule direction de lumière pour tout l'objet (clé du rendu « photographié »).
+const LIGHT_AZ = 235;
 
-// ── Cœur d'énergie : le puits central de la relique ─────────────────────────
+/** Aléa déterministe (aucun random au render). */
+function det(i: number, salt = 0): number {
+  const t = (i * 9301 + (salt + 1) * 49297) % 233280;
+  return t / 233280;
+}
+
+// ── Cœur d'énergie : puits profond, bloom crédible ──────────────────────────
 function DiscCore({
-  color,
   glow,
-  energy,
-  surface,
+  text,
+  tier,
+  ids,
   animated,
 }: {
-  color: string;
   glow: string;
-  energy: number;
-  surface: DiscSurface;
+  text: string;
+  tier: DiscTier;
+  ids: { coreGlow: string; coreWell: string; coreHot: string };
   animated: boolean;
 }) {
-  const coreR = 24;
+  const coreR = 22;
+  const e = tier.energy;
   return (
     <g>
-      {/* Bore gravé en creux */}
-      <circle cx={C} cy={C} r={coreR} fill="#05050a" />
+      {/* Bloom d'énergie derrière le puits — respire */}
+      <motion.circle
+        cx={C}
+        cy={C}
+        r={coreR * (1.1 + e * 0.9)}
+        fill={`url(#${ids.coreGlow})`}
+        animate={
+          animated ? { opacity: [0.4 + e * 0.3, 0.75 + e * 0.25, 0.4 + e * 0.3] } : undefined
+        }
+        transition={
+          animated ? { duration: 3.4 - e, repeat: Infinity, ease: EASE_IN_OUT } : undefined
+        }
+      />
+      {/* Paroi du puits (recreusé, sombre) */}
+      <circle cx={C} cy={C} r={coreR} fill={`url(#${ids.coreWell})`} />
+      {/* Ombre interne haute + reflet bas — donne la profondeur du trou */}
       <circle
         cx={C}
         cy={C}
         r={coreR}
         fill="none"
-        stroke="#000"
-        strokeOpacity="0.7"
-        strokeWidth="2.5"
+        stroke="#000000"
+        strokeOpacity="0.85"
+        strokeWidth="3"
       />
-      {/* Lueur du cœur — s'intensifie avec le rang */}
+      <path
+        d={`M ${C - coreR * 0.72} ${C + coreR * 0.5} A ${coreR} ${coreR} 0 0 0 ${C + coreR * 0.72} ${C + coreR * 0.5}`}
+        fill="none"
+        stroke={text}
+        strokeOpacity="0.25"
+        strokeWidth="1.4"
+      />
+      {/* Foyer incandescent */}
       <motion.circle
         cx={C}
         cy={C}
-        r={coreR * (0.42 + energy * 0.4)}
-        fill={color}
-        style={{ filter: `blur(${2 + energy * 4}px)` }}
+        r={coreR * (0.66 + e * 0.2)}
+        fill={`url(#${ids.coreHot})`}
         animate={
           animated
-            ? { opacity: [0.35 + energy * 0.3, 0.7 + energy * 0.3, 0.35 + energy * 0.3] }
+            ? {
+                opacity: [0.7, 1, 0.7],
+                scale: tier.surface === "molten" ? [0.96, 1.05, 0.96] : [1, 1, 1],
+              }
             : undefined
         }
         transition={
-          animated ? { duration: 3.2 - energy, repeat: Infinity, ease: EASE_IN_OUT } : undefined
+          animated
+            ? { duration: tier.surface === "molten" ? 1.8 : 3, repeat: Infinity, ease: EASE_IN_OUT }
+            : undefined
         }
+        style={{ transformOrigin: `${C}px ${C}px` }}
       />
-      {/* Point de puissance central */}
-      <circle cx={C} cy={C} r={2 + energy * 2.2} fill="#ffffff" opacity={0.5 + energy * 0.45} />
-      {/* Étoile divine / cosmique au cœur des hauts rangs */}
-      {(surface === "divine" || surface === "cosmic") && animated && (
+      {/* Point de puissance blanc */}
+      <circle cx={C} cy={C} r={1.6 + e * 2.4} fill="#ffffff" opacity={0.55 + e * 0.4} />
+
+      {/* Rayons divins (Olympien) — élégants, tournants */}
+      {tier.surface === "divine" && animated && (
         <motion.g
           style={{ transformOrigin: `${C}px ${C}px` }}
-          animate={{ rotate: surface === "cosmic" ? 360 : [0, 8, 0] }}
-          transition={{
-            duration: surface === "cosmic" ? 40 : 6,
-            repeat: Infinity,
-            ease: surface === "cosmic" ? "linear" : EASE_IN_OUT,
-          }}
+          animate={{ rotate: [0, 6, 0] }}
+          transition={{ duration: 7, repeat: Infinity, ease: EASE_IN_OUT }}
         >
-          {[0, 45, 90, 135].map((a) => (
+          {[0, 30, 60, 90, 120, 150].map((a) => (
             <rect
               key={a}
-              x={C - 0.7}
-              y={C - coreR * 0.9}
-              width="1.4"
-              height={coreR * 1.8}
-              rx="0.7"
+              x={C - 0.5}
+              y={C - coreR * 1.15}
+              width="1"
+              height={coreR * 2.3}
+              rx="0.5"
               fill={glow}
-              opacity="0.6"
+              opacity="0.5"
               transform={`rotate(${a} ${C} ${C})`}
             />
           ))}
         </motion.g>
       )}
-      {/* Anneau du cœur */}
-      <circle
-        cx={C}
-        cy={C}
-        r={coreR}
+      {/* Cœur cosmique tournant (Primordial) */}
+      {tier.surface === "cosmic" && animated && (
+        <motion.g
+          style={{ transformOrigin: `${C}px ${C}px` }}
+          animate={{ rotate: 360 }}
+          transition={{ duration: 46, repeat: Infinity, ease: "linear" }}
+        >
+          <ellipse
+            cx={C}
+            cy={C}
+            rx={coreR * 0.85}
+            ry={coreR * 0.32}
+            fill="none"
+            stroke={text}
+            strokeOpacity="0.4"
+            strokeWidth="0.8"
+          />
+          <ellipse
+            cx={C}
+            cy={C}
+            rx={coreR * 0.85}
+            ry={coreR * 0.32}
+            fill="none"
+            stroke={text}
+            strokeOpacity="0.3"
+            strokeWidth="0.8"
+            transform={`rotate(60 ${C} ${C})`}
+          />
+        </motion.g>
+      )}
+
+      {/* Lèvre lumineuse du puits (haut) */}
+      <path
+        d={`M ${C - coreR * 0.8} ${C - coreR * 0.6} A ${coreR} ${coreR} 0 0 1 ${C + coreR * 0.6} ${C - coreR * 0.8}`}
         fill="none"
-        stroke={color}
-        strokeOpacity={0.35 + energy * 0.4}
-        strokeWidth="1"
+        stroke="#ffffff"
+        strokeOpacity="0.3"
+        strokeWidth="1.2"
+        strokeLinecap="round"
       />
     </g>
   );
-}
-
-// ── Effets de surface propres à la matière du rang ──────────────────────────
-function SurfaceFX({
-  surface,
-  faceR,
-  color,
-  glow,
-  energy,
-  animated,
-}: {
-  surface: DiscSurface;
-  faceR: number;
-  color: string;
-  glow: string;
-  energy: number;
-  animated: boolean;
-}) {
-  // Positions déterministes (pas de random au render).
-  const seeds = useMemo(
-    () =>
-      Array.from({ length: 14 }, (_, i) => {
-        const r = ((i * 9301 + 49297) % 233280) / 233280;
-        const r2 = ((i * 4021 + 7919) % 3571) / 3571;
-        const a = r * Math.PI * 2;
-        const rad = 30 + r2 * (faceR - 34);
-        return { x: C + Math.cos(a) * rad, y: C + Math.sin(a) * rad, r, r2, a };
-      }),
-    [faceR],
-  );
-
-  switch (surface) {
-    case "molten": // Titan — fissures de lave incandescentes
-      return (
-        <g>
-          {seeds.slice(0, 6).map((s, i) => {
-            const x2 = C + Math.cos(s.a) * faceR * 0.94;
-            const y2 = C + Math.sin(s.a) * faceR * 0.94;
-            const mx = (s.x + x2) / 2 + (s.r - 0.5) * 12;
-            const my = (s.y + y2) / 2 + (s.r2 - 0.5) * 12;
-            return (
-              <motion.path
-                key={i}
-                d={`M ${s.x.toFixed(1)} ${s.y.toFixed(1)} Q ${mx.toFixed(1)} ${my.toFixed(1)} ${x2.toFixed(1)} ${y2.toFixed(1)}`}
-                fill="none"
-                stroke={glow}
-                strokeWidth={1 + s.r}
-                strokeLinecap="round"
-                style={{ filter: `drop-shadow(0 0 ${2 + energy * 3}px ${color})` }}
-                animate={animated ? { opacity: [0.35, 0.85, 0.35] } : undefined}
-                transition={
-                  animated
-                    ? {
-                        duration: 2.4 + s.r * 2,
-                        repeat: Infinity,
-                        ease: EASE_IN_OUT,
-                        delay: s.r2 * 2,
-                      }
-                    : undefined
-                }
-              />
-            );
-          })}
-        </g>
-      );
-    case "cosmic": // Primordial — constellations reliées + éclats de cristal
-      return (
-        <g>
-          {seeds.map((s, i) => {
-            const n = seeds[(i + 3) % seeds.length];
-            return i % 2 === 0 ? (
-              <line
-                key={`l${i}`}
-                x1={s.x}
-                y1={s.y}
-                x2={n.x}
-                y2={n.y}
-                stroke={color}
-                strokeOpacity="0.25"
-                strokeWidth="0.5"
-              />
-            ) : null;
-          })}
-          {seeds.map((s, i) => (
-            <motion.circle
-              key={`c${i}`}
-              cx={s.x}
-              cy={s.y}
-              r={0.7 + s.r * 1.6}
-              fill="#ffffff"
-              style={{ filter: `drop-shadow(0 0 3px ${glow})` }}
-              animate={animated ? { opacity: [0.2, 0.95, 0.2] } : undefined}
-              transition={
-                animated
-                  ? {
-                      duration: 2.5 + s.r * 3,
-                      repeat: Infinity,
-                      ease: EASE_IN_OUT,
-                      delay: s.r2 * 3,
-                    }
-                  : undefined
-              }
-            />
-          ))}
-        </g>
-      );
-    case "divine": // Olympien — poussière d'or scintillante
-      return (
-        <g>
-          {seeds.slice(0, 9).map((s, i) => (
-            <motion.circle
-              key={i}
-              cx={s.x}
-              cy={s.y}
-              r={0.8 + s.r * 1.4}
-              fill={glow}
-              style={{ filter: `drop-shadow(0 0 3px ${color})` }}
-              animate={animated ? { opacity: [0.15, 0.9, 0.15] } : undefined}
-              transition={
-                animated
-                  ? {
-                      duration: 3 + s.r * 2,
-                      repeat: Infinity,
-                      ease: EASE_IN_OUT,
-                      delay: s.r2 * 2.4,
-                    }
-                  : undefined
-              }
-            />
-          ))}
-        </g>
-      );
-    case "forge": // Guerrier — étincelles vives, brèves
-      return (
-        <g>
-          {seeds.slice(0, 7).map((s, i) => (
-            <motion.circle
-              key={i}
-              cx={s.x}
-              cy={s.y}
-              r={0.8 + s.r}
-              fill={glow}
-              animate={animated ? { opacity: [0, 1, 0] } : { opacity: 0.4 }}
-              transition={
-                animated
-                  ? {
-                      duration: 1.4 + s.r,
-                      repeat: Infinity,
-                      ease: "easeOut",
-                      delay: s.r2 * 3,
-                      repeatDelay: 1.5,
-                    }
-                  : undefined
-              }
-            />
-          ))}
-        </g>
-      );
-    default: // raw / rune — pas d'effet flottant additionnel ici
-      return null;
-  }
 }
 
 export function RankDisc({
@@ -289,81 +191,183 @@ export function RankDisc({
   const visual = getRankVisual(rank.rank.key);
   const tier = discTierFor(rank.rank.key);
   const isHero = variant === "hero";
+  const key = rank.rank.key;
+  const seed = ["mortel", "guerrier", "heros", "titan", "olympien", "primordial"].indexOf(key) + 1;
+
   const uid = useId();
-  const rimId = `rim-${uid}`;
-  const faceId = `face-${uid}`;
-  const bevelId = `bevel-${uid}`;
-  const glossId = `gloss-${uid}`;
-  const nameId = `name-${uid}`;
-  const clipId = `clip-${uid}`;
+  const id = (n: string) => `${n}-${uid}`;
+  const ids = {
+    forge: id("forge"),
+    rim: id("rim"),
+    field: id("field"),
+    bevel: id("bevel"),
+    gloss: id("gloss"),
+    clip: id("clip"),
+    name: id("name"),
+    vignette: id("vig"),
+    key: id("key"),
+    coreGlow: id("cglow"),
+    coreWell: id("cwell"),
+    coreHot: id("chot"),
+    shadow: id("shadow"),
+  };
 
   const rimStops = visual.metal.match(/#[0-9a-f]{6}/gi)?.slice(0, 3) ?? ["#555", "#888", "#333"];
   const faceStops = visual.enamel.match(/#[0-9a-f]{6}/gi)?.slice(0, 3) ?? ["#333", "#222", "#111"];
 
-  // Géométrie dérivée du rang (proportions constantes, valeurs qui évoluent).
+  // Géométrie dérivée (proportions constantes, valeurs qui évoluent).
   const rimInner = OUTER * (1 - tier.rim);
-  const grooveR = rimInner - 3;
-  const faceR = grooveR - 2;
-  const engraveR = faceR - 11; // rayon du texte gravé (arc haut)
-  const coreR = 24;
+  const channelR = rimInner - 1.5;
+  const fieldR = rimInner - 2.5;
+  const engraveR = rimInner + (OUTER - rimInner) * 0.52; // nom gravé dans la jante massive
+  const coreR = 22;
 
-  // Rayons gravés (spokes) — texture radiale.
-  const spokes = useMemo(
+  // Texture de forge (feTurbulence) — paramétrée par la matière du rang.
+  const bf = (0.008 + tier.rough * 0.03).toFixed(3);
+  const surfaceScale = (1 + tier.relief * 2).toFixed(2);
+  // Contraste de la texture de forge (overlay centré sur 0.5 — module sans écraser).
+  const texSlope = 0.3 + tier.relief * 0.5;
+  const texIntercept = 0.5 - texSlope * 0.5;
+
+  // ── Éléments déterministes ────────────────────────────────────────────────
+  const facets = useMemo(
     () => Array.from({ length: tier.spokes }, (_, i) => (i / tier.spokes) * 360),
     [tier.spokes],
   );
-  // Encoches runiques sur l'anneau intérieur.
-  const runes = useMemo(
+  const rivets = useMemo(
     () => Array.from({ length: tier.runes }, (_, i) => (i / Math.max(1, tier.runes)) * 360),
     [tier.runes],
   );
+  const scratches = useMemo(() => {
+    const n = Math.round(4 + tier.wear * 9);
+    return Array.from({ length: n }, (_, i) => {
+      const a0 = det(i, seed) * 360;
+      const span = 18 + det(i, seed + 3) * 60;
+      const r = coreR + 6 + det(i, seed + 5) * (OUTER - coreR - 12);
+      const light = i % 3 === 0;
+      const w = 0.3 + det(i, seed + 7) * 0.5;
+      const a0r = (a0 * Math.PI) / 180;
+      const a1r = ((a0 + span) * Math.PI) / 180;
+      const x0 = C + Math.cos(a0r) * r;
+      const y0 = C + Math.sin(a0r) * r;
+      const x1 = C + Math.cos(a1r) * r;
+      const y1 = C + Math.sin(a1r) * r;
+      const large = span > 180 ? 1 : 0;
+      return {
+        d: `M ${x0.toFixed(1)} ${y0.toFixed(1)} A ${r.toFixed(1)} ${r.toFixed(1)} 0 ${large} 1 ${x1.toFixed(1)} ${y1.toFixed(1)}`,
+        stroke: light ? "#ffffff" : "#000000",
+        opacity: (light ? 0.06 : 0.1) + tier.wear * 0.05,
+        w,
+      };
+    });
+  }, [tier.wear, seed]);
+  const nicks = useMemo(() => {
+    const n = Math.round(tier.wear * 9);
+    return Array.from({ length: n }, (_, i) => {
+      const a = det(i, seed + 11) * 360;
+      const depth = 1.4 + det(i, seed + 13) * 2.6;
+      return { a, depth };
+    });
+  }, [tier.wear, seed]);
+  const particles = useMemo(() => {
+    if (!isHero) return [];
+    const n = 7 + Math.round(tier.energy * 6);
+    return Array.from({ length: n }, (_, i) => ({
+      id: i,
+      left: 10 + det(i, seed + 17) * 80,
+      size: 1 + det(i, seed + 19) * 2.4,
+      delay: det(i, seed + 23) * 6,
+      duration: 4 + det(i, seed + 29) * 5,
+      drift: (i % 2 ? 1 : -1) * (6 + det(i, seed + 31) * 14),
+    }));
+  }, [isHero, tier.energy, seed]);
 
   const label = rank.rank.label.toUpperCase();
-  // Espacement du nom gravé adapté à sa longueur (reste lisible & centré).
-  const nameSpacing = Math.max(2, 9 - label.length * 0.55);
-  // Arc supérieur pour le textPath (West → sommet → East, sens horaire).
+  const nameSpacing = Math.max(1.5, 8.5 - label.length * 0.5);
   const arcPath = `M ${C - engraveR} ${C} A ${engraveR} ${engraveR} 0 0 1 ${C + engraveR} ${C}`;
+  const floatY = isHero ? -5 - tier.energy * 4 : -3;
 
-  const floatY = isHero ? -6 - tier.energy * 4 : -3;
+  // Braises (warm) vs poussière (cold) vs éclats (divine/cosmic).
+  const warm = key === "guerrier" || key === "titan";
+  const partColor = visual.particleColor;
 
   return (
     <motion.div
       className="relative flex items-center justify-center"
-      style={{ width: size, height: size, perspective: 800 }}
-      initial={{ opacity: 0, scale: 0.82, y: 12 }}
+      style={{ width: size, height: size, perspective: 900 }}
+      initial={{ opacity: 0, scale: 0.82, y: 14 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
-      transition={{ duration: 0.85, delay: revealDelay, ease: EASE_OUT }}
+      transition={{ duration: 0.9, delay: revealDelay, ease: EASE_OUT }}
     >
-      {/* Socle lumineux au sol (hero) — la relique lévite au-dessus d'une lueur */}
+      {/* ── Environnement (derrière) : le fond participe, avec sobriété ──────── */}
       {isHero && (
-        <motion.div
-          className="absolute left-1/2 -translate-x-1/2 rounded-[50%] blur-2xl"
-          style={{
-            bottom: -size * 0.04,
-            width: size * 0.78,
-            height: size * 0.16,
-            background: glow,
-          }}
-          animate={
-            animated
-              ? { opacity: [0.3, 0.55 + tier.energy * 0.25, 0.3], scaleX: [0.86, 1.08, 0.86] }
-              : undefined
-          }
-          transition={{ duration: 4.4, repeat: Infinity, ease: EASE_IN_OUT }}
-          aria-hidden
-        />
+        <>
+          {/* Nappe d'énergie au sol */}
+          <motion.div
+            className="absolute left-1/2 rounded-[50%] blur-2xl"
+            style={{
+              bottom: -size * 0.02,
+              width: size * 0.9,
+              height: size * 0.2,
+              x: "-50%",
+              background: glow,
+            }}
+            animate={
+              animated
+                ? { opacity: [0.25, 0.5 + tier.energy * 0.25, 0.25], scaleX: [0.85, 1.1, 0.85] }
+                : undefined
+            }
+            transition={{ duration: 4.6, repeat: Infinity, ease: EASE_IN_OUT }}
+            aria-hidden
+          />
+          {/* Particules d'ambiance : braises / poussière / éclats */}
+          <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
+            {particles.map((p) => (
+              <motion.span
+                key={p.id}
+                className="absolute rounded-full"
+                style={{
+                  left: `${p.left}%`,
+                  bottom: warm ? "8%" : "auto",
+                  top: warm ? "auto" : "12%",
+                  width: p.size,
+                  height: p.size,
+                  background: partColor,
+                  filter: `blur(0.4px) drop-shadow(0 0 ${p.size * 2}px ${partColor})`,
+                }}
+                initial={{ opacity: 0 }}
+                animate={
+                  animated
+                    ? {
+                        opacity: [0, 0.85, 0],
+                        y: warm ? [0, -size * 0.6] : [0, size * 0.5],
+                        x: [0, p.drift],
+                      }
+                    : { opacity: 0.4 }
+                }
+                transition={
+                  animated
+                    ? { duration: p.duration, delay: p.delay, repeat: Infinity, ease: "easeOut" }
+                    : undefined
+                }
+              />
+            ))}
+          </div>
+        </>
       )}
 
-      {/* Basculement 3D + flottement — la relique « vit » (plus haut rang = plus vivante) */}
+      {/* ── Relique : basculement 3D + flottement (poids qui « vit ») ────────── */}
       <motion.div
         className="relative flex items-center justify-center"
         style={{ width: size, height: size, transformStyle: "preserve-3d" }}
         animate={
-          animated ? { rotateY: [-5, 5, -5], rotateX: [3, -3, 3], y: [0, floatY, 0] } : undefined
+          animated
+            ? { rotateY: [-4, 4, -4], rotateX: [2.5, -2.5, 2.5], y: [0, floatY, 0] }
+            : undefined
         }
         transition={
           animated
-            ? { duration: 9 - tier.energy * 2, repeat: Infinity, ease: EASE_IN_OUT }
+            ? { duration: 10 - tier.energy * 2, repeat: Infinity, ease: EASE_IN_OUT }
             : undefined
         }
       >
@@ -372,244 +376,474 @@ export function RankDisc({
           className="absolute inset-0 rounded-full blur-2xl"
           style={{
             background: glow,
-            transform: `scale(${(isHero ? 1.15 : 0.95) + tier.energy * 0.25})`,
+            transform: `scale(${(isHero ? 1.05 : 0.9) + tier.energy * 0.2})`,
           }}
           animate={animated ? HALO_BREATH.animate : undefined}
           transition={animated ? HALO_BREATH.transition : undefined}
           aria-hidden
         />
 
-        {/* Anneau conique rotatif d'énergie (derrière le disque) */}
-        {animated && (
-          <motion.div
-            className="absolute inset-0 rounded-full"
-            style={{
-              background: `conic-gradient(from 0deg, transparent 0deg, ${secondary}90 55deg, transparent 130deg, transparent 220deg, ${primary}70 285deg, transparent 350deg)`,
-              filter: "blur(6px)",
-              opacity: (isHero ? 0.55 : 0.4) + tier.energy * 0.25,
-            }}
-            animate={{ rotate: 360 }}
-            transition={{ duration: 26 - tier.energy * 8, repeat: Infinity, ease: "linear" }}
-            aria-hidden
-          />
-        )}
-
-        {/* Rayons divins tournants (Olympien) */}
+        {/* Rayons divins tournants derrière le disque (Olympien) */}
         {animated && tier.surface === "divine" && (
           <motion.div
             className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
             style={{
-              width: size * 1.5,
-              height: size * 1.5,
-              background: `conic-gradient(from 0deg, transparent 0deg, ${glow} 10deg, transparent 30deg, transparent 90deg, ${glow} 100deg, transparent 122deg, transparent 200deg, ${glow} 210deg, transparent 232deg)`,
-              maskImage: "radial-gradient(circle, black 28%, transparent 68%)",
-              WebkitMaskImage: "radial-gradient(circle, black 28%, transparent 68%)",
-              opacity: 0.5,
+              width: size * 1.55,
+              height: size * 1.55,
+              background: `conic-gradient(from 0deg, transparent 0deg, ${glow} 9deg, transparent 26deg, transparent 92deg, ${glow} 101deg, transparent 118deg, transparent 200deg, ${glow} 209deg, transparent 226deg)`,
+              maskImage: "radial-gradient(circle, black 26%, transparent 66%)",
+              WebkitMaskImage: "radial-gradient(circle, black 26%, transparent 66%)",
+              opacity: 0.45,
             }}
             animate={{ rotate: 360 }}
-            transition={{ duration: 55, repeat: Infinity, ease: "linear" }}
+            transition={{ duration: 60, repeat: Infinity, ease: "linear" }}
             aria-hidden
           />
         )}
 
-        <svg viewBox="0 0 200 200" width={size} height={size} className="relative">
+        <svg viewBox="0 0 200 200" width={size} height={size} className="relative overflow-visible">
           <defs>
-            <radialGradient id={rimId} cx="38%" cy="30%" r="75%">
-              {rimStops.map((c, i) => (
-                <stop
-                  key={i}
-                  offset={`${(i / Math.max(1, rimStops.length - 1)) * 100}%`}
-                  stopColor={c}
-                />
-              ))}
+            {/* Métal de la jante — éclairé en haut-gauche */}
+            <radialGradient id={ids.rim} cx="37%" cy="28%" r="82%">
+              <stop offset="0%" stopColor={rimStops[1] ?? "#888"} />
+              <stop offset="42%" stopColor={rimStops[0] ?? "#666"} />
+              <stop offset="78%" stopColor={rimStops[2] ?? "#333"} />
+              <stop offset="100%" stopColor="#0a0a0c" />
             </radialGradient>
-            <radialGradient id={faceId} cx="40%" cy="32%" r="80%">
-              {faceStops.map((c, i) => (
-                <stop
-                  key={i}
-                  offset={`${(i / Math.max(1, faceStops.length - 1)) * 100}%`}
-                  stopColor={c}
-                />
-              ))}
+            {/* Champ intérieur */}
+            <radialGradient id={ids.field} cx="40%" cy="30%" r="85%">
+              <stop offset="0%" stopColor={faceStops[0] ?? "#444"} />
+              <stop offset="55%" stopColor={faceStops[1] ?? "#282828"} />
+              <stop offset="100%" stopColor={faceStops[2] ?? "#0c0c0e"} />
             </radialGradient>
-            <linearGradient id={bevelId} x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor="#ffffff" stopOpacity="0.7" />
-              <stop offset="45%" stopColor="#ffffff" stopOpacity="0.06" />
-              <stop offset="55%" stopColor="#000000" stopOpacity="0.05" />
-              <stop offset="100%" stopColor="#000000" stopOpacity="0.6" />
+            {/* Biseau de la jante : lumière haut → ombre bas */}
+            <linearGradient id={ids.bevel} x1="0.2" y1="0" x2="0.8" y2="1">
+              <stop offset="0%" stopColor="#ffffff" stopOpacity="0.85" />
+              <stop offset="42%" stopColor="#ffffff" stopOpacity="0.08" />
+              <stop offset="58%" stopColor="#000000" stopOpacity="0.1" />
+              <stop offset="100%" stopColor="#000000" stopOpacity="0.75" />
             </linearGradient>
-            <linearGradient id={glossId} x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor="#ffffff" stopOpacity="0.42" />
-              <stop offset="55%" stopColor="#ffffff" stopOpacity="0.05" />
+            <linearGradient id={ids.gloss} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#ffffff" stopOpacity="0.28" />
+              <stop offset="55%" stopColor="#ffffff" stopOpacity="0.04" />
               <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
             </linearGradient>
-            <clipPath id={clipId}>
+            {/* Key light (hotspot spéculaire) */}
+            <radialGradient id={ids.key} cx="32%" cy="21%" r="40%">
+              <stop
+                offset="0%"
+                stopColor="#ffffff"
+                stopOpacity={tier.surface === "raw" ? 0.22 : 0.36}
+              />
+              <stop offset="55%" stopColor="#ffffff" stopOpacity="0.04" />
+              <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
+            </radialGradient>
+            {/* Vignette : périphérie assombrie (usure, lumière rasante) */}
+            <radialGradient id={ids.vignette} cx="50%" cy="44%" r="56%">
+              <stop offset="0%" stopColor="#000000" stopOpacity="0" />
+              <stop offset="66%" stopColor="#000000" stopOpacity="0" />
+              <stop offset="90%" stopColor="#000000" stopOpacity="0.35" />
+              <stop offset="100%" stopColor="#000000" stopOpacity="0.78" />
+            </radialGradient>
+            {/* Cœur */}
+            <radialGradient id={ids.coreGlow} cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stopColor={glow} stopOpacity="0.9" />
+              <stop offset="55%" stopColor={primary} stopOpacity="0.4" />
+              <stop offset="100%" stopColor={primary} stopOpacity="0" />
+            </radialGradient>
+            <radialGradient id={ids.coreWell} cx="42%" cy="34%" r="75%">
+              <stop offset="0%" stopColor="#14131a" />
+              <stop offset="70%" stopColor="#070609" />
+              <stop offset="100%" stopColor="#000000" />
+            </radialGradient>
+            <radialGradient id={ids.coreHot} cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stopColor="#ffffff" />
+              <stop offset="28%" stopColor={text} />
+              <stop offset="60%" stopColor={primary} stopOpacity="0.75" />
+              <stop offset="100%" stopColor={primary} stopOpacity="0" />
+            </radialGradient>
+
+            {/* FORGE — texture de métal réelle : bruit → relief éclairé, recentré sur
+                le gris moyen puis mélangé en OVERLAY. Module la surface (grain,
+                martelage) SANS écraser la structure (jante, gravures, cœur). */}
+            <filter
+              id={ids.forge}
+              x="-20%"
+              y="-20%"
+              width="140%"
+              height="140%"
+              colorInterpolationFilters="sRGB"
+            >
+              <feTurbulence
+                type="fractalNoise"
+                baseFrequency={bf}
+                numOctaves="3"
+                seed={seed * 7}
+                stitchTiles="stitch"
+                result="noise"
+              />
+              <feDiffuseLighting
+                in="noise"
+                surfaceScale={surfaceScale}
+                diffuseConstant="1"
+                lightingColor="#ffffff"
+                result="light"
+              >
+                <feDistantLight azimuth={LIGHT_AZ} elevation="48" />
+              </feDiffuseLighting>
+              <feComponentTransfer in="light" result="tex">
+                <feFuncR type="linear" slope={texSlope} intercept={texIntercept} />
+                <feFuncG type="linear" slope={texSlope} intercept={texIntercept} />
+                <feFuncB type="linear" slope={texSlope} intercept={texIntercept} />
+              </feComponentTransfer>
+              <feComposite in="tex" in2="SourceAlpha" operator="in" result="texC" />
+              <feBlend in="SourceGraphic" in2="texC" mode="overlay" />
+            </filter>
+
+            <clipPath id={ids.clip}>
               <circle cx={C} cy={C} r={OUTER} />
             </clipPath>
-            <path id={nameId} d={arcPath} />
+            <path id={ids.name} d={arcPath} />
           </defs>
 
-          {/* Échelle du diamètre selon le rang (la relique grandit, centrée) */}
+          {/* Ombre de contact lourde (le disque pèse) */}
+          <ellipse
+            cx={C}
+            cy={C + OUTER * 0.62}
+            rx={OUTER * 0.86}
+            ry={OUTER * 0.2}
+            fill="#000000"
+            opacity="0.55"
+            style={{ filter: "blur(6px)" }}
+          />
+          <circle
+            cx={C}
+            cy={C + 4}
+            r={OUTER}
+            fill="#000000"
+            opacity="0.5"
+            style={{ filter: "blur(3px)" }}
+          />
+
+          {/* Diamètre du rang (centré) */}
           <g transform={`translate(${C} ${C}) scale(${tier.scale}) translate(${-C} ${-C})`}>
-            {/* Ombre portée */}
-            <circle cx={C} cy={C + 3} r={OUTER} fill="#000000" opacity="0.5" />
+            {/* ═══ CORPS FORGÉ (texturé + éclairé par le filtre) ═══ */}
+            <g filter={`url(#${ids.forge})`}>
+              {/* Jante massive */}
+              <circle cx={C} cy={C} r={OUTER} fill={`url(#${ids.rim})`} />
+              {/* Champ intérieur en creux */}
+              <circle cx={C} cy={C} r={fieldR} fill={`url(#${ids.field})`} />
 
-            {/* Jante métal */}
-            <circle
-              cx={C}
-              cy={C}
-              r={OUTER}
-              fill={`url(#${rimId})`}
-              stroke={secondary}
-              strokeOpacity="0.85"
-              strokeWidth="1"
-            />
-            {/* Biseau extérieur (relief) */}
-            <circle
-              cx={C}
-              cy={C}
-              r={OUTER - 2}
-              fill="none"
-              stroke={`url(#${bevelId})`}
-              strokeWidth="3"
-            />
+              {/* Facettes radiales forgées (grain très subtil, jamais une roue) */}
+              <g clipPath={`url(#${ids.clip})`} opacity={0.4}>
+                {facets.map((a, i) => {
+                  const a0 = (a * Math.PI) / 180;
+                  const a1 = ((a + 360 / tier.spokes) * Math.PI) / 180;
+                  const x0 = C + Math.cos(a0) * fieldR;
+                  const y0 = C + Math.sin(a0) * fieldR;
+                  const x1 = C + Math.cos(a1) * fieldR;
+                  const y1 = C + Math.sin(a1) * fieldR;
+                  return (
+                    <path
+                      key={a}
+                      d={`M ${C} ${C} L ${x0.toFixed(1)} ${y0.toFixed(1)} A ${fieldR} ${fieldR} 0 0 1 ${x1.toFixed(1)} ${y1.toFixed(1)} Z`}
+                      fill={i % 2 === 0 ? "#ffffff" : "#000000"}
+                      opacity={i % 2 === 0 ? 0.03 : 0.06}
+                    />
+                  );
+                })}
+              </g>
 
-            {/* Gorge gravée (creux entre jante et champ) */}
-            <circle cx={C} cy={C} r={grooveR + 2} fill="#000000" opacity={0.55 * tier.groove} />
-            <circle
-              cx={C}
-              cy={C}
-              r={rimInner}
-              fill="none"
-              stroke="#000"
-              strokeOpacity={0.6 * tier.groove}
-              strokeWidth="2.5"
-            />
+              {/* Gorge profonde entre jante et champ */}
+              <circle
+                cx={C}
+                cy={C}
+                r={channelR}
+                fill="none"
+                stroke="#000000"
+                strokeOpacity={0.75 * tier.groove}
+                strokeWidth="4"
+              />
+              <circle
+                cx={C}
+                cy={C}
+                r={fieldR}
+                fill="none"
+                stroke="#000000"
+                strokeOpacity="0.5"
+                strokeWidth="1"
+              />
+              <circle
+                cx={C}
+                cy={C}
+                r={fieldR - 1}
+                fill="none"
+                stroke={text}
+                strokeOpacity="0.12"
+                strokeWidth="0.6"
+              />
 
-            {/* Champ intérieur (matière émaillée) */}
-            <circle
-              cx={C}
-              cy={C}
-              r={faceR}
-              fill={`url(#${faceId})`}
-              stroke={primary}
-              strokeOpacity="0.5"
-              strokeWidth="0.8"
-            />
+              {/* Biseau extérieur massif (chanfrein éclairé) */}
+              <circle
+                cx={C}
+                cy={C}
+                r={OUTER - 2.5}
+                fill="none"
+                stroke={`url(#${ids.bevel})`}
+                strokeWidth="6"
+              />
+              <circle
+                cx={C}
+                cy={C}
+                r={OUTER}
+                fill="none"
+                stroke="#000000"
+                strokeOpacity="0.7"
+                strokeWidth="1.4"
+              />
+              {/* Reflet vif du chanfrein (haut-gauche) — vend l'épaisseur du métal */}
+              <path
+                d={`M ${C + Math.cos(Math.PI * 1.15) * (OUTER - 2)} ${C + Math.sin(Math.PI * 1.15) * (OUTER - 2)} A ${OUTER - 2} ${OUTER - 2} 0 0 1 ${C + Math.cos(Math.PI * 1.72) * (OUTER - 2)} ${C + Math.sin(Math.PI * 1.72) * (OUTER - 2)}`}
+                fill="none"
+                stroke="#ffffff"
+                strokeOpacity="0.55"
+                strokeWidth="1.4"
+                strokeLinecap="round"
+              />
+              {/* Marche intérieure sombre (la jante domine le champ, profondeur) */}
+              <circle
+                cx={C}
+                cy={C}
+                r={rimInner + 1}
+                fill="none"
+                stroke="#000000"
+                strokeOpacity="0.5"
+                strokeWidth="2.5"
+              />
 
-            {/* Rayons gravés (spokes) — texture radiale */}
-            <g opacity={0.25 + tier.groove * 0.4}>
-              {spokes.map((a) => (
-                <rect
-                  key={a}
-                  x={C - 0.5}
-                  y={C - faceR + 6}
-                  width="1"
-                  height={faceR - coreR - 8}
-                  fill="#000000"
-                  transform={`rotate(${a} ${C} ${C})`}
+              {/* Rivets / encoches sculptés sur l'anneau intérieur de la jante */}
+              {rivets.map((a) => {
+                const rad = rimInner + 3.5;
+                const x = C + Math.cos((a * Math.PI) / 180) * rad;
+                const y = C + Math.sin((a * Math.PI) / 180) * rad;
+                return (
+                  <g key={a}>
+                    <circle cx={x} cy={y + 0.5} r="1.8" fill="#000000" opacity="0.6" />
+                    <circle cx={x} cy={y} r="1.6" fill={`url(#${ids.rim})`} />
+                    <circle
+                      cx={x - 0.4}
+                      cy={y - 0.5}
+                      r="0.6"
+                      fill="#ffffff"
+                      opacity={0.5 + tier.energy * 0.3}
+                    />
+                  </g>
+                );
+              })}
+
+              {/* NOM DU RANG — gravure profondément sculptée dans la jante (jamais un chiffre) */}
+              {(() => {
+                const f = {
+                  fontFamily: "ui-serif, Georgia, 'Times New Roman', serif" as const,
+                  fontWeight: 800,
+                  fontSize: 14.5,
+                  letterSpacing: nameSpacing,
+                };
+                const tp = (dx = 0, dy = 0) => (
+                  <textPath
+                    href={`#${ids.name}`}
+                    startOffset="50%"
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    transform={dx || dy ? `translate(${dx},${dy})` : undefined}
+                  >
+                    {label}
+                  </textPath>
+                );
+                return (
+                  <g>
+                    {/* sillon assombri où l'inscription est entaillée */}
+                    <path
+                      d={arcPath}
+                      fill="none"
+                      stroke="#000000"
+                      strokeOpacity="0.46"
+                      strokeWidth="18"
+                      strokeLinecap="round"
+                    />
+                    {/* parois hautes du sillon (double ombre = profondeur) */}
+                    <text {...f} fill="#000000" opacity="0.95">
+                      {tp(0, -1.4)}
+                    </text>
+                    <text {...f} fill="#000000" opacity="0.7">
+                      {tp(0.5, -0.5)}
+                    </text>
+                    {/* lueur interne pour les hauts rangs (gravure chargée d'énergie) */}
+                    {tier.energy > 0.35 && (
+                      <text
+                        {...f}
+                        fill={glow}
+                        opacity={0.45 + tier.energy * 0.4}
+                        style={{ filter: `drop-shadow(0 0 2.5px ${glow})` }}
+                      >
+                        {tp()}
+                      </text>
+                    )}
+                    {/* arête basse captant la lumière (lèvre du sillon) */}
+                    <text {...f} fill="#ffffff" opacity="0.5">
+                      {tp(0, 1.3)}
+                    </text>
+                    {/* corps sombre entaillé */}
+                    <text {...f} fill="#08070a" opacity="0.88">
+                      {tp()}
+                    </text>
+                  </g>
+                );
+              })()}
+            </g>
+
+            {/* ═══ USURE (par-dessus le métal) ═══ */}
+            <g clipPath={`url(#${ids.clip})`}>
+              {scratches.map((s, i) => (
+                <path
+                  key={i}
+                  d={s.d}
+                  fill="none"
+                  stroke={s.stroke}
+                  strokeOpacity={s.opacity}
+                  strokeWidth={s.w}
+                  strokeLinecap="round"
                 />
               ))}
             </g>
-
-            {/* Encoches runiques sur l'anneau intérieur (s'allument avec le rang) */}
-            {runes.map((a) => {
-              const rad = faceR - 5;
-              const x = C + Math.cos((a * Math.PI) / 180) * rad;
-              const y = C + Math.sin((a * Math.PI) / 180) * rad;
+            {/* Éclats sur le bord (relique ancienne, ébréchée) */}
+            {nicks.map((nk, i) => {
+              const a = (nk.a * Math.PI) / 180;
+              const pa = a + 0.05;
+              const pb = a - 0.05;
               return (
-                <circle
-                  key={a}
-                  cx={x}
-                  cy={y}
-                  r={1.2}
-                  fill={text}
-                  opacity={0.3 + tier.energy * 0.5}
-                  style={{ filter: tier.energy > 0.4 ? `drop-shadow(0 0 2px ${glow})` : undefined }}
+                <path
+                  key={i}
+                  d={`M ${(C + Math.cos(pa) * OUTER).toFixed(1)} ${(C + Math.sin(pa) * OUTER).toFixed(1)} L ${(C + Math.cos(a) * (OUTER - nk.depth)).toFixed(1)} ${(C + Math.sin(a) * (OUTER - nk.depth)).toFixed(1)} L ${(C + Math.cos(pb) * OUTER).toFixed(1)} ${(C + Math.sin(pb) * OUTER).toFixed(1)} Z`}
+                  fill="#000000"
+                  opacity="0.55"
                 />
               );
             })}
 
-            {/* Effets de surface (lave, constellations, or, étincelles) */}
-            <SurfaceFX
-              surface={tier.surface}
-              faceR={faceR}
-              color={primary}
-              glow={glow}
-              energy={tier.energy}
-              animated={animated}
-            />
-
-            {/* NOM DU RANG gravé en arc — inscription en creux (intaglio), l'identité
-                de la relique. Jamais un chiffre. Lisible sur toute matière : lueur
-                interne (hauts rangs) → arête lumineuse basse → creux sombre au-dessus. */}
-            {(() => {
-              const nameFont = {
-                fontFamily: "ui-serif, Georgia, serif" as const,
-                fontWeight: 700,
-                fontSize: 14,
-                letterSpacing: nameSpacing,
-              };
-              const path = (extra?: { dx?: number; dy?: number }) => (
-                <textPath
-                  href={`#${nameId}`}
-                  startOffset="50%"
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  transform={extra ? `translate(${extra.dx ?? 0},${extra.dy ?? 0})` : undefined}
-                >
-                  {label}
-                </textPath>
-              );
-              return (
-                <g>
-                  {/* Lueur interne (la gravure semble chargée d'énergie) */}
-                  {tier.energy > 0.35 && (
-                    <text
-                      {...nameFont}
-                      fill={glow}
-                      opacity={0.5 + tier.energy * 0.4}
+            {/* Fissures de lave (Titan) */}
+            {tier.surface === "molten" && (
+              <g clipPath={`url(#${ids.clip})`}>
+                {facets.slice(0, 5).map((a, i) => {
+                  const a0 = (a * Math.PI) / 180;
+                  const x0 = C + Math.cos(a0) * (coreR + 4);
+                  const y0 = C + Math.sin(a0) * (coreR + 4);
+                  const x1 = C + Math.cos(a0) * (fieldR - 2);
+                  const y1 = C + Math.sin(a0) * (fieldR - 2);
+                  const mx = (x0 + x1) / 2 + (det(i, seed + 3) - 0.5) * 16;
+                  const my = (y0 + y1) / 2 + (det(i, seed + 9) - 0.5) * 16;
+                  return (
+                    <motion.path
+                      key={i}
+                      d={`M ${x0.toFixed(1)} ${y0.toFixed(1)} Q ${mx.toFixed(1)} ${my.toFixed(1)} ${x1.toFixed(1)} ${y1.toFixed(1)}`}
+                      fill="none"
+                      stroke={glow}
+                      strokeWidth={1.1 + det(i, seed) * 0.9}
+                      strokeLinecap="round"
+                      style={{ filter: `drop-shadow(0 0 3px ${primary})` }}
+                      animate={animated ? { opacity: [0.35, 0.9, 0.35] } : { opacity: 0.6 }}
+                      transition={
+                        animated
+                          ? {
+                              duration: 2.2 + det(i, seed) * 2,
+                              repeat: Infinity,
+                              ease: EASE_IN_OUT,
+                              delay: det(i, seed + 1) * 2,
+                            }
+                          : undefined
+                      }
+                    />
+                  );
+                })}
+              </g>
+            )}
+            {/* Constellations (Primordial) */}
+            {tier.surface === "cosmic" && (
+              <g clipPath={`url(#${ids.clip})`}>
+                {Array.from({ length: 12 }, (_, i) => {
+                  const a = det(i, seed + 2) * Math.PI * 2;
+                  const r = coreR + 5 + det(i, seed + 4) * (fieldR - coreR - 8);
+                  const x = C + Math.cos(a) * r;
+                  const y = C + Math.sin(a) * r;
+                  return (
+                    <motion.circle
+                      key={i}
+                      cx={x}
+                      cy={y}
+                      r={0.6 + det(i, seed + 6) * 1.4}
+                      fill="#ffffff"
                       style={{ filter: `drop-shadow(0 0 3px ${glow})` }}
-                    >
-                      {path()}
-                    </text>
-                  )}
-                  {/* Arête inférieure captant la lumière */}
-                  <text {...nameFont} fill="#ffffff" opacity="0.4">
-                    {path({ dy: 1.1 })}
-                  </text>
-                  {/* Creux sombre — le corps de la lettre entaillée */}
-                  <text {...nameFont} fill="#050507" opacity="0.85">
-                    {path()}
-                  </text>
-                </g>
-              );
-            })()}
+                      animate={animated ? { opacity: [0.15, 0.9, 0.15] } : { opacity: 0.5 }}
+                      transition={
+                        animated
+                          ? {
+                              duration: 2.5 + det(i, seed + 8) * 3,
+                              repeat: Infinity,
+                              ease: EASE_IN_OUT,
+                              delay: det(i, seed + 10) * 3,
+                            }
+                          : undefined
+                      }
+                    />
+                  );
+                })}
+              </g>
+            )}
 
-            {/* Cœur d'énergie */}
-            <DiscCore
-              color={primary}
-              glow={glow}
-              energy={tier.energy}
-              surface={tier.surface}
-              animated={animated}
+            {/* ═══ LUMIÈRE CINÉMATOGRAPHIQUE ═══ */}
+            <circle
+              cx={C}
+              cy={C}
+              r={OUTER}
+              fill={`url(#${ids.vignette})`}
+              clipPath={`url(#${ids.clip})`}
+            />
+            <circle
+              cx={C}
+              cy={C}
+              r={OUTER}
+              fill={`url(#${ids.key})`}
+              clipPath={`url(#${ids.clip})`}
+            />
+            {/* Rim light bas-droite */}
+            <path
+              d={`M ${C + Math.cos(Math.PI * 0.12) * OUTER} ${C + Math.sin(Math.PI * 0.12) * OUTER} A ${OUTER} ${OUTER} 0 0 1 ${C + Math.cos(Math.PI * 0.62) * OUTER} ${C + Math.sin(Math.PI * 0.62) * OUTER}`}
+              fill="none"
+              stroke={secondary}
+              strokeOpacity="0.5"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              style={{ filter: `blur(1px) drop-shadow(0 0 3px ${glow})` }}
             />
 
-            {/* Reflet spéculaire qui balaie la surface */}
+            {/* ═══ CŒUR ═══ */}
+            <DiscCore glow={glow} text={text} tier={tier} ids={ids} animated={animated} />
+
+            {/* Reflet spéculaire qui balaie */}
             {animated && (
-              <g clipPath={`url(#${clipId})`}>
+              <g clipPath={`url(#${ids.clip})`}>
                 <motion.rect
                   x="-120"
                   y="0"
-                  width="70"
+                  width="44"
                   height="200"
-                  fill={`url(#${glossId})`}
-                  transform="skewX(-20)"
-                  animate={{ x: [-120, 280] }}
+                  fill={`url(#${ids.gloss})`}
+                  transform="skewX(-18)"
+                  animate={{ x: [-120, 300] }}
                   transition={{
-                    duration: 5.5,
+                    duration: 6.5,
                     repeat: Infinity,
-                    repeatDelay: 2.6,
+                    repeatDelay: 3.5,
                     ease: EASE_IN_OUT,
                   }}
                 />
