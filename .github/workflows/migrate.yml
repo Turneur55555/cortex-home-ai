@@ -312,6 +312,36 @@ jobs:
             fi
           fi
 
+      # ── 4a. Vérifier que le bucket pdfs est accessible (post-création) ────
+      - name: Verify bucket is accessible
+        if: steps.push.outputs.success == 'true'
+        run: |
+          SERVICE_KEY=$(supabase projects api-keys \
+            --project-ref "$PROJECT_REF" \
+            --output json \
+            | jq -r '.[] | select(.name == "service_role") | .api_key')
+
+          echo "::add-mask::$SERVICE_KEY"
+
+          if [ -z "$SERVICE_KEY" ] || [ "$SERVICE_KEY" = "null" ]; then
+            echo "Impossible d'obtenir le service_role key"
+            exit 1
+          fi
+
+          # Vérifier l'accessibilité du bucket (GET /objects = test de lecture active)
+          VERIFY_STATUS=$(curl -s -o /tmp/bucket_verify.json -w "%{http_code}" \
+            "https://${PROJECT_REF}.supabase.co/storage/v1/bucket/pdfs/objects" \
+            -H "Authorization: Bearer ${SERVICE_KEY}" \
+            -H "apikey: ${SERVICE_KEY}")
+
+          if [ "$VERIFY_STATUS" = "200" ]; then
+            echo "✅ Bucket pdfs accessible et prêt (HTTP $VERIFY_STATUS)"
+          else
+            echo "❌ Bucket pdfs non accessible (HTTP $VERIFY_STATUS)"
+            cat /tmp/bucket_verify.json
+            exit 1
+          fi
+
       # ── 4b. Vérifier que types.ts correspond à la base (post-migration) ───
       # Les migrations viennent d'être appliquées : la base contient désormais
       # les nouvelles tables. types.ts committé DOIT correspondre — sinon on a
@@ -333,22 +363,30 @@ jobs:
         if: always()
         run: |
           PUSH_OK="${{ steps.push.outputs.success }}"
-          MIGS=$(ls supabase/migrations/*.sql | wc -l)
+          MIGS=$(ls supabase/migrations/*.sql 2>/dev/null | wc -l || echo 0)
           STATUS_EMOJI="✅"
-          [ "$PUSH_OK" != "true" ] && STATUS_EMOJI="❌"
+          STATUS_TEXT="Réussi"
+
+          if [ "$PUSH_OK" != "true" ]; then
+            STATUS_EMOJI="❌"
+            STATUS_TEXT="**ÉCHOUÉ** — voir logs ci-dessous"
+          fi
 
           cat >> "$GITHUB_STEP_SUMMARY" <<MARKDOWN
           ## ${STATUS_EMOJI} Supabase Migrations
 
-          | | |
+          | Indicateur | Valeur |
           |---|---|
-          | **Status** | ${PUSH_OK:-false} |
+          | **Status** | ${STATUS_TEXT} |
           | **Migrations locales** | ${MIGS} |
+          | **Push réussi** | ${PUSH_OK:-N/A} |
           | **Commit** | \`${{ github.sha }}\` |
           | **Branche** | \`${{ github.ref_name }}\` |
 
           ### Dernières migrations
           \`\`\`
-          $(ls -t supabase/migrations/*.sql | head -5 | xargs -I{} basename {} | sed 's/^/  /')
+          $(ls -t supabase/migrations/*.sql 2>/dev/null | head -5 | xargs -I{} basename {} | sed 's/^/  /' || echo '  (aucune migration)')
           \`\`\`
+
+          $(if [ "$PUSH_OK" != "true" ]; then echo ""; echo "⚠️  **MIGRATION ÉCHOUÉE** — Vérifier les logs du job pour les détails d'erreur."; fi)
           MARKDOWN

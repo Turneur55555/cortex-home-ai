@@ -26,19 +26,45 @@ jobs:
 
       - name: Deploy all edge functions
         run: |
-          supabase functions deploy \
-            analyze-pdf \
-            analyze-image \
-            chat \
-            cleanup-pdfs \
-            coach-workout \
-            muscle-readiness \
-            recipe-assistant \
-            scan-fridge \
-            scan-meal \
-            parse-meal-text \
-            generate-weekly-report \
-            scheduled-weekly-report \
-            --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
+          set -eo pipefail
+          MAX_ATTEMPTS=3
+          DELAY=5
+
+          for attempt in $(seq 1 $MAX_ATTEMPTS); do
+            echo "════════════════════════════════════════"
+            echo "Tentative $attempt/$MAX_ATTEMPTS — $(date -u '+%H:%M:%S UTC')"
+            echo "════════════════════════════════════════"
+
+            if supabase functions deploy \
+              analyze-pdf \
+              analyze-image \
+              chat \
+              cleanup-pdfs \
+              coach-workout \
+              muscle-readiness \
+              recipe-assistant \
+              scan-fridge \
+              scan-meal \
+              parse-meal-text \
+              generate-weekly-report \
+              scheduled-weekly-report \
+              --project-ref ${{ secrets.SUPABASE_PROJECT_REF }} 2>&1 | tee /tmp/functions_deploy.log; then
+              echo "✅ Edge functions déployées avec succès"
+              break
+            fi
+
+            DEPLOY_EXIT=$?
+            echo "❌ Tentative $attempt échouée (exit $DEPLOY_EXIT)"
+
+            if [ "$attempt" -lt "$MAX_ATTEMPTS" ]; then
+              echo "⏳ Attente ${DELAY}s avant retry..."
+              sleep "$DELAY"
+              DELAY=$((DELAY * 2))
+            else
+              echo "::error::Déploiement edge functions échoué après $MAX_ATTEMPTS tentatives"
+              cat /tmp/functions_deploy.log
+              exit 1
+            fi
+          done
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
