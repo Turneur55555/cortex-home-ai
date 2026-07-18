@@ -71,9 +71,35 @@ function loadRemoteMigrations() {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
-    const migrations = JSON.parse(output);
-    if (!Array.isArray(migrations)) {
+    // Nettoyer la réponse : extraire uniquement la portion JSON
+    // Le CLI peut retourner des avertissements/messages avant ou après
+    let jsonPart = output.trim();
+
+    // Chercher le premier '[' pour commencer le JSON
+    const jsonStart = jsonPart.indexOf('[');
+    if (jsonStart > 0) {
+      jsonPart = jsonPart.substring(jsonStart);
+    }
+
+    // Chercher le dernier ']' pour terminer le JSON
+    const jsonEnd = jsonPart.lastIndexOf(']');
+    if (jsonEnd > 0) {
+      jsonPart = jsonPart.substring(0, jsonEnd + 1);
+    }
+
+    let migrations;
+    try {
+      migrations = JSON.parse(jsonPart);
+    } catch (parseErr) {
       console.error('❌ Format inattendu de supabase migration list');
+      console.error('   Tentative de parsing échouée : ' + parseErr.message);
+      console.error('   Réponse brute (300 chars) : ' + output.slice(0, 300).replace(/\n/g, ' '));
+      process.exit(2);
+    }
+
+    if (!Array.isArray(migrations)) {
+      console.error('❌ Format inattendu de supabase migration list (pas un array)');
+      console.error('   Type : ' + typeof migrations);
       console.error('   Réponse : ' + output.slice(0, 200));
       process.exit(2);
     }
