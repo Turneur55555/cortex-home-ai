@@ -41,12 +41,13 @@ export function useSessionReward(workoutId: string | null | undefined): SessionR
     enabled: !!user && !!workoutId,
     staleTime: 15_000,
     queryFn: async (): Promise<SessionXpEvent[]> => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("xp_events")
         .select("source, amount")
         .eq("workout_id", workoutId!);
       if (error) throw error;
       return (data ?? []) as SessionXpEvent[];
+
     },
   });
 

@@ -45,7 +45,7 @@ export function useActiveSeason(): ActiveSeasonState {
     staleTime: 300_000,
     queryFn: async (): Promise<ActiveSeason | null> => {
       const nowIso = new Date().toISOString();
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("seasons")
         .select("id, index, slug, name, theme, starts_at, ends_at")
         .eq("status", "active")
@@ -55,6 +55,7 @@ export function useActiveSeason(): ActiveSeasonState {
         .limit(1)
         .maybeSingle();
       if (error) throw error;
+
       return (data as ActiveSeason | null) ?? null;
     },
   });
@@ -64,14 +65,15 @@ export function useActiveSeason(): ActiveSeasonState {
     enabled: !!user && !!season,
     staleTime: 30_000,
     queryFn: async (): Promise<{ ps: number; tier: number } | null> => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("user_season_progress")
         .select("ps, tier")
         .eq("user_id", user!.id)
         .eq("season_id", season!.id)
         .maybeSingle();
       if (error) throw error;
-      return data ?? null;
+      return (data as { ps: number; tier: number } | null) ?? null;
+
     },
   });
 
