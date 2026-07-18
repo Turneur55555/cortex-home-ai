@@ -65,63 +65,58 @@ function loadGitMigrations() {
 // ─── Récupérer les migrations Supabase ────────────────────────────────────────
 function loadRemoteMigrations() {
   try {
-    // Essayer d'abord avec --json (Supabase CLI <= 2.109.1)
-    // Si ce flag n'existe pas, le CLI affiche un avertissement mais peut continuer
-    const output = execFileSync('supabase', ['migration', 'list', '--linked', '--json'], {
+    // Supabase CLI 2.109.1 ne supporte pas --json ni --output json
+    // Le CLI retourne un tableau ASCII. On parse le texte directement.
+    const output = execFileSync('supabase', ['migration', 'list', '--linked'], {
       encoding: 'utf8',
       maxBuffer: 64 * 1024 * 1024,
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
-    // Nettoyer la réponse : extraire uniquement la portion JSON
-    // Le CLI peut retourner des avertissements/messages avant ou après
-    let jsonPart = output.trim();
+    // Parser le tableau ASCII tabulaire
+    // Format :
+    //   Local            | Remote           | Time (UTC)
+    //   ---|---|---|
+    //   `20260510000001` | `20260510000001` | `2026-05-10 00:00:01`
+    const lines = output.split('\n');
+    const migrations = new Map();
 
-    // Chercher le premier '[' pour commencer le JSON
-    const jsonStart = jsonPart.indexOf('[');
-    if (jsonStart > 0) {
-      jsonPart = jsonPart.substring(jsonStart);
-    }
+    for (const line of lines) {
+      // Ignorer les en-têtes et les séparateurs
+      if (!line.includes('`') || line.includes('---') || line.includes('Local')) {
+        continue;
+      }
 
-    // Chercher le dernier ']' pour terminer le JSON
-    const jsonEnd = jsonPart.lastIndexOf(']');
-    if (jsonEnd > 0) {
-      jsonPart = jsonPart.substring(0, jsonEnd + 1);
-    }
+      // Extraire les valeurs entre backticks
+      const match = line.match(/`([^`]+)`\s*\|\s*`([^`]+)`\s*\|\s*`?([^`]*)`?/);
+      if (match) {
+        const localVersion = match[1];
+        const remoteVersion = match[2];
+        const timestamp = match[3];
 
-    let migrations;
-    try {
-      migrations = JSON.parse(jsonPart);
-    } catch (parseErr) {
-      console.error('❌ Format inattendu de supabase migration list');
-      console.error('   Tentative de parsing échouée : ' + parseErr.message);
-      console.error('   Réponse brute (300 chars) : ' + output.slice(0, 300).replace(/\n/g, ' '));
-      process.exit(2);
-    }
+        // Déterminer le statut
+        let status = 'APPLIED';
+        if (!remoteVersion || remoteVersion === '') {
+          status = 'LOCAL_ONLY';
+        } else if (!localVersion || localVersion === '') {
+          status = 'REMOTE_ONLY';
+        }
 
-    if (!Array.isArray(migrations)) {
-      console.error('❌ Format inattendu de supabase migration list (pas un array)');
-      console.error('   Type : ' + typeof migrations);
-      console.error('   Réponse : ' + output.slice(0, 200));
-      console.error('');
-      console.error('   💡 Note: Vérifiez que le Supabase CLI supporte --json');
-      console.error('   Commande essayée : supabase migration list --linked --json');
-      process.exit(2);
-    }
-
-    // Extraire les versions uniques avec leur statut
-    const byVersion = new Map();
-    for (const m of migrations) {
-      const version = m.version || m.name || '';
-      if (!version) continue;
-      const status = m.status || 'UNKNOWN';
-      if (!byVersion.has(version)) {
-        byVersion.set(version, { status, timestamp: m.timestamp });
+        if (remoteVersion) {
+          migrations.set(remoteVersion, { status, timestamp });
+        }
       }
     }
 
-    remoteMigrations = new Map(byVersion);
-    return byVersion.size;
+    if (migrations.size === 0) {
+      console.error('❌ Impossible de parser les migrations Supabase');
+      console.error('   Réponse brute :');
+      console.error(output.slice(0, 500).split('\n').slice(0, 10).map(l => '   ' + l).join('\n'));
+      process.exit(2);
+    }
+
+    remoteMigrations = migrations;
+    return migrations.size;
   } catch (e) {
     if (e.code === 'ENOENT') {
       console.error('❌ CLI Supabase non disponible (supabase gen types fonctionne-t-il ?)');
