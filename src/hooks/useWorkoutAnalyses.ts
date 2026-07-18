@@ -27,12 +27,13 @@ export function useWorkoutAnalysisIndex() {
     enabled: !!user?.id,
     staleTime: 30_000,
     queryFn: async (): Promise<Set<string>> => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("workout_analyses")
         .select("workout_id")
         .eq("user_id", user!.id);
       if (error) throw error;
-      return new Set((data ?? []).map((row) => row.workout_id));
+      return new Set(((data ?? []) as Array<{ workout_id: string }>).map((row) => row.workout_id));
+
     },
   });
 }
@@ -45,13 +46,14 @@ export function useStoredWorkoutAnalysis(workoutId: string | undefined) {
     queryKey: [...WORKOUT_ANALYSES_QUERY_ROOT, "detail", workoutId, user?.id],
     enabled: !!user?.id && !!workoutId,
     queryFn: async (): Promise<WorkoutAnalysis | null> => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("workout_analyses")
         .select("summary")
         .eq("workout_id", workoutId!)
         .maybeSingle();
       if (error) throw error;
-      return (data?.summary as unknown as WorkoutAnalysis) ?? null;
+      return ((data as { summary?: unknown } | null)?.summary as unknown as WorkoutAnalysis) ?? null;
+
     },
   });
 }
