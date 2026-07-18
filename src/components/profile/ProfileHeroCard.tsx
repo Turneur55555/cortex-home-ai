@@ -1,12 +1,12 @@
 import { useRef, useState } from "react";
 import { motion } from "framer-motion";
-import { Camera, Flame, Layers, Medal } from "lucide-react";
+import { Camera } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { MasteryBar } from "@/components/fitness/MasteryBar";
 import { RankAmbientParticles } from "@/components/fitness/RankAmbientParticles";
-import { Blason } from "@/components/rpg/Blason";
+import { RankDisc } from "@/components/rpg/RankDisc";
 import { getRankVisual } from "@/lib/fitness/rankVisuals";
 import {
   RANK_TIERS,
@@ -22,14 +22,10 @@ import type { RankAggregate } from "@/components/fitness/RankAggregator";
 
 interface Props {
   pseudo: string;
-  streak: number;
   avatarUrl?: string | null;
   onEdit: () => void;
   onAvatarChange: (url: string) => Promise<void>;
   rankAggregate: RankAggregate;
-  totalWorkouts: number;
-  achievementsUnlocked: number;
-  achievementsTotal: number;
 }
 
 async function compressAvatar(file: File): Promise<Blob> {
@@ -62,51 +58,26 @@ async function compressAvatar(file: File): Promise<Blob> {
   });
 }
 
-function StatTile({
-  icon,
-  value,
-  label,
-  accentClass,
-}: {
-  icon: React.ReactNode;
-  value: string;
-  label: string;
-  accentClass?: string;
-}) {
-  return (
-    <div className="flex min-w-0 flex-col items-center gap-0.5 rounded-xl bg-black/25 px-2 py-2.5 text-center ring-1 ring-white/10 backdrop-blur-sm">
-      <span className={accentClass ?? "text-white/70"}>{icon}</span>
-      <div className="w-full truncate text-[13px] font-black leading-tight text-white">{value}</div>
-      <div className="w-full truncate text-[8.5px] font-semibold uppercase tracking-wider text-white/45">
-        {label}
-      </div>
-    </div>
-  );
-}
-
 /**
  * Fiche de Personnage — pièce maîtresse de CORTEX (Accueil).
  *
- * P1 « signature premium » : le RANG est le héros. Le blason (Blason) est mis
- * en scène au centre, le nom de rang (« TITAN ») domine, et la progression est
- * cadrée VERS LE PROCHAIN RANG. Le Niveau/XP n'est plus le chiffre-roi : il
- * devient une pastille subordonnée — le moteur qui mène au rang, jamais son
- * remplaçant. Le joueur doit dire « je suis Titan », pas « je suis niveau 42 ».
+ * P1 « signature premium » : le RANG est le héros. Le DISQUE (RankDisc), symbole
+ * officiel de CORTEX, est mis en scène au centre ; le nom de rang (« TITAN »)
+ * domine, et la progression est cadrée VERS LE PROCHAIN RANG. Le Niveau/XP n'est
+ * plus le chiffre-roi : il devient une pastille subordonnée — le moteur qui mène
+ * au rang. Le Hero RACONTE une histoire : il ne porte plus de tableau de bord
+ * (Série / Séances / Succès vivent sous le Hero, cf. HeroStatsStrip).
  *
  * Aucune logique métier ici : `rankAggregate` vient de RankAggregator (qui
- * observe le moteur de rang), `userStats` de useUserStats. Réutilise le
- * langage graphique partagé (Blason, tokens premium) destiné à toute l'app.
+ * observe le moteur de rang), `userStats` de useUserStats. Réutilise le langage
+ * graphique partagé (RankDisc, tokens premium) destiné à toute l'app.
  */
 export function ProfileHeroCard({
   pseudo,
-  streak,
   avatarUrl,
   onEdit,
   onAvatarChange,
   rankAggregate,
-  totalWorkouts,
-  achievementsUnlocked,
-  achievementsTotal,
 }: Props) {
   const { user } = useAuth();
   const { data: userStats } = useUserStats();
@@ -245,7 +216,7 @@ export function ProfileHeroCard({
 
       {/* ── Scène du RANG (le héros) ──────────────────────────────────────── */}
       <div className="relative mt-3 flex flex-col items-center text-center">
-        <Blason rank={rank} size={150} variant="hero" revealDelay={0.1} />
+        <RankDisc rank={rank} size={170} variant="hero" revealDelay={0.1} />
 
         {/* Nom de RANG monumental : lettrage serif, métal dégradé, halo, reflet. */}
         <motion.div
@@ -349,32 +320,6 @@ export function ProfileHeroCard({
             Enregistre ta première séance pour forger ton rang.
           </p>
         )}
-      </motion.div>
-
-      {/* ── Statistiques (subordonnées) ───────────────────────────────────── */}
-      <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: stagger(4), ease: EASE_OUT }}
-        className="relative mt-4 grid grid-cols-3 gap-1.5"
-      >
-        <StatTile
-          icon={<Flame className="h-3.5 w-3.5 text-orange-400" />}
-          value={`${streak}j`}
-          label="Série"
-          accentClass="text-orange-400"
-        />
-        <StatTile
-          icon={<Layers className="h-3.5 w-3.5 text-white/70" />}
-          value={`${totalWorkouts}`}
-          label="Séances"
-        />
-        <StatTile
-          icon={<Medal className="h-3.5 w-3.5 text-amber-400" />}
-          value={`${achievementsUnlocked}/${achievementsTotal}`}
-          label="Succès"
-          accentClass="text-amber-400"
-        />
       </motion.div>
     </motion.header>
   );

@@ -6,6 +6,7 @@ import { useActivityStreak } from "@/hooks/useActivityStreak";
 import { buildAchievementCollection } from "@/lib/profile/achievements/collection";
 import { ProfileRPGData, type ProfileRPGDataValue } from "@/components/profile/rpg/ProfileRPGData";
 import { ProfileHeroCard } from "@/components/profile/ProfileHeroCard";
+import { HeroStatsStrip } from "@/components/profile/HeroStatsStrip";
 import { RPGProgressionSection } from "@/components/profile/rpg/RPGProgressionSection";
 import { ClassCard } from "@/components/profile/ClassCard";
 import { EditPseudoSheet } from "@/components/profile/EditPseudoSheet";
@@ -99,11 +100,15 @@ function DashboardHub({
       {/* 1. Hero — Qui suis-je */}
       <ProfileHeroCard
         pseudo={pseudo}
-        streak={streak}
         avatarUrl={avatarUrl}
         onEdit={onEdit}
         onAvatarChange={onAvatarChange}
         rankAggregate={rankAggregate}
+      />
+
+      {/* 1b. Statistiques déplacées sous le Hero */}
+      <HeroStatsStrip
+        streak={streak}
         totalWorkouts={totalWorkouts}
         achievementsUnlocked={collection.unlockedCount}
         achievementsTotal={collection.total}
