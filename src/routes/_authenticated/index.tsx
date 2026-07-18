@@ -7,6 +7,7 @@ import { useActivityStreak } from "@/hooks/useActivityStreak";
 import { buildAchievementCollection } from "@/lib/profile/achievements/collection";
 import { ProfileRPGData, type ProfileRPGDataValue } from "@/components/profile/rpg/ProfileRPGData";
 import { ProfileHeroCard } from "@/components/profile/ProfileHeroCard";
+import { HeroStatsStrip } from "@/components/profile/HeroStatsStrip";
 import { SeasonTrackCard } from "@/components/profile/rpg/SeasonTrackCard";
 import { RPGProgressionSection } from "@/components/profile/rpg/RPGProgressionSection";
 import { ClassCard } from "@/components/profile/ClassCard";
@@ -95,11 +96,14 @@ function HomeHub({
     <>
       <ProfileHeroCard
         pseudo={pseudo}
-        streak={streak}
         avatarUrl={avatarUrl}
         onEdit={onEdit}
         onAvatarChange={onAvatarChange}
         rankAggregate={rankAggregate}
+      />
+
+      <HeroStatsStrip
+        streak={streak}
         totalWorkouts={totalWorkouts}
         achievementsUnlocked={collection.unlockedCount}
         achievementsTotal={collection.total}
