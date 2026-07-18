@@ -65,6 +65,13 @@ WHERE level IS DISTINCT FROM public.compute_level_from_xp(xp);
 -- (AFTER INSERT, `award_xp_on_badge`, seule fonction habilitée à écrire
 -- l'XP d'un badge). Résultat : xp_reward versé deux fois par badge
 -- débloqué. Un seul écrivain désormais : le trigger.
+--
+-- `unlock_user_badge` a changé de type de retour à plusieurs reprises
+-- dans l'historique (`user_badges` puis `void`) — `CREATE OR REPLACE
+-- FUNCTION` ne peut PAS changer le type de retour d'une fonction existante
+-- (erreur Postgres bloquante). Le DROP explicite rend cette migration
+-- exécutable quel que soit le type de retour actuellement en place.
+DROP FUNCTION IF EXISTS public.unlock_user_badge(text);
 CREATE OR REPLACE FUNCTION public.unlock_user_badge(_badge_key text)
 RETURNS void
 LANGUAGE plpgsql
@@ -104,6 +111,13 @@ BEGIN
   ON CONFLICT DO NOTHING;
 END;
 $$;
+
+-- Le DROP FUNCTION ci-dessus efface les privilèges précédemment accordés
+-- (20260607103913 / 20260630135437) — ré-appliqués à l'identique pour ne
+-- pas régresser la posture de sécurité (PUBLIC/anon ne doivent jamais
+-- pouvoir appeler cette fonction SECURITY DEFINER).
+REVOKE ALL ON FUNCTION public.unlock_user_badge(text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.unlock_user_badge(text) TO authenticated;
 
 -- ── 3b. Objectifs : suppression du double-versement + de l'exploit de
 --       bascule (is_completed true→false→true réattribuait l'XP à chaque
