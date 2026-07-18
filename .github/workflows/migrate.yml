@@ -328,6 +328,17 @@ jobs:
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: node scripts/check-supabase-types.mjs
 
+      # ── 4c. Audit : détecter les dérives Git ↔ Supabase (post-migration) ──
+      # Après application des migrations, vérifier qu'il n'y a pas de dérives
+      # (migrations orphelines en base, migrations supprimées en Git mais toujours
+      # appliquées, etc.). Cet audit détecte les incohérences d'état.
+      - name: Audit - Detect Git ↔ Supabase drift
+        if: steps.push.outputs.success == 'true'
+        id: audit
+        run: node scripts/audit-migration-drift.mjs || true
+        # Note: `|| true` pour ne pas échouer le job — l'audit est informatif.
+        # En cas de dérive réelle, l'étape "summary" l'inclura dans le rapport.
+
       # ── 5. GitHub Step Summary ────────────────────────────────────────────
       - name: Generate summary
         if: always()

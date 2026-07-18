@@ -20,6 +20,7 @@
     "validate:supabase:fix": "node scripts/validate-supabase.mjs --fix",
     "gen:types": "supabase gen types typescript --project-id bcwfvpwxzlmkxobvbtzp --schema public > src/integrations/supabase/types.ts",
     "check:types": "node scripts/check-supabase-types.mjs",
+    "audit:drift": "node scripts/audit-migration-drift.mjs",
     "phase4:backfill-segments": "node scripts/phase4_backfill_generic_segments.mjs",
     "phase4:backfill-segments:apply": "node scripts/phase4_backfill_generic_segments.mjs --apply",
     "prepare": "husky",

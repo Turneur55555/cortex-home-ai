@@ -1,6 +1,23 @@
 # Mémoire projet — cortex-home-ai
 
 ## Dernière mise à jour
+2026-07-18
+
+## AUDIT : Détection automatique des dérives Git ↔ Supabase (2026-07-18, branche `claude/git-supabase-drift-detection-hx04xv`)
+Mise en place d'un système d'audit continu pour détecter les **incohérences d'état entre Git et Supabase** — problème identifié lors de l'audit du workflow `migrate.yml` (mutations hors-Git en base).
+- **`scripts/audit-migration-drift.mjs`** : script d'audit autonome qui récupère l'état des migrations en base (`supabase migration list --linked --output json`) et le compare aux migrations Git. Détecte 3 types de dérives critiques :
+  1. **REMOTE_ONLY** : migration appliquée en Supabase mais absente de Git (orpheline, risque maj divergence)
+  2. **DELETED_IN_GIT** : migration supprimée du dépôt mais toujours appliquée en base (impossible rejouer l'historique)
+  3. **NOT_APPLIED** : migration dans Git mais non appliquée (normal en dev, critique si oublie sur main)
+- **`.github/workflows/audit-migration-drift.yml`** : workflow GitHub déclenché automatiquement (quotidien 08:00 UTC + push sur main + manuel). Produit un résumé GitHub Step Summary avec statut critique/warning. Optionnel dans le job — ne bloque pas le pipeline (utilise `|| true`).
+- **Intégration `migrate.yml`** : nouvelle étape post-migration (`Audit - Detect Git ↔ Supabase drift`) qui tourne après chaque push — détecte immédiatement toute dérive créée par la migration.
+- **`package.json`** : ajout script `audit:drift` pour exécution locale (`npm run audit:drift`).
+- **`docs/architecture/migration-drift-detection.md`** : documentation complète (types de dérives, corrections, workflows intégrés, debug avancé).
+- **`scripts/test-audit-migration-drift.mjs`** : tests de base (syntaxe, charge des migrations, etc.). Tests complets avec Supabase (nécessite CLI linké) exécutés en CI.
+- **Exit codes** : 0 = sain, 1 = dérive détectée (audit requis), 2 = erreur config/connectivité.
+- Vérifié : script parse sans erreur (node --check), 164 migrations loaders, tests de base ✅. Déploiement & test en CI via GitHub Actions.
+
+## Dernière mise à jour (ancienne)
 2026-07-17
 
 ## DETTE TECHNIQUE RÉSOLUE : « types.ts — la base est la source de vérité » (2026-07-17, branche `claude/cortex-rpg-analysis-h7e4eb`, NON mergé)
