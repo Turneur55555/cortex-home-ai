@@ -494,6 +494,9 @@ export function useFinishGenericActiveWorkout() {
       qc.invalidateQueries({ queryKey: ["fitness"] });
       qc.invalidateQueries({ queryKey: ["user_activity"] });
       qc.invalidateQueries({ queryKey: ["activity_streak"] });
+      // RPG : la clôture verse de l'XP côté serveur (trigger
+      // `award_xp_on_workout_complete`) — invalider le cache Niveau/Rang.
+      qc.invalidateQueries({ queryKey: ["user_stats"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -504,12 +507,15 @@ export function useCancelGenericActiveWorkout() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (workoutId: string) => {
+      // L'XP éventuellement versée est retirée côté serveur avant la
+      // suppression (trigger `trg_reverse_xp_before_workout_delete`).
       const { error } = await supabase.from("workouts").delete().eq("id", workoutId);
       if (error) throw error;
     },
     onSuccess: () => {
       toast.success("Séance annulée");
       qc.invalidateQueries({ queryKey: ["fitness"] });
+      qc.invalidateQueries({ queryKey: ["user_stats"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });

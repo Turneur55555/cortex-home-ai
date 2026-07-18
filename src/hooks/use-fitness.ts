@@ -222,6 +222,8 @@ export function useDeleteWorkout() {
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
       // Les exercices et leurs séries sont supprimés par cascade FK (ON DELETE CASCADE).
+      // L'XP éventuellement versée est retirée côté serveur avant la
+      // suppression (trigger `trg_reverse_xp_before_workout_delete`).
       const { error } = await supabase
         .from("workouts")
         .delete()
@@ -232,6 +234,7 @@ export function useDeleteWorkout() {
     onSuccess: () => {
       toast.success("Séance supprimée");
       qc.invalidateQueries({ queryKey: WORKOUTS_KEY });
+      qc.invalidateQueries({ queryKey: ["user_stats"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -646,6 +649,10 @@ export function useFinishWorkout() {
       qc.invalidateQueries({ queryKey: ["fitness"] });
       qc.invalidateQueries({ queryKey: ["user_activity"] });
       qc.invalidateQueries({ queryKey: ["activity_streak"] });
+      // RPG : la clôture verse de l'XP côté serveur (trigger
+      // `award_xp_on_workout_complete`) — invalider le cache Niveau/Rang
+      // pour ne jamais afficher un XP/niveau périmé.
+      qc.invalidateQueries({ queryKey: ["user_stats"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -657,6 +664,8 @@ export function useCancelWorkout() {
   return useMutation({
     mutationFn: async (workoutId: string) => {
       // Exercices + séries supprimés par cascade FK (ON DELETE CASCADE).
+      // L'XP éventuellement versée est retirée côté serveur avant la
+      // suppression (trigger `trg_reverse_xp_before_workout_delete`).
       const { error } = await supabase.from("workouts").delete().eq("id", workoutId);
       if (error) throw error;
     },
@@ -664,6 +673,7 @@ export function useCancelWorkout() {
       toast.success("Séance annulée");
       // Étape 0.2 : idem useFinishWorkout — invalidation par préfixe fitness.
       qc.invalidateQueries({ queryKey: ["fitness"] });
+      qc.invalidateQueries({ queryKey: ["user_stats"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
