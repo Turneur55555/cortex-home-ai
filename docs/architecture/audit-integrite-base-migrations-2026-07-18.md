@@ -316,12 +316,86 @@ Row counts inchangés après opérations : `dossiers=44, dsn=44, ca_praticiens=6
 controle_lignes=929` (identiques à l'audit). **Aucun objet TachePaie modifié.**
 
 ### 9.5 Ce qui reste (hors périmètre RPG, décision requise)
-- **Historique de migrations** : ~37 doublons re-timestampés (`applied` à confirmer)
-  + 10 orphelines distantes → `db push` reste bloqué tant que non réconcilié.
-  À traiter dans un pass dédié, chaque `repair` documenté.
-- **Objets dormants** (`daily_activity`, `exercise_catalog`, `calendar_tokens`,
-  fonctions badge legacy) : absents, non utilisés — décider suppression définitive
-  des migrations ou re-création (probablement à supprimer).
 - **`types.ts`** : régénération impossible proprement tant que la base héberge
   TachePaie (le générateur ramènerait le schéma paie). Lié à la séparation vers un
   projet Supabase dédié CORTEX (feuille de route validée par Nathan, 18/07).
+- Voir §10 pour la réconciliation complète de l'historique (traitée le 18/07,
+  scope CORTEX uniquement, TachePaie non touchée).
+
+---
+
+## 10. Réconciliation de l'historique de migrations (18/07/2026, scope CORTEX only)
+
+**Préalable de confiance résolu** : vérification croisée du `project_ref` — repo
+(`supabase/config.toml`), base auditée, et preuve indépendante préexistante
+(`MIGRATION_AUDIT_REPORT.md`, committé le 17/07 avant cette investigation) confirment
+tous `bcwfvpwxzlmkxobvbtzp` / organisation **Icortex**. L'organisation « Taches »
+possède un projet Supabase **distinct**, jamais touché par cette session.
+
+**Périmètre explicitement exclu** : aucune donnée ni objet TachePaie modifié ou
+supprimé (confirmé par row counts inchangés en fin d'opération, §10.4).
+
+### 10.1 Inventaire complet TachePaie (lecture seule, périmètre confirmé)
+21 tables (`dossiers` 44 lignes, `dsn` 44, `taches` 3, `taches_recurrentes` 0,
+`echeances` 88, `arrets_maladie` 0, `stc` 0, `contrats` 0, `dossier_documents` 0,
+`profiles` 2, `activity_log` 182, `controle_lignes` 929, `ca_praticiens` 627,
+`cp_controles` 1, `cp_historique` 6, `imports` 1, `historique_imports` 0,
+`regles_analyse` 0, `affiliations_mutuelle` 0, `silae_sync_logs` 20,
+`app_settings` 1 — **1948 lignes au total**), 1 vue (`v_briefing_matinal`),
+12 triggers, ~24 policies, ~63 index. Fonctions propres : `log_table_activity`,
+`update_updated_at`. **Découverte critique** : `set_updated_at` (utilitaire
+générique) est utilisée par `regles_analyse` (paie) **et** `user_preferences`
+(CORTEX) — créée par CORTEX en tout premier (`20260510000001_shared_updated_at_function`,
+avant même TachePaie) — **jamais** incluse dans le périmètre TachePaie, jamais touchée.
+Vérifié : **zéro référence** à un objet TachePaie dans `src/` (code CORTEX).
+
+### 10.2 Repair — historique réconcilié (métadonnées uniquement, aucun DDL exécuté)
+**10 orphelines distantes supprimées** (`DELETE FROM supabase_migrations.schema_migrations`,
+équivalent `migration repair --status reverted`) : `20260709165428`, `20260709182521`,
+`20260709215432`, `20260711200853`, `20260711203309`, `20260711203334`,
+`20260711211110`, `20260712213330`, `20260714201321`, `20260716165402` — toutes
+correspondant à des objets CORTEX déjà existants sous un autre timestamp (workout
+engine, exercice_central, hyrox catalog…), aucune ne touchait TachePaie.
+
+**34 migrations locales marquées `applied`** (INSERT metadata, SQL jamais exécuté) :
+objets déjà présents en base sous un autre chemin (Lovable/Studio non tracké) ou
+fonctions legacy dormantes (`award_xp_on_badge`, `award_xp_on_goal_complete`,
+`award_time_of_day_badges` — 0 appel réel dans le code, seulement 1 commentaire) ou
+table `exercise_catalog` (superseded par `exercise_reference`, 0 référence code).
+Liste complète et justification par version : voir commit associé. Une entrée
+(`20260705180000_reconstructed_snapshot_missing_creates`) crée des objets TachePaie
+(`activity_log`/`dossier_documents`/`taches_recurrentes`) déjà existants — marquée
+`applied` en métadonnées seules, **aucune donnée TachePaie modifiée**.
+
+### 10.3 Gap fonctionnel réel comblé : `daily_activity`
+Découverte en classifiant les migrations : `daily_activity` est référencée par du
+code **actif** (`src/lib/health/importAppleHealth.ts`, utilisé par
+`HealthDataPanel.tsx`, `upsertChunks("daily_activity", …)`) — l'import Apple Health
+écrivait silencieusement dans le vide. Table absente en base pour la même raison
+racine que le RPG (migration jamais poussée). **Appliquée** (idempotente, additive,
+dépendance `touch_updated_at()` vérifiée présente) : la table existe désormais,
+la fonctionnalité d'import Apple Health est réparée.
+
+### 10.4 🔴 Retenu — 2 migrations destructrices, décision utilisateur requise
+Deux fichiers pending contiennent des `DROP TABLE … CASCADE` visant des **tables
+CORTEX vivantes avec données réelles**, jamais exécutés jusqu'ici (bug migrate.yml) :
+- `20260619195942` : `DROP TABLE reminders CASCADE` + `DROP TABLE calendar_tokens CASCADE`
+  — `reminders` contient **5 lignes réelles**. Zéro référence dans `src/` (feature retirée du code).
+- `20260714145745` : `DROP FUNCTION ensure_home_categories_for_me` + `DROP TABLE items/home_subcategories/home_categories CASCADE`
+  — **98 lignes réelles** (11+54+33). Zéro référence dans `src/` (feature « Maison » retirée du code).
+
+Le code ne référence plus aucun de ces objets — cohérent avec une suppression de
+fonctionnalité voulue mais jamais réellement poussée en base (même cause racine que
+le RPG : `migrate.yml` cassé). **Mais supprimer 103 lignes de données réelles est
+irréversible** : non exécuté sans confirmation explicite. Confirmé par dry-run CI
+(run `29639556315`, 18/07 09:41) : ce sont **les deux seules** migrations qu'un
+`db push` réel appliquerait désormais — tout le reste est propre.
+
+### 10.5 Validation post-réconciliation
+- Dry-run CI (`29639556315`) : `Push migrations to Supabase` → **success**. Détecte
+  et lie exactement les 2 migrations retenues, zéro erreur d'orpheline.
+- TachePaie : row counts inchangés (`dossiers=44, dsn=44, ca_praticiens=627,
+  controle_lignes=929`) — **confirmé intact**.
+- CORTEX : `reminders=5, items=11, home_categories=33` — **confirmé intact** (rien
+  supprimé sans confirmation).
+- Tests : 391 pass. Typecheck : 0 erreur (hors artefacts sandbox `html-to-image`).
