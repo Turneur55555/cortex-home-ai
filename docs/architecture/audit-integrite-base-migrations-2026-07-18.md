@@ -221,3 +221,54 @@ sans jamais toucher TachePaie ni casser l'enregistrement des séances.**
 - ❌ Appliquer R1 avant d'avoir matérialisé `compute_level_from_xp` (casse
   l'enregistrement des séances).
 - ❌ Toute opération sur les tables TachePaie.
+
+---
+
+## 8. Journal de validation du pipeline (18/07/2026)
+
+### 8.1 Dry-run du `migrate.yml` corrigé — run `29637391413` (branche)
+Dispatch `workflow_dispatch` en `dry_run=true` (aucune migration appliquée).
+Résultats **factuels** :
+- `supabase link` : ✅ — **accès CI validés** (token + project ref corrects).
+- `supabase db push --linked --dry-run` : **s'exécute réellement** et **se connecte
+  à la base distante** (« Connecting to remote database... »). Plus aucun
+  « Unrecognized flag » : le correctif du flag `--project-ref` est confirmé.
+  **Pas de problème de password/secret** (la connexion aboutit).
+- Job **rouge** sur échec réel : **plus aucun faux « Push réussi » possible.** ✅
+- Étapes post-push (bucket, vérif types) : **sautées** en dry-run comme prévu.
+
+### 8.2 Cause de l'échec du push (attendue) : historique divergent
+`db push` refuse car la base contient des versions absentes du repo :
+```
+Remote migration versions not found in local migrations directory.
+supabase migration repair --status reverted 20260708210642 … 20260716165402
+```
+= les orphelines de §2.3. **C'est le vrai bloqueur** à traiter en réconciliation
+manuelle (étape 1 du plan) avant d'appliquer quoi que ce soit.
+
+### 8.3 ⚠️ Effet de bord constaté et neutralisé
+L'**auto-repair préexistant** du workflow (hérité, conservé par erreur) a marqué
+**3 orphelines `reverted` automatiquement** pendant ce run de validation :
+`20260707110600`, `20260708210642`, `20260709165411`.
+- **Impact réel : métadonnées uniquement.** Les objets créés par ces migrations
+  (`workout_templates`, `stock_history`, workout_engine) **existent toujours**
+  (vérifié `to_regclass`). Aucune perte de schéma ni de données.
+- L'historique est passé de **135 → 132** migrations enregistrées.
+- **C'est précisément la « réparation silencieuse » à proscrire.** → **Auto-repair
+  entièrement retiré de `migrate.yml`** (même commit) : le workflow **détecte et
+  reporte** désormais les orphelines mais ne les **répare jamais** ; il **échoue
+  bruyamment** sur erreur déterministe (orpheline / objet existant / dépendance
+  manquante) sans retry ni mutation.
+
+### 8.4 État des orphelines après ce run (10 restantes)
+`20260709165428`, `20260709182521`, `20260709215432`, `20260711200853`,
+`20260711203309`, `20260711203334`, `20260711211110`, `20260712213330`,
+`20260714201321`, `20260716165402`.
+Toute opération `migration repair` future sur ces versions devra être **explicite,
+justifiée cas par cas, et consignée ici** (aucune ne doit masquer un écart réel).
+
+### 8.5 Statut du plan de remédiation
+- **Étape 0 (CI)** : ✅ **validée en conditions réelles** (dry-run) + auto-repair retiré.
+- **Étape 1 (réconcilier l'historique)** : ⏳ à faire — 10 orphelines + doublons
+  re-timestampés. **C'est le prochain jalon**, manuel et documenté.
+- Étapes 2–5 (compute_level_from_xp → R1 → S0 → démonstration) : inchangées, en aval.

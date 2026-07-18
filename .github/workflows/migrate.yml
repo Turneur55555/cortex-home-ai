@@ -98,104 +98,56 @@ jobs:
       - name: Link Supabase project
         run: supabase link --project-ref "$PROJECT_REF"
 
-      # ── 2. Détecter et réparer les migrations orphelines ──────────────────
+      # ── 2. Détecter (SANS réparer) les migrations orphelines ──────────────
       #
-      # POURQUOI set +e ici :
-      #   GitHub Actions exécute chaque `run:` avec bash -eo pipefail.
-      #   `supabase migration list` peut retourner un exit code non-zéro
-      #   (ex. 13 = erreur réseau/auth dans le CLI Go) et `|| echo "[]"`
-      #   ne suffit pas à l'absorber dans tous les contextes de pipeline.
-      #   On désactive temporairement le bail-on-error pour capturer
-      #   proprement le code retour et diagnostiquer l'erreur réelle.
+      # DÉCISION (18/07/2026) : ce workflow ne DOIT JAMAIS modifier
+      # automatiquement l'historique de migrations (`migration repair`).
+      # Une réparation automatique masque un problème de fond (divergence
+      # code⇄base) et peut altérer silencieusement `schema_migrations`.
+      # → Ici on se contente de DÉTECTER et de REPORTER les orphelines.
+      #   La réconciliation est une opération MANUELLE et DOCUMENTÉE
+      #   (voir docs/architecture/audit-integrite-base-migrations-2026-07-18.md).
       #
-      # POURQUOI jq au lieu de node --input-type=module <<'EOF' :
-      #   La syntaxe `echo "$RAW" | node --input-type=module <<'EOF'` est
-      #   un bug bash : le heredoc redirige stdin de node (pour le script JS),
-      #   ce qui prive le pipe de lecteur. echo écrit dans le vide → SIGPIPE
-      #   (signal 13). Avec set -eo pipefail, le job meurt avec exit 13.
-      #   jq est préinstallé sur ubuntu-latest et n'a pas ce problème.
-      - name: Repair orphaned remote migrations
-        id: repair
+      # set +e : `supabase migration list` peut sortir en code non-zéro
+      # (réseau/auth) ; on capture proprement sans faire échouer l'étape de
+      # simple diagnostic. jq (préinstallé) évite le piège SIGPIPE des heredoc.
+      - name: Detect orphaned remote migrations (report only)
+        id: detect
         run: |
-          echo "Récupération de la liste des migrations distantes..."
-
-          # ── Appel CLI avec capture complète (stdout + stderr) ──────────
+          echo "Diagnostic de l'historique de migrations (lecture seule, aucune réparation)..."
           set +e
-          RAW=$(supabase migration list \
-            --linked \
-            --output json 2>&1)
-          SUPABASE_EXIT=$?
+          RAW=$(supabase migration list --linked --output json 2>&1)
           set -e
 
-          if [ "$SUPABASE_EXIT" -ne 0 ]; then
-            echo "⚠️  supabase migration list a retourné exit code $SUPABASE_EXIT"
-            echo "   Sortie brute (5 premières lignes) :"
-            echo "$RAW" | head -5 | sed 's/^/     /'
-            echo "   → Réparation ignorée (le push détectera les orphelins si besoin)"
-            exit 0
-          fi
-
-          # ── Vérifications défensives du contenu ────────────────────────
-          if [ -z "$RAW" ]; then
-            echo "⚠️  Réponse vide — aucune migration distante connue"
-            exit 0
-          fi
-
-          # Extraire uniquement la portion JSON (ignore les éventuels warnings ANSI)
           JSON_PART=$(echo "$RAW" | grep -o '\[.*' | head -1 || true)
-          if [ -z "$JSON_PART" ]; then
-            JSON_PART="$RAW"
-          fi
-
-          # Valider la syntaxe JSON avec jq (disponible nativement sur ubuntu-latest)
+          [ -z "$JSON_PART" ] && JSON_PART="$RAW"
           if ! echo "$JSON_PART" | jq empty 2>/dev/null; then
-            echo "⚠️  Réponse non-JSON de supabase migration list :"
+            echo "ℹ️  Liste des migrations indisponible en JSON — diagnostic ignoré."
             echo "$RAW" | head -10 | sed 's/^/     /'
-            echo "   → Réparation ignorée"
             exit 0
           fi
 
-          # ── Extraction des orphelins avec jq ───────────────────────────
-          # status "REMOTE_ONLY" = présent sur le remote mais absent en local
-          # Supabase CLI peut aussi utiliser des champs sans .status (ancien format)
           ORPHANED=$(echo "$JSON_PART" | jq -r '
             if type == "array" then
               .[]
               | select(
                   (.status // "") == "REMOTE_ONLY"
-                  or (
-                    (.local // .local_path // null) == null
-                    and (.remote // .remote_version // null) != null
-                  )
+                  or ((.local // .local_path // null) == null
+                      and (.remote // .remote_version // null) != null)
                 )
               | (.version // .remote // .remote_version // "")
               | select(length > 0)
-            else
-              empty
-            end
+            else empty end
           ' 2>/dev/null || true)
 
-          # ── Réparation ─────────────────────────────────────────────────
           if [ -z "$ORPHANED" ]; then
-            echo "✅ Aucune migration orpheline"
+            echo "✅ Aucune migration orpheline détectée."
           else
-            echo "🔧 Migrations orphelines détectées :"
-            while IFS= read -r VERSION; do
-              [ -z "$VERSION" ] && continue
-              echo "   → $VERSION"
-              set +e
-              supabase migration repair \
-                --linked \
-                --status reverted \
-                "$VERSION"
-              REPAIR_EXIT=$?
-              set -e
-              if [ "$REPAIR_EXIT" -eq 0 ]; then
-                echo "   ✅ Réparée"
-              else
-                echo "   ⚠️  Réparation ignorée (exit $REPAIR_EXIT) — le push retentera"
-              fi
-            done <<< "$ORPHANED"
+            echo "⚠️  Migrations orphelines distantes (présentes en base, absentes du repo) :"
+            echo "$ORPHANED" | sed 's/^/     👻 /'
+            echo ""
+            echo "   → Réconciliation MANUELLE requise (non exécutée ici, par conception)."
+            echo "     Voir docs/architecture/audit-integrite-base-migrations-2026-07-18.md"
           fi
 
       # ── 3. Push avec retry exponentiel ────────────────────────────────────
@@ -252,37 +204,34 @@ jobs:
 
             echo "❌ Tentative $attempt échouée (exit $PUSH_EXIT)"
 
-            # ── Détection automatique des causes connues ─────────────────
-            # Cause : migration orpheline détectée en cours de push
+            # ── Erreurs DÉTERMINISTES : ne jamais retenter ni réparer ────
+            # Ces causes ne se résolvent pas toutes seules ; retenter ne
+            # ferait que masquer le problème. On échoue immédiatement, avec
+            # un diagnostic clair. AUCUN `migration repair` automatique :
+            # la réconciliation d'historique est manuelle et documentée.
             if echo "$OUTPUT" | grep -q "Remote migration versions not found"; then
-              ORPHAN=$(echo "$OUTPUT" \
-                | grep -oP 'supabase migration repair --status reverted \K\d+' \
-                | head -1)
-              if [ -n "$ORPHAN" ]; then
-                echo "🔧 Auto-repair migration orpheline : $ORPHAN"
-                supabase migration repair \
-                  --linked \
-                  --status reverted \
-                  "$ORPHAN" || true
-                DELAY=2
-              fi
+              echo "::error::Historique de migrations divergent — des versions"
+              echo "::error::distantes sont absentes du repo (orphelines). Réconciliation"
+              echo "::error::MANUELLE requise, voir docs/architecture/audit-integrite-base-migrations-2026-07-18.md"
+              echo "::error::Ce workflow ne répare PAS l'historique automatiquement (par conception)."
+              break
             fi
-
-            # Cause : conflit de fonction (retente sans attente)
-            if echo "$OUTPUT" | grep -qE "function .+ does not exist|42883"; then
-              echo "⚠️  Fonction manquante — vérifier validate-supabase.mjs"
-            fi
-
-            # Cause : relation/policy/trigger déjà existante
             if echo "$OUTPUT" | grep -qE "already exists|42710|42P16"; then
-              echo "⚠️  Objet déjà existant — migrations non-idempotentes"
+              echo "::error::Objet déjà existant (migration non idempotente ou déjà appliquée"
+              echo "::error::sous un autre numéro de version). Échec volontaire — pas de retry."
+              break
+            fi
+            if echo "$OUTPUT" | grep -qE "function .+ does not exist|42883"; then
+              echo "::error::Fonction référencée manquante — dépendance non satisfaite."
+              break
             fi
 
+            # ── Sinon : erreur potentiellement transitoire (réseau) → retry ─
             if [ "$attempt" -eq "$MAX" ]; then
               break
             fi
 
-            echo "⏳ Attente ${DELAY}s avant la prochaine tentative..."
+            echo "⏳ Attente ${DELAY}s avant la prochaine tentative (erreur possiblement transitoire)..."
             sleep "$DELAY"
             DELAY=$((DELAY * 2))
           done
