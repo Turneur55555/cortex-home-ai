@@ -69,7 +69,7 @@ jobs:
 
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
 
     steps:
       - uses: actions/checkout@v4
@@ -87,7 +87,7 @@ jobs:
 
       # ── 1. Link ────────────────────────────────────────────────────────────
       - name: Link Supabase project
-        run: supabase link --project-ref "$PROJECT_REF"
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
 
       # ── 2. Détecter et réparer les migrations orphelines ──────────────────
       #
@@ -266,7 +266,7 @@ jobs:
         if: steps.push.outputs.success == 'true'
         run: |
           SERVICE_KEY=$(supabase projects api-keys \
-            --project-ref "$PROJECT_REF" \
+            --project-ref "$SUPABASE_PROJECT_REF" \
             --output json \
             | jq -r '.[] | select(.name == "service_role") | .api_key')
 
