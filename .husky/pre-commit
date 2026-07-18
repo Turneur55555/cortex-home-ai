@@ -57,6 +57,47 @@ fi
 
 echo "✅ Migrations Supabase OK"
 
+# ── Types Supabase : vérifier que types.ts a été régénéré si migration modifiée ──
+# Ce check est une heuristique locale (rapide) : s'il y a des migrations modifiées
+# dans le commit, on s'attend à ce que types.ts change aussi (sinon, oubli probable).
+#
+# Raison : le vrai check (base ↔ types.ts) ne peut se faire que sur CI (requiert
+# SUPABASE_ACCESS_TOKEN + accès à la base). Mais on peut faire un avertissement local.
+#
+MODIFIED_MIGRATIONS=$(git diff --cached --name-only \
+  | grep "supabase/migrations/.*\.sql$" || true)
+
+if [ -n "$MODIFIED_MIGRATIONS" ]; then
+  echo "🔍 Migrations Supabase modifiées détectées — vérification types.ts..."
+
+  # Vérifier que types.ts est aussi modifié (heuristique naive)
+  TYPES_MODIFIED=$(git diff --cached --name-only \
+    | grep -c "src/integrations/supabase/types.ts" || echo 0)
+
+  if [ "$TYPES_MODIFIED" -eq 0 ]; then
+    echo ""
+    echo "⚠️  Attention : vous avez modifié une migration Supabase mais types.ts"
+    echo "   n'est pas modifié en parallèle. Cela suggère un oubli."
+    echo ""
+    echo "   Avez-vous lancé : npm run gen:types ?"
+    echo ""
+    echo "   Si oui, les types n'ont pas changé (migration retroactive, etc.) :"
+    echo "   → git add src/integrations/supabase/types.ts (inchangé)"
+    echo ""
+    echo "   Si non (vous avez oublié) :"
+    echo "   → npm run gen:types"
+    echo "   → git add src/integrations/supabase/types.ts"
+    echo ""
+    read -p "Continuer quand même ? (y/n) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+      exit 1
+    fi
+  fi
+
+  echo "✅ Types Supabase en sync avec migrations"
+fi
+
 # ── Slugs de repas : frontend / Edge Functions / contrainte SQL ──────────────
 # Ne tourne que si un commit touche un fichier lié aux repas — garde le hook
 # rapide le reste du temps. Voir docs/nutrition-meal-slugs.md.

@@ -316,14 +316,16 @@ jobs:
       # Les migrations viennent d'être appliquées : la base contient désormais
       # les nouvelles tables. types.ts committé DOIT correspondre — sinon on a
       # oublié de régénérer (`npm run gen:types`). Échec visible, aucun commit.
+      #
+      # IMPORTANT : ce check s'exécute TOUJOURS (même si le push échoue), car
+      # on veut s'assurer qu'en cas de retry du push, types.ts sera conforme.
+      # Un push échoué sans check types.ts laisse la CI en état inconsistant.
       - name: Setup Node (vérif types)
-        if: steps.push.outputs.success == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: "20"
 
       - name: Vérifier que types.ts correspond à la base
-        if: steps.push.outputs.success == 'true'
         env:
           SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
         run: node scripts/check-supabase-types.mjs

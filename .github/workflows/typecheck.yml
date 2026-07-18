@@ -5,12 +5,20 @@ name: Typecheck
 # régression de types — notamment une table disparue de types.ts et utilisée
 # par du code — casse immédiatement la CI, de façon visible.
 #
+# Bonus (PR uniquement) : si une migration est ajoutée, vérifier que types.ts
+# serait conforme après son application. Prévient les merges de migrations
+# sans régénération types.
+#
 # Ce n'est PAS la solution principale (voir supabase-types.yml + la génération
 # officielle depuis la base) : c'est le garde-fou côté code.
 
 on:
   pull_request:
     branches: [main]
+    paths:
+      - 'src/**'
+      - 'supabase/migrations/**'
+      - '.github/workflows/typecheck.yml'
   push:
     branches: [main]
   workflow_dispatch:
@@ -34,3 +42,47 @@ jobs:
 
       - name: Typecheck
         run: npm run typecheck
+
+  # ─── Garde-fou supplémentaire en PR : vérifier types.ts si migration ajoutée ───
+  # Si une PR ajoute une migration, génère les types depuis la base (post-merge)
+  # et compare avec le types.ts committé. Détecte les migrations sans types.ts
+  # régénéré. Ne s'exécute que sur PR (les merges ont supabase-types.yml).
+  types-sync-on-migration-pr:
+    name: Types sync check (migration in PR)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Détecter si une migration a été ajoutée/modifiée en PR
+      - name: Check for migrations in this PR
+        id: detect
+        run: |
+          BASE_REF="origin/${{ github.base_ref }}"
+          if git rev-parse --verify "$BASE_REF" >/dev/null 2>&1; then
+            HAS_MIGRATIONS=$(git diff --name-only "$BASE_REF"...HEAD | grep -c "supabase/migrations/" || echo 0)
+            echo "has_migrations=$HAS_MIGRATIONS" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_migrations=0" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: supabase/setup-cli@v1
+        if: steps.detect.outputs.has_migrations != '0'
+        with:
+          version: "2.109.1"
+
+      - uses: actions/setup-node@v4
+        if: steps.detect.outputs.has_migrations != '0'
+        with:
+          node-version: "20"
+
+      - name: Verify types.ts matches DB schema
+        if: steps.detect.outputs.has_migrations != '0'
+        run: |
+          echo "🔍 Migration détectée en PR → vérification types.ts..."
+          node scripts/check-supabase-types.mjs
