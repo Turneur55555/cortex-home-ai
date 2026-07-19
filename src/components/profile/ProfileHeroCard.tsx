@@ -334,7 +334,7 @@ export function ProfileHeroCard({
           </span>
         </div>
         <MasteryBar
-          percent={(ranked ? rank.progress : 0) * 100}
+          percent={(showRanked ? rank.progress : 0) * 100}
           colors={colors}
           segments={5}
           height={10}
