@@ -351,7 +351,7 @@ export function ProfileHeroCard({
             </span>
           </p>
         )}
-        {!ranked && (
+        {!showRanked && !isHydrating && (
           <p className="mt-1.5 text-center text-[10px] text-white/45">
             Enregistre ta première séance pour forger ton rang.
           </p>
