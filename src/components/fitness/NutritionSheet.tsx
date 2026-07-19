@@ -57,7 +57,7 @@ async function saveCustomFood(
         source: "custom",
         source_id: `user:${user.id}:${normalized}`,
         name,
-        normalized_name: normalized,
+        name_normalized: normalized,
         calories: per100.calories,
         protein_g: per100.proteins,
         carbs_g: per100.carbs,
