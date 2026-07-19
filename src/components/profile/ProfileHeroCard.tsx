@@ -257,7 +257,7 @@ export function ProfileHeroCard({
         {/* Nom de RANG monumental : lettrage serif, métal dégradé, halo, reflet. */}
         <motion.div
           initial={{ opacity: 0, y: 12, scale: 0.94 }}
-          animate={{ opacity: ranked ? 1 : 0.6, y: 0, scale: 1 }}
+          animate={{ opacity: showRanked ? 1 : isHydrating ? 0 : 0.6, y: 0, scale: 1 }}
           transition={{ duration: 0.7, delay: stagger(1), ease: EASE_OUT }}
           className="relative mt-3 flex flex-col items-center"
         >
