@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Camera } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
@@ -86,9 +86,45 @@ export function ProfileHeroCard({
   const [uploading, setUploading] = useState(false);
   const initial = pseudo[0]?.toUpperCase() ?? "?";
 
+  // Cache local du dernier rang connu (par utilisateur) pour éviter le flash
+  // « Mortel » pendant que RankAggregator sonde les hooks asynchrones.
+  // Clé stable : on ne stocke que le `tierIndex` (0..N) — reconstruit via
+  // `toRankState`. Aucune fuite entre utilisateurs (clé préfixée par user.id).
+  const cacheKey = user ? `cortex:hero-rank-tier:${user.id}` : null;
+  const [cachedTier, setCachedTier] = useState<number | null>(() => {
+    if (typeof window === "undefined" || !cacheKey) return null;
+    const raw = window.localStorage.getItem(cacheKey);
+    if (raw == null) return null;
+    const n = parseInt(raw, 10);
+    return Number.isFinite(n) && n >= 0 ? n : null;
+  });
+
   const ranked = rankAggregate.best?.rank ?? null;
-  // Rang affiché : le meilleur obtenu, sinon Mortel I en repli (mis en sourdine).
-  const rank: RankState = ranked ?? toRankState(0, 0);
+
+  // Persiste le meilleur rang dès qu'il est disponible.
+  useEffect(() => {
+    if (!cacheKey || !ranked) return;
+    if (ranked.tierIndex === cachedTier) return;
+    try {
+      window.localStorage.setItem(cacheKey, String(ranked.tierIndex));
+      setCachedTier(ranked.tierIndex);
+    } catch {
+      /* quota / SSR — no-op */
+    }
+  }, [cacheKey, ranked, cachedTier]);
+
+  // Ordre de priorité : rang réel > rang en cache (chargement) > Mortel I.
+  // → tant que la sonde n'a pas fini, on n'affiche JAMAIS un rang inférieur
+  //   au dernier rang connu de l'utilisateur.
+  const displayRank: RankState =
+    ranked ?? (cachedTier != null ? toRankState(cachedTier, 0) : toRankState(0, 0));
+  const isHydrating = !ranked && cachedTier == null && rankAggregate.isLoading;
+  // `ranked` reste la source de vérité "utilisateur classé" pour les libellés
+  // ("Non classé", CTA "commence"), mais l'affichage visuel utilise le cache.
+  const rank: RankState = displayRank;
+  // Considère l'utilisateur comme classé dès qu'on a un rang à afficher —
+  // réel OU en cache — pour éviter le clignotement "Non classé" puis "Titan".
+  const showRanked = !!ranked || cachedTier != null;
   const colors = rank.rank.colors;
   const visual = getRankVisual(rank.rank.key);
 
@@ -221,7 +257,7 @@ export function ProfileHeroCard({
         {/* Nom de RANG monumental : lettrage serif, métal dégradé, halo, reflet. */}
         <motion.div
           initial={{ opacity: 0, y: 12, scale: 0.94 }}
-          animate={{ opacity: ranked ? 1 : 0.6, y: 0, scale: 1 }}
+          animate={{ opacity: showRanked ? 1 : isHydrating ? 0 : 0.6, y: 0, scale: 1 }}
           transition={{ duration: 0.7, delay: stagger(1), ease: EASE_OUT }}
           className="relative mt-3 flex flex-col items-center"
         >
@@ -276,7 +312,7 @@ export function ProfileHeroCard({
             className="text-[11px] font-bold uppercase tracking-[0.3em]"
             style={{ color: colors.secondary }}
           >
-            {ranked ? `Rang ${rank.romanLevel}` : "Non classé"}
+            {showRanked ? `Rang ${rank.romanLevel}` : isHydrating ? "" : "Non classé"}
           </span>
           <span className="h-px w-6" style={{ background: `${colors.secondary}66` }} />
         </motion.div>
@@ -291,14 +327,14 @@ export function ProfileHeroCard({
       >
         <div className="mb-1.5 flex items-end justify-between">
           <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/40">
-            {ranked ? "Progression" : "Ton ascension commence"}
+            {showRanked ? "Progression" : isHydrating ? "" : "Ton ascension commence"}
           </span>
           <span className="text-[11px] font-bold" style={{ color: colors.secondary }}>
             {rank.isMax ? "Rang suprême" : nextTier ? `vers ${nextTier.fullName}` : ""}
           </span>
         </div>
         <MasteryBar
-          percent={(ranked ? rank.progress : 0) * 100}
+          percent={(showRanked ? rank.progress : 0) * 100}
           colors={colors}
           segments={5}
           height={10}
@@ -315,7 +351,7 @@ export function ProfileHeroCard({
             </span>
           </p>
         )}
-        {!ranked && (
+        {!showRanked && !isHydrating && (
           <p className="mt-1.5 text-center text-[10px] text-white/45">
             Enregistre ta première séance pour forger ton rang.
           </p>
