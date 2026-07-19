@@ -86,9 +86,42 @@ export function ProfileHeroCard({
   const [uploading, setUploading] = useState(false);
   const initial = pseudo[0]?.toUpperCase() ?? "?";
 
+  // Cache local du dernier rang connu (par utilisateur) pour éviter le flash
+  // « Mortel » pendant que RankAggregator sonde les hooks asynchrones.
+  // Clé stable : on ne stocke que le `tierIndex` (0..N) — reconstruit via
+  // `toRankState`. Aucune fuite entre utilisateurs (clé préfixée par user.id).
+  const cacheKey = user ? `cortex:hero-rank-tier:${user.id}` : null;
+  const [cachedTier, setCachedTier] = useState<number | null>(() => {
+    if (typeof window === "undefined" || !cacheKey) return null;
+    const raw = window.localStorage.getItem(cacheKey);
+    if (raw == null) return null;
+    const n = parseInt(raw, 10);
+    return Number.isFinite(n) && n >= 0 ? n : null;
+  });
+
   const ranked = rankAggregate.best?.rank ?? null;
-  // Rang affiché : le meilleur obtenu, sinon Mortel I en repli (mis en sourdine).
-  const rank: RankState = ranked ?? toRankState(0, 0);
+
+  // Persiste le meilleur rang dès qu'il est disponible.
+  useEffect(() => {
+    if (!cacheKey || !ranked) return;
+    if (ranked.tierIndex === cachedTier) return;
+    try {
+      window.localStorage.setItem(cacheKey, String(ranked.tierIndex));
+      setCachedTier(ranked.tierIndex);
+    } catch {
+      /* quota / SSR — no-op */
+    }
+  }, [cacheKey, ranked, cachedTier]);
+
+  // Ordre de priorité : rang réel > rang en cache (chargement) > Mortel I.
+  // → tant que la sonde n'a pas fini, on n'affiche JAMAIS un rang inférieur
+  //   au dernier rang connu de l'utilisateur.
+  const displayRank: RankState =
+    ranked ?? (cachedTier != null ? toRankState(cachedTier, 0) : toRankState(0, 0));
+  const isHydrating = !ranked && cachedTier == null && rankAggregate.isLoading;
+  // `ranked` reste la source de vérité "utilisateur classé" pour les libellés
+  // ("Non classé", CTA "commence"), mais l'affichage visuel utilise le cache.
+  const rank: RankState = displayRank;
   const colors = rank.rank.colors;
   const visual = getRankVisual(rank.rank.key);
 
