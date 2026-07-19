@@ -122,6 +122,9 @@ export function ProfileHeroCard({
   // `ranked` reste la source de vérité "utilisateur classé" pour les libellés
   // ("Non classé", CTA "commence"), mais l'affichage visuel utilise le cache.
   const rank: RankState = displayRank;
+  // Considère l'utilisateur comme classé dès qu'on a un rang à afficher —
+  // réel OU en cache — pour éviter le clignotement "Non classé" puis "Titan".
+  const showRanked = !!ranked || cachedTier != null;
   const colors = rank.rank.colors;
   const visual = getRankVisual(rank.rank.key);
 
