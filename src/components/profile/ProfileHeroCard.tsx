@@ -312,7 +312,7 @@ export function ProfileHeroCard({
             className="text-[11px] font-bold uppercase tracking-[0.3em]"
             style={{ color: colors.secondary }}
           >
-            {ranked ? `Rang ${rank.romanLevel}` : "Non classé"}
+            {showRanked ? `Rang ${rank.romanLevel}` : isHydrating ? "" : "Non classé"}
           </span>
           <span className="h-px w-6" style={{ background: `${colors.secondary}66` }} />
         </motion.div>
