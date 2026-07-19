@@ -327,7 +327,7 @@ export function ProfileHeroCard({
       >
         <div className="mb-1.5 flex items-end justify-between">
           <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/40">
-            {ranked ? "Progression" : "Ton ascension commence"}
+            {showRanked ? "Progression" : isHydrating ? "" : "Ton ascension commence"}
           </span>
           <span className="text-[11px] font-bold" style={{ color: colors.secondary }}>
             {rank.isMax ? "Rang suprême" : nextTier ? `vers ${nextTier.fullName}` : ""}
