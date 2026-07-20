@@ -16,7 +16,7 @@ import {
 } from "@/lib/fitness/exerciseRanks";
 import { toRankState } from "@/hooks/useExerciseProgression";
 import { useUserStats } from "@/hooks/useUserStats";
-import { characterLevelProgress } from "@/lib/fitness/rpg/characterLevel";
+import { characterProgression } from "@/lib/fitness/rpg/characterTitle";
 import { SERIF, EASE_OUT, stagger } from "@/components/rpg/premium/tokens";
 import type { RankAggregate } from "@/components/fitness/RankAggregator";
 
@@ -63,7 +63,7 @@ async function compressAvatar(file: File): Promise<Blob> {
  *
  * P1 « signature premium » : le RANG est le héros. Le DISQUE (RankDisc), symbole
  * officiel de CORTEX, est mis en scène au centre ; le nom de rang (« TITAN »)
- * domine, et la progression est cadrée VERS LE PROCHAIN RANG. Le Niveau/XP n'est
+ * domine, et la progression est cadrée VERS LE PROCHAIN RANG. Le Titre/Grade/XP n'est
  * plus le chiffre-roi : il devient une pastille subordonnée — le moteur qui mène
  * au rang. Le Hero RACONTE une histoire : il ne porte plus de tableau de bord
  * (Série / Séances / Succès vivent sous le Hero, cf. HeroStatsStrip).
@@ -81,7 +81,7 @@ export function ProfileHeroCard({
 }: Props) {
   const { user } = useAuth();
   const { data: userStats } = useUserStats();
-  const levelInfo = characterLevelProgress(userStats?.xp ?? 0);
+  const progression = characterProgression(userStats?.xp ?? 0);
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const initial = pseudo[0]?.toUpperCase() ?? "?";
@@ -192,7 +192,7 @@ export function ProfileHeroCard({
         }}
       />
 
-      {/* ── Ligne d'identité (subordonnée) : avatar + pseudo · Niveau ──────── */}
+      {/* ── Ligne d'identité (subordonnée) : avatar + pseudo · Titre ──────── */}
       <div className="relative flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2.5">
           <div className="relative shrink-0">
@@ -241,12 +241,20 @@ export function ProfileHeroCard({
           </button>
         </div>
 
-        {/* Niveau — subordonné : le moteur, pas l'identité. */}
-        <div className="shrink-0 rounded-xl bg-black/30 px-2.5 py-1.5 text-center ring-1 ring-white/10 backdrop-blur-sm">
+        {/* Titre + Grade + XP — subordonné : le moteur, pas l'identité. */}
+        <div className="shrink-0 rounded-xl bg-black/30 px-2.5 py-1.5 text-right ring-1 ring-white/10 backdrop-blur-sm">
           <div className="text-[8px] font-semibold uppercase tracking-[0.16em] text-white/40">
-            Niveau
+            {progression.title}
           </div>
-          <div className="text-base font-black leading-none text-white">{levelInfo.level}</div>
+          <div className="text-[11px] font-bold leading-tight text-white">{progression.grade}</div>
+          <div className="mt-0.5 text-[9px] tabular-nums text-white/55">
+            {progression.xp.toLocaleString("fr-FR")} XP
+          </div>
+          <div className="text-[8px] leading-tight text-white/40">
+            {progression.isMaxGradeInTitle
+              ? "Grade suprême"
+              : `Plus que ${progression.xpToNextGrade.toLocaleString("fr-FR")} XP avant ${progression.nextGrade}`}
+          </div>
         </div>
       </div>
 

@@ -14,11 +14,11 @@ import { AnimatedNumber } from "@/components/fitness/AnimatedNumber";
 import { MasteryBar } from "@/components/fitness/MasteryBar";
 import { Confetti } from "@/components/fitness/session/WorkoutCelebration";
 import { useSessionReward } from "@/hooks/useSessionReward";
-import { characterLevelProgress } from "@/lib/fitness/rpg/characterLevel";
+import { characterProgression } from "@/lib/fitness/rpg/characterTitle";
 import { useBadgeHighlights } from "@/hooks/useBadgeHighlights";
 import { RARITY_COLORS, RARITY_LABELS, type BadgeRarity } from "@/lib/fitness/badges";
 
-// Palette "trésor" dédiée à l'XP — le Niveau est la colonne vertébrale, la
+// Palette "trésor" dédiée à l'XP — la progression RPG est la colonne vertébrale, la
 // récompense se lit en or/ambre (distinct des couleurs de rang mythologique).
 const XP_COLORS = {
   gradient: "linear-gradient(90deg,#b45309 0%,#f59e0b 55%,#fcd34d 100%)",
@@ -54,7 +54,7 @@ function Section({ delay, children }: { delay: number; children: React.ReactNode
 /**
  * Écran de récompense de fin de séance — UN SEUL écran premium qui récapitule
  * la progression RPG obtenue pendant la séance (XP gagnée + détail des
- * sources, montée de niveau, record, badge). Pas de succession de pop-ups :
+ * sources, montée de grade, record, badge). Pas de succession de pop-ups :
  * le bilan IA détaillé devient opt-in via « Voir le bilan ».
  *
  * Lecture seule : toutes les valeurs viennent du serveur (xp_events /
@@ -77,6 +77,10 @@ export function SessionRewardScreen({
 }) {
   const { totalXp, breakdown, level, hasXp } = useSessionReward(workoutId);
   const { latestUnlocked } = useBadgeHighlights();
+
+  const progressionBefore = characterProgression(level.xpBefore);
+  const progressionAfter = characterProgression(level.xpAfter);
+  const gradeChanged = progressionBefore.grade !== progressionAfter.grade;
 
   const newBadge =
     latestUnlocked?.unlockedAt && new Date(latestUnlocked.unlockedAt) >= new Date(createdAtISO)
@@ -131,11 +135,13 @@ export function SessionRewardScreen({
           </Section>
         )}
 
-        {/* Niveau de personnage */}
+        {/* Progression RPG : Titre + Grade + XP */}
         <Section delay={0.28}>
           <div className="mt-5 rounded-2xl border border-white/8 bg-white/[0.03] p-4">
             <div className="mb-2 flex items-center justify-between">
-              <span className="text-xs font-bold text-white/80">Niveau {level.levelAfter}</span>
+              <span className="text-xs font-bold text-white/80">
+                {progressionAfter.title} · {progressionAfter.grade}
+              </span>
               {level.leveledUp && (
                 <motion.span
                   initial={{ scale: 0.6, opacity: 0 }}
@@ -148,7 +154,9 @@ export function SessionRewardScreen({
                   }}
                 >
                   <ArrowUp className="h-3 w-3" />
-                  NIVEAU +{level.levelsGained}
+                  {gradeChanged
+                    ? `${progressionBefore.grade} → ${progressionAfter.grade}`
+                    : "Ascension"}
                 </motion.span>
               )}
             </div>
@@ -160,11 +168,9 @@ export function SessionRewardScreen({
               showLabel={false}
             />
             <p className="mt-2 text-right text-[10px] text-white/40">
-              {level.leveledUp
-                ? `Niveau ${level.levelBefore} → ${level.levelAfter}`
-                : `Encore ${characterLevelProgress(level.xpAfter).xpToNext} XP avant le niveau ${
-                    level.levelAfter + 1
-                  }`}
+              {progressionAfter.isMaxGradeInTitle
+                ? `${progressionAfter.xp.toLocaleString("fr-FR")} XP`
+                : `Plus que ${progressionAfter.xpToNextGrade.toLocaleString("fr-FR")} XP avant ${progressionAfter.nextGrade}`}
             </p>
           </div>
         </Section>
