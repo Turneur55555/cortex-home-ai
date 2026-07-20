@@ -1,11 +1,11 @@
 import { useMemo } from "react";
 import { Sparkles, Swords, Target } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MasteryBar } from "@/components/fitness/MasteryBar";
-import { toRankState } from "@/hooks/useExerciseProgression";
-import { TOTAL_TIERS } from "@/lib/fitness/exerciseRanks";
 import { StatChip, HighlightRow } from "@/components/profile/shared";
 import { computeRecentPRs } from "@/utils/fitness/exercise-stats";
+import { gradeName, nextGradeLabel, formatXp } from "@/lib/fitness/rpg/grade";
+import { useUserStats } from "@/hooks/useUserStats";
+import { characterLevelProgress } from "@/lib/fitness/rpg/characterLevel";
 import type { RankAggregate } from "@/components/fitness/RankAggregator";
 import type { AchievementAggregateWithLoading } from "@/hooks/useAchievements";
 
