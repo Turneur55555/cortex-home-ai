@@ -8,15 +8,11 @@ import { MasteryBar } from "@/components/fitness/MasteryBar";
 import { RankAmbientParticles } from "@/components/fitness/RankAmbientParticles";
 import { RankDisc } from "@/components/rpg/RankDisc";
 import { getRankVisual } from "@/lib/fitness/rankVisuals";
-import {
-  RANK_TIERS,
-  LEVELS_PER_RANK,
-  TOTAL_TIERS,
-  type RankState,
-} from "@/lib/fitness/exerciseRanks";
+import { type RankState } from "@/lib/fitness/exerciseRanks";
 import { toRankState } from "@/hooks/useExerciseProgression";
 import { useUserStats } from "@/hooks/useUserStats";
 import { characterLevelProgress } from "@/lib/fitness/rpg/characterLevel";
+import { gradeName, nextGradeLabel, formatXp } from "@/lib/fitness/rpg/grade";
 import { SERIF, EASE_OUT, stagger } from "@/components/rpg/premium/tokens";
 import type { RankAggregate } from "@/components/fitness/RankAggregator";
 
