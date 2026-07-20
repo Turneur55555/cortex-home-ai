@@ -1,11 +1,11 @@
 import { useMemo } from "react";
 import { Sparkles, Swords, Target } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { MasteryBar } from "@/components/fitness/MasteryBar";
-import { toRankState } from "@/hooks/useExerciseProgression";
-import { TOTAL_TIERS } from "@/lib/fitness/exerciseRanks";
 import { StatChip, HighlightRow } from "@/components/profile/shared";
 import { computeRecentPRs } from "@/utils/fitness/exercise-stats";
+import { gradeName, nextGradeLabel, formatXp } from "@/lib/fitness/rpg/grade";
+import { useUserStats } from "@/hooks/useUserStats";
+import { characterLevelProgress } from "@/lib/fitness/rpg/characterLevel";
 import type { RankAggregate } from "@/components/fitness/RankAggregator";
 import type { AchievementAggregateWithLoading } from "@/hooks/useAchievements";
 
@@ -39,14 +39,14 @@ export function RPGProgressionSection({
     [topExercises, prByName, histByName, nameByKey],
   );
 
+  const { data: userStats } = useUserStats();
+  const levelInfo = characterLevelProgress(userStats?.xp ?? 0);
+
   const isLoading = rankAggregate.isLoading || achievements.isLoading;
   const best = rankAggregate.best;
 
-  const nextRank = useMemo(() => {
-    if (!best) return null;
-    if (best.rank.isMax) return null;
-    return toRankState(Math.min(TOTAL_TIERS - 1, best.rank.tierIndex + 1), 0);
-  }, [best]);
+  const currentGrade = best ? gradeName(best.rank.levelInRank) : null;
+  const nextGrade = best ? nextGradeLabel(best.rank) : null;
 
   return (
     <section className="mb-6">
@@ -66,7 +66,7 @@ export function RPGProgressionSection({
 
       {!isLoading && !best && (
         <div className="rounded-2xl border border-dashed border-white/[0.08] p-6 text-center">
-          <p className="text-sm font-medium text-muted-foreground/60">Aucun rang pour l'instant</p>
+          <p className="text-sm font-medium text-muted-foreground/60">Aucun grade pour l'instant</p>
           <p className="mt-1 text-xs text-muted-foreground/40">
             Enregistre quelques séances pour démarrer ta progression RPG.
           </p>
@@ -75,28 +75,45 @@ export function RPGProgressionSection({
 
       {!isLoading && best && (
         <div className="space-y-3">
-          {/* Progression globale */}
-          <div className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-4">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-xs font-semibold text-white/80">
-                {Math.round(best.rank.progress * 100)}% vers{" "}
-                {nextRank ? nextRank.fullName : "le rang maximum"}
+          {/* Titre · Grade · XP restante */}
+          <div className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-4 text-center">
+            <p
+              className="text-lg font-black uppercase tracking-[0.15em]"
+              style={{ color: best.rank.rank.colors.secondary }}
+            >
+              {best.rank.rank.label}
+            </p>
+            <p className="mt-0.5 text-xs font-semibold uppercase tracking-[0.2em] text-white/60">
+              {currentGrade}
+            </p>
+            {!best.rank.isMax && nextGrade && (
+              <p className="mt-2.5 text-[12px] font-semibold text-white/80">
+                Plus que{" "}
+                <span className="font-black" style={{ color: best.rank.rank.colors.secondary }}>
+                  {formatXp(levelInfo.xpToNext)} XP
+                </span>{" "}
+                avant{" "}
+                <span
+                  className="font-black uppercase tracking-wider"
+                  style={{ color: best.rank.rank.colors.secondary }}
+                >
+                  {nextGrade}
+                </span>
               </p>
-            </div>
-            <div className="mt-2.5">
-              <MasteryBar
-                percent={best.rank.progress * 100}
-                colors={best.rank.rank.colors}
-                segments={5}
-                height={10}
-                showLabel={false}
-              />
-            </div>
+            )}
+            {best.rank.isMax && (
+              <p
+                className="mt-2.5 text-[12px] font-semibold"
+                style={{ color: best.rank.rank.colors.secondary }}
+              >
+                Grade suprême atteint
+              </p>
+            )}
           </div>
 
-          {/* Prochain rang + progression récente */}
+          {/* Grade suivant + progression récente */}
           <div className="grid grid-cols-2 gap-2">
-            <StatChip label="Prochain rang" value={nextRank ? nextRank.fullName : "Rang maximum"} />
+            <StatChip label="Prochain grade" value={nextGrade ?? "Grade suprême"} />
             {recentPRs[0] && (
               <StatChip
                 label="Progression récente"
@@ -110,7 +127,7 @@ export function RPGProgressionSection({
           {achievements.nextObjective && (
             <HighlightRow
               icon={<Target className="h-3.5 w-3.5" />}
-              label={`Prochaine récompense (${achievements.nextObjective.progress}%)`}
+              label="Prochaine récompense"
               title={achievements.nextObjective.def.title}
               rarity={achievements.nextObjective.def.rarity}
             />
