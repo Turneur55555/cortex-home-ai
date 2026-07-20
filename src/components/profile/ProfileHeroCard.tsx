@@ -288,6 +288,7 @@ export function ProfileHeroCard({
           </span>
         </motion.div>
 
+        {/* Grade nommé (remplace « Rang I..V ») */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -299,48 +300,39 @@ export function ProfileHeroCard({
             className="text-[11px] font-bold uppercase tracking-[0.3em]"
             style={{ color: colors.secondary }}
           >
-            {showRanked ? `Rang ${rank.romanLevel}` : isHydrating ? "" : "Non classé"}
+            {showRanked ? currentGrade : isHydrating ? "" : "Non classé"}
           </span>
           <span className="h-px w-6" style={{ background: `${colors.secondary}66` }} />
         </motion.div>
       </div>
 
-      {/* ── Progression VERS LE PROCHAIN RANG ─────────────────────────────── */}
+      {/* ── XP restante avant le prochain grade ───────────────────────────── */}
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.6, delay: stagger(3), ease: EASE_OUT }}
-        className="relative mt-5"
+        className="relative mt-5 text-center"
       >
-        <div className="mb-1.5 flex items-end justify-between">
-          <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-white/40">
-            {showRanked ? "Progression" : isHydrating ? "" : "Ton ascension commence"}
-          </span>
-          <span className="text-[11px] font-bold" style={{ color: colors.secondary }}>
-            {rank.isMax ? "Rang suprême" : nextTier ? `vers ${nextTier.fullName}` : ""}
-          </span>
-        </div>
-        <MasteryBar
-          percent={(showRanked ? rank.progress : 0) * 100}
-          colors={colors}
-          segments={5}
-          height={10}
-          showLabel={false}
-        />
-        {!rank.isMax && nextFamily && tiersToNextFamily > 1 && (
-          <p className="mt-1.5 text-center text-[10px] text-white/45">
-            Encore {tiersToNextFamily} paliers avant le seuil de{" "}
-            <span
-              className="font-semibold uppercase tracking-wider"
-              style={{ color: colors.secondary }}
-            >
-              {nextFamily.label}
+        {showRanked && !rank.isMax && nextGrade && (
+          <p className="text-[13px] font-semibold text-white/85">
+            Plus que{" "}
+            <span className="font-black" style={{ color: colors.secondary }}>
+              {formatXp(xpToNextGrade)} XP
+            </span>{" "}
+            avant{" "}
+            <span className="font-black uppercase tracking-wider" style={{ color: colors.secondary }}>
+              {nextGrade}
             </span>
           </p>
         )}
+        {showRanked && rank.isMax && (
+          <p className="text-[13px] font-semibold" style={{ color: colors.secondary }}>
+            Grade suprême atteint
+          </p>
+        )}
         {!showRanked && !isHydrating && (
-          <p className="mt-1.5 text-center text-[10px] text-white/45">
-            Enregistre ta première séance pour forger ton rang.
+          <p className="text-[11px] text-white/45">
+            Enregistre ta première séance pour forger ton grade.
           </p>
         )}
       </motion.div>
