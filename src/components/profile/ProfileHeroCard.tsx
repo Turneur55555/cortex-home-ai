@@ -4,7 +4,7 @@ import { Camera } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { MasteryBar } from "@/components/fitness/MasteryBar";
+
 import { RankAmbientParticles } from "@/components/fitness/RankAmbientParticles";
 import { RankDisc } from "@/components/rpg/RankDisc";
 import { getRankVisual } from "@/lib/fitness/rankVisuals";
