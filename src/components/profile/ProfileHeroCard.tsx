@@ -10,9 +10,7 @@ import { RankDisc } from "@/components/rpg/RankDisc";
 import { getRankVisual } from "@/lib/fitness/rankVisuals";
 import { type RankState } from "@/lib/fitness/exerciseRanks";
 import { toRankState } from "@/hooks/useExerciseProgression";
-import { useUserStats } from "@/hooks/useUserStats";
-import { characterLevelProgress } from "@/lib/fitness/rpg/characterLevel";
-import { gradeName, nextGradeLabel, formatXp } from "@/lib/fitness/rpg/grade";
+import { gradeName } from "@/lib/fitness/rpg/grade";
 import { SERIF, EASE_OUT, stagger } from "@/components/rpg/premium/tokens";
 import type { RankAggregate } from "@/components/fitness/RankAggregator";
 
@@ -57,16 +55,14 @@ async function compressAvatar(file: File): Promise<Blob> {
 /**
  * Fiche de Personnage — pièce maîtresse de CORTEX (Accueil).
  *
- * P1 « signature premium » : le RANG est le héros. Le DISQUE (RankDisc), symbole
- * officiel de CORTEX, est mis en scène au centre ; le nom de rang (« TITAN »)
- * domine, et la progression est cadrée VERS LE PROCHAIN RANG. Le Niveau/XP n'est
- * plus le chiffre-roi : il devient une pastille subordonnée — le moteur qui mène
- * au rang. Le Hero RACONTE une histoire : il ne porte plus de tableau de bord
- * (Série / Séances / Succès vivent sous le Hero, cf. HeroStatsStrip).
+ * Le DISQUE (RankDisc), symbole officiel de CORTEX, est mis en scène au centre ;
+ * le nom de rang (« TITAN ») domine en lettrage serif, et le Grade (« Émérite »)
+ * s'affiche en sous-titre. Aucune progression, ni XP, ni tableau de bord : la
+ * carte représente uniquement le personnage.
  *
  * Aucune logique métier ici : `rankAggregate` vient de RankAggregator (qui
- * observe le moteur de rang), `userStats` de useUserStats. Réutilise le langage
- * graphique partagé (RankDisc, tokens premium) destiné à toute l'app.
+ * observe le moteur de rang). Réutilise le langage graphique partagé
+ * (RankDisc, tokens premium) destiné à toute l'app.
  */
 export function ProfileHeroCard({
   pseudo,
@@ -76,8 +72,6 @@ export function ProfileHeroCard({
   rankAggregate,
 }: Props) {
   const { user } = useAuth();
-  const { data: userStats } = useUserStats();
-  const levelInfo = characterLevelProgress(userStats?.xp ?? 0);
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const initial = pseudo[0]?.toUpperCase() ?? "?";
@@ -124,12 +118,8 @@ export function ProfileHeroCard({
   const colors = rank.rank.colors;
   const visual = getRankVisual(rank.rank.key);
 
-  // P2 — Grade nommé + XP restante avant le prochain grade (plus de "Rang N",
-  // plus de "%", plus de "Niveau"). XP dérivée du barème serveur via
-  // `characterLevelProgress` (aucune logique modifiée).
+  // P2 — Grade nommé (plus de "Rang I..V", plus de "%", plus de "Niveau").
   const currentGrade = gradeName(rank.levelInRank);
-  const nextGrade = nextGradeLabel(rank);
-  const xpToNextGrade = levelInfo.xpToNext;
 
   const handleFile = async (file: File) => {
     if (!user) return;
@@ -306,36 +296,6 @@ export function ProfileHeroCard({
         </motion.div>
       </div>
 
-      {/* ── XP restante avant le prochain grade ───────────────────────────── */}
-      <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: stagger(3), ease: EASE_OUT }}
-        className="relative mt-5 text-center"
-      >
-        {showRanked && !rank.isMax && nextGrade && (
-          <p className="text-[13px] font-semibold text-white/85">
-            Plus que{" "}
-            <span className="font-black" style={{ color: colors.secondary }}>
-              {formatXp(xpToNextGrade)} XP
-            </span>{" "}
-            avant{" "}
-            <span className="font-black uppercase tracking-wider" style={{ color: colors.secondary }}>
-              {nextGrade}
-            </span>
-          </p>
-        )}
-        {showRanked && rank.isMax && (
-          <p className="text-[13px] font-semibold" style={{ color: colors.secondary }}>
-            Grade suprême atteint
-          </p>
-        )}
-        {!showRanked && !isHydrating && (
-          <p className="text-[11px] text-white/45">
-            Enregistre ta première séance pour forger ton grade.
-          </p>
-        )}
-      </motion.div>
     </motion.header>
   );
 }

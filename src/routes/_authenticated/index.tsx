@@ -3,11 +3,8 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
 import { useProfile } from "@/hooks/useProfile";
-import { useActivityStreak } from "@/hooks/useActivityStreak";
-import { buildAchievementCollection } from "@/lib/profile/achievements/collection";
 import { ProfileRPGData, type ProfileRPGDataValue } from "@/components/profile/rpg/ProfileRPGData";
 import { ProfileHeroCard } from "@/components/profile/ProfileHeroCard";
-import { HeroStatsStrip } from "@/components/profile/HeroStatsStrip";
 import { SeasonTrackCard } from "@/components/profile/rpg/SeasonTrackCard";
 import { RPGProgressionSection } from "@/components/profile/rpg/RPGProgressionSection";
 import { ClassCard } from "@/components/profile/ClassCard";
@@ -28,7 +25,6 @@ function HomePage() {
   const { user } = useAuth();
   const fallback = useMemo(() => user?.email?.split("@")[0] ?? "Utilisateur", [user?.email]);
   const { pseudo, avatarUrl, updatePseudo, updateAvatar } = useProfile(fallback);
-  const { current: streak } = useActivityStreak();
   const [editOpen, setEditOpen] = useState(false);
 
   return (
@@ -38,7 +34,6 @@ function HomePage() {
           <HomeHub
             rpg={rpg}
             pseudo={pseudo}
-            streak={streak}
             avatarUrl={avatarUrl}
             onEdit={() => setEditOpen(true)}
             onAvatarChange={updateAvatar}
@@ -62,35 +57,17 @@ function HomePage() {
 function HomeHub({
   rpg,
   pseudo,
-  streak,
   avatarUrl,
   onEdit,
   onAvatarChange,
 }: {
   rpg: ProfileRPGDataValue;
   pseudo: string;
-  streak: number;
   avatarUrl?: string | null;
   onEdit: () => void;
   onAvatarChange: (url: string) => Promise<void>;
 }) {
-  const {
-    rankAggregate,
-    achievements,
-    legacyBadges,
-    topExercises,
-    nameByKey,
-    histByName,
-    volByName,
-    prByName,
-    workouts,
-    totalWorkouts,
-  } = rpg;
-
-  const collection = useMemo(
-    () => buildAchievementCollection(achievements, legacyBadges),
-    [achievements, legacyBadges],
-  );
+  const { rankAggregate, achievements, legacyBadges, workouts } = rpg;
 
   return (
     <>
@@ -102,24 +79,9 @@ function HomeHub({
         rankAggregate={rankAggregate}
       />
 
-      <HeroStatsStrip
-        streak={streak}
-        totalWorkouts={totalWorkouts}
-        achievementsUnlocked={collection.unlockedCount}
-        achievementsTotal={collection.total}
-      />
-
       <SeasonTrackCard />
 
-      <RPGProgressionSection
-        rankAggregate={rankAggregate}
-        achievements={achievements}
-        topExercises={topExercises}
-        nameByKey={nameByKey}
-        histByName={histByName}
-        volByName={volByName}
-        prByName={prByName}
-      />
+      <RPGProgressionSection rankAggregate={rankAggregate} />
 
       <ClassCard workouts={workouts} rankAggregate={rankAggregate} />
 

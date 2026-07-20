@@ -86,15 +86,7 @@ function ProgressionDetail({
 
   return (
     <>
-      <RPGProgressionSection
-        rankAggregate={rankAggregate}
-        achievements={achievements}
-        topExercises={topExercises}
-        nameByKey={nameByKey}
-        histByName={histByName}
-        volByName={volByName}
-        prByName={prByName}
-      />
+      <RPGProgressionSection rankAggregate={rankAggregate} />
 
       <section className="mb-6">
         <h2 className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
