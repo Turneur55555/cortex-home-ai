@@ -187,7 +187,7 @@ export function ProfileHeroCard({
         }}
       />
 
-      {/* ── Ligne d'identité (subordonnée) : avatar + pseudo · Niveau ──────── */}
+      {/* ── Ligne d'identité : avatar + pseudo ────────────────────────────── */}
       <div className="relative flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2.5">
           <div className="relative shrink-0">
@@ -234,14 +234,6 @@ export function ProfileHeroCard({
               Athlète
             </p>
           </button>
-        </div>
-
-        {/* Niveau — subordonné : le moteur, pas l'identité. */}
-        <div className="shrink-0 rounded-xl bg-black/30 px-2.5 py-1.5 text-center ring-1 ring-white/10 backdrop-blur-sm">
-          <div className="text-[8px] font-semibold uppercase tracking-[0.16em] text-white/40">
-            Niveau
-          </div>
-          <div className="text-base font-black leading-none text-white">{levelInfo.level}</div>
         </div>
       </div>
 
