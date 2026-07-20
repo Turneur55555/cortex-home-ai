@@ -124,13 +124,12 @@ export function ProfileHeroCard({
   const colors = rank.rank.colors;
   const visual = getRankVisual(rank.rank.key);
 
-  // Cadrage « vers le prochain rang » : palier suivant + seuil de la prochaine
-  // FAMILLE de rang (le vrai saut de prestige : Titan → Olympien…).
-  const nextTier = rank.tierIndex < TOTAL_TIERS - 1 ? toRankState(rank.tierIndex + 1, 0) : null;
-  const familyIdx = Math.floor(rank.tierIndex / LEVELS_PER_RANK);
-  const nextFamilyStart = (familyIdx + 1) * LEVELS_PER_RANK;
-  const nextFamily = nextFamilyStart < TOTAL_TIERS ? RANK_TIERS[familyIdx + 1] : null;
-  const tiersToNextFamily = nextFamily ? nextFamilyStart - rank.tierIndex : 0;
+  // P2 — Grade nommé + XP restante avant le prochain grade (plus de "Rang N",
+  // plus de "%", plus de "Niveau"). XP dérivée du barème serveur via
+  // `characterLevelProgress` (aucune logique modifiée).
+  const currentGrade = gradeName(rank.levelInRank);
+  const nextGrade = nextGradeLabel(rank);
+  const xpToNextGrade = levelInfo.xpToNext;
 
   const handleFile = async (file: File) => {
     if (!user) return;
