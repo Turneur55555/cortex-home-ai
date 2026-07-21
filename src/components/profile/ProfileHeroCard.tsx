@@ -125,7 +125,7 @@ export function ProfileHeroCard({ rankAggregate }: Props) {
           <span
             aria-hidden
             className="pointer-events-none -mt-1 bg-clip-text text-[42px] font-black uppercase leading-none tracking-[0.1em] text-transparent"
-                       style={{
+            style={{
               fontFamily: SERIF,
               backgroundImage: `linear-gradient(180deg, ${colors.primary} 0%, transparent 70%)`,
               WebkitBackgroundClip: "text",
@@ -140,7 +140,6 @@ export function ProfileHeroCard({ rankAggregate }: Props) {
           </span>
         </motion.div>
       </div>
-
     </motion.header>
   );
 }
