@@ -12,6 +12,7 @@ import {
   evaluateAchievements,
   type AchievementAggregate,
 } from "@/lib/profile/achievements/evaluate";
+import { useClaimAchievements } from "@/hooks/useClaimAchievements";
 import type { RankAggregate } from "@/components/fitness/RankAggregator";
 import type { BadgeWithProgress } from "@/hooks/useBadgeSystem";
 import type { FitnessStats } from "@/lib/fitness/badges";
@@ -163,6 +164,8 @@ export function useAchievements(
     courseSessionsCount,
     coursePrepFlags,
   ]);
+
+  useClaimAchievements(aggregate.all);
 
   return {
     ...aggregate,

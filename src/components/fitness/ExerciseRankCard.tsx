@@ -8,6 +8,7 @@ import { RankUpOverlay } from "./RankUpOverlay";
 import { ExerciseRankShareSheet } from "./ExerciseRankShareSheet";
 import { useAuth } from "@/hooks/use-auth";
 import { useExerciseProgression } from "@/hooks/useExerciseProgression";
+import { useAwardExerciseRankUp } from "@/hooks/useAwardExerciseRankUp";
 import { getRankVisual } from "@/lib/fitness/rankVisuals";
 import type { RankState } from "@/lib/fitness/exerciseRanks";
 
@@ -84,6 +85,7 @@ export function ExerciseRankCard({ exerciseName }: { exerciseName: string }) {
   const [rankUp, setRankUp] = useState<RankState | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
   const initialisedRef = useRef(false);
+  const awardRankUp = useAwardExerciseRankUp();
 
   useEffect(() => {
     if (isLoading || sessionCount === 0 || !user) return;
@@ -98,7 +100,9 @@ export function ExerciseRankCard({ exerciseName }: { exerciseName: string }) {
     if (seen != null && rank.tierIndex > seen) {
       setRankUp(rank);
       saveSeen(user.id, exerciseName, rank.tierIndex);
+      awardRankUp.mutate({ titreKey: rank.rank.key, exerciseName });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rank.tierIndex, isLoading, sessionCount, exerciseName, rank, user]);
 
   const { colors } = rank.rank;

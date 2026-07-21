@@ -19,3 +19,18 @@ export const REWARD_SOURCES = {
 } as const;
 
 export type RewardSourceKey = (typeof REWARD_SOURCES)[keyof typeof REWARD_SOURCES];
+
+/**
+ * Sources versées par des chemins dédiés (server-only ou RPC spécifique,
+ * jamais via `award_reward_event` générique) — documentées ici pour mémoire,
+ * pas pour typer un appel client :
+ *  - `exercise_weight_record` / `exercise_reps_record` / `exercise_volume_record`
+ *    / `exercise_1rm_record` : détectés 100% serveur à la clôture de séance
+ *    (voir `award_xp_on_workout_complete`), rendement décroissant partagé
+ *    ('exercise_progress').
+ *  - `exercise_rank_up_<titre>` (mortel/guerrier/heros/titan/olympien/primordial) :
+ *    voir `useAwardExerciseRankUp`.
+ *  - `badge_<badge_key>` / `goal_<goal_id>` / `achievement_<achievement_id>` :
+ *    préfixes dynamiques, versés par `unlock_user_badge` / `award_goal_xp` /
+ *    `claim_achievement`.
+ */
