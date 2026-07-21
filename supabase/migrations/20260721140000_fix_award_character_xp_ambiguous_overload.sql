@@ -1,0 +1,40 @@
+-- =====================================================================
+-- FIX SUP-MRV2ZUZJ-PQPX — Séance créée en UI mais jamais enregistrée
+-- (ou disparue après actualisation).
+--
+-- Cause racine : la migration 20260721120000_rpg_reward_catalog_p1_5.sql a
+-- ajouté un second overload `award_character_xp(uuid, text, integer, uuid,
+-- text)` (avec `_dedup_key`) SANS retirer l'ancien
+-- `award_character_xp(uuid, text, integer, uuid)`. Les paramètres 4 et 5
+-- ayant TOUS LES DEUX une valeur DEFAULT, tout appel avec exactement 4
+-- arguments positionnels devient ambigu pour Postgres (les deux overloads
+-- sont candidats à égalité) : erreur "function ... is not unique"
+-- (confirmée en direct dans les logs Postgres du projet, répétée à chaque
+-- tentative). Cet appel à 4 arguments est exactement celui utilisé par
+-- `award_xp_on_workout_complete()` (trigger AFTER INSERT/UPDATE OF status
+-- sur `public.workouts`) pour verser `workout_muscu`/`streak`/
+-- `workout_support`.
+--
+-- Impact : toute séance qui entre dans l'état `completed` (clôture d'une
+-- séance live via `useFinishWorkout`/`useFinishGenericActiveWorkout`, ou
+-- création directe d'une séance déjà terminée via `useAddWorkout` — la
+-- colonne `workouts.status` vaut `completed` par défaut) déclenche ce
+-- trigger, qui lève une exception PL/pgSQL non rattrapée. Une exception
+-- dans un trigger annule TOUTE la transaction en cours, y compris
+-- l'INSERT/UPDATE de la ligne `workouts` elle-même : la séance n'est
+-- jamais committée en base, alors que l'UI (React Query, optimiste ou non)
+-- a déjà pu réagir à l'appel avant l'échec réseau — d'où l'impression
+-- qu'"la séance a été créée mais disparaît après actualisation".
+--
+-- Correction définitive : un seul overload canonique. Le 5-arg couvre
+-- strictement le même comportement que le 4-arg (même vérification
+-- d'idempotence par `workout_id`, plus la vérification optionnelle par
+-- `dedup_key`) — ce n'est pas un contournement, c'est la suppression de
+-- l'overload devenu redondant et dangereux. Tous les appels existants à 4
+-- arguments (award_xp_on_workout_complete, etc.) restent valides à
+-- l'identique : le 5e paramètre `_dedup_key` retombe sur son DEFAULT NULL,
+-- et il ne reste plus qu'un seul candidat possible pour la résolution de
+-- surcharge.
+-- =====================================================================
+
+DROP FUNCTION IF EXISTS public.award_character_xp(uuid, text, integer, uuid);
