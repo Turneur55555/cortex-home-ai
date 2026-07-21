@@ -3,6 +3,13 @@
 ## Dernière mise à jour
 2026-07-21
 
+## LOT RPG-P1.9 « Reward Engine — validation finale » (2026-07-21, branche `claude/session-a32s21`)
+Dernière passe de vérification avant de considérer le Reward Engine terminé (aucun changement de code — les deux vérifications passent sans détecter de déséquilibre).
+- **Écart entre profils** : simulation sur 5 fréquences (1/2/3/5/7 séances/semaine), répartition XP par source (séance/streak/records/rang) et temps pour atteindre chaque Titre. Écart net et monotone : Primordial atteint en ~17 ans à 1 séance/sem contre ~2,2 ans à 7/sem (~8×, proportionnel à l'écart de fréquence) ; Titan en ~3,25 ans (1/sem) contre ~0,49 an (7/sem). Aucun chevauchement anormal entre profils.
+- **Farming par rotation d'exercices** : comparaison Joueur A (exercices fixes) vs Joueur B (renouvelle systématiquement ses exercices). Un exercice inédit déclenche presque toujours un `exercise_progress_record` (aucun historique à battre) — avantage réel mais **doublement borné** : (1) le rendement décroissant est partagé par SEMAINE tous exercices confondus (au-delà du 4ᵉ événement, plancher 40 % = 12 XP, quel que soit le nombre d'exercices ajoutés) ; (2) `exercise_rank_up` exige un historique RÉEL et soutenu sur le MÊME exercice (fenêtre de consolidation de 8 séances, gates de confirmation Olympien/Primordial à 30-60 jours d'étalement) — un renouvellement systématique interdit à toute exercice de dépasser Mortel/Guerrier, ce qui prive définitivement le Joueur B des paliers `exercise_rank_up` (jusqu'à 350 XP/exercice/Titre), la source la plus généreuse à long terme. Sur plusieurs années, l'avantage de court terme du renouvellement est annulé, voire dépassé, par la perte cumulée de rang. **Aucune correction nécessaire.**
+- Vérifié : tsc 0 erreur, vitest 406 passed/36 skipped, aucun fichier modifié (working tree propre avant cette passe).
+- **Reward Engine officiellement terminé** (P1 → P1.9). Prochain chantier à la demande de Nathan : Phase 2 (Voies).
+
 ## LOT RPG-P1.8 « Recalibrage complet des seuils, à partir de zéro » (2026-07-21, branche `claude/session-a32s21`)
 Suite de P1.7 : confirmation du mécanisme `exercise_progress_record` (relu dans le SQL réel — un seul `IF has_progress`/un seul `PERFORM award_diminishing_reward` par exercice et par séance, quel que soit le nombre de métriques battues) + recalibrage intégral des seuils, sans aucun héritage des tables précédentes (consigne explicite de Nathan : « n'essaie pas de conserver les anciens chiffres »).
 - **Nouvelle simulation** (script Python jetable, non committé) sur l'économie réduite à 5 familles (P1.7) : Débutant 296→57 640 XP (1sem→5ans), Régulier 454→98 688, Passionné 683→158 292, Extrême 851→202 050.
