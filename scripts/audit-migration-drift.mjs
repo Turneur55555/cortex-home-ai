@@ -123,10 +123,16 @@ function loadRemoteMigrations() {
 }
 
 // ─── Détecter les migrations supprimées dans Git ───────────────────────────────
+// `--all` (au lieu de `HEAD`) faisait remonter des suppressions provenant de
+// N'IMPORTE QUELLE branche du dépôt (actions/checkout fetch-depth:0 récupère
+// toutes les branches, même non fusionnées) : un fichier de migration
+// renommé/retiré sur une branche expérimentale jamais mergée polluait
+// l'audit de `main`, alors même que ce fichier existe toujours à HEAD. Portée
+// restreinte à l'historique réel de la branche auditée.
 function detectDeletedMigrations() {
   try {
     const deleted = execSync(
-      'git log --all --diff-filter=D --name-only --pretty=format: -- "supabase/migrations/*.sql" 2>/dev/null | grep -v "^$" | sort -u || true',
+      'git log HEAD --diff-filter=D --name-only --pretty=format: -- "supabase/migrations/*.sql" 2>/dev/null | grep -v "^$" | sort -u || true',
       { encoding: 'utf8', cwd: ROOT, stdio: ['pipe', 'pipe', 'pipe'] }
     )
       .trim()
@@ -153,7 +159,11 @@ function analyzeGitVsRemote() {
   }
 
   // Dérive 2 : Migration supprimée dans Git mais toujours en base
+  // Garde supplémentaire : un fichier renommé puis restauré (delete + add
+  // dans l'historique de la MÊME branche) reste un faux positif tant qu'il
+  // est toujours présent dans le dossier de migrations actuel.
   for (const version of deletedInGit) {
+    if (gitMigrations.has(version)) continue;
     if (remoteMigrations.has(version)) {
       const info = remoteMigrations.get(version);
       if (info.status === 'APPLIED') {
