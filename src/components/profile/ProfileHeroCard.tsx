@@ -33,41 +33,8 @@ export function ProfileHeroCard() {
   const visual = getRankVisual(rank.rank.key);
   const currentGrade = progress.grade;
 
-  const handleFile = async (file: File) => {
-    if (!user) return;
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error("Image trop volumineuse (max 10 Mo)");
-      return;
-    }
-    setUploading(true);
-    try {
-      const compressed = await compressAvatar(file);
-      const path = `${user.id}/avatar-${Date.now()}.jpg`;
-      const { error } = await supabase.storage
-        .from("avatars")
-        .upload(path, compressed, { upsert: true, contentType: "image/jpeg" });
-      if (error) throw error;
-      const { data } = supabase.storage.from("avatars").getPublicUrl(path);
-      await onAvatarChange(data.publicUrl);
 
-      void supabase.storage
-        .from("avatars")
-        .list(user.id)
-        .then(({ data: files }) => {
-          const old = (files ?? [])
-            .filter((f) => `${user.id}/${f.name}` !== path)
-            .map((f) => `${user.id}/${f.name}`);
-          if (old.length) void supabase.storage.from("avatars").remove(old);
-        });
 
-      toast.success("Avatar mis à jour");
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Erreur upload";
-      toast.error(msg);
-    } finally {
-      setUploading(false);
-    }
-  };
 
   return (
     <motion.header
