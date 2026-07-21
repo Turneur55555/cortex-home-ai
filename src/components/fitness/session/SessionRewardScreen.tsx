@@ -14,7 +14,8 @@ import { AnimatedNumber } from "@/components/fitness/AnimatedNumber";
 import { MasteryBar } from "@/components/fitness/MasteryBar";
 import { Confetti } from "@/components/fitness/session/WorkoutCelebration";
 import { useSessionReward } from "@/hooks/useSessionReward";
-import { characterLevelProgress } from "@/lib/fitness/rpg/characterLevel";
+import { buildTitleTransition } from "@/lib/fitness/rpg/sessionReward";
+import { nextGradeLabel } from "@/lib/fitness/rpg/titleProgress";
 import { useBadgeHighlights } from "@/hooks/useBadgeHighlights";
 import { RARITY_COLORS, RARITY_LABELS, type BadgeRarity } from "@/lib/fitness/badges";
 
@@ -77,6 +78,7 @@ export function SessionRewardScreen({
 }) {
   const { totalXp, breakdown, level, hasXp } = useSessionReward(workoutId);
   const { latestUnlocked } = useBadgeHighlights();
+  const titleTransition = buildTitleTransition(level.xpBefore, level.xpAfter);
 
   const newBadge =
     latestUnlocked?.unlockedAt && new Date(latestUnlocked.unlockedAt) >= new Date(createdAtISO)
@@ -131,12 +133,14 @@ export function SessionRewardScreen({
           </Section>
         )}
 
-        {/* Niveau de personnage */}
+        {/* Titre / Grade — progression principale */}
         <Section delay={0.28}>
           <div className="mt-5 rounded-2xl border border-white/8 bg-white/[0.03] p-4">
             <div className="mb-2 flex items-center justify-between">
-              <span className="text-xs font-bold text-white/80">Niveau {level.levelAfter}</span>
-              {level.leveledUp && (
+              <span className="text-xs font-bold text-white/80">
+                {titleTransition.after.title.label} — {titleTransition.after.grade}
+              </span>
+              {titleTransition.gradeUp && (
                 <motion.span
                   initial={{ scale: 0.6, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
@@ -148,23 +152,34 @@ export function SessionRewardScreen({
                   }}
                 >
                   <ArrowUp className="h-3 w-3" />
-                  NIVEAU +{level.levelsGained}
+                  NOUVEAU GRADE
                 </motion.span>
               )}
             </div>
             <MasteryBar
-              percent={level.progressAfter * 100}
+              percent={
+                titleTransition.after.isMax
+                  ? 100
+                  : ((titleTransition.after.xp - titleTransition.after.xpCurrentThreshold) /
+                      Math.max(
+                        1,
+                        (titleTransition.after.xpNextThreshold ??
+                          titleTransition.after.xpCurrentThreshold) -
+                          titleTransition.after.xpCurrentThreshold,
+                      )) *
+                    100
+              }
               colors={XP_COLORS}
               segments={5}
               height={10}
               showLabel={false}
             />
             <p className="mt-2 text-right text-[10px] text-white/40">
-              {level.leveledUp
-                ? `Niveau ${level.levelBefore} → ${level.levelAfter}`
-                : `Encore ${characterLevelProgress(level.xpAfter).xpToNext} XP avant le niveau ${
-                    level.levelAfter + 1
-                  }`}
+              {titleTransition.gradeUp
+                ? `${titleTransition.before.title.label} — ${titleTransition.before.grade} → ${titleTransition.after.title.label} — ${titleTransition.after.grade}`
+                : titleTransition.after.isMax
+                  ? "Grade suprême atteint"
+                  : `Encore ${titleTransition.after.xpToNext} XP avant ${nextGradeLabel(titleTransition.after)}`}
             </p>
           </div>
         </Section>

@@ -8,6 +8,7 @@
 // ============================================================
 
 import { characterLevelForXp, characterLevelProgress } from "./characterLevel";
+import { titleProgressForXp, type TitleProgress } from "./titleProgress";
 
 /** Une ligne d'XP versée pour la séance (miroir de la table `xp_events`). */
 export interface SessionXpEvent {
@@ -134,5 +135,29 @@ export function buildLevelTransitionFromServer(
     levelsGained: Math.max(0, levelAfter - levelBefore),
     progressBefore: characterLevelProgress(before).progress,
     progressAfter: characterLevelProgress(after).progress,
+  };
+}
+
+export interface TitleTransition {
+  before: TitleProgress;
+  after: TitleProgress;
+  /** true si le Titre OU le Grade a changé pendant la séance. */
+  gradeUp: boolean;
+}
+
+/**
+ * Transition de Titre/Grade (progression principale) induite par la
+ * séance, à partir de l'XP avant/après. Affichage uniquement : le Reward
+ * Engine (serveur) a déjà décidé des montants, ce module ne fait que
+ * dériver le Titre/Grade correspondant (moteur `titleProgress`,
+ * indépendant de la courbe de Niveau historique).
+ */
+export function buildTitleTransition(xpBefore: number, xpAfter: number): TitleTransition {
+  const before = titleProgressForXp(xpBefore);
+  const after = titleProgressForXp(xpAfter);
+  return {
+    before,
+    after,
+    gradeUp: after.tierIndex > before.tierIndex,
   };
 }

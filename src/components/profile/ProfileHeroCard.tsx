@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Camera } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
@@ -8,18 +8,16 @@ import { toast } from "sonner";
 import { RankAmbientParticles } from "@/components/fitness/RankAmbientParticles";
 import { RankDisc } from "@/components/rpg/RankDisc";
 import { getRankVisual } from "@/lib/fitness/rankVisuals";
-import { type RankState } from "@/lib/fitness/exerciseRanks";
 import { toRankState } from "@/hooks/useExerciseProgression";
-import { gradeName } from "@/lib/fitness/rpg/grade";
+import { useUserStats } from "@/hooks/useUserStats";
+import { titleProgressForXp } from "@/lib/fitness/rpg/titleProgress";
 import { SERIF, EASE_OUT, stagger } from "@/components/rpg/premium/tokens";
-import type { RankAggregate } from "@/components/fitness/RankAggregator";
 
 interface Props {
   pseudo: string;
   avatarUrl?: string | null;
   onEdit: () => void;
   onAvatarChange: (url: string) => Promise<void>;
-  rankAggregate: RankAggregate;
 }
 
 async function compressAvatar(file: File): Promise<Blob> {
@@ -60,66 +58,35 @@ async function compressAvatar(file: File): Promise<Blob> {
  * s'affiche en sous-titre. Aucune progression, ni XP, ni tableau de bord : la
  * carte représente uniquement le personnage.
  *
- * Aucune logique métier ici : `rankAggregate` vient de RankAggregator (qui
- * observe le moteur de rang). Réutilise le langage graphique partagé
+ * Aucune logique métier ici : le Titre/Grade vient du moteur de progression
+ * principale (`titleProgress`, piloté par l'XP globale uniquement — jamais
+ * par le Rang par exercice). Réutilise le langage graphique partagé
  * (RankDisc, tokens premium) destiné à toute l'app.
  */
-export function ProfileHeroCard({
-  pseudo,
-  avatarUrl,
-  onEdit,
-  onAvatarChange,
-  rankAggregate,
-}: Props) {
+export function ProfileHeroCard({ pseudo, avatarUrl, onEdit, onAvatarChange }: Props) {
   const { user } = useAuth();
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const initial = pseudo[0]?.toUpperCase() ?? "?";
 
-  // Cache local du dernier rang connu (par utilisateur) pour éviter le flash
-  // « Mortel » pendant que RankAggregator sonde les hooks asynchrones.
-  // Clé stable : on ne stocke que le `tierIndex` (0..N) — reconstruit via
-  // `toRankState`. Aucune fuite entre utilisateurs (clé préfixée par user.id).
-  const cacheKey = user ? `cortex:hero-rank-tier:${user.id}` : null;
-  const [cachedTier, setCachedTier] = useState<number | null>(() => {
-    if (typeof window === "undefined" || !cacheKey) return null;
-    const raw = window.localStorage.getItem(cacheKey);
-    if (raw == null) return null;
-    const n = parseInt(raw, 10);
-    return Number.isFinite(n) && n >= 0 ? n : null;
-  });
+  const { data: userStats, isLoading: statsLoading } = useUserStats();
+  const progress = titleProgressForXp(userStats?.xp ?? 0);
 
-  const ranked = rankAggregate.best?.rank ?? null;
+  // Position dans le palier courant (0..100), pour l'anneau de progression
+  // du Disque uniquement — jamais affiché en texte (règle "pas de %").
+  const gradeSpan = Math.max(
+    1,
+    (progress.xpNextThreshold ?? progress.xpCurrentThreshold) - progress.xpCurrentThreshold,
+  );
+  const percentInGrade = progress.isMax
+    ? 100
+    : ((progress.xp - progress.xpCurrentThreshold) / gradeSpan) * 100;
 
-  // Persiste le meilleur rang dès qu'il est disponible.
-  useEffect(() => {
-    if (!cacheKey || !ranked) return;
-    if (ranked.tierIndex === cachedTier) return;
-    try {
-      window.localStorage.setItem(cacheKey, String(ranked.tierIndex));
-      setCachedTier(ranked.tierIndex);
-    } catch {
-      /* quota / SSR — no-op */
-    }
-  }, [cacheKey, ranked, cachedTier]);
-
-  // Ordre de priorité : rang réel > rang en cache (chargement) > Mortel I.
-  // → tant que la sonde n'a pas fini, on n'affiche JAMAIS un rang inférieur
-  //   au dernier rang connu de l'utilisateur.
-  const displayRank: RankState =
-    ranked ?? (cachedTier != null ? toRankState(cachedTier, 0) : toRankState(0, 0));
-  const isHydrating = !ranked && cachedTier == null && rankAggregate.isLoading;
-  // `ranked` reste la source de vérité "utilisateur classé" pour les libellés
-  // ("Non classé", CTA "commence"), mais l'affichage visuel utilise le cache.
-  const rank: RankState = displayRank;
-  // Considère l'utilisateur comme classé dès qu'on a un rang à afficher —
-  // réel OU en cache — pour éviter le clignotement "Non classé" puis "Titan".
-  const showRanked = !!ranked || cachedTier != null;
+  const rank = toRankState(progress.tierIndex, percentInGrade);
+  const isHydrating = statsLoading;
   const colors = rank.rank.colors;
   const visual = getRankVisual(rank.rank.key);
-
-  // P2 — Grade nommé (plus de "Rang I..V", plus de "%", plus de "Niveau").
-  const currentGrade = gradeName(rank.levelInRank);
+  const currentGrade = progress.grade;
 
   const handleFile = async (file: File) => {
     if (!user) return;
@@ -234,7 +201,7 @@ export function ProfileHeroCard({
         {/* Nom de RANG monumental : lettrage serif, métal dégradé, halo, reflet. */}
         <motion.div
           initial={{ opacity: 0, y: 12, scale: 0.94 }}
-          animate={{ opacity: showRanked ? 1 : isHydrating ? 0 : 0.6, y: 0, scale: 1 }}
+          animate={{ opacity: isHydrating ? 0 : 1, y: 0, scale: 1 }}
           transition={{ duration: 0.7, delay: stagger(1), ease: EASE_OUT }}
           className="relative mt-3 flex flex-col items-center"
         >
@@ -290,12 +257,11 @@ export function ProfileHeroCard({
             className="text-[11px] font-bold uppercase tracking-[0.3em]"
             style={{ color: colors.secondary }}
           >
-            {showRanked ? currentGrade : isHydrating ? "" : "Non classé"}
+            {isHydrating ? "" : currentGrade}
           </span>
           <span className="h-px w-6" style={{ background: `${colors.secondary}66` }} />
         </motion.div>
       </div>
-
     </motion.header>
   );
 }
