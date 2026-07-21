@@ -8,64 +8,14 @@ import { useUserStats } from "@/hooks/useUserStats";
 import { titleProgressForXp } from "@/lib/fitness/rpg/titleProgress";
 import { SERIF, EASE_OUT, stagger } from "@/components/rpg/premium/tokens";
 
-interface Props {
-  pseudo: string;
-  avatarUrl?: string | null;
-  onEdit: () => void;
-  onAvatarChange: (url: string) => Promise<void>;
-}
-
-async function compressAvatar(file: File): Promise<Blob> {
-  const dataUrl = await new Promise<string>((res, rej) => {
-    const r = new FileReader();
-    r.onload = () => res(r.result as string);
-    r.onerror = () => rej(new Error("Lecture du fichier échouée"));
-    r.readAsDataURL(file);
-  });
-  const img = await new Promise<HTMLImageElement>((res, rej) => {
-    const i = new Image();
-    i.onload = () => res(i);
-    i.onerror = () => rej(new Error("Image invalide ou format non supporté"));
-    i.src = dataUrl;
-  });
-  const MAX = 512;
-  const ratio = Math.min(1, MAX / Math.max(img.width, img.height));
-  const w = Math.round(img.width * ratio);
-  const h = Math.round(img.height * ratio);
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-  canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
-  return new Promise<Blob>((res, rej) => {
-    canvas.toBlob(
-      (blob) => (blob ? res(blob) : rej(new Error("Compression échouée"))),
-      "image/jpeg",
-      0.85,
-    );
-  });
-}
-
 /**
  * Fiche de Personnage — pièce maîtresse de CORTEX (Accueil).
- *
- * Le DISQUE (RankDisc), symbole officiel de CORTEX, est mis en scène au centre ;
- * le nom de rang (« TITAN ») domine en lettrage serif, et le Grade (« Émérite »)
- * s'affiche en sous-titre. Aucune progression, ni XP, ni tableau de bord : la
- * carte représente uniquement le personnage.
- *
- * Aucune logique métier ici : le Titre/Grade vient du moteur de progression
- * principale (`titleProgress`, piloté par l'XP globale uniquement — jamais
- * par le Rang par exercice). Réutilise le langage graphique partagé
- * (RankDisc, tokens premium) destiné à toute l'app.
+ * L'identité (avatar + pseudo) est rendue AU-DESSUS via ProfileIdentityStrip.
  */
-export function ProfileHeroCard({ pseudo, avatarUrl, onEdit, onAvatarChange }: Props) {
-  const { user } = useAuth();
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
-  const initial = pseudo[0]?.toUpperCase() ?? "?";
-
+export function ProfileHeroCard() {
   const { data: userStats, isLoading: statsLoading } = useUserStats();
   const progress = titleProgressForXp(userStats?.xp ?? 0);
+
 
   // Position dans le palier courant (0..100), pour l'anneau de progression
   // du Disque uniquement — jamais affiché en texte (règle "pas de %").
