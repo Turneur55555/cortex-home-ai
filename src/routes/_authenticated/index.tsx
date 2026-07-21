@@ -78,11 +78,11 @@ function HomeHub({
         onEdit={onEdit}
         onAvatarChange={onAvatarChange}
       />
-      <ProfileHeroCard rankAggregate={rankAggregate} />
+      <ProfileHeroCard />
 
       <SeasonTrackCard />
 
-      <RPGProgressionSection rankAggregate={rankAggregate} />
+      <RPGProgressionSection />
 
       <ClassCard workouts={workouts} rankAggregate={rankAggregate} />
 
