@@ -34,10 +34,19 @@ export function RPGProgressionSection() {
         </h2>
       </div>
 
-      {isLoading && <Skeleton className="h-16 w-full rounded-2xl" />}
+      {isLoading && <Skeleton className="h-28 w-full rounded-2xl" />}
 
       {!isLoading && (
         <div className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-4">
+          <div className="mb-3 text-center">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/40">
+              Grade actuel
+            </div>
+            <div className="text-sm font-black uppercase tracking-wider text-white/90">
+              {progress.grade}
+            </div>
+          </div>
+
           <div
             className="h-2.5 w-full overflow-hidden rounded-full bg-white/[0.06]"
             role="progressbar"
@@ -53,6 +62,7 @@ export function RPGProgressionSection() {
               }}
             />
           </div>
+
           <p className="mt-2.5 text-center text-[12px] font-semibold text-white/80">
             {progress.isMax || !nextGrade ? (
               "Grade suprême atteint"
