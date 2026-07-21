@@ -71,7 +71,15 @@ function loadRemoteMigrations() {
       stdio: ['pipe', 'pipe', 'pipe'],
     });
 
-    const migrations = JSON.parse(output);
+    // Le CLI Supabase peut préfixer la sortie JSON avec des lignes de log
+    // (ex: "Local | Remote | Time...") malgré --output json : on isole le tableau.
+    const jsonStart = output.indexOf('[');
+    if (jsonStart === -1) {
+      console.error('❌ Format inattendu de supabase migration list');
+      console.error('   Réponse : ' + output.slice(0, 200));
+      process.exit(2);
+    }
+    const migrations = JSON.parse(output.slice(jsonStart));
     if (!Array.isArray(migrations)) {
       console.error('❌ Format inattendu de supabase migration list');
       console.error('   Réponse : ' + output.slice(0, 200));
