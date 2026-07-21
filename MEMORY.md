@@ -3,6 +3,14 @@
 ## Dernière mise à jour
 2026-07-21
 
+## LOT RPG-P1.8 « Recalibrage complet des seuils, à partir de zéro » (2026-07-21, branche `claude/session-a32s21`)
+Suite de P1.7 : confirmation du mécanisme `exercise_progress_record` (relu dans le SQL réel — un seul `IF has_progress`/un seul `PERFORM award_diminishing_reward` par exercice et par séance, quel que soit le nombre de métriques battues) + recalibrage intégral des seuils, sans aucun héritage des tables précédentes (consigne explicite de Nathan : « n'essaie pas de conserver les anciens chiffres »).
+- **Nouvelle simulation** (script Python jetable, non committé) sur l'économie réduite à 5 familles (P1.7) : Débutant 296→57 640 XP (1sem→5ans), Régulier 454→98 688, Passionné 683→158 292, Extrême 851→202 050.
+- **`XP_THRESHOLDS` (`titleConfig.ts`) entièrement remplacés** (30 valeurs recalculées de zéro à partir de cette courbe, plus aucun lien avec les seuils P1/P1.6/P1.7) : Mortel 0→1350, Guerrier 1800→6450, Héros 8000→18500, Titan 22000→43000, Olympien 50000→83700, Primordial 95000→226000.
+- **Vérification** : Débutant Olympien II à 5 ans ; Régulier Primordial I ; Passionné Primordial III ; Extrême **Primordial IV** (Grade V toujours hors de portée à 5 ans) — différenciation nette entre profils à chaque horizon, aucun plafonnement, y compris pour le profil le plus assidu.
+- Vérifié : vitest 406 passed/36 skipped (inchangé, seuils testés dynamiquement — aucune valeur codée en dur dans les tests), tsc 0 erreur, eslint clean, `vite build` OK.
+- **Reward Engine + courbe de progression considérés définitifs par Nathan** à l'issue de cette passe. Prochain chantier à la demande de Nathan : Phase 2 (Voies).
+
 ## LOT RPG-P1.7 « Économie d'XP réduite à la seule progression réelle » (2026-07-21, branche `claude/session-a32s21`)
 Audit complet (table exhaustive : nom, XP, condition exacte, répétable, fréquence max, calculé où, statut, validé/proposé) ayant révélé plusieurs doublons réels (`pr_muscu` vs `exercise_weight_record` ; Achievements vs Badges sur 5 compteurs partagés — séances, streak, protéines, mensurations, séances/semaine). Décisions de Nathan : une progression réelle = une seule récompense XP ; Badges/Achievements/Goals deviennent des couches de prestige/collection/suivi personnel, plus aucune XP ; le Rang par exercice doit être 100% automatique (jamais d'action manuelle).
 - **Migration `20260721130500_rpg_reward_engine_pure_training_economy.sql`** :

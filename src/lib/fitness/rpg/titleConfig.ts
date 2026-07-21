@@ -33,55 +33,51 @@ export const GRADE_NAMES_BY_TITLE: Record<
 
 /**
  * XP cumulée nécessaire pour ENTRER dans le palier i (0..29). Palier 0
- * (Mortel — Éveillé) = 0 XP. Croissance pensée pour que :
- *  - les premiers grades de Mortel tombent vite (quelques séances) ;
- *  - Guerrier arrive après plusieurs dizaines de séances ;
- *  - Héros après plusieurs mois d'entraînement régulier ;
- *  - Titan soit réservé aux joueurs très investis ;
- *  - Olympien après plusieurs centaines de séances ;
- *  - Primordial représente plusieurs années d'investissement, sans jamais
- *    être épuisé (Grade V) par un joueur même extrême en moins de 5 ans.
- * Valeurs figées, éditables individuellement — aucune formule.
+ * (Mortel — Éveillé) = 0 XP. Valeurs figées, éditables individuellement —
+ * aucune formule.
  *
- * Recalibrées en P1.7 après réduction de l'économie XP à 5 familles
- * (workout_muscu / workout_support / streak / exercise_progress_record /
- * exercise_rank_up — retrait de pr_muscu, badges, achievements, goals de
- * l'économie XP). Simulation sur 4 profils (Débutant 2 séances/sem →
- * Extrême quasi quotidien) de 1 semaine à 5 ans : aucun profil ne plafonne
- * avant 5 ans, y compris Extrême (Primordial IV à 5 ans, Grade V encore
- * hors de portée).
+ * Recalibrées intégralement en P1.8, à partir de zéro (aucun héritage des
+ * seuils précédents), sur l'économie XP réduite à 5 familles (P1.7) :
+ * workout_muscu / workout_support / streak / exercise_progress_record /
+ * exercise_rank_up. Simulation sur 4 profils (Débutant 2 séances/sem →
+ * Extrême quasi quotidien) de 1 semaine à 5 ans :
+ *  - Débutant  : Héros III (1 an) → Olympien II (5 ans)
+ *  - Régulier  : Héros V (1 an) → Primordial I (5 ans)
+ *  - Passionné : Titan III (1 an) → Primordial III (5 ans)
+ *  - Extrême   : Titan IV (1 an) → Primordial IV (5 ans, Grade V encore
+ *    hors de portée — aucun profil ne plafonne avant 5 ans).
  */
 export const XP_THRESHOLDS: readonly number[] = [
   0,
-  380,
-  1300,
-  2650,
-  4400, // Mortel
-  6500,
-  8400,
-  11200,
-  14500,
-  18100, // Guerrier
+  200,
+  550,
+  900,
+  1350, // Mortel
+  1800,
+  2600,
+  3700,
+  5000,
+  6450, // Guerrier
+  8000,
+  9700,
+  12250,
+  15200,
+  18500, // Héros
   22000,
-  24450,
-  28100,
-  32300,
-  36950, // Héros
-  42000,
-  44950,
-  49300,
-  54350,
-  59950, // Titan
-  66000,
-  70800,
-  77850,
-  86100,
-  95200, // Olympien
-  105000,
-  122900,
-  149050,
-  179650,
-  213500, // Primordial
+  25450,
+  30500,
+  36400,
+  43000, // Titan
+  50000,
+  55550,
+  63700,
+  73200,
+  83700, // Olympien
+  95000,
+  116600,
+  148200,
+  185100,
+  226000, // Primordial
 ];
 
 if (XP_THRESHOLDS.length !== TOTAL_TIERS) {
