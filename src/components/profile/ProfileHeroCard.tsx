@@ -56,59 +56,10 @@ export function ProfileHeroCard() {
         }}
       />
 
-      {/* ── Ligne d'identité : avatar + pseudo ────────────────────────────── */}
-      <div className="relative flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <div className="relative shrink-0">
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              className="group relative flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl border border-white/20 bg-black/40 shadow-lg"
-              aria-label="Changer l'avatar"
-            >
-              {avatarUrl ? (
-                <img src={avatarUrl} alt={pseudo} className="h-full w-full object-cover" />
-              ) : (
-                <span className="text-lg font-bold text-white">{initial}</span>
-              )}
-              <span className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
-                <Camera className="h-4 w-4 text-white" />
-              </span>
-            </button>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) void handleFile(f);
-                e.target.value = "";
-              }}
-            />
-            {uploading && (
-              <span className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/60 text-[10px] text-white">
-                …
-              </span>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={onEdit}
-            className="min-w-0 text-left"
-            aria-label="Modifier le pseudo"
-          >
-            <p className="truncate text-sm font-bold tracking-tight text-white">{pseudo}</p>
-            <p className="text-[10px] font-medium uppercase tracking-[0.15em] text-white/40">
-              Athlète
-            </p>
-          </button>
-        </div>
-      </div>
-
       {/* ── Scène du RANG (le héros) ──────────────────────────────────────── */}
-      <div className="relative mt-3 flex flex-col items-center text-center">
+      <div className="relative flex flex-col items-center text-center">
         <RankDisc rank={rank} size={170} variant="hero" revealDelay={0.1} />
+
 
         {/* Nom de RANG monumental : lettrage serif, métal dégradé, halo, reflet. */}
         <motion.div
