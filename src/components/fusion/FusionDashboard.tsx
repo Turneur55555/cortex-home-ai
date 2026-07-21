@@ -75,12 +75,13 @@ function DashboardHub({
 
   return (
     <>
-      <ProfileHeroCard
+      <ProfileIdentityStrip
         pseudo={pseudo}
         avatarUrl={avatarUrl}
         onEdit={onEdit}
         onAvatarChange={onAvatarChange}
       />
+      <ProfileHeroCard />
 
       <RPGProgressionSection />
 
