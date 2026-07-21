@@ -41,7 +41,7 @@ export function ProfileHeroCard() {
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6, ease: EASE_OUT }}
-      className="relative mb-6 overflow-hidden rounded-[28px] px-5 pb-5 pt-4 shadow-elevated"
+      className="relative mb-6 overflow-hidden rounded-[28px] px-5 pb-5 pt-5 shadow-elevated"
       style={{
         background: visual.atmosphere,
         boxShadow: `inset 0 0 0 1px ${visual.vignette}, 0 16px 50px -22px ${colors.glow}`,
