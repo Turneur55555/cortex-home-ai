@@ -1,9 +1,7 @@
 import { useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import confetti from "canvas-confetti";
-import { RankDisc } from "@/components/rpg/RankDisc";
-import { RankAmbientParticles } from "./RankAmbientParticles";
-import { getRankVisual } from "@/lib/fitness/rankVisuals";
+import { RankIllustration } from "@/components/rpg/RankIllustration";
 import type { RankState } from "@/lib/fitness/exerciseRanks";
 
 /**
@@ -40,17 +38,15 @@ export function RankUpOverlay({ rank, onDone }: { rank: RankState | null; onDone
     <AnimatePresence>
       {rank &&
         (() => {
-          const visual = getRankVisual(rank.rank.key);
           const { colors } = rank.rank;
           return (
             <motion.div
-              className="fixed inset-0 z-[100] flex flex-col items-center justify-center overflow-hidden"
+              className="fixed inset-0 z-[100] flex flex-col items-center justify-center overflow-hidden bg-black"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.3 }}
               onClick={onDone}
-              style={{ background: visual.atmosphere }}
             >
               {/* Vignettage */}
               <div
@@ -95,11 +91,6 @@ export function RankUpOverlay({ rank, onDone }: { rank: RankState | null; onDone
                 ))}
               </svg>
 
-              {/* Particules ambiantes du rang */}
-              <div className="absolute inset-0">
-                <RankAmbientParticles rankKey={rank.rank.key} seed={11} />
-              </div>
-
               {/* Flash blanc bref */}
               <motion.div
                 className="pointer-events-none absolute inset-0 bg-white"
@@ -124,7 +115,11 @@ export function RankUpOverlay({ rank, onDone }: { rank: RankState | null; onDone
                   className="absolute inset-0 -z-10 rounded-full blur-3xl"
                   style={{ background: colors.glow, transform: "scale(1.6)" }}
                 />
-                <RankDisc rank={rank} size={220} variant="hero" />
+                <RankIllustration
+                  rankKey={rank.rank.key}
+                  label={rank.rank.label}
+                  className="h-64 w-52 rounded-3xl shadow-2xl"
+                />
               </motion.div>
 
               {/* Texte */}

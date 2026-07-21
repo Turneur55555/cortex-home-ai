@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import { ChevronRight, Sparkles, Swords } from "lucide-react";
 import { AppSheet } from "@/components/profile/AppSheet";
 import { computeCharacterClass, type CharacterClassResult } from "@/lib/profile/characterClass";
-import { getRankVisual } from "@/lib/fitness/rankVisuals";
 import type { RankAggregate } from "@/components/fitness/RankAggregator";
 
 interface WorkoutLike {
@@ -74,7 +73,7 @@ function ClassDetailSheet({
   result: CharacterClassResult;
 }) {
   const secondFamily = result.breakdown[1] ?? null;
-  const visual = result.bestRankInFamily ? getRankVisual(result.bestRankInFamily.rank.key) : null;
+  const accentColor = result.bestRankInFamily?.rank.colors.secondary;
 
   return (
     <AppSheet
@@ -144,10 +143,7 @@ function ClassDetailSheet({
 
         <section className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-3.5">
           <div className="flex items-start gap-2">
-            <Sparkles
-              className="mt-0.5 h-4 w-4 shrink-0"
-              style={{ color: visual?.particleColor ?? undefined }}
-            />
+            <Sparkles className="mt-0.5 h-4 w-4 shrink-0" style={{ color: accentColor }} />
             <div className="min-w-0 space-y-1.5">
               <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Comment évoluer

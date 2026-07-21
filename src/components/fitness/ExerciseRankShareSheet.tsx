@@ -2,9 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toPng } from "html-to-image";
 import { Share2, Download, X, Loader2 } from "lucide-react";
-import { ExerciseRankBadge } from "./ExerciseRankBadge";
-import { RankAmbientParticles } from "./RankAmbientParticles";
-import { getRankVisual } from "@/lib/fitness/rankVisuals";
+import { RankIllustration } from "@/components/rpg/RankIllustration";
 import type { RankState } from "@/lib/fitness/exerciseRanks";
 import type { ExerciseBest } from "@/hooks/useExerciseProgression";
 
@@ -28,7 +26,6 @@ export function ExerciseRankShareSheet({
   const captureRef = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState<null | "share" | "download">(null);
   const { colors } = rank.rank;
-  const visual = getRankVisual(rank.rank.key);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -117,59 +114,49 @@ export function ExerciseRankShareSheet({
           onClick={(e) => e.stopPropagation()}
           className="flex w-full max-w-[360px] flex-col items-center gap-4 px-5 pb-8"
         >
-          {/* Carte à capturer — ratio 4:5 */}
+          {/* Carte à capturer — ratio 4:5, l'illustration officielle du rang EST la carte */}
           <div
             ref={captureRef}
             className="relative w-full overflow-hidden rounded-3xl"
             style={{
               aspectRatio: "4 / 5",
-              background: visual.atmosphere,
-              boxShadow: `inset 0 0 0 1px ${visual.vignette}, 0 30px 80px -30px ${colors.glow}`,
+              boxShadow: `inset 0 0 0 1px ${colors.primary}30, 0 30px 80px -30px ${colors.glow}`,
             }}
           >
-            <RankAmbientParticles rankKey={rank.rank.key} seed={7} />
+            <RankIllustration
+              rankKey={rank.rank.key}
+              label={rank.rank.label}
+              className="absolute inset-0 h-full w-full"
+            />
             <div
               className="pointer-events-none absolute inset-0"
               style={{
                 background:
-                  "radial-gradient(120% 60% at 50% 100%, rgba(0,0,0,0.65) 0%, transparent 70%)",
+                  "linear-gradient(180deg, rgba(0,0,0,0.55) 0%, transparent 32%, transparent 55%, rgba(0,0,0,0.85) 100%)",
               }}
             />
 
             <div className="relative flex h-full flex-col items-center justify-between p-6 pt-8">
-              {/* Signature haut */}
-              <div className="text-center">
+              {/* Signature haut + niveau romain (info absente de l'illustration) */}
+              <div className="flex w-full items-center justify-between">
                 <p
                   className="text-[9px] font-bold uppercase tracking-[0.4em]"
-                  style={{ color: colors.secondary, opacity: 0.85 }}
+                  style={{ color: colors.secondary, opacity: 0.9 }}
                 >
                   iCortex · Rang
                 </p>
+                <span className="rounded-md bg-black/60 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-white backdrop-blur-sm">
+                  {rank.romanLevel}
+                </span>
               </div>
 
-              {/* Badge + titre */}
-              <div className="flex flex-col items-center">
-                <ExerciseRankBadge rank={rank} size={130} animated={false} />
-                <h2
-                  className="mt-5 font-serif text-[30px] font-bold uppercase leading-none tracking-[0.18em]"
-                  style={{
-                    color: colors.text,
-                    textShadow: `0 0 24px ${colors.glow}, 0 1px 0 rgba(0,0,0,0.4)`,
-                  }}
-                >
-                  {rank.rank.label}{" "}
-                  <span style={{ color: colors.secondary }}>{rank.romanLevel}</span>
-                </h2>
-                <div
-                  className="mx-auto mt-3 h-px w-24"
-                  style={{
-                    background: `linear-gradient(90deg, transparent, ${colors.secondary}, transparent)`,
-                  }}
-                />
-                <p className="mt-3 text-center text-[11px] uppercase tracking-[0.28em] text-white/70 line-clamp-1">
-                  {exerciseName}
-                </p>
-              </div>
+              {/* Exercice (le rang est porté par l'illustration elle-même) */}
+              <p
+                className="text-center text-[11px] uppercase tracking-[0.28em] text-white/85 line-clamp-1"
+                style={{ textShadow: "0 1px 8px rgba(0,0,0,0.85)" }}
+              >
+                {exerciseName}
+              </p>
 
               {/* Stats */}
               <div className="grid w-full grid-cols-3 gap-2">

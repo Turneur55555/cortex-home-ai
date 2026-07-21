@@ -2,12 +2,13 @@
 // Signature visuelle CORTEX — tokens de design premium partagés.
 //
 // UNE seule source pour le langage graphique du RPG : courbes d'animation,
-// durées, respiration, halos. Réutilisé par le Blason, le Hero, et (à venir)
-// les montées de rang, récompenses, Saisons, Chroniques, Reliques — pour que
-// chaque écran premium appartienne au même univers.
+// durées, respiration, halos. Réutilisé par tous les écrans premium (Hero,
+// montées de rang, récompenses, Saisons, Chroniques, Reliques) qui affichent
+// un rang via `RankIllustration` (src/components/rpg/RankIllustration.tsx +
+// src/assets/ranks) — pour que chaque écran appartienne au même univers.
 //
 // Purement des constantes, zéro dépendance. Aucune couleur de rang ici : les
-// couleurs viennent de `rankVisuals.ts` / `exerciseRanks.ts` (par rang).
+// couleurs viennent de `exerciseRanks.ts` (par rang).
 // ============================================================
 
 /** Entrée « premium » — décélération franche puis pose douce. */

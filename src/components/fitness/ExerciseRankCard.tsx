@@ -2,13 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Sparkles, Share2 } from "lucide-react";
 import { ExerciseRankBadge } from "./ExerciseRankBadge";
-import { RankAmbientParticles } from "./RankAmbientParticles";
 import { MasteryBar } from "./MasteryBar";
 import { RankUpOverlay } from "./RankUpOverlay";
 import { ExerciseRankShareSheet } from "./ExerciseRankShareSheet";
 import { useAuth } from "@/hooks/use-auth";
 import { useExerciseProgression } from "@/hooks/useExerciseProgression";
-import { getRankVisual } from "@/lib/fitness/rankVisuals";
 import type { RankState } from "@/lib/fitness/exerciseRanks";
 
 const STORAGE_PREFIX = "exrank:seen:";
@@ -106,7 +104,6 @@ export function ExerciseRankCard({ exerciseName }: { exerciseName: string }) {
   }, [rank.tierIndex, isLoading, sessionCount, exerciseName, rank, user]);
 
   const { colors } = rank.rank;
-  const visual = getRankVisual(rank.rank.key);
 
   if (sessionCount === 0 && !isLoading) {
     return (
@@ -122,15 +119,11 @@ export function ExerciseRankCard({ exerciseName }: { exerciseName: string }) {
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: "easeOut" }}
-        className="relative overflow-hidden rounded-2xl"
+        className="relative overflow-hidden rounded-2xl bg-[#0b0b0f]"
         style={{
-          background: visual.atmosphere,
-          boxShadow: `inset 0 0 0 1px ${visual.vignette}, 0 10px 40px -20px ${colors.glow}`,
+          boxShadow: `inset 0 0 0 1px ${colors.primary}30, 0 10px 40px -20px ${colors.glow}`,
         }}
       >
-        {/* Particules ambiantes */}
-        <RankAmbientParticles rankKey={rank.rank.key} />
-
         {/* Vignettage haut/bas pour la profondeur */}
         <div
           className="pointer-events-none absolute inset-0"
@@ -170,7 +163,7 @@ export function ExerciseRankCard({ exerciseName }: { exerciseName: string }) {
                 }}
               />
               <p className="mt-2 text-[10px] uppercase tracking-[0.22em] text-white/50">
-                {sessionCount} séance{sessionCount > 1 ? "s" : ""} · {visual.ambiance}
+                {sessionCount} séance{sessionCount > 1 ? "s" : ""}
               </p>
             </div>
           </div>

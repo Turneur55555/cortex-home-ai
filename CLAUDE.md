@@ -16,10 +16,13 @@ Saisons **racontent** la progression, elles ne donnent aucun avantage de puissan
 CORTEX vise à être **le plus beau RPG de progression du fitness**, pas une app de suivi gamifiée.
 - **Le Rang est la star** (Titan, Olympien…). Le joueur retient son RANG, jamais son niveau. Le
   Niveau/XP ne fait que raconter le chemin vers le prochain Rang — toujours au service du Rang.
-- **Chaque famille de Rang est un univers** (matière, lumière, particules propres), pas une couleur.
-- **Signature visuelle partagée** : réutiliser `src/components/rpg/` (Blason, RankSigil, premium/tokens,
-  premium/rankUniverse) sur TOUS les écrans premium (récompenses, montées de rang, Chroniques, Saisons,
-  Reliques, trophées) pour un univers cohérent.
+- **Chaque famille de Rang a son illustration officielle**, pas une couleur générée en CSS/SVG.
+- **Signature visuelle partagée** : depuis le 21/07/2026, le rang se représente **uniquement** via
+  `RankIllustration` (`src/components/rpg/RankIllustration.tsx`), qui sélectionne l'image
+  `src/assets/ranks/<clé>.webp` du rang courant. Un seul système, aucune autre façon de représenter un
+  rang (plus de Disque/Blason/sigils SVG) — réutiliser `RankIllustration` sur TOUS les écrans premium
+  (récompenses, montées de rang, Chroniques, Saisons, Reliques, trophées) pour un univers cohérent.
+  `premium/tokens.ts` reste la source des courbes d'animation/durées partagées.
 - **Deux questions avant d'ajouter** : (1) renforce-t-elle la boucle entraîner→progresser→récompenser→
   revenir ? (2) crée-t-elle un vrai effet « Waouh » ? Si non aux deux → pas prioritaire.
 - **Test de chaque itération premium** : *« Si un utilisateur ouvrait cet écran pour la première fois,
