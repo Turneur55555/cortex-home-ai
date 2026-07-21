@@ -1,71 +1,43 @@
-import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { useAuth } from "@/hooks/use-auth";
 
 import { RankAmbientParticles } from "@/components/fitness/RankAmbientParticles";
 import { RankDisc } from "@/components/rpg/RankDisc";
 import { getRankVisual } from "@/lib/fitness/rankVisuals";
-import { type RankState } from "@/lib/fitness/exerciseRanks";
 import { toRankState } from "@/hooks/useExerciseProgression";
+import { useUserStats } from "@/hooks/useUserStats";
+import { titleProgressForXp } from "@/lib/fitness/rpg/titleProgress";
 import { SERIF, EASE_OUT, stagger } from "@/components/rpg/premium/tokens";
-import type { RankAggregate } from "@/components/fitness/RankAggregator";
-
-interface Props {
-  rankAggregate: RankAggregate;
-}
 
 /**
  * Fiche de Personnage — pièce maîtresse de CORTEX (Accueil).
  *
  * Le DISQUE (RankDisc), symbole officiel de CORTEX, est mis en scène au centre ;
- * le nom de rang (« TITAN ») domine en lettrage serif. Aucune photo, prénom,
- * grade, ni progression : le rang est l'unique information. L'identité de
+ * le nom du TITRE (« TITAN ») domine en lettrage serif. Aucune photo, prénom,
+ * grade, ni progression : le Titre est l'unique information. L'identité de
  * l'utilisateur (avatar + pseudo) est rendue par ProfileIdentityStrip, au-dessus.
  *
- * Aucune logique métier ici : `rankAggregate` vient de RankAggregator (qui
- * observe le moteur de rang). Réutilise le langage graphique partagé
- * (RankDisc, tokens premium) destiné à toute l'app.
+ * Aucune logique métier ici : le Titre vient du moteur de progression
+ * principale (`titleProgress`, piloté PAR L'XP GLOBALE UNIQUEMENT — jamais
+ * par le Rang par exercice, qui reste un système indépendant avec ses propres
+ * paliers). Réutilise le langage graphique partagé (RankDisc, tokens premium)
+ * destiné à toute l'app.
  */
-export function ProfileHeroCard({ rankAggregate }: Props) {
-  const { user } = useAuth();
+export function ProfileHeroCard() {
+  const { data: userStats, isLoading: statsLoading } = useUserStats();
+  const progress = titleProgressForXp(userStats?.xp ?? 0);
 
-  // Cache local du dernier rang connu (par utilisateur) pour éviter le flash
-  // « Mortel » pendant que RankAggregator sonde les hooks asynchrones.
-  // Clé stable : on ne stocke que le `tierIndex` (0..N) — reconstruit via
-  // `toRankState`. Aucune fuite entre utilisateurs (clé préfixée par user.id).
-  const cacheKey = user ? `cortex:hero-rank-tier:${user.id}` : null;
-  const [cachedTier, setCachedTier] = useState<number | null>(() => {
-    if (typeof window === "undefined" || !cacheKey) return null;
-    const raw = window.localStorage.getItem(cacheKey);
-    if (raw == null) return null;
-    const n = parseInt(raw, 10);
-    return Number.isFinite(n) && n >= 0 ? n : null;
-  });
+  // Position dans le palier courant (0..100), pour l'anneau de progression
+  // du Disque uniquement — jamais affiché en texte (règle "pas de %").
+  const gradeSpan = Math.max(
+    1,
+    (progress.xpNextThreshold ?? progress.xpCurrentThreshold) - progress.xpCurrentThreshold,
+  );
+  const percentInGrade = progress.isMax
+    ? 100
+    : ((progress.xp - progress.xpCurrentThreshold) / gradeSpan) * 100;
 
-  const ranked = rankAggregate.best?.rank ?? null;
-
-  // Persiste le meilleur rang dès qu'il est disponible.
-  useEffect(() => {
-    if (!cacheKey || !ranked) return;
-    if (ranked.tierIndex === cachedTier) return;
-    try {
-      window.localStorage.setItem(cacheKey, String(ranked.tierIndex));
-      setCachedTier(ranked.tierIndex);
-    } catch {
-      /* quota / SSR — no-op */
-    }
-  }, [cacheKey, ranked, cachedTier]);
-
-  // Ordre de priorité : rang réel > rang en cache (chargement) > Mortel I.
-  // → tant que la sonde n'a pas fini, on n'affiche JAMAIS un rang inférieur
-  //   au dernier rang connu de l'utilisateur.
-  const displayRank: RankState =
-    ranked ?? (cachedTier != null ? toRankState(cachedTier, 0) : toRankState(0, 0));
-  const isHydrating = !ranked && cachedTier == null && rankAggregate.isLoading;
-  const rank: RankState = displayRank;
-  // Considère l'utilisateur comme classé dès qu'on a un rang à afficher —
-  // réel OU en cache — pour éviter le clignotement "Non classé" puis "Titan".
-  const showRanked = !!ranked || cachedTier != null;
+  const rank = toRankState(progress.tierIndex, percentInGrade);
+  const isHydrating = statsLoading;
   const colors = rank.rank.colors;
   const visual = getRankVisual(rank.rank.key);
 
@@ -89,14 +61,14 @@ export function ProfileHeroCard({ rankAggregate }: Props) {
         }}
       />
 
-      {/* ── Scène du RANG (le héros) ──────────────────────────────────────── */}
+      {/* ── Scène du TITRE (le héros) ──────────────────────────────────────── */}
       <div className="relative flex flex-col items-center text-center">
         <RankDisc rank={rank} size={170} variant="hero" revealDelay={0.1} />
 
-        {/* Nom de RANG monumental : lettrage serif, métal dégradé, halo, reflet. */}
+        {/* Nom de TITRE monumental : lettrage serif, métal dégradé, halo, reflet. */}
         <motion.div
           initial={{ opacity: 0, y: 12, scale: 0.94 }}
-          animate={{ opacity: showRanked ? 1 : isHydrating ? 0 : 0.6, y: 0, scale: 1 }}
+          animate={{ opacity: isHydrating ? 0 : 1, y: 0, scale: 1 }}
           transition={{ duration: 0.7, delay: stagger(1), ease: EASE_OUT }}
           className="relative mt-3 flex flex-col items-center"
         >

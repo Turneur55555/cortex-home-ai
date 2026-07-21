@@ -81,9 +81,9 @@ function DashboardHub({
         onEdit={onEdit}
         onAvatarChange={onAvatarChange}
       />
-      <ProfileHeroCard rankAggregate={rankAggregate} />
+      <ProfileHeroCard />
 
-      <RPGProgressionSection rankAggregate={rankAggregate} />
+      <RPGProgressionSection />
 
       <ClassCard workouts={workouts} rankAggregate={rankAggregate} />
     </>
