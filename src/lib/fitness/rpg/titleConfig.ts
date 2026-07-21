@@ -39,8 +39,17 @@ export const GRADE_NAMES_BY_TITLE: Record<
  *  - Héros après plusieurs mois d'entraînement régulier ;
  *  - Titan soit réservé aux joueurs très investis ;
  *  - Olympien après plusieurs centaines de séances ;
- *  - Primordial représente plusieurs années d'investissement.
+ *  - Primordial représente plusieurs années d'investissement, sans jamais
+ *    être épuisé (Grade V) par un joueur même extrême en moins de 5 ans.
  * Valeurs figées, éditables individuellement — aucune formule.
+ *
+ * Recalibrées en P1.7 après réduction de l'économie XP à 5 familles
+ * (workout_muscu / workout_support / streak / exercise_progress_record /
+ * exercise_rank_up — retrait de pr_muscu, badges, achievements, goals de
+ * l'économie XP). Simulation sur 4 profils (Débutant 2 séances/sem →
+ * Extrême quasi quotidien) de 1 semaine à 5 ans : aucun profil ne plafonne
+ * avant 5 ans, y compris Extrême (Primordial IV à 5 ans, Grade V encore
+ * hors de portée).
  */
 export const XP_THRESHOLDS: readonly number[] = [
   0,
@@ -49,30 +58,30 @@ export const XP_THRESHOLDS: readonly number[] = [
   2650,
   4400, // Mortel
   6500,
-  8950,
-  11750,
-  14900,
-  18300, // Guerrier
+  8400,
+  11200,
+  14500,
+  18100, // Guerrier
   22000,
-  26000,
-  30350,
-  35000,
-  39900, // Héros
-  45000,
-  50400,
-  56100,
-  62000,
-  68200, // Titan
-  74600,
-  81250,
-  88200,
-  95500,
-  103000, // Olympien
-  110700,
-  118500,
-  126600,
-  135000,
-  143500, // Primordial
+  24450,
+  28100,
+  32300,
+  36950, // Héros
+  42000,
+  44950,
+  49300,
+  54350,
+  59950, // Titan
+  66000,
+  70800,
+  77850,
+  86100,
+  95200, // Olympien
+  105000,
+  122900,
+  149050,
+  179650,
+  213500, // Primordial
 ];
 
 if (XP_THRESHOLDS.length !== TOTAL_TIERS) {

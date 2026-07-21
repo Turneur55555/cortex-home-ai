@@ -6,6 +6,7 @@ import { localDateYMD } from "@/lib/dates";
 import type { DisciplineId, SessionSegment } from "@/lib/fitness/engines/types";
 import { resolveExerciseId, resolveExerciseIdsByLabel } from "@/services/exerciseResolution";
 import { identityKey } from "@/lib/fitness/recentExercises";
+import { verifyExerciseRanksForSession } from "@/hooks/useVerifyExerciseRanksForSession";
 import {
   ACTIVE_WORKOUT_CONFLICT_MESSAGE,
   isActiveWorkoutConflict,
@@ -653,6 +654,9 @@ export function useFinishWorkout() {
       // `award_xp_on_workout_complete`) — invalider le cache Niveau/Rang
       // pour ne jamais afficher un XP/niveau périmé.
       qc.invalidateQueries({ queryKey: ["user_stats"] });
+      // RPG : montée de Rang par exercice — automatique, jamais besoin
+      // d'ouvrir la fiche d'un exercice (voir useVerifyExerciseRanksForSession).
+      verifyExerciseRanksForSession(workout.exercises);
     },
     onError: (e: Error) => toast.error(e.message),
   });

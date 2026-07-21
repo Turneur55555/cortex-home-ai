@@ -135,10 +135,7 @@ function CollectionCard({ item, index }: { item: CollectionItem; index: number }
             Bientôt disponible
           </span>
         ) : isUnlocked ? (
-          <div className="flex items-center justify-between">
-            {item.xpReward > 0 && (
-              <span className="text-[10px] font-bold text-amber-400/90">+{item.xpReward} XP</span>
-            )}
+          <div className="flex items-center justify-end">
             {item.unlockedAt && (
               <span className="text-[9px] text-white/40">
                 {new Date(item.unlockedAt).toLocaleDateString("fr-FR", {
@@ -151,12 +148,7 @@ function CollectionCard({ item, index }: { item: CollectionItem; index: number }
           </div>
         ) : (
           <div>
-            <div className="mb-1 flex items-center justify-between">
-              {item.xpReward > 0 && (
-                <span className="text-[10px] font-semibold text-amber-400/50">
-                  +{item.xpReward} XP
-                </span>
-              )}
+            <div className="mb-1 flex items-center justify-end">
               <span className="text-[10px] font-bold tabular-nums text-white/30">
                 {item.progress}%
               </span>

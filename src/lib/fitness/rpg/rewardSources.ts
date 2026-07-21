@@ -6,31 +6,33 @@
 // lue dans `reward_catalog`). Il sert uniquement à typer les appels à la
 // RPC générique `award_reward_event` et à documenter les sources connues.
 //
-// Ajouter une future source (Chronique, défi, succès, saison, rang
-// d'exercice...) = une ligne ici (typage) + une ligne dans le catalogue
-// serveur (montant) — jamais une nouvelle RPC ni un nouveau moteur.
+// Philosophie (validée par Nathan, P1.7) : l'XP ne représente QUE la
+// progression réelle d'entraînement. Badges/Achievements/Goals sont des
+// couches de prestige/collection/suivi personnel — ils ne versent plus
+// d'XP. Cinq familles seulement composent l'économie XP.
 // ============================================================
 
 export const REWARD_SOURCES = {
   workoutMuscu: "workout_muscu",
   workoutSupport: "workout_support",
-  prMuscu: "pr_muscu",
   streak: "streak",
 } as const;
 
 export type RewardSourceKey = (typeof REWARD_SOURCES)[keyof typeof REWARD_SOURCES];
 
 /**
- * Sources versées par des chemins dédiés (server-only ou RPC spécifique,
- * jamais via `award_reward_event` générique) — documentées ici pour mémoire,
- * pas pour typer un appel client :
- *  - `exercise_weight_record` / `exercise_reps_record` / `exercise_volume_record`
- *    / `exercise_1rm_record` : détectés 100% serveur à la clôture de séance
- *    (voir `award_xp_on_workout_complete`), rendement décroissant partagé
- *    ('exercise_progress').
+ * Sources versées par des chemins dédiés (server-only ou Edge Function,
+ * jamais via `award_reward_event` générique) — documentées ici pour mémoire :
+ *  - `exercise_progress_record` : UNE seule récompense par exercice et par
+ *    séance, quel que soit le nombre de métriques battues (poids/reps/
+ *    volume/1RM) — détecté 100% serveur à la clôture de séance
+ *    (`award_xp_on_workout_complete`), rendement décroissant hebdomadaire
+ *    partagé ('exercise_progress').
  *  - `exercise_rank_up_<titre>` (mortel/guerrier/heros/titan/olympien/primordial) :
- *    voir `useAwardExerciseRankUp`.
- *  - `badge_<badge_key>` / `goal_<goal_id>` / `achievement_<achievement_id>` :
- *    préfixes dynamiques, versés par `unlock_user_badge` / `award_goal_xp` /
- *    `claim_achievement`.
+ *    déclenché automatiquement à la clôture de séance
+ *    (`useVerifyExerciseRanksForSession`), jamais par une action manuelle.
+ *
+ * Badges (`unlock_user_badge`), Achievements (`claim_achievement`) et Goals
+ * (`award_goal_xp`) ne versent plus d'XP (prestige/collection/suivi
+ * personnel uniquement) — ne plus les référencer comme sources XP.
  */

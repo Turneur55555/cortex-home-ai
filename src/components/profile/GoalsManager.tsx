@@ -227,14 +227,11 @@ function GoalCard({
               {isDone && <Check className="h-2.5 w-2.5" />}
               {s.label}
             </span>
-            <span className="text-[10px] text-muted-foreground/60">
+            <span className="ml-auto text-[10px] text-muted-foreground/60">
               {new Date(goal.target_date).toLocaleDateString("fr-FR", {
                 day: "2-digit",
                 month: "short",
               })}
-            </span>
-            <span className="ml-auto text-[10px] font-bold text-amber-400/70">
-              +{goal.xp_reward} XP
             </span>
           </div>
         </div>
