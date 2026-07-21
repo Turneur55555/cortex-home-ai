@@ -118,7 +118,7 @@ export function RankUpOverlay({ rank, onDone }: { rank: RankState | null; onDone
                 <RankIllustration
                   rankKey={rank.rank.key}
                   label={rank.rank.label}
-                  className="h-64 w-52 rounded-3xl shadow-2xl"
+                  className="aspect-[4/5] w-52 rounded-3xl shadow-2xl"
                 />
               </motion.div>
 
