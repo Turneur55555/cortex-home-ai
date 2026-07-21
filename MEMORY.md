@@ -3,6 +3,49 @@
 ## Dernière mise à jour
 2026-07-21
 
+## LOT RPG-P1.6 « Reward Engine 100% serveur-autoritaire » (2026-07-21, branche `claude/session-a32s21`)
+Fin de toute confiance cliente, même partielle, sur les deux derniers points signalés par Nathan.
+- **`exercise_rank_up` recalculé ENTIÈREMENT côté serveur.** Le client n'envoie plus que l'identité de
+  l'exercice (nom + `exercise_reference_id` optionnel) — plus aucun Titre, palier ou 1RM calculé côté
+  client. Nouvelle Edge Function **`supabase/functions/verify-exercise-rank/`** : reconstruit l'historique
+  complet (`exercise_sets`/`exercises`/`workouts` complétés, RLS-scopé à l'utilisateur) + le poids de corps
+  (`body_tracking`), recalcule le Rang via **`supabase/functions/_shared/rankEngine.ts`** — une copie
+  fidèle et volontaire du VRAI moteur (`src/lib/fitness/rank/engine.ts`+`config.ts`+
+  `familyClassification.ts`), les Edge Functions Deno ne pouvant pas importer `src/` (alias `@/` non
+  résolvables, cf. commentaire déjà présent dans `analyze-exercise/index.ts`). Verse l'XP via le service
+  role (`award_character_xp` étendu, `GRANT ... TO service_role`), un Titre à la fois, jamais deux fois
+  (`dedup_key` = `exercise_rank_up:<exerciseKey>:<titreKey>`, une fois pour toutes par exercice+Titre).
+  Ancienne RPC cliente `award_exercise_rank_up` (faisait confiance à un `_titre_key` déclaré) **retirée**.
+  **Garde-fou anti-dérive réellement exécuté** (pas seulement statique) : nouveau
+  `src/lib/fitness/rank/rankEngine.sql-parity.test.ts` — exécute LES DEUX implémentations sur 300 historiques
+  synthétiques aléatoires et vérifie un `confirmedTierIndex` identique (même esprit que
+  `characterLevel.sql-parity.test.ts`, mais ici les deux côtés tournent réellement en JS/TS, contrairement
+  au SQL qui n'est vérifiable qu'à l'exécution en base — indisponible dans cette session).
+  `useAwardExerciseRankUp`/`ExerciseRankCard.tsx` appellent désormais l'Edge Function au lieu de l'ancienne RPC.
+- **Achievements vérifiés serveur, comme les Badges.** `claim_achievement` ne fait plus confiance au
+  montant/à l'éligibilité déclarés par le client : nouvelle table `achievement_criteria` (mappe le PRÉFIXE
+  d'un succès à seuil — format `buildMilestoneSeries` : `<prefix>_<tierIndex>_<seuil>`, le seuil est déjà
+  dans l'ID — à une statistique calculable serveur) + `compute_achievement_stats` (étend
+  `compute_fitness_stats` sans le modifier : ajoute `distinct_months_active`/`total_volume_kg`/
+  `total_sets`/`total_reps`/`distinct_exercise_count`/`guided_sessions_count`/`course_sessions_count`).
+  **12 familles mappées dans cette passe** (endurance_workouts/streak/months_active, strength_total_volume,
+  hyper_sets/reps, exploration_distinct_exercises, nutrition_protein_days, body_measurements,
+  guided_sessions, running_sessions, recovery_weekly_target). **Familles non mappées → 0 XP** (pas de
+  confiance résiduelle) : `first_steps` (non-tiered), `rpg_*` (nécessiterait le moteur de Rang — candidat
+  naturel pour une extension future de `verify-exercise-rank`, qui connaît déjà le Rang réel), `secret_*`,
+  `collection_*` (méta), `body_weight_change`, `recovery_weekly_streak`, `hyrox_simulations`, prépas course
+  booléennes. **Aucune régression** : ces familles ne versaient déjà aucune XP avant ce chantier.
+- Vérifié : vitest **406 passed/36 skipped** (+2, dont la parité exécutée réellement), tsc 0 erreur,
+  eslint clean (fichiers touchés ; erreurs prettier pré-existantes dans `ExerciseRankCard.tsx` hors zone
+  touchée, non corrigées), `validate-supabase.mjs` ✅, `vite build` OK. Edge Function non testable en
+  live dans cet environnement (pas de runtime Deno, pas d'instance Supabase liée) — logique métier
+  couverte par le test de parité + revue manuelle attentive de la requête PostgREST embarquée
+  (`exercises.select("...,workouts!inner(...)")` + `.eq("workouts.status", ...)`, idiome standard mais
+  jamais exécuté ici) ; à valider par Nathan après déploiement.
+- **Reward Engine considéré quasiment définitif par Nathan** à l'issue de ce lot (P1 → P1.6) : moteur
+  générique, catalogue centralisé, rendement décroissant, records d'exercice, badges/objectifs/succès tous
+  server-autoritaires. Prochain chantier RPG à la demande de Nathan : Phase 2 (Voies).
+
 ## LOT RPG-P1.5 « Reward Catalog complet — unique source de vérité XP » (2026-07-21, branche `claude/session-a32s21`)
 Suite du Reward Engine générique (P1) : audit exhaustif de toutes les actions du joueur (fitness/nutrition/Chroniques/défis/succès/saisons/profil) validé par Nathan, puis implémentation. Décisions actées : **Saisons et Chroniques restent hors économie XP** (Saisons = PS uniquement, jamais d'XP permanent — `docs/architecture/rpg-saisons.md` §9 ; Chroniques = récit de séances déjà récompensées, aucun événement `chronicle_*`) ; **Rang par exercice reste 6 sources distinctes** (pas de fusion), avec **rendement décroissant** plutôt qu'un plafond brutal.
 - **Migration `20260721120000_rpg_reward_catalog_p1_5.sql`** :

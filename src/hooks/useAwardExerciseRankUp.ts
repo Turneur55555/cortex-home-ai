@@ -1,40 +1,39 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import type { RankKey } from "@/lib/fitness/exerciseRanks";
 
 /**
- * Déclare une montée de Rang par exercice au Reward Engine. Le serveur ne
- * revalide PAS la classification (Titre) — il exige la preuve qu'une
- * amélioration réelle a eu lieu (nouveau meilleur 1RM estimé sur cet
- * exercice) avant de verser quoi que ce soit ; sinon la réclamation est
- * silencieusement ignorée (voir `award_exercise_rank_up`, migration
- * `20260721120000`).
+ * Déclenche la vérification serveur d'une montée de Rang par exercice.
+ * Le client n'envoie plus AUCUNE valeur calculée (ni Titre, ni palier, ni
+ * 1RM) — seulement l'identité de l'exercice. L'Edge Function
+ * `verify-exercise-rank` recalcule ENTIÈREMENT le Rang depuis les données
+ * brutes (même moteur que le client, copie fidèle testée en parité) et
+ * décide seule si un `exercise_rank_up` est versé. Voir migration
+ * `20260721130000` et `supabase/functions/verify-exercise-rank/`.
  */
 export function useAwardExerciseRankUp() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async ({
-      titreKey,
       exerciseName,
       exerciseReferenceId,
-      workoutId,
     }: {
-      titreKey: RankKey;
       exerciseName: string;
       exerciseReferenceId?: string | null;
-      workoutId?: string | null;
     }) => {
-      const { error } = await (supabase as any).rpc("award_exercise_rank_up", {
-        _titre_key: titreKey,
-        _exercise_reference_id: exerciseReferenceId ?? null,
-        _exercise_name: exerciseName,
-        _workout_id: workoutId ?? null,
+      const { data, error } = await supabase.functions.invoke("verify-exercise-rank", {
+        body: {
+          exercise_name: exerciseName,
+          exercise_reference_id: exerciseReferenceId ?? null,
+        },
       });
       if (error) throw error;
+      return data as { tierIndex: number; titre: string; granted: string[] };
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["user_stats"] });
+    onSuccess: (data) => {
+      if (data?.granted?.length) {
+        void queryClient.invalidateQueries({ queryKey: ["user_stats"] });
+      }
     },
   });
 }

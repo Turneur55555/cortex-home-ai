@@ -100,7 +100,7 @@ export function ExerciseRankCard({ exerciseName }: { exerciseName: string }) {
     if (seen != null && rank.tierIndex > seen) {
       setRankUp(rank);
       saveSeen(user.id, exerciseName, rank.tierIndex);
-      awardRankUp.mutate({ titreKey: rank.rank.key, exerciseName });
+      awardRankUp.mutate({ exerciseName });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rank.tierIndex, isLoading, sessionCount, exerciseName, rank, user]);
