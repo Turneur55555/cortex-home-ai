@@ -65,31 +65,46 @@ function loadGitMigrations() {
 // ─── Récupérer les migrations Supabase ────────────────────────────────────────
 function loadRemoteMigrations() {
   try {
-    const output = execFileSync('supabase', ['migration', 'list', '--linked', '--output', 'json'], {
-      encoding: 'utf8',
-      maxBuffer: 64 * 1024 * 1024,
-      stdio: ['pipe', 'pipe', 'pipe'],
-    });
+    // --output/-o contrôle le format des *status variables* (supabase status -o env),
+    // pas celui des commandes comme `migration list` : c'est --output-format qui régit
+    // la sortie structurée de la commande elle-même (confirmé via `supabase migration
+    // list --help` et test local contre un Postgres réel avec CLI 2.109.1).
+    const output = execFileSync(
+      'supabase',
+      ['migration', 'list', '--linked', '--output-format', 'json'],
+      {
+        encoding: 'utf8',
+        maxBuffer: 64 * 1024 * 1024,
+        stdio: ['pipe', 'pipe', 'pipe'],
+      }
+    );
 
-    const migrations = JSON.parse(output);
+    const jsonStart = output.indexOf('{');
+    if (jsonStart === -1) {
+      console.error('❌ Format inattendu de supabase migration list');
+      console.error('   Réponse : ' + output.slice(0, 200));
+      process.exit(2);
+    }
+    const parsed = JSON.parse(output.slice(jsonStart));
+    const migrations = parsed.migrations;
     if (!Array.isArray(migrations)) {
       console.error('❌ Format inattendu de supabase migration list');
       console.error('   Réponse : ' + output.slice(0, 200));
       process.exit(2);
     }
 
-    // Extraire les versions uniques avec leur statut
+    // Schéma réel : [{ local, remote, time }, ...]
+    // `remote` renseigné = migration appliquée en base (peu importe si `local` est vide,
+    // c'est justement le signal d'une migration orpheline détecté plus bas).
     const byVersion = new Map();
     for (const m of migrations) {
-      const version = m.version || m.name || '';
-      if (!version) continue;
-      const status = m.status || 'UNKNOWN';
-      if (!byVersion.has(version)) {
-        byVersion.set(version, { status, timestamp: m.timestamp });
+      if (!m.remote) continue;
+      if (!byVersion.has(m.remote)) {
+        byVersion.set(m.remote, { status: 'APPLIED', timestamp: m.time });
       }
     }
 
-    remoteMigrations = new Map(byVersion);
+    remoteMigrations = byVersion;
     return byVersion.size;
   } catch (e) {
     if (e.code === 'ENOENT') {

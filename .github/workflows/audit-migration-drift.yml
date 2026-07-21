@@ -27,6 +27,7 @@ jobs:
 
     env:
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
     steps:
       - uses: actions/checkout@v4
@@ -43,8 +44,6 @@ jobs:
 
       # ── Link au projet Supabase ──────────────────────────────────────────
       - name: Link Supabase project
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
 
       # ── Lancer l'audit ───────────────────────────────────────────────────
