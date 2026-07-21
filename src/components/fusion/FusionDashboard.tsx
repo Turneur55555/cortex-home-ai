@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useProfile } from "@/hooks/useProfile";
 import { ProfileRPGData, type ProfileRPGDataValue } from "@/components/profile/rpg/ProfileRPGData";
 import { ProfileHeroCard } from "@/components/profile/ProfileHeroCard";
+import { ProfileIdentityStrip } from "@/components/profile/ProfileIdentityStrip";
 import { RPGProgressionSection } from "@/components/profile/rpg/RPGProgressionSection";
 import { ClassCard } from "@/components/profile/ClassCard";
 import { EditPseudoSheet } from "@/components/profile/EditPseudoSheet";
