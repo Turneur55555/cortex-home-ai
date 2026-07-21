@@ -78,13 +78,7 @@ function HomeHub({
         onEdit={onEdit}
         onAvatarChange={onAvatarChange}
       />
-      <ProfileHeroCard
-        pseudo={pseudo}
-        avatarUrl={avatarUrl}
-        onEdit={onEdit}
-        onAvatarChange={onAvatarChange}
-        rankAggregate={rankAggregate}
-      />
+      <ProfileHeroCard rankAggregate={rankAggregate} />
 
       <SeasonTrackCard />
 
