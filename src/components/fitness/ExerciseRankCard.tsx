@@ -8,6 +8,16 @@ import { ExerciseRankShareSheet } from "./ExerciseRankShareSheet";
 import { useAuth } from "@/hooks/use-auth";
 import { useExerciseProgression } from "@/hooks/useExerciseProgression";
 import type { RankState } from "@/lib/fitness/exerciseRanks";
+import { getRankIllustration } from "@/assets/ranks";
+
+/**
+ * DIAGNOSTIC TEMPORAIRE — carré noir iOS (à retirer une fois la cause confirmée).
+ * Rendu volontairement nu : aucun wrapper, overlay, animation, transform,
+ * mask, coin arrondi ni backdrop-filter. Juste un conteneur de taille fixe
+ * et un <img> brut, pour isoler si le carré noir vient du CSS/compositing
+ * autour du composant ou du chargement de l'image elle-même dans ce contexte.
+ */
+const DIAGNOSTIC_MINIMAL_IMG = true;
 
 const STORAGE_PREFIX = "exrank:seen:";
 
@@ -109,6 +119,16 @@ export function ExerciseRankCard({ exerciseName }: { exerciseName: string }) {
     return (
       <div className="rounded-2xl border border-border bg-surface/60 p-4 text-center text-xs text-muted-foreground">
         Enregistre ta première série pour démarrer la progression RPG.
+      </div>
+    );
+  }
+
+  // DIAGNOSTIC TEMPORAIRE — voir commentaire de DIAGNOSTIC_MINIMAL_IMG en haut
+  // du fichier. Court-circuite tout le reste du rendu de la carte.
+  if (DIAGNOSTIC_MINIMAL_IMG) {
+    return (
+      <div style={{ width: 104, height: 104 }}>
+        <img src={getRankIllustration(rank.rank.key) ?? undefined} alt={rank.rank.label} />
       </div>
     );
   }
