@@ -11,13 +11,20 @@ import { applyRankTheme } from "@/components/rpg/rankTheme";
  *   voir applyRankTheme) — le Titre global (piloté par l'XP, comme
  *   ProfileHeroCard) est l'unique source de l'identité visuelle de Cortex
  * - animations (framer-motion reducedMotion)
+ *
+ * Tant que `userStats` n'a pas encore répondu (premier chargement), on
+ * n'appelle PAS applyRankTheme : le thème garde sa valeur précédente (déjà
+ * posée sur `:root` par un rendu antérieur dans la session) ou, à froid, le
+ * repli neutre défini dans styles.css — jamais un flash "Mortel" le temps
+ * que le vrai rang soit connu.
  */
 export function PreferencesEffects({ children }: { children: ReactNode }) {
   const { prefs } = useUserPreferences();
   const { data: userStats } = useUserStats();
-  const rankKey = titleProgressForXp(userStats?.xp ?? 0).title.key;
+  const rankKey = userStats ? titleProgressForXp(userStats.xp).title.key : null;
 
   useEffect(() => {
+    if (!rankKey) return;
     applyRankTheme(rankKey);
   }, [rankKey]);
 
