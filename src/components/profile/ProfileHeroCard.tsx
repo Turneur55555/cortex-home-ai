@@ -11,8 +11,15 @@ import { EASE_OUT } from "@/components/rpg/premium/tokens";
  *
  * L'illustration officielle du TITRE courant (« GUERRIER », « TITAN »…)
  * occupe toute la carte ; elle porte déjà le nom du rang, donc aucun texte
- * n'est superposé. L'identité de l'utilisateur (avatar + pseudo) est rendue
- * par ProfileIdentityStrip, au-dessus.
+ * n'est superposé.
+ *
+ * Ratio du conteneur : 4:5 exact, conformément à la règle absolue de
+ * `assets/ranks/FORMAT.md` (tout conteneur accueillant `RankIllustration`
+ * respecte ce ratio, sinon `object-fit: cover` recadre l'image de façon
+ * imprévisible et peut couper le disque/le lettrage du rang). Pour réduire
+ * l'emprise verticale sur Accueil, on contraint la hauteur (`height` +
+ * `self-center`) plutôt que de déformer ou recadrer le ratio : la largeur
+ * suit proportionnellement, l'illustration reste entière.
  *
  * Aucune logique métier ici : le Titre vient du moteur de progression
  * principale (`titleProgress`, piloté PAR L'XP GLOBALE UNIQUEMENT — jamais
@@ -39,8 +46,8 @@ export function ProfileHeroCard() {
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6, ease: EASE_OUT }}
-      className="relative mb-6 overflow-hidden rounded-[28px] shadow-elevated"
-      style={{ aspectRatio: "4 / 4" }}
+      className="relative mb-3 self-center overflow-hidden rounded-[28px] shadow-elevated"
+      style={{ aspectRatio: "4 / 5", height: "clamp(220px, 36vh, 360px)" }}
     >
       <RankIllustration
         rankKey={rank.rank.key}

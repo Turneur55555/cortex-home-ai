@@ -88,7 +88,7 @@ export function ClassCard({ workouts, rankAggregate }: Props) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="relative mb-6 w-full overflow-hidden rounded-[20px] p-2.5 text-left transition-transform active:scale-[0.99]"
+        className="relative mb-3 w-full overflow-hidden rounded-[20px] p-2.5 text-left transition-transform active:scale-[0.99]"
         style={{ background: plateSurface, boxShadow: plateShadow }}
       >
         {/* Grain martelé + respiration de lumière + reflet — propres au rang. */}
