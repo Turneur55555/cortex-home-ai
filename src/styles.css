@@ -98,6 +98,8 @@
   /* Grain de matériau appliqué par .bg-rank-grain — vide tant que le rang
      n'est pas connu (pas de bruit avant applyRankTheme). */
   --material-grain: none;
+  --rank-grain-opacity: 0.4;
+  --rank-halo-duration: 5s;
 
   --card: oklch(0.16 0.02 280);
   --card-foreground: oklch(0.98 0.005 280);
@@ -139,7 +141,8 @@
   --gradient-surface: linear-gradient(180deg, oklch(0.18 0.022 280), oklch(0.14 0.018 280));
   --gradient-glow: radial-gradient(circle at 50% 0%, oklch(0.62 0.22 285 / 0.25), transparent 60%);
 
-  /* Shadows */
+  /* Shadows — repli avant que le rang ne soit connu ; recolorées et
+     enrichies (relief + profondeur, voir RANK_AMBIANCE) par applyRankTheme. */
   --shadow-card: 0 8px 24px -8px oklch(0 0 0 / 0.5);
   --shadow-elevated: 0 16px 40px -12px oklch(0 0 0 / 0.6);
   --shadow-glow: 0 0 32px -4px oklch(0.62 0.22 285 / 0.4);
@@ -238,11 +241,38 @@
   /* Grain de matériau du rang courant — bruit procédural partagé (voir
      MATERIAL_GRAIN, rankTheme.ts), teinté par ce qui se trouve dessous via
      le mode de fusion : même texture pour les 6 rangs, seule la couleur en
-     dessous change la perception du "métal". */
+     dessous change la perception du "métal". Intensité (grossier/discret)
+     pilotée par --rank-grain-opacity (RANK_AMBIANCE). */
   .bg-rank-grain {
     background-image: var(--material-grain);
     background-size: 160px 160px;
     mix-blend-mode: overlay;
+    opacity: var(--rank-grain-opacity);
+  }
+}
+
+@layer utilities {
+  /* Respiration du halo ambiant — rythme propre au rang (RANK_AMBIANCE),
+     lente et vaste pour le cosmos, brève et nerveuse pour la flamme/foudre.
+     Opt-in : tout composant premium, présent ou futur, hérite du même
+     rythme en appliquant simplement cette classe. */
+  @keyframes rank-breathe {
+    0%, 100% { opacity: 0.5; }
+    50%      { opacity: 0.85; }
+  }
+  .animate-rank-breathe {
+    animation: rank-breathe var(--rank-halo-duration) ease-in-out infinite;
+  }
+  /* Respecte la préférence "Animations" (Réglages) et prefers-reduced-motion
+     système — la seule boucle infinie posée par RankTheme reste opt-in. */
+  .motion-reduce .animate-rank-breathe {
+    animation: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-rank-breathe {
+    animation: none;
   }
 }
 

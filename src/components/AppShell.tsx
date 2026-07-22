@@ -13,21 +13,22 @@ interface AppShellProps {
  * Mobile-first container, max-width 430px centered, with ambient glow.
  *
  * Point unique par lequel TOUT écran authentifié passe (Outlet + BottomNav) :
- * c'est ici que le grain de matériau du rang (RankTheme) est posé une seule
- * fois pour couvrir 100% de l'app, plutôt que d'être dupliqué carte par
- * carte. Le fond (bg-background) reste inchangé — seul un relief très
- * discret (opacity 0.4) se superpose, teinté par ce qu'il y a dessous.
+ * c'est ici que le grain de matériau et la respiration du halo ambiant du
+ * rang (RankTheme) sont posés une seule fois pour couvrir 100% de l'app,
+ * plutôt que d'être dupliqués carte par carte. Le fond (bg-background) reste
+ * inchangé — seuls un relief discret (grain) et un rythme de halo propres au
+ * rang (RANK_AMBIANCE) se superposent.
  */
 export function AppShell({ children }: AppShellProps) {
   return (
     <div className="relative min-h-screen w-full bg-background">
-      {/* Ambient top glow */}
+      {/* Ambient top glow — respire au rythme du rang (RANK_AMBIANCE.haloDuration) */}
       <div
         aria-hidden
-        className="pointer-events-none fixed inset-x-0 top-0 h-[500px] bg-gradient-glow opacity-60"
+        className="pointer-events-none fixed inset-x-0 top-0 h-[500px] bg-gradient-glow animate-rank-breathe"
       />
       {/* Grain de matériau du rang — sur tout le viewport, très discret */}
-      <div aria-hidden className="pointer-events-none fixed inset-0 bg-rank-grain opacity-40" />
+      <div aria-hidden className="pointer-events-none fixed inset-0 bg-rank-grain" />
       <div
         className="relative mx-auto flex min-h-screen w-full max-w-[430px] flex-col"
         style={{

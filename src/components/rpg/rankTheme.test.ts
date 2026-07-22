@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { RANK_TIERS, type RankKey } from "@/lib/fitness/exerciseRanks";
 import {
   MATERIAL_GRAIN,
+  RANK_AMBIANCE,
   rankGlowShadow,
+  rankRelief,
   rankRingInset,
   rankSurfaceShadow,
   rankTextGlow,
@@ -98,5 +100,33 @@ describe("MATERIAL_GRAIN", () => {
   it("ne référence aucune couleur (le grain est neutre, teinté par ce qu'il y a dessous)", () => {
     // saturate=0 : aucune teinte propre au bruit lui-même.
     expect(decodeURIComponent(MATERIAL_GRAIN)).toContain('type="saturate" values="0"');
+  });
+});
+
+describe("RANK_AMBIANCE", () => {
+  it("définit un profil pour chacun des 6 rangs", () => {
+    for (const tier of RANK_TIERS) {
+      expect(RANK_AMBIANCE[tier.key]).toBeDefined();
+    }
+  });
+
+  it("donne à chaque rang un profil distinct (pas une valeur copiée-collée)", () => {
+    const profiles = RANK_TIERS.map((t) => JSON.stringify(RANK_AMBIANCE[t.key]));
+    expect(new Set(profiles).size).toBe(RANK_TIERS.length);
+  });
+
+  it("Primordial respire plus lentement (plus vaste) que Titan (plus nerveux)", () => {
+    expect(RANK_AMBIANCE.primordial.haloDuration).toBeGreaterThan(RANK_AMBIANCE.titan.haloDuration);
+    expect(RANK_AMBIANCE.primordial.shadowBlur).toBeGreaterThan(RANK_AMBIANCE.titan.shadowBlur);
+  });
+});
+
+describe("rankRelief", () => {
+  it("construit un bevel dont l'alpha suit le paramètre fourni", () => {
+    const theme = rankThemeByKey("olympien");
+    // alpha 0.14 -> 0x24 (36/255 ≈ 0.14)
+    expect(rankRelief(theme, 0.14)).toBe(
+      `inset 0 1px 0 ${theme.text}24, inset 0 -12px 24px -16px rgba(0,0,0,0.5)`,
+    );
   });
 });

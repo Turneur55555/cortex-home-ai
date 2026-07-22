@@ -83,6 +83,84 @@ const GRAIN_SVG =
 export const MATERIAL_GRAIN = `url("data:image/svg+xml,${encodeURIComponent(GRAIN_SVG)}")`;
 
 /**
+ * Profil d'ambiance par rang — ce qui rend chaque rang identifiable même
+ * sans l'illustration : profondeur (halo plus ou moins large/diffus), grain
+ * (plus ou moins marqué), relief (bevel plus ou moins net), rythme du halo
+ * ambiant (lent et vaste pour le cosmos, vif et pulsé pour la foudre/flamme).
+ * Une seule table, indexée par rang — pas un système par composant.
+ */
+interface RankAmbiance {
+  /** Étalement du halo (blur), en px — plus grand = plus diffus/vaste. */
+  shadowBlur: number;
+  /** Contraction du halo (spread négatif), en px. */
+  shadowSpread: number;
+  /** Intensité du grain de matériau (0..1) — coarse/lourd vs fin/discret. */
+  grainOpacity: number;
+  /** Netteté du relief (bevel) en haut des surfaces (0..1). */
+  reliefAlpha: number;
+  /** Durée d'un cycle de respiration du halo ambiant, en secondes. */
+  haloDuration: number;
+}
+
+export const RANK_AMBIANCE: Record<RankKey, RankAmbiance> = {
+  // stone — inerte, lourd, grain rocheux marqué, halo étroit et lent.
+  mortel: {
+    shadowBlur: 24,
+    shadowSpread: -14,
+    grainOpacity: 0.5,
+    reliefAlpha: 0.05,
+    haloDuration: 6,
+  },
+  // shield — métal martelé, halo contenu, relief net.
+  guerrier: {
+    shadowBlur: 30,
+    shadowSpread: -16,
+    grainOpacity: 0.42,
+    reliefAlpha: 0.08,
+    haloDuration: 5,
+  },
+  // helm — acier brossé, plus fin, plus posé.
+  heros: {
+    shadowBlur: 34,
+    shadowSpread: -16,
+    grainOpacity: 0.32,
+    reliefAlpha: 0.1,
+    haloDuration: 4.5,
+  },
+  // flame — braises, halo large et chaud, pulsation rapide et nerveuse.
+  titan: {
+    shadowBlur: 44,
+    shadowSpread: -18,
+    grainOpacity: 0.46,
+    reliefAlpha: 0.09,
+    haloDuration: 2.2,
+  },
+  // lightning — or poli, relief net et brillant, pulsation énergique.
+  olympien: {
+    shadowBlur: 40,
+    shadowSpread: -10,
+    grainOpacity: 0.28,
+    reliefAlpha: 0.14,
+    haloDuration: 3,
+  },
+  // cosmos — vaste, diffus, grain fin (poussière d'étoiles), respiration lente et majestueuse.
+  primordial: {
+    shadowBlur: 56,
+    shadowSpread: -6,
+    grainOpacity: 0.24,
+    reliefAlpha: 0.12,
+    haloDuration: 7,
+  },
+};
+
+/** Bevel/relief haut de surface, teinté par le texte du rang (clair), intensité par ambiance. */
+export function rankRelief(theme: RankTheme, alpha: number): string {
+  return `inset 0 1px 0 ${theme.text}${Math.round(alpha * 255)
+    .toString(16)
+    .padStart(2, "0")}, inset 0 -12px 24px -16px rgba(0,0,0,0.5)`;
+}
+
+/**
  * Applique le thème du rang courant à toute l'application, en recolorant les
  * variables CSS partagées (`:root`, voir `styles.css`) que les utilitaires
  * Tailwind (`bg-primary`, `ring-ring`, `shadow-glow`, `bg-card`, `bg-surface`,
@@ -97,9 +175,16 @@ export const MATERIAL_GRAIN = `url("data:image/svg+xml,${encodeURIComponent(GRAI
  * légèrement (`color-mix`) vers la couleur officielle du rang, pour donner
  * aux cartes/dialogs/sheets/séparateurs un "matériau" cohérent avec le rang
  * sans jamais sortir de la direction artistique sombre existante.
+ *
+ * `--shadow-card`/`--shadow-elevated` (déjà utilisées par `.shadow-card`/
+ * `.shadow-elevated` dans toute l'app) embarquent en plus le relief/l'ambiance
+ * du rang (RANK_AMBIANCE) : c'est ce qui rend un rang identifiable à la
+ * silhouette de l'interface, pas seulement à sa couleur — sans qu'aucun
+ * composant existant ou futur n'ait à changer une ligne pour en hériter.
  */
 export function applyRankTheme(key: RankKey): void {
   const theme = rankThemeByKey(key);
+  const ambiance = RANK_AMBIANCE[key];
   const root = document.documentElement;
 
   // Accent / halos / boutons / focus (déjà en place).
@@ -112,9 +197,12 @@ export function applyRankTheme(key: RankKey): void {
     "--gradient-glow",
     `radial-gradient(circle at 50% 0%, ${theme.glow}, transparent 60%)`,
   );
-  root.style.setProperty("--shadow-glow", rankGlowShadow(theme.glow, 0, 32, -4));
+  root.style.setProperty(
+    "--shadow-glow",
+    rankGlowShadow(theme.glow, 0, ambiance.shadowBlur, ambiance.shadowSpread),
+  );
 
-  // Matériaux : surfaces/cartes/bordures/séparateurs (nouveau).
+  // Matériaux : surfaces/cartes/bordures/séparateurs.
   root.style.setProperty(
     "--surface",
     `color-mix(in oklch, ${theme.primary} 14%, oklch(0.16 0.02 280))`,
@@ -136,4 +224,15 @@ export function applyRankTheme(key: RankKey): void {
     `linear-gradient(180deg, color-mix(in oklch, ${theme.primary} 18%, oklch(0.18 0.022 280)), color-mix(in oklch, ${theme.primary} 10%, oklch(0.14 0.018 280)))`,
   );
   root.style.setProperty("--material-grain", MATERIAL_GRAIN);
+  root.style.setProperty("--rank-grain-opacity", String(ambiance.grainOpacity));
+  root.style.setProperty("--rank-halo-duration", `${ambiance.haloDuration}s`);
+
+  // Profondeur/relief : réutilisées par shadow-card/shadow-elevated (95+
+  // fichiers déjà consommateurs), donc héritées sans implémentation propre.
+  const relief = rankRelief(theme, ambiance.reliefAlpha);
+  root.style.setProperty("--shadow-card", `${relief}, 0 8px 24px -8px oklch(0 0 0 / 0.5)`);
+  root.style.setProperty(
+    "--shadow-elevated",
+    `${relief}, 0 16px 40px -12px oklch(0 0 0 / 0.5), 0 0 ${ambiance.shadowBlur}px -8px ${theme.glow}`,
+  );
 }

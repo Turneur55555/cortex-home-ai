@@ -10,7 +10,8 @@ import { applyRankTheme } from "@/components/rpg/rankTheme";
  * - thème visuel du rang courant (variables CSS --primary/--ring/--gradient-*,
  *   voir applyRankTheme) — le Titre global (piloté par l'XP, comme
  *   ProfileHeroCard) est l'unique source de l'identité visuelle de Cortex
- * - animations (framer-motion reducedMotion)
+ * - animations (framer-motion reducedMotion + boucles CSS pures de RankTheme,
+ *   comme .animate-rank-breathe, via la classe .motion-reduce sur <html>)
  *
  * Tant que `userStats` n'a pas encore répondu (premier chargement), on
  * n'appelle PAS applyRankTheme : le thème garde sa valeur précédente (déjà
@@ -27,6 +28,10 @@ export function PreferencesEffects({ children }: { children: ReactNode }) {
     if (!rankKey) return;
     applyRankTheme(rankKey);
   }, [rankKey]);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("motion-reduce", !prefs.animations_enabled);
+  }, [prefs.animations_enabled]);
 
   return (
     <MotionConfig reducedMotion={prefs.animations_enabled ? "never" : "always"}>
