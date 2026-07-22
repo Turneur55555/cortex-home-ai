@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Sparkles, Share2 } from "lucide-react";
 import { RankIllustration } from "@/components/rpg/RankIllustration";
+import { rankRingInset, rankSurfaceShadow, rankTextGlow } from "@/components/rpg/rankTheme";
 import { MasteryBar } from "./MasteryBar";
 import { RankUpOverlay } from "./RankUpOverlay";
 import { ExerciseRankShareSheet } from "./ExerciseRankShareSheet";
@@ -16,11 +17,16 @@ function loadSeen(userId: string, exerciseName: string): number | null {
   try {
     const v = localStorage.getItem(STORAGE_PREFIX + userId + ":" + exerciseName);
     return v == null ? null : parseInt(v, 10);
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 function saveSeen(userId: string, exerciseName: string, tierIndex: number) {
-  try { localStorage.setItem(STORAGE_PREFIX + userId + ":" + exerciseName, String(tierIndex)); }
-  catch { /* noop */ }
+  try {
+    localStorage.setItem(STORAGE_PREFIX + userId + ":" + exerciseName, String(tierIndex));
+  } catch {
+    /* noop */
+  }
 }
 
 /**
@@ -44,10 +50,9 @@ function TrophyTile({
     <div
       className="relative overflow-hidden rounded-xl p-2.5 text-center"
       style={{
-        background:
-          "linear-gradient(180deg,rgba(255,255,255,0.06) 0%,rgba(255,255,255,0.02) 100%)",
+        background: "linear-gradient(180deg,rgba(255,255,255,0.06) 0%,rgba(255,255,255,0.02) 100%)",
         boxShadow: featured
-          ? `inset 0 0 0 1px ${colors.primary}55, 0 6px 20px -8px ${colors.glow}`
+          ? rankSurfaceShadow(colors, { ringAlpha: "55", y: 6, blur: 20, spread: -8 })
           : "inset 0 0 0 1px rgba(255,255,255,0.06)",
         backdropFilter: "blur(6px)",
       }}
@@ -122,7 +127,7 @@ export function ExerciseRankCard({ exerciseName }: { exerciseName: string }) {
         transition={{ duration: 0.5, ease: "easeOut" }}
         className="relative isolate overflow-hidden rounded-2xl bg-[#0b0b0f]"
         style={{
-          boxShadow: `inset 0 0 0 1px ${colors.primary}30, 0 10px 40px -20px ${colors.glow}`,
+          boxShadow: rankSurfaceShadow(colors, { y: 10, blur: 40, spread: -20 }),
           // Force sa propre couche de composition GPU : évite un bug de rendu
           // WebKit/Safari où des coins arrondis + overflow imbriqués sous un
           // ancêtre `backdrop-filter` (le sheet de la fiche d'exercice) se
@@ -156,7 +161,7 @@ export function ExerciseRankCard({ exerciseName }: { exerciseName: string }) {
                 className="mt-1 font-serif text-[26px] font-bold uppercase leading-none tracking-[0.18em]"
                 style={{
                   color: colors.text,
-                  textShadow: `0 0 18px ${colors.glow}, 0 1px 0 rgba(0,0,0,0.4)`,
+                  textShadow: rankTextGlow(colors.glow, 18, "0 1px 0 rgba(0,0,0,0.4)"),
                 }}
               >
                 {gradeName(rank.rank.key, rank.levelInRank)}
@@ -195,13 +200,7 @@ export function ExerciseRankCard({ exerciseName }: { exerciseName: string }) {
           {/* Trophy block */}
           {best.weight > 0 && (
             <div className="mt-6 grid grid-cols-3 gap-2">
-              <TrophyTile
-                value={best.weight}
-                unit="kg"
-                label="PR"
-                colors={colors}
-                featured
-              />
+              <TrophyTile value={best.weight} unit="kg" label="PR" colors={colors} featured />
               <TrophyTile
                 value={`×${best.reps}`}
                 unit="reps"
@@ -223,10 +222,13 @@ export function ExerciseRankCard({ exerciseName }: { exerciseName: string }) {
               className="mt-5 flex items-start gap-2 rounded-xl p-3"
               style={{
                 background: "linear-gradient(180deg,rgba(0,0,0,0.35),rgba(0,0,0,0.15))",
-                boxShadow: `inset 0 0 0 1px ${colors.primary}30`,
+                boxShadow: rankRingInset(colors.primary),
               }}
             >
-              <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0" style={{ color: colors.secondary }} />
+              <Sparkles
+                className="mt-0.5 h-3.5 w-3.5 shrink-0"
+                style={{ color: colors.secondary }}
+              />
               <span className="text-[11.5px] leading-relaxed text-white/85">{nextRankHint}</span>
             </div>
           )}
@@ -244,7 +246,12 @@ export function ExerciseRankCard({ exerciseName }: { exerciseName: string }) {
             style={{
               background: `linear-gradient(180deg, ${colors.primary}30, ${colors.primary}10)`,
               color: colors.text,
-              boxShadow: `inset 0 0 0 1px ${colors.primary}55, 0 6px 22px -12px ${colors.glow}`,
+              boxShadow: rankSurfaceShadow(colors, {
+                ringAlpha: "55",
+                y: 6,
+                blur: 22,
+                spread: -12,
+              }),
             }}
           >
             <Share2 className="h-3.5 w-3.5" />

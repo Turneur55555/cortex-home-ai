@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { toPng } from "html-to-image";
 import { Share2, Download, X, Loader2 } from "lucide-react";
 import { RankIllustration } from "@/components/rpg/RankIllustration";
+import { rankGlowShadow, rankRingInset, rankSurfaceShadow } from "@/components/rpg/rankTheme";
 import type { RankState } from "@/lib/fitness/exerciseRanks";
 import { gradeName } from "@/lib/fitness/rpg/grade";
 import type { ExerciseBest } from "@/hooks/useExerciseProgression";
@@ -51,7 +52,10 @@ export function ExerciseRankShareSheet({
       const blob = await generate();
       if (!blob) return;
       const file = new File([blob], `icortex-${rank.rank.key}.png`, { type: "image/png" });
-      const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean; share?: (d: ShareData) => Promise<void> };
+      const nav = navigator as Navigator & {
+        canShare?: (d: ShareData) => boolean;
+        share?: (d: ShareData) => Promise<void>;
+      };
       if (nav.canShare?.({ files: [file] }) && nav.share) {
         const gradeLabel = `${rank.rank.label} — ${gradeName(rank.rank.key, rank.levelInRank)}`;
         await nav.share({
@@ -122,7 +126,7 @@ export function ExerciseRankShareSheet({
             className="relative w-full overflow-hidden rounded-3xl"
             style={{
               aspectRatio: "4 / 5",
-              boxShadow: `inset 0 0 0 1px ${colors.primary}30, 0 30px 80px -30px ${colors.glow}`,
+              boxShadow: rankSurfaceShadow(colors, { y: 30, blur: 80, spread: -30 }),
             }}
           >
             <RankIllustration
@@ -162,8 +166,19 @@ export function ExerciseRankShareSheet({
 
               {/* Stats */}
               <div className="grid w-full grid-cols-3 gap-2">
-                <ShareStat value={best.weight > 0 ? `${best.weight}` : "—"} unit="kg" label="PR" featured colors={colors} />
-                <ShareStat value={`×${best.reps || "—"}`} unit="reps" label="Série" colors={colors} />
+                <ShareStat
+                  value={best.weight > 0 ? `${best.weight}` : "—"}
+                  unit="kg"
+                  label="PR"
+                  featured
+                  colors={colors}
+                />
+                <ShareStat
+                  value={`×${best.reps || "—"}`}
+                  unit="reps"
+                  label="Série"
+                  colors={colors}
+                />
                 <ShareStat
                   value={best.oneRM > 0 ? `${Math.round(best.oneRM)}` : "—"}
                   unit="kg"
@@ -182,14 +197,17 @@ export function ExerciseRankShareSheet({
                 </div>
                 <div
                   className="h-2 overflow-hidden rounded-full"
-                  style={{ background: "rgba(0,0,0,0.55)", boxShadow: "inset 0 1px 2px rgba(0,0,0,0.7)" }}
+                  style={{
+                    background: "rgba(0,0,0,0.55)",
+                    boxShadow: "inset 0 1px 2px rgba(0,0,0,0.7)",
+                  }}
                 >
                   <div
                     className="h-full rounded-full"
                     style={{
                       width: `${Math.max(0, Math.min(100, masteryPercent))}%`,
                       background: colors.gradient,
-                      boxShadow: `0 0 10px ${colors.glow}`,
+                      boxShadow: rankGlowShadow(colors.glow, 0, 10, 0),
                     }}
                   />
                 </div>
@@ -209,10 +227,14 @@ export function ExerciseRankShareSheet({
               style={{
                 background: `linear-gradient(180deg, ${colors.primary}, ${colors.primary}cc)`,
                 color: colors.text,
-                boxShadow: `0 10px 26px -12px ${colors.glow}`,
+                boxShadow: rankGlowShadow(colors.glow, 10, 26, -12),
               }}
             >
-              {busy === "share" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />}
+              {busy === "share" ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Share2 className="h-4 w-4" />
+              )}
               Partager
             </button>
             <button
@@ -220,7 +242,11 @@ export function ExerciseRankShareSheet({
               disabled={!!busy}
               className="flex items-center justify-center gap-2 rounded-xl bg-white/10 px-4 py-3 text-[11px] font-bold uppercase tracking-[0.2em] text-white"
             >
-              {busy === "download" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              {busy === "download" ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
             </button>
           </div>
         </motion.div>
@@ -248,7 +274,7 @@ function ShareStat({
       style={{
         background: "linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.02))",
         boxShadow: featured
-          ? `inset 0 0 0 1px ${colors.primary}55`
+          ? rankRingInset(colors.primary, "55")
           : "inset 0 0 0 1px rgba(255,255,255,0.06)",
       }}
     >
@@ -258,8 +284,12 @@ function ShareStat({
       >
         {value}
       </div>
-      <div className="mt-0.5 text-[8px] font-bold uppercase tracking-[0.2em] text-white/55">{unit}</div>
-      <div className="mt-1 text-[8px] font-semibold uppercase tracking-[0.18em] text-white/40">{label}</div>
+      <div className="mt-0.5 text-[8px] font-bold uppercase tracking-[0.2em] text-white/55">
+        {unit}
+      </div>
+      <div className="mt-1 text-[8px] font-semibold uppercase tracking-[0.18em] text-white/40">
+        {label}
+      </div>
     </div>
   );
 }

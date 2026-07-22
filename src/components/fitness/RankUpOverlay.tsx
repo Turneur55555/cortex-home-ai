@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import confetti from "canvas-confetti";
 import { RankIllustration } from "@/components/rpg/RankIllustration";
+import { rankTextGlow } from "@/components/rpg/rankTheme";
 import type { RankState } from "@/lib/fitness/exerciseRanks";
 import { gradeName } from "@/lib/fitness/rpg/grade";
 
@@ -139,7 +140,7 @@ export function RankUpOverlay({ rank, onDone }: { rank: RankState | null; onDone
                 className="mt-2 font-serif text-4xl font-bold uppercase tracking-[0.18em]"
                 style={{
                   color: colors.text,
-                  textShadow: `0 0 30px ${colors.glow}, 0 0 6px rgba(255,255,255,0.4)`,
+                  textShadow: rankTextGlow(colors.glow, 30, "0 0 6px rgba(255,255,255,0.4)"),
                 }}
               >
                 {gradeName(rank.rank.key, rank.levelInRank)}

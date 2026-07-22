@@ -1,4 +1,5 @@
 import { RankIllustration } from "@/components/rpg/RankIllustration";
+import { rankGlowShadow } from "@/components/rpg/rankTheme";
 import type { RankState } from "@/lib/fitness/exerciseRanks";
 
 /**
@@ -15,7 +16,7 @@ export function ExerciseRankBadge({ rank, size = 88 }: { rank: RankState; size?:
   return (
     <div
       className="relative aspect-[4/5] overflow-hidden rounded-2xl"
-      style={{ width: size, boxShadow: `0 10px 28px -14px ${glow}` }}
+      style={{ width: size, boxShadow: rankGlowShadow(glow, 10, 28, -14) }}
     >
       <RankIllustration
         rankKey={rank.rank.key}
