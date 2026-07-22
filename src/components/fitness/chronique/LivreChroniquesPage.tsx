@@ -43,6 +43,8 @@ import { fr } from "date-fns/locale";
 import { WorkoutCard, type WorkoutRow } from "@/components/fitness/WorkoutCard";
 import { GenericHistoryCard } from "@/components/fitness/session/GenericHistoryCard";
 import { SectionReveal } from "@/components/fitness/SectionReveal";
+import { ClassCard } from "@/components/profile/ClassCard";
+import { ProfileRPGData } from "@/components/profile/rpg/ProfileRPGData";
 import { exerciseIllustration } from "@/lib/fitness/exerciseIllustrations";
 import { formatTonnage } from "@/lib/fitness/strength";
 import {
@@ -244,6 +246,15 @@ export function LivreChroniquesPage({
           Le Livre des Chroniques
         </span>
       </div>
+
+      {/* ── CLASSE PRINCIPALE — déménagée depuis Accueil, premier bloc du
+          Livre, composant réutilisé tel quel (mêmes calculs, mêmes stats,
+          mêmes explications, aucune duplication) ─────────────────────── */}
+      <SectionReveal>
+        <ProfileRPGData>
+          {(rpg) => <ClassCard workouts={rpg.workouts} rankAggregate={rpg.rankAggregate} />}
+        </ProfileRPGData>
+      </SectionReveal>
 
       {/* ── En-tête du Livre ───────────────────────────────────────────── */}
       <SectionReveal>
