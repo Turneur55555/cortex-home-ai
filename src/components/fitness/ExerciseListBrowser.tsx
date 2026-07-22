@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, Loader2, Search, X } from "lucide-react";
 import { normalize } from "@/lib/fitness/exerciseCatalog";
+import { RankIllustration } from "@/components/rpg/RankIllustration";
+import { gradeName } from "@/lib/fitness/rpg/grade";
+import type { RankState } from "@/lib/fitness/exerciseRanks";
 
 export interface BrowserExercise {
   id: string;
@@ -23,6 +26,15 @@ interface Props<T extends BrowserExercise> {
   /** Groupes mis en avant visuellement (ex: "Mes exercices"). */
   highlightGroups?: Set<string>;
   getPhoto?: (name: string) => string | null | undefined;
+  /**
+   * Rang RPG déjà atteint pour un exercice (clé = nom d'exercice, comme
+   * `useExerciseProgression`) — fourni uniquement par les écrans où le
+   * moteur Rang s'applique (Catalogue musculation). Quand présent pour une
+   * ligne, remplace la photo de référence par `RankIllustration` (même
+   * composant/cadrage que partout ailleurs dans le RPG) + le grade officiel,
+   * exactement comme la fiche d'exercice.
+   */
+  rankByName?: Map<string, RankState>;
   /** Tap principal sur la ligne — comportement injecté par l'écran appelant
    *  (sélection rapide dans le Picker, ouverture de la fiche dans le Catalogue). */
   onRowTap: (item: T) => void;
@@ -51,6 +63,7 @@ export function ExerciseListBrowser<T extends BrowserExercise>({
   groupOrder,
   highlightGroups,
   getPhoto,
+  rankByName,
   onRowTap,
   renderRowMenu,
   emptyLabel,
@@ -168,6 +181,7 @@ export function ExerciseListBrowser<T extends BrowserExercise>({
               {!isCollapsed && (
                 <ul className="space-y-0.5 pl-2">
                   {exercises.map((ex) => {
+                    const rank = rankByName?.get(ex.name);
                     const photo = getPhoto?.(ex.name);
                     const menu = renderRowMenu?.(ex);
                     return (
@@ -177,7 +191,15 @@ export function ExerciseListBrowser<T extends BrowserExercise>({
                           onClick={() => onRowTap(ex)}
                           className="flex flex-1 items-center gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-white/[0.04] active:bg-white/[0.07]"
                         >
-                          {photo ? (
+                          {rank ? (
+                            <div className="relative aspect-[4/5] w-8 shrink-0 overflow-hidden rounded-md shadow-elevated">
+                              <RankIllustration
+                                rankKey={rank.rank.key}
+                                label={rank.rank.label}
+                                className="absolute inset-0 h-full w-full"
+                              />
+                            </div>
+                          ) : photo ? (
                             <img
                               src={photo}
                               alt={ex.name}
@@ -187,7 +209,14 @@ export function ExerciseListBrowser<T extends BrowserExercise>({
                           ) : (
                             <div className="h-10 w-10 shrink-0 rounded-lg bg-white/5" />
                           )}
-                          <span className="min-w-0 flex-1 truncate text-sm">{ex.name}</span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm">{ex.name}</span>
+                            {rank && (
+                              <span className="block truncate text-[10px] uppercase tracking-wider text-muted-foreground">
+                                {gradeName(rank.rank.key, rank.levelInRank)}
+                              </span>
+                            )}
+                          </span>
                         </button>
                         {menu}
                       </li>
