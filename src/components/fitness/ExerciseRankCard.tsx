@@ -119,9 +119,15 @@ export function ExerciseRankCard({ exerciseName }: { exerciseName: string }) {
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: "easeOut" }}
-        className="relative overflow-hidden rounded-2xl bg-[#0b0b0f]"
+        className="relative isolate overflow-hidden rounded-2xl bg-[#0b0b0f]"
         style={{
           boxShadow: `inset 0 0 0 1px ${colors.primary}30, 0 10px 40px -20px ${colors.glow}`,
+          // Force sa propre couche de composition GPU : évite un bug de rendu
+          // WebKit/Safari où des coins arrondis + overflow imbriqués sous un
+          // ancêtre `backdrop-filter` (le sheet de la fiche d'exercice) se
+          // peignent en noir plein au lieu du contenu réel (illustration de
+          // rang comprise).
+          transform: "translateZ(0)",
         }}
       >
         {/* Vignettage haut/bas pour la profondeur */}
