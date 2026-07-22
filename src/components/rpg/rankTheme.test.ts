@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { RANK_TIERS, type RankKey } from "@/lib/fitness/exerciseRanks";
 import {
+  MATERIAL_GRAIN,
   rankGlowShadow,
   rankRingInset,
   rankSurfaceShadow,
@@ -85,5 +86,17 @@ describe("rankTextGlow", () => {
     expect(rankTextGlow("rgba(239,68,68,0.55)", 18, "0 1px 0 rgba(0,0,0,0.4)")).toBe(
       "0 0 18px rgba(239,68,68,0.55), 0 1px 0 rgba(0,0,0,0.4)",
     );
+  });
+});
+
+describe("MATERIAL_GRAIN", () => {
+  it("est une seule texture partagée (data URI SVG), pas une par rang", () => {
+    expect(MATERIAL_GRAIN).toMatch(/^url\("data:image\/svg\+xml,/);
+    expect(MATERIAL_GRAIN).toContain("feTurbulence");
+  });
+
+  it("ne référence aucune couleur (le grain est neutre, teinté par ce qu'il y a dessous)", () => {
+    // saturate=0 : aucune teinte propre au bruit lui-même.
+    expect(decodeURIComponent(MATERIAL_GRAIN)).toContain('type="saturate" values="0"');
   });
 });

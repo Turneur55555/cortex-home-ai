@@ -11,6 +11,12 @@ interface AppShellProps {
 
 /**
  * Mobile-first container, max-width 430px centered, with ambient glow.
+ *
+ * Point unique par lequel TOUT écran authentifié passe (Outlet + BottomNav) :
+ * c'est ici que le grain de matériau du rang (RankTheme) est posé une seule
+ * fois pour couvrir 100% de l'app, plutôt que d'être dupliqué carte par
+ * carte. Le fond (bg-background) reste inchangé — seul un relief très
+ * discret (opacity 0.4) se superpose, teinté par ce qu'il y a dessous.
  */
 export function AppShell({ children }: AppShellProps) {
   return (
@@ -20,6 +26,8 @@ export function AppShell({ children }: AppShellProps) {
         aria-hidden
         className="pointer-events-none fixed inset-x-0 top-0 h-[500px] bg-gradient-glow opacity-60"
       />
+      {/* Grain de matériau du rang — sur tout le viewport, très discret */}
+      <div aria-hidden className="pointer-events-none fixed inset-0 bg-rank-grain opacity-40" />
       <div
         className="relative mx-auto flex min-h-screen w-full max-w-[430px] flex-col"
         style={{

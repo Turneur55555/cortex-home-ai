@@ -89,8 +89,15 @@
   /* Backgrounds */
   --background: oklch(0.12 0.015 280);
   --foreground: oklch(0.98 0.005 280);
+  /* Surface/card/border/gradient-surface : repli neutre avant que le rang ne
+     soit connu — recolorés (color-mix) au premier rendu par applyRankTheme,
+     voir src/components/rpg/rankTheme.ts. Le fond de l'app (--background)
+     n'est jamais modifié par le rang. */
   --surface: oklch(0.16 0.02 280);
   --surface-elevated: oklch(0.19 0.025 280);
+  /* Grain de matériau appliqué par .bg-rank-grain — vide tant que le rang
+     n'est pas connu (pas de bruit avant applyRankTheme). */
+  --material-grain: none;
 
   --card: oklch(0.16 0.02 280);
   --card-foreground: oklch(0.98 0.005 280);
@@ -227,6 +234,15 @@
   }
   .text-balance {
     text-wrap: balance;
+  }
+  /* Grain de matériau du rang courant — bruit procédural partagé (voir
+     MATERIAL_GRAIN, rankTheme.ts), teinté par ce qui se trouve dessous via
+     le mode de fusion : même texture pour les 6 rangs, seule la couleur en
+     dessous change la perception du "métal". */
+  .bg-rank-grain {
+    background-image: var(--material-grain);
+    background-size: 160px 160px;
+    mix-blend-mode: overlay;
   }
 }
 

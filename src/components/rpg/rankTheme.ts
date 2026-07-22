@@ -65,19 +65,44 @@ export function rankTextGlow(glow: string, blur: number, extra?: string): string
 }
 
 /**
+ * Grain de matériau — bruit procédural partagé par les 6 rangs (une seule
+ * texture, jamais réinventée par rang : ce qui différencie le "métal" perçu
+ * d'un rang à l'autre, c'est la couleur en dessous, pas l'algorithme de
+ * bruit). Généré une fois au chargement du module, appliqué en
+ * `mix-blend-mode: overlay` par `.bg-rank-grain` (styles.css) — donne un
+ * relief de surface (acier brossé, martelé, grain de pierre…) sans aucun
+ * fichier de texture, conformément à la règle « seules les illustrations
+ * officielles sont des assets artistiques ».
+ */
+const GRAIN_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="140" height="140">' +
+  '<filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" stitchTiles="stitch" result="noise"/>' +
+  '<feColorMatrix in="noise" type="saturate" values="0"/></filter>' +
+  '<rect width="100%" height="100%" filter="url(#n)"/></svg>';
+
+export const MATERIAL_GRAIN = `url("data:image/svg+xml,${encodeURIComponent(GRAIN_SVG)}")`;
+
+/**
  * Applique le thème du rang courant à toute l'application, en recolorant les
  * variables CSS partagées (`:root`, voir `styles.css`) que les utilitaires
- * Tailwind (`bg-primary`, `ring-ring`, `shadow-glow`, `bg-gradient-primary`,
- * `bg-gradient-glow`…) référencent déjà partout dans l'app. Remplace
+ * Tailwind (`bg-primary`, `ring-ring`, `shadow-glow`, `bg-card`, `bg-surface`,
+ * bordures par défaut…) référencent déjà partout dans l'app. Remplace
  * l'ancien `applyAccent` (couleur d'accent utilisateur, retirée) : le rang
  * est désormais l'unique source de l'identité visuelle de Cortex — aucun
  * composant n'a besoin de connaître le rang pour en hériter la couleur, il
- * lui suffit d'utiliser les tokens `--primary`/`--ring`/`--gradient-*`
- * existants.
+ * lui suffit d'utiliser les tokens existants.
+ *
+ * `--surface`/`--card`/`--border`/`--gradient-surface` restent volontairement
+ * sombres (le fond de l'app ne change pas) — seule leur teinte dérive
+ * légèrement (`color-mix`) vers la couleur officielle du rang, pour donner
+ * aux cartes/dialogs/sheets/séparateurs un "matériau" cohérent avec le rang
+ * sans jamais sortir de la direction artistique sombre existante.
  */
 export function applyRankTheme(key: RankKey): void {
   const theme = rankThemeByKey(key);
   const root = document.documentElement;
+
+  // Accent / halos / boutons / focus (déjà en place).
   root.style.setProperty("--primary", theme.primary);
   root.style.setProperty("--primary-glow", theme.secondary);
   root.style.setProperty("--primary-glow-soft", theme.glow);
@@ -88,4 +113,27 @@ export function applyRankTheme(key: RankKey): void {
     `radial-gradient(circle at 50% 0%, ${theme.glow}, transparent 60%)`,
   );
   root.style.setProperty("--shadow-glow", rankGlowShadow(theme.glow, 0, 32, -4));
+
+  // Matériaux : surfaces/cartes/bordures/séparateurs (nouveau).
+  root.style.setProperty(
+    "--surface",
+    `color-mix(in oklch, ${theme.primary} 14%, oklch(0.16 0.02 280))`,
+  );
+  root.style.setProperty(
+    "--surface-elevated",
+    `color-mix(in oklch, ${theme.primary} 16%, oklch(0.19 0.025 280))`,
+  );
+  root.style.setProperty(
+    "--card",
+    `color-mix(in oklch, ${theme.primary} 14%, oklch(0.16 0.02 280))`,
+  );
+  root.style.setProperty(
+    "--border",
+    `color-mix(in oklch, ${theme.secondary} 20%, oklch(1 0 0 / 0.06))`,
+  );
+  root.style.setProperty(
+    "--gradient-surface",
+    `linear-gradient(180deg, color-mix(in oklch, ${theme.primary} 18%, oklch(0.18 0.022 280)), color-mix(in oklch, ${theme.primary} 10%, oklch(0.14 0.018 280)))`,
+  );
+  root.style.setProperty("--material-grain", MATERIAL_GRAIN);
 }
