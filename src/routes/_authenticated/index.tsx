@@ -68,9 +68,11 @@ function HomeHub({
 }) {
   const { rankAggregate, workouts } = rpg;
 
-  // Accueil simplifié (Phase 1) : Hero → Progression RPG → Classe principale.
-  // Saisons et Salle des trophées ont été retirées de l'accueil (elles restent
-  // disponibles ailleurs). Les Quêtes ne figuraient pas sur l'accueil.
+  // Nouvel ordre hiérarchique (Phase 2) :
+  // 1. Classe principale (identité du joueur via sa classe)
+  // 2. Hero Card (illustration du rang courant)
+  // 3. Progression RPG (grade et XP vers le prochain)
+  // Cet ordre raconte : Qui suis-je ? → À quel rang j'appartiens ? → Combien me reste-t-il avant d'évoluer ?
   return (
     <>
       <ProfileIdentityStrip
@@ -79,11 +81,11 @@ function HomeHub({
         onEdit={onEdit}
         onAvatarChange={onAvatarChange}
       />
+      <ClassCard workouts={workouts} rankAggregate={rankAggregate} />
+
       <ProfileHeroCard />
 
       <RPGProgressionSection />
-
-      <ClassCard workouts={workouts} rankAggregate={rankAggregate} />
     </>
   );
 }

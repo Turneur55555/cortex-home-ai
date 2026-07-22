@@ -1,7 +1,13 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useMemo, useState } from "react";
+import { toast } from "sonner";
 import { Apple, BarChart3, ChevronRight, HeartPulse } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
+import { useProfile } from "@/hooks/useProfile";
 import { ProfileRPGData } from "@/components/profile/rpg/ProfileRPGData";
 import { QuestsPreview } from "@/components/profile/rpg/QuestsPreview";
+import { ProfileIdentityStrip } from "@/components/profile/ProfileIdentityStrip";
+import { EditPseudoSheet } from "@/components/profile/EditPseudoSheet";
 import { BodyStatusCard } from "@/components/profile/BodyStatusCard";
 import { DisciplineBreakdownCard } from "@/components/profile/DisciplineBreakdownCard";
 import { DocumentsSummaryCard } from "@/components/profile/DocumentsSummaryCard";
@@ -21,8 +27,30 @@ export const Route = createFileRoute("/_authenticated/profil")({
 });
 
 function ProfilPage() {
+  const { user } = useAuth();
+  const fallback = useMemo(() => user?.email?.split("@")[0] ?? "Utilisateur", [user?.email]);
+  const { pseudo, avatarUrl, updatePseudo, updateAvatar } = useProfile(fallback);
+  const [editOpen, setEditOpen] = useState(false);
+
   return (
     <main className="relative flex flex-1 flex-col overflow-hidden px-5 pb-32 pt-[max(2.5rem,env(safe-area-inset-top))]">
+      <ProfileIdentityStrip
+        pseudo={pseudo}
+        avatarUrl={avatarUrl}
+        onEdit={() => setEditOpen(true)}
+        onAvatarChange={updateAvatar}
+      />
+
+      <EditPseudoSheet
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        current={pseudo}
+        onSave={async (v) => {
+          await updatePseudo(v);
+          toast.success("Pseudo mis à jour");
+        }}
+      />
+
       <ProfileRPGData>
         {(rpg) => (
           <QuestsPreview />
