@@ -1,23 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Sparkles, Share2 } from "lucide-react";
-import { ExerciseRankBadge } from "./ExerciseRankBadge";
+import { RankIllustration } from "@/components/rpg/RankIllustration";
 import { MasteryBar } from "./MasteryBar";
 import { RankUpOverlay } from "./RankUpOverlay";
 import { ExerciseRankShareSheet } from "./ExerciseRankShareSheet";
 import { useAuth } from "@/hooks/use-auth";
 import { useExerciseProgression } from "@/hooks/useExerciseProgression";
 import type { RankState } from "@/lib/fitness/exerciseRanks";
-import { getRankIllustration } from "@/assets/ranks";
-
-/**
- * DIAGNOSTIC TEMPORAIRE — carré noir iOS (à retirer une fois la cause confirmée).
- * Rendu volontairement nu : aucun wrapper, overlay, animation, transform,
- * mask, coin arrondi ni backdrop-filter. Juste un conteneur de taille fixe
- * et un <img> brut, pour isoler si le carré noir vient du CSS/compositing
- * autour du composant ou du chargement de l'image elle-même dans ce contexte.
- */
-const DIAGNOSTIC_MINIMAL_IMG = true;
+import { gradeName } from "@/lib/fitness/rpg/grade";
 
 const STORAGE_PREFIX = "exrank:seen:";
 
@@ -123,16 +114,6 @@ export function ExerciseRankCard({ exerciseName }: { exerciseName: string }) {
     );
   }
 
-  // DIAGNOSTIC TEMPORAIRE — voir commentaire de DIAGNOSTIC_MINIMAL_IMG en haut
-  // du fichier. Court-circuite tout le reste du rendu de la carte.
-  if (DIAGNOSTIC_MINIMAL_IMG) {
-    return (
-      <div style={{ width: 104, height: 104 }}>
-        <img src={getRankIllustration(rank.rank.key) ?? undefined} alt={rank.rank.label} />
-      </div>
-    );
-  }
-
   return (
     <>
       <motion.div
@@ -145,25 +126,24 @@ export function ExerciseRankCard({ exerciseName }: { exerciseName: string }) {
           // Force sa propre couche de composition GPU : évite un bug de rendu
           // WebKit/Safari où des coins arrondis + overflow imbriqués sous un
           // ancêtre `backdrop-filter` (le sheet de la fiche d'exercice) se
-          // peignent en noir plein au lieu du contenu réel (illustration de
-          // rang comprise).
+          // peignent en noir plein au lieu du contenu réel.
           transform: "translateZ(0)",
         }}
       >
-        {/* Vignettage haut/bas pour la profondeur */}
-        <div
-          className="pointer-events-none absolute inset-0"
-          style={{
-            background:
-              "radial-gradient(120% 60% at 50% 100%, rgba(0,0,0,0.55) 0%, transparent 70%)",
-          }}
-        />
-
         {/* Contenu */}
         <div className="relative p-5">
-          {/* Badge + titre */}
+          {/* Illustration officielle du rang — même signature visuelle que la
+              carte d'accueil (RankIllustration, ratio 4:5 intégral, disque +
+              titre gravé jamais recadrés), simplement mise à l'échelle de la
+              carte plutôt que plein écran. */}
           <div className="flex flex-col items-center pt-2">
-            <ExerciseRankBadge rank={rank} size={104} />
+            <div className="relative aspect-[4/5] w-full max-w-[220px] overflow-hidden rounded-[22px] shadow-elevated">
+              <RankIllustration
+                rankKey={rank.rank.key}
+                label={rank.rank.label}
+                className="absolute inset-0 h-full w-full"
+              />
+            </div>
 
             <div className="mt-4 text-center">
               <p
@@ -179,8 +159,7 @@ export function ExerciseRankCard({ exerciseName }: { exerciseName: string }) {
                   textShadow: `0 0 18px ${colors.glow}, 0 1px 0 rgba(0,0,0,0.4)`,
                 }}
               >
-                {rank.rank.label}{" "}
-                <span style={{ color: colors.secondary }}>{rank.romanLevel}</span>
+                {gradeName(rank.levelInRank)}
               </h3>
               <div
                 className="mx-auto mt-2 h-px w-24"
