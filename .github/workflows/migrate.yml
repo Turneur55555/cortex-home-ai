@@ -32,7 +32,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Run static validator
         id: validate
@@ -319,7 +319,7 @@ jobs:
         if: steps.push.outputs.success == 'true'
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
 
       - name: Vérifier que types.ts correspond à la base
         if: steps.push.outputs.success == 'true'
