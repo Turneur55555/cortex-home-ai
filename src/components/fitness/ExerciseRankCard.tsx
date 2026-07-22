@@ -159,7 +159,7 @@ export function ExerciseRankCard({ exerciseName }: { exerciseName: string }) {
                   textShadow: `0 0 18px ${colors.glow}, 0 1px 0 rgba(0,0,0,0.4)`,
                 }}
               >
-                {gradeName(rank.levelInRank)}
+                {gradeName(rank.rank.key, rank.levelInRank)}
               </h3>
               <div
                 className="mx-auto mt-2 h-px w-24"
