@@ -53,10 +53,11 @@ export function ExerciseRankShareSheet({
       const file = new File([blob], `icortex-${rank.rank.key}.png`, { type: "image/png" });
       const nav = navigator as Navigator & { canShare?: (d: ShareData) => boolean; share?: (d: ShareData) => Promise<void> };
       if (nav.canShare?.({ files: [file] }) && nav.share) {
+        const gradeLabel = `${rank.rank.label} — ${gradeName(rank.rank.key, rank.levelInRank)}`;
         await nav.share({
           files: [file],
-          title: `${rank.fullName} — ${exerciseName}`,
-          text: `Rang ${rank.fullName} sur iCortex 💪`,
+          title: `${gradeLabel} — ${exerciseName}`,
+          text: `Rang ${gradeLabel} sur iCortex 💪`,
         });
       } else {
         // fallback téléchargement

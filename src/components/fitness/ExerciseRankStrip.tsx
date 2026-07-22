@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { ExerciseRankBadge } from "./ExerciseRankBadge";
 import { ExerciseAnalysisSheet } from "./ExerciseAnalysisSheet";
 import { useExerciseProgression } from "@/hooks/useExerciseProgression";
+import { gradeName } from "@/lib/fitness/rpg/grade";
 
 function MiniRankTile({
   exerciseKey,
@@ -46,7 +47,7 @@ function MiniRankTile({
       <div className="w-full text-center">
         <p className="truncate text-[10px] font-semibold text-white/70">{displayName}</p>
         <p className="mt-0.5 font-serif text-xs font-bold" style={{ color: colors.text }}>
-          {rank.fullName}
+          {gradeName(rank.rank.key, rank.levelInRank)}
         </p>
         <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-white/5">
           <motion.div
