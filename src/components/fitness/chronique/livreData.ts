@@ -11,6 +11,7 @@
 import type { RankState } from "@/lib/fitness/exerciseRanks";
 import { toRankState } from "@/hooks/useExerciseProgression";
 import { projectVolumeToRankTier, type LegendLevel } from "@/lib/fitness/chronicles";
+import { gradeName } from "@/lib/fitness/rpg/grade";
 
 // ── Rareté des Légendes (dérivée du niveau déjà calculé) ──────────────────────
 
@@ -87,7 +88,10 @@ export type SpecRank = {
 export function specRankFromVolume(volumeKg: number): SpecRank {
   const { tierIndex, masteryPercent } = projectVolumeToRankTier(volumeKg);
   const rank = toRankState(tierIndex, masteryPercent);
-  const next = tierIndex >= 29 ? null : toRankState(tierIndex + 1, 0).fullName;
+  const nextState = tierIndex >= 29 ? null : toRankState(tierIndex + 1, 0);
+  const next = nextState
+    ? `${nextState.rank.label} — ${gradeName(nextState.rank.key, nextState.levelInRank)}`
+    : null;
   return {
     rank,
     nextName: next,

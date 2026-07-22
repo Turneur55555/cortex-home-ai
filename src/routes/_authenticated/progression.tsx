@@ -6,6 +6,7 @@ import { RPGProgressionSection } from "@/components/profile/rpg/RPGProgressionSe
 import { ExerciseRankStrip } from "@/components/fitness/ExerciseRankStrip";
 import { StatChip } from "@/components/profile/shared";
 import { computeBroadActivity, CATALOG_GROUPS } from "@/lib/profile/achievements/muscleVolume";
+import { gradeName } from "@/lib/fitness/rpg/grade";
 
 export const Route = createFileRoute("/_authenticated/progression")({
   head: () => ({
@@ -96,7 +97,7 @@ function ProgressionDetail({
           {rankAggregate.average && (
             <StatChip
               label="Rang moyen"
-              value={`${rankAggregate.average.rank.label} ${rankAggregate.average.romanLevel}`}
+              value={`${rankAggregate.average.rank.label} — ${gradeName(rankAggregate.average.rank.key, rankAggregate.average.levelInRank)}`}
             />
           )}
           {broad.dominantMuscleGroup && (

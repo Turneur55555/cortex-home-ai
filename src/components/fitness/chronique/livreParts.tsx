@@ -10,6 +10,7 @@
 import { motion } from "framer-motion";
 import { Lock } from "lucide-react";
 import type { RankState } from "@/lib/fitness/exerciseRanks";
+import { gradeName } from "@/lib/fitness/rpg/grade";
 
 // ── Sheen : reflet lumineux qui balaie une carte (shimmer premium) ────────────
 
@@ -90,7 +91,7 @@ export function RankPill({ rank }: { rank: RankState }) {
       className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold"
       style={{ background: c.gradient, color: c.text, boxShadow: `0 0 16px -6px ${c.glow}` }}
     >
-      {rank.fullName}
+      {rank.rank.label} — {gradeName(rank.rank.key, rank.levelInRank)}
     </span>
   );
 }

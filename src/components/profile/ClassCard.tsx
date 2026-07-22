@@ -3,6 +3,7 @@ import { ChevronRight, Sparkles, Swords } from "lucide-react";
 import { AppSheet } from "@/components/profile/AppSheet";
 import { computeCharacterClass, type CharacterClassResult } from "@/lib/profile/characterClass";
 import type { RankAggregate } from "@/components/fitness/RankAggregator";
+import { gradeName } from "@/lib/fitness/rpg/grade";
 
 interface WorkoutLike {
   date: string;
@@ -102,7 +103,11 @@ function ClassDetailSheet({
           {result.bestRankInFamily && (
             <p className="mt-2 text-sm leading-relaxed text-foreground/90">
               Ton meilleur rang dans cette famille :{" "}
-              <strong>{result.bestRankInFamily.fullName}</strong>.
+              <strong>
+                {result.bestRankInFamily.rank.label} —{" "}
+                {gradeName(result.bestRankInFamily.rank.key, result.bestRankInFamily.levelInRank)}
+              </strong>
+              .
             </p>
           )}
         </section>
@@ -134,7 +139,8 @@ function ClassDetailSheet({
                 <p className="mt-1 text-[10px] text-muted-foreground/70">
                   {f.sessionsCount} séance{f.sessionsCount > 1 ? "s" : ""} · {f.exerciseCount}{" "}
                   exercice{f.exerciseCount > 1 ? "s" : ""}
-                  {f.bestRank && ` · ${f.bestRank.fullName}`}
+                  {f.bestRank &&
+                    ` · ${f.bestRank.rank.label} — ${gradeName(f.bestRank.rank.key, f.bestRank.levelInRank)}`}
                 </p>
               </div>
             ))}

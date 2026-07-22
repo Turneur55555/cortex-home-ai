@@ -22,22 +22,18 @@ plier au format, jamais le code qui s'adapte au fichier.
   quel multiple exact de 4:5 convient ; un ratio différent sera cadré de
   façon imprévisible par `object-fit: cover`.
 
-## Cadrage — deux zones, une seule mise en page pour tous les rangs
+## Cadrage — une seule mise en page, partout, sans exception
 
-L'illustration est découpée en deux bandes horizontales fixes. Cette mise en
-page doit être **identique sur les six rangs** :
-
-1. **Zone haute (0–80% de la hauteur, soit un carré exact largeur × largeur)**
-   — contient le sujet : disque/emblème/personnage du rang. C'est la SEULE
-   zone garantie visible partout, y compris dans les médaillons carrés
-   compacts (`ExerciseRankBadge`, `MiniRankTile`) qui recadrent en haut
-   (`object-position: top`) et perdent la bande basse.
-2. **Zone basse (80–100% de la hauteur, les 20% du bas)** — contient le nom
-   du rang gravé/incrusté dans l'image (ex. « GUERRIER »), centré
-   horizontalement. Visible uniquement sur les écrans plein format
-   (`ProfileHeroCard`, `RankUpOverlay`, `ExerciseRankShareSheet`, tous en
-   ratio 4:5 exact — aucun recadrage n'y survient puisque le ratio du
-   conteneur est identique à celui de l'image).
+**Règle absolue depuis le 22/07/2026 (une seule source de vérité pour
+l'affichage des rangs) : tout conteneur qui accueille `RankIllustration`
+respecte le ratio 4:5 exact.** Il n'existe plus aucun médaillon/badge carré
+recadré nulle part dans l'app (l'ancien recadrage carré de
+`ExerciseRankBadge`/`MiniRankTile` a été retiré) — `object-fit: cover` ne
+recadre donc jamais rien en pratique, quel que soit l'écran : accueil, fiche
+d'exercice, La Forge, montée de rang, écran de partage, bandelette de
+Progression. L'illustration est toujours vue en entier, disque ET titre
+gravé compris. Seule la TAILLE du conteneur varie selon le contexte (grand
+sur l'accueil, compact dans une liste) — jamais son ratio.
 
 **Zone de sécurité** : ne placer aucun élément essentiel (sujet ou lettrage)
 à moins de **6% de la largeur** des bords gauche/droit, ni à moins de **4%
@@ -46,8 +42,10 @@ les légers écarts de rendu entre appareils.
 
 **Titre** : ne jamais ajouter de titre en overlay côté code — l'illustration
 porte déjà le nom du rang, `RankIllustration` ne superpose donc aucun texte
-par-dessus (seuls les compteurs de progression indépendants de l'image,
-comme le niveau romain, sont superposés en petite pastille).
+par-dessus. Aucun chiffre romain, aucune répétition du nom de rang nulle
+part : le seul texte de progression toléré est le nom du grade officiel
+(`gradeName()`, `src/lib/fitness/rpg/grade.ts`), affiché par l'appelant SOUS
+l'illustration — jamais en overlay dessus.
 
 ## Repli si absente
 
