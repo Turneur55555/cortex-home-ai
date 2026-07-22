@@ -11,31 +11,43 @@
 // que traduire `levelInRank` (1..5) en libellé pour l'UI.
 // ============================================================
 
-import { RANK_TIERS, LEVELS_PER_RANK, type RankState } from "@/lib/fitness/exerciseRanks";
+import { RANK_TIERS, LEVELS_PER_RANK, type RankKey, type RankState } from "@/lib/fitness/exerciseRanks";
 
-/** Grades nommés à l'intérieur d'une famille (positions 1..5). */
-export const GRADE_NAMES = ["Novice", "Aspirant", "Accompli", "Émérite", "Maître"] as const;
+/**
+ * Grades nommés à l'intérieur d'une famille (positions 1..5), propres à
+ * chaque Rang — pas de liste unique commune à tous les rangs : la
+ * progression d'un Titan ne se raconte pas avec les mêmes mots que celle
+ * d'un Olympien.
+ */
+export const GRADE_NAMES: Record<RankKey, readonly [string, string, string, string, string]> = {
+  mortel: ["Éveillé", "Initié", "Aguerri", "Accompli", "Émérite"],
+  guerrier: ["Écuyer", "Combattant", "Champion", "Vainqueur", "Invaincu"],
+  heros: ["Célèbre", "Admiré", "Glorieux", "Légendaire", "Mythique"],
+  titan: ["Colossal", "Implacable", "Dominateur", "Inébranlable", "Souverain"],
+  olympien: ["Divin", "Sacré", "Céleste", "Immortel", "Exalté"],
+  primordial: ["Originel", "Ancestral", "Absolu", "Transcendant", "Omnipotent"],
+};
 
-/** Libellé du grade pour une position 1..LEVELS_PER_RANK. */
-export function gradeName(levelInRank: number): string {
+/** Libellé du grade pour une famille de rang et une position 1..LEVELS_PER_RANK. */
+export function gradeName(rankKey: RankKey, levelInRank: number): string {
   const idx = Math.max(1, Math.min(LEVELS_PER_RANK, levelInRank)) - 1;
-  return GRADE_NAMES[idx];
+  return GRADE_NAMES[rankKey][idx];
 }
 
 /**
  * Libellé du grade suivant : soit le grade suivant dans la même famille,
- * soit le premier grade de la famille suivante ("Novice Guerrier"), soit
+ * soit le premier grade de la famille suivante ("Écuyer Guerrier"), soit
  * `null` si c'est déjà le grade suprême.
  */
 export function nextGradeLabel(rank: RankState): string | null {
   if (rank.isMax) return null;
   if (rank.levelInRank < LEVELS_PER_RANK) {
-    return gradeName(rank.levelInRank + 1);
+    return gradeName(rank.rank.key, rank.levelInRank + 1);
   }
   const familyIdx = RANK_TIERS.findIndex((r) => r.key === rank.rank.key);
   const nextFamily = RANK_TIERS[familyIdx + 1];
   if (!nextFamily) return null;
-  return `${GRADE_NAMES[0]} ${nextFamily.label}`;
+  return `${GRADE_NAMES[nextFamily.key][0]} ${nextFamily.label}`;
 }
 
 /** Formatage FR d'une XP entière avec espace fine insécable comme séparateur. */
