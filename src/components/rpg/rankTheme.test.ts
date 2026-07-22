@@ -119,6 +119,23 @@ describe("RANK_AMBIANCE", () => {
     expect(RANK_AMBIANCE.primordial.haloDuration).toBeGreaterThan(RANK_AMBIANCE.titan.haloDuration);
     expect(RANK_AMBIANCE.primordial.shadowBlur).toBeGreaterThan(RANK_AMBIANCE.titan.shadowBlur);
   });
+
+  it("Mortel est le plus sobre : grain le plus grossier, halo le plus discret", () => {
+    const grains = RANK_TIERS.map((t) => RANK_AMBIANCE[t.key].grainScale);
+    expect(RANK_AMBIANCE.mortel.grainScale).toBe(Math.max(...grains));
+    const blurs = RANK_TIERS.map((t) => RANK_AMBIANCE[t.key].shadowBlur);
+    expect(RANK_AMBIANCE.mortel.shadowBlur).toBe(Math.min(...blurs));
+  });
+
+  it("Primordial a le grain le plus fin (poussière d'étoiles) de tous les rangs", () => {
+    const grains = RANK_TIERS.map((t) => RANK_AMBIANCE[t.key].grainScale);
+    expect(RANK_AMBIANCE.primordial.grainScale).toBe(Math.min(...grains));
+  });
+
+  it("Titan a le passage de lumière le plus fréquent (braises nerveuses)", () => {
+    const sweeps = RANK_TIERS.map((t) => RANK_AMBIANCE[t.key].sweepDuration);
+    expect(RANK_AMBIANCE.titan.sweepDuration).toBe(Math.min(...sweeps));
+  });
 });
 
 describe("rankRelief", () => {

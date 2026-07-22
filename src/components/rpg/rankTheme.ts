@@ -85,8 +85,10 @@ export const MATERIAL_GRAIN = `url("data:image/svg+xml,${encodeURIComponent(GRAI
 /**
  * Profil d'ambiance par rang — ce qui rend chaque rang identifiable même
  * sans l'illustration : profondeur (halo plus ou moins large/diffus), grain
- * (plus ou moins marqué), relief (bevel plus ou moins net), rythme du halo
- * ambiant (lent et vaste pour le cosmos, vif et pulsé pour la foudre/flamme).
+ * (plus ou moins marqué, plus ou moins fin), relief (bevel plus ou moins
+ * net), intensité du matériau (surface/bordure plus ou moins saturées, pour
+ * ne plus lire comme "transparent"), rythme du halo ambiant et de l'éclat
+ * de lumière (lent et vaste pour le cosmos, vif et pulsé pour la lave).
  * Une seule table, indexée par rang — pas un système par composant.
  */
 interface RankAmbiance {
@@ -96,60 +98,92 @@ interface RankAmbiance {
   shadowSpread: number;
   /** Intensité du grain de matériau (0..1) — coarse/lourd vs fin/discret. */
   grainOpacity: number;
+  /** Taille du motif de grain, en px — grand = grain grossier (pierre), petit = fin (cristal). */
+  grainScale: number;
   /** Netteté du relief (bevel) en haut des surfaces (0..1). */
   reliefAlpha: number;
   /** Durée d'un cycle de respiration du halo ambiant, en secondes. */
   haloDuration: number;
+  /** % de couleur du rang mélangée aux surfaces/cartes (color-mix) — matériau franc, pas transparence. */
+  surfaceMix: number;
+  /** % de couleur du rang mélangée aux bordures/séparateurs — bordure intégrée au matériau. */
+  borderMix: number;
+  /** Durée d'un passage de l'éclat de lumière ambiant (glint), en secondes. */
+  sweepDuration: number;
 }
 
 export const RANK_AMBIANCE: Record<RankKey, RankAmbiance> = {
-  // stone — inerte, lourd, grain rocheux marqué, halo étroit et lent.
+  // stone — froide, lourde, minérale, sobre : grain grossier, très peu de glow, halo lent et étroit.
   mortel: {
-    shadowBlur: 24,
-    shadowSpread: -14,
-    grainOpacity: 0.5,
-    reliefAlpha: 0.05,
-    haloDuration: 6,
+    shadowBlur: 20,
+    shadowSpread: -12,
+    grainOpacity: 0.55,
+    grainScale: 200,
+    reliefAlpha: 0.04,
+    haloDuration: 8,
+    surfaceMix: 16,
+    borderMix: 22,
+    sweepDuration: 14,
   },
-  // shield — métal martelé, halo contenu, relief net.
+  // shield — cuivre/forge, chaude et martiale : reflets cuivrés, braises décoratives discrètes.
   guerrier: {
-    shadowBlur: 30,
-    shadowSpread: -16,
-    grainOpacity: 0.42,
-    reliefAlpha: 0.08,
-    haloDuration: 5,
-  },
-  // helm — acier brossé, plus fin, plus posé.
-  heros: {
-    shadowBlur: 34,
-    shadowSpread: -16,
-    grainOpacity: 0.32,
+    shadowBlur: 28,
+    shadowSpread: -14,
+    grainOpacity: 0.4,
+    grainScale: 130,
     reliefAlpha: 0.1,
     haloDuration: 4.5,
+    surfaceMix: 24,
+    borderMix: 30,
+    sweepDuration: 6,
   },
-  // flame — braises, halo large et chaud, pulsation rapide et nerveuse.
-  titan: {
-    shadowBlur: 44,
-    shadowSpread: -18,
-    grainOpacity: 0.46,
-    reliefAlpha: 0.09,
-    haloDuration: 2.2,
-  },
-  // lightning — or poli, relief net et brillant, pulsation énergique.
-  olympien: {
-    shadowBlur: 40,
-    shadowSpread: -10,
+  // helm — acier bleuté, noble et lumineuse : reflets métalliques nets, énergie discrète.
+  heros: {
+    shadowBlur: 32,
+    shadowSpread: -16,
     grainOpacity: 0.28,
-    reliefAlpha: 0.14,
-    haloDuration: 3,
+    grainScale: 90,
+    reliefAlpha: 0.13,
+    haloDuration: 4,
+    surfaceMix: 20,
+    borderMix: 26,
+    sweepDuration: 5,
   },
-  // cosmos — vaste, diffus, grain fin (poussière d'étoiles), respiration lente et majestueuse.
+  // flame — lave/magma, brutale et explosive : halo large et chaud, pulsation rapide et nerveuse.
+  titan: {
+    shadowBlur: 46,
+    shadowSpread: -16,
+    grainOpacity: 0.48,
+    grainScale: 150,
+    reliefAlpha: 0.09,
+    haloDuration: 2,
+    surfaceMix: 26,
+    borderMix: 34,
+    sweepDuration: 3,
+  },
+  // lightning — or poli/marbre, divine et prestigieuse : relief net et brillant, éclats lumineux fréquents.
+  olympien: {
+    shadowBlur: 42,
+    shadowSpread: -8,
+    grainOpacity: 0.22,
+    grainScale: 100,
+    reliefAlpha: 0.16,
+    haloDuration: 3.2,
+    surfaceMix: 22,
+    borderMix: 32,
+    sweepDuration: 4.5,
+  },
+  // cosmos — argent/cristal, mystique et intemporelle : grain le plus fin, halo le plus vaste et le plus lent.
   primordial: {
-    shadowBlur: 56,
-    shadowSpread: -6,
-    grainOpacity: 0.24,
-    reliefAlpha: 0.12,
-    haloDuration: 7,
+    shadowBlur: 60,
+    shadowSpread: -4,
+    grainOpacity: 0.18,
+    grainScale: 70,
+    reliefAlpha: 0.14,
+    haloDuration: 9,
+    surfaceMix: 18,
+    borderMix: 28,
+    sweepDuration: 10,
   },
 };
 
@@ -172,9 +206,11 @@ export function rankRelief(theme: RankTheme, alpha: number): string {
  *
  * `--surface`/`--card`/`--border`/`--gradient-surface` restent volontairement
  * sombres (le fond de l'app ne change pas) — seule leur teinte dérive
- * légèrement (`color-mix`) vers la couleur officielle du rang, pour donner
- * aux cartes/dialogs/sheets/séparateurs un "matériau" cohérent avec le rang
- * sans jamais sortir de la direction artistique sombre existante.
+ * (`color-mix`, intensité propre au rang via `surfaceMix`/`borderMix`) vers
+ * la couleur officielle du rang, pour donner aux cartes/dialogs/sheets/
+ * séparateurs un vrai "matériau" — pas un aplat transparent identique pour
+ * les 6 rangs — sans jamais sortir de la direction artistique sombre
+ * existante.
  *
  * `--shadow-card`/`--shadow-elevated` (déjà utilisées par `.shadow-card`/
  * `.shadow-elevated` dans toute l'app) embarquent en plus le relief/l'ambiance
@@ -202,30 +238,44 @@ export function applyRankTheme(key: RankKey): void {
     rankGlowShadow(theme.glow, 0, ambiance.shadowBlur, ambiance.shadowSpread),
   );
 
-  // Matériaux : surfaces/cartes/bordures/séparateurs.
+  // Matériaux : surfaces/cartes/bordures/séparateurs — intensité (surfaceMix/
+  // borderMix) propre au rang, pour que le matériau se voie (plus de cartes
+  // "transparentes") au lieu d'une teinte flottante identique partout.
+  //
+  // Important : la base mélangée doit être STRICTEMENT neutre (chroma 0) —
+  // toute teinte résiduelle (l'ancien violet fixe, oklch(... 280)) fausserait
+  // la couleur perçue de chaque matériau (un gris Mortel ou un rouge Titan
+  // reviendrait légèrement violet). D'où oklch(L 0 0) ci-dessous.
   root.style.setProperty(
     "--surface",
-    `color-mix(in oklch, ${theme.primary} 14%, oklch(0.16 0.02 280))`,
+    `color-mix(in oklch, ${theme.primary} ${ambiance.surfaceMix}%, oklch(0.16 0 0))`,
   );
   root.style.setProperty(
     "--surface-elevated",
-    `color-mix(in oklch, ${theme.primary} 16%, oklch(0.19 0.025 280))`,
+    `color-mix(in oklch, ${theme.primary} ${ambiance.surfaceMix + 2}%, oklch(0.19 0 0))`,
   );
   root.style.setProperty(
     "--card",
-    `color-mix(in oklch, ${theme.primary} 14%, oklch(0.16 0.02 280))`,
+    `color-mix(in oklch, ${theme.primary} ${ambiance.surfaceMix}%, oklch(0.16 0 0))`,
   );
   root.style.setProperty(
     "--border",
-    `color-mix(in oklch, ${theme.secondary} 20%, oklch(1 0 0 / 0.06))`,
+    `color-mix(in oklch, ${theme.secondary} ${ambiance.borderMix}%, oklch(1 0 0 / 0.06))`,
   );
+  // Dégradé à 3 tons (au lieu d'un simple fondu vertical) : suggère une
+  // surface éclairée d'un côté, comme un vrai matériau, pas un aplat.
   root.style.setProperty(
     "--gradient-surface",
-    `linear-gradient(180deg, color-mix(in oklch, ${theme.primary} 18%, oklch(0.18 0.022 280)), color-mix(in oklch, ${theme.primary} 10%, oklch(0.14 0.018 280)))`,
+    `linear-gradient(165deg, ` +
+      `color-mix(in oklch, ${theme.primary} ${ambiance.surfaceMix + 8}%, oklch(0.19 0 0)) 0%, ` +
+      `color-mix(in oklch, ${theme.primary} ${ambiance.surfaceMix}%, oklch(0.16 0 0)) 55%, ` +
+      `color-mix(in oklch, ${theme.primary} ${Math.max(ambiance.surfaceMix - 8, 0)}%, oklch(0.13 0 0)) 100%)`,
   );
   root.style.setProperty("--material-grain", MATERIAL_GRAIN);
   root.style.setProperty("--rank-grain-opacity", String(ambiance.grainOpacity));
+  root.style.setProperty("--rank-grain-scale", `${ambiance.grainScale}px`);
   root.style.setProperty("--rank-halo-duration", `${ambiance.haloDuration}s`);
+  root.style.setProperty("--rank-sweep-duration", `${ambiance.sweepDuration}s`);
 
   // Profondeur/relief : réutilisées par shadow-card/shadow-elevated (95+
   // fichiers déjà consommateurs), donc héritées sans implémentation propre.

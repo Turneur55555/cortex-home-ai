@@ -13,11 +13,12 @@ interface AppShellProps {
  * Mobile-first container, max-width 430px centered, with ambient glow.
  *
  * Point unique par lequel TOUT écran authentifié passe (Outlet + BottomNav) :
- * c'est ici que le grain de matériau et la respiration du halo ambiant du
- * rang (RankTheme) sont posés une seule fois pour couvrir 100% de l'app,
- * plutôt que d'être dupliqués carte par carte. Le fond (bg-background) reste
- * inchangé — seuls un relief discret (grain) et un rythme de halo propres au
- * rang (RANK_AMBIANCE) se superposent.
+ * c'est ici que le grain de matériau, la respiration du halo ambiant et
+ * l'éclat de lumière du rang (RankTheme) sont posés une seule fois pour
+ * couvrir 100% de l'app, plutôt que d'être dupliqués carte par carte. Le
+ * fond (bg-background) reste inchangé — seuls un relief discret (grain), un
+ * rythme de halo et un passage de lumière propres au rang (RANK_AMBIANCE) se
+ * superposent.
  */
 export function AppShell({ children }: AppShellProps) {
   return (
@@ -29,6 +30,12 @@ export function AppShell({ children }: AppShellProps) {
       />
       {/* Grain de matériau du rang — sur tout le viewport, très discret */}
       <div aria-hidden className="pointer-events-none fixed inset-0 bg-rank-grain" />
+      {/* Éclat de lumière du rang — un seul passage diagonal, cadencé par
+          RANK_AMBIANCE.sweepDuration (reflets cuivrés/éclats dorés/reflets
+          cristallins/braises, selon la couleur et le rythme du rang) */}
+      <div aria-hidden className="pointer-events-none fixed inset-0 overflow-hidden">
+        <div className="absolute -inset-y-1/4 -inset-x-1/2 rank-glint-layer" />
+      </div>
       <div
         className="relative mx-auto flex min-h-screen w-full max-w-[430px] flex-col"
         style={{

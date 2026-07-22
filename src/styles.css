@@ -99,7 +99,9 @@
      n'est pas connu (pas de bruit avant applyRankTheme). */
   --material-grain: none;
   --rank-grain-opacity: 0.4;
+  --rank-grain-scale: 160px;
   --rank-halo-duration: 5s;
+  --rank-sweep-duration: 6s;
 
   --card: oklch(0.16 0.02 280);
   --card-foreground: oklch(0.98 0.005 280);
@@ -245,7 +247,7 @@
      pilotée par --rank-grain-opacity (RANK_AMBIANCE). */
   .bg-rank-grain {
     background-image: var(--material-grain);
-    background-size: 160px 160px;
+    background-size: var(--rank-grain-scale) var(--rank-grain-scale);
     mix-blend-mode: overlay;
     opacity: var(--rank-grain-opacity);
   }
@@ -273,6 +275,44 @@
 @media (prefers-reduced-motion: reduce) {
   .animate-rank-breathe {
     animation: none;
+  }
+}
+
+@layer utilities {
+  /*
+   * Éclat de lumière ambiant — UNE seule primitive pour "reflets cuivrés"
+   * (Guerrier), "éclats lumineux" (Olympien), "reflets cristallins"
+   * (Primordial), "fissures incandescentes" (Titan) : un même passage de
+   * lumière diagonale, dont seule la couleur (--primary-glow-soft) et la
+   * cadence (--rank-sweep-duration, RANK_AMBIANCE) changent par rang — pas
+   * six effets distincts. transform+opacity uniquement (GPU, pas de reflow).
+   */
+  @keyframes rank-glint {
+    0%   { transform: translateX(-140%) skewX(-18deg); opacity: 0; }
+    6%   { opacity: 1; }
+    16%  { opacity: 0; }
+    100% { transform: translateX(240%) skewX(-18deg); opacity: 0; }
+  }
+  .rank-glint-layer {
+    background: linear-gradient(
+      75deg,
+      transparent 42%,
+      var(--primary-glow-soft) 50%,
+      transparent 58%
+    );
+    animation: rank-glint var(--rank-sweep-duration) ease-in-out infinite;
+    will-change: transform;
+  }
+  .motion-reduce .rank-glint-layer {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rank-glint-layer {
+    animation: none;
+    opacity: 0;
   }
 }
 
