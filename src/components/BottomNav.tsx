@@ -44,7 +44,7 @@ export function BottomNav() {
           className="pointer-events-none absolute inset-0 -z-10 opacity-60"
           style={{
             background:
-              "radial-gradient(circle at 50% 120%, rgba(108,99,255,0.25), transparent 60%)",
+              "radial-gradient(circle at 50% 120%, var(--primary-glow-soft), transparent 60%)",
           }}
         />
         <ul className="relative flex items-center justify-between">
@@ -62,10 +62,10 @@ export function BottomNav() {
                       <motion.span
                         layoutId="nav-active-pill"
                         transition={{ type: "spring", stiffness: 420, damping: 32 }}
-                        className="absolute inset-0 rounded-full bg-primary/20 shadow-[0_0_18px_rgba(108,99,255,0.55)]"
+                        className="absolute inset-0 rounded-full bg-primary/20 shadow-[0_0_18px_var(--primary-glow-soft)]"
                         style={{
                           backgroundImage:
-                            "linear-gradient(135deg, rgba(108,99,255,0.35), rgba(77,175,255,0.25))",
+                            "linear-gradient(135deg, var(--primary-glow-soft), transparent)",
                         }}
                       />
                     )}
@@ -74,7 +74,7 @@ export function BottomNav() {
                       transition={{ type: "spring", stiffness: 400, damping: 18 }}
                       className={
                         active
-                          ? "relative text-white drop-shadow-[0_0_8px_rgba(108,99,255,0.8)]"
+                          ? "relative text-white drop-shadow-[0_0_8px_var(--primary-glow-soft)]"
                           : "relative text-muted-foreground transition-colors group-hover:text-foreground"
                       }
                     >

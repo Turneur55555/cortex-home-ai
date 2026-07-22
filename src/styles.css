@@ -97,10 +97,14 @@
   --popover: oklch(0.18 0.022 280);
   --popover-foreground: oklch(0.98 0.005 280);
 
-  /* Primary — violet premium */
+  /* Primary — recoloré au premier rendu par RankTheme (applyRankTheme),
+     voir src/components/rpg/rankTheme.ts. Ces valeurs ne servent que de
+     repli avant que le rang courant ne soit connu (FOUC). */
   --primary: oklch(0.62 0.22 285);
   --primary-foreground: oklch(0.99 0.005 280);
   --primary-glow: oklch(0.72 0.2 285);
+  /* Variante translucide du halo du rang (halos ambiants, glows de boutons). */
+  --primary-glow-soft: oklch(0.62 0.22 285 / 0.35);
 
   /* Accent — cyan electric */
   --accent: oklch(0.75 0.15 200);

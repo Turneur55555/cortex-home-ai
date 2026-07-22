@@ -63,3 +63,29 @@ export function rankSurfaceShadow(
 export function rankTextGlow(glow: string, blur: number, extra?: string): string {
   return extra ? `0 0 ${blur}px ${glow}, ${extra}` : `0 0 ${blur}px ${glow}`;
 }
+
+/**
+ * Applique le thème du rang courant à toute l'application, en recolorant les
+ * variables CSS partagées (`:root`, voir `styles.css`) que les utilitaires
+ * Tailwind (`bg-primary`, `ring-ring`, `shadow-glow`, `bg-gradient-primary`,
+ * `bg-gradient-glow`…) référencent déjà partout dans l'app. Remplace
+ * l'ancien `applyAccent` (couleur d'accent utilisateur, retirée) : le rang
+ * est désormais l'unique source de l'identité visuelle de Cortex — aucun
+ * composant n'a besoin de connaître le rang pour en hériter la couleur, il
+ * lui suffit d'utiliser les tokens `--primary`/`--ring`/`--gradient-*`
+ * existants.
+ */
+export function applyRankTheme(key: RankKey): void {
+  const theme = rankThemeByKey(key);
+  const root = document.documentElement;
+  root.style.setProperty("--primary", theme.primary);
+  root.style.setProperty("--primary-glow", theme.secondary);
+  root.style.setProperty("--primary-glow-soft", theme.glow);
+  root.style.setProperty("--ring", theme.primary);
+  root.style.setProperty("--gradient-primary", theme.gradient);
+  root.style.setProperty(
+    "--gradient-glow",
+    `radial-gradient(circle at 50% 0%, ${theme.glow}, transparent 60%)`,
+  );
+  root.style.setProperty("--shadow-glow", rankGlowShadow(theme.glow, 0, 32, -4));
+}

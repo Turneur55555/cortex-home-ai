@@ -5,6 +5,7 @@ import { RankIllustration } from "@/components/rpg/RankIllustration";
 import { rankTextGlow } from "@/components/rpg/rankTheme";
 import type { RankState } from "@/lib/fitness/exerciseRanks";
 import { gradeName } from "@/lib/fitness/rpg/grade";
+import { isHapticsEnabled } from "@/lib/haptics";
 
 /**
  * Cinématique de montée de rang — "Reliquary".
@@ -14,7 +15,7 @@ import { gradeName } from "@/lib/fitness/rpg/grade";
 export function RankUpOverlay({ rank, onDone }: { rank: RankState | null; onDone: () => void }) {
   useEffect(() => {
     if (!rank) return;
-    if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+    if (isHapticsEnabled() && typeof navigator !== "undefined" && "vibrate" in navigator) {
       try {
         navigator.vibrate?.([15, 30, 15, 30, 60]);
       } catch {

@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
-import { Palette, Ruler, Sparkles } from "lucide-react";
+import { Ruler, Sparkles, Vibrate } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
-import { ACCENT_OPTIONS, applyAccent } from "@/lib/accent";
+import { isHapticsEnabled, setHapticsEnabled } from "@/lib/haptics";
 
 function PrefRow({
   icon: Icon,
@@ -27,16 +27,12 @@ function PrefRow({
 export function PersonalizationPanel() {
   const { prefs, update } = useUserPreferences();
   const [heightDraft, setHeightDraft] = useState<string>("");
+  const [haptics, setHaptics] = useState<boolean>(() => isHapticsEnabled());
 
   // Synchronise le champ taille quand les prefs arrivent
   useEffect(() => {
     setHeightDraft(prefs.height_cm != null ? String(prefs.height_cm) : "");
   }, [prefs.height_cm]);
-
-  // Applique la couleur d'accent (réellement : recolore --primary)
-  useEffect(() => {
-    applyAccent(prefs.accent_color);
-  }, [prefs.accent_color]);
 
   const commitHeight = () => {
     const trimmed = heightDraft.trim();
@@ -75,24 +71,15 @@ export function PersonalizationPanel() {
             aria-label="Taille en centimètres"
           />
         </PrefRow>
-        <div className="flex items-center gap-3 px-4 py-3">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/5 text-muted-foreground">
-            <Palette className="h-3.5 w-3.5" />
-          </span>
-          <span className="flex-1 text-sm">Couleur d'accent</span>
-          <div className="flex gap-1.5">
-            {ACCENT_OPTIONS.map((a) => (
-              <button
-                key={a.hex}
-                type="button"
-                onClick={() => void update({ accent_color: a.hex })}
-                className="h-5 w-5 rounded-full border-2 transition-transform active:scale-90"
-                style={{ background: a.hex, borderColor: prefs.accent_color === a.hex ? "white" : "transparent" }}
-                aria-label={`Couleur ${a.label}`}
-              />
-            ))}
-          </div>
-        </div>
+        <PrefRow icon={Vibrate} label="Vibrations">
+          <Switch
+            checked={haptics}
+            onCheckedChange={(v) => {
+              setHaptics(v);
+              setHapticsEnabled(v);
+            }}
+          />
+        </PrefRow>
       </div>
     </section>
   );

@@ -14,7 +14,8 @@ export function ChatBot() {
     {
       id: "welcome",
       role: "assistant",
-      content: "Salut ! Je suis l'assistant ICORTEX. Pose-moi une question sur ta nutrition, ton fitness ou tes documents.",
+      content:
+        "Salut ! Je suis l'assistant ICORTEX. Pose-moi une question sur ta nutrition, ton fitness ou tes documents.",
     },
   ]);
   const [input, setInput] = useState("");
@@ -86,7 +87,7 @@ export function ChatBot() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="fixed bottom-24 right-4 z-40 flex h-11 w-11 items-center justify-center rounded-full bg-gradient-primary text-primary-foreground shadow-[0_0_12px_rgba(108,99,255,0.45)] transition-transform active:scale-90"
+        className="fixed bottom-24 right-4 z-40 flex h-11 w-11 items-center justify-center rounded-full bg-gradient-primary text-primary-foreground shadow-[0_0_12px_var(--primary-glow-soft)] transition-transform active:scale-90"
         aria-label="Ouvrir le chat"
       >
         <MessageCircle className="h-5 w-5" />

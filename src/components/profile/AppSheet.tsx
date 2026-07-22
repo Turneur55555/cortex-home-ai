@@ -39,10 +39,7 @@ export function AppSheet({
                 className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm"
               />
             </Dialog.Overlay>
-            <Dialog.Content
-              asChild
-              onOpenAutoFocus={(e) => e.preventDefault()}
-            >
+            <Dialog.Content asChild onOpenAutoFocus={(e) => e.preventDefault()}>
               <motion.div
                 initial={{ y: "100%" }}
                 animate={{ y: 0 }}
@@ -62,7 +59,7 @@ export function AppSheet({
                   className="pointer-events-none absolute inset-x-0 top-0 h-40 opacity-70"
                   style={{
                     background:
-                      "radial-gradient(circle at 50% 0%, rgba(108,99,255,0.35), transparent 70%)",
+                      "radial-gradient(circle at 50% 0%, var(--primary-glow-soft), transparent 70%)",
                   }}
                 />
 

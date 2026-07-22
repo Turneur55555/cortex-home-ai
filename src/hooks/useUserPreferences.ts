@@ -2,16 +2,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
-import { DEFAULT_ACCENT } from "@/lib/accent";
 
 export interface UserPreferences {
-  accent_color: string;
   animations_enabled: boolean;
   height_cm: number | null;
 }
 
 const DEFAULTS: UserPreferences = {
-  accent_color: DEFAULT_ACCENT,
   animations_enabled: true,
   height_cm: null,
 };
@@ -28,7 +25,7 @@ export function useUserPreferences() {
     queryFn: async (): Promise<UserPreferences> => {
       const { data, error } = await supabase
         .from("user_preferences")
-        .select("accent_color, animations_enabled, height_cm")
+        .select("animations_enabled, height_cm")
         .eq("user_id", user!.id)
         .maybeSingle();
       if (error) throw error;
@@ -50,7 +47,9 @@ export function useUserPreferences() {
   });
 
   const safeUpdate = (patch: Partial<UserPreferences>) =>
-    update.mutateAsync(patch).catch(() => { /* handled by onError */ });
+    update.mutateAsync(patch).catch(() => {
+      /* handled by onError */
+    });
 
   return {
     prefs: query.data ?? DEFAULTS,

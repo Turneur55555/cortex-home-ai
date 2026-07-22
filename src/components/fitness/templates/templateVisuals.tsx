@@ -45,7 +45,7 @@ export function TemplateIcon({ icon, className }: { icon: string; className?: st
   return <Icon className={className ?? "h-5 w-5"} />;
 }
 
-/** #6c63ff = accent par défaut de l'app (user_preferences.accent_color). */
+/** #6c63ff = couleur par défaut de la palette curée (première option, "primary"). */
 export const TEMPLATE_COLORS: Record<string, string> = {
   primary: "#6c63ff",
   red: "#ef4444",

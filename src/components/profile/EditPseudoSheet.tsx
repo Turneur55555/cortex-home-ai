@@ -74,7 +74,7 @@ export function EditPseudoSheet({ open, onOpenChange, current, onSave }: EditPse
             maxLength={20}
             placeholder="Votre pseudo"
             disabled={saving || success}
-            className="h-14 w-full rounded-2xl border border-white/10 bg-white/[0.04] px-5 text-base font-medium tracking-tight text-foreground placeholder:text-muted-foreground/60 backdrop-blur-xl outline-none transition-all focus:border-primary/50 focus:bg-white/[0.06] focus:shadow-[0_0_0_4px_rgba(108,99,255,0.15)] disabled:opacity-60"
+            className="h-14 w-full rounded-2xl border border-white/10 bg-white/[0.04] px-5 text-base font-medium tracking-tight text-foreground placeholder:text-muted-foreground/60 backdrop-blur-xl outline-none transition-all focus:border-primary/50 focus:bg-white/[0.06] focus:shadow-[0_0_0_4px_var(--primary-glow-soft)] disabled:opacity-60"
           />
           <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-[11px] tabular-nums text-muted-foreground">
             {value.length}/20
