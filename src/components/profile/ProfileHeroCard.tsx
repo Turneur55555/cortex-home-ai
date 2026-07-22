@@ -47,7 +47,7 @@ export function ProfileHeroCard() {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6, ease: EASE_OUT }}
       className="relative mb-3 self-center overflow-hidden rounded-[28px] shadow-elevated"
-      style={{ aspectRatio: "4 / 5", height: "clamp(220px, 36vh, 360px)" }}
+      style={{ aspectRatio: "4 / 5", height: "clamp(270px, 44vh, 440px)" }}
     >
       <RankIllustration
         rankKey={rank.rank.key}
