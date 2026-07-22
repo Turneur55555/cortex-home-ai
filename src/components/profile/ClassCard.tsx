@@ -4,6 +4,16 @@ import { AppSheet } from "@/components/profile/AppSheet";
 import { computeCharacterClass, type CharacterClassResult } from "@/lib/profile/characterClass";
 import type { RankAggregate } from "@/components/fitness/RankAggregator";
 import { gradeName } from "@/lib/fitness/rpg/grade";
+import { useUserStats } from "@/hooks/useUserStats";
+import { titleProgressForXp } from "@/lib/fitness/rpg/titleProgress";
+import {
+  RANK_AMBIANCE,
+  rankGlowShadow,
+  rankRelief,
+  rankRingInset,
+  rankTextGlow,
+  rankThemeByKey,
+} from "@/components/rpg/rankTheme";
 
 interface WorkoutLike {
   date: string;
@@ -21,20 +31,55 @@ interface Props {
 }
 
 /**
- * Classe principale — carte épurée, aucune statistique en façade. Tout
- * l'explicatif (pourquoi cette classe, quelles données, comment évoluer)
- * vit dans le bottom sheet ouvert au tap. Dérivé uniquement de données déjà
- * calculées ailleurs (volume par exercice + classification de famille du
- * moteur Rang existant, rangs déjà sondés par RankAggregator) — aucune
- * nouvelle règle métier.
+ * Classe principale — ARTEFACT forgé dans la matière du rang courant, même
+ * philosophie que la carte Progression RPG (direction « Artefact »). La façade
+ * ne porte aucune statistique : tout l'explicatif (pourquoi cette classe,
+ * quelles données, comment évoluer) vit dans le bottom sheet ouvert au tap.
+ * Structure fonctionnelle inchangée — seule la direction artistique évolue.
+ *
+ * Toute la matière (surface, relief, biseau, gravure, reflets, grain,
+ * profondeur, lumière) est pilotée par RankTheme + `RANK_AMBIANCE` : passer
+ * d'un rang à l'autre reforge l'objet (pierre → cuivre → acier → basalte/lave
+ * → or → cristal), ce n'est pas une simple recoloration. Les couleurs de rang
+ * transitent par les helpers `rankTheme`, jamais réassemblées à la main.
+ *
+ * Aucune nouvelle règle métier : la classe vient de `computeCharacterClass`
+ * (volume × moteur Rang existant), le rang courant de l'XP globale
+ * (`titleProgress`) — exactement comme Progression RPG, pour un accueil
+ * cohérent, entièrement reforgé dans la même matière.
+ *
+ * NB (dette assumée) : les formules de matière ci-dessous reprennent celles de
+ * `RPGProgressionSection` — elles seront unifiées dans le composant
+ * réutilisable (`ForgedCard`) une fois la direction validée. Progression RPG
+ * n'est volontairement pas touchée pour l'instant.
  */
 export function ClassCard({ workouts, rankAggregate }: Props) {
   const [open, setOpen] = useState(false);
+  const { data: userStats } = useUserStats();
 
   const result = useMemo(
     () => computeCharacterClass(workouts, rankAggregate.reports),
     [workouts, rankAggregate.reports],
   );
+
+  // Matière du rang courant (couleurs RankTheme + profil de matériau RANK_AMBIANCE).
+  const progress = titleProgressForXp(userStats?.xp ?? 0);
+  const theme = rankThemeByKey(progress.title.key);
+  const amb = RANK_AMBIANCE[progress.title.key];
+  const mix = amb.surfaceMix;
+  const plateSurface =
+    `radial-gradient(120% 120% at 50% -30%, color-mix(in oklch, ${theme.secondary} 42%, transparent), transparent 60%),` +
+    `linear-gradient(158deg,` +
+    ` color-mix(in oklch, ${theme.primary} ${mix + 22}%, oklch(0.22 0 0)) 0%,` +
+    ` color-mix(in oklch, ${theme.primary} ${mix + 10}%, oklch(0.16 0 0)) 55%,` +
+    ` color-mix(in oklch, ${theme.primary} ${Math.max(mix - 6, 0)}%, oklch(0.1 0 0)) 100%)`;
+  const plateShadow = [
+    "0 20px 44px -20px rgba(0,0,0,0.78)",
+    "0 6px 14px -10px rgba(0,0,0,0.5)",
+    rankRelief(theme, amb.reliefAlpha),
+    rankRingInset(theme.secondary, "45"),
+    rankGlowShadow(theme.glow, 0, 0, Math.round(amb.shadowBlur * 0.6)),
+  ].join(", ");
 
   if (!result) return null;
 
@@ -43,20 +88,67 @@ export function ClassCard({ workouts, rankAggregate }: Props) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="mb-6 flex w-full items-center justify-between gap-3 rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.05] to-white/[0.02] px-4 py-3.5 text-left backdrop-blur-xl transition-colors hover:border-primary/30"
+        className="relative mb-6 w-full overflow-hidden rounded-[20px] p-2.5 text-left transition-transform active:scale-[0.99]"
+        style={{ background: plateSurface, boxShadow: plateShadow }}
       >
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary">
-            <Swords className="h-4 w-4" />
+        {/* Grain martelé + respiration de lumière + reflet — propres au rang. */}
+        <span aria-hidden className="bg-rank-grain pointer-events-none absolute inset-0" />
+        <span
+          aria-hidden
+          className="animate-rank-breathe pointer-events-none absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(120% 80% at 50% -20%, rgba(255,255,255,0.1), transparent 60%)",
+          }}
+        />
+        <span
+          aria-hidden
+          className="rank-glint-layer pointer-events-none absolute inset-0 opacity-40"
+        />
+
+        {/* Champ en creux : la gravure se lit « dans » le métal. */}
+        <span
+          className="relative flex items-center justify-between gap-3 rounded-[14px] px-3 py-2.5"
+          style={{
+            background: "rgba(0,0,0,0.16)",
+            boxShadow: `inset 0 3px 9px -3px rgba(0,0,0,0.68), inset 0 1px 0 rgba(0,0,0,0.4), ${rankRingInset(theme.primary, "22")}`,
+          }}
+        >
+          <span className="flex min-w-0 items-center gap-3">
+            {/* Sceau découpé dans le même métal (chip en creux, teinté rang). */}
+            <span
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px]"
+              style={{
+                background: "rgba(0,0,0,0.24)",
+                boxShadow: `inset 0 2px 5px rgba(0,0,0,0.6), inset 0 -1px 0 ${theme.secondary}2e, ${rankRingInset(theme.secondary, "3a")}`,
+                color: theme.text,
+              }}
+            >
+              <Swords
+                className="h-4 w-4"
+                style={{ filter: `drop-shadow(0 0 6px ${theme.glow})` }}
+              />
+            </span>
+            <span className="min-w-0">
+              <span
+                className="block text-[9px] font-semibold uppercase tracking-[0.24em]"
+                style={{ color: "rgba(255,255,255,0.52)", textShadow: "0 1px 1px rgba(0,0,0,0.6)" }}
+              >
+                Classe principale
+              </span>
+              <span
+                className="block truncate text-base font-black tracking-tight"
+                style={{
+                  color: theme.text,
+                  textShadow: rankTextGlow(theme.glow, 12, "0 1px 0 rgba(0,0,0,0.55)"),
+                }}
+              >
+                {result.className}
+              </span>
+            </span>
           </span>
-          <div className="min-w-0">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              Classe principale
-            </p>
-            <p className="truncate text-base font-bold tracking-tight">{result.className}</p>
-          </div>
-        </div>
-        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <ChevronRight className="h-4 w-4 shrink-0" style={{ color: "rgba(255,255,255,0.5)" }} />
+        </span>
       </button>
 
       <ClassDetailSheet open={open} onOpenChange={setOpen} result={result} />

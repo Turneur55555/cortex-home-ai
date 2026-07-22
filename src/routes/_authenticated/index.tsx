@@ -6,10 +6,8 @@ import { useProfile } from "@/hooks/useProfile";
 import { ProfileRPGData, type ProfileRPGDataValue } from "@/components/profile/rpg/ProfileRPGData";
 import { ProfileHeroCard } from "@/components/profile/ProfileHeroCard";
 import { ProfileIdentityStrip } from "@/components/profile/ProfileIdentityStrip";
-import { SeasonTrackCard } from "@/components/profile/rpg/SeasonTrackCard";
 import { RPGProgressionSection } from "@/components/profile/rpg/RPGProgressionSection";
 import { ClassCard } from "@/components/profile/ClassCard";
-import { TrophyRoomPreview } from "@/components/profile/rpg/TrophyRoomPreview";
 import { EditPseudoSheet } from "@/components/profile/EditPseudoSheet";
 
 export const Route = createFileRoute("/_authenticated/")({
@@ -68,8 +66,11 @@ function HomeHub({
   onEdit: () => void;
   onAvatarChange: (url: string) => Promise<void>;
 }) {
-  const { rankAggregate, achievements, legacyBadges, workouts } = rpg;
+  const { rankAggregate, workouts } = rpg;
 
+  // Accueil simplifié (Phase 1) : Hero → Progression RPG → Classe principale.
+  // Saisons et Salle des trophées ont été retirées de l'accueil (elles restent
+  // disponibles ailleurs). Les Quêtes ne figuraient pas sur l'accueil.
   return (
     <>
       <ProfileIdentityStrip
@@ -80,13 +81,9 @@ function HomeHub({
       />
       <ProfileHeroCard />
 
-      <SeasonTrackCard />
-
       <RPGProgressionSection />
 
       <ClassCard workouts={workouts} rankAggregate={rankAggregate} />
-
-      <TrophyRoomPreview achievements={achievements} legacyBadges={legacyBadges} />
     </>
   );
 }
