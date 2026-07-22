@@ -8,17 +8,17 @@ import { normalize } from "./exerciseCatalog";
 export type RankKey = "mortel" | "guerrier" | "heros" | "titan" | "olympien" | "primordial";
 
 export interface RankTierColors {
-  primary: string;      // couleur dominante
-  secondary: string;    // accent
-  glow: string;         // halo / shadow
-  text: string;         // texte foreground du badge
-  gradient: string;     // gradient CSS complet pour la barre
+  primary: string; // couleur dominante
+  secondary: string; // accent
+  glow: string; // halo / shadow
+  text: string; // texte foreground du badge
+  gradient: string; // gradient CSS complet pour la barre
 }
 
 export interface RankTier {
   key: RankKey;
-  label: string;              // "Titan"
-  motif: string;              // motif visuel : laurel / column / lightning / flame / wings / shield / helm / spear / obsidian
+  label: string; // "Titan"
+  motif: string; // motif visuel : laurel / column / lightning / flame / wings / shield / helm / spear / obsidian
   colors: RankTierColors;
 }
 
@@ -76,11 +76,13 @@ export const RANK_TIERS: RankTier[] = [
     label: "Olympien",
     motif: "lightning",
     colors: {
-      primary: "#2563eb",
-      secondary: "#eab308",
-      glow: "rgba(234,179,8,0.6)",
-      text: "#fef9c3",
-      gradient: "linear-gradient(90deg,#1e3a8a 0%,#3b82f6 45%,#eab308 100%)",
+      // Or lumineux dominant (couronne de laurier gravée, braises dorées de
+      // l'illustration officielle) — plus de bleu, cf. validation du 22/07/2026.
+      primary: "#ca8a04",
+      secondary: "#fde047",
+      glow: "rgba(250,204,21,0.65)",
+      text: "#fffbeb",
+      gradient: "linear-gradient(90deg,#78350f 0%,#ca8a04 45%,#fde047 100%)",
     },
   },
   {
@@ -88,12 +90,14 @@ export const RANK_TIERS: RankTier[] = [
     label: "Primordial",
     motif: "cosmos",
     colors: {
-      primary: "#7c3aed",
+      // Blanc cosmique / argent / gris froid (médaillon fracturé, poussière
+      // d'étoiles de l'illustration officielle) — plus de violet, cf.
+      // validation du 22/07/2026.
+      primary: "#64748b",
       secondary: "#f8fafc",
-      glow: "rgba(124,58,237,0.7)",
-      text: "#f5f3ff",
-      gradient:
-        "linear-gradient(90deg,#0c0a1f 0%,#4c1d95 40%,#a78bfa 75%,#f8fafc 100%)",
+      glow: "rgba(241,245,249,0.75)",
+      text: "#f8fafc",
+      gradient: "linear-gradient(90deg,#1e293b 0%,#64748b 45%,#cbd5e1 75%,#ffffff 100%)",
     },
   },
 ];
@@ -109,16 +113,16 @@ export const TOTAL_TIERS = RANK_TIERS.length * LEVELS_PER_RANK; // 30
  * portent ici un pourcentage de Maîtrise (0..100), pas une XP.
  */
 export interface RankState {
-  tierIndex: number;        // 0..29
-  rank: RankTier;           // Titan
-  levelInRank: number;      // 1..5
-  romanLevel: string;       // "III"
-  fullName: string;         // "Titan III"
-  xp: number;               // Maîtrise (0..100)
-  currentTierXp: number;    // Maîtrise (0..100)
-  nextTierXp: number;       // toujours 100
-  xpToNext: number;         // 100 - Maîtrise
-  progress: number;         // 0..1
+  tierIndex: number; // 0..29
+  rank: RankTier; // Titan
+  levelInRank: number; // 1..5
+  romanLevel: string; // "III"
+  fullName: string; // "Titan III"
+  xp: number; // Maîtrise (0..100)
+  currentTierXp: number; // Maîtrise (0..100)
+  nextTierXp: number; // toujours 100
+  xpToNext: number; // 100 - Maîtrise
+  progress: number; // 0..1
   isMax: boolean;
 }
 
@@ -141,7 +145,11 @@ const DIFFICULTY_RULES: DifficultyRule[] = [
   { pattern: /rowing|d(e|é)velopp(e|é)|presse|fentes?|lunge|clean|snatch|thruster/, coef: 1.4 },
   { pattern: /machine convergente|smith/, coef: 1.2 },
   { pattern: /\bmachine\b|guid(e|é)/, coef: 1.1 },
-  { pattern: /curl|extension|(e|é)cart(e|é)|(e|é)l(e|é)vation|kickback|pull ?over|shrug|crunch|leg raise/, coef: 1.0 },
+  {
+    pattern:
+      /curl|extension|(e|é)cart(e|é)|(e|é)l(e|é)vation|kickback|pull ?over|shrug|crunch|leg raise/,
+    coef: 1.0,
+  },
 ];
 
 export function exerciseDifficulty(name: string): number {
