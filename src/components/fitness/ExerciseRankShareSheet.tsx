@@ -4,6 +4,7 @@ import { toPng } from "html-to-image";
 import { Share2, Download, X, Loader2 } from "lucide-react";
 import { RankIllustration } from "@/components/rpg/RankIllustration";
 import type { RankState } from "@/lib/fitness/exerciseRanks";
+import { gradeName } from "@/lib/fitness/rpg/grade";
 import type { ExerciseBest } from "@/hooks/useExerciseProgression";
 
 /**
@@ -137,7 +138,7 @@ export function ExerciseRankShareSheet({
             />
 
             <div className="relative flex h-full flex-col items-center justify-between p-6 pt-8">
-              {/* Signature haut + niveau romain (info absente de l'illustration) */}
+              {/* Signature haut + grade officiel (info absente de l'illustration) */}
               <div className="flex w-full items-center justify-between">
                 <p
                   className="text-[9px] font-bold uppercase tracking-[0.4em]"
@@ -146,7 +147,7 @@ export function ExerciseRankShareSheet({
                   iCortex · Rang
                 </p>
                 <span className="rounded-md bg-black/60 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-white backdrop-blur-sm">
-                  {rank.romanLevel}
+                  {gradeName(rank.rank.key, rank.levelInRank)}
                 </span>
               </div>
 

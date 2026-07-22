@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import confetti from "canvas-confetti";
 import { RankIllustration } from "@/components/rpg/RankIllustration";
 import type { RankState } from "@/lib/fitness/exerciseRanks";
+import { gradeName } from "@/lib/fitness/rpg/grade";
 
 /**
  * Cinématique de montée de rang — "Reliquary".
@@ -141,7 +142,7 @@ export function RankUpOverlay({ rank, onDone }: { rank: RankState | null; onDone
                   textShadow: `0 0 30px ${colors.glow}, 0 0 6px rgba(255,255,255,0.4)`,
                 }}
               >
-                {rank.rank.label} <span style={{ color: colors.secondary }}>{rank.romanLevel}</span>
+                {gradeName(rank.rank.key, rank.levelInRank)}
               </motion.h2>
 
               <motion.p

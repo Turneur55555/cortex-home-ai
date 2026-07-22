@@ -1,8 +1,13 @@
+import { useMemo } from "react";
 import { X } from "lucide-react";
 import { listEngines } from "@/lib/fitness/engines/registry";
 import { isReadyEngine } from "@/lib/fitness/engines/types";
 import type { DisciplineId } from "@/lib/fitness/engines/types";
 import { DisciplineIcon } from "./session/DisciplineIcon";
+import { RankIllustration } from "@/components/rpg/RankIllustration";
+import { RankAggregator } from "./RankAggregator";
+import { useWorkouts } from "@/hooks/use-fitness";
+import { computePRs } from "@/utils/fitness/exercise-stats";
 
 // ============================================================
 // Point d'entrée UNIQUE de La Forge (Phase 1 multi-discipline,
@@ -18,6 +23,13 @@ import { DisciplineIcon } from "./session/DisciplineIcon";
 //     (nouveau, générique, voir ce fichier)
 // "autre" (Freeform) est explicitement exclu : texte libre généré par IA,
 // aucun vocabulaire d'exercice stable à cataloguer.
+//
+// Illustration de rang (2026-07-22) : seule "Musculation" (feedsRankEngine
+// = true, voir engines/types.ts) a un Rang à afficher — c'est la SEULE
+// discipline dont le moteur Rang/Maîtrise interprète les séances. Les
+// autres disciplines n'ont aucune donnée de rang par construction (frontière
+// documentée dans engines/types.ts) : elles gardent leur DisciplineIcon
+// existante plutôt qu'une illustration inventée.
 // ============================================================
 
 export function ForgeDisciplineChooser({
@@ -28,6 +40,8 @@ export function ForgeDisciplineChooser({
   onPick: (discipline: DisciplineId) => void;
 }) {
   const disciplines = listEngines().filter((e) => isReadyEngine(e) && e.id !== "autre");
+  const { data: workouts } = useWorkouts();
+  const { topExercises } = useMemo(() => computePRs(workouts), [workouts]);
 
   return (
     <div
@@ -51,24 +65,41 @@ export function ForgeDisciplineChooser({
           </button>
         </div>
 
-        <ul className="space-y-1.5 overflow-y-auto">
-          {disciplines.map((d) => (
-            <li key={d.id}>
-              <button
-                type="button"
-                onClick={() => onPick(d.id)}
-                className="flex w-full items-center gap-3 rounded-2xl border border-border bg-surface/60 p-3 text-left transition-colors hover:bg-surface active:scale-[0.99]"
-              >
-                <span
-                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/5 ${d.accentClassName}`}
-                >
-                  <DisciplineIcon icon={d.icon} className="h-4.5 w-4.5" />
-                </span>
-                <span className="text-sm font-medium text-foreground">{d.label}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
+        <RankAggregator exerciseNames={topExercises}>
+          {({ best }) => (
+            <ul className="space-y-1.5 overflow-y-auto">
+              {disciplines.map((d) => {
+                const muscuRank = d.id === "muscu" ? best?.rank : null;
+                return (
+                  <li key={d.id}>
+                    <button
+                      type="button"
+                      onClick={() => onPick(d.id)}
+                      className="flex w-full items-center gap-3 rounded-2xl border border-border bg-surface/60 p-3 text-left transition-colors hover:bg-surface active:scale-[0.99]"
+                    >
+                      {muscuRank ? (
+                        <div className="relative aspect-[4/5] w-9 shrink-0 overflow-hidden rounded-lg shadow-elevated">
+                          <RankIllustration
+                            rankKey={muscuRank.rank.key}
+                            label={muscuRank.rank.label}
+                            className="absolute inset-0 h-full w-full"
+                          />
+                        </div>
+                      ) : (
+                        <span
+                          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/5 ${d.accentClassName}`}
+                        >
+                          <DisciplineIcon icon={d.icon} className="h-4.5 w-4.5" />
+                        </span>
+                      )}
+                      <span className="text-sm font-medium text-foreground">{d.label}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </RankAggregator>
       </div>
     </div>
   );

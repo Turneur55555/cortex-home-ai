@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Book,
   BookOpen,
@@ -38,10 +38,32 @@ import {
 import { ExerciseListBrowser, type BrowserExercise } from "./ExerciseListBrowser";
 import { ExerciseActionsMenu, type ExerciseMenuAction } from "./ExerciseActionsMenu";
 import { ExerciseAnalysisSheet, type ExerciseAnalysisActions } from "./ExerciseAnalysisSheet";
+import { RankAggregator, type ProbeResult } from "./RankAggregator";
+import type { RankState } from "@/lib/fitness/exerciseRanks";
 import type { RecentExercise } from "@/lib/fitness/recentExercises";
 import { identityKey } from "@/lib/fitness/recentExercises";
 
 export type { RecentExercise };
+
+/**
+ * Ponte invisible entre `RankAggregator` (render-prop) et l'état local du
+ * Catalogue : ne fait que recopier `reports` (un ProbeResult par exercice
+ * déjà pratiqué) dans une Map<nom, RankState> consommable directement par
+ * `ExerciseListBrowser`, sans imposer de restructurer tout l'arbre JSX
+ * existant autour d'un render-prop.
+ */
+function RankByNameSync({
+  reports,
+  onChange,
+}: {
+  reports: ProbeResult[];
+  onChange: (map: Map<string, RankState>) => void;
+}) {
+  useEffect(() => {
+    onChange(new Map(reports.map((r) => [r.name, r.rank])));
+  }, [reports, onChange]);
+  return null;
+}
 
 export type PickedExercise = {
   name: string;
@@ -159,6 +181,7 @@ export function ExerciseExplorerSheet({
   const [promotingExercise, setPromotingExercise] = useState<DbCatalogRow | null>(null);
   const [promoteGroup, setPromoteGroup] = useState(CATALOG_GROUPS[0]);
   const [openExercise, setOpenExercise] = useState<BrowserExercise | null>(null);
+  const [rankByName, setRankByName] = useState<Map<string, RankState>>(new Map());
 
   // Picker uniquement : scan caméra IA.
   const [scanning, setScanning] = useState(false);
@@ -193,6 +216,23 @@ export function ExerciseExplorerSheet({
     }
     return exerciseIllustration(name);
   };
+
+  // Illustration de rang dans le Catalogue (2026-07-22) — uniquement les
+  // exercices déjà pratiqués (une entrée dans `prByName`, calculé une fois
+  // par SeancesTab via computePRs, zéro requête supplémentaire) : sonder le
+  // Rang des ~100 exercices du catalogue entier serait coûteux et n'a de
+  // toute façon aucun sens pour un exercice jamais loggé (sessionCount = 0).
+  // Réservé au mode "catalog" : le Picker garde son comportement existant.
+  const rankedExerciseNames = useMemo(
+    () =>
+      mode === "catalog"
+        ? items
+            .filter((it) => prByName.has(keyForBrowserExercise(it.name, it.id)))
+            .map((it) => it.name)
+        : [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [items, prByName, mode],
+  );
 
   const normQuery = normalize(query);
   const filteredRecents = useMemo(() => {
@@ -455,6 +495,11 @@ export function ExerciseExplorerSheet({
 
   return (
     <div className="fixed inset-0 z-[60] flex items-end justify-center" onClick={onClose}>
+      {rankedExerciseNames.length > 0 && (
+        <RankAggregator exerciseNames={rankedExerciseNames}>
+          {({ reports }) => <RankByNameSync reports={reports} onChange={setRankByName} />}
+        </RankAggregator>
+      )}
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
 
       <div
@@ -564,6 +609,7 @@ export function ExerciseExplorerSheet({
             groupOrder={ALL_GROUPS}
             highlightGroups={new Set(["Mes exercices"])}
             getPhoto={getPhoto}
+            rankByName={mode === "catalog" ? rankByName : undefined}
             onRowTap={handleRowTap}
             renderRowMenu={(ex) => (
               <ExerciseActionsMenu title={ex.name} actions={buildMenuActions(ex)} />
