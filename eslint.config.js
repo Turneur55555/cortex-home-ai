@@ -45,4 +45,27 @@ export default tseslint.config(
     },
   },
   eslintPluginPrettier,
+  {
+    // Fichiers générés automatiquement (Supabase CLI, Lovable) : jamais
+    // repassés par un formatter, donc en désaccord permanent avec Prettier
+    // sans que ça reflète un problème de qualité. On coupe uniquement
+    // prettier/prettier ici — toutes les vraies règles de qualité
+    // (no-explicit-any, no-unused-vars, no-console, etc.) restent actives
+    // et remonteraient normalement si ces fichiers en contenaient.
+    files: ["src/integrations/supabase/types.ts", "src/integrations/lovable/index.ts"],
+    rules: {
+      "prettier/prettier": "off",
+    },
+  },
+  {
+    // Edge functions Deno (supabase/functions/**) : hors du projet
+    // TypeScript principal (voir tsconfig.json → "include"), formatées par
+    // `deno fmt` selon une convention différente de la config Prettier du
+    // front. Même traitement : seul prettier/prettier est coupé, les
+    // vraies règles de qualité restent actives sur ces fichiers.
+    files: ["supabase/functions/**/*.ts"],
+    rules: {
+      "prettier/prettier": "off",
+    },
+  },
 );
