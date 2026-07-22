@@ -23,6 +23,16 @@ CORTEX vise à être **le plus beau RPG de progression du fitness**, pas une app
   rang (plus de Disque/Blason/sigils SVG) — réutiliser `RankIllustration` sur TOUS les écrans premium
   (récompenses, montées de rang, Chroniques, Saisons, Reliques, trophées) pour un univers cohérent.
   `premium/tokens.ts` reste la source des courbes d'animation/durées partagées.
+- **RankTheme — garde-fou anti-duplication (validé par Nathan, 22/07/2026)** : toute couleur affichée
+  pour un RANG (halo, liseré, glow de texte — `boxShadow`/`textShadow` construits à partir de
+  `rank.colors.*`) doit passer par `src/components/rpg/rankTheme.ts` (`rankRingInset`, `rankGlowShadow`,
+  `rankSurfaceShadow`, `rankTextGlow`, `rankTierByKey`/`rankThemeByKey`) — **jamais** réassembler une
+  chaîne `` `inset 0 0 0 1px ${colors.primary}30, ...` `` à la main dans un composant. Si le helper qui
+  manque n'existe pas encore, l'ajouter dans `rankTheme.ts`, pas en inline. Cette règle ne concerne QUE
+  le rang par exercice / Titre global (`RANK_TIERS`) — elle ne s'applique jamais aux palettes
+  volontairement distinctes (accent utilisateur `lib/accent.ts`, récompense XP, Saison, rareté des
+  badges/Légendes `rarityVisuals.ts`) : ce sont des domaines produit séparés, pas des doublons du
+  thème de rang, et ils ne doivent pas être migrés vers `rankTheme.ts`.
 - **Deux questions avant d'ajouter** : (1) renforce-t-elle la boucle entraîner→progresser→récompenser→
   revenir ? (2) crée-t-elle un vrai effet « Waouh » ? Si non aux deux → pas prioritaire.
 - **Test de chaque itération premium** : *« Si un utilisateur ouvrait cet écran pour la première fois,
