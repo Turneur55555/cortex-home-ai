@@ -27,8 +27,21 @@ import { EASE_OUT } from "@/components/rpg/premium/tokens";
  * paliers). La correspondance rang → illustration vit dans `assets/ranks`.
  */
 export function ProfileHeroCard() {
-  const { data: userStats } = useUserStats();
+  const { data: userStats, isLoading, isFetching, dataUpdatedAt } = useUserStats();
   const progress = titleProgressForXp(userStats?.xp ?? 0);
+
+  // TEMP DIAGNOSTIC — à retirer après investigation du flash de rang au démarrage.
+  // eslint-disable-next-line no-console
+  console.log("[RANG-DEBUG] ProfileHeroCard render", {
+    t: performance.now().toFixed(1),
+    isLoading,
+    isFetching,
+    dataUpdatedAt,
+    rawXp: userStats?.xp,
+    xpUsed: progress.xp,
+    tierIndex: progress.tierIndex,
+    rankKey: progress.title.key,
+  });
 
   // Position dans le palier courant (0..100).
   const gradeSpan = Math.max(

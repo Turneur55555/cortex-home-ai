@@ -36,8 +36,22 @@ import {
  * Rien d'autre n'est touché pour l'instant.
  */
 export function RPGProgressionSection() {
-  const { data: userStats, isLoading } = useUserStats();
+  const { data: userStats, isLoading, isFetching, dataUpdatedAt } = useUserStats();
   const progress = titleProgressForXp(userStats?.xp ?? 0);
+
+  // TEMP DIAGNOSTIC — à retirer après investigation du flash de rang au démarrage.
+  // eslint-disable-next-line no-console
+  console.log("[RANG-DEBUG] RPGProgressionSection render", {
+    t: performance.now().toFixed(1),
+    isLoading,
+    isFetching,
+    dataUpdatedAt,
+    rawXp: userStats?.xp,
+    xpUsed: progress.xp,
+    tierIndex: progress.tierIndex,
+    rankKey: progress.title.key,
+  });
+
   const currentGrade = progress.grade;
   const nextGrade = nextGradeLabel(progress);
   const percent = progress.isMax
