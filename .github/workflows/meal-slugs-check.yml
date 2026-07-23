@@ -19,7 +19,6 @@ on:
       - 'supabase/functions/_shared/meals.ts'
       - 'supabase/functions/scan-meal/**'
       - 'supabase/functions/parse-meal-text/**'
-      - 'supabase/functions/analyze-image/**'
       - 'supabase/functions/analyze-pdf/**'
       - 'supabase/migrations/**'
   pull_request:
@@ -29,7 +28,6 @@ on:
       - 'supabase/functions/_shared/meals.ts'
       - 'supabase/functions/scan-meal/**'
       - 'supabase/functions/parse-meal-text/**'
-      - 'supabase/functions/analyze-image/**'
       - 'supabase/functions/analyze-pdf/**'
       - 'supabase/migrations/**'
   workflow_dispatch:

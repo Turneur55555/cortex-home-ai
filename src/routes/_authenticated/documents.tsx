@@ -12,27 +12,20 @@ import {
   Sparkles,
   Trash2,
   Upload,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   useDocuments,
-  useUploadAndAnalyze,
+  useDeposeDocument,
   useDeleteDocument,
   MODULE_LABELS,
-  MODULE_SELECTION_LABELS,
   type DocModule,
-  type DocModuleSelection,
-  type AnalysisResult,
+  type DepositResult,
+  type FitnessJournalEntry,
 } from "@/hooks/use-documents";
-import { useImageUpload, isImageFile, type UploadStage } from "@/hooks/useImageUpload";
+import { useAddWorkout } from "@/hooks/use-fitness";
 import type { Tables } from "@/integrations/supabase/types";
 
 export const Route = createFileRoute("/_authenticated/documents")({
@@ -41,7 +34,7 @@ export const Route = createFileRoute("/_authenticated/documents")({
       { title: "Documents — ICORTEX" },
       {
         name: "description",
-        content: "Analyse IA de vos PDF et photos, déversés vers les modules.",
+        content: "Analyse IA de vos PDF et photos, déversés automatiquement vers les bons modules.",
       },
     ],
   }),
@@ -49,106 +42,59 @@ export const Route = createFileRoute("/_authenticated/documents")({
   component: DocumentsPage,
 });
 
-const STAGE_LABELS: Record<UploadStage, string> = {
-  idle: "",
-  validating: "Vérification…",
-  compressing: "Compression…",
-  uploading: "Envoi…",
-  ocr: "Lecture IA…",
-  parsing: "Extraction…",
-  done: "Terminé",
-  error: "Erreur",
-};
-
+function isImageName(nameOrType: string): boolean {
+  return /\.(jpe?g|png|webp|heic|heif)$/i.test(nameOrType) || nameOrType.startsWith("image/");
+}
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 function DocumentsPage() {
   const { upload: openUploadOnLoad } = Route.useSearch();
   const docs = useDocuments();
-  const upload = useUploadAndAnalyze();
-  const imageUpload = useImageUpload();
+  const depose = useDeposeDocument();
   const remove = useDeleteDocument();
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [open, setOpen] = useState(!!openUploadOnLoad);
-  const [module, setModule] = useState<DocModuleSelection>("auto");
   const [pickedFiles, setPickedFiles] = useState<File[]>([]);
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(
     null,
   );
-  const [lastResult, setLastResult] = useState<{
-    doc: Tables<"documents">;
-    result: AnalysisResult;
-  } | null>(null);
+  const [reports, setReports] = useState<Array<{ fileName: string; result: DepositResult }>>([]);
 
-  const isWorking = upload.isPending || imageUpload.isUploading;
-
-  const handleSubmit = async () => {
+  const handleDeposer = async () => {
     if (pickedFiles.length === 0) return toast.error("Sélectionne au moins un fichier");
-    console.log("[Documents] Clic sur le bouton d'import —", pickedFiles.length, "fichier(s)");
     const total = pickedFiles.length;
-    let last: { doc: Tables<"documents">; result: AnalysisResult } | null = null;
+    const newReports: Array<{ fileName: string; result: DepositResult }> = [];
     let ok = 0;
 
     for (let i = 0; i < total; i++) {
       setBatchProgress({ current: i + 1, total });
       const file = pickedFiles[i];
-      console.log(`[Documents] Upload ${i + 1}/${total} — début (${file.name})`);
       try {
-        if (isImageFile(file)) {
-          const res = await imageUpload.upload(file, module);
-          if (res) {
-            last = { doc: res.doc, result: res.result };
-            if (res.wasAuto) {
-              toast.success(
-                `Image analysée — détecté: ${MODULE_LABELS[res.detectedModule as DocModule] ?? res.detectedModule}`,
-              );
-            } else {
-              toast.success("Image analysée");
-            }
-            ok++;
-          }
-        } else {
-          const res = await upload.mutateAsync({ file, module });
-          if (res) {
-            last = { doc: res.doc, result: res.result };
-            ok++;
-          }
-        }
-        console.log(`[Documents] Upload ${i + 1}/${total} — succès (${file.name})`);
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : "Échec de l'analyse";
-        console.error(`[Documents] Upload ${i + 1}/${total} — échec (${file.name})`, e);
-        // Les erreurs PDF sont déjà notifiées par onError de la mutation ;
-        // useImageUpload ne toaste pas lui-même, donc on le fait ici pour ne jamais rester silencieux.
-        if (isImageFile(file)) toast.error(msg);
+        const result = await depose.mutateAsync(file);
+        newReports.push({ fileName: file.name, result });
+        ok++;
+      } catch {
+        // toast d'erreur déjà déclenché par onError du hook — on continue les fichiers suivants
       }
     }
 
     setBatchProgress(null);
-    setLastResult(last);
-    console.log(`[Documents] Import terminé — ${ok}/${total} réussi(s)`);
+    setReports((prev) => [...newReports, ...prev]);
     if (ok > 0) {
       setPickedFiles([]);
       setOpen(false);
     }
-    if (total > 1) toast.success(`${ok}/${total} fichiers analysés`);
+    if (total > 1) toast.success(`${ok}/${total} fichiers déversés`);
   };
 
   const submitLabel = () => {
-    if (imageUpload.isUploading && imageUpload.stage !== "idle") {
-      const stageLabel = STAGE_LABELS[imageUpload.stage] || "Analyse…";
-      if (batchProgress) return `${stageLabel} (${batchProgress.current}/${batchProgress.total})`;
-      return stageLabel;
+    if (depose.isPending && batchProgress) {
+      return `Déversement ${batchProgress.current}/${batchProgress.total}…`;
     }
-    if (upload.isPending) {
-      if (batchProgress) return `Analyse ${batchProgress.current}/${batchProgress.total}…`;
-      return "Analyse en cours…";
-    }
-    return pickedFiles.length > 1
-      ? `Analyser ${pickedFiles.length} fichiers`
-      : "Analyser avec l'IA";
+    if (depose.isPending) return "Déversement en cours…";
+    return pickedFiles.length > 1 ? `Déverser ${pickedFiles.length} fichiers` : "Déverser";
   };
 
   return (
@@ -158,7 +104,8 @@ function DocumentsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Documents</h1>
           <p className="mt-1 text-xs text-muted-foreground">
-            Importe un PDF ou une photo — l'IA détecte le bon module et l'analyse.
+            Importe un PDF ou une photo — l'IA détecte le(s) module(s) concerné(s) et déverse les
+            données automatiquement.
           </p>
         </div>
         <Sheet open={open} onOpenChange={setOpen}>
@@ -173,37 +120,13 @@ function DocumentsPage() {
             </SheetHeader>
             <div className="mt-5 flex flex-col gap-4">
               <div>
-                <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                  Module cible
-                </label>
-                <Select value={module} onValueChange={(v) => setModule(v as DocModuleSelection)}>
-                  <SelectTrigger style={{ WebkitTapHighlightColor: "transparent" }}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {(Object.keys(MODULE_SELECTION_LABELS) as DocModuleSelection[]).map((m) => (
-                      <SelectItem key={m} value={m}>
-                        {MODULE_SELECTION_LABELS[m]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  Laisse sur « Détection automatique » pour que l'IA choisisse.
-                </p>
-              </div>
-              <div>
                 <input
                   ref={fileRef}
                   type="file"
                   accept="application/pdf,image/jpeg,image/jpg,image/png,image/webp,image/heic,image/heif"
                   multiple
                   className="hidden"
-                  onChange={(e) => {
-                    const files = e.target.files ? Array.from(e.target.files) : [];
-                    console.log("[Documents] Fichier(s) sélectionné(s) :", files.map((f) => f.name));
-                    setPickedFiles(files);
-                  }}
+                  onChange={(e) => setPickedFiles(e.target.files ? Array.from(e.target.files) : [])}
                 />
                 <Button
                   type="button"
@@ -214,8 +137,7 @@ function DocumentsPage() {
                   {pickedFiles.length === 0 ? (
                     <Files className="h-4 w-4 text-primary" />
                   ) : pickedFiles.length === 1 ? (
-                    /\.(jpe?g|png|webp|heic|heif)$/i.test(pickedFiles[0].name) ||
-                    pickedFiles[0].type.startsWith("image/") ? (
+                    isImageName(pickedFiles[0].name) || pickedFiles[0].type.startsWith("image/") ? (
                       <FileImage className="h-4 w-4 text-primary" />
                     ) : (
                       <FileText className="h-4 w-4 text-primary" />
@@ -235,47 +157,43 @@ function DocumentsPage() {
                   PDF, JPG, PNG, WEBP, HEIC — 15 Mo max. Photos iPhone acceptées.
                 </p>
               </div>
-              {imageUpload.isUploading && imageUpload.stage !== "idle" && (
-                <div className="h-1 w-full overflow-hidden rounded-full bg-border">
-                  <div
-                    className="h-full rounded-full bg-primary transition-all duration-700"
-                    style={{ width: `${imageUpload.progress}%` }}
-                  />
-                </div>
-              )}
+
+              {/* Le bouton reste toujours visible et cliquable — jamais remplacé
+                  par la barre de progression (régression corrigée : voir historique
+                  du module). */}
               <Button
                 type="button"
                 className="gap-1.5"
-                onClick={() => void handleSubmit()}
-                disabled={isWorking || pickedFiles.length === 0}
+                onClick={() => void handleDeposer()}
+                disabled={depose.isPending || pickedFiles.length === 0}
               >
-                {isWorking ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    {submitLabel()}
-                  </>
+                {depose.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  <>
-                    <Sparkles className="h-4 w-4" />
-                    {submitLabel()}
-                  </>
+                  <Sparkles className="h-4 w-4" />
                 )}
+                {submitLabel()}
               </Button>
             </div>
           </SheetContent>
         </Sheet>
       </header>
 
-      {/* ── Last result card ───────────────────────────────────────────────── */}
-      {lastResult && (
-        <ResultCard
-          doc={lastResult.doc}
-          result={lastResult.result}
-          onDismiss={() => setLastResult(null)}
-        />
+      {/* ── Rapports de déversement (les plus récents en premier) ────────────── */}
+      {reports.length > 0 && (
+        <section className="flex flex-col gap-3">
+          {reports.map((r, i) => (
+            <DepositReportCard
+              key={`${r.fileName}-${i}`}
+              fileName={r.fileName}
+              result={r.result}
+              onDismiss={() => setReports((prev) => prev.filter((_, idx) => idx !== i))}
+            />
+          ))}
+        </section>
       )}
 
-      {/* ── History ────────────────────────────────────────────────────────── */}
+      {/* ── Historique ─────────────────────────────────────────────────────── */}
       <section className="flex flex-col gap-2 pb-6">
         <h2 className="px-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           Historique
@@ -296,36 +214,79 @@ function DocumentsPage() {
   );
 }
 
-// ─── Result card (after fresh upload) ─────────────────────────────────────────
+// ─── Rapport de déversement (après clic sur "Déverser") ───────────────────────
 
-function ResultCard({
-  doc,
+const MODULE_TABLE_LABELS: Record<string, string> = {
+  body: "Mesures corporelles",
+  nutrition: "Nutrition",
+  supplements: "Santé (compléments)",
+  fitness_template: "Séances (modèle)",
+};
+
+function DepositReportCard({
+  fileName,
   result,
   onDismiss,
 }: {
-  doc: Tables<"documents">;
-  result: AnalysisResult;
+  fileName: string;
+  result: DepositResult;
   onDismiss: () => void;
 }) {
-  const detected = doc.module as DocModule;
+  const { analysis, report } = result;
+  const addWorkout = useAddWorkout();
+  const [confirmedJournal, setConfirmedJournal] = useState<Set<number>>(new Set());
+
+  const touchedModules = Object.keys(report) as Array<keyof typeof report>;
+  const detectedLabels = (analysis.detected_modules ?? [])
+    .map((m) => MODULE_LABELS[m as DocModule] ?? m)
+    .join(", ");
+  const journalEntries: FitnessJournalEntry[] = analysis.modules?.fitness_journal ?? [];
+
+  const handleConfirmJournal = async (entry: FitnessJournalEntry, idx: number) => {
+    try {
+      await addWorkout.mutateAsync({
+        name: entry.name,
+        date: entry.date ?? new Date().toISOString().slice(0, 10),
+        duration_minutes: entry.duration_minutes ?? null,
+        notes: entry.notes ?? null,
+        exercises: (entry.exercises ?? []).map((ex) => ({
+          name: ex.name,
+          sets: ex.sets ?? null,
+          reps: ex.reps ?? null,
+          weight: ex.weight ?? null,
+        })),
+      });
+      setConfirmedJournal((prev) => new Set(prev).add(idx));
+      toast.success("Séance ajoutée à l'historique");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Impossible de créer la séance");
+    }
+  };
 
   return (
     <div className="rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/10 to-transparent p-4">
-      {/* Header */}
-      <div className="flex items-center gap-2">
-        <Sparkles className="h-4 w-4 text-primary" />
-        <span className="text-xs font-semibold uppercase tracking-wider text-primary">
-          Analyse IA — détecté : {MODULE_LABELS[detected] ?? detected}
-        </span>
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4 shrink-0 text-primary" />
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-primary">
+              {fileName}
+            </p>
+            {detectedLabels && (
+              <p className="text-[11px] text-muted-foreground">Classé : {detectedLabels}</p>
+            )}
+          </div>
+        </div>
+        <Button type="button" size="icon" variant="ghost" className="h-7 w-7 shrink-0" onClick={onDismiss}>
+          <X className="h-3.5 w-3.5" />
+        </Button>
       </div>
 
-      {/* Summary */}
-      <p className="mt-2 text-sm text-foreground">{result.summary}</p>
+      <p className="mt-2 text-sm text-foreground">{analysis.summary}</p>
 
-      {/* Insights */}
-      {result.key_insights.length > 0 && (
+      {analysis.key_insights.length > 0 && (
         <ul className="mt-3 flex flex-col gap-1.5">
-          {result.key_insights.map((k, i) => (
+          {analysis.key_insights.map((k, i) => (
             <li key={i} className="flex gap-2 text-xs text-muted-foreground">
               <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
               <span>{k}</span>
@@ -334,10 +295,9 @@ function ResultCard({
         </ul>
       )}
 
-      {/* Alerts */}
-      {result.alerts.length > 0 && (
+      {analysis.alerts.length > 0 && (
         <ul className="mt-3 flex flex-col gap-1.5 rounded-xl border border-destructive/30 bg-destructive/5 p-2.5">
-          {result.alerts.map((a, i) => (
+          {analysis.alerts.map((a, i) => (
             <li key={i} className="flex gap-2 text-xs text-destructive">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               <span>{a}</span>
@@ -346,26 +306,94 @@ function ResultCard({
         </ul>
       )}
 
+      {/* ── Détail du déversement, module par module ───────────────────────── */}
+      {touchedModules.length > 0 && (
+        <div className="mt-3 flex flex-col gap-2 border-t border-border pt-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Déversement
+          </p>
+          {touchedModules.map((mod) => {
+            const modReport = report[mod];
+            if (!modReport) return null;
+            return (
+              <div key={mod} className="rounded-xl bg-white/[0.03] p-2.5">
+                <p className="text-xs font-semibold text-foreground">
+                  {MODULE_TABLE_LABELS[mod] ?? mod}
+                </p>
+                {modReport.written.length > 0 && (
+                  <ul className="mt-1 flex flex-col gap-0.5">
+                    {modReport.written.map((w, i) => (
+                      <li key={i} className="flex gap-1.5 text-xs text-muted-foreground">
+                        <Check className="mt-0.5 h-3 w-3 shrink-0 text-primary" />
+                        <span>
+                          {(w.name as string) ?? (w.date as string) ?? "Ligne créée"}
+                          {w.table ? ` (${w.table})` : ""}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {modReport.skipped.length > 0 && (
+                  <ul className="mt-1 flex flex-col gap-0.5">
+                    {modReport.skipped.map((s, i) => (
+                      <li key={i} className="flex gap-1.5 text-xs text-amber-500">
+                        <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                        <span>{s.reason as string}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
+      {/* ── Journal de séance détecté : jamais auto-inséré, confirmation requise ── */}
+      {journalEntries.length > 0 && (
+        <div className="mt-3 flex flex-col gap-2 border-t border-border pt-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Séance réalisée détectée — à confirmer
+          </p>
+          {journalEntries.map((entry, idx) => (
+            <div key={idx} className="flex items-center justify-between gap-2 rounded-xl bg-white/[0.03] p-2.5">
+              <div className="min-w-0">
+                <p className="truncate text-xs font-semibold text-foreground">{entry.name}</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {entry.date ? `${entry.date} · ` : ""}
+                  {(entry.exercises ?? []).length} exercice(s)
+                </p>
+              </div>
+              {confirmedJournal.has(idx) ? (
+                <span className="shrink-0 text-xs text-primary">Ajoutée ✓</span>
+              ) : (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="shrink-0"
+                  disabled={addWorkout.isPending}
+                  onClick={() => void handleConfirmJournal(entry, idx)}
+                >
+                  Créer cette séance
+                </Button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
-
-      {/* Dismiss */}
-      <div className="mt-3 flex justify-end">
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          onClick={onDismiss}
-          className="min-h-[2.75rem] px-4"
-        >
-          Fermer
-        </Button>
-      </div>
+      {touchedModules.length === 0 && journalEntries.length === 0 && (
+        <p className="mt-3 border-t border-border pt-3 text-xs text-muted-foreground">
+          Aucun module métier dédié pour ce contenu — document classé et archivé, aucune donnée
+          déversée.
+        </p>
+      )}
     </div>
   );
 }
 
-// ─── History card ─────────────────────────────────────────────────────────────
+// ─── Historique ─────────────────────────────────────────────────────────────
 
 function DocCard({ doc, onDelete }: { doc: Tables<"documents">; onDelete: () => void }) {
   const insights = useMemo<string[]>(
@@ -376,15 +404,13 @@ function DocCard({ doc, onDelete }: { doc: Tables<"documents">; onDelete: () => 
     () => (Array.isArray(doc.alerts) ? (doc.alerts as string[]) : []),
     [doc.alerts],
   );
-  
 
   const [open, setOpen] = useState(false);
   const detected = doc.module as DocModule;
-  const isImageDoc = /\.(jpe?g|png|webp|heic|heif|jpg)$/i.test(doc.storage_path);
+  const isImageDoc = isImageName(doc.storage_path);
 
   return (
     <div className="rounded-2xl border border-border bg-surface p-3.5">
-      {/* ── Clickable header ─────────────────────────────────────────────── */}
       <button
         type="button"
         className="flex w-full items-start gap-3 text-left"
@@ -406,7 +432,6 @@ function DocCard({ doc, onDelete }: { doc: Tables<"documents">; onDelete: () => 
         </div>
       </button>
 
-      {/* ── Expandable insights / alerts ─────────────────────────────────── */}
       {open && (insights.length > 0 || alerts.length > 0) && (
         <div className="mt-3 flex flex-col gap-2 border-t border-border pt-3">
           {insights.length > 0 && (
@@ -430,7 +455,6 @@ function DocCard({ doc, onDelete }: { doc: Tables<"documents">; onDelete: () => 
         </div>
       )}
 
-      {/* ── Actions — toujours visibles ───────────────────────────────────── */}
       <div className="mt-3 flex flex-col gap-2 border-t border-border pt-3">
         <div className="flex justify-end">
           <Button

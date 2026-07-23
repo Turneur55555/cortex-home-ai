@@ -1,0 +1,12 @@
+-- Suppression de health_data_imports : table écriture-seule.
+--
+-- Preuve d'absence d'usage (méthodologie CLEANUP_AUDIT_REPORT.md du
+-- 05/07/2026) :
+--   - 0 ligne en production
+--   - unique écrivain : l'edge function analyze-image (retirée dans cette
+--     même refonte du module Documents — remplacée par analyze-pdf unifié)
+--   - aucune lecture nulle part dans le frontend (grep confirmé)
+--   - aucun trigger autre que son propre trigger updated_at, aucune FK
+--     entrante, aucune fonction pg_proc n'y fait référence, aucune vue
+--     n'en dépend (vérifié par introspection SQL directe)
+drop table if exists public.health_data_imports;

@@ -12,8 +12,8 @@ function daysAgo(dateStr: string): string {
 
 /**
  * Carte de résumé — remplace le double panneau "Docs IA" / "Mes PDF"
- * autrefois dupliqué sur Profil. La page `/documents` (avec son
- * `TransferPanel`) est déjà l'expérience complète : Profil se contente d'y
+ * autrefois dupliqué sur Profil. La page `/documents` est déjà l'expérience
+ * complète (import + rapport de déversement) : Profil se contente d'y
  * renvoyer plutôt que d'en réafficher une copie appauvrie (voir audit du
  * 06/07/2026, §2.1). Réutilise `useDocuments()` tel quel — aucune nouvelle
  * requête, aucune logique dupliquée.

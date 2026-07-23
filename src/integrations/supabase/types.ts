@@ -279,6 +279,7 @@ export type Database = {
           notes: string | null
           right_arm: number | null
           right_thigh: number | null
+          source_document_id: string | null
           user_id: string
           waist: number | null
           weight: number | null
@@ -296,6 +297,7 @@ export type Database = {
           notes?: string | null
           right_arm?: number | null
           right_thigh?: number | null
+          source_document_id?: string | null
           user_id: string
           waist?: number | null
           weight?: number | null
@@ -313,11 +315,20 @@ export type Database = {
           notes?: string | null
           right_arm?: number | null
           right_thigh?: number | null
+          source_document_id?: string | null
           user_id?: string
           waist?: number | null
           weight?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "body_tracking_source_document_id_fkey"
+            columns: ["source_document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       ca_praticiens: {
         Row: {
@@ -733,8 +744,8 @@ export type Database = {
       documents: {
         Row: {
           alerts: Json | null
-          analysis: string | null
           created_at: string
+          extracted_items: Json
           id: string
           key_insights: Json | null
           module: string
@@ -745,8 +756,8 @@ export type Database = {
         }
         Insert: {
           alerts?: Json | null
-          analysis?: string | null
           created_at?: string
+          extracted_items?: Json
           id?: string
           key_insights?: Json | null
           module: string
@@ -757,8 +768,8 @@ export type Database = {
         }
         Update: {
           alerts?: Json | null
-          analysis?: string | null
           created_at?: string
+          extracted_items?: Json
           id?: string
           key_insights?: Json | null
           module?: string
@@ -1654,45 +1665,6 @@ export type Database = {
         }
         Relationships: []
       }
-      health_data_imports: {
-        Row: {
-          created_at: string
-          data_type: string | null
-          id: string
-          image_path: string
-          image_url: string | null
-          ocr_text: string | null
-          parsed_data: Json | null
-          status: string
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          data_type?: string | null
-          id?: string
-          image_path: string
-          image_url?: string | null
-          ocr_text?: string | null
-          parsed_data?: Json | null
-          status?: string
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          data_type?: string | null
-          id?: string
-          image_path?: string
-          image_url?: string | null
-          ocr_text?: string | null
-          parsed_data?: Json | null
-          status?: string
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
       historique_imports: {
         Row: {
           categorie: string | null
@@ -1894,6 +1866,7 @@ export type Database = {
           percentage_consumed: number | null
           proteins: number | null
           serving_count: number | null
+          source_document_id: string | null
           user_id: string
         }
         Insert: {
@@ -1915,6 +1888,7 @@ export type Database = {
           percentage_consumed?: number | null
           proteins?: number | null
           serving_count?: number | null
+          source_document_id?: string | null
           user_id: string
         }
         Update: {
@@ -1936,9 +1910,18 @@ export type Database = {
           percentage_consumed?: number | null
           proteins?: number | null
           serving_count?: number | null
+          source_document_id?: string | null
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "nutrition_source_document_id_fkey"
+            columns: ["source_document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       nutrition_favorites: {
         Row: {
@@ -2687,6 +2670,7 @@ export type Database = {
           created_at: string
           date: string
           id: string
+          source_document_id: string | null
           supplement_id: string
           taken: boolean
           user_id: string
@@ -2695,6 +2679,7 @@ export type Database = {
           created_at?: string
           date: string
           id?: string
+          source_document_id?: string | null
           supplement_id: string
           taken?: boolean
           user_id: string
@@ -2703,11 +2688,19 @@ export type Database = {
           created_at?: string
           date?: string
           id?: string
+          source_document_id?: string | null
           supplement_id?: string
           taken?: boolean
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "supplement_logs_source_document_id_fkey"
+            columns: ["source_document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "supplement_logs_supplement_id_fkey"
             columns: ["supplement_id"]
@@ -2726,6 +2719,7 @@ export type Database = {
           name: string
           notes: string | null
           sort_order: number
+          source_document_id: string | null
           unit: string | null
           updated_at: string
           user_id: string
@@ -2738,6 +2732,7 @@ export type Database = {
           name: string
           notes?: string | null
           sort_order?: number
+          source_document_id?: string | null
           unit?: string | null
           updated_at?: string
           user_id: string
@@ -2750,11 +2745,20 @@ export type Database = {
           name?: string
           notes?: string | null
           sort_order?: number
+          source_document_id?: string | null
           unit?: string | null
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "supplements_source_document_id_fkey"
+            columns: ["source_document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       taches: {
         Row: {
@@ -3392,6 +3396,7 @@ export type Database = {
           icon: string
           id: string
           name: string
+          source_document_id: string | null
           updated_at: string
           user_id: string
         }
@@ -3401,6 +3406,7 @@ export type Database = {
           icon?: string
           id?: string
           name: string
+          source_document_id?: string | null
           updated_at?: string
           user_id: string
         }
@@ -3410,10 +3416,19 @@ export type Database = {
           icon?: string
           id?: string
           name?: string
+          source_document_id?: string | null
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "workout_templates_source_document_id_fkey"
+            columns: ["source_document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       workouts: {
         Row: {
@@ -3574,6 +3589,10 @@ export type Database = {
         Returns: string
       }
       daitch_mokotoff: { Args: { "": string }; Returns: string[] }
+      deposit_document_analysis: {
+        Args: { p_document_id: string; p_modules: Json }
+        Returns: Json
+      }
       dmetaphone: { Args: { "": string }; Returns: string }
       dmetaphone_alt: { Args: { "": string }; Returns: string }
       f_unaccent: { Args: { "": string }; Returns: string }

@@ -1,9 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { FunctionsHttpError, FunctionsFetchError } from "@supabase/supabase-js";
+import { FunctionsFetchError } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 
+// Classifications possibles pour un document. Toutes ne mènent pas à une
+// écriture en base : "habits"/"menager" n'ont aucune table métier (modules
+// retirés en juillet 2026, volontairement non recréés — voir
+// docs/architecture/documents-deposit-pipeline.md), "pharmacie" générique
+// (analyses, comptes-rendus) reste archivée sans forcer un schéma inadapté.
 export type DocModule =
   | "alimentation"
   | "pharmacie"
@@ -14,30 +19,54 @@ export type DocModule =
   | "body"
   | "documents";
 
-export type DocModuleSelection = DocModule | "auto";
-
 export const MODULE_LABELS: Record<DocModule, string> = {
   alimentation: "Alimentation",
-  pharmacie: "Pharmacie",
+  pharmacie: "Santé / Pharmacie",
   habits: "Garde-robe",
   menager: "Ménager",
   nutrition: "Nutrition",
   fitness: "Séances",
   body: "Mesures corporelles",
-  documents: "Document seul",
+  documents: "Document générique",
 };
 
-export const MODULE_SELECTION_LABELS: Record<DocModuleSelection, string> = {
-  auto: "Détection automatique",
-  ...MODULE_LABELS,
+export type FitnessJournalEntry = {
+  date?: string;
+  name: string;
+  duration_minutes?: number;
+  exercises?: Array<{ name: string; sets?: number; reps?: number; weight?: number }>;
+  notes?: string;
 };
 
+// Réponse de l'edge function analyze-pdf — pure analyse, n'écrit jamais en base.
 export type AnalysisResult = {
   summary: string;
   key_insights: string[];
   alerts: string[];
-  extracted_items: Array<Record<string, unknown>>;
-  detected_module?: DocModule | null;
+  detected_modules: DocModule[];
+  modules: {
+    body?: Array<Record<string, unknown>>;
+    nutrition?: Array<Record<string, unknown>>;
+    supplements?: Array<Record<string, unknown>>;
+    fitness_template?: Array<Record<string, unknown>>;
+    fitness_journal?: FitnessJournalEntry[];
+    documents?: Array<Record<string, unknown>>;
+  };
+};
+
+// Réponse du RPC transactionnel deposit_document_analysis.
+export type ModuleDepositReport = {
+  written: Array<Record<string, unknown>>;
+  skipped: Array<Record<string, unknown>>;
+};
+export type DepositReport = Partial<
+  Record<"body" | "nutrition" | "supplements" | "fitness_template", ModuleDepositReport>
+>;
+
+export type DepositResult = {
+  doc: Tables<"documents">;
+  analysis: AnalysisResult;
+  report: DepositReport;
 };
 
 export function useDocuments() {
@@ -65,11 +94,16 @@ const ACCEPTED_IMAGE_TYPES = new Set([
 
 function isImageFile(file: File): boolean {
   if (ACCEPTED_IMAGE_TYPES.has(file.type)) return true;
-  // iOS Safari may report HEIC as "" — fallback to extension
+  // iOS Safari peut rapporter un type MIME vide pour HEIC — fallback extension.
   return /\.(jpe?g|png|webp|heic|heif)$/i.test(file.name);
 }
 
+// Compression canvas — HEIC/HEIF exclus car les navigateurs ne savent pas les
+// dessiner sur un canvas ; l'edge function les gère nativement via magic bytes.
 async function compressImage(file: File): Promise<Blob> {
+  const isHeic = /\.(heic|heif)$/i.test(file.name) || file.type === "image/heic" || file.type === "image/heif";
+  if (isHeic) return file;
+
   const dataUrl = await new Promise<string>((res, rej) => {
     const r = new FileReader();
     r.onload = () => res(r.result as string);
@@ -102,19 +136,13 @@ async function compressImage(file: File): Promise<Blob> {
   });
 }
 
-// ─── Instrumentation temporaire — diagnostic du blocage "Analyse 1/1…" (PDF) ──
-// Chaque étape réseau du pipeline PDF est chronométrée et bornée par un timeout
-// explicite : si une promesse ne se résout jamais, on le sait précisément (quelle
-// étape, après combien de temps) au lieu de rester bloqué indéfiniment sur
-// isPending=true. À retirer une fois la cause racine confirmée en prod.
-const PIPELINE_LOG_PREFIX = "[PDF-Import]";
-
+// Chaque étape réseau du pipeline est bornée par un timeout explicite : si une
+// promesse ne se résout jamais (cause historique du blocage "Analyse 1/1…"),
+// la mutation échoue proprement avec un message qui identifie l'étape en
+// cause, au lieu de laisser isPending=true indéfiniment.
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {
-      console.error(
-        `${PIPELINE_LOG_PREFIX} TIMEOUT après ${ms}ms — l'étape "${label}" n'a jamais répondu. C'est probablement l'appel bloquant.`,
-      );
       reject(new Error(`Timeout: l'étape "${label}" n'a pas répondu après ${Math.round(ms / 1000)}s.`));
     }, ms);
     promise.then(
@@ -130,14 +158,30 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   });
 }
 
-export function useUploadAndAnalyze() {
+function friendlyFunctionError(fnErr: unknown, isImage: boolean): string {
+  let msg = isImage
+    ? "Impossible d'analyser cette image. Essayez un format JPG ou PNG clair."
+    : "Impossible d'analyser ce document. Vérifiez que le fichier n'est pas corrompu.";
+  if (fnErr instanceof FunctionsFetchError) {
+    msg = "Service d'analyse inaccessible (erreur réseau). Réessaie dans un instant.";
+  }
+  return msg;
+}
+
+/**
+ * Pipeline unique de déversement : upload → analyse IA (analyze-pdf) →
+ * écriture transactionnelle dans les modules concernés (RPC
+ * deposit_document_analysis). Un seul appel = un clic sur "Déverser".
+ */
+export function useDeposeDocument() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ file, module }: { file: File; module: DocModuleSelection }) => {
+    mutationFn: async (file: File): Promise<DepositResult> => {
       let stage = "start";
+      let createdDocId: string | null = null;
+      let analysisSaved = false;
       const mark = (s: string) => {
         stage = s;
-        console.log(`${PIPELINE_LOG_PREFIX} étape atteinte: ${s}`);
       };
 
       try {
@@ -148,7 +192,7 @@ export function useUploadAndAnalyze() {
         if (!user) throw new Error("Non authentifié");
 
         const isImage = isImageFile(file);
-        const isPdf = file.type === "application/pdf";
+        const isPdf = file.type === "application/pdf" || /\.pdf$/i.test(file.name);
         if (!isImage && !isPdf) {
           throw new Error("Format non supporté (PDF, JPG, PNG, WEBP, HEIC)");
         }
@@ -156,8 +200,7 @@ export function useUploadAndAnalyze() {
 
         let uploadBlob: Blob = file;
         let contentType = file.type || "application/pdf";
-        // Normalize filename: replace HEIC/HEIF with .jpg since we compress to JPEG
-        let displayName = file.name.replace(/\.(heic|heif)$/i, ".jpg");
+        const displayName = file.name.replace(/\.(heic|heif)$/i, ".jpg");
 
         if (isImage) {
           mark("compress:image");
@@ -167,89 +210,107 @@ export function useUploadAndAnalyze() {
 
         const path = `${user.id}/${Date.now()}-${displayName.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
 
-        mark("storage:upload:start");
-        const uploadStartedAt = Date.now();
+        mark("storage:upload");
         const { error: upErr } = await withTimeout(
           supabase.storage.from("pdf-documents").upload(path, uploadBlob, { contentType, upsert: false }),
           30_000,
-          "storage.upload (Supabase Storage)",
+          "storage.upload",
         );
         if (upErr) throw upErr;
-        mark(`storage:upload:done (${Date.now() - uploadStartedAt}ms)`);
 
-        mark("edge-function:invoke:start (analyze-pdf)");
-        const invokeStartedAt = Date.now();
-        const { data: ai, error: fnErr } = await withTimeout(
-          supabase.functions.invoke("analyze-pdf", {
-            body: { storage_path: path, module, name: displayName, content_type: contentType },
-          }),
-          60_000,
-          "functions.invoke(analyze-pdf) — inclut le téléchargement, l'encodage et l'appel IA côté edge function",
-        );
-        mark(`edge-function:invoke:done (${Date.now() - invokeStartedAt}ms)`);
-
-        if (fnErr) {
-          let friendlyMsg = isImage
-            ? "Impossible d'analyser cette image. Essayez un format JPG ou PNG clair."
-            : "Impossible d'analyser ce PDF. Vérifiez que le fichier n'est pas corrompu.";
-          if (fnErr instanceof FunctionsFetchError) {
-            friendlyMsg = "Service d'analyse inaccessible (erreur réseau). Réessaie dans un instant.";
-          } else if (fnErr instanceof FunctionsHttpError) {
-            const body = await (fnErr.context as Response).json().catch(() => null) as Record<string, unknown> | null;
-            if (body?.error && typeof body.error === "string") friendlyMsg = body.error;
-          }
-          throw new Error(friendlyMsg);
-        }
-        if (ai?.error) throw new Error(ai.error);
-
-        const result = ai as AnalysisResult;
-        const finalModule: DocModule =
-          module === "auto" ? (result.detected_module ?? "documents") : module;
-
-        mark("db:insert:start (table documents)");
-        const { data: doc, error: insErr } = await withTimeout(
+        // Ligne "documents" créée avant l'analyse (module provisoire) pour que
+        // le RPC de déversement ait un document_id à référencer en traçabilité.
+        mark("db:insert-stub");
+        const { data: stubDoc, error: stubErr } = await withTimeout(
           supabase
             .from("documents")
-            .insert({
-              user_id: user.id,
-              name: displayName,
-              module: finalModule,
-              storage_path: path,
-              summary: result.summary,
-              key_insights: result.key_insights,
-              alerts: result.alerts,
-              analysis: JSON.stringify(result.extracted_items),
-            })
+            .insert({ user_id: user.id, name: displayName, storage_path: path, module: "documents" })
             .select()
             .single(),
           15_000,
-          "documents.insert (Supabase DB)",
+          "documents.insert (stub)",
         );
-        if (insErr) throw insErr;
-        mark("db:insert:done");
+        if (stubErr) throw stubErr;
+        createdDocId = stubDoc.id;
 
-        return { doc, result, detectedModule: finalModule, wasAuto: module === "auto", isImage };
+        mark("edge-function:invoke");
+        const { data: ai, error: fnErr } = await withTimeout(
+          supabase.functions.invoke("analyze-pdf", {
+            body: { storage_path: path, name: displayName },
+          }),
+          60_000,
+          "functions.invoke(analyze-pdf)",
+        );
+        if (fnErr) throw new Error(friendlyFunctionError(fnErr, isImage));
+        if ((ai as { error?: string })?.error) throw new Error((ai as { error: string }).error);
+
+        const analysis = ai as AnalysisResult;
+        const primaryModule: DocModule = (analysis.detected_modules?.[0] as DocModule) ?? "documents";
+
+        mark("db:update-analysis");
+        const { data: updatedDoc, error: updErr } = await withTimeout(
+          supabase
+            .from("documents")
+            .update({
+              module: primaryModule,
+              summary: analysis.summary,
+              key_insights: analysis.key_insights,
+              alerts: analysis.alerts,
+              extracted_items: (analysis.modules?.documents ?? []) as never,
+            })
+            .eq("id", createdDocId)
+            .select()
+            .single(),
+          15_000,
+          "documents.update (analyse)",
+        );
+        if (updErr) throw updErr;
+        analysisSaved = true;
+
+        const depositPayload: Record<string, unknown> = {};
+        if (analysis.modules?.body?.length) depositPayload.body = analysis.modules.body;
+        if (analysis.modules?.nutrition?.length) depositPayload.nutrition = analysis.modules.nutrition;
+        if (analysis.modules?.supplements?.length) depositPayload.supplements = analysis.modules.supplements;
+        if (analysis.modules?.fitness_template?.length)
+          depositPayload.fitness_template = analysis.modules.fitness_template;
+
+        let report: DepositReport = {};
+        if (Object.keys(depositPayload).length > 0) {
+          mark("rpc:deposit");
+          const { data: reportData, error: rpcErr } = await withTimeout(
+            supabase.rpc("deposit_document_analysis", {
+              p_document_id: createdDocId,
+              p_modules: depositPayload,
+            }),
+            20_000,
+            "rpc.deposit_document_analysis",
+          );
+          if (rpcErr) throw rpcErr;
+          report = reportData as DepositReport;
+        }
+
+        return { doc: updatedDoc, analysis, report };
       } catch (e) {
-        console.error(`${PIPELINE_LOG_PREFIX} ÉCHEC — dernière étape atteinte: "${stage}"`, e);
+        console.error(`[Documents] échec à l'étape "${stage}"`, e);
+        // Nettoyage best-effort : ne pas laisser un document "stub" sans
+        // analyse dans l'historique si l'échec survient avant que l'analyse
+        // ait pu être enregistrée dessus.
+        if (createdDocId && !analysisSaved) {
+          void supabase.from("documents").delete().eq("id", createdDocId);
+        }
         throw e;
       }
     },
-    onSuccess: ({ wasAuto, detectedModule }) => {
-      console.log(`${PIPELINE_LOG_PREFIX} onSuccess — invalidation de la query "documents"`);
-      toast.success(
-        wasAuto
-          ? `Document analysé — détecté: ${MODULE_LABELS[detectedModule]}`
-          : "Document analysé",
-      );
+    onSuccess: ({ report, analysis }) => {
+      const modulesLabel = analysis.detected_modules?.map((m) => MODULE_LABELS[m] ?? m).join(", ");
+      toast.success(modulesLabel ? `Document analysé — ${modulesLabel}` : "Document analysé");
       qc.invalidateQueries({ queryKey: ["documents"] });
+      if (report.body) qc.invalidateQueries({ queryKey: ["body_tracking"] });
+      if (report.nutrition) qc.invalidateQueries({ queryKey: ["nutrition"] });
+      if (report.supplements) qc.invalidateQueries({ queryKey: ["supplements"] });
+      if (report.fitness_template) qc.invalidateQueries({ queryKey: ["fitness", "workout_templates"] });
     },
-    onError: (e: Error) => {
-      console.error(`${PIPELINE_LOG_PREFIX} onError —`, e.message);
-      toast.error(e.message);
-    },
-    onSettled: () => {
-      console.log(`${PIPELINE_LOG_PREFIX} onSettled — isPending remis à false`);
-    },
+    onError: (e: Error) => toast.error(e.message),
   });
 }
 
