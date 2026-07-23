@@ -24,6 +24,7 @@ function buildCors(req: Request) {
 
 interface ScanItem {
   name: string;
+  grams: number;
   calories: number;
   proteins: number;
   carbs: number;
@@ -65,12 +66,13 @@ const MEAL_TOOL = {
                 type: "string",
                 description: "Nom de l'aliment avec quantité si pertinent (ex: '5 sushis saumon', 'Haricots verts', 'Riz blanc cuit')",
               },
+              grams:    { type: "number", description: "Masse estimée en grammes pour cet aliment (celle utilisée au point 1 de la méthode)" },
               calories: { type: "number", description: "kcal pour la quantité de cet aliment visible sur la photo" },
               proteins: { type: "number", description: "Protéines en g" },
               carbs:    { type: "number", description: "Glucides en g" },
               fats:     { type: "number", description: "Lipides en g" },
             },
-            required: ["name", "calories", "proteins", "carbs", "fats"],
+            required: ["name", "grams", "calories", "proteins", "carbs", "fats"],
             additionalProperties: false,
           },
           minItems: 1,
@@ -94,6 +96,7 @@ Méthode par aliment :
 1. Estime la masse en grammes (repères : assiette ~25 cm, fourchette ~20 cm).
 2. Applique les valeurs /100 g de la table CIQUAL.
 3. Calcule kcal + protéines + glucides + lipides pour cette masse estimée.
+4. Renvoie aussi cette masse (grams) : c'est elle qui sera enregistrée comme poids de référence.
 
 Si un aliment est ambigu, prends la valeur moyenne et baisse confidence.
 Retourne STRICTEMENT du JSON via tool calling. Tout le texte en FRANÇAIS.`;
@@ -119,6 +122,7 @@ function extractFromAiResponse(aiJson: unknown): ScanResult | null {
         return {
           items: [{
             name: p.name ?? "Repas analysé",
+            grams: p.grams ?? 0,
             calories: p.calories ?? 0,
             proteins: p.proteins ?? 0,
             carbs: p.carbs ?? 0,
@@ -154,7 +158,14 @@ function extractFromAiResponse(aiJson: unknown): ScanResult | null {
         }
         if (typeof p?.calories === "number") {
           return {
-            items: [{ name: p.name ?? "Repas", calories: p.calories, proteins: p.proteins ?? 0, carbs: p.carbs ?? 0, fats: p.fats ?? 0 }],
+            items: [{
+              name: p.name ?? "Repas",
+              grams: p.grams ?? 0,
+              calories: p.calories,
+              proteins: p.proteins ?? 0,
+              carbs: p.carbs ?? 0,
+              fats: p.fats ?? 0,
+            }],
             meal: p.meal,
             confidence: p.confidence,
           };
@@ -182,7 +193,7 @@ async function callGemini(apiKey: string, b64: string, mt: string): Promise<unkn
         {
           role: "user",
           content: [
-            { type: "text", text: "Identifie chaque aliment séparément et donne ses macros." },
+            { type: "text", text: "Identifie chaque aliment séparément et donne sa masse estimée (grammes) avec ses macros." },
             { type: "image_url", image_url: { url: `data:${mt};base64,${b64}` } },
           ],
         },
@@ -220,7 +231,7 @@ async function callOpenAI(apiKey: string, b64: string, mt: string): Promise<unkn
         {
           role: "user",
           content: [
-            { type: "text", text: "Identifie chaque aliment séparément et donne ses macros." },
+            { type: "text", text: "Identifie chaque aliment séparément et donne sa masse estimée (grammes) avec ses macros." },
             { type: "image_url", image_url: { url: `data:${mt};base64,${b64}`, detail: "auto" } },
           ],
         },
@@ -348,6 +359,7 @@ Deno.serve(async (req) => {
 
     const items: ScanItem[] = parsed.items.map((item) => ({
       name:     typeof item.name === "string" ? item.name.slice(0, 200) : "Aliment",
+      grams:    safeNum(item.grams),
       calories: safeNum(item.calories),
       proteins: safeNum(item.proteins),
       carbs:    safeNum(item.carbs),

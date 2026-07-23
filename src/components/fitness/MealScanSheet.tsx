@@ -11,11 +11,16 @@ import { useAddNutritionBatch } from "@/hooks/use-fitness";
 
 interface ScanItem {
   name: string;
+  grams: number;
   calories: number;
   proteins: number;
   carbs: number;
   fats: number;
 }
+
+/** Poids valide (> 0) ou null si irrécupérable — jamais une valeur fabriquée. */
+const safeGrams = (g: number | null | undefined): number | null =>
+  g != null && Number.isFinite(g) && g > 0 ? Math.round(g * 10) / 10 : null;
 
 interface ScanResponse {
   items: ScanItem[];
@@ -102,6 +107,7 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
   // n'écrase l'item qu'à la validation, bornes DB appliquées (bugs B4/B9).
   const [editDraft, setEditDraft] = useState<{
     name: string;
+    grams: string;
     calories: string;
     proteins: string;
     carbs: string;
@@ -114,6 +120,7 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
     setEditingIdx(idx);
     setEditDraft({
       name: it.name,
+      grams: formatDecimal(it.grams),
       calories: formatDecimal(it.calories),
       proteins: formatDecimal(it.proteins),
       carbs: formatDecimal(it.carbs),
@@ -129,7 +136,8 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
         carbs: parseDecimal(editDraft.carbs) ?? 0,
         fats: parseDecimal(editDraft.fats) ?? 0,
       });
-      updateItem(idx, { name: editDraft.name.trim() || "Aliment", ...macros });
+      const grams = safeGrams(parseDecimal(editDraft.grams)) ?? 0;
+      updateItem(idx, { name: editDraft.name.trim() || "Aliment", grams, ...macros });
     }
     setEditingIdx(null);
     setEditDraft(null);
@@ -146,23 +154,37 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
       items.map((item) => {
         // B9 : borne aux contraintes DB avant insertion (l'IA peut halluciner).
         const m = clampMacroSet(item);
+        const calories = Math.round(m.calories);
+        const proteins = Math.round(m.proteins * 10) / 10;
+        const carbs = Math.round(m.carbs * 10) / 10;
+        const fats = Math.round(m.fats * 10) / 10;
+        const grams = safeGrams(item.grams);
+        // Le poids estimé par l'IA devient le poids de référence du journal
+        // (consumed_quantity/consumed_unit) tant que l'utilisateur ne le
+        // modifie pas — base_* dérivé pour 100 g à partir de ce même poids,
+        // pour que la réouverture (WeightEditModal) retrouve exactement
+        // cette valeur. Repli sans perte si le poids est irrécupérable
+        // (grams <= 0, ne devrait plus arriver : le schéma IA l'exige).
+        const per100 = grams
+          ? {
+              base_calories: Math.round((calories / grams) * 100),
+              base_proteins: Math.round((proteins / grams) * 100 * 10) / 10,
+              base_carbs: Math.round((carbs / grams) * 100 * 10) / 10,
+              base_fats: Math.round((fats / grams) * 100 * 10) / 10,
+            }
+          : { base_calories: null, base_proteins: null, base_carbs: null, base_fats: null };
         return {
           date,
           meal,
           name: item.name,
-          calories: Math.round(m.calories),
-          proteins: Math.round(m.proteins * 10) / 10,
-          carbs: Math.round(m.carbs * 10) / 10,
-          fats: Math.round(m.fats * 10) / 10,
-          // Poids réel inconnu (l'IA renvoie des macros absolus, pas un
-          // grammage) : base_* reste NULL plutôt que de stocker une valeur
-          // absolue sous l'étiquette « pour 100 g » — WeightEditModal
-          // recalcule sa propre référence /100 g depuis calories/poids
-          // nominal au moment de l'édition, sans jamais lire base_*.
-          base_calories: null,
-          base_proteins: null,
-          base_carbs: null,
-          base_fats: null,
+          calories,
+          proteins,
+          carbs,
+          fats,
+          ...per100,
+          consumed_quantity: grams,
+          consumed_unit: "g",
+          consumed_grams_per_unit: null,
           serving_count: 1,
           percentage_consumed: 100,
         };
@@ -278,6 +300,21 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
                           autoFocus
                           className="w-full rounded-lg border border-border bg-surface px-2.5 py-2 text-base outline-none focus:border-primary"
                         />
+                        <div>
+                          <label className="mb-0.5 block text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+                            Poids (g)
+                          </label>
+                          <input
+                            type="text"
+                            inputMode="decimal"
+                            value={editDraft?.grams ?? ""}
+                            onChange={(e) =>
+                              setEditDraft((d) => (d ? { ...d, grams: e.target.value } : d))
+                            }
+                            autoComplete="off"
+                            className="w-full rounded-lg border border-border bg-surface px-2.5 py-2 text-base outline-none focus:border-primary"
+                          />
+                        </div>
                         <div className="grid grid-cols-4 gap-1.5">
                           {(["calories", "proteins", "carbs", "fats"] as const).map((field) => (
                             <div key={field}>
@@ -325,6 +362,9 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-medium">{item.name}</p>
                           <p className="text-[11px] text-muted-foreground">
+                            {safeGrams(item.grams) != null
+                              ? `${formatDecimal(item.grams)} g · `
+                              : ""}
                             {Math.round(item.calories)} kcal · P
                             {Math.round(item.proteins * 10) / 10} G
                             {Math.round(item.carbs * 10) / 10} L{Math.round(item.fats * 10) / 10}
