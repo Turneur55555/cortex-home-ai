@@ -40,27 +40,7 @@ import { computeHallOfFame, computeForgotten, computePlateaus } from "@/lib/fitn
 import { useLatestBodyWeight } from "@/hooks/useLatestBodyWeight";
 import { ENGINE_REGISTRY } from "@/lib/fitness/engines/registry";
 import { isReadyEngine, type DisciplineId } from "@/lib/fitness/engines/types";
-import { AnimatedNumber, GoldCard, PopIn } from "../livreParts";
-
-function SectionTitle({
-  icon,
-  children,
-  hint,
-}: {
-  icon: React.ReactNode;
-  children: React.ReactNode;
-  hint?: string;
-}) {
-  return (
-    <div className="mb-3">
-      <div className="flex items-center gap-2">
-        <span className="text-amber-400">{icon}</span>
-        <h2 className="font-serif text-[17px] font-semibold italic text-white/90">{children}</h2>
-      </div>
-      {hint && <p className="mt-0.5 text-[11px] text-muted-foreground">{hint}</p>}
-    </div>
-  );
-}
+import { AnimatedNumber, GoldCard, ModuleSectionTitle, PopIn } from "../livreParts";
 
 interface Props {
   workouts: WorkoutRow[];
@@ -113,53 +93,55 @@ export function ProgressionModule({
   return (
     <div className="flex flex-col gap-6">
       {/* ── Récap carrière ─────────────────────────────────────────────── */}
-      <div
-        className="relative overflow-hidden rounded-[26px] border border-white/[0.08] p-5 shadow-elevated"
-        style={{
-          background: `
-            radial-gradient(120% 80% at 50% 0%, rgba(234,179,8,0.14) 0%, transparent 55%),
-            linear-gradient(180deg,#171004 0%,#070502 100%)`,
-        }}
-      >
-        <div className="grid grid-cols-3 gap-2">
-          <div className="rounded-2xl bg-white/[0.04] px-2 py-3 text-center ring-1 ring-white/5">
-            <AnimatedNumber
-              value={hof.career.sessions}
-              className="text-xl font-bold tabular-nums text-white"
-            />
-            <p className="mt-0.5 text-[9px] font-medium uppercase tracking-wider text-white/50">
-              Séances
-            </p>
-          </div>
-          <div className="rounded-2xl bg-white/[0.04] px-2 py-3 text-center ring-1 ring-white/5">
-            <AnimatedNumber
-              value={hof.career.tonnage}
-              format={(n) => formatTonnage(Math.round(n))}
-              className="text-xl font-bold tabular-nums text-white"
-            />
-            <p className="mt-0.5 text-[9px] font-medium uppercase tracking-wider text-white/50">
-              Soulevés
-            </p>
-          </div>
-          <div className="rounded-2xl bg-white/[0.04] px-2 py-3 text-center ring-1 ring-white/5">
-            <AnimatedNumber
-              value={hof.career.prCount}
-              className="text-xl font-bold tabular-nums text-amber-300"
-            />
-            <p className="mt-0.5 text-[9px] font-medium uppercase tracking-wider text-white/50">
-              Records
-            </p>
+      <SectionReveal>
+        <div
+          className="relative overflow-hidden rounded-[26px] border border-white/[0.08] p-5 shadow-elevated"
+          style={{
+            background: `
+              radial-gradient(120% 80% at 50% 0%, rgba(234,179,8,0.14) 0%, transparent 55%),
+              linear-gradient(180deg,#171004 0%,#070502 100%)`,
+          }}
+        >
+          <div className="grid grid-cols-3 gap-2">
+            <div className="rounded-2xl bg-white/[0.04] px-2 py-3 text-center ring-1 ring-white/5">
+              <AnimatedNumber
+                value={hof.career.sessions}
+                className="text-xl font-bold tabular-nums text-white"
+              />
+              <p className="mt-0.5 text-[9px] font-medium uppercase tracking-wider text-white/50">
+                Séances
+              </p>
+            </div>
+            <div className="rounded-2xl bg-white/[0.04] px-2 py-3 text-center ring-1 ring-white/5">
+              <AnimatedNumber
+                value={hof.career.tonnage}
+                format={(n) => formatTonnage(Math.round(n))}
+                className="text-xl font-bold tabular-nums text-white"
+              />
+              <p className="mt-0.5 text-[9px] font-medium uppercase tracking-wider text-white/50">
+                Soulevés
+              </p>
+            </div>
+            <div className="rounded-2xl bg-white/[0.04] px-2 py-3 text-center ring-1 ring-white/5">
+              <AnimatedNumber
+                value={hof.career.prCount}
+                className="text-xl font-bold tabular-nums text-amber-300"
+              />
+              <p className="mt-0.5 text-[9px] font-medium uppercase tracking-wider text-white/50">
+                Records
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      </SectionReveal>
 
       {/* ── Hall of Fame ───────────────────────────────────────────────── */}
       {(hof.bestTonnage || hof.heaviestSet || hof.longestSet || hof.longestSession) && (
         <SectionReveal>
           <div>
-            <SectionTitle icon={<Crown className="h-4 w-4" />} hint="Tes records absolus.">
+            <ModuleSectionTitle icon={<Crown className="h-4 w-4" />} hint="Tes records absolus.">
               Hall of Fame
-            </SectionTitle>
+            </ModuleSectionTitle>
             <div className="flex flex-col gap-3">
               {hof.bestTonnage && (
                 <PopIn>
@@ -312,12 +294,12 @@ export function ProgressionModule({
       {topExercises.length > 0 && (
         <SectionReveal>
           <div>
-            <SectionTitle
+            <ModuleSectionTitle
               icon={<TrendingUp className="h-4 w-4" />}
               hint="Tes charges dans le temps."
             >
               Tendances
-            </SectionTitle>
+            </ModuleSectionTitle>
             <WorkoutProgressCharts
               topExercises={topExercises}
               histByName={histByName}
@@ -332,12 +314,12 @@ export function ProgressionModule({
       {forgotten.length > 0 && (
         <SectionReveal>
           <div>
-            <SectionTitle
+            <ModuleSectionTitle
               icon={<History className="h-4 w-4" />}
               hint="Des exercices que tu maîtrisais disparaissent de tes séances."
             >
               Techniques oubliées
-            </SectionTitle>
+            </ModuleSectionTitle>
             <div className="flex flex-col gap-3">
               {forgotten.map((f, i) => {
                 const lastPr = prByName.get(f.key) ?? null;
@@ -383,12 +365,12 @@ export function ProgressionModule({
       {plateaus.length > 0 && (
         <SectionReveal>
           <div>
-            <SectionTitle
+            <ModuleSectionTitle
               icon={<TrendingUp className="h-4 w-4" />}
               hint="Des exercices encore joués, mais qui ne progressent plus."
             >
               Le potentiel caché
-            </SectionTitle>
+            </ModuleSectionTitle>
             <div className="flex flex-col gap-3">
               {plateaus.map((p, i) => (
                 <PopIn key={p.key} delay={i * 0.05}>
@@ -424,12 +406,12 @@ export function ProgressionModule({
       {/* ── Chronologie ────────────────────────────────────────────────── */}
       <SectionReveal>
         <div>
-          <SectionTitle
+          <ModuleSectionTitle
             icon={<Heart className="h-4 w-4" />}
             hint="Chaque séance ouvre sa Chronique immersive."
           >
             Chronologie
-          </SectionTitle>
+          </ModuleSectionTitle>
           {workouts.length === 0 ? (
             <p className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-6 text-center text-xs text-muted-foreground">
               Encore vierge — lance-toi, ta première légende t'attend.

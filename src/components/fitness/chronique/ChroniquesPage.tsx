@@ -27,19 +27,44 @@ import { ChevronLeft, Crown, Hammer, TrendingUp } from "lucide-react";
 
 import type { WorkoutRow } from "@/components/fitness/WorkoutCard";
 import { ProfileRPGData } from "@/components/profile/rpg/ProfileRPGData";
+import { EASE_OUT } from "@/components/rpg/premium/tokens";
 import { LegendesModule } from "./modules/LegendesModule";
 import { ForgeModule } from "./modules/ForgeModule";
 import { ProgressionModule } from "./modules/ProgressionModule";
 
 type ModuleKey = "legendes" | "forge" | "progression";
 
-const MODULES: Array<{ key: ModuleKey; label: string; icon: React.ReactNode }> = [
-  { key: "legendes", label: "Légendes", icon: <Crown className="h-3.5 w-3.5" /> },
-  { key: "forge", label: "Forge", icon: <Hammer className="h-3.5 w-3.5" /> },
-  { key: "progression", label: "Progression", icon: <TrendingUp className="h-3.5 w-3.5" /> },
+const MODULES: Array<{
+  key: ModuleKey;
+  label: string;
+  icon: React.ReactNode;
+  /** Rappelle la mission unique du module sous le sélecteur — un
+   *  utilisateur qui ouvre l'onglet pour la première fois doit savoir ce
+   *  qu'il regarde sans avoir à deviner. */
+  mission: string;
+}> = [
+  {
+    key: "legendes",
+    label: "Légendes",
+    icon: <Crown className="h-3.5 w-3.5" />,
+    mission: "Ta maîtrise, groupe musculaire par groupe musculaire.",
+  },
+  {
+    key: "forge",
+    label: "Forge",
+    icon: <Hammer className="h-3.5 w-3.5" />,
+    mission: "La bibliothèque complète de tes exercices.",
+  },
+  {
+    key: "progression",
+    label: "Progression",
+    icon: <TrendingUp className="h-3.5 w-3.5" />,
+    mission: "Tes preuves : records, tendances, trophées, chronologie.",
+  },
 ];
 
 export function ChroniquesPage({
+  initialModule,
   workouts,
   prByName,
   histByName,
@@ -57,6 +82,9 @@ export function ChroniquesPage({
   onOpenCatalog,
   onBack,
 }: {
+  /** Module à ouvrir directement (deep-link depuis `/trophees` ou
+   *  `/progression`, désormais redirigées vers ce domicile unique). */
+  initialModule?: ModuleKey;
   workouts: WorkoutRow[];
   prByName: Map<string, number>;
   histByName: Map<string, Array<{ date: string; weight: number }>>;
@@ -76,14 +104,16 @@ export function ChroniquesPage({
 }) {
   // Ouvre directement sur Les Légendes — le module le plus identitaire et le
   // plus "capturable" (illustrations de rang), jamais sur un lanceur de
-  // cartes ni sur des graphiques (règle DA : le Rang est la star).
-  const [active, setActive] = useState<ModuleKey>("legendes");
+  // cartes ni sur des graphiques (règle DA : le Rang est la star) — sauf
+  // deep-link explicite depuis une route redirigée vers son nouveau domicile.
+  const [active, setActive] = useState<ModuleKey>(initialModule ?? "legendes");
+  const activeModule = MODULES.find((m) => m.key === active)!;
 
   return (
     <motion.section
       initial={{ opacity: 0, y: 18 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: 0.4, ease: EASE_OUT }}
       className="flex flex-col gap-5 pb-4"
     >
       {/* ── Couverture du livre + sélecteur segmenté — collants ─────────── */}
@@ -131,6 +161,8 @@ export function ChroniquesPage({
             );
           })}
         </div>
+
+        <p className="px-1 text-[11px] leading-snug text-white/50">{activeModule.mission}</p>
       </div>
 
       {/* ── Contenu du module actif ──────────────────────────────────────
@@ -145,12 +177,16 @@ export function ChroniquesPage({
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ duration: 0.22, ease: EASE_OUT }}
             >
               {active === "legendes" && (
                 <LegendesModule
                   workouts={workouts}
                   rankAggregate={rankAggregate}
+                  prByName={prByName}
+                  histByName={histByName}
+                  volByName={volByName}
+                  nameByKey={nameByKey}
                   classWorkouts={classWorkouts}
                 />
               )}

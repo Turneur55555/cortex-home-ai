@@ -47,7 +47,15 @@ import { workoutToTemplateSeed, type TemplateSeedExercise } from "@/lib/fitness/
 
 // ── Composant principal ─────────────────────────────────────────────────────────
 
-export function SeancesTab() {
+interface SeancesTabProps {
+  /** Deep-link (`?chroniques=`) depuis une route redirigée vers le domicile
+   *  unique des Chroniques (`/trophees`, `/progression`) — ouvre directement
+   *  le module concerné au lieu de laisser l'utilisateur retomber sur
+   *  l'écran Séances sans contexte. */
+  initialChroniques?: "legendes" | "forge" | "progression";
+}
+
+export function SeancesTab({ initialChroniques }: SeancesTabProps = {}) {
   const { data, isLoading, error } = useWorkouts();
   const { data: activeWorkout, isLoading: activeLoading } = useActiveWorkout();
   // Phase pilote Course (2026-07-09) : séance active générique (segments
@@ -101,7 +109,7 @@ export function SeancesTab() {
   // Forge, Progression (voir docs/architecture/rpg-chroniques.md). La
   // Forge n'a plus de porte d'entrée séparée sur cet écran : elle vit
   // désormais comme un module des Chroniques.
-  const [chroniquesOpen, setChroniquesOpen] = useState(false);
+  const [chroniquesOpen, setChroniquesOpen] = useState(!!initialChroniques);
   // LOT C1 — module immersif « Chronique » : toucher une chronique de
   // musculation (désormais depuis la Chronologie du module Progression)
   // ouvre une page plein écran dédiée (ChroniquePage).
@@ -340,6 +348,7 @@ export function SeancesTab() {
     return (
       <section className="flex flex-col gap-4">
         <ChroniquesPage
+          initialModule={initialChroniques}
           workouts={data ?? []}
           prByName={prByName}
           histByName={histByName}

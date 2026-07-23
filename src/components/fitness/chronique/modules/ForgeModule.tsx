@@ -20,6 +20,8 @@ import { DisciplineIcon } from "@/components/fitness/session/DisciplineIcon";
 import { RankIllustration } from "@/components/rpg/RankIllustration";
 import type { RankAggregate } from "@/components/fitness/RankAggregator";
 import { DisciplineExerciseLibrarySheet } from "@/components/fitness/DisciplineExerciseLibrarySheet";
+import { EASE_OUT, stagger } from "@/components/rpg/premium/tokens";
+import { ModuleSectionTitle } from "../livreParts";
 
 export function ForgeModule({
   rankAggregate,
@@ -43,12 +45,12 @@ export function ForgeModule({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center gap-2 px-1">
-        <Hammer className="h-4 w-4 text-amber-400" />
-        <h2 className="font-serif text-[15px] font-semibold italic text-white/90">
-          Choisis une discipline
-        </h2>
-      </div>
+      <ModuleSectionTitle
+        icon={<Hammer className="h-4 w-4" />}
+        hint="Recherche, filtres, variantes, favoris — jamais un créateur de séance."
+      >
+        Choisis une discipline
+      </ModuleSectionTitle>
 
       <ul className="flex flex-col gap-2">
         {disciplines.map((d, i) => {
@@ -58,7 +60,7 @@ export function ForgeModule({
               key={d.id}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.35, delay: i * 0.04 }}
+              transition={{ duration: 0.35, delay: stagger(i), ease: EASE_OUT }}
             >
               <button
                 type="button"

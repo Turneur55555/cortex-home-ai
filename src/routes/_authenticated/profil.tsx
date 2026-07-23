@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useProfile } from "@/hooks/useProfile";
 import { ProfileRPGData } from "@/components/profile/rpg/ProfileRPGData";
 import { QuestsPreview } from "@/components/profile/rpg/QuestsPreview";
+import { TrophyRoomPreview } from "@/components/profile/rpg/TrophyRoomPreview";
 import { ProfileIdentityStrip } from "@/components/profile/ProfileIdentityStrip";
 import { EditPseudoSheet } from "@/components/profile/EditPseudoSheet";
 import { BodyStatusCard } from "@/components/profile/BodyStatusCard";
@@ -53,7 +54,10 @@ function ProfilPage() {
 
       <ProfileRPGData>
         {(rpg) => (
-          <QuestsPreview />
+          <>
+            <QuestsPreview />
+            <TrophyRoomPreview achievements={rpg.achievements} legacyBadges={rpg.legacyBadges} />
+          </>
         )}
       </ProfileRPGData>
 

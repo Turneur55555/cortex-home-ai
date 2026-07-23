@@ -10,8 +10,8 @@
 // ============================================================
 
 import { useMemo } from "react";
-import { Dumbbell } from "lucide-react";
 import { AppSheet } from "@/components/profile/AppSheet";
+import { ExerciseRankStrip } from "@/components/fitness/ExerciseRankStrip";
 import type { WorkoutRow } from "@/components/fitness/WorkoutCard";
 import {
   computeLegends,
@@ -27,21 +27,36 @@ import { RankPill, MasteryGauge } from "../livreParts";
 export function FamilyDetailSheet({
   family,
   workouts,
+  prByName,
+  histByName,
+  volByName,
+  nameByKey,
   onClose,
 }: {
   family: Specialization;
   workouts: WorkoutRow[];
+  prByName: Map<string, number>;
+  histByName: Map<string, Array<{ date: string; weight: number }>>;
+  volByName: Map<string, Array<{ date: string; volume: number }>>;
+  nameByKey: Map<string, string>;
   onClose: () => void;
 }) {
   const sr = specRankFromVolume(family.volume);
   const pct = family.volume > 0 ? sr.rank.xp : 0;
 
-  const contributors = useMemo(() => {
+  // Clés identityKey des exercices de cette famille (même clé que
+  // prByName/histByName/volByName/nameByKey — buildGroups() et computePRs()
+  // partagent la même fonction identityKey(), voir workoutGrouping.ts) :
+  // ExerciseRankStrip peut donc les consommer directement, sans nouvelle
+  // dérivation. C'est ici, et nulle part ailleurs, que le rang PAR EXERCICE
+  // se lit (l'ancienne route /progression y renvoie désormais).
+  const contributorKeys = useMemo(() => {
     const group = SPECIALIZATION_GROUPS.find((g) => g.id === family.id);
     if (!group) return [];
     const all = computeLegends(workouts, 999);
     return all
       .filter((card) => exerciseToMuscles(card.name).some((m) => group.muscles.includes(m)))
+      .map((card) => card.key)
       .slice(0, 12);
   }, [family.id, workouts]);
 
@@ -87,29 +102,19 @@ export function FamilyDetailSheet({
           <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             Exercices contributeurs
           </h3>
-          {contributors.length === 0 ? (
+          {contributorKeys.length === 0 ? (
             <p className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 text-center text-xs text-muted-foreground">
               Aucun exercice construit sur la durée dans ce groupe pour l'instant.
             </p>
           ) : (
-            <div className="space-y-2">
-              {contributors.map((c) => (
-                <div
-                  key={c.key}
-                  className="flex items-center gap-3 rounded-2xl bg-white/[0.03] p-3 ring-1 ring-white/[0.05]"
-                >
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-white/[0.04] text-white/50">
-                    <Dumbbell className="h-4 w-4" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-semibold text-white/90">{c.name}</p>
-                    <p className="text-[10px] text-muted-foreground">
-                      PR {c.pr} kg · {c.sessions} séance{c.sessions > 1 ? "s" : ""}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <ExerciseRankStrip
+              topExercises={contributorKeys}
+              nameByKey={nameByKey}
+              histByName={histByName}
+              volByName={volByName}
+              prByName={prByName}
+              layout="grid"
+            />
           )}
         </section>
       </div>
