@@ -2,7 +2,7 @@
 // Sensei briefing (Phase 8) — assemble les informations que le Sensei
 // (et demain le Planner Engine) doivent CONNAÎTRE avant de dialoguer :
 // dernières disciplines pratiquées, statistiques principales, dernier
-// record, objectifs actifs, récupération disponible.
+// record, récupération disponible.
 //
 // Fonction PURE (zéro import React, zéro décision) : elle ne choisit
 // JAMAIS quelle discipline proposer ni ne pré-remplit aucune réponse —
@@ -32,8 +32,6 @@ export interface SenseiBriefing {
   weeklySessions: number;
   /** Musculation uniquement — voir en-tête de fichier. */
   bestPR: { name: string; weight: number } | null;
-  /** Objectifs actifs (non complétés), triés par progression décroissante, max 2. */
-  activeGoals: Array<{ title: string; progress: number }>;
   recovery: {
     readyCount: number;
     fatiguedCount: number;
@@ -46,7 +44,6 @@ export interface BuildSenseiBriefingInput {
   /** Triés du plus récent au plus ancien (ordre natif de useWorkouts()). */
   workouts: Array<{ date: string; discipline?: string | null }>;
   bestPR: { name: string; weight: number } | null;
-  goals: Array<{ title: string; progress: number; is_completed: boolean }>;
   recoveryMap: Map<MuscleId, MuscleRecovery>;
 }
 
@@ -64,12 +61,6 @@ export function buildSenseiBriefing(input: BuildSenseiBriefingInput): SenseiBrie
   const weekStart = new Date();
   weekStart.setDate(weekStart.getDate() - 7);
   const weeklySessions = input.workouts.filter((w) => new Date(w.date) >= weekStart).length;
-
-  const activeGoals = input.goals
-    .filter((g) => !g.is_completed)
-    .sort((a, b) => b.progress - a.progress)
-    .slice(0, 2)
-    .map((g) => ({ title: g.title, progress: g.progress }));
 
   let readyCount = 0;
   let fatiguedCount = 0;
@@ -91,7 +82,6 @@ export function buildSenseiBriefing(input: BuildSenseiBriefingInput): SenseiBrie
     totalSessions: input.workouts.length,
     weeklySessions,
     bestPR: input.bestPR,
-    activeGoals,
     recovery: { readyCount, fatiguedCount, mostFatigued },
   };
 }

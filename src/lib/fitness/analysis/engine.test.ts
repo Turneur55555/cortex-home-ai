@@ -69,11 +69,6 @@ describe("inferObjective", () => {
   it("privilégie l'objectif explicite", () => {
     expect(inferObjective({ explicitObjective: "posture" })).toBe("posture");
   });
-  it("infère la sèche depuis un objectif de perte de poids actif", () => {
-    expect(inferObjective({ goals: [{ goal_type: "weight_loss", is_completed: false }] })).toBe(
-      "seche",
-    );
-  });
   it("infère la force depuis des reps basses", () => {
     expect(inferObjective({ avgReps: 4 })).toBe("force");
   });

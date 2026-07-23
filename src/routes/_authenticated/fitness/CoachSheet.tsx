@@ -40,7 +40,6 @@ import { DISCIPLINE_CONTEXT_BUILDERS } from "@/components/fitness/sensei/senseiC
 import type { SenseiRuntimeInputs } from "@/components/fitness/sensei/senseiCustomRenderers";
 import { useWorkouts } from "@/hooks/use-fitness";
 import { useSenseiTrainingHistory } from "@/hooks/useSenseiTrainingHistory";
-import { useGoalsWithProgress } from "@/hooks/useGoalsWithProgress";
 import { computePRs } from "@/utils/fitness/exercise-stats";
 import { buildSenseiBriefing, type SenseiBriefing } from "@/lib/fitness/engines/senseiBriefing";
 
@@ -105,7 +104,6 @@ export function CoachSheet({
   // briefing informatif ci-dessus continue d'utiliser briefingWorkouts
   // (comportement inchangé, aucune régression sur le reste de l'app).
   const { data: senseiHistory } = useSenseiTrainingHistory();
-  const { goals: briefingGoals } = useGoalsWithProgress();
   const { prByName: briefingPrByName, nameByKey: briefingNameByKey } = useMemo(
     () => computePRs(briefingWorkouts ?? []),
     [briefingWorkouts],
@@ -126,10 +124,9 @@ export function CoachSheet({
       buildSenseiBriefing({
         workouts: briefingWorkouts ?? [],
         bestPR: briefingBestPR,
-        goals: briefingGoals,
         recoveryMap: recovery,
       }),
-    [briefingWorkouts, briefingBestPR, briefingGoals, recovery],
+    [briefingWorkouts, briefingBestPR, recovery],
   );
   // Niveau/objectif/profil d'entraînement musculation ne sont plus des
   // questions posées à l'utilisateur ET ne sont plus affichés (demande
@@ -375,7 +372,6 @@ export function CoachSheet({
 function SenseiBriefingPanel({ briefing }: { briefing: SenseiBriefing }) {
   const hasContent =
     briefing.recentDisciplines.length > 0 ||
-    briefing.activeGoals.length > 0 ||
     briefing.bestPR != null ||
     briefing.recovery.fatiguedCount > 0;
   if (!hasContent) return null;
@@ -393,12 +389,6 @@ function SenseiBriefingPanel({ briefing }: { briefing: SenseiBriefing }) {
         <p>
           <span className="font-semibold text-foreground/80">Record : </span>
           {briefing.bestPR.name} {briefing.bestPR.weight} kg
-        </p>
-      )}
-      {briefing.activeGoals.length > 0 && (
-        <p>
-          <span className="font-semibold text-foreground/80">Objectifs actifs : </span>
-          {briefing.activeGoals.map((g) => `${g.title} (${g.progress}%)`).join(" · ")}
         </p>
       )}
       {briefing.recovery.fatiguedCount > 0 && (

@@ -4,10 +4,9 @@
 // Mission unique : raconter, avec les preuves, tout ce que le joueur a
 // fait et comment il évolue. Contient : le récap carrière, le Hall of
 // Fame (records personnels absolus), les courbes de tendance, les
-// exercices en perte de vitesse (oubliés / plateaux), la collection de
-// badges & succès unifiée (TrophyRoom — intégrée ici naturellement,
-// aucune 4e destination créée), et la Chronologie des séances (chacune
-// ouvre sa Chronique immersive). Zéro rang par muscle ici (→ Légendes).
+// exercices en perte de vitesse (oubliés / plateaux), et la Chronologie
+// des séances (chacune ouvre sa Chronique immersive). Zéro rang par
+// muscle ici (→ Légendes).
 // ============================================================
 
 import { useMemo } from "react";
@@ -32,9 +31,6 @@ import { WorkoutCard, type WorkoutRow } from "@/components/fitness/WorkoutCard";
 import { GenericHistoryCard } from "@/components/fitness/session/GenericHistoryCard";
 import { SectionReveal } from "@/components/fitness/SectionReveal";
 import { WorkoutProgressCharts } from "@/components/fitness/WorkoutProgressCharts";
-import { TrophyRoom } from "@/components/profile/rpg/TrophyRoom";
-import type { AchievementAggregateWithLoading } from "@/hooks/useAchievements";
-import type { BadgeWithProgress } from "@/hooks/useBadgeSystem";
 import { formatTonnage } from "@/lib/fitness/strength";
 import { computeHallOfFame, computeForgotten, computePlateaus } from "@/lib/fitness/chronicles";
 import { useLatestBodyWeight } from "@/hooks/useLatestBodyWeight";
@@ -53,8 +49,6 @@ interface Props {
   topExercises: string[];
   imageUrls: Map<string, string> | undefined;
   latestDate: string;
-  achievements: AchievementAggregateWithLoading;
-  legacyBadges: BadgeWithProgress[];
   onRepeatLive: (w: WorkoutRow) => void;
   onOpenFromTemplate: (w: WorkoutRow) => void;
   onSaveAsTemplate: (w: WorkoutRow) => void;
@@ -72,8 +66,6 @@ export function ProgressionModule({
   topExercises,
   imageUrls,
   latestDate,
-  achievements,
-  legacyBadges,
   onRepeatLive,
   onOpenFromTemplate,
   onSaveAsTemplate,
@@ -392,16 +384,6 @@ export function ProgressionModule({
           </div>
         </SectionReveal>
       )}
-
-      {/* ── Trophées & succès — intégrés naturellement, aucune 4e
-          destination créée (décision Nathan, 23/07/2026). ──────────────── */}
-      <SectionReveal>
-        <TrophyRoom
-          achievements={achievements}
-          legacyBadges={legacyBadges}
-          isLoading={achievements.isLoading}
-        />
-      </SectionReveal>
 
       {/* ── Chronologie ────────────────────────────────────────────────── */}
       <SectionReveal>

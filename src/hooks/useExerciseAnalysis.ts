@@ -3,7 +3,6 @@ import { useExerciseSetHistory } from "@/hooks/useExerciseSetHistory";
 import { useRecoveryMap } from "@/hooks/useRecoveryMap";
 import { useWorkouts } from "@/hooks/use-fitness";
 import { useBodyMeasurements } from "@/hooks/useBodyTracking";
-import { useGoals } from "@/hooks/useGoalsWithProgress";
 import { useTrainingObjective } from "@/hooks/useTrainingObjective";
 import { normalize } from "@/lib/fitness/exerciseCatalog";
 import { analyzeExercise, type ExerciseAnalysis } from "@/lib/fitness/analysis";
@@ -19,7 +18,7 @@ export interface ExerciseAnalysisResult {
  * chargées par l'app (historique de séries, carte de récupération, mensurations,
  * objectifs). Tout est mémoïsé : le moteur pur ne recalcule que si une entrée
  * change, et aucune requête supplémentaire n'est déclenchée (réutilise les
- * caches react-query existants ["workouts"], ["body_tracking"], ["goals"]).
+ * caches react-query existants ["workouts"], ["body_tracking"]).
  */
 export function useExerciseAnalysis(
   exerciseName: string | null | undefined,
@@ -28,7 +27,6 @@ export function useExerciseAnalysis(
   const { data: workouts, isLoading: wkLoading } = useWorkouts();
   const recoveryMap = useRecoveryMap(workouts as any);
   const { data: body } = useBodyMeasurements();
-  const { data: goals } = useGoals();
   const { objective: explicitObjective } = useTrainingObjective();
 
   const recoveryArray = useMemo(
@@ -99,10 +97,9 @@ export function useExerciseAnalysis(
       profile: {
         explicitObjective: explicitObjective ?? null,
         body: (body ?? []) as any,
-        goals: (goals ?? []) as any,
       },
     });
-  }, [exerciseName, history, aiMuscleGroups, recoveryArray, explicitObjective, body, goals]);
+  }, [exerciseName, history, aiMuscleGroups, recoveryArray, explicitObjective, body]);
 
   return {
     isLoading: histLoading || wkLoading,

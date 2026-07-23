@@ -1,16 +1,11 @@
 import { useMemo } from "react";
 import { useWorkouts } from "@/hooks/use-fitness";
-import { useBadgeSystem } from "@/hooks/useBadgeSystem";
-import { useAchievements, type AchievementAggregateWithLoading } from "@/hooks/useAchievements";
 import { computePRs } from "@/utils/fitness/exercise-stats";
-import { computeBroadActivity } from "@/lib/profile/achievements/muscleVolume";
+import { computeBroadActivity } from "@/lib/profile/muscleVolume";
 import { RankAggregator, type RankAggregate } from "@/components/fitness/RankAggregator";
-import type { BadgeWithProgress } from "@/hooks/useBadgeSystem";
 
 export interface ProfileRPGDataValue {
   rankAggregate: RankAggregate;
-  achievements: AchievementAggregateWithLoading;
-  legacyBadges: BadgeWithProgress[];
   topExercises: string[];
   nameByKey: Map<string, string>;
   histByName: Map<string, Array<{ date: string; weight: number }>>;
@@ -28,16 +23,14 @@ export interface ProfileRPGDataValue {
     }>;
   }>;
   bestPR: { name: string; weight: number } | null;
-  totalWorkouts: number;
 }
 
 /**
- * Câble toute la donnée Progression RPG (rangs, badges historiques, succès
- * additifs) sur les hooks existants — extrait de l'ancien couple
- * ProfilPage/ProfilRPGBlock pour être réutilisé par plusieurs écrans (hub
- * Profil condensé, écran Progression RPG complet, écran Salle des trophées
- * complet) sans dupliquer le câblage. Aucun moteur touché : ne fait
- * qu'observer RankAggregator/useAchievements/useBadgeSystem/computePRs.
+ * Câble toute la donnée Progression RPG (rangs) sur les hooks existants —
+ * extrait de l'ancien couple ProfilPage/ProfilRPGBlock pour être réutilisé
+ * par plusieurs écrans (hub Profil condensé, écran Progression RPG complet)
+ * sans dupliquer le câblage. Aucun moteur touché : ne fait qu'observer
+ * RankAggregator/computePRs.
  */
 export function ProfileRPGData({
   children,
@@ -49,7 +42,6 @@ export function ProfileRPGData({
     () => computePRs(workouts ?? []),
     [workouts],
   );
-  const badgeSystem = useBadgeSystem();
 
   const workoutsSample = useMemo(
     () =>
@@ -105,73 +97,18 @@ export function ProfileRPGData({
 
   return (
     <RankAggregator exerciseNames={probeExerciseNames}>
-      {(rankAggregate) => (
-        <ProfileRPGDataInner
-          rankAggregate={rankAggregate}
-          badgeSystem={badgeSystem}
-          topExercises={topExercises}
-          nameByKey={nameByKey}
-          histByName={histByName}
-          volByName={volByName}
-          prByName={prByName}
-          workouts={workoutsSample}
-          bestPR={bestPR}
-        >
-          {children}
-        </ProfileRPGDataInner>
-      )}
+      {(rankAggregate) =>
+        children({
+          rankAggregate,
+          topExercises,
+          nameByKey,
+          histByName,
+          volByName,
+          prByName,
+          workouts: workoutsSample,
+          bestPR,
+        })
+      }
     </RankAggregator>
-  );
-}
-
-/**
- * Rendu comme un vrai composant (et non comme un simple callback) : les
- * hooks appelés à l'intérieur (via useAchievements) doivent être attribués à
- * SON propre rendu React, pas à celui de <RankAggregator>. Appeler des hooks
- * directement dans la fonction "children" d'un render-prop casserait les
- * règles des hooks — passer par un composant dédié est la façon correcte de
- * consommer `rankAggregate` tout en calculant les succès.
- */
-function ProfileRPGDataInner({
-  rankAggregate,
-  badgeSystem,
-  topExercises,
-  nameByKey,
-  histByName,
-  volByName,
-  prByName,
-  workouts,
-  bestPR,
-  children,
-}: {
-  rankAggregate: RankAggregate;
-  badgeSystem: ReturnType<typeof useBadgeSystem>;
-  topExercises: string[];
-  nameByKey: Map<string, string>;
-  histByName: Map<string, Array<{ date: string; weight: number }>>;
-  volByName: Map<string, Array<{ date: string; volume: number }>>;
-  prByName: Map<string, number>;
-  workouts: ProfileRPGDataValue["workouts"];
-  bestPR: { name: string; weight: number } | null;
-  children: (value: ProfileRPGDataValue) => React.ReactNode;
-}) {
-  const achievements = useAchievements(rankAggregate, badgeSystem);
-
-  return (
-    <>
-      {children({
-        rankAggregate,
-        achievements,
-        legacyBadges: badgeSystem.badgesWithProgress,
-        topExercises,
-        nameByKey,
-        histByName,
-        volByName,
-        prByName,
-        workouts,
-        bestPR,
-        totalWorkouts: badgeSystem.stats.workouts_count,
-      })}
-    </>
   );
 }

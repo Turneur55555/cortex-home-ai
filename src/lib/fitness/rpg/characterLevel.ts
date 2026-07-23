@@ -11,11 +11,6 @@
 // soit l'écrivain. Le serveur reste la seule autorité qui ÉCRIT
 // `user_stats.level` ; ce module ne fait que DÉRIVER la même valeur et la
 // progression intra-niveau pour l'affichage (barre XP de l'Accueil).
-//
-// ⚠️ `lib/fitness/badges.ts:xpForLevel` utilise une AUTRE formule
-// (level²·100) mais n'est appelé nulle part — ce module est la source
-// unique d'affichage du Niveau de Personnage. Garder les deux formules
-// alignées si `xpForLevel` venait à être réutilisé.
 // ============================================================
 
 /** Diviseur de la courbe serveur (sqrt(xp / DIVISOR) + 1). */

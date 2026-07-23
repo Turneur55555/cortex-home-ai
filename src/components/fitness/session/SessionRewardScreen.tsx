@@ -16,8 +16,6 @@ import { Confetti } from "@/components/fitness/session/WorkoutCelebration";
 import { useSessionReward } from "@/hooks/useSessionReward";
 import { buildTitleTransition } from "@/lib/fitness/rpg/sessionReward";
 import { nextGradeLabel } from "@/lib/fitness/rpg/titleProgress";
-import { useBadgeHighlights } from "@/hooks/useBadgeHighlights";
-import { RARITY_COLORS, RARITY_LABELS, type BadgeRarity } from "@/lib/fitness/badges";
 
 // Palette "trésor" dédiée à l'XP — le Niveau est la colonne vertébrale, la
 // récompense se lit en or/ambre (distinct des couleurs de rang mythologique).
@@ -55,35 +53,26 @@ function Section({ delay, children }: { delay: number; children: React.ReactNode
 /**
  * Écran de récompense de fin de séance — UN SEUL écran premium qui récapitule
  * la progression RPG obtenue pendant la séance (XP gagnée + détail des
- * sources, montée de niveau, record, badge). Pas de succession de pop-ups :
- * le bilan IA détaillé devient opt-in via « Voir le bilan ».
+ * sources, montée de niveau, record). Pas de succession de pop-ups : le
+ * bilan IA détaillé devient opt-in via « Voir le bilan ».
  *
  * Lecture seule : toutes les valeurs viennent du serveur (xp_events /
- * user_stats via useSessionReward, badges via useBadgeHighlights). Règle
- * « donnée absente → section masquée, jamais inventée ».
+ * user_stats via useSessionReward). Règle « donnée absente → section
+ * masquée, jamais inventée ».
  */
 export function SessionRewardScreen({
   workoutId,
   title,
-  createdAtISO,
   onContinue,
   onViewAnalysis,
 }: {
   workoutId: string;
   title: string;
-  /** Début de la séance — pour ne mettre en avant qu'un badge débloqué PENDANT. */
-  createdAtISO: string;
   onContinue: () => void;
   onViewAnalysis: () => void;
 }) {
   const { totalXp, breakdown, level, hasXp } = useSessionReward(workoutId);
-  const { latestUnlocked } = useBadgeHighlights();
   const titleTransition = buildTitleTransition(level.xpBefore, level.xpAfter);
-
-  const newBadge =
-    latestUnlocked?.unlockedAt && new Date(latestUnlocked.unlockedAt) >= new Date(createdAtISO)
-      ? latestUnlocked
-      : null;
 
   const hasPr = breakdown.some((b) => b.source === "pr_muscu");
 
@@ -228,29 +217,6 @@ export function SessionRewardScreen({
               <p className="text-xs font-semibold text-amber-100">
                 Nouveau record personnel dans cette séance !
               </p>
-            </div>
-          </Section>
-        )}
-
-        {/* Badge débloqué pendant la séance */}
-        {newBadge && (
-          <Section delay={0.62}>
-            <div className="mt-3 flex items-center gap-2 rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2.5">
-              <Medal
-                className="h-4 w-4 shrink-0"
-                style={{ color: RARITY_COLORS[newBadge.catalog.rarity as BadgeRarity] }}
-              />
-              <div className="min-w-0">
-                <p className="truncate text-xs font-semibold text-white/85">
-                  Badge débloqué : {newBadge.catalog.label}
-                </p>
-                <p
-                  className="text-[10px] font-medium"
-                  style={{ color: RARITY_COLORS[newBadge.catalog.rarity as BadgeRarity] }}
-                >
-                  {RARITY_LABELS[newBadge.catalog.rarity as BadgeRarity]}
-                </p>
-              </div>
             </div>
           </Section>
         )}

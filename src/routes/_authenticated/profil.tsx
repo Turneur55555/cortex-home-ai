@@ -4,9 +4,6 @@ import { toast } from "sonner";
 import { Apple, BarChart3, ChevronRight, HeartPulse } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useProfile } from "@/hooks/useProfile";
-import { ProfileRPGData } from "@/components/profile/rpg/ProfileRPGData";
-import { QuestsPreview } from "@/components/profile/rpg/QuestsPreview";
-import { TrophyRoomPreview } from "@/components/profile/rpg/TrophyRoomPreview";
 import { ProfileIdentityStrip } from "@/components/profile/ProfileIdentityStrip";
 import { EditPseudoSheet } from "@/components/profile/EditPseudoSheet";
 import { BodyStatusCard } from "@/components/profile/BodyStatusCard";
@@ -51,15 +48,6 @@ function ProfilPage() {
           toast.success("Pseudo mis à jour");
         }}
       />
-
-      <ProfileRPGData>
-        {(rpg) => (
-          <>
-            <QuestsPreview />
-            <TrophyRoomPreview achievements={rpg.achievements} legacyBadges={rpg.legacyBadges} />
-          </>
-        )}
-      </ProfileRPGData>
 
       <BodyStatusCard />
 

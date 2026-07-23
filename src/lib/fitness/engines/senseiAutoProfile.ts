@@ -270,8 +270,7 @@ const UNDER_TRAINED_RATIO = 0.5;
 const OVER_TRAINED_RATIO = 1.6;
 const MIN_TRAINED_MUSCLES_FOR_STATUS = 3;
 
-/** Semaine ISO-ish simplifiée (année + n° de semaine depuis le 1er janvier),
- *  même convention que src/lib/profile/achievements/muscleVolume.ts. */
+/** Semaine ISO-ish simplifiée (année + n° de semaine depuis le 1er janvier). */
 function weekKey(dateStr: string): string {
   const d = new Date(`${dateStr}T12:00:00`);
   const firstJan = new Date(d.getFullYear(), 0, 1);

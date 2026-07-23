@@ -4,7 +4,7 @@
 export { analyzeExercise } from "./engine";
 export type { AnalyzeInput, SessionLike } from "./engine";
 export { inferObjective, buildProfileContext } from "./profile";
-export type { ProfileInput, UserProfileContext, BodyRow, GoalRow } from "./profile";
+export type { ProfileInput, UserProfileContext, BodyRow } from "./profile";
 export { resolveMuscleRoles } from "./muscleRoles";
 export type { RoleMap } from "./muscleRoles";
 export * from "./types";

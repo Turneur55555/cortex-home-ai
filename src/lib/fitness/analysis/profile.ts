@@ -18,17 +18,11 @@ export interface BodyRow {
   waist?: number | null;
 }
 
-export interface GoalRow {
-  goal_type: string;
-  is_completed?: boolean | null;
-}
-
 export interface ProfileInput {
   /** Objectif choisi explicitement par l'utilisateur (surcharge l'inférence). */
   explicitObjective?: TrainingObjective | null;
   /** Mensurations, triées par date DESC (comme useBodyMeasurements). */
   body?: ReadonlyArray<BodyRow> | null;
-  goals?: ReadonlyArray<GoalRow> | null;
   /** Moyenne des répétitions du top set sur l'historique de l'exercice. */
   avgReps?: number | null;
 }
@@ -74,16 +68,10 @@ function trend<T extends keyof BodyRow>(
 
 /**
  * Infère l'objectif d'entraînement à partir des données disponibles.
- * Priorité : objectif explicite > signaux Corps/objectifs > plage de reps.
+ * Priorité : objectif explicite > signaux Corps > plage de reps.
  */
 export function inferObjective(input: ProfileInput): TrainingObjective {
   if (input.explicitObjective) return input.explicitObjective;
-
-  const goals = input.goals ?? [];
-  const activeWeightLoss = goals.some(
-    (g) => g.goal_type === "weight_loss" && !g.is_completed,
-  );
-  if (activeWeightLoss) return "seche";
 
   const body = input.body ?? [];
   const bfTrend = trend(body, "body_fat");

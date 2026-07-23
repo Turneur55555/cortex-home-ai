@@ -22,7 +22,7 @@ export const Route = createFileRoute("/_authenticated/rls-status")({
 // Si tu ajoutes/retires un test là-bas, mets à jour cette liste.
 // ─────────────────────────────────────────────────────────────────────────────
 type Suite = {
-  key: "user_stats" | "user_badges" | "storage_objects";
+  key: "user_stats" | "storage_objects";
   title: string;
   description: string;
   tests: string[];
@@ -38,17 +38,6 @@ const SUITES: Suite[] = [
       "Alice ne peut PAS INSERT dans user_stats",
       "Alice ne peut PAS UPDATE ses stats directement",
       "Alice ne peut PAS voir les stats de Bob",
-    ],
-  },
-  {
-    key: "user_badges",
-    title: "user_badges",
-    description: "Déblocage uniquement via RPC unlock_user_badge.",
-    tests: [
-      "Alice ne peut PAS INSERT directement dans user_badges",
-      "unlock_user_badge échoue si critères non remplis",
-      "unlock_user_badge refuse un badge inconnu",
-      "Alice ne voit pas les badges de Bob",
     ],
   },
   {
@@ -139,7 +128,7 @@ function RlsStatusPage() {
           <h1 className="text-xl font-semibold tracking-tight">État des tests RLS</h1>
         </div>
         <p className="text-sm text-muted-foreground">
-          Isolation entre utilisateurs sur <code>user_stats</code>, <code>user_badges</code> et{" "}
+          Isolation entre utilisateurs sur <code>user_stats</code> et{" "}
           <code>storage.objects</code>.
         </p>
       </header>
@@ -228,9 +217,8 @@ function RlsStatusPage() {
 
       {/* Suites */}
       <Tabs defaultValue="user_stats" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="user_stats">Stats</TabsTrigger>
-          <TabsTrigger value="user_badges">Badges</TabsTrigger>
           <TabsTrigger value="storage_objects">Storage</TabsTrigger>
         </TabsList>
         {SUITES.map((s) => (

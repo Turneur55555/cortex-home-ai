@@ -1,7 +1,6 @@
 /**
  * RLS regression tests — vérifient l'isolation entre utilisateurs sur :
  *   - user_stats (lecture seule côté client)
- *   - user_badges (insert refusé, déblocage uniquement via RPC unlock_user_badge)
  *   - storage.objects (buckets food-images, clothes-images, pharmacy-images, pdf-documents)
  *
  * Exécution :
@@ -128,70 +127,6 @@ d("RLS regression — user isolation", () => {
     it("Alice ne peut PAS voir les stats de Bob", async () => {
       const { data } = await alice.client
         .from("user_stats")
-        .select("user_id")
-        .eq("user_id", bob.id);
-      expect(data ?? []).toHaveLength(0);
-    });
-  });
-
-  // ── user_badges ─────────────────────────────────────────────────────────
-  describe("user_badges", () => {
-    it("Alice ne peut PAS INSERT directement dans user_badges", async () => {
-      const { error } = await alice.client.from("user_badges").insert({
-        user_id: alice.id,
-        badge_key: "hack_attempt",
-        label: "Hacker",
-        icon: "Award",
-        rarity: "legendary",
-        xp_reward: 99999,
-        description: "bypass",
-      });
-      expect(error).not.toBeNull();
-    });
-
-    it("unlock_user_badge échoue si critères non remplis", async () => {
-      // Choisir un badge existant dont les critères ne sont pas remplis
-      const { data: catalog } = await alice.client
-        .from("badges_catalog")
-        .select("badge_key, requirement_type, requirement_value")
-        .in("requirement_type", [
-          "workouts_count",
-          "goals_completed",
-          "body_measurements",
-        ])
-        .order("requirement_value", { ascending: false })
-        .limit(1);
-      const hardBadge = catalog?.[0]?.badge_key;
-      if (!hardBadge) return; // catalog vide → skip
-      const { error } = await (alice.client as any).rpc("unlock_user_badge", {
-        _badge_key: hardBadge,
-      });
-      expect(error).not.toBeNull();
-      expect(String(error?.message)).toMatch(/Criteria not met|Unknown badge/i);
-    });
-
-    it("unlock_user_badge refuse un badge inconnu", async () => {
-      const { error } = await (alice.client as any).rpc("unlock_user_badge", {
-        _badge_key: `__nope_${crypto.randomUUID()}`,
-      });
-      expect(error).not.toBeNull();
-    });
-
-    it("Alice ne voit pas les badges de Bob", async () => {
-      // Seed un badge pour Bob via service-role
-      const { data: cat } = await admin
-        .from("badges_catalog")
-        .select("badge_key, label, icon, rarity, xp_reward, description")
-        .limit(1)
-        .single();
-      if (cat) {
-        await admin.from("user_badges").insert({
-          user_id: bob.id,
-          ...cat,
-        });
-      }
-      const { data } = await alice.client
-        .from("user_badges")
         .select("user_id")
         .eq("user_id", bob.id);
       expect(data ?? []).toHaveLength(0);
