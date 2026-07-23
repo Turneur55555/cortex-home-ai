@@ -76,7 +76,7 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
       setScanResult(d);
       setItems(d.items ?? []);
       const detectedMeal = d.meal ?? "";
-      setMeal(isMealSlug(detectedMeal) ? detectedMeal : "dejeuner");
+      if (isMealSlug(detectedMeal)) setMeal(detectedMeal);
       const n = (d.items ?? []).length;
       const conf = d.confidence != null ? ` (${Math.round(d.confidence * 100)}%)` : "";
       toast.success(`${n} aliment${n > 1 ? "s" : ""} détecté${n > 1 ? "s" : ""}${conf}`);
