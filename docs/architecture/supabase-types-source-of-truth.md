@@ -87,6 +87,33 @@ personne ne regarde forcément (c'est exactement ce qui s'est passé le 23/07/20
 incident plus haut). Corriger automatiquement depuis la base, qui est par construction toujours
 juste, ferme cette fenêtre de risque sans compromettre la garantie « la base fait foi ».
 
+### Garanties de sécurité de l'auto-heal (revue du 23/07/2026)
+
+L'auto-commit (`fix-push` de `supabase-types.yml`, étape 4b de `migrate.yml`) ne doit **jamais**
+masquer une erreur de fond. Il n'intervient que dans **un seul cas** : `types.ts` est le seul
+fichier en dérive, la base est joignable et à jour, et le reste du code reste cohérent une fois
+`types.ts` régénéré. Concrètement, le job **échoue et ne committe rien** si :
+
+1. `supabase gen types` échoue (CLI en erreur, quel qu'en soit le motif) ;
+2. la base est injoignable (auth/réseau) — même mécanisme que 1, plus une validation explicite du
+   contenu généré (non vide, marqueur `Tables:` présent) en défense en profondeur, pour ne jamais
+   committer un fichier vide ou tronqué même si un code de sortie mentait ;
+3. une migration existe dans `supabase/migrations/` mais n'est **pas** appliquée à la base distante
+   (`supabase migration list` le révèle, comparé avant toute régénération) — sinon régénérer
+   masquerait un vrai retard de déploiement sous un faux « fix » de `types.ts` ;
+4. régénérer `types.ts` casse `tsc` ailleurs dans le code — signe que la correction réelle touche
+   plus qu'un fichier généré, donc hors périmètre de l'auto-heal (`npm run typecheck` est exécuté
+   avant tout commit, sur le `types.ts` fraîchement régénéré).
+
+Le commit auto, quand il a lieu, ne stage **jamais** que `src/integrations/supabase/types.ts` — un
+garde-fou explicite (`git diff --cached --name-only`) l'interdit même si la logique en amont
+changeait un jour.
+
+`migrate.yml` n'a pas besoin de la garantie 3 (l'étape 4b ne s'exécute que juste après que
+`supabase db push --include-all` a appliqué **toutes** les migrations locales avec succès — l'état
+« migration en attente » y est impossible par construction), mais applique les garanties 1/2/4 à
+l'identique pour rester cohérent avec `supabase-types.yml`.
+
 ## Bootstrap (une seule fois)
 
 Le premier passage de `supabase-types.yml`/`migrate.yml` peut signaler un écart si le `types.ts`
