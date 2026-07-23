@@ -23,7 +23,30 @@ export function RecipeLogSheet({ date, onClose }: Props) {
   const scaled = perS ? scaleServings(perS, servings) : null;
 
   const confirm = () => {
-    if (!recipeDetail || !scaled) return;
+    if (!recipeDetail || !scaled || !perS) return;
+
+    // Le nombre de portions reste un concept recette (recipes.servings) —
+    // intact. Côté journal, on convertit en grammes quand le grammage total
+    // de la recette est connu, pour que l'écran d'édition du journal reste
+    // « Modifier le poids » uniquement, y compris pour un repas issu d'une
+    // recette. Repli sans perte si le grammage est indisponible (ingrédients
+    // sans grammes) : les macros restent correctes, seule l'édition ultérieure
+    // du poids retombera sur un poids nominal (comportement WeightEditModal).
+    const perServingGrams =
+      recipeDetail.totalGrams != null && recipeDetail.servings > 0
+        ? recipeDetail.totalGrams / recipeDetail.servings
+        : null;
+    const consumedGrams = perServingGrams != null ? perServingGrams * servings : null;
+    const base100 =
+      perServingGrams != null && perServingGrams > 0
+        ? {
+            calories: Math.round((perS.calories / perServingGrams) * 100),
+            proteins: Math.round((perS.protein / perServingGrams) * 100 * 10) / 10,
+            carbs: Math.round((perS.carbs / perServingGrams) * 100 * 10) / 10,
+            fats: Math.round((perS.fat / perServingGrams) * 100 * 10) / 10,
+          }
+        : null;
+
     addBatch.mutate(
       [
         {
@@ -34,16 +57,19 @@ export function RecipeLogSheet({ date, onClose }: Props) {
           proteins: Math.round(scaled.protein * 10) / 10,
           carbs: Math.round(scaled.carbs * 10) / 10,
           fats: Math.round(scaled.fat * 10) / 10,
-          base_calories: Math.round(perS!.calories),
-          base_proteins: Math.round(perS!.protein * 10) / 10,
-          base_carbs: Math.round(perS!.carbs * 10) / 10,
-          base_fats: Math.round(perS!.fat * 10) / 10,
-          serving_count: servings,
+          // Repli sans perte si le grammage total est indisponible : on
+          // laisse base_* à NULL plutôt que d'y stocker une valeur par
+          // portion sous l'étiquette « pour 100 g » (les macros affichés
+          // restent corrects dans tous les cas, cf. `calories` ci-dessus).
+          base_calories: base100 ? base100.calories : null,
+          base_proteins: base100 ? base100.proteins : null,
+          base_carbs: base100 ? base100.carbs : null,
+          base_fats: base100 ? base100.fats : null,
+          serving_count: 1,
           percentage_consumed: 100,
-          // B3 : sans ces champs, l'édition de portion retombait sur 1 portion
-          // et écrasait les macros réelles (÷N).
-          consumed_quantity: servings,
-          consumed_unit: "portion",
+          consumed_quantity: consumedGrams,
+          consumed_unit: "g",
+          consumed_grams_per_unit: null,
         },
       ],
       { onSuccess: () => onClose() },
@@ -77,7 +103,10 @@ export function RecipeLogSheet({ date, onClose }: Props) {
               </label>
               <select
                 value={selectedId ?? ""}
-                onChange={(e) => { setSelectedId(e.target.value || null); setServings(1); }}
+                onChange={(e) => {
+                  setSelectedId(e.target.value || null);
+                  setServings(1);
+                }}
                 className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary"
               >
                 <option value="">Choisir une recette…</option>
@@ -125,7 +154,9 @@ export function RecipeLogSheet({ date, onClose }: Props) {
                         >
                           −
                         </button>
-                        <span className="min-w-[2rem] text-center text-base font-semibold">{servings}</span>
+                        <span className="min-w-[2rem] text-center text-base font-semibold">
+                          {servings}
+                        </span>
                         <button
                           type="button"
                           onClick={() => setServings((s) => s + 0.5)}

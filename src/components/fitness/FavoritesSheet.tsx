@@ -3,7 +3,7 @@ import { Loader2, Plus, Star, Trash2, X } from "lucide-react";
 import { FullscreenSheet as Sheet, Field } from "@/components/shared/FormComponents";
 import { FoodAutocomplete } from "@/components/FoodAutocomplete";
 import { MEAL_LABELS, MEAL_SLUGS, scalePer100 } from "@/lib/nutrition/meals";
-import { parseDecimal } from "@/lib/nutrition/portions";
+import { parseDecimal } from "@/lib/nutrition/weight";
 import type { FoodSuggestion } from "@/services/foodSuggestion";
 import {
   useNutritionFavorites,
@@ -20,13 +20,7 @@ const MEALS: Array<{ slug: string; label: string }> = MEAL_SLUGS.map((slug) => (
 
 const scale = scalePer100;
 
-export function FavoritesSheet({
-  date,
-  onClose,
-}: {
-  date: string;
-  onClose: () => void;
-}) {
+export function FavoritesSheet({ date, onClose }: { date: string; onClose: () => void }) {
   const { data: favorites, isLoading } = useNutritionFavorites();
   const addFav = useAddFavorite();
   const delFav = useDeleteFavorite();
@@ -55,10 +49,13 @@ export function FavoritesSheet({
       proteins: fav.proteins,
       carbs: fav.carbs,
       fats: fav.fats,
-      base_calories: fav.calories,
-      base_proteins: fav.proteins,
-      base_carbs: fav.carbs,
-      base_fats: fav.fats,
+      // nutrition_favorites ne stocke que des macros déjà scalés (aucun
+      // grammage ni référence /100 g) : base_* reste NULL plutôt que de
+      // dupliquer fav.calories sous l'étiquette « pour 100 g ».
+      base_calories: null,
+      base_proteins: null,
+      base_carbs: null,
+      base_fats: null,
       serving_count: 1,
       percentage_consumed: 100,
     });
@@ -184,10 +181,7 @@ export function FavoritesSheet({
 
         <ul className="space-y-2">
           {(favorites ?? []).map((fav) => (
-            <li
-              key={fav.id}
-              className="rounded-xl border border-border bg-card p-3"
-            >
+            <li key={fav.id} className="rounded-xl border border-border bg-card p-3">
               <div className="flex items-center gap-2">
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{fav.name}</p>
@@ -208,9 +202,7 @@ export function FavoritesSheet({
               <div className="mt-2 flex items-center gap-2">
                 <select
                   value={mealByFav[fav.id] ?? fav.meal ?? "collation"}
-                  onChange={(e) =>
-                    setMealByFav((m) => ({ ...m, [fav.id]: e.target.value }))
-                  }
+                  onChange={(e) => setMealByFav((m) => ({ ...m, [fav.id]: e.target.value }))}
                   className="min-w-0 flex-1 rounded-lg border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none focus:border-foreground/30"
                 >
                   {MEALS.map((m) => (

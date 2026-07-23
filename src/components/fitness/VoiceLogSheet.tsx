@@ -5,7 +5,7 @@ import { useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { FullscreenSheet as Sheet } from "@/components/shared/FormComponents";
 import { MEAL_LABELS, clampMacroSet, isMealSlug } from "@/lib/nutrition/meals";
-import { formatDecimal, parseDecimal } from "@/lib/nutrition/portions";
+import { formatDecimal, parseDecimal } from "@/lib/nutrition/weight";
 import { useAddNutritionBatch } from "@/hooks/use-fitness";
 
 interface ParsedItem {
@@ -23,19 +23,19 @@ interface ParseResult {
   details?: string;
 }
 
-
 // Vérifie si SpeechRecognition est disponible (Chrome iOS / Safari 17+).
 const hasSpeechRecognition =
   typeof window !== "undefined" &&
   (typeof window.SpeechRecognition !== "undefined" ||
-    typeof (window as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition !== "undefined");
+    typeof (window as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition !==
+      "undefined");
 
 type SpeechRecognitionType = typeof SpeechRecognition;
 
 function getSpeechRecognition(): SpeechRecognitionType | null {
   if (typeof window === "undefined") return null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (window.SpeechRecognition ?? (window as any).webkitSpeechRecognition) ?? null;
+  return window.SpeechRecognition ?? (window as any).webkitSpeechRecognition ?? null;
 }
 
 interface VoiceLogSheetProps {
@@ -124,7 +124,9 @@ export function VoiceLogSheet({ date, onClose }: VoiceLogSheetProps) {
 
   // Clean up on unmount
   useEffect(() => {
-    return () => { recognitionRef.current?.abort(); };
+    return () => {
+      recognitionRef.current?.abort();
+    };
   }, []);
 
   const handleManualParse = () => {
@@ -138,7 +140,10 @@ export function VoiceLogSheet({ date, onClose }: VoiceLogSheetProps) {
 
   const removeItem = (idx: number) => {
     setItems((prev) => prev.filter((_, i) => i !== idx));
-    if (editingIdx === idx) { setEditingIdx(null); setEditDraft(null); }
+    if (editingIdx === idx) {
+      setEditingIdx(null);
+      setEditDraft(null);
+    }
   };
 
   const updateItem = (idx: number, patch: Partial<ParsedItem>) =>
@@ -147,7 +152,11 @@ export function VoiceLogSheet({ date, onClose }: VoiceLogSheetProps) {
   // Brouillon d'édition en chaînes : accepte « 12,5 » (parseDecimal) et
   // n'écrase l'item qu'à la validation, bornes DB appliquées (bugs B4/B9).
   const [editDraft, setEditDraft] = useState<{
-    name: string; calories: string; proteins: string; carbs: string; fats: string;
+    name: string;
+    calories: string;
+    proteins: string;
+    carbs: string;
+    fats: string;
   } | null>(null);
 
   const startEdit = (idx: number) => {
@@ -191,10 +200,13 @@ export function VoiceLogSheet({ date, onClose }: VoiceLogSheetProps) {
           proteins: Math.round(m.proteins * 10) / 10,
           carbs: Math.round(m.carbs * 10) / 10,
           fats: Math.round(m.fats * 10) / 10,
-          base_calories: Math.round(m.calories),
-          base_proteins: Math.round(m.proteins * 10) / 10,
-          base_carbs: Math.round(m.carbs * 10) / 10,
-          base_fats: Math.round(m.fats * 10) / 10,
+          // Poids réel inconnu (l'IA renvoie des macros absolus, pas un
+          // grammage) : base_* reste NULL plutôt que de stocker une valeur
+          // absolue sous l'étiquette « pour 100 g ».
+          base_calories: null,
+          base_proteins: null,
+          base_carbs: null,
+          base_fats: null,
           serving_count: 1,
           percentage_consumed: 100,
         };
@@ -225,7 +237,6 @@ export function VoiceLogSheet({ date, onClose }: VoiceLogSheetProps) {
   return (
     <Sheet title="Saisie vocale" onClose={onClose}>
       <div className="space-y-4">
-
         {/* Mic button */}
         {hasSpeechRecognition && (
           <div className="flex flex-col items-center gap-3 py-2">
@@ -249,9 +260,7 @@ export function VoiceLogSheet({ date, onClose }: VoiceLogSheetProps) {
               )}
             </button>
             <p className="text-center text-xs text-muted-foreground">
-              {recording
-                ? "Parle… relâche quand tu as fini"
-                : "Maintiens le bouton et parle"}
+              {recording ? "Parle… relâche quand tu as fini" : "Maintiens le bouton et parle"}
             </p>
           </div>
         )}
@@ -284,7 +293,9 @@ export function VoiceLogSheet({ date, onClose }: VoiceLogSheetProps) {
         {/* Divider */}
         <div className="flex items-center gap-2">
           <div className="h-px flex-1 bg-border" />
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">ou tape</span>
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            ou tape
+          </span>
           <div className="h-px flex-1 bg-border" />
         </div>
 
@@ -324,7 +335,9 @@ export function VoiceLogSheet({ date, onClose }: VoiceLogSheetProps) {
                       <input
                         type="text"
                         value={editDraft?.name ?? item.name}
-                        onChange={(e) => setEditDraft((d) => (d ? { ...d, name: e.target.value } : d))}
+                        onChange={(e) =>
+                          setEditDraft((d) => (d ? { ...d, name: e.target.value } : d))
+                        }
                         autoComplete="off"
                         className="w-full rounded-lg border border-border bg-surface px-2.5 py-2 text-base outline-none focus:border-primary"
                       />
@@ -332,13 +345,21 @@ export function VoiceLogSheet({ date, onClose }: VoiceLogSheetProps) {
                         {(["calories", "proteins", "carbs", "fats"] as const).map((field) => (
                           <div key={field}>
                             <label className="mb-0.5 block text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
-                              {field === "calories" ? "kcal" : field === "proteins" ? "prot" : field === "carbs" ? "gluc" : "lip"}
+                              {field === "calories"
+                                ? "kcal"
+                                : field === "proteins"
+                                  ? "prot"
+                                  : field === "carbs"
+                                    ? "gluc"
+                                    : "lip"}
                             </label>
                             <input
                               type="text"
                               inputMode="decimal"
                               value={editDraft?.[field] ?? ""}
-                              onChange={(e) => setEditDraft((d) => (d ? { ...d, [field]: e.target.value } : d))}
+                              onChange={(e) =>
+                                setEditDraft((d) => (d ? { ...d, [field]: e.target.value } : d))
+                              }
                               autoComplete="off"
                               className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-base outline-none focus:border-primary"
                             />
@@ -358,10 +379,8 @@ export function VoiceLogSheet({ date, onClose }: VoiceLogSheetProps) {
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium">{item.name}</p>
                         <p className="text-[11px] text-muted-foreground">
-                          {Math.round(item.calories)} kcal · P
-                          {Math.round(item.proteins * 10) / 10} G
-                          {Math.round(item.carbs * 10) / 10} L
-                          {Math.round(item.fats * 10) / 10}
+                          {Math.round(item.calories)} kcal · P{Math.round(item.proteins * 10) / 10}{" "}
+                          G{Math.round(item.carbs * 10) / 10} L{Math.round(item.fats * 10) / 10}
                         </p>
                       </div>
                       <button
@@ -388,9 +407,8 @@ export function VoiceLogSheet({ date, onClose }: VoiceLogSheetProps) {
 
             {/* Totals */}
             <div className="rounded-xl bg-surface px-3 py-2 text-center text-xs">
-              <span className="font-bold text-primary">{Math.round(totals.calories)}</span>{" "}
-              kcal · P{Math.round(totals.proteins * 10) / 10} G
-              {Math.round(totals.carbs * 10) / 10} L
+              <span className="font-bold text-primary">{Math.round(totals.calories)}</span> kcal · P
+              {Math.round(totals.proteins * 10) / 10} G{Math.round(totals.carbs * 10) / 10} L
               {Math.round(totals.fats * 10) / 10}
             </div>
 
@@ -439,4 +457,3 @@ export function VoiceLogSheet({ date, onClose }: VoiceLogSheetProps) {
     </Sheet>
   );
 }
-
