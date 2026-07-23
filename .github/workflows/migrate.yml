@@ -311,21 +311,40 @@ jobs:
             fi
           fi
 
-      # ── 4b. Vérifier que types.ts correspond à la base (post-migration) ───
+      # ── 4b. Régénérer types.ts depuis la base (post-migration) ────────────
       # Les migrations viennent d'être appliquées : la base contient désormais
-      # les nouvelles tables. types.ts committé DOIT correspondre — sinon on a
-      # oublié de régénérer (`npm run gen:types`). Échec visible, aucun commit.
-      - name: Setup Node (vérif types)
+      # les nouvelles tables. Si types.ts committé n'a pas été régénéré
+      # (`npm run gen:types` oublié avant le push), on le fait ici et on
+      # committe automatiquement — même logique que l'auto-commit d'idempotence
+      # du job "validate" ci-dessus, et que le job "fix-push" de
+      # supabase-types.yml (qui prend le relais pour tout push direct à
+      # types.ts hors migration, ex. Lovable/gpt-engineer-app[bot]).
+      # L'auto-correction ne peut pas être fausse : elle vient toujours de
+      # `supabase gen types` contre la base qu'on vient de migrer.
+      - name: Setup Node (régénération types)
         if: steps.push.outputs.success == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: "24"
 
-      - name: Vérifier que types.ts correspond à la base
+      - name: Régénérer types.ts depuis la base
         if: steps.push.outputs.success == 'true'
-        env:
-          SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
-        run: node scripts/check-supabase-types.mjs
+        run: npm run gen:types
+
+      - name: Committer si dérive corrigée
+        if: steps.push.outputs.success == 'true'
+        run: |
+          if git diff --quiet src/integrations/supabase/types.ts; then
+            echo "✅ types.ts déjà conforme à la base — rien à corriger."
+          else
+            echo "⚠️  Dérive détectée et corrigée automatiquement :"
+            git diff --stat src/integrations/supabase/types.ts
+            git config user.name  "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add src/integrations/supabase/types.ts
+            git commit -m "ci: auto-corrige la dérive types.ts après migration [skip ci]"
+            git push
+          fi
 
       # ── 4c. Audit : détecter les dérives Git ↔ Supabase (post-migration) ──
       # Après application des migrations, vérifier qu'il n'y a pas de dérives

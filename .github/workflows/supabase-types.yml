@@ -1,25 +1,42 @@
 name: Supabase Types Sync
 
 # La BASE DE DONNÉES est la source de vérité unique des types.
-# Ce workflow régénère les types officiels depuis la base (supabase gen types)
-# et ÉCHOUE si `src/integrations/supabase/types.ts` committé ne correspond plus
-# (table/colonne manquante ou en trop). Aucune correction automatique, aucun
-# commit : une erreur visible et explicite, jamais une réparation silencieuse.
-#
-# Objectif : rendre IMPOSSIBLE une régression silencieuse des types (ex. une
-# régénération Lovable qui efface des tables). Voir
+# Ce workflow compare `src/integrations/supabase/types.ts` committé aux types
+# générés depuis la base (`supabase gen types`). Voir
 # docs/architecture/supabase-types-source-of-truth.md
+#
+# Deux comportements selon le déclencheur (même logique que migrate.yml pour
+# les corrections d'idempotence des migrations) :
+#
+#   - pull_request → BLOQUANT, aucune correction automatique. Une dérive fait
+#     échouer le check ; c'est à l'auteur de la PR de lancer `npm run
+#     gen:types` et de committer. Empêche qu'une PR merge un types.ts obsolète
+#     (Claude Code, contributeurs humains).
+#
+#   - push sur main → AUTO-CORRECTION. Régénère types.ts depuis la base et
+#     committe directement (`ci: auto-corrige la dérive types.ts [skip ci]`),
+#     comme le fait déjà migrate.yml pour les migrations non-idempotentes.
+#     Nécessaire car certains outils (Lovable / gpt-engineer-app[bot])
+#     poussent directement sur main sans passer par une PR : un check
+#     seulement bloquant serait invisible et laisserait la dérive en place
+#     indéfiniment (cause exacte de la régression du 23/07/2026, commit
+#     238a9db — un types.ts vieux de ~40 migrations poussé directement sur
+#     main par gpt-engineer-app[bot], jamais corrigé faute d'action sur
+#     l'échec CI). L'auto-correction ne peut PAS être fausse : elle vient
+#     toujours de `supabase gen types` contre la base réelle.
 #
 # Cas des PR ajoutant une migration : la nouvelle table n'existe pas encore en
 # base tant que la migration n'est pas appliquée (au merge, par migrate.yml).
-# On ne lance donc PAS ce check sur les PR (le garde-fou tsc de typecheck.yml
-# les couvre) ; la conformité base⇄types est vérifiée sur main, APRÈS
-# application des migrations (étape finale de migrate.yml), et ici pour les
-# pushs main qui ne touchent que types.ts (typiquement les régénérations
-# Lovable poussées directement).
+# On déduit donc ce cas (voir étape "Déléguer à migrate.yml") ; la conformité
+# base⇄types est vérifiée sur main, APRÈS application des migrations (étape
+# finale de migrate.yml).
 
 on:
   push:
+    branches: [main]
+    paths:
+      - "src/integrations/supabase/types.ts"
+  pull_request:
     branches: [main]
     paths:
       - "src/integrations/supabase/types.ts"
@@ -29,8 +46,10 @@ permissions:
   contents: read
 
 jobs:
-  check:
-    name: types.ts conforme à la base
+  # ─── PR : bloquant, jamais de commit ────────────────────────────────────
+  check-pr:
+    name: types.ts conforme à la base (PR)
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -40,14 +59,60 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Si ce push modifie AUSSI des migrations, c'est migrate.yml qui vérifie
-      # la conformité APRÈS les avoir appliquées (sinon la base est en retard
-      # sur types.ts → faux écart). On se retire donc de ce cas.
+      # Une PR qui ajoute une migration n'a pas encore cette migration en
+      # base (elle n'est appliquée qu'au merge, par migrate.yml) : comparer
+      # maintenant donnerait un faux écart. On se retire de ce cas.
+      - name: Déléguer à migrate.yml si des migrations changent
+        id: guard
+        run: |
+          BASE="${{ github.event.pull_request.base.sha }}"
+          if git diff --name-only "$BASE" "${{ github.sha }}" -- 'supabase/migrations/**' | grep -q .; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Des migrations changent dans cette PR → vérification déléguée à migrate.yml après merge."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: supabase/setup-cli@v1
+        if: steps.guard.outputs.skip == 'false'
+        with:
+          version: "2.109.1"
+
+      - uses: actions/setup-node@v4
+        if: steps.guard.outputs.skip == 'false'
+        with:
+          node-version: "24"
+
+      - name: Vérifier que types.ts correspond à la base
+        if: steps.guard.outputs.skip == 'false'
+        run: node scripts/check-supabase-types.mjs
+
+  # ─── push sur main : auto-correction ────────────────────────────────────
+  fix-push:
+    name: types.ts conforme à la base (push main)
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Même garde que côté PR : si ce push modifie AUSSI des migrations,
+      # c'est migrate.yml qui régénère/vérifie APRÈS les avoir appliquées
+      # (sinon la base est en retard sur types.ts → faux écart).
       - name: Déléguer à migrate.yml si des migrations changent
         id: guard
         run: |
           BEFORE="${{ github.event.before }}"
-          if [ -z "$BEFORE" ] || ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          elif [ -z "$BEFORE" ] || ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
             echo "skip=false" >> "$GITHUB_OUTPUT"
           elif git diff --name-only "$BEFORE" "${{ github.sha }}" -- 'supabase/migrations/**' | grep -q .; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
@@ -66,6 +131,21 @@ jobs:
         with:
           node-version: "24"
 
-      - name: Vérifier que types.ts correspond à la base
+      - name: Régénérer types.ts depuis la base
         if: steps.guard.outputs.skip == 'false'
-        run: node scripts/check-supabase-types.mjs
+        run: npm run gen:types
+
+      - name: Committer si dérive corrigée
+        if: steps.guard.outputs.skip == 'false'
+        run: |
+          if git diff --quiet src/integrations/supabase/types.ts; then
+            echo "✅ types.ts déjà conforme à la base — rien à corriger."
+          else
+            echo "⚠️  Dérive détectée et corrigée automatiquement :"
+            git diff --stat src/integrations/supabase/types.ts
+            git config user.name  "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add src/integrations/supabase/types.ts
+            git commit -m "ci: auto-corrige la dérive types.ts (base = source de vérité) [skip ci]"
+            git push
+          fi
