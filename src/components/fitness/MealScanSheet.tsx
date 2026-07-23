@@ -76,7 +76,7 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
       setScanResult(d);
       setItems(d.items ?? []);
       const detectedMeal = d.meal ?? "";
-      setMeal(isMealSlug(detectedMeal) ? detectedMeal : "dejeuner");
+      if (isMealSlug(detectedMeal)) setMeal(detectedMeal);
       const n = (d.items ?? []).length;
       const conf = d.confidence != null ? ` (${Math.round(d.confidence * 100)}%)` : "";
       toast.success(`${n} aliment${n > 1 ? "s" : ""} détecté${n > 1 ? "s" : ""}${conf}`);
@@ -246,6 +246,25 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
               )}
             </div>
 
+            {/* Meal selector — l'utilisateur choisit avant validation */}
+            <div>
+              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                Repas
+              </label>
+              <select
+                value={meal}
+                onChange={(e) => setMeal(e.target.value)}
+                disabled={editingIdx != null}
+                className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary disabled:opacity-40"
+              >
+                {Object.entries(MEAL_LABELS).map(([slug, label]) => (
+                  <option key={slug} value={slug}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <ul className="space-y-2">
               {items.map((item, idx) => {
                 const isEditing = editingIdx === idx;
@@ -375,21 +394,8 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
               {Math.round(totals.fats * 10) / 10}
             </div>
 
-            {/* Meal selector */}
-            <select
-              value={meal}
-              onChange={(e) => setMeal(e.target.value)}
-              disabled={editingIdx != null}
-              className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary disabled:opacity-40"
-            >
-              {Object.entries(MEAL_LABELS).map(([slug, label]) => (
-                <option key={slug} value={slug}>
-                  {label}
-                </option>
-              ))}
-            </select>
-
             {/* Confirm */}
+
             <button
               type="button"
               onClick={confirm}
