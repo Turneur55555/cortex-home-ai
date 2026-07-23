@@ -9,7 +9,8 @@ import { FullscreenSheet as Sheet } from "@/components/shared/FormComponents";
 import { format } from "date-fns";
 import { computeMacros, type ProductNutriments } from "@/lib/nutrition/macros";
 import { lookupBarcode } from "@/services/foodCatalog";
-import { WeightSelector, type WeightChange } from "@/components/fitness/WeightSelector";
+import { WeightSelector } from "@/components/fitness/WeightSelector";
+import { calculateNutritionFromGrams, formatDecimal, per100FromFood } from "@/lib/nutrition/weight";
 import type { FoodSuggestion } from "@/services/foodSuggestion";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -77,7 +78,8 @@ export function BarcodeScannerSheet({ onClose }: { onClose: () => void }) {
   const [history, setHistory] = useState<Product[]>([]);
   const [camStatus, setCamStatus] = useState<"idle" | "active" | "denied">("idle");
 
-  const [weight, setWeight] = useState<WeightChange | null>(null);
+  // Poids courant — unique source de vérité pour la quantité consommée.
+  const [weightText, setWeightText] = useState("");
 
   const addNutrition = useAddNutrition();
 
@@ -104,6 +106,11 @@ export function BarcodeScannerSheet({ onClose }: { onClose: () => void }) {
     };
   }, [product, per100]);
 
+  // Poids/macros dérivés de weightText — jamais stockés séparément.
+  const calc = pseudoFood
+    ? calculateNutritionFromGrams(weightText, per100FromFood(pseudoFood))
+    : null;
+
   const stopCamera = useCallback(() => {
     try {
       controlsRef.current?.stop();
@@ -129,7 +136,6 @@ export function BarcodeScannerSheet({ onClose }: { onClose: () => void }) {
 
     setError(null);
     setProduct(null);
-    setWeight(null);
     setLoading(true);
     try {
       const result = await lookupBarcode(code);
@@ -146,6 +152,7 @@ export function BarcodeScannerSheet({ onClose }: { onClose: () => void }) {
           nutriments: result.nutriments as ProductNutriments | undefined,
         };
         setProduct(p);
+        setWeightText(formatDecimal(suggestInitialGrams(p.quantity ?? p.serving_size)));
         setHistory((h) => {
           const filtered = h.filter((x) => x.barcode !== code);
           return [p, ...filtered].slice(0, 8);
@@ -218,21 +225,21 @@ export function BarcodeScannerSheet({ onClose }: { onClose: () => void }) {
   // handleAddToStock removed: Maison/stocks module deleted.
 
   const handleAddToNutrition = async () => {
-    if (!product || !per100 || !weight) return;
+    if (!product || !per100 || !calc || calc.error) return;
     try {
       await addNutrition.mutateAsync({
         date: format(new Date(), "yyyy-MM-dd"),
-        name: `${product.product_name || "Produit"} (${Math.round(weight.grams)} g)`,
+        name: `${product.product_name || "Produit"} (${Math.round(calc.totalGrams)} g)`,
         meal: "collation",
-        calories: weight.calories,
-        proteins: weight.proteins,
-        carbs: weight.carbs,
-        fats: weight.fats,
+        calories: calc.calories,
+        proteins: calc.proteins,
+        carbs: calc.carbs,
+        fats: calc.fats,
         base_calories: per100.calories,
         base_proteins: per100.proteins,
         base_carbs: per100.carbs,
         base_fats: per100.fats,
-        consumed_quantity: weight.grams,
+        consumed_quantity: calc.totalGrams,
         consumed_unit: "g",
         consumed_grams_per_unit: null,
         serving_count: 1,
@@ -358,7 +365,7 @@ export function BarcodeScannerSheet({ onClose }: { onClose: () => void }) {
             </div>
 
             {/* Sélecteur de poids — même moteur que la saisie manuelle */}
-            <WeightSelector food={pseudoFood} onChange={setWeight} />
+            <WeightSelector food={pseudoFood} value={weightText} onChange={setWeightText} />
 
             {/* Référence 100g */}
             {per100?.calories != null && (
@@ -369,17 +376,17 @@ export function BarcodeScannerSheet({ onClose }: { onClose: () => void }) {
             )}
 
             {/* Macros recalculées */}
-            {weight && (
+            {calc && !calc.error && (
               <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-elevated">
                 <p className="px-4 pt-3 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                  Valeurs pour {Math.round(weight.grams)} g
+                  Valeurs pour {Math.round(calc.totalGrams)} g
                 </p>
                 <div className="mt-2 grid grid-cols-4 gap-px bg-border">
                   {[
-                    { label: "Kcal", val: weight.calories, color: "text-orange-400" },
-                    { label: "Prot", val: weight.proteins, color: "text-blue-400" },
-                    { label: "Gluc", val: weight.carbs, color: "text-emerald-400" },
-                    { label: "Lip", val: weight.fats, color: "text-yellow-400" },
+                    { label: "Kcal", val: calc.calories, color: "text-orange-400" },
+                    { label: "Prot", val: calc.proteins, color: "text-blue-400" },
+                    { label: "Gluc", val: calc.carbs, color: "text-emerald-400" },
+                    { label: "Lip", val: calc.fats, color: "text-yellow-400" },
                   ].map((m, i) => (
                     <div key={i} className="bg-surface py-3 text-center">
                       <span className={`block text-lg font-black tabular-nums ${m.color}`}>
@@ -398,7 +405,7 @@ export function BarcodeScannerSheet({ onClose }: { onClose: () => void }) {
             <div>
               <button
                 onClick={handleAddToNutrition}
-                disabled={addNutrition.isPending || !weight}
+                disabled={addNutrition.isPending || !calc || !!calc.error}
                 className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-primary py-3 text-xs font-bold text-primary-foreground shadow-glow disabled:opacity-60"
               >
                 {addNutrition.isPending ? (
@@ -425,7 +432,12 @@ export function BarcodeScannerSheet({ onClose }: { onClose: () => void }) {
               {history.map((item, idx) => (
                 <button
                   key={idx}
-                  onClick={() => setProduct(item)}
+                  onClick={() => {
+                    setProduct(item);
+                    setWeightText(
+                      formatDecimal(suggestInitialGrams(item.quantity ?? item.serving_size)),
+                    );
+                  }}
                   className="flex w-full items-center gap-3 rounded-xl border border-border bg-surface/50 p-2 text-left hover:border-primary/50 transition-colors"
                 >
                   <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-border bg-white">

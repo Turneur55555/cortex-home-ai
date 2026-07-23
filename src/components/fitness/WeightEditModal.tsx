@@ -1,10 +1,14 @@
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { useUpdateNutrition } from "@/hooks/use-fitness";
 import { Sheet } from "@/components/shared/FormComponents";
 import type { NutritionEntry } from "@/lib/nutrition/utils";
-import { WeightSelector, type WeightChange } from "@/components/fitness/WeightSelector";
-import { resolveConsumedGrams } from "@/lib/nutrition/weight";
+import { WeightSelector } from "@/components/fitness/WeightSelector";
+import {
+  calculateNutritionFromGrams,
+  formatDecimal,
+  resolveConsumedGrams,
+} from "@/lib/nutrition/weight";
 import type { FoodSuggestion } from "@/services/foodSuggestion";
 
 interface WeightEditModalProps {
@@ -15,22 +19,26 @@ interface WeightEditModalProps {
 
 /**
  * Écran unique d'édition d'un aliment loggé : « Modifier le poids ».
- * Un seul champ (grammes), les macros sont toujours recalculées à partir
- * d'un ratio pour-cent-grammes dérivé des valeurs réellement enregistrées —
- * fonctionne identiquement quelle que soit l'origine historique de la ligne
- * (catalogue, scan, saisie manuelle, ancien mode « portion »/scoop/pot…).
+ *
+ * Source de vérité unique : `weightText` (le texte saisi). Titre, champ,
+ * preset actif, aperçu nutritionnel et données enregistrées en sont tous
+ * dérivés à chaque rendu — aucun autre state, aucun useEffect de
+ * synchronisation. Fonctionne identiquement quelle que soit l'origine
+ * historique de la ligne (catalogue, scan, saisie manuelle, ancien mode
+ * « portion »/scoop/pot…) car la référence /100 g ci-dessous est elle-même
+ * dérivée une fois pour toutes des valeurs réellement enregistrées, jamais
+ * de `base_*` (potentiellement ambigu sur d'anciennes lignes).
  */
 export function WeightEditModal({ item, date, onClose }: WeightEditModalProps) {
   const update = useUpdateNutrition();
 
-  // Poids déjà connu pour cette ligne (ou 100 g par défaut si irrécupérable —
-  // seules quelques lignes très anciennes sans grammage exploitable).
+  // Poids déjà connu pour cette ligne (ou 100 g nominal si irrécupérable —
+  // ex. lignes issues d'un scan IA, qui ne stocke jamais de grammage réel).
   const initialGrams = resolveConsumedGrams(item) ?? 100;
 
-  // Référence /100 g dérivée des valeurs actuellement enregistrées : robuste
-  // face à toute ambiguïté historique (aucune dépendance à base_* pour la
-  // valeur de départ — base_* est réécrit canoniquement à la sauvegarde).
-  const effectivePer100 = useMemo(() => {
+  // Référence /100 g dérivée UNE fois des valeurs actuellement enregistrées
+  // et du poids initial — jamais recalculée depuis autre chose ensuite.
+  const per100 = useMemo(() => {
     const g = initialGrams > 0 ? initialGrams : 100;
     const per = (v: number | null | undefined) => (v != null ? (v / g) * 100 : null);
     return {
@@ -45,48 +53,48 @@ export function WeightEditModal({ item, date, onClose }: WeightEditModalProps) {
     () => ({
       id: item.id,
       name: item.name ?? "Aliment",
-      calories: effectivePer100.calories,
-      proteins: effectivePer100.proteins,
-      carbs: effectivePer100.carbs,
-      fats: effectivePer100.fats,
+      calories: per100.calories,
+      proteins: per100.proteins,
+      carbs: per100.carbs,
+      fats: per100.fats,
       source: "custom",
       default_serving: null,
     }),
-    [item.id, item.name, effectivePer100],
+    [item.id, item.name, per100],
   );
 
-  const [calc, setCalc] = useState<WeightChange | null>(null);
-  const onWeightChange = useCallback((c: WeightChange) => setCalc(c), []);
+  // ─── Unique source de vérité du composant ──────────────────────────────
+  const [weightText, setWeightText] = useState(() => formatDecimal(initialGrams));
 
+  // Tout le reste est dérivé de weightText à chaque rendu — jamais stocké :
+  const calc = calculateNutritionFromGrams(weightText, per100);
   const preview = {
-    calories: calc?.calories ?? item.calories ?? 0,
-    proteins: calc?.proteins ?? item.proteins ?? 0,
-    carbs: calc?.carbs ?? item.carbs ?? 0,
-    fats: calc?.fats ?? item.fats ?? 0,
+    calories: calc.calories ?? item.calories ?? 0,
+    proteins: calc.proteins ?? item.proteins ?? 0,
+    carbs: calc.carbs ?? item.carbs ?? 0,
+    fats: calc.fats ?? item.fats ?? 0,
   };
 
   const round1 = (v: number | null) => (v != null ? Math.round(v * 10) / 10 : null);
 
   const submit = async () => {
+    if (calc.error) return;
     const patch = {
-      calories: calc?.calories ?? item.calories,
-      proteins: calc?.proteins ?? item.proteins,
-      carbs: calc?.carbs ?? item.carbs,
-      fats: calc?.fats ?? item.fats,
-      consumed_quantity: calc?.grams ?? initialGrams,
+      calories: calc.calories,
+      proteins: calc.proteins,
+      carbs: calc.carbs,
+      fats: calc.fats,
+      consumed_quantity: calc.totalGrams,
       consumed_unit: "g",
       consumed_grams_per_unit: null,
       serving_count: 1,
       percentage_consumed: 100,
       // base_* canonicalisé /100 g à chaque sauvegarde (auto-réparation des
       // lignes historiques ambiguës — plus jamais de double convention).
-      base_calories:
-        effectivePer100.calories != null
-          ? Math.round(effectivePer100.calories)
-          : item.base_calories,
-      base_proteins: round1(effectivePer100.proteins) ?? item.base_proteins,
-      base_carbs: round1(effectivePer100.carbs) ?? item.base_carbs,
-      base_fats: round1(effectivePer100.fats) ?? item.base_fats,
+      base_calories: per100.calories != null ? Math.round(per100.calories) : item.base_calories,
+      base_proteins: round1(per100.proteins) ?? item.base_proteins,
+      base_carbs: round1(per100.carbs) ?? item.base_carbs,
+      base_fats: round1(per100.fats) ?? item.base_fats,
     };
     await update.mutateAsync({ id: item.id, date, patch });
     onClose();
@@ -97,7 +105,12 @@ export function WeightEditModal({ item, date, onClose }: WeightEditModalProps) {
       <div className="space-y-5">
         <p className="truncate text-sm font-semibold">{item.name}</p>
 
-        <WeightSelector food={pseudoFood} initialGrams={initialGrams} onChange={onWeightChange} />
+        {/* Le poids courant, unique et toujours cohérent avec le champ/preset/macros ci-dessous */}
+        <p className="text-center text-3xl font-black tabular-nums">
+          {calc.error ? "—" : `${formatDecimal(calc.totalGrams)} g`}
+        </p>
+
+        <WeightSelector food={pseudoFood} value={weightText} onChange={setWeightText} />
 
         {/* Aperçu macros */}
         <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
@@ -120,7 +133,7 @@ export function WeightEditModal({ item, date, onClose }: WeightEditModalProps) {
         <button
           type="button"
           onClick={submit}
-          disabled={update.isPending}
+          disabled={update.isPending || calc.error != null}
           className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-gradient-primary text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-60"
         >
           {update.isPending && <Loader2 className="h-4 w-4 animate-spin" />}

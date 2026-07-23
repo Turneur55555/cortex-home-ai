@@ -1,69 +1,36 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Scale } from "lucide-react";
 import {
   buildGramPresets,
   calculateNutritionFromGrams,
   formatDecimal,
-  loadSavedWeight,
   parseDecimal,
   per100FromFood,
   type WeightPreset,
 } from "@/lib/nutrition/weight";
 import type { FoodSuggestion } from "@/services/foodSuggestion";
 
-export interface WeightChange {
-  grams: number;
-  calories: number | null;
-  proteins: number | null;
-  carbs: number | null;
-  fats: number | null;
-}
-
 interface Props {
   food: FoodSuggestion;
-  /** Notifie le parent du résultat (macros + poids choisi). */
-  onChange: (result: WeightChange) => void;
-  /** Poids initial imposé (édition d'un repas déjà loggé). Prioritaire sur localStorage. */
-  initialGrams?: number | null;
+  /** Saisie brute du poids (grammes) — unique source de vérité, possédée par l'appelant. */
+  value: string;
+  onChange: (value: string) => void;
   /** Afficher les raccourcis ½ / ¾ / ×2 (défaut : true). */
   quickScale?: boolean;
 }
 
 /**
- * Sélecteur de poids — source de vérité unique = un nombre de grammes.
- *  - chips de poids suggéré (½ / 1 / 2 × grammage de référence, ou 50/100/150/200 g)
- *  - saisie libre (virgule ou point)
- *  - raccourcis ½ / ¾ / ×2
- *  - macros recalculés en direct via calculateNutritionFromGrams
+ * Sélecteur de poids — composant entièrement contrôlé, sans état propre.
+ * `value` (texte saisi) est l'unique source de vérité, possédée par l'appelant.
+ * Preset actif, macros, erreurs : tout est dérivé de `value` à chaque rendu,
+ * jamais stocké séparément — aucun risque de désynchronisation.
  */
-export function WeightSelector({ food, onChange, initialGrams, quickScale = true }: Props) {
+export function WeightSelector({ food, value, onChange, quickScale = true }: Props) {
   const presets = useMemo(() => buildGramPresets(food), [food]);
 
-  const initial = useMemo(() => {
-    if (initialGrams != null && initialGrams > 0) return initialGrams;
-    const saved = loadSavedWeight(food);
-    if (saved != null) return saved;
-    return presets[1]?.grams ?? 100;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [food, initialGrams]);
-
-  const [gramsInput, setGramsInput] = useState<string>(formatDecimal(initial));
-
-  useEffect(() => {
-    const calc = calculateNutritionFromGrams(gramsInput, per100FromFood(food));
-    if (calc.error) return; // ne pas propager une saisie invalide
-    onChange({
-      grams: calc.totalGrams,
-      calories: calc.calories,
-      proteins: calc.proteins,
-      carbs: calc.carbs,
-      fats: calc.fats,
-    });
-  }, [gramsInput, food, onChange]);
-
-  const parsed = parseDecimal(gramsInput);
+  const parsed = parseDecimal(value);
   const errorMsg =
-    gramsInput.trim() === ""
+    value.trim() === ""
       ? null
       : parsed == null
         ? "Saisissez un nombre (ex. 33 ou 33,5)"
@@ -71,20 +38,19 @@ export function WeightSelector({ food, onChange, initialGrams, quickScale = true
           ? "Le poids doit être supérieur à 0"
           : null;
 
-  const calc = calculateNutritionFromGrams(gramsInput, per100FromFood(food));
+  const calc = calculateNutritionFromGrams(value, per100FromFood(food));
 
-  const applyPreset = (p: WeightPreset) => setGramsInput(formatDecimal(p.grams));
+  const applyPreset = (p: WeightPreset) => onChange(formatDecimal(p.grams));
 
   const scaleBy = (factor: number) => {
-    const cur = parseDecimal(gramsInput);
-    if (cur == null || cur <= 0) return;
-    setGramsInput(formatDecimal(Math.round(cur * factor * 10) / 10));
+    if (parsed == null || parsed <= 0) return;
+    onChange(formatDecimal(Math.round(parsed * factor * 10) / 10));
   };
 
   const adjustBy = (delta: number) => {
-    const cur = parseDecimal(gramsInput) ?? 0;
+    const cur = parsed ?? 0;
     const next = Math.max(10, Math.round((cur + delta) * 10) / 10);
-    setGramsInput(formatDecimal(next));
+    onChange(formatDecimal(next));
   };
 
   return (
@@ -94,10 +60,10 @@ export function WeightSelector({ food, onChange, initialGrams, quickScale = true
         <span className="text-xs font-semibold uppercase tracking-wider text-primary">Poids</span>
       </div>
 
-      {/* Chips de poids suggéré */}
+      {/* Chips de poids suggéré — le preset actif est calculé, jamais stocké */}
       <div className="flex flex-wrap gap-1.5">
         {presets.map((p) => {
-          const active = parseDecimal(gramsInput) === p.grams;
+          const active = parsed === p.grams;
           return (
             <button
               key={p.label}
@@ -131,8 +97,8 @@ export function WeightSelector({ food, onChange, initialGrams, quickScale = true
           type="text"
           inputMode="decimal"
           aria-label="Poids en grammes"
-          value={gramsInput}
-          onChange={(e) => setGramsInput(e.target.value)}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
           autoComplete="off"
           placeholder="ex. 100"
           className={

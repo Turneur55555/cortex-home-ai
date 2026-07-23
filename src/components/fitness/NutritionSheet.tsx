@@ -8,7 +8,15 @@ import { FoodAutocomplete } from "@/components/FoodAutocomplete";
 import type { FoodSuggestion } from "@/services/foodSuggestion";
 import type { MealPrefill } from "@/lib/nutrition/utils";
 import { WeightSelector } from "@/components/fitness/WeightSelector";
-import { parseDecimal, formatDecimal, saveLastWeight } from "@/lib/nutrition/weight";
+import {
+  parseDecimal,
+  formatDecimal,
+  saveLastWeight,
+  loadSavedWeight,
+  buildGramPresets,
+  calculateNutritionFromGrams,
+  per100FromFood,
+} from "@/lib/nutrition/weight";
 
 import { MEAL_OPTIONS, type MealSlug } from "@/lib/nutrition/meals";
 
@@ -86,8 +94,8 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
 
   // Aliment de référence sélectionné (autocomplete).
   const [baseFood, setBaseFood] = useState<FoodSuggestion | null>(null);
-  // Poids courant en grammes (renseigné par WeightSelector).
-  const [weight, setWeight] = useState<{ grams: number } | null>(null);
+  // Poids courant — unique source de vérité pour la quantité de baseFood.
+  const [weightText, setWeightText] = useState("");
 
   const [form, setForm] = useState({
     name: prefill?.name ?? "",
@@ -100,31 +108,39 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
   // Poids total optionnel pour une saisie manuelle (permet d'enregistrer l'aliment /100 g).
   const [manualGrams, setManualGrams] = useState("");
 
-  const selectBaseFood = useCallback((food: FoodSuggestion) => {
-    setBaseFood(food);
-    setForm((f) => ({ ...f, name: food.name }));
+  // Applique un poids saisi : met à jour la source de vérité (weightText) et
+  // dérive systématiquement les macros affichées — jamais l'inverse.
+  const applyWeightText = useCallback((text: string, food: FoodSuggestion | null) => {
+    setWeightText(text);
+    if (!food) return;
+    const calc = calculateNutritionFromGrams(text, per100FromFood(food));
+    if (calc.error) return;
+    setForm((f) => ({
+      ...f,
+      calories: calc.calories != null ? String(calc.calories) : "",
+      proteins: calc.proteins != null ? formatDecimal(calc.proteins) : "",
+      carbs: calc.carbs != null ? formatDecimal(calc.carbs) : "",
+      fats: calc.fats != null ? formatDecimal(calc.fats) : "",
+    }));
   }, []);
 
-  // Callback stable consommé par WeightSelector — met à jour le form.
-  const handleWeightChange = useCallback(
-    (r: {
-      grams: number;
-      calories: number | null;
-      proteins: number | null;
-      carbs: number | null;
-      fats: number | null;
-    }) => {
-      setWeight({ grams: r.grams });
-      setForm((f) => ({
-        ...f,
-        calories: r.calories != null ? String(r.calories) : "",
-        proteins: r.proteins != null ? formatDecimal(r.proteins) : "",
-        carbs: r.carbs != null ? formatDecimal(r.carbs) : "",
-        fats: r.fats != null ? formatDecimal(r.fats) : "",
-      }));
+  const selectBaseFood = useCallback(
+    (food: FoodSuggestion) => {
+      setBaseFood(food);
+      setForm((f) => ({ ...f, name: food.name }));
+      const saved = loadSavedWeight(food);
+      const presets = buildGramPresets(food);
+      const startGrams = saved ?? presets[1]?.grams ?? 100;
+      applyWeightText(formatDecimal(startGrams), food);
     },
-    [],
+    [applyWeightText],
   );
+
+  // Poids courant dérivé du texte saisi — jamais stocké séparément.
+  const weightCalc = baseFood
+    ? calculateNutritionFromGrams(weightText, per100FromFood(baseFood))
+    : null;
+  const grams = weightCalc && !weightCalc.error ? weightCalc.totalGrams : null;
 
   // Logique d'insertion pure — retourne true si l'ajout a réussi.
   const doAdd = async (): Promise<boolean> => {
@@ -148,8 +164,8 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
       return false;
     }
 
-    if (baseFood && weight) {
-      saveLastWeight(baseFood, weight.grams);
+    if (baseFood && grams != null) {
+      saveLastWeight(baseFood, grams);
     }
 
     const mGrams = parseDecimal(manualGrams);
@@ -164,7 +180,7 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
       : null;
 
     try {
-      const isFood = !!(baseFood && weight);
+      const isFood = !!(baseFood && grams != null);
       await add.mutateAsync({
         date,
         name: form.name.trim(),
@@ -179,7 +195,7 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
         base_fats: isFood ? baseFood!.fats : per100 ? per100.fats : fats,
         serving_count: 1,
         percentage_consumed: 100,
-        consumed_quantity: isFood ? weight!.grams : manualWithGrams ? mGrams! : null,
+        consumed_quantity: isFood ? grams! : manualWithGrams ? mGrams! : null,
         consumed_unit: "g",
         consumed_grams_per_unit: null,
       });
@@ -203,7 +219,7 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
     const ok = await doAdd();
     if (ok) {
       setBaseFood(null);
-      setWeight(null);
+      setWeightText("");
       setManualGrams("");
       setForm({ name: "", meal: currentMeal, calories: "", proteins: "", carbs: "", fats: "" });
     }
@@ -226,7 +242,13 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
         />
 
         {/* Sélecteur de poids intelligent (presets + grammes libres) */}
-        {baseFood && <WeightSelector food={baseFood} onChange={handleWeightChange} />}
+        {baseFood && (
+          <WeightSelector
+            food={baseFood}
+            value={weightText}
+            onChange={(text) => applyWeightText(text, baseFood)}
+          />
+        )}
 
         <div>
           <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
