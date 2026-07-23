@@ -48,6 +48,8 @@ export interface RecipeWithMacros extends Recipe {
   ingredients: RecipeIngredient[];
   totalMacros: MacroTotals;
   perServingMacros: MacroTotals;
+  /** Somme des grammages d'ingrédients (null si un ingrédient n'a pas de grammage connu). */
+  totalGrams: number | null;
 }
 
 const RECIPES_KEY = ["recipes"] as const;
@@ -65,7 +67,10 @@ export function useRecipes() {
   return useQuery({
     queryKey: RECIPES_KEY,
     queryFn: async (): Promise<Recipe[]> => {
-      const { data, error } = await db.from("recipes").select("*").order("name", { ascending: true });
+      const { data, error } = await db
+        .from("recipes")
+        .select("*")
+        .order("name", { ascending: true });
       if (error) throw error;
       return (data ?? []) as unknown as Recipe[];
     },
@@ -89,13 +94,16 @@ export function useRecipe(id: string | null | undefined) {
       if (ingErr) throw ingErr;
       const ingredients = (ings ?? []) as unknown as RecipeIngredient[];
       const total = recipeMacros(ingredients.map(toMacroInput));
+      const totalGrams = ingredients.every((ing) => ing.grams != null && ing.grams > 0)
+        ? ingredients.reduce((sum, ing) => sum + (ing.grams ?? 0), 0)
+        : null;
       return {
         ...(recipe as Recipe),
         ingredients,
         totalMacros: total,
         perServingMacros: perServing(total, (recipe as Recipe).servings),
+        totalGrams,
       };
     },
   });
 }
-

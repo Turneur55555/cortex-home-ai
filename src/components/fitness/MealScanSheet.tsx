@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { FullscreenSheet as Sheet } from "@/components/shared/FormComponents";
 import { fileToBase64Compressed } from "@/lib/nutrition/utils";
 import { MEAL_LABELS, clampMacroSet, isMealSlug } from "@/lib/nutrition/meals";
-import { formatDecimal, parseDecimal } from "@/lib/nutrition/portions";
+import { formatDecimal, parseDecimal } from "@/lib/nutrition/weight";
 import { useAddNutritionBatch } from "@/hooks/use-fitness";
 
 interface ScanItem {
@@ -57,8 +57,12 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
             const body = await ctx.json();
             detail = body?.error ?? "";
           }
-        } catch {/* ignore */}
-        throw new Error(detail || "Erreur de connexion au service IA. Vérifie ta connexion et réessaie.");
+        } catch {
+          /* ignore */
+        }
+        throw new Error(
+          detail || "Erreur de connexion au service IA. Vérifie ta connexion et réessaie.",
+        );
       }
       if (data?.error) throw new Error(data.error as string);
       return data as ScanResponse;
@@ -86,7 +90,10 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
 
   const removeItem = (idx: number) => {
     setItems((prev) => prev.filter((_, i) => i !== idx));
-    if (editingIdx === idx) { setEditingIdx(null); setEditDraft(null); }
+    if (editingIdx === idx) {
+      setEditingIdx(null);
+      setEditDraft(null);
+    }
   };
 
   const updateItem = (idx: number, patch: Partial<ScanItem>) =>
@@ -95,7 +102,11 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
   // Brouillon d'édition en chaînes : accepte « 12,5 » (parseDecimal) et
   // n'écrase l'item qu'à la validation, bornes DB appliquées (bugs B4/B9).
   const [editDraft, setEditDraft] = useState<{
-    name: string; calories: string; proteins: string; carbs: string; fats: string;
+    name: string;
+    calories: string;
+    proteins: string;
+    carbs: string;
+    fats: string;
   } | null>(null);
 
   const startEdit = (idx: number) => {
@@ -186,7 +197,9 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
             {lastFileRef.current && (
               <button
                 type="button"
-                onClick={() => { if (lastFileRef.current) scan.mutate(lastFileRef.current); }}
+                onClick={() => {
+                  if (lastFileRef.current) scan.mutate(lastFileRef.current);
+                }}
                 className="inline-flex h-11 items-center gap-2 rounded-xl bg-destructive/10 px-4 text-sm font-semibold text-destructive active:scale-95"
               >
                 Réessayer
@@ -212,16 +225,20 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
           <>
             <div className="flex items-center gap-2">
               {scanResult.details && (
-                <p className="flex-1 text-[11px] italic text-muted-foreground">{scanResult.details}</p>
+                <p className="flex-1 text-[11px] italic text-muted-foreground">
+                  {scanResult.details}
+                </p>
               )}
               {scanResult.confidence != null && (
-                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                  scanResult.confidence >= 0.75
-                    ? "bg-green-500/15 text-green-600"
-                    : scanResult.confidence >= 0.5
-                    ? "bg-yellow-500/15 text-yellow-600"
-                    : "bg-red-500/15 text-red-600"
-                }`}>
+                <span
+                  className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                    scanResult.confidence >= 0.75
+                      ? "bg-green-500/15 text-green-600"
+                      : scanResult.confidence >= 0.5
+                        ? "bg-yellow-500/15 text-yellow-600"
+                        : "bg-red-500/15 text-red-600"
+                  }`}
+                >
                   {Math.round(scanResult.confidence * 100)}% confiance
                 </span>
               )}
@@ -235,7 +252,9 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
                       <input
                         type="text"
                         value={editDraft?.name ?? item.name}
-                        onChange={(e) => setEditDraft((d) => (d ? { ...d, name: e.target.value } : d))}
+                        onChange={(e) =>
+                          setEditDraft((d) => (d ? { ...d, name: e.target.value } : d))
+                        }
                         autoComplete="off"
                         className="w-full rounded-lg border border-border bg-surface px-2.5 py-2 text-base outline-none focus:border-primary"
                       />
@@ -243,13 +262,21 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
                         {(["calories", "proteins", "carbs", "fats"] as const).map((field) => (
                           <div key={field}>
                             <label className="mb-0.5 block text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
-                              {field === "calories" ? "kcal" : field === "proteins" ? "prot" : field === "carbs" ? "gluc" : "lip"}
+                              {field === "calories"
+                                ? "kcal"
+                                : field === "proteins"
+                                  ? "prot"
+                                  : field === "carbs"
+                                    ? "gluc"
+                                    : "lip"}
                             </label>
                             <input
                               type="text"
                               inputMode="decimal"
                               value={editDraft?.[field] ?? ""}
-                              onChange={(e) => setEditDraft((d) => (d ? { ...d, [field]: e.target.value } : d))}
+                              onChange={(e) =>
+                                setEditDraft((d) => (d ? { ...d, [field]: e.target.value } : d))
+                              }
                               autoComplete="off"
                               className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-base outline-none focus:border-primary"
                             />
@@ -269,10 +296,8 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium">{item.name}</p>
                         <p className="text-[11px] text-muted-foreground">
-                          {Math.round(item.calories)} kcal · P
-                          {Math.round(item.proteins * 10) / 10} G
-                          {Math.round(item.carbs * 10) / 10} L
-                          {Math.round(item.fats * 10) / 10}
+                          {Math.round(item.calories)} kcal · P{Math.round(item.proteins * 10) / 10}{" "}
+                          G{Math.round(item.carbs * 10) / 10} L{Math.round(item.fats * 10) / 10}
                         </p>
                       </div>
                       <button
@@ -299,9 +324,8 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
 
             {/* Totals */}
             <div className="rounded-xl bg-surface px-3 py-2 text-center text-xs">
-              <span className="font-bold text-primary">{Math.round(totals.calories)}</span>{" "}
-              kcal · P{Math.round(totals.proteins * 10) / 10} G
-              {Math.round(totals.carbs * 10) / 10} L
+              <span className="font-bold text-primary">{Math.round(totals.calories)}</span> kcal · P
+              {Math.round(totals.proteins * 10) / 10} G{Math.round(totals.carbs * 10) / 10} L
               {Math.round(totals.fats * 10) / 10}
             </div>
 

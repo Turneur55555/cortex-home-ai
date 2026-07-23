@@ -57,7 +57,7 @@ import { NutritionSheet } from "@/components/fitness/NutritionSheet";
 import { MealPlanSheet } from "@/components/fitness/MealPlanSheet";
 import { GoalsSheet } from "@/components/fitness/GoalsSheet";
 import { NutritionAnalysisSheet } from "@/components/fitness/NutritionAnalysisSheet";
-import { PortionEditModal } from "@/components/fitness/PortionEditModal";
+import { WeightEditModal } from "@/components/fitness/WeightEditModal";
 import { NutritionHistorySheet } from "@/components/fitness/NutritionHistorySheet";
 import { SavedMealsSheet } from "@/components/fitness/SavedMealsSheet";
 import { FavoritesSheet } from "@/components/fitness/FavoritesSheet";
@@ -65,7 +65,7 @@ import { RecipeLogSheet } from "@/components/fitness/RecipeLogSheet";
 import { VoiceLogSheet } from "@/components/fitness/VoiceLogSheet";
 import { SwipeableNutritionItem } from "@/components/fitness/SwipeableNutritionItem";
 import { useCreateSavedMeal } from "@/hooks/use-saved-meals";
-import { getPortionBadge } from "@/lib/nutrition/utils";
+import { getWeightBadge } from "@/lib/nutrition/utils";
 import { MEAL_LABELS, MEAL_SLUGS, isMealSlug } from "@/lib/nutrition/meals";
 import type { MealPrefill, NutritionEntry } from "@/lib/nutrition/utils";
 
@@ -150,7 +150,7 @@ export function NutritionTab() {
   const [scanOpen, setScanOpen] = useState(false);
   const [barcodeOpen, setBarcodeOpen] = useState(false);
   const [prefill, setPrefill] = useState<MealPrefill | null>(null);
-  const [portionItem, setPortionItem] = useState<NutritionEntry | null>(null);
+  const [weightEditItem, setWeightEditItem] = useState<NutritionEntry | null>(null);
   const [analysisOpen, setAnalysisOpen] = useState(false);
   const [savedOpen, setSavedOpen] = useState(false);
   const [favSheetOpen, setFavSheetOpen] = useState(false);
@@ -621,12 +621,12 @@ export function NutritionTab() {
 
                           <ul className="space-y-1.5">
                             {g.items.map((m) => {
-                              const badge = getPortionBadge(m);
+                              const badge = getWeightBadge(m);
                               return (
                                 <SwipeableNutritionItem
                                   key={m.id}
                                   onDelete={() => handleDelete(m)}
-                                  onTap={() => setPortionItem(m)}
+                                  onTap={() => setWeightEditItem(m)}
                                 >
                                   <div className="flex items-center gap-1 p-3">
                                     <div className="min-w-0 flex-1">
@@ -800,8 +800,12 @@ export function NutritionTab() {
           </div>
         </div>
       )}
-      {portionItem && (
-        <PortionEditModal item={portionItem} date={date} onClose={() => setPortionItem(null)} />
+      {weightEditItem && (
+        <WeightEditModal
+          item={weightEditItem}
+          date={date}
+          onClose={() => setWeightEditItem(null)}
+        />
       )}
       {confirmDeleteMeal && (
         <WorkoutDeleteDialog

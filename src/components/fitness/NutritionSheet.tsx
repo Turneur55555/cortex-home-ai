@@ -7,13 +7,8 @@ import { Field, Sheet, SubmitButton } from "@/components/shared/FormComponents";
 import { FoodAutocomplete } from "@/components/FoodAutocomplete";
 import type { FoodSuggestion } from "@/services/foodSuggestion";
 import type { MealPrefill } from "@/lib/nutrition/utils";
-import { PortionSelector } from "@/components/fitness/PortionSelector";
-import {
-  parseDecimal,
-  formatDecimal,
-  saveLastPortion,
-  type PortionUnit,
-} from "@/lib/nutrition/portions";
+import { WeightSelector } from "@/components/fitness/WeightSelector";
+import { parseDecimal, formatDecimal, saveLastWeight } from "@/lib/nutrition/weight";
 
 import { MEAL_OPTIONS, type MealSlug } from "@/lib/nutrition/meals";
 
@@ -43,7 +38,12 @@ const normalizeFoodName = (name: string): string =>
 // Best-effort : ne bloque jamais le log du repas.
 async function saveCustomFood(
   name: string,
-  per100: { calories: number | null; proteins: number | null; carbs: number | null; fats: number | null },
+  per100: {
+    calories: number | null;
+    proteins: number | null;
+    carbs: number | null;
+    fats: number | null;
+  },
 ) {
   try {
     const {
@@ -73,7 +73,6 @@ async function saveCustomFood(
 
 // PantryPicker removed: Maison/stocks module deleted.
 
-
 // ─── NutritionSheet ───────────────────────────────────────────────────────────
 
 interface NutritionSheetProps {
@@ -87,13 +86,8 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
 
   // Aliment de référence sélectionné (autocomplete).
   const [baseFood, setBaseFood] = useState<FoodSuggestion | null>(null);
-  // État courant de la portion (renseigné par PortionSelector).
-  const [portion, setPortion] = useState<{
-    quantity: number;
-    unit: PortionUnit;
-    grams: number;
-    gramsPerUnit: number | null;
-  } | null>(null);
+  // Poids courant en grammes (renseigné par WeightSelector).
+  const [weight, setWeight] = useState<{ grams: number } | null>(null);
 
   const [form, setForm] = useState({
     name: prefill?.name ?? "",
@@ -111,23 +105,26 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
     setForm((f) => ({ ...f, name: food.name }));
   }, []);
 
-  // Callback stable consommé par PortionSelector — met à jour le form.
-  const handlePortionChange = useCallback(
-    (r: { quantity: number; unit: PortionUnit; grams: number; gramsPerUnit: number | null;
-          calories: number | null; proteins: number | null;
-          carbs: number | null; fats: number | null }) => {
-      setPortion({ quantity: r.quantity, unit: r.unit, grams: r.grams, gramsPerUnit: r.gramsPerUnit });
+  // Callback stable consommé par WeightSelector — met à jour le form.
+  const handleWeightChange = useCallback(
+    (r: {
+      grams: number;
+      calories: number | null;
+      proteins: number | null;
+      carbs: number | null;
+      fats: number | null;
+    }) => {
+      setWeight({ grams: r.grams });
       setForm((f) => ({
         ...f,
         calories: r.calories != null ? String(r.calories) : "",
         proteins: r.proteins != null ? formatDecimal(r.proteins) : "",
-        carbs:    r.carbs    != null ? formatDecimal(r.carbs)    : "",
-        fats:     r.fats     != null ? formatDecimal(r.fats)     : "",
+        carbs: r.carbs != null ? formatDecimal(r.carbs) : "",
+        fats: r.fats != null ? formatDecimal(r.fats) : "",
       }));
     },
     [],
   );
-
 
   // Logique d'insertion pure — retourne true si l'ajout a réussi.
   const doAdd = async (): Promise<boolean> => {
@@ -135,23 +132,24 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
 
     const calories = parseDecimal(form.calories);
     const proteins = parseDecimal(form.proteins);
-    const carbs    = parseDecimal(form.carbs);
-    const fats     = parseDecimal(form.fats);
+    const carbs = parseDecimal(form.carbs);
+    const fats = parseDecimal(form.fats);
 
-    const outOfRange = (v: number | null, max: number) =>
-      v != null && (v < 0 || v > max);
+    const outOfRange = (v: number | null, max: number) => v != null && (v < 0 || v > max);
     if (
       outOfRange(calories, 10000) ||
       outOfRange(proteins, 1000) ||
       outOfRange(carbs, 1000) ||
       outOfRange(fats, 1000)
     ) {
-      toast.error("Valeurs hors limites : kcal ≤ 10000, macros ≤ 1000 g, et aucune valeur négative.");
+      toast.error(
+        "Valeurs hors limites : kcal ≤ 10000, macros ≤ 1000 g, et aucune valeur négative.",
+      );
       return false;
     }
 
-    if (baseFood && portion) {
-      saveLastPortion(baseFood, { quantity: portion.quantity, unit: portion.unit });
+    if (baseFood && weight) {
+      saveLastWeight(baseFood, weight.grams);
     }
 
     const mGrams = parseDecimal(manualGrams);
@@ -166,7 +164,7 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
       : null;
 
     try {
-      const isFood = !!(baseFood && portion);
+      const isFood = !!(baseFood && weight);
       await add.mutateAsync({
         date,
         name: form.name.trim(),
@@ -181,9 +179,9 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
         base_fats: isFood ? baseFood!.fats : per100 ? per100.fats : fats,
         serving_count: 1,
         percentage_consumed: 100,
-        consumed_quantity: isFood ? portion!.quantity : manualWithGrams ? mGrams! : 1,
-        consumed_unit: isFood ? portion!.unit : manualWithGrams ? "g" : "portion",
-        consumed_grams_per_unit: isFood ? (portion!.gramsPerUnit ?? null) : manualWithGrams ? 1 : null,
+        consumed_quantity: isFood ? weight!.grams : manualWithGrams ? mGrams! : null,
+        consumed_unit: "g",
+        consumed_grams_per_unit: null,
       });
       if (manualWithGrams && per100) void saveCustomFood(form.name.trim(), per100);
       return true;
@@ -205,7 +203,7 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
     const ok = await doAdd();
     if (ok) {
       setBaseFood(null);
-      setPortion(null);
+      setWeight(null);
       setManualGrams("");
       setForm({ name: "", meal: currentMeal, calories: "", proteins: "", carbs: "", fats: "" });
     }
@@ -216,7 +214,6 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
   return (
     <Sheet title={prefill ? "Confirmer l'aliment" : "Nouvel aliment"} onClose={onClose}>
       <form onSubmit={submit} className="space-y-4">
-
         <FoodAutocomplete
           value={form.name}
           onChange={(v) => setForm({ ...form, name: v })}
@@ -228,13 +225,8 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
           required
         />
 
-
-        {/* Sélecteur de portion intelligent (presets + grammes libres) */}
-        {baseFood && (
-          <PortionSelector food={baseFood} onChange={handlePortionChange} />
-        )}
-
-
+        {/* Sélecteur de poids intelligent (presets + grammes libres) */}
+        {baseFood && <WeightSelector food={baseFood} onChange={handleWeightChange} />}
 
         <div>
           <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -246,7 +238,9 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
             className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary"
           >
             {MEAL_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
             ))}
           </select>
         </div>
@@ -291,8 +285,7 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
             disabled={busy}
             className="inline-flex h-12 flex-1 items-center justify-center gap-1.5 rounded-xl border border-border text-sm font-semibold transition-opacity disabled:opacity-60"
           >
-            {busy && <Loader2 className="h-4 w-4 animate-spin" />}
-            + Continuer
+            {busy && <Loader2 className="h-4 w-4 animate-spin" />}+ Continuer
           </button>
           <SubmitButton pending={busy}>Ajouter</SubmitButton>
         </div>
