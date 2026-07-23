@@ -140,7 +140,7 @@ async function compressImage(file: File): Promise<Blob> {
 // promesse ne se résout jamais (cause historique du blocage "Analyse 1/1…"),
 // la mutation échoue proprement avec un message qui identifie l'étape en
 // cause, au lieu de laisser isPending=true indéfiniment.
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+function withTimeout<T>(promise: PromiseLike<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {
       reject(new Error(`Timeout: l'étape "${label}" n'a pas répondu après ${Math.round(ms / 1000)}s.`));
