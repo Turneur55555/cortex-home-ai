@@ -12,14 +12,18 @@ name: Supabase Types Sync
 #
 # Cas des PR ajoutant une migration : la nouvelle table n'existe pas encore en
 # base tant que la migration n'est pas appliquée (au merge, par migrate.yml).
-# On ne lance donc PAS ce check sur les PR (le garde-fou tsc de typecheck.yml
-# les couvre) ; la conformité base⇄types est vérifiée sur main, APRÈS
-# application des migrations (étape finale de migrate.yml), et ici pour les
-# pushs main qui ne touchent que types.ts (typiquement les régénérations
-# Lovable poussées directement).
+# Ce cas est délégué à migrate.yml (conformité vérifiée sur main, APRÈS
+# application des migrations). Mais toute PR qui touche types.ts SANS toucher
+# de migration (édition manuelle, régénération Lovable, etc.) est bloquante :
+# ce workflow tourne alors en check requis avant merge, empêchant qu'un
+# types.ts désynchronisé n'atteigne jamais main.
 
 on:
   push:
+    branches: [main]
+    paths:
+      - "src/integrations/supabase/types.ts"
+  pull_request:
     branches: [main]
     paths:
       - "src/integrations/supabase/types.ts"
@@ -40,18 +44,28 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Si ce push modifie AUSSI des migrations, c'est migrate.yml qui vérifie
-      # la conformité APRÈS les avoir appliquées (sinon la base est en retard
-      # sur types.ts → faux écart). On se retire donc de ce cas.
+      # Si ce changement touche AUSSI des migrations, c'est migrate.yml qui
+      # vérifie la conformité APRÈS les avoir appliquées (sinon la base est en
+      # retard sur types.ts → faux écart). On se retire donc de ce cas.
+      # - push (main) : compare avant/après le push.
+      # - pull_request : compare la base de la PR à sa tête (couvre tout point
+      #   d'entrée manuel de types.ts avant même le merge sur main).
       - name: Déléguer à migrate.yml si des migrations changent
         id: guard
         run: |
-          BEFORE="${{ github.event.before }}"
-          if [ -z "$BEFORE" ] || ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.sha }}"
+          fi
+
+          if [ -z "$BASE" ] || ! git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
             echo "skip=false" >> "$GITHUB_OUTPUT"
-          elif git diff --name-only "$BEFORE" "${{ github.sha }}" -- 'supabase/migrations/**' | grep -q .; then
+          elif git diff --name-only "$BASE" "$HEAD" -- 'supabase/migrations/**' | grep -q .; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "Des migrations changent dans ce push → vérification déléguée à migrate.yml."
+            echo "Des migrations changent dans ce diff → vérification déléguée à migrate.yml."
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi

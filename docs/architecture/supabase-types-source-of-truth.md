@@ -45,7 +45,7 @@ Ne **jamais** éditer `types.ts` à la main. Pour ajouter une table :
 
 | Workflow | Déclencheur | Rôle |
 |---|---|---|
-| **`supabase-types.yml`** | push `main` touchant `types.ts` (hors migrations) | Régénère depuis la base et **échoue** si `types.ts` diverge. Attrape les régénérations Lovable qui effacent des tables. |
+| **`supabase-types.yml`** | PR **et** push `main` touchant `types.ts` (hors migrations) | Régénère depuis la base et **échoue** si `types.ts` diverge. Sur PR, c'est un check bloquant (statut requis) : aucune édition manuelle ou régénération erronée de `types.ts` ne peut atteindre `main` sans être détectée. Attrape aussi les régénérations Lovable qui effacent des tables. |
 | **`migrate.yml`** (étape finale) | push `main` avec migrations | Après application des migrations, vérifie que `types.ts` correspond à la base (sinon on a oublié `npm run gen:types`). |
 | **`typecheck.yml`** | toute PR + push `main` | Filet côté code : `tsc` casse si du code référence une table disparue. Zéro maintenance. |
 
@@ -53,12 +53,24 @@ Le contrôle de conformité base⇄types est fait par `scripts/check-supabase-ty
 compare, au niveau **sémantique** (tables + colonnes, tolérant au formatage), les types générés
 depuis la base et le fichier committé, et liste précisément ce qui manque / est en trop.
 
-### Pourquoi pas de check base⇄types sur les PR ?
+### Pourquoi pas de check base⇄types sur les PR qui touchent une migration ?
 
 Une PR qui ajoute une migration référence une table **pas encore appliquée** à la base (elle le
-sera au merge, par `migrate.yml`). Un check base⇄types y verrait un faux écart. Les PR sont donc
-couvertes par le garde-fou **`tsc`** (`typecheck.yml`) ; la conformité base⇄types est vérifiée sur
-`main`, **après** application des migrations.
+sera au merge, par `migrate.yml`). Un check base⇄types y verrait un faux écart. Ce cas précis est
+donc délégué au garde-fou **`tsc`** (`typecheck.yml`) et à la vérification `migrate.yml`,
+**après** application des migrations sur `main`.
+
+Pour toute PR qui touche `types.ts` **sans** toucher de migration (le cas d'une édition manuelle
+ou d'une régénération incorrecte), `supabase-types.yml` tourne directement sur la PR et bloque le
+merge en cas de dérive — voir « À activer côté GitHub » ci-dessous.
+
+### À activer côté GitHub (une fois, manuellement)
+
+Pour que ce check bloque *réellement* le merge, il faut le déclarer comme **status check requis**
+sur `main` : Settings → Branches → Branch protection rule (`main`) → Require status checks to pass
+→ cocher `types.ts conforme à la base` (job de `supabase-types.yml`) et `TypeScript (tsc)`
+(`typecheck.yml`). Sans cette étape, le workflow tourne et échoue visiblement, mais GitHub autorise
+tout de même le merge d'une PR rouge.
 
 ## Bootstrap (une seule fois)
 
@@ -70,3 +82,14 @@ puis committer — la base fait foi désormais.
 
 Le check couvre **tables + colonnes**. Les vues/fonctions/enums ne sont pas comparés finement
 (rarement la cause d'incident). Le garde-fou `tsc` couvre tout ce que le code utilise réellement.
+
+## Lovable — pas de protection native de fichier
+
+Lovable ne propose pas de mécanisme pour marquer un fichier comme protégé/exclu de sa génération.
+Si Lovable régénère `types.ts` depuis sa propre compréhension du schéma (au lieu de la base réelle),
+rien ne l'empêche de le pousser directement sur `main`. La protection ne peut donc pas venir de
+Lovable lui-même : elle vient entièrement des garde-fous après coup (`supabase-types.yml` bloquant
+sur PR, vérification post-push sur `main`, `.gitattributes` marquant le fichier `linguist-generated`
+pour signaler visuellement dans les diffs GitHub que ce n'est pas un fichier à relire/éditer).
+Si Lovable introduit un jour un mécanisme de fichiers protégés/exclus, l'activer sur ce fichier
+en complément (pas en remplacement) des garde-fous CI existants.

@@ -1,1 +1,5 @@
 * text=auto eol=lf
+
+# Fichier généré (supabase gen types) — jamais une source de vérité, jamais
+# d'édition manuelle. Voir docs/architecture/supabase-types-source-of-truth.md
+src/integrations/supabase/types.ts linguist-generated=true
