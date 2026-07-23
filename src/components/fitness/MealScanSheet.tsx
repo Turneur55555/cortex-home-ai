@@ -6,7 +6,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { FullscreenSheet as Sheet } from "@/components/shared/FormComponents";
 import { fileToBase64Compressed } from "@/lib/nutrition/utils";
 import { MEAL_LABELS, clampMacroSet, isMealSlug } from "@/lib/nutrition/meals";
-import { formatDecimal, parseDecimal } from "@/lib/nutrition/weight";
+import {
+  buildAiMealLogEntry,
+  formatDecimal,
+  parseDecimal,
+  safeGrams,
+} from "@/lib/nutrition/weight";
 import { useAddNutritionBatch } from "@/hooks/use-fitness";
 
 interface ScanItem {
@@ -17,10 +22,6 @@ interface ScanItem {
   carbs: number;
   fats: number;
 }
-
-/** Poids valide (> 0) ou null si irrécupérable — jamais une valeur fabriquée. */
-const safeGrams = (g: number | null | undefined): number | null =>
-  g != null && Number.isFinite(g) && g > 0 ? Math.round(g * 10) / 10 : null;
 
 interface ScanResponse {
   items: ScanItem[];
@@ -154,40 +155,12 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
       items.map((item) => {
         // B9 : borne aux contraintes DB avant insertion (l'IA peut halluciner).
         const m = clampMacroSet(item);
-        const calories = Math.round(m.calories);
-        const proteins = Math.round(m.proteins * 10) / 10;
-        const carbs = Math.round(m.carbs * 10) / 10;
-        const fats = Math.round(m.fats * 10) / 10;
-        const grams = safeGrams(item.grams);
         // Le poids estimé par l'IA devient le poids de référence du journal
         // (consumed_quantity/consumed_unit) tant que l'utilisateur ne le
-        // modifie pas — base_* dérivé pour 100 g à partir de ce même poids,
-        // pour que la réouverture (WeightEditModal) retrouve exactement
-        // cette valeur. Repli sans perte si le poids est irrécupérable
-        // (grams <= 0, ne devrait plus arriver : le schéma IA l'exige).
-        const per100 = grams
-          ? {
-              base_calories: Math.round((calories / grams) * 100),
-              base_proteins: Math.round((proteins / grams) * 100 * 10) / 10,
-              base_carbs: Math.round((carbs / grams) * 100 * 10) / 10,
-              base_fats: Math.round((fats / grams) * 100 * 10) / 10,
-            }
-          : { base_calories: null, base_proteins: null, base_carbs: null, base_fats: null };
-        return {
-          date,
-          meal,
-          name: item.name,
-          calories,
-          proteins,
-          carbs,
-          fats,
-          ...per100,
-          consumed_quantity: grams,
-          consumed_unit: "g",
-          consumed_grams_per_unit: null,
-          serving_count: 1,
-          percentage_consumed: 100,
-        };
+        // modifie pas — base_* dérivé pour 100 g à partir de ce même poids
+        // par buildAiMealLogEntry, pour que la réouverture (WeightEditModal)
+        // retrouve exactement cette valeur. Même contrat que VoiceLogSheet.
+        return { date, meal, ...buildAiMealLogEntry({ ...item, ...m }) };
       }),
       { onSuccess: () => onClose() },
     );

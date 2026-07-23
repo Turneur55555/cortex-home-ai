@@ -3,6 +3,12 @@
 import { createClient } from "@supabase/supabase-js";
 import { checkRateLimit, recordRateLimit } from "../_shared/rate-limit.ts";
 import { MEAL_SLUGS, isMealSlug } from "../_shared/meals.ts";
+import {
+  MEAL_ITEM_SCHEMA,
+  safeNum,
+  sanitizeMealItem,
+  type MealAnalysisResult,
+} from "../_shared/meal-items.ts";
 
 function buildCors(req: Request) {
   const origin = req.headers.get("origin") ?? "";
@@ -19,18 +25,8 @@ function buildCors(req: Request) {
   };
 }
 
-interface ParsedItem {
-  name: string;
-  calories: number;
-  proteins: number;
-  carbs: number;
-  fats: number;
-}
-
-interface ParseResult {
-  items: ParsedItem[];
-  meal?: string;
-  confidence?: number;
+// MealItem / MealAnalysisResult (avec grams requis) : voir ../_shared/meal-items.ts
+interface ParseResult extends MealAnalysisResult {
   details?: string;
 }
 
@@ -53,26 +49,12 @@ const MEAL_TOOL = {
         },
         details: {
           type: "string",
-          description: "1-2 phrases résumant les aliments et portions identifiés",
+          description: "1-2 phrases résumant les aliments et quantités identifiés",
         },
         items: {
           type: "array",
           description: "Liste de chaque aliment mentionné séparément. Un aliment = une entrée.",
-          items: {
-            type: "object",
-            properties: {
-              name: {
-                type: "string",
-                description: "Nom de l'aliment avec quantité (ex: 'Saumon 100 g', 'Noix de cajou 100 g')",
-              },
-              calories: { type: "number", description: "kcal pour la portion donnée" },
-              proteins: { type: "number", description: "Protéines en g" },
-              carbs:    { type: "number", description: "Glucides en g" },
-              fats:     { type: "number", description: "Lipides en g" },
-            },
-            required: ["name", "calories", "proteins", "carbs", "fats"],
-            additionalProperties: false,
-          },
+          items: MEAL_ITEM_SCHEMA,
           minItems: 1,
         },
       },
@@ -87,9 +69,10 @@ Identifie CHAQUE aliment séparément avec ses macros pour la portion mentionné
 
 Règles :
 - Si une quantité est précisée (ex: "100 g de saumon"), utilise-la exactement.
-- Si aucune quantité n'est précisée, utilise une portion standard raisonnable.
+- Si aucune quantité n'est précisée, utilise une masse standard raisonnable.
 - Applique les valeurs nutritionnelles /100 g de la table CIQUAL.
-- Calcule kcal + protéines + glucides + lipides pour chaque portion.
+- Calcule kcal + protéines + glucides + lipides pour cette masse.
+- Renvoie aussi cette masse (grams) : c'est elle qui sera enregistrée comme poids de référence.
 - Tout le texte en FRANÇAIS.
 - Retourne STRICTEMENT via tool calling, jamais de texte libre.`;
 
@@ -202,16 +185,7 @@ Deno.serve(async (req) => {
       return fail("Je n'ai pas pu identifier d'aliments dans ce texte. Précise par exemple : '100 g de poulet, 80 g de riz'.");
     }
 
-    const safeNum = (v: unknown, fallback = 0) =>
-      typeof v === "number" && isFinite(v) && v >= 0 ? Math.round(v * 10) / 10 : fallback;
-
-    const items: ParsedItem[] = parsed.items.map((item) => ({
-      name:     typeof item.name === "string" ? item.name.slice(0, 200) : "Aliment",
-      calories: safeNum(item.calories),
-      proteins: safeNum(item.proteins),
-      carbs:    safeNum(item.carbs),
-      fats:     safeNum(item.fats),
-    }));
+    const items = parsed.items.map(sanitizeMealItem);
 
     const result: ParseResult = {
       items,

@@ -5,11 +5,17 @@ import { useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { FullscreenSheet as Sheet } from "@/components/shared/FormComponents";
 import { MEAL_LABELS, clampMacroSet, isMealSlug } from "@/lib/nutrition/meals";
-import { formatDecimal, parseDecimal } from "@/lib/nutrition/weight";
+import {
+  buildAiMealLogEntry,
+  formatDecimal,
+  parseDecimal,
+  safeGrams,
+} from "@/lib/nutrition/weight";
 import { useAddNutritionBatch } from "@/hooks/use-fitness";
 
 interface ParsedItem {
   name: string;
+  grams: number;
   calories: number;
   proteins: number;
   carbs: number;
@@ -153,6 +159,7 @@ export function VoiceLogSheet({ date, onClose }: VoiceLogSheetProps) {
   // n'écrase l'item qu'à la validation, bornes DB appliquées (bugs B4/B9).
   const [editDraft, setEditDraft] = useState<{
     name: string;
+    grams: string;
     calories: string;
     proteins: string;
     carbs: string;
@@ -165,6 +172,7 @@ export function VoiceLogSheet({ date, onClose }: VoiceLogSheetProps) {
     setEditingIdx(idx);
     setEditDraft({
       name: it.name,
+      grams: formatDecimal(it.grams),
       calories: formatDecimal(it.calories),
       proteins: formatDecimal(it.proteins),
       carbs: formatDecimal(it.carbs),
@@ -180,7 +188,8 @@ export function VoiceLogSheet({ date, onClose }: VoiceLogSheetProps) {
         carbs: parseDecimal(editDraft.carbs) ?? 0,
         fats: parseDecimal(editDraft.fats) ?? 0,
       });
-      updateItem(idx, { name: editDraft.name.trim() || "Aliment", ...macros });
+      const grams = safeGrams(parseDecimal(editDraft.grams)) ?? 0;
+      updateItem(idx, { name: editDraft.name.trim() || "Aliment", grams, ...macros });
     }
     setEditingIdx(null);
     setEditDraft(null);
@@ -192,24 +201,10 @@ export function VoiceLogSheet({ date, onClose }: VoiceLogSheetProps) {
       items.map((item) => {
         // B9 : borne aux contraintes DB avant insertion (l'IA peut halluciner).
         const m = clampMacroSet(item);
-        return {
-          date,
-          meal,
-          name: item.name,
-          calories: Math.round(m.calories),
-          proteins: Math.round(m.proteins * 10) / 10,
-          carbs: Math.round(m.carbs * 10) / 10,
-          fats: Math.round(m.fats * 10) / 10,
-          // Poids réel inconnu (l'IA renvoie des macros absolus, pas un
-          // grammage) : base_* reste NULL plutôt que de stocker une valeur
-          // absolue sous l'étiquette « pour 100 g ».
-          base_calories: null,
-          base_proteins: null,
-          base_carbs: null,
-          base_fats: null,
-          serving_count: 1,
-          percentage_consumed: 100,
-        };
+        // Même contrat que MealScanSheet : le poids estimé par l'IA devient
+        // le poids de référence du journal (consumed_quantity/consumed_unit),
+        // base_* dérivé pour 100 g à partir de ce même poids.
+        return { date, meal, ...buildAiMealLogEntry({ ...item, ...m }) };
       }),
       { onSuccess: () => onClose() },
     );
@@ -341,6 +336,21 @@ export function VoiceLogSheet({ date, onClose }: VoiceLogSheetProps) {
                         autoComplete="off"
                         className="w-full rounded-lg border border-border bg-surface px-2.5 py-2 text-base outline-none focus:border-primary"
                       />
+                      <div>
+                        <label className="mb-0.5 block text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+                          Poids (g)
+                        </label>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={editDraft?.grams ?? ""}
+                          onChange={(e) =>
+                            setEditDraft((d) => (d ? { ...d, grams: e.target.value } : d))
+                          }
+                          autoComplete="off"
+                          className="w-full rounded-lg border border-border bg-surface px-2.5 py-2 text-base outline-none focus:border-primary"
+                        />
+                      </div>
                       <div className="grid grid-cols-4 gap-1.5">
                         {(["calories", "proteins", "carbs", "fats"] as const).map((field) => (
                           <div key={field}>
@@ -379,6 +389,7 @@ export function VoiceLogSheet({ date, onClose }: VoiceLogSheetProps) {
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium">{item.name}</p>
                         <p className="text-[11px] text-muted-foreground">
+                          {safeGrams(item.grams) != null ? `${formatDecimal(item.grams)} g · ` : ""}
                           {Math.round(item.calories)} kcal · P{Math.round(item.proteins * 10) / 10}{" "}
                           G{Math.round(item.carbs * 10) / 10} L{Math.round(item.fats * 10) / 10}
                         </p>

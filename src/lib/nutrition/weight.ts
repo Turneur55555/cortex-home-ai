@@ -241,3 +241,73 @@ export function saveLastWeight(food: Parameters<typeof keyFor>[0], grams: number
     /* quota — silencieux */
   }
 }
+
+// ─── Construction de l'entrée journal pour un item détecté par IA ──────────
+// Contrat commun à MealScanSheet (scan-meal) et VoiceLogSheet (parse-meal-text) :
+// les deux edge functions renvoient désormais { name, grams, calories, proteins,
+// carbs, fats } par aliment (voir supabase/functions/_shared/meal-items.ts) ; le
+// poids estimé devient systématiquement le poids de référence enregistré
+// (consumed_quantity / consumed_unit = "g"), avec des base_* par 100 g dérivés
+// de ce poids — jamais de valeurs figées à null tant que grams est connu.
+
+/** Poids ≥ 0, arrondi à 1 décimale, ou null si absent/invalide. */
+export function safeGrams(g: number | null | undefined): number | null {
+  return g != null && Number.isFinite(g) && g > 0 ? Math.round(g * 10) / 10 : null;
+}
+
+export interface AiMealItemInput {
+  name: string;
+  grams: number | null | undefined;
+  calories: number;
+  proteins: number;
+  carbs: number;
+  fats: number;
+}
+
+export interface AiMealLogEntry {
+  name: string;
+  calories: number;
+  proteins: number;
+  carbs: number;
+  fats: number;
+  base_calories: number | null;
+  base_proteins: number | null;
+  base_carbs: number | null;
+  base_fats: number | null;
+  consumed_quantity: number | null;
+  consumed_unit: "g";
+  consumed_grams_per_unit: null;
+  serving_count: 1;
+  percentage_consumed: 100;
+}
+
+/**
+ * Construit l'objet métier à insérer dans le journal pour un aliment détecté
+ * par IA (scan photo ou dictée vocale) — seule fonction habilitée à dériver
+ * consumed_quantity/base_* à partir du poids estimé, pour que scan-meal et
+ * parse-meal-text produisent strictement le même objet.
+ */
+export function buildAiMealLogEntry(item: AiMealItemInput): AiMealLogEntry {
+  const calories = Math.round(item.calories);
+  const proteins = Math.round(item.proteins * 10) / 10;
+  const carbs = Math.round(item.carbs * 10) / 10;
+  const fats = Math.round(item.fats * 10) / 10;
+  const grams = safeGrams(item.grams);
+
+  return {
+    name: item.name,
+    calories,
+    proteins,
+    carbs,
+    fats,
+    base_calories: grams ? Math.round((calories / grams) * 100) : null,
+    base_proteins: grams ? Math.round((proteins / grams) * 100 * 10) / 10 : null,
+    base_carbs: grams ? Math.round((carbs / grams) * 100 * 10) / 10 : null,
+    base_fats: grams ? Math.round((fats / grams) * 100 * 10) / 10 : null,
+    consumed_quantity: grams,
+    consumed_unit: "g",
+    consumed_grams_per_unit: null,
+    serving_count: 1,
+    percentage_consumed: 100,
+  };
+}

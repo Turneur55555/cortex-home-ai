@@ -4,6 +4,12 @@
 import { createClient } from "@supabase/supabase-js";
 import { checkRateLimit, recordRateLimit } from "../_shared/rate-limit.ts";
 import { MEAL_SLUGS, isMealSlug } from "../_shared/meals.ts";
+import {
+  MEAL_ITEM_SCHEMA,
+  safeNum,
+  sanitizeMealItem,
+  type MealAnalysisResult,
+} from "../_shared/meal-items.ts";
 
 function buildCors(req: Request) {
   const origin = req.headers.get("origin") ?? "";
@@ -21,21 +27,7 @@ function buildCors(req: Request) {
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-interface ScanItem {
-  name: string;
-  grams: number;
-  calories: number;
-  proteins: number;
-  carbs: number;
-  fats: number;
-}
-
-interface ScanResult {
-  items: ScanItem[];
-  meal?: string;
-  confidence?: number;
-}
+// MealItem / MealAnalysisResult (avec grams requis) : voir ../_shared/meal-items.ts
 
 // ─── Tool definition ──────────────────────────────────────────────────────────
 
@@ -59,22 +51,7 @@ const MEAL_TOOL = {
         items: {
           type: "array",
           description: "Liste de chaque aliment ou groupe identifié séparément. Un aliment = une entrée.",
-          items: {
-            type: "object",
-            properties: {
-              name: {
-                type: "string",
-                description: "Nom de l'aliment avec quantité si pertinent (ex: '5 sushis saumon', 'Haricots verts', 'Riz blanc cuit')",
-              },
-              grams:    { type: "number", description: "Masse estimée en grammes pour cet aliment (celle utilisée au point 1 de la méthode)" },
-              calories: { type: "number", description: "kcal pour la quantité de cet aliment visible sur la photo" },
-              proteins: { type: "number", description: "Protéines en g" },
-              carbs:    { type: "number", description: "Glucides en g" },
-              fats:     { type: "number", description: "Lipides en g" },
-            },
-            required: ["name", "grams", "calories", "proteins", "carbs", "fats"],
-            additionalProperties: false,
-          },
+          items: MEAL_ITEM_SCHEMA,
           minItems: 1,
         },
       },
@@ -103,7 +80,7 @@ Retourne STRICTEMENT du JSON via tool calling. Tout le texte en FRANÇAIS.`;
 
 // ─── Parser robuste ───────────────────────────────────────────────────────────
 
-function extractFromAiResponse(aiJson: unknown): ScanResult | null {
+function extractFromAiResponse(aiJson: unknown): MealAnalysisResult | null {
   // Chemin 1 : tool_calls standard
   const calls = (aiJson as { choices?: Array<{ message?: { tool_calls?: Array<{ function: { arguments: string } }> } }> })
     ?.choices?.[0]?.message?.tool_calls;
@@ -114,20 +91,13 @@ function extractFromAiResponse(aiJson: unknown): ScanResult | null {
       // Format nouveau : { items: [...] }
       if (Array.isArray(p?.items) && p.items.length > 0) {
         console.log("[scan-meal] parsed items via tool_call:", p.items.length);
-        return p as ScanResult;
+        return p as MealAnalysisResult;
       }
       // Ancien format : { name, calories, ... } → wrap pour rétrocompat
       if (typeof p?.calories === "number") {
         console.log("[scan-meal] fallback: old format wrapped as single item");
         return {
-          items: [{
-            name: p.name ?? "Repas analysé",
-            grams: p.grams ?? 0,
-            calories: p.calories ?? 0,
-            proteins: p.proteins ?? 0,
-            carbs: p.carbs ?? 0,
-            fats: p.fats ?? 0,
-          }],
+          items: [sanitizeMealItem(p)],
           meal: p.meal,
           confidence: p.confidence,
         };
@@ -154,18 +124,11 @@ function extractFromAiResponse(aiJson: unknown): ScanResult | null {
         const p = JSON.parse(match[0]);
         if (Array.isArray(p?.items)) {
           console.log("[scan-meal] parsed items via content fallback:", p.items.length);
-          return p as ScanResult;
+          return p as MealAnalysisResult;
         }
         if (typeof p?.calories === "number") {
           return {
-            items: [{
-              name: p.name ?? "Repas",
-              grams: p.grams ?? 0,
-              calories: p.calories,
-              proteins: p.proteins ?? 0,
-              carbs: p.carbs ?? 0,
-              fats: p.fats ?? 0,
-            }],
+            items: [sanitizeMealItem(p)],
             meal: p.meal,
             confidence: p.confidence,
           };
@@ -353,20 +316,10 @@ Deno.serve(async (req) => {
       return fail("L'IA n'a pas pu analyser cette image. Essaie avec une photo plus nette et mieux éclairée.");
     }
 
-    // Sanity check + nettoyage de chaque item
-    const safeNum = (v: unknown, fallback = 0) =>
-      typeof v === "number" && isFinite(v) && v >= 0 ? Math.round(v * 10) / 10 : fallback;
+    // Sanity check + nettoyage de chaque item (bornes/typage communs)
+    const items = parsed.items.map(sanitizeMealItem);
 
-    const items: ScanItem[] = parsed.items.map((item) => ({
-      name:     typeof item.name === "string" ? item.name.slice(0, 200) : "Aliment",
-      grams:    safeNum(item.grams),
-      calories: safeNum(item.calories),
-      proteins: safeNum(item.proteins),
-      carbs:    safeNum(item.carbs),
-      fats:     safeNum(item.fats),
-    }));
-
-    const result: ScanResult = {
+    const result: MealAnalysisResult = {
       items,
       meal:       isMealSlug(parsed.meal) ? parsed.meal : "dejeuner",
       confidence: safeNum(parsed.confidence, 0.7),
