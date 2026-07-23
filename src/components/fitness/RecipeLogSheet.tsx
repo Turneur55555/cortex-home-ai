@@ -57,10 +57,14 @@ export function RecipeLogSheet({ date, onClose }: Props) {
           proteins: Math.round(scaled.protein * 10) / 10,
           carbs: Math.round(scaled.carbs * 10) / 10,
           fats: Math.round(scaled.fat * 10) / 10,
-          base_calories: base100 ? base100.calories : Math.round(perS.calories),
-          base_proteins: base100 ? base100.proteins : Math.round(perS.protein * 10) / 10,
-          base_carbs: base100 ? base100.carbs : Math.round(perS.carbs * 10) / 10,
-          base_fats: base100 ? base100.fats : Math.round(perS.fat * 10) / 10,
+          // Repli sans perte si le grammage total est indisponible : on
+          // laisse base_* à NULL plutôt que d'y stocker une valeur par
+          // portion sous l'étiquette « pour 100 g » (les macros affichés
+          // restent corrects dans tous les cas, cf. `calories` ci-dessus).
+          base_calories: base100 ? base100.calories : null,
+          base_proteins: base100 ? base100.proteins : null,
+          base_carbs: base100 ? base100.carbs : null,
+          base_fats: base100 ? base100.fats : null,
           serving_count: 1,
           percentage_consumed: 100,
           consumed_quantity: consumedGrams,

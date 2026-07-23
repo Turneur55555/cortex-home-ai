@@ -49,10 +49,13 @@ export function FavoritesSheet({ date, onClose }: { date: string; onClose: () =>
       proteins: fav.proteins,
       carbs: fav.carbs,
       fats: fav.fats,
-      base_calories: fav.calories,
-      base_proteins: fav.proteins,
-      base_carbs: fav.carbs,
-      base_fats: fav.fats,
+      // nutrition_favorites ne stocke que des macros déjà scalés (aucun
+      // grammage ni référence /100 g) : base_* reste NULL plutôt que de
+      // dupliquer fav.calories sous l'étiquette « pour 100 g ».
+      base_calories: null,
+      base_proteins: null,
+      base_carbs: null,
+      base_fats: null,
       serving_count: 1,
       percentage_consumed: 100,
     });

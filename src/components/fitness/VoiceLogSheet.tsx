@@ -200,10 +200,13 @@ export function VoiceLogSheet({ date, onClose }: VoiceLogSheetProps) {
           proteins: Math.round(m.proteins * 10) / 10,
           carbs: Math.round(m.carbs * 10) / 10,
           fats: Math.round(m.fats * 10) / 10,
-          base_calories: Math.round(m.calories),
-          base_proteins: Math.round(m.proteins * 10) / 10,
-          base_carbs: Math.round(m.carbs * 10) / 10,
-          base_fats: Math.round(m.fats * 10) / 10,
+          // Poids réel inconnu (l'IA renvoie des macros absolus, pas un
+          // grammage) : base_* reste NULL plutôt que de stocker une valeur
+          // absolue sous l'étiquette « pour 100 g ».
+          base_calories: null,
+          base_proteins: null,
+          base_carbs: null,
+          base_fats: null,
           serving_count: 1,
           percentage_consumed: 100,
         };
