@@ -102,79 +102,140 @@ async function compressImage(file: File): Promise<Blob> {
   });
 }
 
+// ─── Instrumentation temporaire — diagnostic du blocage "Analyse 1/1…" (PDF) ──
+// Chaque étape réseau du pipeline PDF est chronométrée et bornée par un timeout
+// explicite : si une promesse ne se résout jamais, on le sait précisément (quelle
+// étape, après combien de temps) au lieu de rester bloqué indéfiniment sur
+// isPending=true. À retirer une fois la cause racine confirmée en prod.
+const PIPELINE_LOG_PREFIX = "[PDF-Import]";
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      console.error(
+        `${PIPELINE_LOG_PREFIX} TIMEOUT après ${ms}ms — l'étape "${label}" n'a jamais répondu. C'est probablement l'appel bloquant.`,
+      );
+      reject(new Error(`Timeout: l'étape "${label}" n'a pas répondu après ${Math.round(ms / 1000)}s.`));
+    }, ms);
+    promise.then(
+      (v) => {
+        clearTimeout(timer);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(timer);
+        reject(e);
+      },
+    );
+  });
+}
+
 export function useUploadAndAnalyze() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ file, module }: { file: File; module: DocModuleSelection }) => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error("Non authentifié");
+      let stage = "start";
+      const mark = (s: string) => {
+        stage = s;
+        console.log(`${PIPELINE_LOG_PREFIX} étape atteinte: ${s}`);
+      };
 
-      const isImage = isImageFile(file);
-      const isPdf = file.type === "application/pdf";
-      if (!isImage && !isPdf) {
-        throw new Error("Format non supporté (PDF, JPG, PNG, WEBP, HEIC)");
-      }
-      if (file.size > 15 * 1024 * 1024) throw new Error("Fichier trop volumineux (max 15 Mo)");
+      try {
+        mark("auth:getUser");
+        const {
+          data: { user },
+        } = await withTimeout(supabase.auth.getUser(), 10_000, "auth.getUser");
+        if (!user) throw new Error("Non authentifié");
 
-      let uploadBlob: Blob = file;
-      let contentType = file.type || "application/pdf";
-      // Normalize filename: replace HEIC/HEIF with .jpg since we compress to JPEG
-      let displayName = file.name.replace(/\.(heic|heif)$/i, ".jpg");
-
-      if (isImage) {
-        uploadBlob = await compressImage(file);
-        contentType = "image/jpeg";
-      }
-
-      const path = `${user.id}/${Date.now()}-${displayName.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-      const { error: upErr } = await supabase.storage
-        .from("pdf-documents")
-        .upload(path, uploadBlob, { contentType, upsert: false });
-      if (upErr) throw upErr;
-
-      const { data: ai, error: fnErr } = await supabase.functions.invoke("analyze-pdf", {
-        body: { storage_path: path, module, name: displayName, content_type: contentType },
-      });
-
-      if (fnErr) {
-        let friendlyMsg = isImage
-          ? "Impossible d'analyser cette image. Essayez un format JPG ou PNG clair."
-          : "Impossible d'analyser ce PDF. Vérifiez que le fichier n'est pas corrompu.";
-        if (fnErr instanceof FunctionsFetchError) {
-          friendlyMsg = "Service d'analyse inaccessible (erreur réseau). Réessaie dans un instant.";
-        } else if (fnErr instanceof FunctionsHttpError) {
-          const body = await (fnErr.context as Response).json().catch(() => null) as Record<string, unknown> | null;
-          if (body?.error && typeof body.error === "string") friendlyMsg = body.error;
+        const isImage = isImageFile(file);
+        const isPdf = file.type === "application/pdf";
+        if (!isImage && !isPdf) {
+          throw new Error("Format non supporté (PDF, JPG, PNG, WEBP, HEIC)");
         }
-        throw new Error(friendlyMsg);
+        if (file.size > 15 * 1024 * 1024) throw new Error("Fichier trop volumineux (max 15 Mo)");
+
+        let uploadBlob: Blob = file;
+        let contentType = file.type || "application/pdf";
+        // Normalize filename: replace HEIC/HEIF with .jpg since we compress to JPEG
+        let displayName = file.name.replace(/\.(heic|heif)$/i, ".jpg");
+
+        if (isImage) {
+          mark("compress:image");
+          uploadBlob = await compressImage(file);
+          contentType = "image/jpeg";
+        }
+
+        const path = `${user.id}/${Date.now()}-${displayName.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+
+        mark("storage:upload:start");
+        const uploadStartedAt = Date.now();
+        const { error: upErr } = await withTimeout(
+          supabase.storage.from("pdf-documents").upload(path, uploadBlob, { contentType, upsert: false }),
+          30_000,
+          "storage.upload (Supabase Storage)",
+        );
+        if (upErr) throw upErr;
+        mark(`storage:upload:done (${Date.now() - uploadStartedAt}ms)`);
+
+        mark("edge-function:invoke:start (analyze-pdf)");
+        const invokeStartedAt = Date.now();
+        const { data: ai, error: fnErr } = await withTimeout(
+          supabase.functions.invoke("analyze-pdf", {
+            body: { storage_path: path, module, name: displayName, content_type: contentType },
+          }),
+          60_000,
+          "functions.invoke(analyze-pdf) — inclut le téléchargement, l'encodage et l'appel IA côté edge function",
+        );
+        mark(`edge-function:invoke:done (${Date.now() - invokeStartedAt}ms)`);
+
+        if (fnErr) {
+          let friendlyMsg = isImage
+            ? "Impossible d'analyser cette image. Essayez un format JPG ou PNG clair."
+            : "Impossible d'analyser ce PDF. Vérifiez que le fichier n'est pas corrompu.";
+          if (fnErr instanceof FunctionsFetchError) {
+            friendlyMsg = "Service d'analyse inaccessible (erreur réseau). Réessaie dans un instant.";
+          } else if (fnErr instanceof FunctionsHttpError) {
+            const body = await (fnErr.context as Response).json().catch(() => null) as Record<string, unknown> | null;
+            if (body?.error && typeof body.error === "string") friendlyMsg = body.error;
+          }
+          throw new Error(friendlyMsg);
+        }
+        if (ai?.error) throw new Error(ai.error);
+
+        const result = ai as AnalysisResult;
+        const finalModule: DocModule =
+          module === "auto" ? (result.detected_module ?? "documents") : module;
+
+        mark("db:insert:start (table documents)");
+        const { data: doc, error: insErr } = await withTimeout(
+          supabase
+            .from("documents")
+            .insert({
+              user_id: user.id,
+              name: displayName,
+              module: finalModule,
+              storage_path: path,
+              summary: result.summary,
+              key_insights: result.key_insights,
+              alerts: result.alerts,
+              analysis: JSON.stringify(result.extracted_items),
+            })
+            .select()
+            .single(),
+          15_000,
+          "documents.insert (Supabase DB)",
+        );
+        if (insErr) throw insErr;
+        mark("db:insert:done");
+
+        return { doc, result, detectedModule: finalModule, wasAuto: module === "auto", isImage };
+      } catch (e) {
+        console.error(`${PIPELINE_LOG_PREFIX} ÉCHEC — dernière étape atteinte: "${stage}"`, e);
+        throw e;
       }
-      if (ai?.error) throw new Error(ai.error);
-
-      const result = ai as AnalysisResult;
-      const finalModule: DocModule =
-        module === "auto" ? (result.detected_module ?? "documents") : module;
-
-      const { data: doc, error: insErr } = await supabase
-        .from("documents")
-        .insert({
-          user_id: user.id,
-          name: displayName,
-          module: finalModule,
-          storage_path: path,
-          summary: result.summary,
-          key_insights: result.key_insights,
-          alerts: result.alerts,
-          analysis: JSON.stringify(result.extracted_items),
-        })
-        .select()
-        .single();
-      if (insErr) throw insErr;
-
-      return { doc, result, detectedModule: finalModule, wasAuto: module === "auto", isImage };
     },
     onSuccess: ({ wasAuto, detectedModule }) => {
+      console.log(`${PIPELINE_LOG_PREFIX} onSuccess — invalidation de la query "documents"`);
       toast.success(
         wasAuto
           ? `Document analysé — détecté: ${MODULE_LABELS[detectedModule]}`
@@ -182,7 +243,13 @@ export function useUploadAndAnalyze() {
       );
       qc.invalidateQueries({ queryKey: ["documents"] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => {
+      console.error(`${PIPELINE_LOG_PREFIX} onError —`, e.message);
+      toast.error(e.message);
+    },
+    onSettled: () => {
+      console.log(`${PIPELINE_LOG_PREFIX} onSettled — isPending remis à false`);
+    },
   });
 }
 

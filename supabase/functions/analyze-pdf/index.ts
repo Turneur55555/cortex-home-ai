@@ -2,6 +2,7 @@
 // Returns structured JSON: summary, key_insights[], alerts[], extracted_items[]
 // Items are typed for the target module so the client can "pour" them in.
 import { createClient } from "@supabase/supabase-js";
+import { encodeBase64 } from "https://deno.land/std@0.224.0/encoding/base64.ts";
 import { checkRateLimit, recordRateLimit } from "../_shared/rate-limit.ts";
 import { getCachedResult, setCachedResult } from "../_shared/ai-cache.ts";
 import { MEAL_SLUGS } from "../_shared/meals.ts";
@@ -53,7 +54,12 @@ Deno.serve(async (req) => {
     });
   };
 
+  const fnStart = Date.now();
+  const mark = (step: string) =>
+    console.log(`[analyze-pdf] step: ${step} — t+${Date.now() - fnStart}ms`);
+
   try {
+    mark("handler:start");
     const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
     if (!GEMINI_API_KEY) return fail("Service indisponible", 500, "GEMINI_API_KEY manquant");
 
@@ -65,11 +71,15 @@ Deno.serve(async (req) => {
       global: { headers: { Authorization: auth } },
     });
 
+    mark("auth:getUser:start");
     const { data: userData, error: userErr } = await supa.auth.getUser();
     if (userErr || !userData.user) return fail("Non authentifié", 401, userErr);
+    mark("auth:getUser:done");
 
+    mark("rate-limit:check:start");
     const rl = await checkRateLimit(supa, userData.user.id, "analyze_pdf", 20);
     if (!rl.ok) return fail("Limite atteinte (20 analyses/h). Réessaie plus tard.", 429);
+    mark("rate-limit:check:done");
 
 
 
@@ -99,8 +109,10 @@ Deno.serve(async (req) => {
     }
 
     // Vérifier le cache avant l'appel IA
+    mark("cache:lookup:start");
     const cacheKey = `analyze-pdf:${storage_path}:${module}`;
     const cached = await getCachedResult(supa, cacheKey);
+    mark("cache:lookup:done");
     if (cached) {
       console.log("[analyze-pdf] Cache hit:", cacheKey);
       return new Response(JSON.stringify(cached), {
@@ -125,16 +137,17 @@ Deno.serve(async (req) => {
         : "document";
 
     // Download file from storage
-    console.log("[analyze-pdf] step: download from storage");
+    mark("storage:download:start");
     const { data: fileBlob, error: dlErr } = await supa.storage
       .from("pdf-documents")
       .download(storage_path);
     if (dlErr || !fileBlob) {
       return fail("Document introuvable", 404, dlErr);
     }
+    mark("storage:download:done");
 
     // Convert to base64
-    console.log("[analyze-pdf] step: convert to base64");
+    mark("base64:convert:start");
     const buf = new Uint8Array(await fileBlob.arrayBuffer());
     console.log("[analyze-pdf] file size bytes:", buf.length);
 
@@ -145,9 +158,14 @@ Deno.serve(async (req) => {
       );
     }
 
-    let bin = "";
-    for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
-    const b64 = btoa(bin);
+    // NOTE root cause (perf): l'ancienne conversion faisait `bin += String.fromCharCode(buf[i])`
+    // caractère par caractère — pour un PDF non compressé de plusieurs Mo (contrairement aux
+    // images, redimensionnées côté client à ~1400px), cette boucle pouvait prendre plusieurs
+    // dizaines de secondes, bien au-delà du timeout Gemini (45s) qui ne couvre que le fetch IA.
+    // La fonction restait alors "en cours" sans jamais atteindre l'appel réseau, d'où le blocage
+    // perçu comme infini côté client. `encodeBase64` (std/encoding) encode en un seul passage.
+    const b64 = encodeBase64(buf);
+    mark("base64:convert:done");
     console.log("[analyze-pdf] b64 length:", b64.length);
 
     const isAuto = module === "auto";
@@ -367,7 +385,7 @@ Deno.serve(async (req) => {
       image_url: { url: `data:${contentType};base64,${b64}` },
     };
 
-    console.log("[analyze-pdf] step: calling Gemini, isImage:", isImage);
+    mark(`gemini:fetch:start (isImage=${isImage})`);
     const t0 = Date.now();
 
     const aiRes = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
@@ -397,7 +415,7 @@ Deno.serve(async (req) => {
       }),
     });
 
-    console.log("[analyze-pdf] Gemini status:", aiRes.status, "ms:", Date.now() - t0);
+    mark(`gemini:fetch:done (status=${aiRes.status}, ${Date.now() - t0}ms)`);
 
     if (!aiRes.ok) {
       const txt = await aiRes.text();
@@ -429,9 +447,11 @@ Deno.serve(async (req) => {
       return fail("Résultat IA non parsable", 502, e);
     }
 
-    console.log("[analyze-pdf] done, extracted_items:", (parsed.extracted_items as unknown[])?.length ?? 0);
+    mark(`parse:done, extracted_items=${(parsed.extracted_items as unknown[])?.length ?? 0}`);
 
+    mark("rate-limit:record:start");
     await recordRateLimit(supa, userData.user.id, "analyze_pdf");
+    mark("rate-limit:record:done");
 
     const responsePayload = {
       summary: parsed.summary ?? "",
@@ -442,14 +462,20 @@ Deno.serve(async (req) => {
     };
 
     // Sauvegarder dans le cache (TTL 24h pour les analyses PDF)
+    mark("cache:write:start");
     await setCachedResult(supa, cacheKey, "analyze-pdf", responsePayload, userData.user.id);
+    mark("cache:write:done");
 
+    mark(`handler:success (total=${Date.now() - fnStart}ms)`);
     return new Response(
       JSON.stringify(responsePayload),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } },
     );
   } catch (e) {
-    console.error("[analyze-pdf] unhandled exception:", e);
+    console.error(
+      `[analyze-pdf] unhandled exception après ${Date.now() - fnStart}ms:`,
+      e,
+    );
     return fail("Erreur inattendue lors de l'analyse. Réessayez.", 500, e);
   }
 });
