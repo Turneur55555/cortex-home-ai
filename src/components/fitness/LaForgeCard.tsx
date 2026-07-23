@@ -15,8 +15,9 @@ import { titleProgressForXp } from "@/lib/fitness/rpg/titleProgress";
  */
 export function LaForgeCard({ onClick }: { onClick: () => void }) {
   const { data: userStats } = useUserStats();
-  const progress = titleProgressForXp(userStats?.xp ?? 0);
-  const rank = toRankState(progress.tierIndex, 0);
+  // `userStats` n'est `undefined` que sans aucun rang confirmé en cache
+  // (tout premier lancement) — dans ce seul cas, ne pas inventer de rang.
+  const rank = userStats ? toRankState(titleProgressForXp(userStats.xp).tierIndex, 0) : null;
 
   return (
     <motion.button
@@ -52,11 +53,15 @@ export function LaForgeCard({ onClick }: { onClick: () => void }) {
 
       <div className="relative flex items-center gap-4">
         <div className="relative aspect-[4/5] w-11 shrink-0 overflow-hidden rounded-xl shadow-elevated">
-          <RankIllustration
-            rankKey={rank.rank.key}
-            label={rank.rank.label}
-            className="absolute inset-0 h-full w-full"
-          />
+          {rank ? (
+            <RankIllustration
+              rankKey={rank.rank.key}
+              label={rank.rank.label}
+              className="absolute inset-0 h-full w-full"
+            />
+          ) : (
+            <div className="absolute inset-0 h-full w-full animate-pulse bg-white/5" />
+          )}
         </div>
 
         <div className="min-w-0 flex-1">

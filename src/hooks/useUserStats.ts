@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
@@ -8,39 +9,73 @@ export interface UserStats {
   total_actions: number;
 }
 
+const CACHE_PREFIX = "cortex.userStats.v1:";
+
+interface CachedUserStats {
+  stats: UserStats;
+  updatedAt: number;
+}
+
+/**
+ * Dernier `user_stats` confirmé par le serveur, persisté par utilisateur.
+ * Sert de `initialData` à la query ci-dessous pour qu'un rang déjà connu
+ * s'affiche immédiatement au lancement — jamais un rang inventé (xp par
+ * défaut) le temps que le réseau réponde.
+ */
+function readCache(userId: string): CachedUserStats | null {
+  try {
+    const raw = localStorage.getItem(CACHE_PREFIX + userId);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<CachedUserStats>;
+    if (
+      typeof parsed.updatedAt !== "number" ||
+      typeof parsed.stats?.xp !== "number" ||
+      typeof parsed.stats?.level !== "number" ||
+      typeof parsed.stats?.total_actions !== "number"
+    ) {
+      return null;
+    }
+    return { stats: parsed.stats, updatedAt: parsed.updatedAt };
+  } catch {
+    return null;
+  }
+}
+
+function writeCache(userId: string, stats: UserStats) {
+  try {
+    const entry: CachedUserStats = { stats, updatedAt: Date.now() };
+    localStorage.setItem(CACHE_PREFIX + userId, JSON.stringify(entry));
+  } catch {
+    // Stockage indisponible (navigation privée, quota) — le rang reste
+    // correct pour cette session, simplement pas persisté au prochain lancement.
+  }
+}
+
 export function useUserStats() {
   const { user } = useAuth();
+  const userId = user?.id;
+  const cached = useMemo(() => (userId ? readCache(userId) : null), [userId]);
+
   return useQuery({
-    queryKey: ["user_stats", user?.id],
+    queryKey: ["user_stats", userId],
     enabled: !!user,
     staleTime: 30_000,
+    // Affiche le dernier rang confirmé dès le premier rendu ; `initialDataUpdatedAt`
+    // reporte son ancienneté réelle pour que React Query le considère périmé et
+    // relance un fetch en arrière-plan dès le montage (comportement par défaut de
+    // `refetchOnMount` face à des données déjà stale).
+    initialData: cached?.stats,
+    initialDataUpdatedAt: cached?.updatedAt,
     queryFn: async (): Promise<UserStats> => {
-      // TEMP DIAGNOSTIC — à retirer après investigation du flash de rang au démarrage.
-      const t0 = performance.now();
-      const { data, error, status, statusText } = await supabase
+      const { data, error } = await supabase
         .from("user_stats")
         .select("xp, level, total_actions")
         .eq("user_id", user!.id)
         .maybeSingle();
-      const durationMs = performance.now() - t0;
-      // eslint-disable-next-line no-console
-      console.log("[RANG-DEBUG] useUserStats queryFn resolved", {
-        tStart: t0.toFixed(1),
-        tEnd: performance.now().toFixed(1),
-        durationMs: durationMs.toFixed(1),
-        xp: data?.xp,
-        status,
-        statusText,
-        error: error?.message,
-        // Indice de provenance réseau vs cache Service Worker : Workbox
-        // NetworkFirst ne pose pas d'en-tête standard lisible ici, mais une
-        // résolution quasi instantanée (<5ms) après un cold start est un
-        // signe fort de réponse servie par le SW plutôt que par le réseau ;
-        // un plateau proche de 5000ms indique le timeout NetworkFirst
-        // (networkTimeoutSeconds: 5, vite.config.ts) avant fallback cache.
-      });
       if (error) throw error;
-      return data ?? { xp: 0, level: 1, total_actions: 0 };
+      const stats = data ?? { xp: 0, level: 1, total_actions: 0 };
+      writeCache(user!.id, stats);
+      return stats;
     },
   });
 }
