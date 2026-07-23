@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { FunctionsFetchError } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
-import type { Tables } from "@/integrations/supabase/types";
+import type { Json, Tables } from "@/integrations/supabase/types";
 
 // Classifications possibles pour un document. Toutes ne mènent pas à une
 // écriture en base : "habits"/"menager" n'ont aucune table métier (modules
@@ -280,7 +280,11 @@ export function useDeposeDocument() {
           const { data: reportData, error: rpcErr } = await withTimeout(
             supabase.rpc("deposit_document_analysis", {
               p_document_id: createdDocId,
-              p_modules: depositPayload,
+              // depositPayload est un Record<string, unknown> (JSON déjà décodé
+              // depuis la réponse d'analyze-pdf) : structurellement, `unknown`
+              // n'est pas assignable à `Json` (le compilateur ne peut pas
+              // prouver l'absence de fonctions/symbols), d'où le double cast.
+              p_modules: depositPayload as unknown as Json,
             }),
             20_000,
             "rpc.deposit_document_analysis",
