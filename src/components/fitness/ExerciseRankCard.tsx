@@ -94,7 +94,7 @@ export function ExerciseRankCard({ exerciseName }: { exerciseName: string }) {
   // (`useVerifyExerciseRanksForSession`), jamais depuis cette carte — la
   // fiche exercice reste un simple affichage.
   useEffect(() => {
-    if (isLoading || sessionCount === 0 || !user) return;
+    if (isLoading || !rank || sessionCount === 0 || !user) return;
     const seen = loadSeen(user.id, exerciseName);
     if (!initialisedRef.current) {
       initialisedRef.current = true;
@@ -107,11 +107,22 @@ export function ExerciseRankCard({ exerciseName }: { exerciseName: string }) {
       setRankUp(rank);
       saveSeen(user.id, exerciseName, rank.tierIndex);
     }
-  }, [rank.tierIndex, isLoading, sessionCount, exerciseName, rank, user]);
+  }, [rank, isLoading, sessionCount, exerciseName, user]);
+
+  // Tant que le rang n'est pas résolu, ne rien afficher qui suppose un rang
+  // (ni le rang par défaut "Mortel", ni l'état vide) — un simple squelette.
+  if (isLoading || !rank) {
+    return (
+      <div className="flex flex-col items-center gap-4 rounded-2xl bg-[#0b0b0f] p-5">
+        <div className="aspect-[4/5] w-full max-w-[220px] animate-pulse rounded-[22px] bg-white/5" />
+        <div className="h-3 w-32 animate-pulse rounded-full bg-white/5" />
+      </div>
+    );
+  }
 
   const { colors } = rank.rank;
 
-  if (sessionCount === 0 && !isLoading) {
+  if (sessionCount === 0) {
     return (
       <div className="rounded-2xl border border-border bg-surface/60 p-4 text-center text-xs text-muted-foreground">
         Enregistre ta première série pour démarrer la progression RPG.

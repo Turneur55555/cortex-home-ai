@@ -20,9 +20,9 @@ interface ProbeResult {
 function RankProbe({ name, onReport }: { name: string; onReport: (r: ProbeResult) => void }) {
   const { rank, sessionCount, isLoading, nextRankHint, best } = useExerciseProgression(name);
   useEffect(() => {
-    if (!isLoading) onReport({ name, rank, sessionCount, nextRankHint, best });
+    if (!isLoading && rank) onReport({ name, rank, sessionCount, nextRankHint, best });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, rank.tierIndex, rank.progress, sessionCount, isLoading, nextRankHint, best.oneRM]);
+  }, [name, rank, sessionCount, isLoading, nextRankHint, best.oneRM]);
   return null;
 }
 

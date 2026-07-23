@@ -37,7 +37,9 @@ export interface ExerciseBest {
 
 export interface ExerciseProgressionSnapshot {
   isLoading: boolean;
-  rank: RankState;
+  /** null tant que l'historique/le poids de corps ne sont pas chargés — ne
+   *  jamais retomber sur un rang par défaut ("Mortel") pendant ce délai. */
+  rank: RankState | null;
   masteryPercent: number;
   /** Message motivant vers le rang suivant (remplace la liste d'objectifs). */
   nextRankHint: string | null;
@@ -76,15 +78,24 @@ export function useExerciseProgression(
       if (m.best1RM > best.oneRM) best.oneRM = m.best1RM;
     }
 
-    const result = exerciseName
-      ? computeRankState(DEFAULT_RANK_ENGINE_CONFIG, exerciseName, sessions, bodyweightKg)
-      : null;
+    const loading = historyLoading || bodyLoading;
+
+    // Tant que l'historique/le poids de corps sont en cours de chargement,
+    // `sessions` vaut [] — un `computeRankState` calculé dessus retomberait
+    // sur le tier 0 ("Mortel") comme s'il n'y avait vraiment aucune séance.
+    // On ne calcule donc le rang qu'une fois le chargement terminé.
+    const result =
+      !loading && exerciseName
+        ? computeRankState(DEFAULT_RANK_ENGINE_CONFIG, exerciseName, sessions, bodyweightKg)
+        : null;
 
     return {
-      isLoading: historyLoading || bodyLoading,
-      rank: toRankState(result?.confirmedTierIndex ?? 0, result?.masteryPercent ?? 0),
-      masteryPercent: result?.masteryPercent ?? 0,
-      nextRankHint: result?.nextRankHint ?? null,
+      isLoading: loading,
+      rank: loading
+        ? null
+        : toRankState(result?.confirmedTierIndex ?? 0, result?.masteryPercent ?? 0),
+      masteryPercent: loading ? 0 : (result?.masteryPercent ?? 0),
+      nextRankHint: loading ? null : (result?.nextRankHint ?? null),
       best,
       sessionCount: sessions.length,
       bodyweightKnown: latestWeight != null,
