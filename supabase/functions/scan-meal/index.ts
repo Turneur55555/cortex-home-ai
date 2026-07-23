@@ -34,7 +34,6 @@ interface ScanResult {
   items: ScanItem[];
   meal?: string;
   confidence?: number;
-  details?: string;
 }
 
 // ─── Tool definition ──────────────────────────────────────────────────────────
@@ -56,10 +55,6 @@ const MEAL_TOOL = {
           type: "number",
           description: "Niveau de confiance global 0..1",
         },
-        details: {
-          type: "string",
-          description: "1-2 phrases décrivant les hypothèses de portions",
-        },
         items: {
           type: "array",
           description: "Liste de chaque aliment ou groupe identifié séparément. Un aliment = une entrée.",
@@ -70,7 +65,7 @@ const MEAL_TOOL = {
                 type: "string",
                 description: "Nom de l'aliment avec quantité si pertinent (ex: '5 sushis saumon', 'Haricots verts', 'Riz blanc cuit')",
               },
-              calories: { type: "number", description: "kcal pour la portion visible" },
+              calories: { type: "number", description: "kcal pour la quantité de cet aliment visible sur la photo" },
               proteins: { type: "number", description: "Protéines en g" },
               carbs:    { type: "number", description: "Glucides en g" },
               fats:     { type: "number", description: "Lipides en g" },
@@ -98,7 +93,7 @@ Exemples corrects :
 Méthode par aliment :
 1. Estime la masse en grammes (repères : assiette ~25 cm, fourchette ~20 cm).
 2. Applique les valeurs /100 g de la table CIQUAL.
-3. Calcule kcal + protéines + glucides + lipides pour cette portion.
+3. Calcule kcal + protéines + glucides + lipides pour cette masse estimée.
 
 Si un aliment est ambigu, prends la valeur moyenne et baisse confidence.
 Retourne STRICTEMENT du JSON via tool calling. Tout le texte en FRANÇAIS.`;
@@ -131,7 +126,6 @@ function extractFromAiResponse(aiJson: unknown): ScanResult | null {
           }],
           meal: p.meal,
           confidence: p.confidence,
-          details: p.details,
         };
       }
     } catch (e) {
@@ -364,7 +358,6 @@ Deno.serve(async (req) => {
       items,
       meal:       isMealSlug(parsed.meal) ? parsed.meal : "dejeuner",
       confidence: safeNum(parsed.confidence, 0.7),
-      details:    typeof parsed.details === "string" ? parsed.details.slice(0, 500) : undefined,
     };
 
     const totalKcal = items.reduce((s, i) => s + i.calories, 0);

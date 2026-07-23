@@ -21,7 +21,6 @@ interface ScanResponse {
   items: ScanItem[];
   meal?: string;
   confidence?: number;
-  details?: string;
 }
 
 interface MealScanSheetProps {
@@ -136,6 +135,11 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
     setEditDraft(null);
   };
 
+  const cancelEdit = () => {
+    setEditingIdx(null);
+    setEditDraft(null);
+  };
+
   const confirm = () => {
     if (items.length === 0) return;
     addBatch.mutate(
@@ -229,11 +233,9 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
         {scanResult && !scan.isPending && items.length > 0 && (
           <>
             <div className="flex items-center gap-2">
-              {scanResult.details && (
-                <p className="flex-1 text-[11px] italic text-muted-foreground">
-                  {scanResult.details}
-                </p>
-              )}
+              <p className="flex-1 text-[11px] text-muted-foreground">
+                Vérifiez les aliments détectés avant l'enregistrement.
+              </p>
               {scanResult.confidence != null && (
                 <span
                   className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
@@ -250,81 +252,107 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
             </div>
 
             <ul className="space-y-2">
-              {items.map((item, idx) => (
-                <li key={idx} className="rounded-xl border border-border bg-card">
-                  {editingIdx === idx ? (
-                    <div className="space-y-2 p-3">
-                      <input
-                        type="text"
-                        value={editDraft?.name ?? item.name}
-                        onChange={(e) =>
-                          setEditDraft((d) => (d ? { ...d, name: e.target.value } : d))
-                        }
-                        autoComplete="off"
-                        className="w-full rounded-lg border border-border bg-surface px-2.5 py-2 text-base outline-none focus:border-primary"
-                      />
-                      <div className="grid grid-cols-4 gap-1.5">
-                        {(["calories", "proteins", "carbs", "fats"] as const).map((field) => (
-                          <div key={field}>
-                            <label className="mb-0.5 block text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
-                              {field === "calories"
-                                ? "kcal"
-                                : field === "proteins"
-                                  ? "prot"
-                                  : field === "carbs"
-                                    ? "gluc"
-                                    : "lip"}
-                            </label>
-                            <input
-                              type="text"
-                              inputMode="decimal"
-                              value={editDraft?.[field] ?? ""}
-                              onChange={(e) =>
-                                setEditDraft((d) => (d ? { ...d, [field]: e.target.value } : d))
-                              }
-                              autoComplete="off"
-                              className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-base outline-none focus:border-primary"
-                            />
-                          </div>
-                        ))}
+              {items.map((item, idx) => {
+                const isEditing = editingIdx === idx;
+                const someoneElseEditing = editingIdx != null && !isEditing;
+                return (
+                  <li
+                    key={idx}
+                    className={
+                      "rounded-xl border bg-card transition-all " +
+                      (isEditing
+                        ? "border-primary shadow-elevated ring-1 ring-primary/40"
+                        : "border-border") +
+                      (someoneElseEditing ? " pointer-events-none opacity-40" : "")
+                    }
+                  >
+                    {isEditing ? (
+                      <div className="space-y-2 p-3">
+                        <input
+                          type="text"
+                          value={editDraft?.name ?? item.name}
+                          onChange={(e) =>
+                            setEditDraft((d) => (d ? { ...d, name: e.target.value } : d))
+                          }
+                          autoComplete="off"
+                          autoFocus
+                          className="w-full rounded-lg border border-border bg-surface px-2.5 py-2 text-base outline-none focus:border-primary"
+                        />
+                        <div className="grid grid-cols-4 gap-1.5">
+                          {(["calories", "proteins", "carbs", "fats"] as const).map((field) => (
+                            <div key={field}>
+                              <label className="mb-0.5 block text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+                                {field === "calories"
+                                  ? "kcal"
+                                  : field === "proteins"
+                                    ? "prot"
+                                    : field === "carbs"
+                                      ? "gluc"
+                                      : "lip"}
+                              </label>
+                              <input
+                                type="text"
+                                inputMode="decimal"
+                                value={editDraft?.[field] ?? ""}
+                                onChange={(e) =>
+                                  setEditDraft((d) => (d ? { ...d, [field]: e.target.value } : d))
+                                }
+                                autoComplete="off"
+                                className="w-full rounded-lg border border-border bg-surface px-2 py-2 text-base outline-none focus:border-primary"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                        <div className="flex gap-1.5">
+                          <button
+                            type="button"
+                            onClick={cancelEdit}
+                            className="flex-1 rounded-lg border border-border bg-surface py-3 text-sm font-semibold text-muted-foreground active:scale-[0.98]"
+                          >
+                            Annuler
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => commitEdit(idx)}
+                            className="flex-[2] rounded-lg bg-primary/10 py-3 text-sm font-semibold text-primary active:scale-[0.98]"
+                          >
+                            Valider
+                          </button>
+                        </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => commitEdit(idx)}
-                        className="w-full rounded-lg bg-primary/10 py-3 text-sm font-semibold text-primary active:scale-[0.98]"
-                      >
-                        Valider
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2 p-3">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">{item.name}</p>
-                        <p className="text-[11px] text-muted-foreground">
-                          {Math.round(item.calories)} kcal · P{Math.round(item.proteins * 10) / 10}{" "}
-                          G{Math.round(item.carbs * 10) / 10} L{Math.round(item.fats * 10) / 10}
-                        </p>
+                    ) : (
+                      <div className="flex items-center gap-2 p-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">{item.name}</p>
+                          <p className="text-[11px] text-muted-foreground">
+                            {Math.round(item.calories)} kcal · P
+                            {Math.round(item.proteins * 10) / 10} G
+                            {Math.round(item.carbs * 10) / 10} L{Math.round(item.fats * 10) / 10}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => startEdit(idx)}
+                          disabled={someoneElseEditing}
+                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground active:bg-muted disabled:opacity-40"
+                          aria-label="Modifier"
+                        >
+                          <span className="text-sm">✎</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeItem(idx)}
+                          disabled={someoneElseEditing}
+                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground active:bg-destructive/10 active:text-destructive disabled:opacity-40"
+                          aria-label="Retirer"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => startEdit(idx)}
-                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground active:bg-muted"
-                        aria-label="Modifier"
-                      >
-                        <span className="text-sm">✎</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => removeItem(idx)}
-                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-muted-foreground active:bg-destructive/10 active:text-destructive"
-                        aria-label="Retirer"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  )}
-                </li>
-              ))}
+                    )}
+                  </li>
+                );
+              })}
             </ul>
 
             {/* Totals */}
@@ -338,7 +366,8 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
             <select
               value={meal}
               onChange={(e) => setMeal(e.target.value)}
-              className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary"
+              disabled={editingIdx != null}
+              className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary disabled:opacity-40"
             >
               {Object.entries(MEAL_LABELS).map(([slug, label]) => (
                 <option key={slug} value={slug}>
@@ -351,7 +380,7 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
             <button
               type="button"
               onClick={confirm}
-              disabled={addBatch.isPending}
+              disabled={addBatch.isPending || editingIdx != null}
               className="inline-flex h-12 w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-primary text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-60"
             >
               {addBatch.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
@@ -388,7 +417,7 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
         <div className="flex gap-2">
           <button
             type="button"
-            disabled={scan.isPending}
+            disabled={scan.isPending || editingIdx != null}
             onClick={() => camRef.current?.click()}
             className="inline-flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-primary text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-60"
           >
@@ -397,7 +426,7 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
           </button>
           <button
             type="button"
-            disabled={scan.isPending}
+            disabled={scan.isPending || editingIdx != null}
             onClick={() => fileRef.current?.click()}
             className="inline-flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl border border-border bg-surface text-xs font-semibold disabled:opacity-60"
           >
