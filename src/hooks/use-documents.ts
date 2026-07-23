@@ -109,7 +109,7 @@ async function compressImage(file: File): Promise<Blob> {
 // isPending=true. À retirer une fois la cause racine confirmée en prod.
 const PIPELINE_LOG_PREFIX = "[PDF-Import]";
 
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+function withTimeout<T>(promise: PromiseLike<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {
       console.error(
