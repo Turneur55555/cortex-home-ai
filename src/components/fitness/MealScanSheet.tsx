@@ -394,21 +394,8 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
               {Math.round(totals.fats * 10) / 10}
             </div>
 
-            {/* Meal selector */}
-            <select
-              value={meal}
-              onChange={(e) => setMeal(e.target.value)}
-              disabled={editingIdx != null}
-              className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary disabled:opacity-40"
-            >
-              {Object.entries(MEAL_LABELS).map(([slug, label]) => (
-                <option key={slug} value={slug}>
-                  {label}
-                </option>
-              ))}
-            </select>
-
             {/* Confirm */}
+
             <button
               type="button"
               onClick={confirm}
