@@ -26,11 +26,27 @@ function MiniRankTile({
   prByName: Map<string, number>;
   fixedWidth: boolean;
 }) {
-  const { rank, sessionCount } = useExerciseProgression(exerciseName);
-  const { colors } = rank.rank;
+  const { rank, sessionCount, isLoading } = useExerciseProgression(exerciseName);
   void histByName;
   void volByName;
   void prByName;
+
+  // Ne jamais afficher un rang par défaut ("Mortel") avant que le vrai rang
+  // ne soit résolu — squelette neutre le temps du chargement.
+  if (isLoading || !rank) {
+    return (
+      <div
+        className={`flex flex-col items-center gap-2 rounded-2xl border border-white/10 p-3 ${
+          fixedWidth ? "w-[150px] shrink-0" : "w-full"
+        }`}
+      >
+        <div className="aspect-[4/5] w-16 animate-pulse rounded-2xl bg-white/5" />
+        <div className="h-2 w-16 animate-pulse rounded-full bg-white/5" />
+      </div>
+    );
+  }
+
+  const { colors } = rank.rank;
 
   return (
     <button
