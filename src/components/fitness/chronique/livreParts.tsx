@@ -7,11 +7,71 @@
 // couleurs officielles du système RPG existant (RANK_TIERS).
 // ============================================================
 
-import { motion } from "framer-motion";
+import { useEffect, useRef } from "react";
+import { motion, useInView, animate } from "framer-motion";
 import { Lock } from "lucide-react";
 import type { RankState } from "@/lib/fitness/exerciseRanks";
 import { rankGlowShadow } from "@/components/rpg/rankTheme";
 import { gradeName } from "@/lib/fitness/rpg/grade";
+
+// ── Titre de section — UNIQUE gabarit pour les 3 modules des Chroniques
+//    (Légendes, Forge, Progression) : icône ambrée + titre serif italique +
+//    indice optionnel. Toute section d'un module doit passer par ce
+//    composant plutôt que recomposer sa propre hiérarchie (règle DA :
+//    cohérence visuelle entre modules). ───────────────────────────────────
+
+export function ModuleSectionTitle({
+  icon,
+  children,
+  hint,
+}: {
+  icon: React.ReactNode;
+  children: React.ReactNode;
+  hint?: string;
+}) {
+  return (
+    <div className="mb-3 px-1">
+      <div className="flex items-center gap-2">
+        <span className="text-amber-400">{icon}</span>
+        <h2 className="font-serif text-[15px] font-semibold italic text-white/90">{children}</h2>
+      </div>
+      {hint && <p className="mt-0.5 text-[11px] text-muted-foreground">{hint}</p>}
+    </div>
+  );
+}
+
+// ── Compteur animé : compte jusqu'à sa valeur à l'entrée dans le viewport
+//    (une seule fois, GPU-light) — utilisé par tous les gros chiffres du
+//    module Progression (carrière, Hall of Fame). ───────────────────────────
+
+export function AnimatedNumber({
+  value,
+  format: fmt,
+  className,
+}: {
+  value: number;
+  format?: (n: number) => string;
+  className?: string;
+}) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const inView = useInView(ref, { once: true, margin: "-40px" });
+  useEffect(() => {
+    if (!inView || !ref.current) return;
+    const controls = animate(0, value, {
+      duration: 1.2,
+      ease: [0.16, 1, 0.3, 1],
+      onUpdate: (v) => {
+        if (ref.current) ref.current.textContent = fmt ? fmt(v) : `${Math.round(v)}`;
+      },
+    });
+    return () => controls.stop();
+  }, [inView, value, fmt]);
+  return (
+    <span ref={ref} className={className}>
+      {fmt ? fmt(0) : "0"}
+    </span>
+  );
+}
 
 // ── Sheen : reflet lumineux qui balaie une carte (shimmer premium) ────────────
 
@@ -98,6 +158,35 @@ export function RankPill({ rank }: { rank: RankState }) {
     >
       {rank.rank.label} — {gradeName(rank.rank.key, rank.levelInRank)}
     </span>
+  );
+}
+
+// ── Carte dorée générique (fond ambré, halo optionnel) — Hall of Fame,
+//    Techniques oubliées, Potentiel caché, Galerie des Records. ─────────────
+
+export function GoldCard({
+  children,
+  className = "",
+  glow = false,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  glow?: boolean;
+}) {
+  return (
+    <div
+      className={
+        "relative overflow-hidden rounded-3xl border border-white/[0.07] shadow-card backdrop-blur-xl " +
+        className
+      }
+      style={{
+        background:
+          "radial-gradient(120% 90% at 20% 0%, rgba(234,179,8,0.08) 0%, transparent 55%), linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)",
+        ...(glow ? { boxShadow: "0 0 40px -12px rgba(234,179,8,0.35)" } : {}),
+      }}
+    >
+      {children}
+    </div>
   );
 }
 

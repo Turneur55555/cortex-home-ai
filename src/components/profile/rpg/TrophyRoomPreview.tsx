@@ -13,10 +13,12 @@ const RARITY_ORDER: BadgeRarity[] = ["common", "rare", "epic", "legendary", "myt
 
 /**
  * Aperçu compact de la Salle des trophées — répond à "Qu'ai-je accompli ?"
- * sans jamais réafficher les ~165 succès ici (ça reste le rôle de l'écran
- * `/trophees`, qui héberge le <TrophyRoom> complet inchangé). Dérivé du
- * même `buildAchievementCollection` que l'écran complet — aucune
- * duplication de la logique de fusion succès/badges.
+ * sans jamais réafficher les ~165 succès ici. Domicile unique de la
+ * collection complète (23/07/2026) : Chroniques → Progression (TrophyRoom,
+ * voir ChroniquesPage/ProgressionModule) — cette carte ne fait que teaser
+ * et pointer vers ce domicile, jamais dupliquer la navigation/le filtrage
+ * complets. Dérivé du même `buildAchievementCollection` que l'écran
+ * complet — aucune duplication de la logique de fusion succès/badges.
  */
 export function TrophyRoomPreview({
   achievements,
@@ -98,7 +100,8 @@ export function TrophyRoomPreview({
         )}
 
         <Link
-          to="/trophees"
+          to="/seances"
+          search={{ chroniques: "progression" }}
           className="mt-3 flex items-center justify-center gap-1 rounded-xl bg-white/[0.04] py-2.5 text-xs font-semibold text-white/80 transition-colors hover:bg-white/[0.08]"
         >
           Voir toute la Salle des trophées

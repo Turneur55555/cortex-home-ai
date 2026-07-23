@@ -2,7 +2,6 @@ import { useMemo, useState, useCallback } from "react";
 import { Dumbbell, Loader2, AlertCircle } from "lucide-react";
 import { SeancesHero } from "@/components/fitness/SeancesHero";
 import { ChoisirEpreuveCard } from "@/components/fitness/ChoisirEpreuveCard";
-import { LaForgeCard } from "@/components/fitness/LaForgeCard";
 import { BodyMap } from "@/components/fitness/BodyMap";
 import { type WorkoutRow } from "@/components/fitness/WorkoutCard";
 import { RepeatLiveConfirmDialog } from "@/components/fitness/RepeatLiveConfirmDialog";
@@ -15,14 +14,12 @@ import { TemplateEditorSheet } from "@/components/fitness/templates/TemplateEdit
 import { ActiveWorkoutView } from "@/components/fitness/ActiveWorkoutView";
 import { ActiveGenericSessionView } from "@/components/fitness/session/ActiveGenericSessionView";
 import { ExerciseCatalogSheet } from "@/components/fitness/ExerciseCatalogSheet";
-import { ForgeDisciplineChooser } from "@/components/fitness/ForgeDisciplineChooser";
-import { DisciplineExerciseLibrarySheet } from "@/components/fitness/DisciplineExerciseLibrarySheet";
 import { PostWorkoutAnalysisSheet } from "@/components/fitness/PostWorkoutAnalysisSheet";
 import { GenericPostWorkoutAnalysisSheet } from "@/components/fitness/session/GenericPostWorkoutAnalysisSheet";
 import { SessionRewardScreen } from "@/components/fitness/session/SessionRewardScreen";
 import { ChroniquePage } from "@/components/fitness/chronique/ChroniquePage";
-import { LivreChroniquesCard } from "@/components/fitness/chronique/LivreChroniquesCard";
-import { LivreChroniquesPage } from "@/components/fitness/chronique/LivreChroniquesPage";
+import { ChroniquesEntryCard } from "@/components/fitness/chronique/ChroniquesEntryCard";
+import { ChroniquesPage } from "@/components/fitness/chronique/ChroniquesPage";
 import { SectionReveal } from "@/components/fitness/SectionReveal";
 import {
   useExerciseImageUrls,
@@ -50,7 +47,15 @@ import { workoutToTemplateSeed, type TemplateSeedExercise } from "@/lib/fitness/
 
 // ── Composant principal ─────────────────────────────────────────────────────────
 
-export function SeancesTab() {
+interface SeancesTabProps {
+  /** Deep-link (`?chroniques=`) depuis une route redirigée vers le domicile
+   *  unique des Chroniques (`/trophees`, `/progression`) — ouvre directement
+   *  le module concerné au lieu de laisser l'utilisateur retomber sur
+   *  l'écran Séances sans contexte. */
+  initialChroniques?: "legendes" | "forge" | "progression";
+}
+
+export function SeancesTab({ initialChroniques }: SeancesTabProps = {}) {
   const { data, isLoading, error } = useWorkouts();
   const { data: activeWorkout, isLoading: activeLoading } = useActiveWorkout();
   // Phase pilote Course (2026-07-09) : séance active générique (segments
@@ -98,38 +103,36 @@ export function SeancesTab() {
   const [coachInitialDiscipline, setCoachInitialDiscipline] = useState<DisciplineId | undefined>(
     undefined,
   );
-  // LOT C2 — « Le Livre des Chroniques » : troisième pilier de la page,
-  // ouvert par la Hero Card (l'accordéon historique est supprimé). Page
-  // plein écran (early-return, même système qu'ActiveWorkoutView).
-  const [bookOpen, setBookOpen] = useState(false);
+  // Refonte Chroniques (23/07/2026) : troisième pilier de la page, ouvert
+  // par la Hero Card unique. Page plein écran (early-return, même système
+  // qu'ActiveWorkoutView) composée de trois modules pairs — Légendes,
+  // Forge, Progression (voir docs/architecture/rpg-chroniques.md). La
+  // Forge n'a plus de porte d'entrée séparée sur cet écran : elle vit
+  // désormais comme un module des Chroniques.
+  const [chroniquesOpen, setChroniquesOpen] = useState(!!initialChroniques);
   // LOT C1 — module immersif « Chronique » : toucher une chronique de
-  // musculation (désormais depuis la Chronologie du Livre) ouvre une page
-  // plein écran dédiée (ChroniquePage).
+  // musculation (désormais depuis la Chronologie du module Progression)
+  // ouvre une page plein écran dédiée (ChroniquePage).
   const [chronicleWorkout, setChronicleWorkout] = useState<WorkoutRow | null>(null);
   const openChronicle = useCallback((w: WorkoutRow) => setChronicleWorkout(w), []);
+  // Partagé entre le module Forge (Chroniques) et l'accès pendant une
+  // séance active (ActiveWorkoutView) — une seule porte pour le catalogue
+  // musculation, quel que soit le point d'entrée.
   const [catalogOpen, setCatalogOpen] = useState(false);
-  // Phase 1 multi-discipline (2026-07-11) : une seule Forge, avec un choix
-  // de discipline avant d'ouvrir soit le catalogue muscu existant
-  // (inchangé), soit la nouvelle bibliothèque générique par discipline.
-  const [forgeChooserOpen, setForgeChooserOpen] = useState(false);
-  const [libraryDiscipline, setLibraryDiscipline] = useState<DisciplineId | null>(null);
-  const handleForgePick = (discipline: DisciplineId) => {
-    setForgeChooserOpen(false);
-    if (discipline === "muscu") setCatalogOpen(true);
-    else setLibraryDiscipline(discipline);
-  };
 
-  const { prByName, histByName, volByName, prByGym, histByGym, nameByKey } = useMemo(
+  const { prByName, histByName, volByName, prByGym, histByGym, nameByKey, topExercises } = useMemo(
     () => computePRs(data ?? []),
     [data],
   );
 
-  // Les URLs signées des photos d'exercices ne sont résolues que quand le
-  // Livre est ouvert (même optimisation que l'ancien accordéon déplié).
+  // Les URLs signées des photos d'exercices ne sont résolues que quand les
+  // Chroniques sont ouvertes (même optimisation que l'ancien accordéon déplié).
   const allImagePaths = useMemo(
     () =>
-      bookOpen ? (data ?? []).flatMap((w) => (w.exercises ?? []).map((ex) => ex.image_path)) : [],
-    [data, bookOpen],
+      chroniquesOpen
+        ? (data ?? []).flatMap((w) => (w.exercises ?? []).map((ex) => ex.image_path))
+        : [],
+    [data, chroniquesOpen],
   );
   const { data: listImageUrls } = useExerciseImageUrls(allImagePaths);
   const latestDate = useMemo(() => data?.[0]?.date ?? "", [data]);
@@ -334,37 +337,55 @@ export function SeancesTab() {
     );
   }
 
-  // ── VUE « LE LIVRE DES CHRONIQUES » (LOT C2) ────────────────────────────────
-  // Ouverte par la Hero Card. Vraie page plein écran (early-return, même
-  // système qu'ActiveWorkoutView) — Hall of Fame, Légendes, Techniques
-  // oubliées, Potentiel caché, Spécialisations, Galerie des Records, puis la
-  // Chronologie (les cartes de séances, chacune ouvre la Chronique immersive
-  // du C1). Vérifiée AVANT la Chronique : ouvrir une chronique se fait depuis
-  // le Livre, on doit donc pouvoir revenir au Livre, pas à la page Séances.
-  if (bookOpen && !chronicleWorkout) {
+  // ── VUE « LES CHRONIQUES » (refonte 23/07/2026) ─────────────────────────────
+  // Ouverte par la Hero Card unique. Vraie page plein écran (early-return,
+  // même système qu'ActiveWorkoutView) — trois modules pairs (Légendes,
+  // Forge, Progression) derrière un sélecteur segmenté, plus la Chronique
+  // immersive en drill-down. Vérifiée AVANT la Chronique : ouvrir une
+  // chronique se fait depuis Progression, on doit donc pouvoir revenir aux
+  // Chroniques, pas à la page Séances.
+  if (chroniquesOpen && !chronicleWorkout) {
     return (
-      <LivreChroniquesPage
-        workouts={data ?? []}
-        prByName={prByName}
-        histByName={histByName}
-        volByName={volByName}
-        prByGym={prByGym}
-        histByGym={histByGym}
-        imageUrls={listImageUrls}
-        latestDate={latestDate}
-        onRepeatLive={repeatLive}
-        onOpenFromTemplate={openFromTemplate}
-        onSaveAsTemplate={saveAsTemplate}
-        onOpenChronicle={openChronicle}
-        onBack={() => setBookOpen(false)}
-      />
+      <section className="flex flex-col gap-4">
+        <ChroniquesPage
+          initialModule={initialChroniques}
+          workouts={data ?? []}
+          prByName={prByName}
+          histByName={histByName}
+          volByName={volByName}
+          prByGym={prByGym}
+          histByGym={histByGym}
+          nameByKey={nameByKey}
+          topExercises={topExercises}
+          imageUrls={listImageUrls}
+          latestDate={latestDate}
+          onRepeatLive={repeatLive}
+          onOpenFromTemplate={openFromTemplate}
+          onSaveAsTemplate={saveAsTemplate}
+          onOpenChronicle={openChronicle}
+          onOpenCatalog={() => setCatalogOpen(true)}
+          onBack={() => setChroniquesOpen(false)}
+        />
+        {/* Le catalogue musculation (module Forge) partage la même porte que
+            l'accès pendant une séance active — un seul ExerciseCatalogSheet
+            monté pour toute l'app. */}
+        {catalogOpen && (
+          <ExerciseCatalogSheet
+            onClose={() => setCatalogOpen(false)}
+            histByName={histByName}
+            volByName={volByName}
+            prByName={prByName}
+          />
+        )}
+      </section>
     );
   }
 
   // ── VUE CHRONIQUE IMMERSIVE (LOT C1) ────────────────────────────────────────
-  // Ouverte depuis la Chronologie du Livre. Rendue comme une vraie page
-  // (early-return, même pattern qu'ActiveWorkoutView) : aucun modal, aucun
-  // drawer. « Retour » revient au Livre (bookOpen reste vrai), prev/next navigue.
+  // Ouverte depuis la Chronologie du module Progression. Rendue comme une
+  // vraie page (early-return, même pattern qu'ActiveWorkoutView) : aucun
+  // modal, aucun drawer. « Retour » revient aux Chroniques (chroniquesOpen
+  // reste vrai), prev/next navigue.
   if (chronicleWorkout) {
     return (
       <ChroniquePage
@@ -388,11 +409,6 @@ export function SeancesTab() {
       {/* ── Nouvelle séance — porte d'entrée unique (Phase A, A.1) ───── */}
       <ChoisirEpreuveCard onClick={() => setNewSessionSheetOpen(true)} />
 
-      {/* ── La Forge — atelier de sélection des techniques ──────────── */}
-      <SectionReveal delay={0.05}>
-        <LaForgeCard onClick={() => setForgeChooserOpen(true)} />
-      </SectionReveal>
-
       {error && !isLoading && (
         <div className="rounded-2xl border border-destructive/50 bg-destructive/10 p-4">
           <div className="flex items-start gap-3">
@@ -413,12 +429,12 @@ export function SeancesTab() {
         </div>
       )}
 
-      {/* ── LE LIVRE DES CHRONIQUES — troisième pilier (LOT C2) : plus
-          d'accordéon ni de liste ici, une Hero Card au même poids visuel
-          que l'Arène et La Forge, qui ouvre le module plein écran. ──── */}
+      {/* ── LES CHRONIQUES — troisième pilier : une seule Hero Card (au
+          même poids visuel que l'Arène) ouvre le livre plein écran, qui
+          héberge désormais aussi La Forge en tant que module. ─────────── */}
       {data && !isLoading && (
         <SectionReveal delay={0.1}>
-          <LivreChroniquesCard onClick={() => setBookOpen(true)} />
+          <ChroniquesEntryCard onClick={() => setChroniquesOpen(true)} />
         </SectionReveal>
       )}
 
@@ -501,20 +517,6 @@ export function SeancesTab() {
           histByName={histByName}
           volByName={volByName}
           prByName={prByName}
-        />
-      )}
-
-      {forgeChooserOpen && (
-        <ForgeDisciplineChooser
-          onClose={() => setForgeChooserOpen(false)}
-          onPick={handleForgePick}
-        />
-      )}
-
-      {libraryDiscipline && (
-        <DisciplineExerciseLibrarySheet
-          discipline={libraryDiscipline}
-          onClose={() => setLibraryDiscipline(null)}
         />
       )}
 

@@ -1,41 +1,13 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { ChevronLeft } from "lucide-react";
-import { ProfileRPGData } from "@/components/profile/rpg/ProfileRPGData";
-import { TrophyRoom } from "@/components/profile/rpg/TrophyRoom";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
+// Domicile unique de la Salle des trophées (23/07/2026) : Chroniques →
+// Progression (voir SeancesTab/ChroniquesPage/ProgressionModule, qui monte
+// <TrophyRoom> — badges ⊕ succès unifiés). Cette route ne rend plus rien
+// elle-même : elle ne fait que rediriger, pour qu'un lien ou un favori
+// existant vers /trophees continue de fonctionner au lieu de dupliquer le
+// contenu ou de 404. Même pattern que /_authenticated/fitness/index.tsx.
 export const Route = createFileRoute("/_authenticated/trophees")({
-  head: () => ({
-    meta: [
-      { title: "Salle des trophées — ICORTEX" },
-      { name: "description", content: "Toute ta collection de succès et de badges." },
-    ],
-  }),
-  component: TropheesPage,
+  beforeLoad: () => {
+    throw redirect({ to: "/seances", search: { chroniques: "progression" } });
+  },
 });
-
-function TropheesPage() {
-  return (
-    <main className="flex flex-1 flex-col px-5 pb-32 pt-[max(2.5rem,env(safe-area-inset-top))]">
-      <header className="mb-5">
-        <Link
-          to="/profil"
-          className="mb-3 inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-foreground"
-        >
-          <ChevronLeft className="h-3.5 w-3.5" />
-          Profil
-        </Link>
-        <h1 className="text-2xl font-bold tracking-tight">Salle des trophées</h1>
-      </header>
-
-      <ProfileRPGData>
-        {({ achievements, legacyBadges }) => (
-          <TrophyRoom
-            achievements={achievements}
-            legacyBadges={legacyBadges}
-            isLoading={achievements.isLoading}
-          />
-        )}
-      </ProfileRPGData>
-    </main>
-  );
-}
