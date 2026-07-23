@@ -408,8 +408,10 @@ export type Specialization = {
 };
 
 // Catégories dérivées des 14 MuscleId du domaine — libellés "univers
-// CORTEX", calcul purement volumétrique.
-const SPECIALIZATION_GROUPS: Array<{ id: string; title: string; muscles: MuscleId[] }> = [
+// CORTEX", calcul purement volumétrique. Exporté : Les Légendes (module
+// Chroniques) réutilise la même taxonomie pour filtrer les exercices
+// contributeurs d'une famille (voir ChroniquesPage / FamilyDetailSheet).
+export const SPECIALIZATION_GROUPS: Array<{ id: string; title: string; muscles: MuscleId[] }> = [
   { id: "dos", title: "Maître du Dos", muscles: ["dos", "trapeze", "lombaires"] },
   { id: "pecs", title: "Seigneur des Pectoraux", muscles: ["pectoraux"] },
   {
@@ -453,6 +455,46 @@ export function computeSpecializations(workouts: WorkoutLike[]): Specialization[
   const maxVolume = Math.max(...cards.map((c) => c.volume), 1);
   for (const c of cards) {
     c.stars = Math.max(1, Math.round((c.volume / maxVolume) * 5));
+  }
+  return cards.sort((a, b) => b.volume - a.volume);
+}
+
+// ─── Les Légendes — rang par groupe musculaire (module Chroniques) ───────────
+//
+// Variante de computeSpecializations() qui ne filtre JAMAIS une famille : les
+// 6 familles anatomiques sont une constante du domaine (pas une donnée
+// inventée), donc toujours affichées — seule leur progression (volume/sets/
+// stars, à 0 si jamais entraînée) reflète les vraies séances. C'est la carte
+// mère du module « Les Légendes » (un rang par groupe musculaire, toujours
+// dérivé du même moteur de projection que le Profil — specRankFromVolume).
+
+export function computeLegendFamilies(workouts: WorkoutLike[]): Specialization[] {
+  const totals = new Map<MuscleId, { volume: number; sets: number }>();
+  for (const w of workouts.filter(isMuscu)) {
+    for (const a of sessionMuscleActivation(w.exercises ?? [])) {
+      const entry = totals.get(a.id) ?? { volume: 0, sets: 0 };
+      entry.volume += a.volume;
+      entry.sets += a.sets;
+      totals.set(a.id, entry);
+    }
+  }
+
+  const cards = SPECIALIZATION_GROUPS.map((grp) => {
+    let volume = 0;
+    let sets = 0;
+    for (const m of grp.muscles) {
+      const t = totals.get(m);
+      if (t) {
+        volume += t.volume;
+        sets += t.sets;
+      }
+    }
+    return { id: grp.id, title: grp.title, volume: Math.round(volume), sets, stars: 0 };
+  });
+
+  const maxVolume = Math.max(...cards.map((c) => c.volume), 1);
+  for (const c of cards) {
+    c.stars = c.volume > 0 ? Math.max(1, Math.round((c.volume / maxVolume) * 5)) : 0;
   }
   return cards.sort((a, b) => b.volume - a.volume);
 }

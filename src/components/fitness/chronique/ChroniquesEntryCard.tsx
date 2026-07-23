@@ -1,13 +1,13 @@
 import { motion } from "framer-motion";
-import { Trophy, ChevronRight } from "lucide-react";
+import { BookOpen, ChevronRight } from "lucide-react";
 
 /**
- * LOT C2 — Hero Card « Le Livre des Chroniques », troisième pilier de la
- * page Séances, au même poids visuel que « Entrer dans l'arène »
- * (ChoisirEpreuveCard, rouge) et « La Forge » (or discret). Matériau
- * doré/cuivré, halo animé, particules légères — même gabarit (icône 14,
- * kicker uppercase, titre serif italique, texte, chevron) pour que les
- * trois cartes se lisent comme une même famille.
+ * Porte d'entrée unique des Chroniques — remplace à la fois l'ancienne
+ * carte « Le Livre des Chroniques » et la carte « La Forge » séparée : les
+ * trois modules (Légendes, Forge, Progression) vivent maintenant derrière
+ * une seule porte, au même poids visuel que « Entrer dans l'arène »
+ * (ChoisirEpreuveCard). Même matériau doré/cuivré, halo animé, particules
+ * légères — signature déjà validée, reprise à l'identique.
  */
 
 const SPARKS = [
@@ -17,16 +17,16 @@ const SPARKS = [
   { left: 87, size: 2.5, delay: 9, duration: 21 },
 ];
 
-export function LivreChroniquesCard({ onClick }: { onClick: () => void }) {
+export function ChroniquesEntryCard({ onClick }: { onClick: () => void }) {
   return (
     <motion.button
       type="button"
       onClick={onClick}
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.45, delay: 0.12 }}
+      transition={{ duration: 0.45, delay: 0.1 }}
       whileTap={{ scale: 0.985 }}
-      aria-label="Ouvrir le Livre des Chroniques"
+      aria-label="Ouvrir Les Chroniques"
       className="group relative block w-full overflow-hidden rounded-[26px] border border-white/[0.10] p-5 text-left shadow-elevated transition-colors hover:border-white/[0.20]"
       style={{
         background: `
@@ -36,7 +36,6 @@ export function LivreChroniquesCard({ onClick }: { onClick: () => void }) {
         boxShadow: "inset 0 0 0 1px rgba(234,179,8,0.30), 0 14px 48px -22px rgba(234,179,8,0.40)",
       }}
     >
-      {/* Filet doré haut — même langage que les deux autres piliers */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-5 top-0 h-px"
@@ -45,7 +44,6 @@ export function LivreChroniquesCard({ onClick }: { onClick: () => void }) {
         }}
       />
 
-      {/* Halo animé — respiration lente */}
       <motion.div
         aria-hidden
         className="pointer-events-none absolute -inset-px"
@@ -56,18 +54,12 @@ export function LivreChroniquesCard({ onClick }: { onClick: () => void }) {
         transition={{ duration: 3.4, repeat: Infinity, ease: "easeInOut" }}
       />
 
-      {/* Particules légères — étincelles dorées qui montent */}
       <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
         {SPARKS.map((spark, i) => (
           <motion.span
             key={i}
             className="absolute rounded-full bg-amber-300/60"
-            style={{
-              left: `${spark.left}%`,
-              bottom: -4,
-              width: spark.size,
-              height: spark.size,
-            }}
+            style={{ left: `${spark.left}%`, bottom: -4, width: spark.size, height: spark.size }}
             animate={{ y: [0, -110], opacity: [0, 0.8, 0] }}
             transition={{
               duration: spark.duration,
@@ -88,7 +80,7 @@ export function LivreChroniquesCard({ onClick }: { onClick: () => void }) {
             boxShadow: "inset 0 1px 0 rgba(255,255,255,0.25), 0 6px 24px -8px rgba(234,179,8,0.7)",
           }}
         >
-          <Trophy className="h-6 w-6 text-white drop-shadow" />
+          <BookOpen className="h-6 w-6 text-white drop-shadow" />
         </div>
 
         <div className="min-w-0 flex-1">
@@ -96,16 +88,16 @@ export function LivreChroniquesCard({ onClick }: { onClick: () => void }) {
             className="text-[10px] font-semibold uppercase tracking-[0.28em]"
             style={{ color: "#fcd34d" }}
           >
-            Le Livre des Chroniques
+            Le livre de vie
           </p>
           <p
             className="mt-1 font-serif text-[22px] font-semibold italic leading-tight tracking-wide text-white"
             style={{ textShadow: "0 0 16px rgba(234,179,8,0.35)" }}
           >
-            Chroniques
+            Les Chroniques
           </p>
           <p className="mt-1 text-[11px] leading-snug text-white/60">
-            Revivez chaque bataille. Découvrez vos records. Écrivez la suite de votre légende.
+            Ta maîtrise, ta forge, ta progression — toute ton histoire d'athlète.
           </p>
         </div>
 
