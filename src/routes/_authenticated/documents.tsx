@@ -86,12 +86,15 @@ function DocumentsPage() {
 
   const handleSubmit = async () => {
     if (pickedFiles.length === 0) return toast.error("Sélectionne au moins un fichier");
+    console.log("[Documents] Clic sur le bouton d'import —", pickedFiles.length, "fichier(s)");
+    const total = pickedFiles.length;
     let last: { doc: Tables<"documents">; result: AnalysisResult } | null = null;
     let ok = 0;
 
-    for (let i = 0; i < pickedFiles.length; i++) {
-      setBatchProgress({ current: i + 1, total: pickedFiles.length });
+    for (let i = 0; i < total; i++) {
+      setBatchProgress({ current: i + 1, total });
       const file = pickedFiles[i];
+      console.log(`[Documents] Upload ${i + 1}/${total} — début (${file.name})`);
       try {
         if (isImageFile(file)) {
           const res = await imageUpload.upload(file, module);
@@ -113,16 +116,24 @@ function DocumentsPage() {
             ok++;
           }
         }
-      } catch {
-        // toast handled in hooks
+        console.log(`[Documents] Upload ${i + 1}/${total} — succès (${file.name})`);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Échec de l'analyse";
+        console.error(`[Documents] Upload ${i + 1}/${total} — échec (${file.name})`, e);
+        // Les erreurs PDF sont déjà notifiées par onError de la mutation ;
+        // useImageUpload ne toaste pas lui-même, donc on le fait ici pour ne jamais rester silencieux.
+        if (isImageFile(file)) toast.error(msg);
       }
     }
 
     setBatchProgress(null);
     setLastResult(last);
-    setPickedFiles([]);
-    setOpen(false);
-    if (pickedFiles.length > 1) toast.success(`${ok}/${pickedFiles.length} fichiers analysés`);
+    console.log(`[Documents] Import terminé — ${ok}/${total} réussi(s)`);
+    if (ok > 0) {
+      setPickedFiles([]);
+      setOpen(false);
+    }
+    if (total > 1) toast.success(`${ok}/${total} fichiers analysés`);
   };
 
   const submitLabel = () => {
@@ -188,7 +199,11 @@ function DocumentsPage() {
                   accept="application/pdf,image/jpeg,image/jpg,image/png,image/webp,image/heic,image/heif"
                   multiple
                   className="hidden"
-                  onChange={(e) => setPickedFiles(e.target.files ? Array.from(e.target.files) : [])}
+                  onChange={(e) => {
+                    const files = e.target.files ? Array.from(e.target.files) : [];
+                    console.log("[Documents] Fichier(s) sélectionné(s) :", files.map((f) => f.name));
+                    setPickedFiles(files);
+                  }}
                 />
                 <Button
                   type="button"
