@@ -2,8 +2,11 @@ import { useMemo, useState } from "react";
 import { ChevronDown, ChevronLeft, ChevronUp, Loader2, Plus, Trash2, Utensils, X } from "lucide-react";
 import { FullscreenSheet as Sheet, Field, SubmitButton } from "@/components/shared/FormComponents";
 import { FoodAutocomplete } from "@/components/FoodAutocomplete";
-import { MEAL_LABELS, scalePer100 } from "@/lib/nutrition/meals";
+import { MEAL_LABELS, scalePer100, type MealSlug } from "@/lib/nutrition/meals";
+import { formatDecimal, parseDecimal } from "@/lib/nutrition/weight";
 import type { FoodSuggestion } from "@/services/foodSuggestion";
+import { MealSelect } from "@/components/fitness/MealSelect";
+import { WeightSelector } from "@/components/fitness/WeightSelector";
 import {
   useSavedMeals,
   useCreateSavedMeal,
@@ -48,7 +51,7 @@ export function SavedMealsSheet({
 
   // État du builder
   const [name, setName] = useState("");
-  const [meal, setMeal] = useState("dejeuner");
+  const [meal, setMeal] = useState<MealSlug>("dejeuner");
   const [items, setItems] = useState<BuilderItem[]>([]);
   const [search, setSearch] = useState("");
 
@@ -226,19 +229,12 @@ export function SavedMealsSheet({
                   </ul>
                 )}
                 <div className="mt-2 flex items-center gap-2">
-                  <select
-                    value={mealByMeal[m.id] ?? m.meal ?? "dejeuner"}
-                    onChange={(e) =>
-                      setMealByMeal((prev) => ({ ...prev, [m.id]: e.target.value }))
-                    }
+                  <MealSelect
+                    value={(mealByMeal[m.id] ?? m.meal ?? "dejeuner") as MealSlug}
+                    onChange={(meal) => setMealByMeal((prev) => ({ ...prev, [m.id]: meal }))}
+                    label={null}
                     className="min-w-0 flex-1 rounded-lg border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none focus:border-primary"
-                  >
-                    {Object.entries(MEAL_LABELS).map(([slug, label]) => (
-                      <option key={slug} value={slug}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
+                  />
                   <button
                     type="button"
                     onClick={() =>
@@ -279,20 +275,7 @@ export function SavedMealsSheet({
             required
           />
 
-          <div>
-            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Moment par défaut
-            </label>
-            <select
-              value={meal}
-              onChange={(e) => setMeal(e.target.value)}
-              className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary"
-            >
-              {Object.entries(MEAL_LABELS).map(([slug, label]) => (
-                <option key={slug} value={slug}>{label}</option>
-              ))}
-            </select>
-          </div>
+          <MealSelect value={meal} onChange={setMeal} label="Moment par défaut" />
 
           <FoodAutocomplete
             value={search}
@@ -306,21 +289,12 @@ export function SavedMealsSheet({
               {items.map((it) => (
                 <li
                   key={it.key}
-                  className="rounded-xl border border-border bg-surface p-2.5"
+                  className="space-y-2 rounded-xl border border-border bg-surface p-2.5"
                 >
                   <div className="flex items-center gap-2">
                     <p className="min-w-0 flex-1 truncate text-sm font-medium">
                       {it.name}
                     </p>
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      value={it.grams}
-                      min={0}
-                      onChange={(e) => setGrams(it.key, Number(e.target.value) || 0)}
-                      className="w-16 rounded-lg border border-border bg-card px-2 py-1 text-right text-sm outline-none focus:border-primary"
-                    />
-                    <span className="text-xs text-muted-foreground">g</span>
                     <button
                       type="button"
                       onClick={() => removeItem(it.key)}
@@ -330,7 +304,19 @@ export function SavedMealsSheet({
                       <X className="h-3.5 w-3.5" />
                     </button>
                   </div>
-                  <p className="mt-1 text-[11px] text-muted-foreground">
+                  <WeightSelector
+                    food={{
+                      id: it.key,
+                      name: it.name,
+                      calories: it.per100.calories,
+                      proteins: it.per100.proteins,
+                      carbs: it.per100.carbs,
+                      fats: it.per100.fats,
+                    }}
+                    value={formatDecimal(it.grams)}
+                    onChange={(text) => setGrams(it.key, parseDecimal(text) ?? 0)}
+                  />
+                  <p className="text-[11px] text-muted-foreground">
                     {Math.round(scale(it.per100.calories, it.grams) ?? 0)} kcal · L
                     {scale(it.per100.fats, it.grams) ?? 0} G
                     {scale(it.per100.carbs, it.grams) ?? 0} P

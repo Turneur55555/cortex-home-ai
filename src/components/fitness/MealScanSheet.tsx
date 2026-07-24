@@ -5,7 +5,7 @@ import { Camera, ImageIcon, Loader2, Sparkles, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { FullscreenSheet as Sheet } from "@/components/shared/FormComponents";
 import { fileToBase64Compressed } from "@/lib/nutrition/utils";
-import { MEAL_LABELS, clampMacroSet, isMealSlug } from "@/lib/nutrition/meals";
+import { clampMacroSet, isMealSlug, type MealSlug } from "@/lib/nutrition/meals";
 import {
   buildAiMealLogEntry,
   formatDecimal,
@@ -13,6 +13,7 @@ import {
   safeGrams,
 } from "@/lib/nutrition/weight";
 import { useAddNutritionBatch } from "@/hooks/use-fitness";
+import { MealSelect } from "@/components/fitness/MealSelect";
 
 interface ScanItem {
   name: string;
@@ -41,7 +42,7 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
   const [preview, setPreview] = useState<string | null>(null);
   const [scanResult, setScanResult] = useState<ScanResponse | null>(null);
   const [items, setItems] = useState<ScanItem[]>([]);
-  const [meal, setMeal] = useState("dejeuner");
+  const [meal, setMeal] = useState<MealSlug>("dejeuner");
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const addBatch = useAddNutritionBatch();
 
@@ -247,23 +248,7 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
             </div>
 
             {/* Meal selector — l'utilisateur choisit avant validation */}
-            <div>
-              <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                Repas
-              </label>
-              <select
-                value={meal}
-                onChange={(e) => setMeal(e.target.value)}
-                disabled={editingIdx != null}
-                className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary disabled:opacity-40"
-              >
-                {Object.entries(MEAL_LABELS).map(([slug, label]) => (
-                  <option key={slug} value={slug}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <MealSelect value={meal} onChange={setMeal} disabled={editingIdx != null} />
 
             <ul className="space-y-2">
               {items.map((item, idx) => {

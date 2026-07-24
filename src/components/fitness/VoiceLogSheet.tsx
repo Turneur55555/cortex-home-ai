@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { FullscreenSheet as Sheet } from "@/components/shared/FormComponents";
-import { MEAL_LABELS, clampMacroSet, isMealSlug } from "@/lib/nutrition/meals";
+import { clampMacroSet, isMealSlug, type MealSlug } from "@/lib/nutrition/meals";
 import {
   buildAiMealLogEntry,
   formatDecimal,
@@ -12,6 +12,7 @@ import {
   safeGrams,
 } from "@/lib/nutrition/weight";
 import { useAddNutritionBatch } from "@/hooks/use-fitness";
+import { MealSelect } from "@/components/fitness/MealSelect";
 
 interface ParsedItem {
   name: string;
@@ -55,7 +56,7 @@ export function VoiceLogSheet({ date, onClose }: VoiceLogSheetProps) {
   const [manualText, setManualText] = useState("");
   const [items, setItems] = useState<ParsedItem[]>([]);
   const [parseResult, setParseResult] = useState<ParseResult | null>(null);
-  const [meal, setMeal] = useState("dejeuner");
+  const [meal, setMeal] = useState<MealSlug>("dejeuner");
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const addBatch = useAddNutritionBatch();
@@ -424,17 +425,7 @@ export function VoiceLogSheet({ date, onClose }: VoiceLogSheetProps) {
             </div>
 
             {/* Meal selector */}
-            <select
-              value={meal}
-              onChange={(e) => setMeal(e.target.value)}
-              className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary"
-            >
-              {Object.entries(MEAL_LABELS).map(([slug, label]) => (
-                <option key={slug} value={slug}>
-                  {label}
-                </option>
-              ))}
-            </select>
+            <MealSelect value={meal} onChange={setMeal} />
 
             <div className="flex gap-2">
               <button

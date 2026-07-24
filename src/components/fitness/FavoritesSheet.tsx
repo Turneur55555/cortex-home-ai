@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { Loader2, Plus, Star, Trash2, X } from "lucide-react";
-import { FullscreenSheet as Sheet, Field } from "@/components/shared/FormComponents";
+import { FullscreenSheet as Sheet } from "@/components/shared/FormComponents";
 import { FoodAutocomplete } from "@/components/FoodAutocomplete";
-import { MEAL_LABELS, MEAL_SLUGS, scalePer100 } from "@/lib/nutrition/meals";
+import { scalePer100, type MealSlug } from "@/lib/nutrition/meals";
 import { parseDecimal } from "@/lib/nutrition/weight";
 import type { FoodSuggestion } from "@/services/foodSuggestion";
+import { MealSelect } from "@/components/fitness/MealSelect";
+import { WeightSelector } from "@/components/fitness/WeightSelector";
 import {
   useNutritionFavorites,
   useAddFavorite,
@@ -12,11 +14,6 @@ import {
   type NutritionFavorite,
 } from "@/hooks/use-nutrition-favorites";
 import { useAddNutrition } from "@/hooks/use-fitness";
-
-const MEALS: Array<{ slug: string; label: string }> = MEAL_SLUGS.map((slug) => ({
-  slug,
-  label: MEAL_LABELS[slug],
-}));
 
 const scale = scalePer100;
 
@@ -34,7 +31,7 @@ export function FavoritesSheet({ date, onClose }: { date: string; onClose: () =>
   const [search, setSearch] = useState("");
   const [picked, setPicked] = useState<FoodSuggestion | null>(null);
   const [grams, setGrams] = useState("100");
-  const [newMeal, setNewMeal] = useState("collation");
+  const [newMeal, setNewMeal] = useState<MealSlug>("collation");
 
   // parseDecimal accepte « 12,5 » ; quantité invalide => 0 (bouton désactivé).
   const g = parseDecimal(grams) ?? 0;
@@ -125,25 +122,8 @@ export function FavoritesSheet({ date, onClose }: { date: string; onClose: () =>
 
             {picked && (
               <>
-                <div className="grid grid-cols-2 gap-2">
-                  <Field label="Quantité (g)" value={grams} onChange={setGrams} type="text" />
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      Repas
-                    </label>
-                    <select
-                      value={newMeal}
-                      onChange={(e) => setNewMeal(e.target.value)}
-                      className="w-full rounded-xl border border-border bg-transparent px-3 py-2.5 text-sm outline-none focus:border-foreground/30"
-                    >
-                      {MEALS.map((m) => (
-                        <option key={m.slug} value={m.slug}>
-                          {m.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
+                <WeightSelector food={picked} value={grams} onChange={setGrams} />
+                <MealSelect value={newMeal} onChange={setNewMeal} />
                 <p className="text-xs text-muted-foreground">
                   {Math.round(scale(picked.calories, g) ?? 0)} kcal · L
                   {scale(picked.fats, g) ?? 0} G{scale(picked.carbs, g) ?? 0} P
@@ -200,17 +180,12 @@ export function FavoritesSheet({ date, onClose }: { date: string; onClose: () =>
                 </button>
               </div>
               <div className="mt-2 flex items-center gap-2">
-                <select
-                  value={mealByFav[fav.id] ?? fav.meal ?? "collation"}
-                  onChange={(e) => setMealByFav((m) => ({ ...m, [fav.id]: e.target.value }))}
-                  className="min-w-0 flex-1 rounded-lg border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none focus:border-foreground/30"
-                >
-                  {MEALS.map((m) => (
-                    <option key={m.slug} value={m.slug}>
-                      {m.label}
-                    </option>
-                  ))}
-                </select>
+                <MealSelect
+                  value={(mealByFav[fav.id] ?? fav.meal ?? "collation") as MealSlug}
+                  onChange={(meal) => setMealByFav((m) => ({ ...m, [fav.id]: meal }))}
+                  label={null}
+                  className="min-w-0 flex-1 rounded-lg border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none focus:border-primary"
+                />
                 <button
                   type="button"
                   onClick={() => logFavorite(fav)}
