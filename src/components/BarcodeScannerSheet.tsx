@@ -10,7 +10,8 @@ import { computeMacros, type ProductNutriments } from "@/lib/nutrition/macros";
 import { lookupBarcode } from "@/services/foodCatalog";
 import { WeightSelector } from "@/components/fitness/WeightSelector";
 import { calculateNutritionFromGrams, formatDecimal, per100FromFood } from "@/lib/nutrition/weight";
-import { MEAL_OPTIONS, detectMealFromHour } from "@/lib/nutrition/meals";
+import { detectMealFromHour } from "@/lib/nutrition/meals";
+import { MealSelect } from "@/components/fitness/MealSelect";
 import type { FoodSuggestion } from "@/services/foodSuggestion";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -375,23 +376,8 @@ export function BarcodeScannerSheet({
             {/* Sélecteur de poids — même moteur que la saisie manuelle */}
             <WeightSelector food={pseudoFood} value={weightText} onChange={setWeightText} />
 
-            {/* Repas — même sélecteur que "Nouvel aliment" */}
-            <div>
-              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Repas
-              </label>
-              <select
-                value={meal}
-                onChange={(e) => setMeal(e.target.value as typeof meal)}
-                className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary"
-              >
-                {MEAL_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* Repas — même composant que "Nouvel aliment" (MealSelect) */}
+            <MealSelect value={meal} onChange={setMeal} />
 
             {/* Référence 100g */}
             {per100?.calories != null && (

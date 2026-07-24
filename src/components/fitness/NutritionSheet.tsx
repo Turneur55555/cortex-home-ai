@@ -19,7 +19,8 @@ import {
 } from "@/lib/nutrition/weight";
 import { calculateCaloriesFromMacros } from "@/lib/nutrition/macros";
 
-import { MEAL_OPTIONS, detectMealFromHour } from "@/lib/nutrition/meals";
+import { detectMealFromHour, isMealSlug, type MealSlug } from "@/lib/nutrition/meals";
+import { MealSelect } from "@/components/fitness/MealSelect";
 
 // Normalisation identique au catalogue (food-lookup) pour que l'aliment soit retrouvable.
 const normalizeFoodName = (name: string): string =>
@@ -90,7 +91,9 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
 
   const [form, setForm] = useState({
     name: prefill?.name ?? "",
-    meal: prefill?.meal ?? detectMealFromHour(),
+    meal: (prefill?.meal && isMealSlug(prefill.meal)
+      ? prefill.meal
+      : detectMealFromHour()) as MealSlug,
     calories: prefill?.calories ?? "",
     proteins: prefill?.proteins ?? "",
     carbs: prefill?.carbs ?? "",
@@ -267,22 +270,7 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
           />
         )}
 
-        <div>
-          <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Repas
-          </label>
-          <select
-            value={form.meal}
-            onChange={(e) => setForm({ ...form, meal: e.target.value })}
-            className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary"
-          >
-            {MEAL_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </div>
+        <MealSelect value={form.meal} onChange={(meal) => setForm({ ...form, meal })} />
         {!baseFood && (
           <Field
             label="Poids total (g) — optionnel, pour enregistrer l'aliment"
