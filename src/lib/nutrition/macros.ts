@@ -42,3 +42,16 @@ export function computeMacros(
     fats:     r1(nutriments?.fat_100g),
   };
 }
+
+/**
+ * Calcule les calories à partir des trois macronutriments (règle Atwater :
+ * protéines/glucides = 4 kcal/g, lipides = 9 kcal/g). Seule source de vérité
+ * pour ce calcul — à réutiliser partout où un aliment est créé/modifié.
+ */
+export function calculateCaloriesFromMacros(
+  protein: number,
+  carbs: number,
+  fat: number,
+): number {
+  return Math.round(protein * 4 + carbs * 4 + fat * 9);
+}
