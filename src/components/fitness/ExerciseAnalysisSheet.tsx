@@ -588,7 +588,8 @@ export function ExerciseAnalysisSheet({
             />
           )}
         </div>
-      </div>
+      </motion.div>
     </div>
+
   );
 }
