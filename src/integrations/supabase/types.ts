@@ -82,6 +82,7 @@ export type Database = {
           notes: string | null
           right_arm: number | null
           right_thigh: number | null
+          source_document_id: string | null
           user_id: string
           waist: number | null
           weight: number | null
@@ -99,6 +100,7 @@ export type Database = {
           notes?: string | null
           right_arm?: number | null
           right_thigh?: number | null
+          source_document_id?: string | null
           user_id: string
           waist?: number | null
           weight?: number | null
@@ -116,11 +118,20 @@ export type Database = {
           notes?: string | null
           right_arm?: number | null
           right_thigh?: number | null
+          source_document_id?: string | null
           user_id?: string
           waist?: number | null
           weight?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "body_tracking_source_document_id_fkey"
+            columns: ["source_document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       daily_activity: {
         Row: {
@@ -170,8 +181,8 @@ export type Database = {
       documents: {
         Row: {
           alerts: Json | null
-          analysis: string | null
           created_at: string
+          extracted_items: Json
           id: string
           key_insights: Json | null
           module: string
@@ -182,8 +193,8 @@ export type Database = {
         }
         Insert: {
           alerts?: Json | null
-          analysis?: string | null
           created_at?: string
+          extracted_items?: Json
           id?: string
           key_insights?: Json | null
           module: string
@@ -194,8 +205,8 @@ export type Database = {
         }
         Update: {
           alerts?: Json | null
-          analysis?: string | null
           created_at?: string
+          extracted_items?: Json
           id?: string
           key_insights?: Json | null
           module?: string
@@ -851,6 +862,7 @@ export type Database = {
           percentage_consumed: number | null
           proteins: number | null
           serving_count: number | null
+          source_document_id: string | null
           user_id: string
         }
         Insert: {
@@ -872,6 +884,7 @@ export type Database = {
           percentage_consumed?: number | null
           proteins?: number | null
           serving_count?: number | null
+          source_document_id?: string | null
           user_id: string
         }
         Update: {
@@ -893,9 +906,18 @@ export type Database = {
           percentage_consumed?: number | null
           proteins?: number | null
           serving_count?: number | null
+          source_document_id?: string | null
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "nutrition_source_document_id_fkey"
+            columns: ["source_document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       nutrition_goals: {
         Row: {
@@ -956,6 +978,7 @@ export type Database = {
           created_at: string
           date: string
           id: string
+          source_document_id: string | null
           supplement_id: string
           taken: boolean
           user_id: string
@@ -964,6 +987,7 @@ export type Database = {
           created_at?: string
           date: string
           id?: string
+          source_document_id?: string | null
           supplement_id: string
           taken?: boolean
           user_id: string
@@ -972,11 +996,19 @@ export type Database = {
           created_at?: string
           date?: string
           id?: string
+          source_document_id?: string | null
           supplement_id?: string
           taken?: boolean
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "supplement_logs_source_document_id_fkey"
+            columns: ["source_document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "supplement_logs_supplement_id_fkey"
             columns: ["supplement_id"]
@@ -995,6 +1027,7 @@ export type Database = {
           name: string
           notes: string | null
           sort_order: number
+          source_document_id: string | null
           unit: string | null
           updated_at: string
           user_id: string
@@ -1007,6 +1040,7 @@ export type Database = {
           name: string
           notes?: string | null
           sort_order?: number
+          source_document_id?: string | null
           unit?: string | null
           updated_at?: string
           user_id: string
@@ -1019,11 +1053,20 @@ export type Database = {
           name?: string
           notes?: string | null
           sort_order?: number
+          source_document_id?: string | null
           unit?: string | null
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "supplements_source_document_id_fkey"
+            columns: ["source_document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_activity: {
         Row: {
@@ -1391,6 +1434,7 @@ export type Database = {
           icon: string
           id: string
           name: string
+          source_document_id: string | null
           updated_at: string
           user_id: string
         }
@@ -1400,6 +1444,7 @@ export type Database = {
           icon?: string
           id?: string
           name: string
+          source_document_id?: string | null
           updated_at?: string
           user_id: string
         }
@@ -1409,10 +1454,19 @@ export type Database = {
           icon?: string
           id?: string
           name?: string
+          source_document_id?: string | null
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "workout_templates_source_document_id_fkey"
+            columns: ["source_document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       workouts: {
         Row: {
@@ -1462,6 +1516,10 @@ export type Database = {
     }
     Functions: {
       compute_level_from_xp: { Args: { _xp: number }; Returns: number }
+      deposit_document_analysis: {
+        Args: { p_document_id: string; p_modules: Json }
+        Returns: Json
+      }
       get_user_streak_days: { Args: never; Returns: number }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }

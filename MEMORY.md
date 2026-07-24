@@ -1,7 +1,13 @@
 # Mémoire projet — cortex-home-ai
 
 ## Dernière mise à jour
-2026-07-23
+2026-07-24
+
+## FIX build Nutrition/Documents — alignement types + migration déversement documents (2026-07-24)
+Correction des 2 erreurs TypeScript récurrentes signalées sur `NutritionSheet.tsx` et `use-documents.ts`.
+- **NutritionSheet** : la table `foods` utilise le schéma canonique `name_normalized`, `proteins`, `carbs`, `fats` (pas `normalized_name`, `protein_g`, `carbs_g`, `fat_g`). Le code d'upsert d'aliment personnalisé est réaligné sur ces colonnes.
+- **Documents** : diagnostic confirmé en base avant correction : `deposit_document_analysis` n'existait pas, `documents.extracted_items` n'existait pas, `documents.analysis` existait encore, et les colonnes `source_document_id` n'étaient pas présentes. La migration repo `20260723160000_document_deposit_pipeline.sql` a été appliquée en direct via Lovable Cloud, puis la fonction `deposit_document_analysis(uuid,jsonb)` a été passée en `SECURITY INVOKER` pour éviter d'ajouter une nouvelle alerte linter liée aux fonctions `SECURITY DEFINER` exécutables par les utilisateurs connectés.
+- **Types** : `src/integrations/supabase/types.ts` a été régénéré automatiquement après migration : `documents` expose maintenant `extracted_items`, les tables métier exposent `source_document_id`, et la RPC `deposit_document_analysis` est typée. Les alertes linter restantes après correction (`extension public`, bucket public listable, anciens `SECURITY DEFINER` `get_user_streak_days`/`unlock_user_badge`) sont préexistantes et non liées à ce fix.
 
 ## Suppression complète de la progression secondaire — Salle des trophées, Succès, Quêtes (2026-07-23, branche `claude/remove-secondary-progression-bku2m1`)
 Demande explicite de Nathan : ne conserver QUE la progression par Niveau/Rang. Suppression totale, front + base, de trois systèmes (aucun ne versait déjà d'XP depuis la migration `20260721130500_rpg_reward_engine_pure_training_economy.sql` — pure couches de prestige/collection/suivi personnel).
