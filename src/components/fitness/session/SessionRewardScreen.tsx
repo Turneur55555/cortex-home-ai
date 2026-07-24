@@ -59,13 +59,13 @@ export function SessionRewardScreen({
         initial={{ opacity: 0, y: 24, scale: 0.98 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.45, ease: EASE }}
-        className="relative w-full max-w-sm overflow-hidden rounded-[28px] border border-white/10 bg-gradient-to-b from-[#161311] to-[#0b0a09] p-6"
+        className="relative w-full max-w-sm overflow-hidden rounded-[28px] border border-white/10 bg-gradient-to-b from-[#161311] to-[#0b0a09] px-6 pb-6 pt-3"
         style={{ boxShadow: rankGlowShadow(theme.glow, -20, 80, -24) }}
       >
         {/* Halo d'ambiance */}
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 top-0 h-40"
+          className="pointer-events-none absolute inset-x-0 top-0 h-48"
           style={{
             background: `radial-gradient(120% 100% at 50% 0%, ${theme.glow} 0%, transparent 70%)`,
           }}
@@ -75,17 +75,31 @@ export function SessionRewardScreen({
         <Section delay={0.05}>
           <div className="relative text-center">
             {trophySrc ? (
-              <img
-                src={trophySrc}
-                alt={`Récompense — ${titleTransition.after.title.label}`}
-                loading="eager"
-                decoding="async"
-                className="mx-auto h-60 w-60 object-contain"
-              />
+              <div className="relative mx-auto flex h-[300px] w-[300px] items-center justify-center">
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute inset-4 rounded-full blur-2xl"
+                  style={{
+                    background: `radial-gradient(circle, ${theme.glow} 0%, transparent 72%)`,
+                  }}
+                />
+                <img
+                  src={trophySrc}
+                  alt={`Récompense — ${titleTransition.after.title.label}`}
+                  loading="eager"
+                  decoding="async"
+                  className="relative h-full w-full object-contain"
+                  style={{
+                    filter: `drop-shadow(0 16px 28px ${theme.glow})`,
+                    WebkitMaskImage: "radial-gradient(closest-side, black 82%, transparent 100%)",
+                    maskImage: "radial-gradient(closest-side, black 82%, transparent 100%)",
+                  }}
+                />
+              </div>
             ) : (
               <div className="text-5xl">🏆</div>
             )}
-            <h2 className="mt-2 text-lg font-bold tracking-tight text-white">Séance terminée !</h2>
+            <h2 className="mt-1 text-lg font-bold tracking-tight text-white">Séance terminée !</h2>
           </div>
         </Section>
 
@@ -146,7 +160,7 @@ export function SessionRewardScreen({
             />
             <p className="mt-2 text-right text-[10px] text-white/40">
               {titleTransition.gradeUp
-                ? `${titleTransition.before.title.label} — ${titleTransition.before.grade} → ${titleTransition.after.title.label} — ${titleTransition.after.grade}`
+                ? `${titleTransition.before.grade} → ${titleTransition.after.grade}`
                 : titleTransition.after.isMax
                   ? "Grade suprême atteint"
                   : `Encore ${titleTransition.after.xpToNext} XP avant ${nextGradeLabel(titleTransition.after)}`}

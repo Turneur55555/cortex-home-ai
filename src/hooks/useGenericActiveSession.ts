@@ -487,7 +487,9 @@ export function useFinishGenericActiveWorkout() {
       if (error) throw error;
     },
     onSuccess: (_d, workout) => {
-      toast.success("Séance terminée 💪");
+      // Pas de toast ici : l'écran de récompense (SessionRewardScreen)
+      // s'affiche systématiquement à la clôture et suffit à informer
+      // l'utilisateur — un toast en plus serait redondant.
       logActivity("workout", `Séance terminée : ${workout.name}`, { workout_id: workout.id });
       // Étape 0.2 (INV-4 fraîcheur) : invalidation par préfixe fitness —
       // voir commentaire équivalent dans use-fitness.ts (useFinishWorkout).
