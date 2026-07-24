@@ -21,7 +21,6 @@ import {
   TrendingUp,
   Trash2,
   Trophy,
-  X,
   Zap,
 } from "lucide-react";
 import {
