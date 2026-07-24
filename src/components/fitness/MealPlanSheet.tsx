@@ -11,7 +11,8 @@ import {
   useGenerateShoppingList,
   useSaveShoppingList,
 } from "@/hooks/useMealPlan";
-import { MEAL_OPTIONS } from "@/lib/nutrition/meals";
+import { MEAL_LABELS, type MealSlug } from "@/lib/nutrition/meals";
+import { MealSelect } from "@/components/fitness/MealSelect";
 
 /**
  * Nutrition V2 — planning de repas sur la semaine + génération de la liste de
@@ -20,11 +21,6 @@ import { MEAL_OPTIONS } from "@/lib/nutrition/meals";
  * UI uniquement : logique dans lib/nutrition/* (pur) et hooks/useMealPlan,
  * useRecipes (Supabase). Tokens sémantiques, mobile first.
  */
-
-const MEALS: { value: string; label: string }[] = MEAL_OPTIONS.map((o) => ({
-  value: o.value,
-  label: o.label,
-}));
 
 const iso = (d: Date) => format(d, "yyyy-MM-dd");
 
@@ -44,7 +40,12 @@ export function MealPlanSheet({ onClose }: { onClose: () => void }) {
   const shopping = useGenerateShoppingList(showShopping ? startStr : null, showShopping ? endStr : null);
   const saveShopping = useSaveShoppingList();
 
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<{
+    date: string;
+    meal: MealSlug;
+    recipeId: string;
+    servings: string;
+  }>({
     date: iso(new Date()),
     meal: "dejeuner",
     recipeId: "",
@@ -116,22 +117,11 @@ export function MealPlanSheet({ onClose }: { onClose: () => void }) {
               ))}
             </select>
           </div>
-          <div>
-            <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Repas
-            </label>
-            <select
-              value={form.meal}
-              onChange={(e) => setForm({ ...form, meal: e.target.value })}
-              className="w-full rounded-xl border border-border bg-card px-3 py-2.5 text-sm outline-none focus:border-primary"
-            >
-              {MEALS.map((m) => (
-                <option key={m.value} value={m.value}>
-                  {m.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          <MealSelect
+            value={form.meal}
+            onChange={(meal) => setForm({ ...form, meal })}
+            className="w-full rounded-xl border border-border bg-card px-3 py-2.5 text-sm outline-none focus:border-primary"
+          />
         </div>
         <div className="grid grid-cols-[1fr_auto] gap-3">
           <div>
@@ -189,7 +179,7 @@ export function MealPlanSheet({ onClose }: { onClose: () => void }) {
                   {dayEntries.map((e) => (
                     <div key={e.id} className="flex items-center gap-2 text-sm">
                       <span className="w-16 shrink-0 text-[11px] font-medium text-primary">
-                        {MEALS.find((m) => m.value === e.meal)?.label ?? e.meal}
+                        {(MEAL_LABELS as Record<string, string>)[e.meal] ?? e.meal}
                       </span>
                       <span className="flex-1 truncate">
                         {e.recipes?.name ?? e.custom_name ?? "Repas"}

@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { Loader2, Utensils } from "lucide-react";
 import { FullscreenSheet as Sheet } from "@/components/shared/FormComponents";
-import { MEAL_LABELS } from "@/lib/nutrition/meals";
+import type { MealSlug } from "@/lib/nutrition/meals";
 import { useRecipes, useRecipe } from "@/hooks/useRecipes";
 import { useAddNutritionBatch } from "@/hooks/use-fitness";
 import { scaleServings } from "@/lib/nutrition/recipes";
+import { MealSelect } from "@/components/fitness/MealSelect";
 
 interface Props {
   date: string;
@@ -15,7 +16,7 @@ export function RecipeLogSheet({ date, onClose }: Props) {
   const { data: recipes, isLoading: recipesLoading } = useRecipes();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [servings, setServings] = useState(1);
-  const [meal, setMeal] = useState("dejeuner");
+  const [meal, setMeal] = useState<MealSlug>("dejeuner");
   const addBatch = useAddNutritionBatch();
   const { data: recipeDetail, isLoading: detailLoading } = useRecipe(selectedId);
 
@@ -172,22 +173,7 @@ export function RecipeLogSheet({ date, onClose }: Props) {
                       </div>
                     </div>
 
-                    <div>
-                      <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                        Repas
-                      </label>
-                      <select
-                        value={meal}
-                        onChange={(e) => setMeal(e.target.value)}
-                        className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary"
-                      >
-                        {Object.entries(MEAL_LABELS).map(([slug, label]) => (
-                          <option key={slug} value={slug}>
-                            {label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
+                    <MealSelect value={meal} onChange={setMeal} />
 
                     <button
                       type="button"
