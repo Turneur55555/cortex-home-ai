@@ -23,6 +23,16 @@ export const MEAL_OPTIONS: ReadonlyArray<{ value: MealSlug; label: string }> = M
   (slug) => ({ value: slug, label: MEAL_LABELS[slug] }),
 );
 
+/** Détecte le repas selon l'heure courante, pour pré-remplir un sélecteur. */
+export function detectMealFromHour(): MealSlug {
+  const h = new Date().getHours();
+  if (h >= 6 && h < 11) return "petit-dej";
+  if (h >= 11 && h < 15) return "dejeuner";
+  if (h >= 15 && h < 18) return "gouter";
+  if (h >= 18 && h < 23) return "diner";
+  return "collation";
+}
+
 /** Macros pour `grams` g à partir d'une valeur /100 g (arrondi 0,1 g). */
 export const scalePer100 = (v: number | null, grams: number): number | null =>
   v == null ? null : Math.round(((v * grams) / 100) * 10) / 10;

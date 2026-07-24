@@ -6,11 +6,11 @@ import { toast } from "sonner";
 // useAddStockItem removed: Maison/stocks module deleted.
 import { useAddNutrition } from "@/hooks/use-fitness";
 import { FullscreenSheet as Sheet } from "@/components/shared/FormComponents";
-import { format } from "date-fns";
 import { computeMacros, type ProductNutriments } from "@/lib/nutrition/macros";
 import { lookupBarcode } from "@/services/foodCatalog";
 import { WeightSelector } from "@/components/fitness/WeightSelector";
 import { calculateNutritionFromGrams, formatDecimal, per100FromFood } from "@/lib/nutrition/weight";
+import { MEAL_OPTIONS, detectMealFromHour } from "@/lib/nutrition/meals";
 import type { FoodSuggestion } from "@/services/foodSuggestion";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -64,7 +64,13 @@ function suggestInitialGrams(raw: string | undefined): number {
 
 // ─── Main component ────────────────────────────────────────────────────────────
 
-export function BarcodeScannerSheet({ onClose }: { onClose: () => void }) {
+export function BarcodeScannerSheet({
+  date,
+  onClose,
+}: {
+  date: string;
+  onClose: () => void;
+}) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const readerRef = useRef<BrowserMultiFormatReader | null>(null);
   const controlsRef = useRef<{ stop: () => void } | null>(null);
@@ -80,6 +86,8 @@ export function BarcodeScannerSheet({ onClose }: { onClose: () => void }) {
 
   // Poids courant — unique source de vérité pour la quantité consommée.
   const [weightText, setWeightText] = useState("");
+  // Repas — même sélecteur que "Nouvel aliment" (NutritionSheet).
+  const [meal, setMeal] = useState(detectMealFromHour());
 
   const addNutrition = useAddNutrition();
 
@@ -228,9 +236,9 @@ export function BarcodeScannerSheet({ onClose }: { onClose: () => void }) {
     if (!product || !per100 || !calc || calc.error) return;
     try {
       await addNutrition.mutateAsync({
-        date: format(new Date(), "yyyy-MM-dd"),
+        date,
         name: `${product.product_name || "Produit"} (${Math.round(calc.totalGrams)} g)`,
-        meal: "collation",
+        meal,
         calories: calc.calories,
         proteins: calc.proteins,
         carbs: calc.carbs,
@@ -366,6 +374,24 @@ export function BarcodeScannerSheet({ onClose }: { onClose: () => void }) {
 
             {/* Sélecteur de poids — même moteur que la saisie manuelle */}
             <WeightSelector food={pseudoFood} value={weightText} onChange={setWeightText} />
+
+            {/* Repas — même sélecteur que "Nouvel aliment" */}
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Repas
+              </label>
+              <select
+                value={meal}
+                onChange={(e) => setMeal(e.target.value as typeof meal)}
+                className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary"
+              >
+                {MEAL_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
 
             {/* Référence 100g */}
             {per100?.calories != null && (

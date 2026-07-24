@@ -19,17 +19,7 @@ import {
 } from "@/lib/nutrition/weight";
 import { calculateCaloriesFromMacros } from "@/lib/nutrition/macros";
 
-import { MEAL_OPTIONS, type MealSlug } from "@/lib/nutrition/meals";
-
-// Détecte le repas selon l'heure courante pour pré-remplir le sélecteur.
-function detectMealFromHour(): MealSlug {
-  const h = new Date().getHours();
-  if (h >= 6 && h < 11) return "petit-dej";
-  if (h >= 11 && h < 15) return "dejeuner";
-  if (h >= 15 && h < 18) return "gouter";
-  if (h >= 18 && h < 23) return "diner";
-  return "collation";
-}
+import { MEAL_OPTIONS, detectMealFromHour } from "@/lib/nutrition/meals";
 
 // Normalisation identique au catalogue (food-lookup) pour que l'aliment soit retrouvable.
 const normalizeFoodName = (name: string): string =>
