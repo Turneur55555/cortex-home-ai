@@ -136,9 +136,9 @@ export function RecipeLogSheet({ date, onClose }: Props) {
                         {Math.round(perS?.calories ?? 0)} kcal
                       </p>
                       <p className="text-[11px] text-muted-foreground">
-                        P{Math.round((perS?.protein ?? 0) * 10) / 10} · G
-                        {Math.round((perS?.carbs ?? 0) * 10) / 10} · L
-                        {Math.round((perS?.fat ?? 0) * 10) / 10}
+                        L{Math.round((perS?.fat ?? 0) * 10) / 10} · G
+                        {Math.round((perS?.carbs ?? 0) * 10) / 10} · P
+                        {Math.round((perS?.protein ?? 0) * 10) / 10}
                       </p>
                     </div>
 

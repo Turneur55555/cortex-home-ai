@@ -23,9 +23,9 @@ type Metric = "kcal" | "proteins" | "carbs" | "fats";
 
 const METRICS: { key: Metric; label: string; color: string; unit: string }[] = [
   { key: "kcal",     label: "Calories", color: "hsl(var(--primary))",    unit: "kcal" },
-  { key: "proteins", label: "Protéines", color: "hsl(142 76% 36%)",      unit: "g" },
-  { key: "carbs",    label: "Glucides",  color: "hsl(38 92% 50%)",       unit: "g" },
   { key: "fats",     label: "Lipides",   color: "hsl(0 84% 60%)",        unit: "g" },
+  { key: "carbs",    label: "Glucides",  color: "hsl(38 92% 50%)",       unit: "g" },
+  { key: "proteins", label: "Protéines", color: "hsl(142 76% 36%)",      unit: "g" },
 ];
 
 interface Props {
@@ -53,7 +53,7 @@ function AvgCard({
         </span>
       </p>
       <p className="mt-1 text-[11px] text-muted-foreground">
-        P{avg.proteins} · G{avg.carbs} · L{avg.fats}
+        L{avg.fats} · G{avg.carbs} · P{avg.proteins}
       </p>
       <p className="mt-0.5 text-[10px] text-muted-foreground">
         {avg.trackedDays} jour{avg.trackedDays > 1 ? "s" : ""} suivi

@@ -370,8 +370,8 @@ export function BarcodeScannerSheet({ onClose }: { onClose: () => void }) {
             {/* Référence 100g */}
             {per100?.calories != null && (
               <p className="text-center text-[10px] text-muted-foreground">
-                Référence : {per100.calories} kcal · {per100.proteins}g prot · {per100.carbs}g gluc
-                · {per100.fats}g lip pour 100 g
+                Référence : {per100.calories} kcal · {per100.fats}g lip · {per100.carbs}g gluc
+                · {per100.proteins}g prot pour 100 g
               </p>
             )}
 
@@ -384,9 +384,9 @@ export function BarcodeScannerSheet({ onClose }: { onClose: () => void }) {
                 <div className="mt-2 grid grid-cols-4 gap-px bg-border">
                   {[
                     { label: "Kcal", val: calc.calories, color: "text-orange-400" },
-                    { label: "Prot", val: calc.proteins, color: "text-blue-400" },
-                    { label: "Gluc", val: calc.carbs, color: "text-emerald-400" },
                     { label: "Lip", val: calc.fats, color: "text-yellow-400" },
+                    { label: "Gluc", val: calc.carbs, color: "text-emerald-400" },
+                    { label: "Prot", val: calc.proteins, color: "text-blue-400" },
                   ].map((m, i) => (
                     <div key={i} className="bg-surface py-3 text-center">
                       <span className={`block text-lg font-black tabular-nums ${m.color}`}>

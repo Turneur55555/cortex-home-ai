@@ -39,9 +39,9 @@ const PILLARS = [
 ];
 
 const MACROS = [
-  { label: "Protéines", value: 92, unit: "%", icon: Beef, color: "text-red-400", bar: "from-red-500 to-orange-400" },
-  { label: "Glucides", value: 78, unit: "%", icon: Wheat, color: "text-amber-400", bar: "from-amber-500 to-yellow-400" },
   { label: "Lipides", value: 65, unit: "%", icon: Flame, color: "text-fuchsia-400", bar: "from-fuchsia-500 to-pink-400" },
+  { label: "Glucides", value: 78, unit: "%", icon: Wheat, color: "text-amber-400", bar: "from-amber-500 to-yellow-400" },
+  { label: "Protéines", value: 92, unit: "%", icon: Beef, color: "text-red-400", bar: "from-red-500 to-orange-400" },
 ];
 
 const MICRONUTRIENTS = [

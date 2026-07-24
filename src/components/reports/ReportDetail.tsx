@@ -381,9 +381,9 @@ function FitnessTab({ report }: { report: WeeklyReport }) {
 function NutritionTab({ report }: { report: WeeklyReport }) {
   const n = report.nutrition_data;
   const macroData = [
-    { name: "Protéines", value: n.avg_proteins ?? 0, color: "#6c63ff" },
-    { name: "Glucides", value: n.avg_carbs ?? 0, color: "#4dafff" },
     { name: "Lipides", value: n.avg_fats ?? 0, color: "#ff6c6c" },
+    { name: "Glucides", value: n.avg_carbs ?? 0, color: "#4dafff" },
+    { name: "Protéines", value: n.avg_proteins ?? 0, color: "#6c63ff" },
   ];
 
   return (
@@ -415,9 +415,9 @@ function NutritionTab({ report }: { report: WeeklyReport }) {
       </div>
 
       <div className="grid grid-cols-3 gap-2">
-        <MacroChip label="Protéines" value={`${n.avg_proteins ?? 0}g`} color="text-violet-400" />
-        <MacroChip label="Glucides" value={`${n.avg_carbs ?? 0}g`} color="text-blue-400" />
         <MacroChip label="Lipides" value={`${n.avg_fats ?? 0}g`} color="text-red-400" />
+        <MacroChip label="Glucides" value={`${n.avg_carbs ?? 0}g`} color="text-blue-400" />
+        <MacroChip label="Protéines" value={`${n.avg_proteins ?? 0}g`} color="text-violet-400" />
       </div>
 
       {n.best_days.length > 0 && (

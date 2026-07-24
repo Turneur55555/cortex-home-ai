@@ -213,7 +213,7 @@ export function GoalsSheet({ current, onClose }: GoalsSheetProps) {
                 <div className="rounded-xl bg-primary/10 px-3 py-2 text-center text-xs">
                   <p className="font-bold text-primary text-sm">{tdeeResult.tdee} kcal/j</p>
                   <p className="text-muted-foreground mt-0.5">
-                    P{tdeeResult.proteins}g · G{tdeeResult.carbs}g · L{tdeeResult.fats}g
+                    L{tdeeResult.fats}g · G{tdeeResult.carbs}g · P{tdeeResult.proteins}g
                   </p>
                 </div>
               )}
@@ -275,11 +275,11 @@ export function GoalsSheet({ current, onClose }: GoalsSheetProps) {
           className="grid grid-cols-3 gap-3 transition-opacity duration-200 animate-fade-in"
         >
           <Field
-            label="Prot. (g)"
+            label="Lip. (g)"
             type="number"
             step="0.1"
-            value={form.proteins}
-            onChange={(v) => onMacroChange("proteins", v)}
+            value={form.fats}
+            onChange={(v) => onMacroChange("fats", v)}
           />
           <Field
             label="Gluc. (g)"
@@ -289,11 +289,11 @@ export function GoalsSheet({ current, onClose }: GoalsSheetProps) {
             onChange={(v) => onMacroChange("carbs", v)}
           />
           <Field
-            label="Lip. (g)"
+            label="Prot. (g)"
             type="number"
             step="0.1"
-            value={form.fats}
-            onChange={(v) => onMacroChange("fats", v)}
+            value={form.proteins}
+            onChange={(v) => onMacroChange("proteins", v)}
           />
         </div>
 

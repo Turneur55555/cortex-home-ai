@@ -352,16 +352,16 @@ export function VoiceLogSheet({ date, onClose }: VoiceLogSheetProps) {
                         />
                       </div>
                       <div className="grid grid-cols-4 gap-1.5">
-                        {(["calories", "proteins", "carbs", "fats"] as const).map((field) => (
+                        {(["calories", "fats", "carbs", "proteins"] as const).map((field) => (
                           <div key={field}>
                             <label className="mb-0.5 block text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
                               {field === "calories"
                                 ? "kcal"
-                                : field === "proteins"
-                                  ? "prot"
+                                : field === "fats"
+                                  ? "lip"
                                   : field === "carbs"
                                     ? "gluc"
-                                    : "lip"}
+                                    : "prot"}
                             </label>
                             <input
                               type="text"
@@ -390,8 +390,8 @@ export function VoiceLogSheet({ date, onClose }: VoiceLogSheetProps) {
                         <p className="truncate text-sm font-medium">{item.name}</p>
                         <p className="text-[11px] text-muted-foreground">
                           {safeGrams(item.grams) != null ? `${formatDecimal(item.grams)} g · ` : ""}
-                          {Math.round(item.calories)} kcal · P{Math.round(item.proteins * 10) / 10}{" "}
-                          G{Math.round(item.carbs * 10) / 10} L{Math.round(item.fats * 10) / 10}
+                          {Math.round(item.calories)} kcal · L{Math.round(item.fats * 10) / 10}{" "}
+                          G{Math.round(item.carbs * 10) / 10} P{Math.round(item.proteins * 10) / 10}
                         </p>
                       </div>
                       <button
@@ -418,9 +418,9 @@ export function VoiceLogSheet({ date, onClose }: VoiceLogSheetProps) {
 
             {/* Totals */}
             <div className="rounded-xl bg-surface px-3 py-2 text-center text-xs">
-              <span className="font-bold text-primary">{Math.round(totals.calories)}</span> kcal · P
-              {Math.round(totals.proteins * 10) / 10} G{Math.round(totals.carbs * 10) / 10} L
-              {Math.round(totals.fats * 10) / 10}
+              <span className="font-bold text-primary">{Math.round(totals.calories)}</span> kcal · L
+              {Math.round(totals.fats * 10) / 10} G{Math.round(totals.carbs * 10) / 10} P
+              {Math.round(totals.proteins * 10) / 10}
             </div>
 
             {/* Meal selector */}
