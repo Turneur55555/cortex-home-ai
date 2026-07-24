@@ -249,7 +249,6 @@ export function SeancesTab({ initialChroniques }: SeancesTabProps = {}) {
       <SessionRewardScreen
         workoutId={finishedSnapshot.id}
         title={finishedSnapshot.name}
-        createdAtISO={finishedSnapshot.created_at}
         onContinue={() => setFinishedSnapshot(null)}
         onViewAnalysis={() => setAnalysisRequested(true)}
       />
@@ -272,7 +271,6 @@ export function SeancesTab({ initialChroniques }: SeancesTabProps = {}) {
       <SessionRewardScreen
         workoutId={finishedGenericSnapshot.id}
         title={finishedGenericSnapshot.name}
-        createdAtISO={finishedGenericSnapshot.created_at}
         onContinue={() => setFinishedGenericSnapshot(null)}
         onViewAnalysis={() => setAnalysisRequested(true)}
       />

@@ -5,16 +5,14 @@
 // agir), organisé en TROIS modules pairs — Les Légendes (maîtrise par
 // groupe musculaire), La Forge (bibliothèque d'exercices, "pas un
 // créateur de séance"), Progression (tout ce qui raconte l'évolution :
-// records, tendances, trophées, chronologie). Aucune quatrième
-// destination. Chaque information vit à UN seul endroit (voir
-// docs/architecture/rpg-chroniques.md).
+// records, tendances, chronologie). Aucune quatrième destination. Chaque
+// information vit à UN seul endroit (voir docs/architecture/rpg-chroniques.md).
 //
 // Remplace l'ancien « Livre des Chroniques » (page unique, défilement de
 // 9 sections empilées sans hiérarchie) : même contenu, migré intégralement
-// dans les trois modules ci-dessus, plus la Salle des trophées unifiée
-// (TrophyRoom) désormais intégrée directement ici. Navigation par
-// sélecteur segmenté (un tap, contenu échangé en place) au lieu d'un long
-// scroll — le pouce reste toujours à portée du sélecteur.
+// dans les trois modules ci-dessus. Navigation par sélecteur segmenté (un
+// tap, contenu échangé en place) au lieu d'un long scroll — le pouce reste
+// toujours à portée du sélecteur.
 //
 // Vraie page plein écran (early-return dans SeancesTab, même système
 // qu'ActiveWorkoutView) : aucun modal, aucun drawer pour la navigation
@@ -59,7 +57,7 @@ const MODULES: Array<{
     key: "progression",
     label: "Progression",
     icon: <TrendingUp className="h-3.5 w-3.5" />,
-    mission: "Tes preuves : records, tendances, trophées, chronologie.",
+    mission: "Tes preuves : records, tendances, chronologie.",
   },
 ];
 
@@ -82,8 +80,8 @@ export function ChroniquesPage({
   onOpenCatalog,
   onBack,
 }: {
-  /** Module à ouvrir directement (deep-link depuis `/trophees` ou
-   *  `/progression`, désormais redirigées vers ce domicile unique). */
+  /** Module à ouvrir directement (deep-link depuis `/progression`,
+   *  désormais redirigée vers ce domicile unique). */
   initialModule?: ModuleKey;
   workouts: WorkoutRow[];
   prByName: Map<string, number>;
@@ -170,7 +168,7 @@ export function ChroniquesPage({
           on échange le contenu en place. Les drill-down (fiche de groupe,
           Chronique de séance) restent, eux, de vraies pages plein écran. */}
       <ProfileRPGData>
-        {({ rankAggregate, achievements, legacyBadges, workouts: classWorkouts }) => (
+        {({ rankAggregate, workouts: classWorkouts }) => (
           <AnimatePresence mode="wait">
             <motion.div
               key={active}
@@ -205,8 +203,6 @@ export function ChroniquesPage({
                   topExercises={topExercises}
                   imageUrls={imageUrls}
                   latestDate={latestDate}
-                  achievements={achievements}
-                  legacyBadges={legacyBadges}
                   onRepeatLive={onRepeatLive}
                   onOpenFromTemplate={onOpenFromTemplate}
                   onSaveAsTemplate={onSaveAsTemplate}

@@ -42,7 +42,6 @@ export function useProfile(fallback: string) {
 - `profile.ts` — user profile
 
 Hooks that still call `supabase` directly (to migrate when touched):
-`use-fitness`, `use-pantry`, `use-stocks`, `useGoals`, `useStreak`,
-`useUserActivity`, `useUserBadges`, `useUserStats`, `useUserPreferences`,
-`useBadgeSystem`, `useFoodSearch`,
+`use-fitness`, `use-pantry`, `use-stocks`, `useStreak`,
+`useUserActivity`, `useUserStats`, `useUserPreferences`, `useFoodSearch`,
 `useRecoveryMap`, `use-documents`, `use-user-pdfs`.

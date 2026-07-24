@@ -1,10 +1,9 @@
 // ============================================================
 // Résolveur icône/couleur pour les modèles de séance — même principe que
 // src/components/fitness/session/DisciplineIcon.tsx (table de noms → icône
-// Lucide, résolue uniquement ici). Palette de couleurs curée (comme
-// RARITY_COLORS dans lib/fitness/badges.ts) plutôt qu'un sélecteur de
-// couleur libre, pour rester cohérent avec les modèles déjà utilisés dans
-// l'app pour ce genre de personnalisation.
+// Lucide, résolue uniquement ici). Palette de couleurs curée plutôt qu'un
+// sélecteur de couleur libre, pour rester cohérent avec les modèles déjà
+// utilisés dans l'app pour ce genre de personnalisation.
 // ============================================================
 
 import {

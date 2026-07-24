@@ -7,9 +7,8 @@
 // RPC générique `award_reward_event` et à documenter les sources connues.
 //
 // Philosophie (validée par Nathan, P1.7) : l'XP ne représente QUE la
-// progression réelle d'entraînement. Badges/Achievements/Goals sont des
-// couches de prestige/collection/suivi personnel — ils ne versent plus
-// d'XP. Cinq familles seulement composent l'économie XP.
+// progression réelle d'entraînement. Trois familles seulement composent
+// l'économie XP.
 // ============================================================
 
 export const REWARD_SOURCES = {
@@ -31,8 +30,4 @@ export type RewardSourceKey = (typeof REWARD_SOURCES)[keyof typeof REWARD_SOURCE
  *  - `exercise_rank_up_<titre>` (mortel/guerrier/heros/titan/olympien/primordial) :
  *    déclenché automatiquement à la clôture de séance
  *    (`useVerifyExerciseRanksForSession`), jamais par une action manuelle.
- *
- * Badges (`unlock_user_badge`), Achievements (`claim_achievement`) et Goals
- * (`award_goal_xp`) ne versent plus d'XP (prestige/collection/suivi
- * personnel uniquement) — ne plus les référencer comme sources XP.
  */

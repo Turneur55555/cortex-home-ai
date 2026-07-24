@@ -32,7 +32,6 @@ describe("buildSenseiBriefing", () => {
         { date: "2026-07-02", discipline: "guided" },
       ],
       bestPR: null,
-      goals: [],
       recoveryMap: new Map(),
     });
     expect(briefing.recentDisciplines).toEqual([
@@ -46,28 +45,9 @@ describe("buildSenseiBriefing", () => {
     const briefing = buildSenseiBriefing({
       workouts: [{ date: "2026-07-07" }],
       bestPR: null,
-      goals: [],
       recoveryMap: new Map(),
     });
     expect(briefing.recentDisciplines).toEqual([{ discipline: "muscu", lastDate: "2026-07-07" }]);
-  });
-
-  it("ne garde que les objectifs actifs (non complétés), triés par progression décroissante, max 2", () => {
-    const briefing = buildSenseiBriefing({
-      workouts: [],
-      bestPR: null,
-      goals: [
-        { title: "Objectif A", progress: 40, is_completed: false },
-        { title: "Objectif B (fait)", progress: 100, is_completed: true },
-        { title: "Objectif C", progress: 90, is_completed: false },
-        { title: "Objectif D", progress: 10, is_completed: false },
-      ],
-      recoveryMap: new Map(),
-    });
-    expect(briefing.activeGoals).toEqual([
-      { title: "Objectif C", progress: 90 },
-      { title: "Objectif A", progress: 40 },
-    ]);
   });
 
   it("résume la récupération musculaire sans jamais l'inventer pour d'autres disciplines", () => {
@@ -79,7 +59,6 @@ describe("buildSenseiBriefing", () => {
     const briefing = buildSenseiBriefing({
       workouts: [],
       bestPR: null,
-      goals: [],
       recoveryMap: map,
     });
     expect(briefing.recovery.readyCount).toBe(1);
@@ -91,7 +70,6 @@ describe("buildSenseiBriefing", () => {
     const briefing = buildSenseiBriefing({
       workouts: [],
       bestPR: { name: "Développé couché", weight: 100 },
-      goals: [],
       recoveryMap: new Map(),
     });
     expect(briefing.bestPR).toEqual({ name: "Développé couché", weight: 100 });

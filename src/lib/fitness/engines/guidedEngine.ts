@@ -37,14 +37,11 @@
 // connecteur, non implémenté).
 //
 // feedsRankEngine=false : contenu 100% dans workouts.metadata. XP/
-// streak/quêtes ("séances cette semaine") et achievements génériques
-// (ex: recovery_weekly_target) fonctionnent déjà pour ce moteur SANS
-// AUCUN CODE SUPPLÉMENTAIRE, car `compute_fitness_stats` (SQL, source
-// de useUserStats/useActivityStreak/useGoalsWithProgress) compte la
-// table `workouts` sans filtrer sur `discipline` — vérifié dans le
-// code serveur avant d'écrire ce moteur, pas supposé. Une catégorie de
-// succès DÉDIÉE ("guided", definitions/guided.ts) a été ajoutée cette
-// phase pour un déblocage explicite propre à cette famille.
+// streak fonctionnent déjà pour ce moteur SANS AUCUN CODE
+// SUPPLÉMENTAIRE, car `compute_fitness_stats` (SQL, source de
+// useUserStats/useActivityStreak) compte la table `workouts` sans
+// filtrer sur `discipline` — vérifié dans le code serveur avant
+// d'écrire ce moteur, pas supposé.
 //
 // cardVariant: "guided-session" — valeur posée dès la Phase 1 dans
 // HistoryPresentation mais jamais consommée avant ce moteur.
