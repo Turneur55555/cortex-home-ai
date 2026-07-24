@@ -1,40 +1,13 @@
 import { motion } from "framer-motion";
-import {
-  Activity,
-  ArrowUp,
-  Dumbbell,
-  Flame,
-  Medal,
-  Sparkles,
-  Target,
-  Trophy,
-  type LucideIcon,
-} from "lucide-react";
+import { ArrowUp, Trophy } from "lucide-react";
+import { getRewardTrophy } from "@/assets/rewards";
 import { AnimatedNumber } from "@/components/fitness/AnimatedNumber";
 import { MasteryBar } from "@/components/fitness/MasteryBar";
 import { Confetti } from "@/components/fitness/session/WorkoutCelebration";
+import { rankGlowShadow, rankTextGlow, rankThemeByKey } from "@/components/rpg/rankTheme";
 import { useSessionReward } from "@/hooks/useSessionReward";
 import { buildTitleTransition } from "@/lib/fitness/rpg/sessionReward";
 import { nextGradeLabel } from "@/lib/fitness/rpg/titleProgress";
-
-// Palette "trésor" dédiée à l'XP — le Niveau est la colonne vertébrale, la
-// récompense se lit en or/ambre (distinct des couleurs de rang mythologique).
-const XP_COLORS = {
-  gradient: "linear-gradient(90deg,#b45309 0%,#f59e0b 55%,#fcd34d 100%)",
-  primary: "#f59e0b",
-  secondary: "#fcd34d",
-  glow: "rgba(245,158,11,0.55)",
-};
-
-const ICONS: Record<string, LucideIcon> = {
-  Dumbbell,
-  Trophy,
-  Flame,
-  Activity,
-  Medal,
-  Target,
-  Sparkles,
-};
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
@@ -51,20 +24,20 @@ function Section({ delay, children }: { delay: number; children: React.ReactNode
 }
 
 /**
- * Écran de récompense de fin de séance — UN SEUL écran premium qui récapitule
- * la progression RPG obtenue pendant la séance (XP gagnée + détail des
- * sources, montée de niveau, record). Pas de succession de pop-ups : le
- * bilan IA détaillé devient opt-in via « Voir le bilan ».
+ * Écran de récompense de fin de séance — UN SEUL écran premium, épuré comme
+ * une récompense de RPG : l'illustration du rang, l'XP gagnée, la
+ * progression vers le prochain grade. Le détail des sources d'XP reste
+ * calculé (voir `useSessionReward`) mais n'est plus affiché ici — il
+ * rejoindra une page d'historique dédiée.
  *
  * Lecture seule : toutes les valeurs viennent du serveur (xp_events /
- * user_stats via useSessionReward). Règle « donnée absente → section
- * masquée, jamais inventée ».
+ * user_stats via useSessionReward). Toutes les couleurs dynamiques
+ * (halo, +XP, barre de progression) suivent le `RankTheme` du rang courant —
+ * aucune palette propre à cet écran.
  */
 export function SessionRewardScreen({
   workoutId,
-  title,
   onContinue,
-  onViewAnalysis,
 }: {
   workoutId: string;
   title: string;
@@ -73,8 +46,10 @@ export function SessionRewardScreen({
 }) {
   const { totalXp, breakdown, level, hasXp } = useSessionReward(workoutId);
   const titleTransition = buildTitleTransition(level.xpBefore, level.xpAfter);
-
   const hasPr = breakdown.some((b) => b.source === "pr_muscu");
+  const rankKey = titleTransition.after.title.key;
+  const theme = rankThemeByKey(rankKey);
+  const trophySrc = getRewardTrophy(rankKey);
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-black/80 px-4 py-8 backdrop-blur-sm">
@@ -84,24 +59,33 @@ export function SessionRewardScreen({
         initial={{ opacity: 0, y: 24, scale: 0.98 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         transition={{ duration: 0.45, ease: EASE }}
-        className="relative w-full max-w-sm overflow-hidden rounded-[28px] border border-white/10 bg-gradient-to-b from-[#161311] to-[#0b0a09] p-6 shadow-[0_-20px_80px_-24px_rgba(245,158,11,0.35)]"
+        className="relative w-full max-w-sm overflow-hidden rounded-[28px] border border-white/10 bg-gradient-to-b from-[#161311] to-[#0b0a09] p-6"
+        style={{ boxShadow: rankGlowShadow(theme.glow, -20, 80, -24) }}
       >
         {/* Halo d'ambiance */}
         <div
           aria-hidden
           className="pointer-events-none absolute inset-x-0 top-0 h-40"
           style={{
-            background:
-              "radial-gradient(120% 100% at 50% 0%, rgba(245,158,11,0.20) 0%, transparent 70%)",
+            background: `radial-gradient(120% 100% at 50% 0%, ${theme.glow} 0%, transparent 70%)`,
           }}
         />
 
-        {/* Hero */}
+        {/* Hero — illustration du rang */}
         <Section delay={0.05}>
           <div className="relative text-center">
-            <div className="text-5xl">🏆</div>
+            {trophySrc ? (
+              <img
+                src={trophySrc}
+                alt={`Récompense — ${titleTransition.after.title.label}`}
+                loading="eager"
+                decoding="async"
+                className="mx-auto h-60 w-60 object-contain"
+              />
+            ) : (
+              <div className="text-5xl">🏆</div>
+            )}
             <h2 className="mt-2 text-lg font-bold tracking-tight text-white">Séance terminée !</h2>
-            <p className="truncate text-xs text-white/50">{title}</p>
           </div>
         </Section>
 
@@ -111,7 +95,7 @@ export function SessionRewardScreen({
             <div className="mt-4 text-center">
               <div
                 className="text-[44px] font-black leading-none tracking-tight"
-                style={{ color: XP_COLORS.secondary, textShadow: `0 0 26px ${XP_COLORS.glow}` }}
+                style={{ color: theme.secondary, textShadow: rankTextGlow(theme.glow, 26) }}
               >
                 +<AnimatedNumber value={totalXp} /> XP
               </div>
@@ -122,29 +106,26 @@ export function SessionRewardScreen({
           </Section>
         )}
 
-        {/* Titre / Grade — progression principale */}
+        {/* Progression vers le prochain grade */}
         <Section delay={0.28}>
           <div className="mt-5 rounded-2xl border border-white/8 bg-white/[0.03] p-4">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-xs font-bold text-white/80">
-                {titleTransition.after.title.label} — {titleTransition.after.grade}
-              </span>
-              {titleTransition.gradeUp && (
+            {titleTransition.gradeUp && (
+              <div className="mb-2 flex justify-end">
                 <motion.span
                   initial={{ scale: 0.6, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
                   transition={{ delay: 0.7, type: "spring", stiffness: 320, damping: 14 }}
                   className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-black text-black"
                   style={{
-                    background: XP_COLORS.secondary,
-                    boxShadow: `0 0 18px ${XP_COLORS.glow}`,
+                    background: theme.secondary,
+                    boxShadow: rankGlowShadow(theme.glow, 0, 18, 0),
                   }}
                 >
                   <ArrowUp className="h-3 w-3" />
                   NOUVEAU GRADE
                 </motion.span>
-              )}
-            </div>
+              </div>
+            )}
             <MasteryBar
               percent={
                 titleTransition.after.isMax
@@ -158,7 +139,7 @@ export function SessionRewardScreen({
                       )) *
                     100
               }
-              colors={XP_COLORS}
+              colors={theme}
               segments={5}
               height={10}
               showLabel={false}
@@ -173,42 +154,6 @@ export function SessionRewardScreen({
           </div>
         </Section>
 
-        {/* Détail des sources d'XP */}
-        {breakdown.length > 0 && (
-          <Section delay={0.4}>
-            <div className="mt-3 space-y-1.5">
-              {breakdown.map((line, i) => {
-                const Icon = ICONS[line.icon] ?? Sparkles;
-                return (
-                  <motion.div
-                    key={line.source}
-                    initial={{ opacity: 0, x: -8 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.45 + i * 0.07, duration: 0.35, ease: EASE }}
-                    className="flex items-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2 ring-1 ring-white/[0.04]"
-                  >
-                    <span
-                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
-                      style={{ background: "rgba(245,158,11,0.14)", color: XP_COLORS.secondary }}
-                    >
-                      <Icon className="h-3.5 w-3.5" />
-                    </span>
-                    <span className="min-w-0 flex-1 truncate text-xs text-white/75">
-                      {line.label}
-                    </span>
-                    <span
-                      className="shrink-0 text-xs font-bold"
-                      style={{ color: XP_COLORS.secondary }}
-                    >
-                      +{line.amount}
-                    </span>
-                  </motion.div>
-                );
-              })}
-            </div>
-          </Section>
-        )}
-
         {/* Record personnel */}
         {hasPr && (
           <Section delay={0.55}>
@@ -221,22 +166,15 @@ export function SessionRewardScreen({
           </Section>
         )}
 
-        {/* CTAs */}
+        {/* CTA */}
         <Section delay={0.72}>
-          <div className="mt-6 flex flex-col gap-2">
+          <div className="mt-6">
             <button
               type="button"
               onClick={onContinue}
               className="w-full rounded-xl bg-gradient-primary py-3 text-sm font-semibold text-primary-foreground shadow-glow"
             >
               Continuer
-            </button>
-            <button
-              type="button"
-              onClick={onViewAnalysis}
-              className="w-full rounded-xl border border-white/10 py-2.5 text-xs font-medium text-white/60 transition-colors hover:text-white"
-            >
-              Voir le bilan détaillé
             </button>
           </div>
         </Section>
