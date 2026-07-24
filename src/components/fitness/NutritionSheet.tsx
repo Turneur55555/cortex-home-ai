@@ -17,6 +17,7 @@ import {
   calculateNutritionFromGrams,
   per100FromFood,
 } from "@/lib/nutrition/weight";
+import { calculateCaloriesFromMacros } from "@/lib/nutrition/macros";
 
 import { MEAL_OPTIONS, type MealSlug } from "@/lib/nutrition/meals";
 
@@ -122,6 +123,23 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
       carbs: calc.carbs != null ? formatDecimal(calc.carbs) : "",
       fats: calc.fats != null ? formatDecimal(calc.fats) : "",
     }));
+  }, []);
+
+  // Met à jour un champ macro et recalcule les calories automatiquement dès
+  // que protéines/glucides/lipides sont tous les trois renseignés (formule
+  // Atwater, seule source de vérité : calculateCaloriesFromMacros). Ne calcule
+  // jamais si un champ est vide ou invalide — jamais de NaN affiché.
+  const updateMacroField = useCallback((field: "proteins" | "carbs" | "fats", value: string) => {
+    setForm((f) => {
+      const next = { ...f, [field]: value };
+      const p = parseDecimal(next.proteins);
+      const c = parseDecimal(next.carbs);
+      const fat = parseDecimal(next.fats);
+      if (p != null && p >= 0 && c != null && c >= 0 && fat != null && fat >= 0) {
+        next.calories = String(calculateCaloriesFromMacros(p, c, fat));
+      }
+      return next;
+    });
   }, []);
 
   const selectBaseFood = useCallback(
@@ -282,22 +300,22 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
         />
         <div className="grid grid-cols-3 gap-3">
           <Field
-            label="Prot. (g)"
+            label="Lip. (g)"
             type="text"
-            value={form.proteins}
-            onChange={(v) => setForm({ ...form, proteins: v })}
+            value={form.fats}
+            onChange={(v) => updateMacroField("fats", v)}
           />
           <Field
             label="Gluc. (g)"
             type="text"
             value={form.carbs}
-            onChange={(v) => setForm({ ...form, carbs: v })}
+            onChange={(v) => updateMacroField("carbs", v)}
           />
           <Field
-            label="Lip. (g)"
+            label="Prot. (g)"
             type="text"
-            value={form.fats}
-            onChange={(v) => setForm({ ...form, fats: v })}
+            value={form.proteins}
+            onChange={(v) => updateMacroField("proteins", v)}
           />
         </div>
         <div className="flex gap-2">

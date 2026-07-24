@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeMacros, type ProductNutriments } from "./macros";
+import { computeMacros, calculateCaloriesFromMacros, type ProductNutriments } from "./macros";
 
 describe("computeMacros", () => {
   const standard: ProductNutriments = {
@@ -107,5 +107,20 @@ describe("computeMacros", () => {
     const result = computeMacros(rich, 30);
     expect(result.calories).toBe(270);
     expect(result.fats).toBe(30);
+  });
+});
+
+describe("calculateCaloriesFromMacros", () => {
+  it("applique la formule Atwater (4/4/9)", () => {
+    // 25*4 + 30*4 + 10*9 = 100 + 120 + 90 = 310
+    expect(calculateCaloriesFromMacros(25, 30, 10)).toBe(310);
+  });
+
+  it("retourne 0 quand les trois macros sont à 0", () => {
+    expect(calculateCaloriesFromMacros(0, 0, 0)).toBe(0);
+  });
+
+  it("arrondit le résultat à l'entier le plus proche", () => {
+    expect(calculateCaloriesFromMacros(1.25, 0, 0)).toBe(5);
   });
 });
