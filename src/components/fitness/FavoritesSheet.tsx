@@ -145,9 +145,9 @@ export function FavoritesSheet({ date, onClose }: { date: string; onClose: () =>
                   </div>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {Math.round(scale(picked.calories, g) ?? 0)} kcal · P
-                  {scale(picked.proteins, g) ?? 0} G{scale(picked.carbs, g) ?? 0} L
-                  {scale(picked.fats, g) ?? 0}
+                  {Math.round(scale(picked.calories, g) ?? 0)} kcal · L
+                  {scale(picked.fats, g) ?? 0} G{scale(picked.carbs, g) ?? 0} P
+                  {scale(picked.proteins, g) ?? 0}
                 </p>
                 <button
                   type="button"
@@ -186,8 +186,8 @@ export function FavoritesSheet({ date, onClose }: { date: string; onClose: () =>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{fav.name}</p>
                   <p className="text-xs text-muted-foreground">
-                    {fav.calories ?? 0} kcal · P{fav.proteins ?? 0} G{fav.carbs ?? 0} L
-                    {fav.fats ?? 0}
+                    {fav.calories ?? 0} kcal · L{fav.fats ?? 0} G{fav.carbs ?? 0} P
+                    {fav.proteins ?? 0}
                   </p>
                 </div>
                 <button

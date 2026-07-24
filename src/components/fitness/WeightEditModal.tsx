@@ -118,9 +118,9 @@ export function WeightEditModal({ item, date, onClose }: WeightEditModalProps) {
           <div className="grid grid-cols-4 gap-2 text-center">
             {[
               { label: "kcal", val: preview.calories, color: "text-primary" },
-              { label: "Prot.", val: preview.proteins, color: "text-accent" },
-              { label: "Gluc.", val: preview.carbs, color: "text-warning" },
               { label: "Lip.", val: preview.fats, color: "text-destructive" },
+              { label: "Gluc.", val: preview.carbs, color: "text-warning" },
+              { label: "Prot.", val: preview.proteins, color: "text-accent" },
             ].map((m) => (
               <div key={m.label}>
                 <p className={`text-lg font-bold tabular-nums ${m.color}`}>{m.val ?? 0}</p>

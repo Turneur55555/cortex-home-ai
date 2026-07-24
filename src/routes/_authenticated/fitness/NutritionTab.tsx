@@ -436,13 +436,13 @@ export function NutritionTab() {
       {/* ─── Macros — 3 cartes ─────────────────────────────────────────── */}
       <div className="grid grid-cols-3 gap-2.5">
         <MacroCard
-          icon={Drumstick}
-          iconColor="text-emerald-400"
-          iconBg="bg-emerald-500/10"
-          barColor="bg-emerald-400"
-          label="Protéines"
-          value={totals.proteins}
-          target={goals?.proteins}
+          icon={Droplet}
+          iconColor="text-rose-400"
+          iconBg="bg-rose-500/10"
+          barColor="bg-rose-400"
+          label="Lipides"
+          value={totals.fats}
+          target={goals?.fats}
         />
         <MacroCard
           icon={Wheat}
@@ -454,13 +454,13 @@ export function NutritionTab() {
           target={goals?.carbs}
         />
         <MacroCard
-          icon={Droplet}
-          iconColor="text-rose-400"
-          iconBg="bg-rose-500/10"
-          barColor="bg-rose-400"
-          label="Lipides"
-          value={totals.fats}
-          target={goals?.fats}
+          icon={Drumstick}
+          iconColor="text-emerald-400"
+          iconBg="bg-emerald-500/10"
+          barColor="bg-emerald-400"
+          label="Protéines"
+          value={totals.proteins}
+          target={goals?.proteins}
         />
       </div>
 
@@ -549,9 +549,9 @@ export function NutritionTab() {
                     </div>
                     <div className="flex shrink-0 items-center gap-2.5">
                       <div className="grid grid-cols-3 gap-2">
-                        <MacroChip color="text-emerald-400" label="P" value={gTotals.proteins} />
-                        <MacroChip color="text-amber-400" label="G" value={gTotals.carbs} />
                         <MacroChip color="text-rose-400" label="L" value={gTotals.fats} />
+                        <MacroChip color="text-amber-400" label="G" value={gTotals.carbs} />
+                        <MacroChip color="text-emerald-400" label="P" value={gTotals.proteins} />
                       </div>
                       <div className="text-right">
                         <p className="text-sm font-bold leading-none">
@@ -639,8 +639,8 @@ export function NutritionTab() {
                                         )}
                                       </div>
                                       <p className="mt-0.5 text-xs text-muted-foreground">
-                                        {m.calories ?? 0} kcal · P{m.proteins ?? 0} G{m.carbs ?? 0}{" "}
-                                        L{m.fats ?? 0}
+                                        {m.calories ?? 0} kcal · L{m.fats ?? 0} G{m.carbs ?? 0}{" "}
+                                        P{m.proteins ?? 0}
                                       </p>
                                     </div>
                                     <motion.button

@@ -165,8 +165,8 @@ function SuggestionRow({
         <p className="truncate text-sm font-medium">{food.name}</p>
         <p className="truncate text-[10px] text-muted-foreground">
           {food.brand ? `${food.brand} · ` : ""}
-          {food.calories ?? "?"} kcal · P{food.proteins ?? "?"} G{food.carbs ?? "?"} L
-          {food.fats ?? "?"} /100g
+          {food.calories ?? "?"} kcal · L{food.fats ?? "?"} G{food.carbs ?? "?"} P
+          {food.proteins ?? "?"} /100g
           {food.default_serving ? ` \u00b7 ${food.default_serving.label} (${food.default_serving.grams} g)` : ""}
         </p>
       </div>

@@ -331,10 +331,10 @@ export function SavedMealsSheet({
                     </button>
                   </div>
                   <p className="mt-1 text-[11px] text-muted-foreground">
-                    {Math.round(scale(it.per100.calories, it.grams) ?? 0)} kcal · P
-                    {scale(it.per100.proteins, it.grams) ?? 0} G
-                    {scale(it.per100.carbs, it.grams) ?? 0} L
-                    {scale(it.per100.fats, it.grams) ?? 0}
+                    {Math.round(scale(it.per100.calories, it.grams) ?? 0)} kcal · L
+                    {scale(it.per100.fats, it.grams) ?? 0} G
+                    {scale(it.per100.carbs, it.grams) ?? 0} P
+                    {scale(it.per100.proteins, it.grams) ?? 0}
                   </p>
                 </li>
               ))}
@@ -345,8 +345,8 @@ export function SavedMealsSheet({
             <span className="font-bold text-primary">
               {Math.round(totals.calories)}
             </span>{" "}
-            kcal · P{Math.round(totals.proteins)} G{Math.round(totals.carbs)} L
-            {Math.round(totals.fats)}
+            kcal · L{Math.round(totals.fats)} G{Math.round(totals.carbs)} P
+            {Math.round(totals.proteins)}
           </div>
 
           <SubmitButton pending={create.isPending}>
