@@ -302,6 +302,10 @@ export function ExerciseAnalysisSheet({
             {sessionCount > 0 ? "Fiche d'analyse intelligente" : "Découverte de l'exercice"}
           </p>
 
+          {sessionCount > 0 ? (
+            <>
+
+
           {/* Résumé intelligent + pertinence */}
           {analysis && (
             <div className="rounded-2xl border border-primary/20 bg-primary/[0.06] p-4">
