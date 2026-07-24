@@ -876,3 +876,32 @@ Rapport : `AUDIT_NUTRITION.md` (dossier Drive). Note avant : 64/100.
   - `.github/workflows/meal-slugs-check.yml` (nouveau) + step ajouté à `.husky/pre-commit`.
   - Bug CI trouvé et corrigé : `parse-meal-text` était absent de la liste `supabase functions deploy` dans `.github/workflows/deploy-functions.yml` (la saisie vocale n'était donc jamais redéployée automatiquement). D'autres fonctions (analyze-exercise, analyze-workout, food-lookup, nutrition-analysis, scan-exercise…) sont dans le même cas mais hors périmètre de cette session.
 - Déployées en prod via MCP (hors CI, ce jour) : `scan-meal` v15, `parse-meal-text` v2, `analyze-image` v11, `analyze-pdf` v13.
+
+## Types Supabase — régression `types.ts` + auto-heal CI (2026-07-23, session Claude Cowork, PR #15)
+- **Faux diagnostic initial** : Lovable a signalé `deposit_document_analysis` "jamais déployée" et
+  `NutritionSheet.tsx` utilisant les mauvais noms de colonnes. **Les deux étaient faux** : la
+  migration `20260723160000_document_deposit_pipeline.sql` était bien appliquée (migrate.yml
+  #30023657621, succès, vérifié en direct via MCP Supabase : `deposit_document_analysis` existe,
+  `foods.normalized_name`/`protein_g`/`carbs_g`/`fat_g` et `documents.extracted_items` existent) et
+  `NutritionSheet.tsx` était déjà correct. Parité migrations confirmée 173/173 (`supabase/migrations/`
+  ↔ `list_migrations`), aucune migration manquante.
+- **Cause racine réelle** : commit `238a9db` (23/07 21:10 UTC, auteur `gpt-engineer-app[bot]` =
+  bot Lovable, poussé **directement sur `main` sans PR**) a écrasé `types.ts` (3766→1627 lignes)
+  avec une version antérieure à ~40 migrations — sandbox Lovable avec un checkout obsolète du repo.
+  `supabase-types.yml` a bien détecté la dérive le jour même (run 21:11 UTC) mais l'échec, purement
+  informatif, n'a été vu/corrigé par personne : 5 commits Lovable suivants ont continué par-dessus
+  le fichier cassé.
+- **Fix PR #15** : régénération `types.ts` depuis la base (78 tables, `check-supabase-types.mjs`
+  conforme) + `use-documents.ts` — cast `p_modules: depositPayload as unknown as Json` (démasqué
+  uniquement par la régénération, car le nom du RPC n'était pas reconnu avant donc son 2e argument
+  n'était jamais type-checké). `npm run typecheck` : 0 erreur.
+- **Hardening CI (même PR)** : `supabase-types.yml` scindé en 2 jobs — `check-pr` (PR vers `main`,
+  bloquant, aucun commit auto) et `fix-push` (push direct `main`, auto-régénère + committe
+  `ci: auto-corrige la dérive types.ts…`, même logique que l'auto-commit d'idempotence déjà présent
+  dans `migrate.yml`). `migrate.yml` étape 4b alignée pareil (auto-commit post-migration au lieu de
+  simple échec). Doc mise à jour : `docs/architecture/supabase-types-source-of-truth.md` (4ème
+  incident + nouveau tableau des garde-fous).
+- **Limite structurelle non résolue par la CI** : Lovable pousse directement sur `main`, hors PR —
+  aucun outil MCP disponible en session pour poser une branch protection GitHub (bloquerait de
+  toute façon ce mode de push direct de Lovable, à valider avec l'utilisateur avant d'y toucher).
+  L'auto-heal `fix-push` referme la fenêtre de risque sans ce changement de workflow.

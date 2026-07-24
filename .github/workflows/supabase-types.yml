@@ -1,25 +1,61 @@
 name: Supabase Types Sync
 
 # La BASE DE DONNÉES est la source de vérité unique des types.
-# Ce workflow régénère les types officiels depuis la base (supabase gen types)
-# et ÉCHOUE si `src/integrations/supabase/types.ts` committé ne correspond plus
-# (table/colonne manquante ou en trop). Aucune correction automatique, aucun
-# commit : une erreur visible et explicite, jamais une réparation silencieuse.
-#
-# Objectif : rendre IMPOSSIBLE une régression silencieuse des types (ex. une
-# régénération Lovable qui efface des tables). Voir
+# Ce workflow compare `src/integrations/supabase/types.ts` committé aux types
+# générés depuis la base (`supabase gen types`). Voir
 # docs/architecture/supabase-types-source-of-truth.md
+#
+# Deux comportements selon le déclencheur (même logique que migrate.yml pour
+# les corrections d'idempotence des migrations) :
+#
+#   - pull_request → BLOQUANT, aucune correction automatique. Une dérive fait
+#     échouer le check ; c'est à l'auteur de la PR de lancer `npm run
+#     gen:types` et de committer. Empêche qu'une PR merge un types.ts obsolète
+#     (Claude Code, contributeurs humains).
+#
+#   - push sur main → AUTO-CORRECTION, sous 4 conditions strictes (job
+#     fix-push, revue de sécurité du 23/07/2026 — voir plus bas). Régénère
+#     types.ts depuis la base et committe directement (`ci: auto-corrige la
+#     dérive types.ts [skip ci]`), comme le fait déjà migrate.yml pour les
+#     migrations non-idempotentes. Nécessaire car certains outils (Lovable /
+#     gpt-engineer-app[bot]) poussent directement sur main sans passer par une
+#     PR : un check seulement bloquant serait invisible et laisserait la
+#     dérive en place indéfiniment (cause exacte de la régression du
+#     23/07/2026, commit 238a9db — un types.ts vieux de ~40 migrations poussé
+#     directement sur main par gpt-engineer-app[bot], jamais corrigé faute
+#     d'action sur l'échec CI).
 #
 # Cas des PR ajoutant une migration : la nouvelle table n'existe pas encore en
 # base tant que la migration n'est pas appliquée (au merge, par migrate.yml).
-# On ne lance donc PAS ce check sur les PR (le garde-fou tsc de typecheck.yml
-# les couvre) ; la conformité base⇄types est vérifiée sur main, APRÈS
-# application des migrations (étape finale de migrate.yml), et ici pour les
-# pushs main qui ne touchent que types.ts (typiquement les régénérations
-# Lovable poussées directement).
+# On déduit donc ce cas (voir étape "Déléguer à migrate.yml") ; la conformité
+# base⇄types est vérifiée sur main, APRÈS application des migrations (étape
+# finale de migrate.yml).
+#
+# ── Garanties de sécurité de l'auto-heal (fix-push) ────────────────────────
+# L'auto-commit ne doit JAMAIS masquer une erreur de fond. Il n'intervient que
+# dans UN SEUL cas : types.ts est le seul fichier en dérive, la base est
+# joignable et à jour, et le reste du code reste cohérent une fois types.ts
+# régénéré. Concrètement, le job ÉCHOUE (et ne committe rien) si :
+#   1. `supabase gen types` échoue (CLI en erreur, quel qu'en soit le motif) ;
+#   2. la base est injoignable (auth/réseau) — même mécanisme que 1 : la
+#      commande échoue, le step échoue, aucun step suivant ne s'exécute ; on
+#      valide aussi explicitement le contenu généré en défense en profondeur ;
+#   3. une migration existe dans `supabase/migrations/` mais n'est PAS
+#      appliquée à la base distante (`supabase migration list` le révèle) —
+#      régénérer dans ce cas masquerait un vrai retard de déploiement sous
+#      un faux "fix" de types.ts ;
+#   4. régénérer types.ts casse `tsc` ailleurs dans le code — signe que la
+#      correction réelle touche plus qu'un fichier généré, donc hors
+#      périmètre de l'auto-heal.
+# Le commit auto, quand il a lieu, ne stage jamais que
+# `src/integrations/supabase/types.ts` (vérifié explicitement avant commit).
 
 on:
   push:
+    branches: [main]
+    paths:
+      - "src/integrations/supabase/types.ts"
+  pull_request:
     branches: [main]
     paths:
       - "src/integrations/supabase/types.ts"
@@ -29,8 +65,10 @@ permissions:
   contents: read
 
 jobs:
-  check:
-    name: types.ts conforme à la base
+  # ─── PR : bloquant, jamais de commit ────────────────────────────────────
+  check-pr:
+    name: types.ts conforme à la base (PR)
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -40,14 +78,60 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Si ce push modifie AUSSI des migrations, c'est migrate.yml qui vérifie
-      # la conformité APRÈS les avoir appliquées (sinon la base est en retard
-      # sur types.ts → faux écart). On se retire donc de ce cas.
+      # Une PR qui ajoute une migration n'a pas encore cette migration en
+      # base (elle n'est appliquée qu'au merge, par migrate.yml) : comparer
+      # maintenant donnerait un faux écart. On se retire de ce cas.
+      - name: Déléguer à migrate.yml si des migrations changent
+        id: guard
+        run: |
+          BASE="${{ github.event.pull_request.base.sha }}"
+          if git diff --name-only "$BASE" "${{ github.sha }}" -- 'supabase/migrations/**' | grep -q .; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Des migrations changent dans cette PR → vérification déléguée à migrate.yml après merge."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: supabase/setup-cli@v1
+        if: steps.guard.outputs.skip == 'false'
+        with:
+          version: "2.109.1"
+
+      - uses: actions/setup-node@v4
+        if: steps.guard.outputs.skip == 'false'
+        with:
+          node-version: "24"
+
+      - name: Vérifier que types.ts correspond à la base
+        if: steps.guard.outputs.skip == 'false'
+        run: node scripts/check-supabase-types.mjs
+
+  # ─── push sur main : auto-correction ────────────────────────────────────
+  fix-push:
+    name: types.ts conforme à la base (push main)
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Même garde que côté PR : si ce push modifie AUSSI des migrations,
+      # c'est migrate.yml qui régénère/vérifie APRÈS les avoir appliquées
+      # (sinon la base est en retard sur types.ts → faux écart).
       - name: Déléguer à migrate.yml si des migrations changent
         id: guard
         run: |
           BEFORE="${{ github.event.before }}"
-          if [ -z "$BEFORE" ] || ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          elif [ -z "$BEFORE" ] || ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
             echo "skip=false" >> "$GITHUB_OUTPUT"
           elif git diff --name-only "$BEFORE" "${{ github.sha }}" -- 'supabase/migrations/**' | grep -q .; then
             echo "skip=true" >> "$GITHUB_OUTPUT"
@@ -66,6 +150,114 @@ jobs:
         with:
           node-version: "24"
 
-      - name: Vérifier que types.ts correspond à la base
+      # Nécessaire pour le garde-fou tsc plus bas (garantie 4).
+      - name: Installer les dépendances
         if: steps.guard.outputs.skip == 'false'
-        run: node scripts/check-supabase-types.mjs
+        run: npm ci
+
+      - name: Link Supabase project
+        if: steps.guard.outputs.skip == 'false'
+        env:
+          PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+        run: supabase link --project-ref "$PROJECT_REF"
+
+      # Garantie 3 : si une migration du dépôt n'est pas encore appliquée à
+      # la base, celle-ci est en retard — régénérer types.ts maintenant
+      # produirait un faux "fix" qui masque ce retard (au lieu de types.ts
+      # obsolète, on aurait un types.ts qui efface silencieusement une table
+      # en cours de déploiement). On échoue au lieu de régénérer.
+      - name: Vérifier l'absence de migration locale non appliquée
+        if: steps.guard.outputs.skip == 'false'
+        run: |
+          set +e
+          RAW=$(supabase migration list --linked --output-format json 2>&1)
+          SUPABASE_EXIT=$?
+          set -e
+
+          if [ "$SUPABASE_EXIT" -ne 0 ]; then
+            echo "::error::\`supabase migration list\` a échoué (base injoignable ou CLI en erreur) — abandon, aucune régénération."
+            echo "$RAW" | head -20
+            exit 1
+          fi
+
+          JSON_PART=$(echo "$RAW" | grep -o '{.*}' | head -1 || true)
+          [ -z "$JSON_PART" ] && JSON_PART="$RAW"
+          if ! echo "$JSON_PART" | jq empty 2>/dev/null; then
+            echo "::error::Réponse non-JSON de \`supabase migration list\` — abandon, aucune régénération."
+            echo "$RAW" | head -20
+            exit 1
+          fi
+
+          # local non vide + remote vide = migration présente dans le dépôt,
+          # jamais appliquée à la base distante.
+          PENDING=$(echo "$JSON_PART" | jq -r '
+            .migrations[]?
+            | select((.local // "") != "" and (.remote // "") == "")
+            | .local
+          ')
+
+          if [ -n "$PENDING" ]; then
+            echo "::error::Migration(s) présente(s) dans le dépôt mais NON appliquée(s) à la base :"
+            echo "$PENDING" | sed 's/^/   - /'
+            echo "::error::La base n'est pas à jour — corrige d'abord son application (migrate.yml) avant de relancer ce workflow."
+            exit 1
+          fi
+          echo "✅ Aucune migration locale en attente — base à jour, régénération sûre."
+
+      - name: Régénérer types.ts depuis la base
+        if: steps.guard.outputs.skip == 'false'
+        run: |
+          npm run gen:types
+          # Garanties 1/2 en défense en profondeur : `supabase gen types ...
+          # > fichier` tronque le fichier AVANT d'exécuter la commande. Un
+          # échec de la commande fait déjà échouer ce step (bash -e propage
+          # le code retour malgré la redirection), donc les steps suivants
+          # ne s'exécutent pas — mais on valide aussi explicitement le
+          # contenu, pour ne jamais committer un fichier vide/tronqué même
+          # dans un scénario où le code de sortie mentirait.
+          if [ ! -s src/integrations/supabase/types.ts ] || ! grep -q "Tables:" src/integrations/supabase/types.ts; then
+            echo "::error::Sortie de \`supabase gen types\` vide ou invalide — abandon, aucune régénération commitée."
+            git checkout -- src/integrations/supabase/types.ts
+            exit 1
+          fi
+
+      - name: Committer si dérive corrigée (uniquement si le reste du code reste cohérent)
+        if: steps.guard.outputs.skip == 'false'
+        run: |
+          if git diff --quiet src/integrations/supabase/types.ts; then
+            echo "✅ types.ts déjà conforme à la base — rien à corriger."
+            exit 0
+          fi
+
+          echo "⚠️  Dérive détectée :"
+          git diff --stat src/integrations/supabase/types.ts
+
+          # Garantie 4 : l'auto-heal ne doit intervenir QUE si types.ts est
+          # le seul fichier en cause. On vérifie que le reste du code
+          # compile toujours avec le types.ts régénéré ; si tsc casse
+          # ailleurs, la vraie correction touche plus qu'un fichier généré
+          # et sort du périmètre de l'auto-heal : on ne committe pas.
+          if ! npx tsc --noEmit -p tsconfig.json; then
+            echo "::error::La régénération de types.ts casse le typecheck ailleurs dans le code."
+            echo "::error::Ce n'est plus une simple dérive de types.ts : la correction touche d'autres fichiers."
+            echo "::error::Auto-heal annulé — intervention manuelle requise (voir docs/architecture/supabase-types-source-of-truth.md)."
+            git checkout -- src/integrations/supabase/types.ts
+            exit 1
+          fi
+
+          echo "✅ Reste du code compile toujours — commit de la régénération."
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add src/integrations/supabase/types.ts
+
+          # Garde-fou supplémentaire : n'autoriser QUE ce fichier dans le
+          # commit, quoi qu'il arrive.
+          STAGED=$(git diff --cached --name-only)
+          if [ "$STAGED" != "src/integrations/supabase/types.ts" ]; then
+            echo "::error::Fichiers indexés inattendus : $STAGED — abandon, l'auto-heal ne committe jamais autre chose que types.ts."
+            git reset
+            exit 1
+          fi
+
+          git commit -m "ci: auto-corrige la dérive types.ts (base = source de vérité) [skip ci]"
+          git push
