@@ -1,4 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { motion, useMotionValue, useTransform, type PanInfo } from "framer-motion";
+import { ChevronLeft } from "lucide-react";
 import { format, parseISO, subDays } from "date-fns";
 import { fr } from "date-fns/locale";
 import {
@@ -19,7 +21,6 @@ import {
   TrendingUp,
   Trash2,
   Trophy,
-  X,
   Zap,
 } from "lucide-react";
 import {
@@ -213,46 +214,97 @@ export function ExerciseAnalysisSheet({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [actions, primaryActionFn, primaryActionLabel]);
 
+  // ============================================================
+  // Page plein écran (transition push iOS + swipe-back). Remplace l'ancien
+  // bottom sheet : l'utilisateur "entre" dans une section dédiée plutôt
+  // que d'ouvrir une modale. L'API du composant est inchangée — les 4
+  // appelants (WorkoutCard, ExerciseRankStrip, ActiveWorkoutView,
+  // ExerciseExplorerSheet) continuent d'appeler onClose pour revenir.
+  // ============================================================
+  const dragX = useMotionValue(0);
+  const overlayOpacity = useTransform(dragX, [0, 200], [0.35, 0]);
+
+  // Verrouille le scroll du body pendant l'ouverture (comme un push natif).
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
+  const handleDragEnd = (_: unknown, info: PanInfo) => {
+    if (info.offset.x > 120 || info.velocity.x > 500) onClose();
+    else dragX.set(0);
+  };
+
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <div
-        className="flex max-h-[92vh] w-full max-w-[430px] flex-col rounded-t-3xl border-t border-border bg-card p-5 pb-[calc(2rem+env(safe-area-inset-bottom))] shadow-elevated"
-        onClick={(e) => e.stopPropagation()}
+    <div className="fixed inset-0 z-50">
+      {/* Voile qui s'estompe pendant le swipe-back — donne la profondeur iOS */}
+      <motion.div
+        className="absolute inset-0 bg-black"
+        style={{ opacity: overlayOpacity }}
+        aria-hidden
+      />
+
+      {/* Page — push depuis la droite, swipe-back horizontal */}
+      <motion.div
+        className="absolute inset-0 flex flex-col bg-background"
+        initial={{ x: "100%" }}
+        animate={{ x: 0 }}
+        exit={{ x: "100%" }}
+        transition={{ type: "spring", stiffness: 320, damping: 34, mass: 0.9 }}
+        drag="x"
+        dragDirectionLock
+        dragConstraints={{ left: 0, right: 0 }}
+        dragElastic={{ left: 0, right: 0.6 }}
+        style={{ x: dragX }}
+        onDragEnd={handleDragEnd}
       >
-        {/* Header */}
-        <div className="mb-4 flex items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-2">
-            <Brain className="h-4 w-4 shrink-0 text-primary" />
-            <div className="min-w-0">
-              <h3 className="truncate text-sm font-semibold capitalize">{exerciseName}</h3>
-              <p className="text-[11px] text-muted-foreground">
-                {sessionCount > 0 ? "Fiche d'analyse intelligente" : "Découverte de l'exercice"}
-              </p>
-            </div>
-          </div>
-          <div className="flex shrink-0 items-center gap-1.5">
-            {menuActions.length > 0 && (
-              <ExerciseActionsMenu
-                title={exerciseName}
-                actions={menuActions}
-                triggerClassName="flex h-8 w-8 items-center justify-center rounded-full bg-surface text-muted-foreground hover:bg-white/10 hover:text-foreground"
-              />
-            )}
+        {/* Header sticky — bouton Retour iOS + titre centré */}
+        <div
+          className="sticky top-0 z-10 border-b border-border/60 bg-background/85 backdrop-blur-xl"
+          style={{ paddingTop: "env(safe-area-inset-top)" }}
+        >
+          <div className="relative flex h-12 items-center px-2">
             <button
               onClick={onClose}
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-surface text-muted-foreground"
+              className="flex h-10 items-center gap-0.5 rounded-full px-2 text-primary transition-colors hover:bg-white/5 active:opacity-70"
+              aria-label="Retour"
             >
-              <X className="h-4 w-4" />
+              <ChevronLeft className="h-6 w-6" strokeWidth={2.4} />
+              <span className="text-[15px] font-medium">Retour</span>
             </button>
+            <div className="pointer-events-none absolute inset-x-0 flex justify-center">
+              <h1 className="max-w-[55%] truncate text-[15px] font-semibold capitalize">
+                {exerciseName}
+              </h1>
+            </div>
+            <div className="ml-auto flex items-center gap-1.5 pr-1">
+              {menuActions.length > 0 && (
+                <ExerciseActionsMenu
+                  title={exerciseName}
+                  actions={menuActions}
+                  triggerClassName="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:bg-white/5 hover:text-foreground"
+                />
+              )}
+            </div>
           </div>
         </div>
 
-        <div className="-mx-1 space-y-4 overflow-y-auto px-1">
+        <div
+          className="flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 pt-4"
+          style={{ paddingBottom: "calc(2rem + env(safe-area-inset-bottom))" }}
+        >
+          {/* Sous-titre contextuel — vestige de l'ancien header, gardé pour ne rien perdre */}
+          <p className="-mt-1 text-[11px] uppercase tracking-wider text-muted-foreground">
+            {sessionCount > 0 ? "Fiche d'analyse intelligente" : "Découverte de l'exercice"}
+          </p>
+
           {sessionCount > 0 ? (
             <>
+
+
           {/* Résumé intelligent + pertinence */}
           {analysis && (
             <div className="rounded-2xl border border-primary/20 bg-primary/[0.06] p-4">
@@ -535,7 +587,8 @@ export function ExerciseAnalysisSheet({
             />
           )}
         </div>
-      </div>
+      </motion.div>
     </div>
+
   );
 }
