@@ -129,18 +129,27 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
   // que protéines/glucides/lipides sont tous les trois renseignés (formule
   // Atwater, seule source de vérité : calculateCaloriesFromMacros). Ne calcule
   // jamais si un champ est vide ou invalide — jamais de NaN affiché.
-  const updateMacroField = useCallback((field: "proteins" | "carbs" | "fats", value: string) => {
-    setForm((f) => {
-      const next = { ...f, [field]: value };
-      const p = parseDecimal(next.proteins);
-      const c = parseDecimal(next.carbs);
-      const fat = parseDecimal(next.fats);
-      if (p != null && p >= 0 && c != null && c >= 0 && fat != null && fat >= 0) {
-        next.calories = String(calculateCaloriesFromMacros(p, c, fat));
-      }
-      return next;
-    });
-  }, []);
+  //
+  // N'agit JAMAIS quand un aliment du catalogue est sélectionné (baseFood) :
+  // dans ce cas calculateNutritionFromGrams (via applyWeightText) reste
+  // l'unique source de vérité pour calories/macros — calculateCaloriesFromMacros
+  // ne doit ni être appelée ni écraser ces valeurs.
+  const updateMacroField = useCallback(
+    (field: "proteins" | "carbs" | "fats", value: string) => {
+      setForm((f) => {
+        const next = { ...f, [field]: value };
+        if (baseFood) return next;
+        const p = parseDecimal(next.proteins);
+        const c = parseDecimal(next.carbs);
+        const fat = parseDecimal(next.fats);
+        if (p != null && p >= 0 && c != null && c >= 0 && fat != null && fat >= 0) {
+          next.calories = String(calculateCaloriesFromMacros(p, c, fat));
+        }
+        return next;
+      });
+    },
+    [baseFood],
+  );
 
   const selectBaseFood = useCallback(
     (food: FoodSuggestion) => {
