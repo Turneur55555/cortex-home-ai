@@ -1,4 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { motion, useMotionValue, useTransform, type PanInfo } from "framer-motion";
+import { ChevronLeft } from "lucide-react";
 import { format, parseISO, subDays } from "date-fns";
 import { fr } from "date-fns/locale";
 import {
