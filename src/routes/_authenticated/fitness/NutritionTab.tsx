@@ -750,7 +750,7 @@ export function NutritionTab() {
       {planOpen && <MealPlanSheet onClose={() => setPlanOpen(false)} />}
       {historyOpen && <NutritionHistorySheet onClose={() => setHistoryOpen(false)} />}
       {scanOpen && <MealScanSheet onClose={() => setScanOpen(false)} date={date} />}
-      {barcodeOpen && <BarcodeScannerSheet onClose={() => setBarcodeOpen(false)} />}
+      {barcodeOpen && <BarcodeScannerSheet date={date} onClose={() => setBarcodeOpen(false)} />}
       {analysisOpen && <NutritionAnalysisSheet onClose={() => setAnalysisOpen(false)} />}
       {savedOpen && <SavedMealsSheet date={date} onClose={() => setSavedOpen(false)} />}
       {favSheetOpen && <FavoritesSheet date={date} onClose={() => setFavSheetOpen(false)} />}
