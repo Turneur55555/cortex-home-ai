@@ -9,18 +9,24 @@
 -- validation/persistance.
 -- =====================================================================
 
--- ── Trigger sur workouts (hors des tables droppées ci-dessous) ────────
+-- ── Triggers d'abord (toute table, y compris celles droppées plus bas) ─
+-- Un trigger doit disparaître avant la fonction qu'il exécute, sans quoi
+-- le DROP FUNCTION échoue avec "cannot drop function ... because other
+-- objects depend on it".
 DROP TRIGGER IF EXISTS trg_award_time_of_day_badges ON public.workouts;
-DROP FUNCTION IF EXISTS public.award_time_of_day_badges();
+DROP TRIGGER IF EXISTS trg_award_xp_on_badge ON public.user_badges;
+DROP TRIGGER IF EXISTS goals_award_xp ON public.goals;
+DROP TRIGGER IF EXISTS trg_award_xp_on_goal_complete ON public.goals;
 
--- ── Fonctions RPC dédiées (plus aucun appelant côté client) ───────────
+-- ── Fonctions (plus aucun trigger/appelant après les DROP ci-dessus) ──
+DROP FUNCTION IF EXISTS public.award_time_of_day_badges();
 DROP FUNCTION IF EXISTS public.claim_achievement(text, integer);
 DROP FUNCTION IF EXISTS public.unlock_user_badge(text);
 DROP FUNCTION IF EXISTS public.award_goal_xp();
 DROP FUNCTION IF EXISTS public.award_xp_on_badge();
 DROP FUNCTION IF EXISTS public.award_xp_on_goal_complete();
 
--- ── Tables (CASCADE : droppe leurs triggers/policies/index propres) ───
+-- ── Tables (CASCADE : droppe leurs policies/index/contraintes propres) ─
 DROP TABLE IF EXISTS public.user_achievements CASCADE;
 DROP TABLE IF EXISTS public.achievement_criteria CASCADE;
 DROP TABLE IF EXISTS public.user_badges CASCADE;
