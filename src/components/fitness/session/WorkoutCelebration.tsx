@@ -1,10 +1,6 @@
 // ============================================================
-// Primitives visuelles partagées de l'écran de clôture de séance —
-// extraites de WorkoutSummaryOverlay.tsx (musculation) en Addendum 3
-// (2026-07-15, audit convergence UX) pour que GenericWorkoutSummaryOverlay
-// (5 autres disciplines) ait EXACTEMENT la même célébration (confetti,
-// gabarit de tuile) sans dupliquer le CSS. Aucune logique métier ici
-// (1RM/tonnage restent dans WorkoutSummaryOverlay, propres à muscu).
+// Primitive visuelle partagée de l'écran de clôture de séance (confetti) —
+// utilisée par SessionRewardScreen (écran XP/Progression RPG).
 // ============================================================
 
 import { useMemo } from "react";
@@ -54,25 +50,5 @@ export function Confetti() {
         ))}
       </div>
     </>
-  );
-}
-
-export function SummaryStatTile({
-  label,
-  value,
-  sub,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-}) {
-  return (
-    <div className="rounded-2xl border border-white/5 bg-white/[0.04] p-3 text-center">
-      <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
-        {label}
-      </p>
-      <p className="mt-1 text-xl font-bold leading-none">{value}</p>
-      {sub && <p className="mt-0.5 truncate text-[9px] text-muted-foreground/60">{sub}</p>}
-    </div>
   );
 }

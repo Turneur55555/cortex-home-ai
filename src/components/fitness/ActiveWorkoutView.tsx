@@ -12,7 +12,6 @@ import type { MuscleId } from "@/lib/fitness/muscleMapping";
 import type { MuscleRecovery } from "@/lib/fitness/recovery";
 import { useFitnessStreak } from "@/hooks/useFitnessStreak";
 import { WorkoutTimer } from "./WorkoutTimer";
-import { WorkoutSummaryOverlay } from "./WorkoutSummaryOverlay";
 import { ActiveExerciseCard } from "./exerciseCard/ActiveExerciseCard";
 import { AddExerciseButton } from "./exerciseCard/ExerciseCardPrimitives";
 import { exerciseIllustration } from "@/lib/fitness/exerciseIllustrations";
@@ -51,7 +50,6 @@ export function ActiveWorkoutView({
   const { data: userPhotos } = useUserExercisePhotos();
 
   const [menuOpen, setMenuOpen] = useState(false);
-  const [showSummary, setShowSummary] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
 
@@ -95,7 +93,6 @@ export function ActiveWorkoutView({
   };
 
   const handleFinish = async () => {
-    setShowSummary(false);
     // Capture snapshot before invalidation
     const snapshot = workout;
     await finish.mutateAsync(workout);
@@ -195,7 +192,7 @@ export function ActiveWorkoutView({
                 type="button"
                 onClick={() => {
                   setMenuOpen(false);
-                  setShowSummary(true);
+                  handleFinish();
                 }}
                 className="flex w-full items-center gap-3 px-4 py-3 text-sm font-medium transition-colors hover:bg-primary/10"
               >
@@ -221,7 +218,7 @@ export function ActiveWorkoutView({
         <div className="px-5 pb-5">
           <button
             type="button"
-            onClick={() => setShowSummary(true)}
+            onClick={handleFinish}
             disabled={finish.isPending}
             className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-primary text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-50"
           >
@@ -234,16 +231,6 @@ export function ActiveWorkoutView({
           </button>
         </div>
       </div>
-
-      {/* ── Résumé post-séance ── */}
-      {showSummary && (
-        <WorkoutSummaryOverlay
-          workout={workout}
-          onConfirm={handleFinish}
-          onCancel={() => setShowSummary(false)}
-          isPending={finish.isPending}
-        />
-      )}
 
       {/* ── Confirm cancel ── */}
       {confirmCancel && (

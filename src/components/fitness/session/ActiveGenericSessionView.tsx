@@ -55,10 +55,6 @@ import { AddExerciseButton } from "../exerciseCard/ExerciseCardPrimitives";
 import { ExercisePickerSheet, type PickedExercise } from "../ExercisePickerSheet";
 import { SegmentAnalysisSheet } from "./SegmentAnalysisSheet";
 import { DisciplineIcon } from "./DisciplineIcon";
-// Addendum 3 (2026-07-15) : résumé de clôture générique (confetti + tuiles),
-// remplace le confirm() nu qui laissait cette séance sans aucune célébration
-// contrairement à la musculation (WorkoutSummaryOverlay) — voir doc §8.5.
-import { GenericWorkoutSummaryOverlay } from "./GenericWorkoutSummaryOverlay";
 import { useFitnessStreak } from "@/hooks/useFitnessStreak";
 import { useWorkouts } from "@/hooks/use-fitness";
 import { DisciplineExerciseLibrarySheet } from "../DisciplineExerciseLibrarySheet";
@@ -87,7 +83,6 @@ export function ActiveGenericSessionView({
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
-  const [confirmFinish, setConfirmFinish] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [statsLabel, setStatsLabel] = useState<string | null>(null);
@@ -134,7 +129,6 @@ export function ActiveGenericSessionView({
   };
 
   const handleFinish = async () => {
-    setConfirmFinish(false);
     await finish.mutateAsync(workout);
     onFinished(workout);
   };
@@ -242,7 +236,7 @@ export function ActiveGenericSessionView({
                 type="button"
                 onClick={() => {
                   setMenuOpen(false);
-                  setConfirmFinish(true);
+                  handleFinish();
                 }}
                 className="flex w-full items-center gap-3 px-4 py-3 text-sm font-medium transition-colors hover:bg-primary/10"
               >
@@ -267,7 +261,7 @@ export function ActiveGenericSessionView({
         <div className="px-5 pb-5">
           <button
             type="button"
-            onClick={() => setConfirmFinish(true)}
+            onClick={handleFinish}
             disabled={finish.isPending}
             className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-primary text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-50"
           >
@@ -280,17 +274,6 @@ export function ActiveGenericSessionView({
           </button>
         </div>
       </div>
-
-      {/* ── Résumé de clôture (Addendum 3) — remplace l'ancien confirm() nu,
-          même écran (confetti + tuiles) que WorkoutSummaryOverlay (muscu). ── */}
-      {confirmFinish && (
-        <GenericWorkoutSummaryOverlay
-          workout={workout}
-          onConfirm={handleFinish}
-          onCancel={() => setConfirmFinish(false)}
-          isPending={finish.isPending}
-        />
-      )}
 
       {/* ── Confirm cancel ── */}
       {confirmCancel && (
