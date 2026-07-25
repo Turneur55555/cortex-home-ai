@@ -2,41 +2,31 @@
 // LES CHRONIQUES — Module « Progression ».
 //
 // Mission unique : raconter, avec les preuves, tout ce que le joueur a
-// fait et comment il évolue. Contient : le récap carrière, le Hall of
-// Fame (records personnels absolus), les courbes de tendance, les
-// exercices en perte de vitesse (oubliés / plateaux), et la Chronologie
-// des séances (chacune ouvre sa Chronique immersive). Zéro rang par
-// muscle ici (→ Légendes).
+// fait et comment il évolue. Contient : le récap carrière, les exercices
+// oubliés, les plateaux et la Chronologie des séances (chacune ouvre sa
+// Chronique immersive). Zéro rang par muscle ici (→ Légendes).
+//
+// Note (suppression Hall of Fame + Tendances, 25/07/2026) : les deux
+// sections ont été retirées de cet écran à la demande produit. Les
+// helpers `computeHallOfFame`, `computeForgotten`, `computePlateaus` et
+// le composant `WorkoutProgressCharts` restent utilisés ailleurs dans
+// l'app — on ne retire ici QUE leurs usages locaux devenus obsolètes.
 // ============================================================
 
 import { useMemo } from "react";
-import {
-  Clock,
-  Crown,
-  Flame,
-  Heart,
-  History,
-  Hourglass,
-  Layers,
-  Medal,
-  Sparkles,
-  TrendingUp,
-  Trophy,
-  Zap,
-} from "lucide-react";
+import { Heart, History, Hourglass, Sparkles, TrendingUp } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
 
 import { WorkoutCard, type WorkoutRow } from "@/components/fitness/WorkoutCard";
 import { GenericHistoryCard } from "@/components/fitness/session/GenericHistoryCard";
 import { SectionReveal } from "@/components/fitness/SectionReveal";
-import { WorkoutProgressCharts } from "@/components/fitness/WorkoutProgressCharts";
 import { formatTonnage } from "@/lib/fitness/strength";
 import { computeHallOfFame, computeForgotten, computePlateaus } from "@/lib/fitness/chronicles";
 import { useLatestBodyWeight } from "@/hooks/useLatestBodyWeight";
 import { ENGINE_REGISTRY } from "@/lib/fitness/engines/registry";
 import { isReadyEngine, type DisciplineId } from "@/lib/fitness/engines/types";
-import { AnimatedNumber, GoldCard, ModuleSectionTitle, PopIn } from "../livreParts";
+import { AnimatedNumber, ModuleSectionTitle, PopIn, GoldCard } from "../livreParts";
 
 interface Props {
   workouts: WorkoutRow[];
@@ -45,7 +35,10 @@ interface Props {
   volByName: Map<string, Array<{ date: string; volume: number }>>;
   prByGym: Map<string, Map<string, number>>;
   histByGym: Map<string, Map<string, Array<{ date: string; weight: number }>>>;
+  /** Conservé pour compatibilité avec ChroniquesPage (les Tendances ont
+   *  été supprimées : plus consommé localement). */
   nameByKey: Map<string, string>;
+  /** Idem — plus consommé localement depuis la suppression des Tendances. */
   topExercises: string[];
   imageUrls: Map<string, string> | undefined;
   latestDate: string;
@@ -62,8 +55,6 @@ export function ProgressionModule({
   volByName,
   prByGym,
   histByGym,
-  nameByKey,
-  topExercises,
   imageUrls,
   latestDate,
   onRepeatLive,
@@ -73,8 +64,8 @@ export function ProgressionModule({
 }: Props) {
   const { data: bodyWeightKg } = useLatestBodyWeight();
 
-  const hof = useMemo(
-    () => computeHallOfFame(workouts, bodyWeightKg ?? null),
+  const career = useMemo(
+    () => computeHallOfFame(workouts, bodyWeightKg ?? null).career,
     [workouts, bodyWeightKg],
   );
   const forgotten = useMemo(() => computeForgotten(workouts), [workouts]);
@@ -97,7 +88,7 @@ export function ProgressionModule({
           <div className="grid grid-cols-3 gap-2">
             <div className="rounded-2xl bg-white/[0.04] px-2 py-3 text-center ring-1 ring-white/5">
               <AnimatedNumber
-                value={hof.career.sessions}
+                value={career.sessions}
                 className="text-xl font-bold tabular-nums text-white"
               />
               <p className="mt-0.5 text-[9px] font-medium uppercase tracking-wider text-white/50">
@@ -106,7 +97,7 @@ export function ProgressionModule({
             </div>
             <div className="rounded-2xl bg-white/[0.04] px-2 py-3 text-center ring-1 ring-white/5">
               <AnimatedNumber
-                value={hof.career.tonnage}
+                value={career.tonnage}
                 format={(n) => formatTonnage(Math.round(n))}
                 className="text-xl font-bold tabular-nums text-white"
               />
@@ -116,7 +107,7 @@ export function ProgressionModule({
             </div>
             <div className="rounded-2xl bg-white/[0.04] px-2 py-3 text-center ring-1 ring-white/5">
               <AnimatedNumber
-                value={hof.career.prCount}
+                value={career.prCount}
                 className="text-xl font-bold tabular-nums text-amber-300"
               />
               <p className="mt-0.5 text-[9px] font-medium uppercase tracking-wider text-white/50">
@@ -126,181 +117,6 @@ export function ProgressionModule({
           </div>
         </div>
       </SectionReveal>
-
-      {/* ── Hall of Fame ───────────────────────────────────────────────── */}
-      {(hof.bestTonnage || hof.heaviestSet || hof.longestSet || hof.longestSession) && (
-        <SectionReveal>
-          <div>
-            <ModuleSectionTitle icon={<Crown className="h-4 w-4" />} hint="Tes records absolus.">
-              Hall of Fame
-            </ModuleSectionTitle>
-            <div className="flex flex-col gap-3">
-              {hof.bestTonnage && (
-                <PopIn>
-                  <div
-                    className="relative overflow-hidden rounded-3xl border border-amber-400/25 p-5 backdrop-blur-xl"
-                    style={{
-                      background:
-                        "radial-gradient(120% 100% at 30% 0%, rgba(234,179,8,0.18) 0%, transparent 60%), linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.01) 100%)",
-                      boxShadow: "0 0 46px -12px rgba(234,179,8,0.5)",
-                    }}
-                  >
-                    <div className="relative flex items-center gap-4">
-                      <div
-                        className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl"
-                        style={{
-                          background: "linear-gradient(140deg,#78350f 0%,#eab308 50%,#451a03 100%)",
-                          boxShadow:
-                            "inset 0 1px 0 rgba(255,255,255,0.3), 0 6px 24px -8px rgba(234,179,8,0.8)",
-                        }}
-                      >
-                        <Trophy className="h-7 w-7 text-white drop-shadow" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-300">
-                          Plus gros tonnage
-                        </p>
-                        <AnimatedNumber
-                          value={hof.bestTonnage.value}
-                          format={(n) => formatTonnage(Math.round(n))}
-                          className="mt-0.5 block font-serif text-[34px] font-semibold italic leading-none text-white"
-                        />
-                        <p className="mt-1 truncate text-[11px] text-white/50">
-                          {hof.bestTonnage.workoutName} · {dateOf(hof.bestTonnage.date)}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </PopIn>
-              )}
-
-              <div className="grid grid-cols-2 gap-3">
-                {hof.bestCalories && (
-                  <PopIn delay={0.04}>
-                    <GoldCard glow>
-                      <div className="p-4">
-                        <Medal className="h-4 w-4 text-amber-300" />
-                        <p className="mt-2 text-[10px] font-bold uppercase tracking-wider text-white/50">
-                          Plus grosse séance
-                        </p>
-                        <p className="mt-0.5 text-xl font-bold tabular-nums text-white">
-                          <AnimatedNumber value={hof.bestCalories.value} />{" "}
-                          <span className="text-[11px] font-medium text-white/50">kcal</span>
-                        </p>
-                      </div>
-                    </GoldCard>
-                  </PopIn>
-                )}
-                {hof.bestIntensity && (
-                  <PopIn delay={0.08}>
-                    <GoldCard glow>
-                      <div className="p-4">
-                        <Zap className="h-4 w-4 text-amber-300" />
-                        <p className="mt-2 text-[10px] font-bold uppercase tracking-wider text-white/50">
-                          Plus haute intensité
-                        </p>
-                        <p className="mt-0.5 text-xl font-bold tabular-nums text-white">
-                          <AnimatedNumber value={hof.bestIntensity.value} />{" "}
-                          <span className="text-[11px] font-medium text-white/50">kg/min</span>
-                        </p>
-                      </div>
-                    </GoldCard>
-                  </PopIn>
-                )}
-                {hof.heaviestSet && (
-                  <PopIn delay={0.12}>
-                    <GoldCard glow>
-                      <div className="p-4">
-                        <Flame className="h-4 w-4 text-amber-300" />
-                        <p className="mt-2 text-[10px] font-bold uppercase tracking-wider text-white/50">
-                          Série la plus lourde
-                        </p>
-                        <p className="mt-0.5 truncate text-xs font-semibold text-white/80">
-                          {hof.heaviestSet.exercise}
-                        </p>
-                        <p className="text-xl font-bold tabular-nums text-white">
-                          <AnimatedNumber value={hof.heaviestSet.weight} />{" "}
-                          <span className="text-[11px] font-medium text-white/50">kg</span>
-                        </p>
-                      </div>
-                    </GoldCard>
-                  </PopIn>
-                )}
-                {hof.longestSet && (
-                  <PopIn delay={0.16}>
-                    <GoldCard glow>
-                      <div className="p-4">
-                        <Crown className="h-4 w-4 text-amber-300" />
-                        <p className="mt-2 text-[10px] font-bold uppercase tracking-wider text-white/50">
-                          Plus longue série
-                        </p>
-                        <p className="mt-0.5 truncate text-xs font-semibold text-white/80">
-                          {hof.longestSet.exercise}
-                        </p>
-                        <p className="text-xl font-bold tabular-nums text-white">
-                          <AnimatedNumber value={hof.longestSet.reps} />{" "}
-                          <span className="text-[11px] font-medium text-white/50">reps</span>
-                        </p>
-                      </div>
-                    </GoldCard>
-                  </PopIn>
-                )}
-                {hof.longestSession && (
-                  <PopIn delay={0.2}>
-                    <GoldCard glow>
-                      <div className="p-4">
-                        <Clock className="h-4 w-4 text-amber-300" />
-                        <p className="mt-2 text-[10px] font-bold uppercase tracking-wider text-white/50">
-                          Plus longue séance
-                        </p>
-                        <p className="mt-0.5 text-xl font-bold tabular-nums text-white">
-                          <AnimatedNumber value={hof.longestSession.minutes} />{" "}
-                          <span className="text-[11px] font-medium text-white/50">min</span>
-                        </p>
-                      </div>
-                    </GoldCard>
-                  </PopIn>
-                )}
-                {hof.career.series > 0 && (
-                  <PopIn delay={0.24}>
-                    <GoldCard glow>
-                      <div className="p-4">
-                        <Layers className="h-4 w-4 text-amber-300" />
-                        <p className="mt-2 text-[10px] font-bold uppercase tracking-wider text-white/50">
-                          Séries au total
-                        </p>
-                        <p className="mt-0.5 text-xl font-bold tabular-nums text-white">
-                          <AnimatedNumber value={hof.career.series} />
-                        </p>
-                      </div>
-                    </GoldCard>
-                  </PopIn>
-                )}
-              </div>
-            </div>
-          </div>
-        </SectionReveal>
-      )}
-
-      {/* ── Courbes & tendances ────────────────────────────────────────── */}
-      {topExercises.length > 0 && (
-        <SectionReveal>
-          <div>
-            <ModuleSectionTitle
-              icon={<TrendingUp className="h-4 w-4" />}
-              hint="Tes charges dans le temps."
-            >
-              Tendances
-            </ModuleSectionTitle>
-            <WorkoutProgressCharts
-              topExercises={topExercises}
-              histByName={histByName}
-              prByName={prByName}
-              nameByKey={nameByKey}
-            />
-          </div>
-        </SectionReveal>
-      )}
 
       {/* ── Techniques oubliées ────────────────────────────────────────── */}
       {forgotten.length > 0 && (
