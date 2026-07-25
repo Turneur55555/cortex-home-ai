@@ -1473,6 +1473,7 @@ export type Database = {
           carbs_g: number | null
           category: string | null
           copper_mg: number | null
+          country: string | null
           created_at: string
           fat_g: number | null
           fiber_g: number | null
@@ -1523,6 +1524,7 @@ export type Database = {
           carbs_g?: number | null
           category?: string | null
           copper_mg?: number | null
+          country?: string | null
           created_at?: string
           fat_g?: number | null
           fiber_g?: number | null
@@ -1573,6 +1575,7 @@ export type Database = {
           carbs_g?: number | null
           category?: string | null
           copper_mg?: number | null
+          country?: string | null
           created_at?: string
           fat_g?: number | null
           fiber_g?: number | null

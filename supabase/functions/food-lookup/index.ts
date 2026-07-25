@@ -40,9 +40,12 @@ interface FoodResult {
   quality_score?: number;
   confidence_score?: number;
   default_serving?: ServingInfo | null;
+  /** ISO 3166-1 alpha-2 (ex. "FR") déduit des countries_tags OpenFoodFacts — null si inconnu (USDA, CIQUAL, aliment perso). */
+  country?: string | null;
   /** Interne au ranking — jamais renvoyé au client (voir stripInternal). */
   updated_at?: string;
   has_barcode?: boolean;
+  user_id?: string | null;
 }
 
 const round = (v: unknown, d = 1): number | null => {
@@ -78,7 +81,9 @@ function toResult(row: Record<string, unknown>, barcode?: string): FoodResult {
     image_url: (row.image_url as string) ?? undefined,
     calories, proteins, carbs, fats, fiber,
     barcode,
+    country: (row.country as string | null) ?? undefined,
     updated_at: (row.updated_at as string) ?? undefined,
+    user_id: (row.user_id as string | null) ?? undefined,
     nutriments: {
       "energy-kcal_100g": calories ?? undefined,
       proteins_100g: proteins ?? undefined,
@@ -221,7 +226,100 @@ async function usdaByBarcode(apiKey: string, code: string): Promise<UsdaFood | n
   const list = (data.foods ?? []) as UsdaFood[];
   return list.find((f) => f.gtinUpc?.replace(/^0+/, "") === code.replace(/^0+/, "")) ?? list[0] ?? null;
 }
-async function upsertFood(admin: Admin, payload: ReturnType<typeof usdaToFood>) {
+// ─── OpenFoodFacts — recherche + mapping partagé (barcode ET texte) ────────
+// Un seul mapper (offProductToPayload) pour les deux points d'entrée OFF
+// (scan code-barres existant + nouvelle recherche texte) : même schéma JSON
+// « product » dans les deux API OFF, donc même transformation vers `foods`.
+interface OffProduct {
+  code?: string;
+  product_name?: string;
+  product_name_fr?: string;
+  generic_name?: string;
+  generic_name_fr?: string;
+  brands?: string;
+  categories?: string;
+  image_front_small_url?: string;
+  image_small_url?: string;
+  image_url?: string;
+  countries_tags?: string[];
+  nutriments?: Record<string, number | undefined>;
+}
+
+/** Déduit un pays ISO alpha-2 depuis les countries_tags OpenFoodFacts (ex. "en:france" → "FR"). */
+function inferCountryFromTags(tags: string[] | undefined): string | null {
+  if (!tags || tags.length === 0) return null;
+  const has = (slug: string) => tags.some((t) => t.replace(/^[a-z]{2}:/, "") === slug);
+  if (has("france")) return "FR";
+  if (has("germany")) return "DE";
+  if (has("united-states")) return "US";
+  if (has("spain")) return "ES";
+  if (has("italy")) return "IT";
+  if (has("belgium")) return "BE";
+  if (has("switzerland")) return "CH";
+  return null;
+}
+
+function offProductToPayload(p: OffProduct, code: string) {
+  const n = p.nutriments ?? {};
+  const name = p.product_name_fr || p.product_name || p.generic_name_fr || p.generic_name;
+  if (!name) return null;
+  const calories = round(n["energy-kcal_100g"] ?? (n["energy_100g"] ? n["energy_100g"] / 4.184 : null), 0);
+  const protein = round(n.proteins_100g);
+  const carbs = round(n.carbohydrates_100g);
+  const fat = round(n.fat_100g);
+  const fiber = round(n.fiber_100g);
+  if (calories == null && protein == null && carbs == null && fat == null) return null;
+  return {
+    source: "icortex" as const,
+    source_id: `off:${code}`,
+    name,
+    normalized_name: normalize(name),
+    brand: p.brands ?? null,
+    category: p.categories ?? null,
+    image_url: p.image_front_small_url ?? p.image_small_url ?? p.image_url ?? null,
+    serving_type: "100g",
+    calories, protein_g: protein, carbs_g: carbs, fat_g: fat, fiber_g: fiber,
+    sugars_g: round(n.sugars_100g),
+    saturated_fat_g: round(n["saturated-fat_100g"]),
+    sodium_mg: round(n.sodium_100g != null ? n.sodium_100g * 1000 : null),
+    country: inferCountryFromTags(p.countries_tags),
+    gtinUpc: code,
+  };
+}
+
+/**
+ * Recherche texte OpenFoodFacts, optionnellement filtrée par tag pays OFF
+ * (ex. "france", "european-union"). `tag` absent = recherche mondiale.
+ */
+async function offSearch(query: string, tag: string | undefined, pageSize = 8): Promise<OffProduct[]> {
+  const params = new URLSearchParams({
+    search_terms: query,
+    json: "1",
+    page_size: String(pageSize),
+    fields: "code,product_name,product_name_fr,generic_name,generic_name_fr,brands,categories,image_front_small_url,image_small_url,image_url,countries_tags,nutriments",
+  });
+  if (tag) {
+    params.set("tagtype_0", "countries");
+    params.set("tag_contains_0", "contains");
+    params.set("tag_0", tag);
+  }
+  try {
+    const res = await fetch(`https://world.openfoodfacts.org/cgi/search.pl?${params.toString()}`, {
+      headers: { "user-agent": "cortex-home-ai/1.0 (lovable)" },
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return (data.products ?? []) as OffProduct[];
+  } catch (_) {
+    return [];
+  }
+}
+
+async function upsertFood(
+  admin: Admin,
+  payload: ReturnType<typeof usdaToFood> | ReturnType<typeof offProductToPayload>,
+) {
+  if (!payload) return null;
   const { gtinUpc, ...row } = payload;
   const { data, error } = await admin.from("foods").upsert(row, { onConflict: "source,source_id" }).select().single();
   if (error || !data) throw error ?? new Error("upsert food failed");
@@ -244,7 +342,7 @@ function dedupe(results: FoodResult[]): FoodResult[] {
   return results.filter((r) => (seen.has(r.id) ? false : (seen.add(r.id), true)));
 }
 
-// ─── Déduplication par identité produit ────────────────────────────────────
+// ─── Priorité de sources par pays ──────────────────────────────────────────
 // Cause des doublons "Vita Coco" : le catalogue USDA Branded Foods contient
 // plusieurs fiches indépendantes (fdcId/UPC différents) pour un même nom de
 // produit — reformulations, tailles d'emballage, soumissions redondantes —
@@ -252,13 +350,71 @@ function dedupe(results: FoodResult[]): FoodResult[] {
 // source+source_id, pas sur l'identité produit). `dbSearch` matche par
 // substring et l'ancien `dedupe()` ne retirait que les lignes strictement
 // identiques (même id) : toutes les variantes ressortaient donc côte à côte
-// avec des macros différentes. OpenFoodFacts n'intervient pas dans la
-// recherche (uniquement le scan code-barres) — il n'est pas en cause ici.
+// avec des macros différentes.
 //
-// On regroupe par nom + marque normalisés (assez précis pour capter ces
-// doublons sans fusionner des variantes réellement différentes — saveur,
-// format — dont le nom normalisé diffère), puis on ne garde qu'un
-// représentant par groupe selon la priorité demandée.
+// Seule occurrence en dur de "FR" dans tout le fichier : dès qu'un profil
+// utilisateur exposera un pays, il suffira de le transmettre dans le body
+// (`country`) — normalizeCountry() le validera et remplacera ce défaut,
+// aucune autre ligne à toucher.
+const DEFAULT_COUNTRY = "FR";
+
+/** Tag pays OpenFoodFacts national, pour interroger OFF en priorité #1. */
+const OFF_NATIONAL_TAG: Record<string, string> = {
+  FR: "france",
+  DE: "germany",
+  US: "united-states",
+  ES: "spain",
+  IT: "italy",
+};
+
+/** Tag pays OpenFoodFacts régional (repli), pour interroger OFF en priorité #4. */
+const OFF_REGIONAL_TAG: Record<string, string> = {
+  FR: "european-union",
+  DE: "european-union",
+  ES: "european-union",
+  IT: "european-union",
+  US: "north-america",
+};
+
+// Ordre des buckets de priorité par pays — toute la logique de classement
+// (dédup ET tri d'affichage) ne dépend que de cette table. Ajouter un pays
+// = ajouter une entrée ici, jamais de branche if/else supplémentaire
+// ailleurs dans le moteur.
+const COUNTRY_SOURCE_PRIORITY: Record<string, string[]> = {
+  FR: ["national", "user", "used", "regional", "usda", "other"],
+  DEFAULT: ["user", "used", "national", "regional", "usda", "other"],
+};
+
+function sourcePriorityList(country: string): string[] {
+  return COUNTRY_SOURCE_PRIORITY[country] ?? COUNTRY_SOURCE_PRIORITY.DEFAULT;
+}
+
+/** Valide un pays transmis par le client (ISO alpha-2) ; null si absent/invalide. */
+function normalizeCountry(input: unknown): string | null {
+  if (typeof input !== "string") return null;
+  const c = input.trim().toUpperCase();
+  return /^[A-Z]{2}$/.test(c) ? c : null;
+}
+
+/**
+ * Classe un résultat dans un "bucket" de priorité pour le pays cible.
+ * - "user"     : aliment créé par l'utilisateur courant (foods.source = custom, foods.user_id = lui)
+ * - "used"     : nom déjà journalisé par l'utilisateur (nutrition.name)
+ * - "national" : source nationale pour le pays cible (OFF taggé pays, ou CIQUAL pour FR)
+ * - "regional" : OpenFoodFacts hors pays cible (Europe/monde) ou pays inconnu
+ * - "usda"     : USDA FoodData Central
+ * - "other"    : tout le reste
+ */
+function sourceBucket(r: FoodResult, country: string, usedNames: Set<string>): string {
+  if (r.source === "custom") return "user";
+  if (usedNames.has(normalize(r.name))) return "used";
+  if (r.source === "ciqual" && country === "FR") return "national";
+  if (r.source === "icortex" && r.country && r.country === country) return "national";
+  if (r.source === "usda") return "usda";
+  if (r.source === "icortex") return "regional";
+  return "other";
+}
+
 function productKey(r: FoodResult): string {
   return `${normalize(r.name)}|${(r.brand ?? "").trim().toLowerCase()}`;
 }
@@ -267,7 +423,28 @@ function macroCompleteness(r: FoodResult): number {
   return [r.calories, r.proteins, r.carbs, r.fats].filter((v) => v != null).length;
 }
 
-function selectBestPerProduct(results: FoodResult[]): FoodResult[] {
+/**
+ * Regroupe les résultats par nom + marque normalisés (assez précis pour
+ * capter les doublons "Vita Coco" sans fusionner des variantes réellement
+ * différentes — saveur, format — dont le nom normalisé diffère), puis ne
+ * garde qu'un représentant par groupe selon la priorité :
+ * 1) source nationale (pays cible) 2) aliment utilisateur 3) déjà utilisé
+ * 4) code-barres valide 5) macros complètes 6) meilleur quality_score
+ * 7) plus récemment mis à jour.
+ * Ne supprime jamais rien de `foods` : les variantes écartées restent en
+ * base, simplement absentes de cette réponse de recherche.
+ */
+function selectBestPerProduct(
+  results: FoodResult[],
+  country: string,
+  usedNames: Set<string>,
+): FoodResult[] {
+  const order = sourcePriorityList(country);
+  const bucketRank = (r: FoodResult): number => {
+    const i = order.indexOf(sourceBucket(r, country, usedNames));
+    return i === -1 ? order.length : i;
+  };
+
   const groups = new Map<string, FoodResult[]>();
   for (const r of results) {
     const k = productKey(r);
@@ -281,29 +458,50 @@ function selectBestPerProduct(results: FoodResult[]): FoodResult[] {
       continue;
     }
     group.sort((a, b) => {
-      // 1) code-barres valide (food_barcodes)
+      // 1-3) priorité de source (nationale > utilisateur > déjà utilisé > reste)
+      const bucketDiff = bucketRank(a) - bucketRank(b);
+      if (bucketDiff !== 0) return bucketDiff;
+      // 4) code-barres valide (food_barcodes)
       const barcodeDiff = Number(b.has_barcode ?? false) - Number(a.has_barcode ?? false);
       if (barcodeDiff !== 0) return barcodeDiff;
-      // 2) macros complètes (calories + protéines + glucides + lipides)
+      // 5) macros complètes (calories + protéines + glucides + lipides)
       const macroDiff = macroCompleteness(b) - macroCompleteness(a);
       if (macroDiff !== 0) return macroDiff;
-      // 3) le plus récemment mis à jour
-      const updatedDiff = (b.updated_at ?? "").localeCompare(a.updated_at ?? "");
-      if (updatedDiff !== 0) return updatedDiff;
-      // 4) meilleur score de qualité (cohérence Atwater — computeQuality)
-      return (b.quality_score ?? 0) - (a.quality_score ?? 0);
+      // 6) meilleur score de qualité (cohérence Atwater — computeQuality)
+      const qualityDiff = (b.quality_score ?? 0) - (a.quality_score ?? 0);
+      if (qualityDiff !== 0) return qualityDiff;
+      // 7) le plus récemment mis à jour
+      return (b.updated_at ?? "").localeCompare(a.updated_at ?? "");
     });
-    // 5) un seul représentant conservé par produit — les autres variantes
-    // restent en cache (`foods`) pour ne rien perdre, mais ne sont plus
-    // affichées dans les résultats de recherche.
     picked.push(group[0]);
   }
   return picked;
 }
 
+/**
+ * Récupère les noms déjà journalisés par l'utilisateur (bucket "used") —
+ * fenêtre bornée récente, même principe que useUsedFoods côté client :
+ * agrégation sur un historique borné plutôt qu'un chargement illimité.
+ */
+async function fetchUsedNames(admin: Admin, userId: string, limit = 300): Promise<Set<string>> {
+  const { data } = await admin
+    .from("nutrition")
+    .select("name")
+    .eq("user_id", userId)
+    .not("name", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  const set = new Set<string>();
+  for (const row of data ?? []) {
+    const n = (row as Record<string, unknown>).name as string | null;
+    if (n) set.add(normalize(n));
+  }
+  return set;
+}
+
 /** Retire les champs de ranking internes avant de répondre au client. */
 function stripInternal(results: FoodResult[]): FoodResult[] {
-  return results.map(({ has_barcode: _has_barcode, updated_at: _updated_at, ...rest }) => rest);
+  return results.map(({ has_barcode: _has_barcode, updated_at: _updated_at, user_id: _user_id, ...rest }) => rest);
 }
 
 Deno.serve(async (req) => {
@@ -361,38 +559,10 @@ Deno.serve(async (req) => {
         if (offRes.ok) {
           const offData = await offRes.json();
           if (offData?.status === 1 && offData?.product) {
-            const p = offData.product;
-            const n = p.nutriments ?? {};
-            const name = p.product_name_fr || p.product_name || p.generic_name_fr || p.generic_name;
-            const calories = round(n["energy-kcal_100g"] ?? (n["energy_100g"] ? n["energy_100g"] / 4.184 : null), 0);
-            const protein = round(n.proteins_100g);
-            const carbs = round(n.carbohydrates_100g);
-            const fat = round(n.fat_100g);
-            const fiber = round(n.fiber_100g);
-            if (name && (calories != null || protein != null || carbs != null || fat != null)) {
-              const payload = {
-                source: "icortex" as const,
-                source_id: `off:${code}`,
-                name,
-                normalized_name: normalize(name),
-                brand: p.brands ?? null,
-                category: p.categories ?? null,
-                image_url: p.image_front_small_url ?? p.image_small_url ?? p.image_url ?? null,
-                serving_type: "100g",
-                calories, protein_g: protein, carbs_g: carbs, fat_g: fat, fiber_g: fiber,
-                sugars_g: round(n.sugars_100g),
-                saturated_fat_g: round(n["saturated-fat_100g"]),
-                sodium_mg: round(n.sodium_100g != null ? n.sodium_100g * 1000 : null),
-              };
-              const { data: saved, error: upErr } = await admin
-                .from("foods")
-                .upsert(payload, { onConflict: "source,source_id" })
-                .select()
-                .single();
-              if (!upErr && saved) {
-                const q = computeQuality(calories, protein, carbs, fat);
-                await admin.from("food_quality_scores").upsert({ food_id: saved.id, ...q });
-                await admin.from("food_barcodes").upsert({ barcode: code, food_id: saved.id });
+            const payload = offProductToPayload(offData.product as OffProduct, code);
+            if (payload) {
+              const saved = await upsertFood(admin, payload);
+              if (saved) {
                 const enriched = await enrich(admin, [toResult(saved as Record<string, unknown>, code)]);
                 return Response.json({ ok: true, data: stripInternal(enriched)[0] }, { headers: cors });
               }
@@ -418,9 +588,34 @@ Deno.serve(async (req) => {
       const query = String(body.query ?? "").trim();
       if (query.length < 2) return Response.json({ ok: true, data: [] }, { headers: cors });
       const norm = normalize(query);
+      const country = normalizeCountry(body.country) ?? DEFAULT_COUNTRY;
+      const nationalTag = OFF_NATIONAL_TAG[country];
+      const regionalTag = OFF_REGIONAL_TAG[country];
 
-      const synTerms = await expandSynonyms(admin, norm);
+      const [synTerms, usedNames] = await Promise.all([
+        expandSynonyms(admin, norm),
+        fetchUsedNames(admin, userData.user.id),
+      ]);
       let results = await dbSearch(admin, [norm, ...synTerms]);
+
+      // OpenFoodFacts national (France par défaut) : priorité #1, donc
+      // interrogé directement — on n'attend pas que les autres sources
+      // soient "insuffisantes" pour consulter la source la plus pertinente.
+      if (nationalTag) {
+        const offNational = await offSearch(query, nationalTag, 8);
+        const saved = await Promise.all(
+          offNational.map(async (p) => {
+            if (!p.code) return null;
+            try {
+              return await upsertFood(admin, offProductToPayload(p, p.code));
+            } catch (_) {
+              return null;
+            }
+          }),
+        );
+        for (const s of saved) if (s) results.push(toResult(s as Record<string, unknown>));
+        results = dedupe(results);
+      }
 
       let englishTerm: string | null = null;
       if (results.length < 3 && GEMINI_KEY) {
@@ -429,6 +624,24 @@ Deno.serve(async (req) => {
           const more = await dbSearch(admin, [normalize(englishTerm)]);
           results = dedupe([...results, ...more]);
         }
+      }
+
+      // OpenFoodFacts régional (repli) — seulement si le national + le cache
+      // n'ont pas suffi, comme USDA ci-dessous.
+      if (results.length < 5 && regionalTag) {
+        const offRegional = await offSearch(englishTerm ?? query, regionalTag, 8);
+        const saved = await Promise.all(
+          offRegional.map(async (p) => {
+            if (!p.code) return null;
+            try {
+              return await upsertFood(admin, offProductToPayload(p, p.code));
+            } catch (_) {
+              return null;
+            }
+          }),
+        );
+        for (const s of saved) if (s) results.push(toResult(s as Record<string, unknown>));
+        results = dedupe(results);
       }
 
       if (results.length < 5 && USDA_KEY) {
@@ -453,7 +666,12 @@ Deno.serve(async (req) => {
       // saturent les 15 premiers résultats bruts, le pass de dédup qui suit
       // doit encore avoir de quoi retenir un représentant par produit.
       const enriched = await enrich(admin, results.slice(0, 30));
-      const deduped = selectBestPerProduct(enriched).slice(0, 15);
+      // Sécurité : l'admin client contourne la RLS `foods_select_public_or_own` —
+      // ne jamais exposer l'aliment personnalisé d'un AUTRE utilisateur.
+      const visible = enriched.filter(
+        (r) => !(r.source === "custom" && r.user_id && r.user_id !== userData.user.id),
+      );
+      const deduped = selectBestPerProduct(visible, country, usedNames).slice(0, 15);
       return Response.json({ ok: true, data: stripInternal(deduped) }, { headers: cors });
     }
 
