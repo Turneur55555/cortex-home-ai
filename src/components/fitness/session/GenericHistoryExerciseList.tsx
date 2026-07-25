@@ -33,8 +33,8 @@
 // l'historique — analogue à `w.date === latestDate` en musculation.
 // ============================================================
 
-import { useMemo, useState } from "react";
-import { BarChart3, ChevronRight, Repeat, Trophy } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { BarChart3, ChevronRight, Repeat } from "lucide-react";
 import type { DisciplineId, SessionSegment, SessionView } from "@/lib/fitness/engines/types";
 import {
   bestMetricValue,
@@ -46,6 +46,8 @@ import {
 import { useDisciplineSegmentHistory } from "@/hooks/useDisciplineSegmentHistory";
 import { SessionStatChip } from "./SessionStatChip";
 import { SegmentAnalysisSheet } from "./SegmentAnalysisSheet";
+import { SessionRecordsBlock, type SessionRecordEntry } from "./SessionRecordsBlock";
+import { CollapsibleExercises } from "./CollapsibleExercises";
 
 /** Ligne "méta" enrichie sous le titre de chaque exercice — même esprit
  *  que "N séries · max X kg · Y kg total" en musculation : le nombre de
@@ -95,6 +97,7 @@ function GenericHistoryExerciseRow({
   isOpen,
   onToggle,
   onOpenStats,
+  onRecord,
 }: {
   g: LabelGroup<SessionSegment>;
   discipline: DisciplineId;
@@ -102,6 +105,10 @@ function GenericHistoryExerciseRow({
   isOpen: boolean;
   onToggle: () => void;
   onOpenStats: (label: string) => void;
+  /** Journal de progression (refonte 25/07/2026) : reporte le record de cet
+   *  exercice (s'il y en a un) au bloc "Records" affiché au niveau de la
+   *  liste — remplace le badge jusque-là répété sous chaque exercice. */
+  onRecord: (record: SessionRecordEntry | null) => void;
 }) {
   const repCount = g.instances.length;
   const doneCount = g.instances.filter((seg) =>
@@ -130,6 +137,22 @@ function GenericHistoryExerciseRow({
       : null;
   const isNewRecord = isRecord && latestOccurrenceDate === sessionDate;
 
+  // Reporte le record (s'il y en a un) au bloc "Records" de la liste — plus
+  // de badge répété ici (voir SessionRecordsBlock, rendu une seule fois).
+  useEffect(() => {
+    onRecord(
+      isRecord
+        ? {
+            key: g.key,
+            name: g.displayLabel,
+            valueLabel: currentBest!.formatted,
+            deltaLabel: isNewRecord ? "Nouveau" : null,
+          }
+        : null,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [g.key, g.displayLabel, isRecord, isNewRecord, currentBest?.formatted]);
+
   return (
     <li className="overflow-hidden rounded-2xl border border-white/5 bg-white/[0.03]">
       <div className="flex cursor-pointer select-none items-center gap-3 p-3" onClick={onToggle}>
@@ -143,12 +166,6 @@ function GenericHistoryExerciseRow({
           <p className="mt-0.5 truncate text-[11px] font-medium uppercase tracking-wider text-muted-foreground/80">
             {metaLine}
           </p>
-          {isRecord && (
-            <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-bold text-warning">
-              <Trophy className="h-3 w-3" />
-              {isNewRecord ? "Nouveau record" : `Record ${currentBest!.formatted}`}
-            </span>
-          )}
         </div>
 
         <ChevronRight
@@ -258,32 +275,67 @@ export function GenericHistoryExerciseList({
 }) {
   const [statsLabel, setStatsLabel] = useState<string | null>(null);
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
+  // Journal de progression (refonte 25/07/2026) : liste repliée par défaut,
+  // et records remontés depuis chaque ligne (voir GenericHistoryExerciseRow)
+  // pour alimenter un unique bloc "Records" au lieu d'un badge par exercice.
+  const [exercisesOpen, setExercisesOpen] = useState(false);
+  const [recordsByKey, setRecordsByKey] = useState<Map<string, SessionRecordEntry>>(new Map());
   const groups = useMemo(() => groupByExerciseLabel(view.segments), [view.segments]);
 
   if (groups.length === 0) return null;
 
+  const recordEntries = groups
+    .map((g) => recordsByKey.get(g.key))
+    .filter((r): r is SessionRecordEntry => r != null);
+
   return (
     <>
-      <ul className="space-y-3">
-        {groups.map((g) => (
-          <GenericHistoryExerciseRow
-            key={g.key}
-            g={g}
-            discipline={discipline}
-            sessionDate={sessionDate}
-            isOpen={expandedKeys.has(g.key)}
-            onToggle={() =>
-              setExpandedKeys((prev) => {
-                const next = new Set(prev);
-                if (next.has(g.key)) next.delete(g.key);
-                else next.add(g.key);
-                return next;
-              })
-            }
-            onOpenStats={setStatsLabel}
-          />
-        ))}
-      </ul>
+      <SessionRecordsBlock records={recordEntries} />
+
+      <CollapsibleExercises
+        count={groups.length}
+        open={exercisesOpen}
+        onToggle={() => setExercisesOpen((v) => !v)}
+      >
+        <ul className="space-y-3">
+          {groups.map((g) => (
+            <GenericHistoryExerciseRow
+              key={g.key}
+              g={g}
+              discipline={discipline}
+              sessionDate={sessionDate}
+              isOpen={expandedKeys.has(g.key)}
+              onToggle={() =>
+                setExpandedKeys((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(g.key)) next.delete(g.key);
+                  else next.add(g.key);
+                  return next;
+                })
+              }
+              onOpenStats={setStatsLabel}
+              onRecord={(record) =>
+                setRecordsByKey((prev) => {
+                  const cur = prev.get(g.key) ?? null;
+                  if (cur === record) return prev;
+                  if (
+                    cur &&
+                    record &&
+                    cur.valueLabel === record.valueLabel &&
+                    cur.deltaLabel === record.deltaLabel
+                  ) {
+                    return prev;
+                  }
+                  const next = new Map(prev);
+                  if (record == null) next.delete(g.key);
+                  else next.set(g.key, record);
+                  return next;
+                })
+              }
+            />
+          ))}
+        </ul>
+      </CollapsibleExercises>
 
       {statsLabel && (
         <SegmentAnalysisSheet

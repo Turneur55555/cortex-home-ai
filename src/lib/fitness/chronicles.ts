@@ -48,7 +48,18 @@ function sortAsc(workouts: WorkoutLike[]): WorkoutLike[] {
 // Un exercice jamais vu = « nouvel exercice » ; une charge max STRICTEMENT
 // supérieure au meilleur passé = PR.
 
-export type SessionRecord = { key: string; name: string; weight: number; isNew: boolean };
+export type SessionRecord = {
+  key: string;
+  name: string;
+  weight: number;
+  isNew: boolean;
+  /** Meilleure charge précédente battue par ce record — `null` pour un
+   *  tout premier exercice (`isNew`), auquel cas il n'y a rien à comparer.
+   *  Additif (jamais lu par les consommateurs existants du Hall of Fame /
+   *  des badges) — sert uniquement le bloc "Records" du journal de
+   *  progression pour afficher le delta (ex. "+5 kg"). */
+  previousWeight: number | null;
+};
 
 export function computeRecordsBySession(
   muscuWorkouts: WorkoutLike[],
@@ -63,10 +74,22 @@ export function computeRecordsBySession(
       if (g.maxWeight == null) continue;
       const prev = runningMax.get(g.key);
       if (prev == null) {
-        records.push({ key: g.key, name: g.name, weight: g.maxWeight, isNew: true });
+        records.push({
+          key: g.key,
+          name: g.name,
+          weight: g.maxWeight,
+          isNew: true,
+          previousWeight: null,
+        });
         runningMax.set(g.key, g.maxWeight);
       } else if (g.maxWeight > prev) {
-        records.push({ key: g.key, name: g.name, weight: g.maxWeight, isNew: false });
+        records.push({
+          key: g.key,
+          name: g.name,
+          weight: g.maxWeight,
+          isNew: false,
+          previousWeight: prev,
+        });
         runningMax.set(g.key, g.maxWeight);
       }
     }

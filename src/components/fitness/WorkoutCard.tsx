@@ -44,6 +44,10 @@ import { ENGINE_REGISTRY } from "@/lib/fitness/engines/registry";
 import { DisciplineBadge } from "./session/DisciplineIcon";
 import { useWorkoutAnalysisIndex } from "@/hooks/useWorkoutAnalyses";
 import { StoredWorkoutAnalysisSheet } from "./StoredWorkoutAnalysisSheet";
+import type { SessionRecord } from "@/lib/fitness/chronicles";
+import { SessionHighlights, type HighlightSpec } from "./session/SessionHighlights";
+import { SessionRecordsBlock, type SessionRecordEntry } from "./session/SessionRecordsBlock";
+import { CollapsibleExercises } from "./session/CollapsibleExercises";
 
 export type WorkoutRow = NonNullable<ReturnType<typeof useWorkouts>["data"]>[number];
 
@@ -60,6 +64,7 @@ export function WorkoutCard({
   histByGym,
   imageUrls,
   latestDate,
+  sessionRecords,
   onRepeatLive,
   onOpenFromTemplate,
   onSaveAsTemplate,
@@ -73,6 +78,10 @@ export function WorkoutCard({
   histByGym: Map<string, Map<string, Array<{ date: string; weight: number }>>>;
   imageUrls: Map<string, string> | undefined;
   latestDate: string;
+  /** Records tombés PENDANT cette séance (précalculés une seule fois pour
+   *  tout l'historique via `computeRecordsBySession`, même logique que le
+   *  Hall of Fame) — alimente le bloc "Records" du journal de progression. */
+  sessionRecords: SessionRecord[];
   /** H1 : relance la séance en LIVE (pré-remplie). */
   onRepeatLive: (w: WorkoutRow) => void;
   /** Saisie rétroactive (ancien comportement, inchangé), via le menu ⋮. */
@@ -102,6 +111,11 @@ export function WorkoutCard({
   const [confirmDeleteGroup, setConfirmDeleteGroup] = useState<ExerciseGroup | null>(null);
   const [statsTarget, setStatsTarget] = useState<{ key: string; name: string } | null>(null);
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
+  // Journal de progression (refonte 25/07/2026) : la liste complète des
+  // exercices est repliée par défaut — les exploits (Moments forts,
+  // Records) se lisent avant le détail. Comportement de l'accordéon par
+  // exercice (expandedKeys ci-dessus) strictement inchangé une fois ouvert.
+  const [exercisesOpen, setExercisesOpen] = useState(false);
   const [photoModal, setPhotoModal] = useState<{ url: string; exId: string } | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [uploadingExId, setUploadingExId] = useState<string | null>(null);
@@ -113,6 +127,11 @@ export function WorkoutCard({
     ((w as unknown as { gym_location?: string | null }).gym_location ?? "Salle inconnue") ||
     "Salle inconnue";
   void histByGym;
+  // Le badge "Nouveau PR !" (qui distinguait le PR le plus récent via
+  // `latestDate`) a été retiré au profit du bloc "Records" — le prop reste
+  // dans la signature (contrat inchangé avec ProgressionModule) mais n'est
+  // plus lu localement.
+  void latestDate;
 
   // Stats agrégées RÉELLES de la séance (basées sur séries expansées)
   const stats = useMemo(() => {
@@ -159,6 +178,76 @@ export function WorkoutCard({
       totalReps,
     };
   }, [groups, w.duration_minutes, w.exercises, w.id, bodyWeightKg]);
+
+  // ── Moments forts / Records — dérivations d'affichage uniquement ──────────
+  // Aucun recalcul de logique métier : on ne fait que mettre en forme des
+  // valeurs déjà produites ailleurs (sessionRecords via computeRecordsBySession,
+  // groups via buildGroups) ou déjà chargées (useWorkouts, même clé de cache
+  // que le reste de l'écran — aucune requête supplémentaire).
+  const recordEntries = useMemo<SessionRecordEntry[]>(
+    () =>
+      sessionRecords.map((r) => ({
+        key: r.key,
+        name: r.name,
+        valueLabel: `${r.weight} kg`,
+        deltaLabel: r.previousWeight != null ? `+${r.weight - r.previousWeight} kg` : null,
+      })),
+    [sessionRecords],
+  );
+
+  const { data: allWorkouts } = useWorkouts();
+  const previousVolume = useMemo(() => {
+    if (!allWorkouts) return null;
+    const muscu = allWorkouts.filter((x) => (x.discipline ?? "muscu") === "muscu");
+    const sorted = [...muscu].sort((a, b) => {
+      if (a.date !== b.date) return a.date.localeCompare(b.date);
+      return (a.created_at ?? "").localeCompare(b.created_at ?? "");
+    });
+    const idx = sorted.findIndex((x) => x.id === w.id);
+    if (idx <= 0) return null;
+    return Math.round(workoutTonnage(sorted[idx - 1].exercises ?? []));
+  }, [allWorkouts, w.id]);
+
+  const tonnageDeltaPct =
+    previousVolume != null && previousVolume > 0
+      ? Math.round(((stats.volume - previousVolume) / previousVolume) * 100)
+      : null;
+
+  const heaviestLift = useMemo(() => {
+    let best: { name: string; weight: number } | null = null;
+    for (const g of groups) {
+      if (g.maxWeight != null && (best == null || g.maxWeight > best.weight)) {
+        best = { name: g.name, weight: g.maxWeight };
+      }
+    }
+    return best;
+  }, [groups]);
+
+  const highlights = useMemo<HighlightSpec[]>(() => {
+    const items: HighlightSpec[] = [];
+    if (recordEntries.length > 0) {
+      items.push({
+        key: "records",
+        emoji: "🏆",
+        label: `${recordEntries.length} nouveau${recordEntries.length > 1 ? "x" : ""} record${recordEntries.length > 1 ? "s" : ""}`,
+      });
+    }
+    if (tonnageDeltaPct != null && tonnageDeltaPct !== 0) {
+      items.push({
+        key: "tonnage-delta",
+        emoji: "📈",
+        label: `${tonnageDeltaPct > 0 ? "+" : ""}${tonnageDeltaPct}% de tonnage`,
+      });
+    }
+    if (heaviestLift) {
+      items.push({
+        key: "heaviest",
+        emoji: "🎯",
+        label: `Plus grosse charge : ${heaviestLift.weight} kg — ${heaviestLift.name}`,
+      });
+    }
+    return items;
+  }, [recordEntries.length, tonnageDeltaPct, heaviestLift]);
 
   const handlePhotoUpload = async (exId: string, file: File) => {
     setUploadingExId(exId);
@@ -367,168 +456,178 @@ export function WorkoutCard({
             }
           />
         </div>
+
+        {/* Moments forts — les exploits de la séance, avant le détail. */}
+        <SessionHighlights items={highlights} />
+
+        {/* Records — uniquement les exercices ayant établi un nouveau
+            record cette séance (plus la liste complète, voir plus bas). */}
+        <SessionRecordsBlock records={recordEntries} />
       </div>
 
-      {/* Liste exercices — format tableau toujours visible */}
+      {/* Liste exercices — repliée par défaut (journal de progression) */}
       {groups.length > 0 && (
-        <ul className="space-y-3 px-4 pb-3">
-          {groups.map((g) => {
-            const imgUrl =
-              (g.imagePath ? imageUrls?.get(g.imagePath) : null) ?? exerciseIllustration(g.name);
-            const gymPR = prByGym.get(gymLocation)?.get(g.key) ?? null;
-            const isPR =
-              g.maxWeight != null &&
-              (gymPR != null ? g.maxWeight === gymPR : prByName.get(g.key) === g.maxWeight);
-            const isLatestPR = isPR && w.date === latestDate;
-            const isOpen = expandedKeys.has(g.key);
-            return (
-              <li
-                key={g.key}
-                className="overflow-hidden rounded-2xl border border-white/5 bg-white/[0.03]"
-              >
-                {/* En-tête exercice — ligne cliquable entière */}
-                <div
-                  className="flex cursor-pointer select-none items-center gap-3 p-3"
-                  onClick={() => {
-                    setExpandedKeys((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(g.key)) next.delete(g.key);
-                      else next.add(g.key);
-                      return next;
-                    });
-                  }}
+        <CollapsibleExercises
+          count={groups.length}
+          open={exercisesOpen}
+          onToggle={() => setExercisesOpen((v) => !v)}
+        >
+          <ul className="space-y-3">
+            {groups.map((g) => {
+              const imgUrl =
+                (g.imagePath ? imageUrls?.get(g.imagePath) : null) ?? exerciseIllustration(g.name);
+              const gymPR = prByGym.get(gymLocation)?.get(g.key) ?? null;
+              const isPR =
+                g.maxWeight != null &&
+                (gymPR != null ? g.maxWeight === gymPR : prByName.get(g.key) === g.maxWeight);
+              const isOpen = expandedKeys.has(g.key);
+              return (
+                <li
+                  key={g.key}
+                  className="overflow-hidden rounded-2xl border border-white/5 bg-white/[0.03]"
                 >
-                  {imgUrl ? (
-                    <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl ring-1 ring-white/10">
-                      <img
-                        src={imgUrl}
-                        alt={g.name}
-                        className="h-full w-full object-cover"
-                        loading="lazy"
-                      />
-                    </div>
-                  ) : g.imagePath ? (
-                    <div className="h-14 w-14 shrink-0 animate-pulse rounded-xl bg-muted" />
-                  ) : (
-                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/15 to-primary/5 text-primary/70">
-                      <Dumbbell className="h-5 w-5" />
-                    </div>
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <h3 className="text-[15px] font-bold leading-tight tracking-tight break-words">
-                      {g.name}
-                    </h3>
-                    <p className="mt-0.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/80">
-                      {g.totalSeries} {g.totalSeries > 1 ? "séries" : "série"}
-                      {g.maxWeight != null && (
-                        <>
-                          <span className="mx-1.5 text-muted-foreground/40">·</span>
-                          max {g.maxWeight} kg
-                        </>
-                      )}
-                      {g.volume > 0 && (
-                        <>
-                          <span className="mx-1.5 text-muted-foreground/40">·</span>
-                          <span className="text-muted-foreground/60">
-                            {g.volume >= 1000 ? `${(g.volume / 1000).toFixed(1)}k` : g.volume} kg
-                          </span>
-                        </>
-                      )}
-                    </p>
-                    {isPR && (
-                      <span
-                        className={`mt-1 inline-flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-bold text-warning ${isLatestPR ? "animate-pulse" : ""}`}
-                      >
-                        <Trophy className="h-3 w-3" />
-                        {isLatestPR ? "Nouveau PR !" : "Record personnel"}
-                      </span>
-                    )}
-                    {gymPR != null && gymLocation !== "Salle inconnue" && (
-                      <p className="mt-0.5 text-[10px] font-medium text-primary/80">
-                        Record {gymLocation} : {gymPR} kg
-                      </p>
-                    )}
-                  </div>
-
-                  <ChevronRight
-                    className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-300 ${isOpen ? "rotate-90" : ""}`}
-                  />
-
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setStatsTarget({ key: g.key, name: g.name });
+                  {/* En-tête exercice — ligne cliquable entière */}
+                  <div
+                    className="flex cursor-pointer select-none items-center gap-3 p-3"
+                    onClick={() => {
+                      setExpandedKeys((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(g.key)) next.delete(g.key);
+                        else next.add(g.key);
+                        return next;
+                      });
                     }}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary transition-all active:scale-90"
-                    aria-label="Statistiques"
                   >
-                    <BarChart3 className="h-4 w-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteGroup(g);
-                    }}
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/5 text-muted-foreground transition-all active:scale-90 hover:bg-destructive/15 hover:text-destructive"
-                    aria-label="Supprimer l'exercice"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-
-                {/* Tableau des séries — accordéon */}
-                <div
-                  className="overflow-hidden transition-all duration-300 ease-out"
-                  style={{
-                    maxHeight: isOpen ? "800px" : "0px",
-                    opacity: isOpen ? 1 : 0,
-                  }}
-                >
-                  <div className="mx-3 mb-3 overflow-hidden rounded-xl border border-white/5 bg-black/20">
-                    <div className="grid grid-cols-[56px_1fr_1fr] border-b border-white/5 bg-white/[0.02] py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80">
-                      <div className="text-center">Série</div>
-                      <div className="text-center">Reps</div>
-                      <div className="text-center">Kg</div>
-                    </div>
-                    <ul className="divide-y divide-white/5">
-                      {g.series.map((s) => {
-                        const isMax = s.weight != null && s.weight === g.maxWeight && isPR;
-                        return (
-                          <li
-                            key={`${s.sourceId}-${s.index}`}
-                            className="grid grid-cols-[56px_1fr_1fr] items-center py-2.5 text-sm tabular-nums"
-                          >
-                            <div className="flex items-center justify-center">
-                              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/15 text-[11px] font-bold text-primary">
-                                {s.index}
-                              </span>
-                            </div>
-                            <div className="text-center font-semibold">{s.reps ?? "—"}</div>
-                            <div className="flex items-center justify-center gap-1 text-center font-semibold">
-                              {s.weight ?? "—"}
-                              {isMax && <Trophy className="h-3 w-3 text-warning" />}
-                            </div>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                    {/* Récap tonnage */}
-                    {g.volume > 0 && (
-                      <div className="flex items-center justify-between border-t border-white/5 bg-white/[0.02] px-3 py-2 text-[11px]">
-                        <span className="uppercase tracking-wider text-muted-foreground/70">
-                          Tonnage
-                        </span>
-                        <span className="font-bold tabular-nums">{formatTonnage(g.volume)}</span>
+                    {imgUrl ? (
+                      <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl ring-1 ring-white/10">
+                        <img
+                          src={imgUrl}
+                          alt={g.name}
+                          className="h-full w-full object-cover"
+                          loading="lazy"
+                        />
+                      </div>
+                    ) : g.imagePath ? (
+                      <div className="h-14 w-14 shrink-0 animate-pulse rounded-xl bg-muted" />
+                    ) : (
+                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/15 to-primary/5 text-primary/70">
+                        <Dumbbell className="h-5 w-5" />
                       </div>
                     )}
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-[15px] font-bold leading-tight tracking-tight break-words">
+                        {g.name}
+                      </h3>
+                      <p className="mt-0.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/80">
+                        {g.totalSeries} {g.totalSeries > 1 ? "séries" : "série"}
+                        {g.maxWeight != null && (
+                          <>
+                            <span className="mx-1.5 text-muted-foreground/40">·</span>
+                            max {g.maxWeight} kg
+                          </>
+                        )}
+                        {g.volume > 0 && (
+                          <>
+                            <span className="mx-1.5 text-muted-foreground/40">·</span>
+                            <span className="text-muted-foreground/60">
+                              {g.volume >= 1000 ? `${(g.volume / 1000).toFixed(1)}k` : g.volume} kg
+                            </span>
+                          </>
+                        )}
+                      </p>
+                      {/* Le badge "Nouveau PR !" / "Record personnel" a été retiré
+                        d'ici (refonte journal de progression, 25/07/2026) : cette
+                        info vit désormais dans le bloc "Records" de l'en-tête,
+                        affiché une seule fois par séance plutôt que répété sous
+                        chaque exercice. `isPR`/`isLatestPR` restent utilisés
+                        plus bas pour l'icône trophée du tableau des séries. */}
+                      {gymPR != null && gymLocation !== "Salle inconnue" && (
+                        <p className="mt-0.5 text-[10px] font-medium text-primary/80">
+                          Record {gymLocation} : {gymPR} kg
+                        </p>
+                      )}
+                    </div>
+
+                    <ChevronRight
+                      className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-300 ${isOpen ? "rotate-90" : ""}`}
+                    />
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setStatsTarget({ key: g.key, name: g.name });
+                      }}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary transition-all active:scale-90"
+                      aria-label="Statistiques"
+                    >
+                      <BarChart3 className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteGroup(g);
+                      }}
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/5 text-muted-foreground transition-all active:scale-90 hover:bg-destructive/15 hover:text-destructive"
+                      aria-label="Supprimer l'exercice"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
                   </div>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
+
+                  {/* Tableau des séries — accordéon */}
+                  <div
+                    className="overflow-hidden transition-all duration-300 ease-out"
+                    style={{
+                      maxHeight: isOpen ? "800px" : "0px",
+                      opacity: isOpen ? 1 : 0,
+                    }}
+                  >
+                    <div className="mx-3 mb-3 overflow-hidden rounded-xl border border-white/5 bg-black/20">
+                      <div className="grid grid-cols-[56px_1fr_1fr] border-b border-white/5 bg-white/[0.02] py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80">
+                        <div className="text-center">Série</div>
+                        <div className="text-center">Reps</div>
+                        <div className="text-center">Kg</div>
+                      </div>
+                      <ul className="divide-y divide-white/5">
+                        {g.series.map((s) => {
+                          const isMax = s.weight != null && s.weight === g.maxWeight && isPR;
+                          return (
+                            <li
+                              key={`${s.sourceId}-${s.index}`}
+                              className="grid grid-cols-[56px_1fr_1fr] items-center py-2.5 text-sm tabular-nums"
+                            >
+                              <div className="flex items-center justify-center">
+                                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/15 text-[11px] font-bold text-primary">
+                                  {s.index}
+                                </span>
+                              </div>
+                              <div className="text-center font-semibold">{s.reps ?? "—"}</div>
+                              <div className="flex items-center justify-center gap-1 text-center font-semibold">
+                                {s.weight ?? "—"}
+                                {isMax && <Trophy className="h-3 w-3 text-warning" />}
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                      {/* Récap tonnage */}
+                      {g.volume > 0 && (
+                        <div className="flex items-center justify-between border-t border-white/5 bg-white/[0.02] px-3 py-2 text-[11px]">
+                          <span className="uppercase tracking-wider text-muted-foreground/70">
+                            Tonnage
+                          </span>
+                          <span className="font-bold tabular-nums">{formatTonnage(g.volume)}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </CollapsibleExercises>
       )}
 
       {/* Ajouter un exercice */}

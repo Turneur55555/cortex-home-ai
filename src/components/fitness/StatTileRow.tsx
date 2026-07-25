@@ -43,7 +43,7 @@ export function StatTileRow({ tiles }: { tiles: StatTileSpec[] }) {
   const columns = Math.min(tiles.length, MAX_COLUMNS);
   return (
     <div
-      className="grid gap-2"
+      className="grid gap-2.5"
       style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
     >
       {tiles.map((t) => (

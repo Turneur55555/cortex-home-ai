@@ -21,7 +21,7 @@ export function StatTile({
   return (
     <div
       title={title}
-      className="flex min-w-0 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-2xl bg-white/[0.04] px-2 py-2.5 ring-1 ring-white/5"
+      className="flex min-w-0 flex-col items-center justify-center gap-1 overflow-hidden rounded-2xl bg-white/[0.04] px-2 py-3 ring-1 ring-white/5"
     >
       <span className="text-muted-foreground/70">{icon}</span>
       <span className="mt-0.5 flex min-w-0 flex-wrap items-baseline justify-center gap-0.5">

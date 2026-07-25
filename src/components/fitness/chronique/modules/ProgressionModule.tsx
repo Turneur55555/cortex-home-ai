@@ -22,7 +22,12 @@ import { WorkoutCard, type WorkoutRow } from "@/components/fitness/WorkoutCard";
 import { GenericHistoryCard } from "@/components/fitness/session/GenericHistoryCard";
 import { SectionReveal } from "@/components/fitness/SectionReveal";
 import { formatTonnage } from "@/lib/fitness/strength";
-import { computeHallOfFame, computeForgotten, computePlateaus } from "@/lib/fitness/chronicles";
+import {
+  computeHallOfFame,
+  computeForgotten,
+  computePlateaus,
+  computeRecordsBySession,
+} from "@/lib/fitness/chronicles";
 import { useLatestBodyWeight } from "@/hooks/useLatestBodyWeight";
 import { ENGINE_REGISTRY } from "@/lib/fitness/engines/registry";
 import { isReadyEngine, type DisciplineId } from "@/lib/fitness/engines/types";
@@ -70,6 +75,13 @@ export function ProgressionModule({
   );
   const forgotten = useMemo(() => computeForgotten(workouts), [workouts]);
   const plateaus = useMemo(() => computePlateaus(workouts), [workouts]);
+  // Journal de progression (refonte 25/07/2026) : records tombés par
+  // séance, précalculés une seule fois pour tout l'historique musculation
+  // — alimente le bloc "Records" de chaque WorkoutCard de la Chronologie.
+  const recordsBySession = useMemo(
+    () => computeRecordsBySession(workouts.filter((w) => (w.discipline ?? "muscu") === "muscu")),
+    [workouts],
+  );
 
   const dateOf = (iso: string) => format(parseISO(iso), "d MMM yyyy", { locale: fr });
 
@@ -236,6 +248,7 @@ export function ProgressionModule({
                     histByGym={histByGym}
                     imageUrls={imageUrls}
                     latestDate={latestDate}
+                    sessionRecords={recordsBySession.get(w.id) ?? []}
                     onRepeatLive={onRepeatLive}
                     onOpenFromTemplate={onOpenFromTemplate}
                     onSaveAsTemplate={onSaveAsTemplate}
