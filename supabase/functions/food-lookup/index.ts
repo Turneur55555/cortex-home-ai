@@ -40,6 +40,9 @@ interface FoodResult {
   quality_score?: number;
   confidence_score?: number;
   default_serving?: ServingInfo | null;
+  /** Interne au ranking — jamais renvoyé au client (voir stripInternal). */
+  updated_at?: string;
+  has_barcode?: boolean;
 }
 
 const round = (v: unknown, d = 1): number | null => {
@@ -75,6 +78,7 @@ function toResult(row: Record<string, unknown>, barcode?: string): FoodResult {
     image_url: (row.image_url as string) ?? undefined,
     calories, proteins, carbs, fats, fiber,
     barcode,
+    updated_at: (row.updated_at as string) ?? undefined,
     nutriments: {
       "energy-kcal_100g": calories ?? undefined,
       proteins_100g: proteins ?? undefined,
@@ -107,9 +111,10 @@ type Admin = ReturnType<typeof createClient>;
 async function enrich(admin: Admin, results: FoodResult[]): Promise<FoodResult[]> {
   const ids = results.map((r) => r.id).filter((id) => /^[0-9a-f-]{36}$/i.test(id));
   if (ids.length === 0) return results;
-  const [q, sv] = await Promise.all([
+  const [q, sv, bc] = await Promise.all([
     admin.from("food_quality_scores").select("food_id, quality_score, confidence_score").in("food_id", ids),
     admin.from("food_servings").select("food_id, label, unit, quantity, grams, is_default").in("food_id", ids),
+    admin.from("food_barcodes").select("food_id").in("food_id", ids),
   ]);
   const qMap = new Map<string, { quality_score: number; confidence_score: number }>();
   for (const row of q.data ?? []) qMap.set(String((row as Record<string, unknown>).food_id), row as never);
@@ -120,11 +125,13 @@ async function enrich(admin: Admin, results: FoodResult[]): Promise<FoodResult[]
       svMap.set(String(r.food_id), { label: String(r.label), unit: String(r.unit), quantity: Number(r.quantity), grams: Number(r.grams) });
     }
   }
+  const bcSet = new Set((bc.data ?? []).map((row) => String((row as Record<string, unknown>).food_id)));
   return results.map((r) => ({
     ...r,
     quality_score: qMap.get(r.id)?.quality_score,
     confidence_score: qMap.get(r.id)?.confidence_score,
     default_serving: svMap.get(r.id) ?? null,
+    has_barcode: bcSet.has(r.id),
   }));
 }
 
@@ -237,6 +244,68 @@ function dedupe(results: FoodResult[]): FoodResult[] {
   return results.filter((r) => (seen.has(r.id) ? false : (seen.add(r.id), true)));
 }
 
+// ─── Déduplication par identité produit ────────────────────────────────────
+// Cause des doublons "Vita Coco" : le catalogue USDA Branded Foods contient
+// plusieurs fiches indépendantes (fdcId/UPC différents) pour un même nom de
+// produit — reformulations, tailles d'emballage, soumissions redondantes —
+// chacune upsertée comme une ligne `foods` distincte (onConflict sur
+// source+source_id, pas sur l'identité produit). `dbSearch` matche par
+// substring et l'ancien `dedupe()` ne retirait que les lignes strictement
+// identiques (même id) : toutes les variantes ressortaient donc côte à côte
+// avec des macros différentes. OpenFoodFacts n'intervient pas dans la
+// recherche (uniquement le scan code-barres) — il n'est pas en cause ici.
+//
+// On regroupe par nom + marque normalisés (assez précis pour capter ces
+// doublons sans fusionner des variantes réellement différentes — saveur,
+// format — dont le nom normalisé diffère), puis on ne garde qu'un
+// représentant par groupe selon la priorité demandée.
+function productKey(r: FoodResult): string {
+  return `${normalize(r.name)}|${(r.brand ?? "").trim().toLowerCase()}`;
+}
+
+function macroCompleteness(r: FoodResult): number {
+  return [r.calories, r.proteins, r.carbs, r.fats].filter((v) => v != null).length;
+}
+
+function selectBestPerProduct(results: FoodResult[]): FoodResult[] {
+  const groups = new Map<string, FoodResult[]>();
+  for (const r of results) {
+    const k = productKey(r);
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k)!.push(r);
+  }
+  const picked: FoodResult[] = [];
+  for (const group of groups.values()) {
+    if (group.length === 1) {
+      picked.push(group[0]);
+      continue;
+    }
+    group.sort((a, b) => {
+      // 1) code-barres valide (food_barcodes)
+      const barcodeDiff = Number(b.has_barcode ?? false) - Number(a.has_barcode ?? false);
+      if (barcodeDiff !== 0) return barcodeDiff;
+      // 2) macros complètes (calories + protéines + glucides + lipides)
+      const macroDiff = macroCompleteness(b) - macroCompleteness(a);
+      if (macroDiff !== 0) return macroDiff;
+      // 3) le plus récemment mis à jour
+      const updatedDiff = (b.updated_at ?? "").localeCompare(a.updated_at ?? "");
+      if (updatedDiff !== 0) return updatedDiff;
+      // 4) meilleur score de qualité (cohérence Atwater — computeQuality)
+      return (b.quality_score ?? 0) - (a.quality_score ?? 0);
+    });
+    // 5) un seul représentant conservé par produit — les autres variantes
+    // restent en cache (`foods`) pour ne rien perdre, mais ne sont plus
+    // affichées dans les résultats de recherche.
+    picked.push(group[0]);
+  }
+  return picked;
+}
+
+/** Retire les champs de ranking internes avant de répondre au client. */
+function stripInternal(results: FoodResult[]): FoodResult[] {
+  return results.map(({ has_barcode: _has_barcode, updated_at: _updated_at, ...rest }) => rest);
+}
+
 Deno.serve(async (req) => {
   const cors = buildCors(req);
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
@@ -281,7 +350,7 @@ Deno.serve(async (req) => {
       const cached = await admin.from("food_barcodes").select("barcode, foods(*)").eq("barcode", code).maybeSingle();
       if (cached.data?.foods) {
         const enriched = await enrich(admin, [toResult(cached.data.foods as Record<string, unknown>, code)]);
-        return Response.json({ ok: true, data: enriched[0] }, { headers: cors });
+        return Response.json({ ok: true, data: stripInternal(enriched)[0] }, { headers: cors });
       }
 
       // 1) Open Food Facts — couvre la majorité des codes-barres européens
@@ -325,7 +394,7 @@ Deno.serve(async (req) => {
                 await admin.from("food_quality_scores").upsert({ food_id: saved.id, ...q });
                 await admin.from("food_barcodes").upsert({ barcode: code, food_id: saved.id });
                 const enriched = await enrich(admin, [toResult(saved as Record<string, unknown>, code)]);
-                return Response.json({ ok: true, data: enriched[0] }, { headers: cors });
+                return Response.json({ ok: true, data: stripInternal(enriched)[0] }, { headers: cors });
               }
             }
           }
@@ -339,7 +408,7 @@ Deno.serve(async (req) => {
           const payload = usdaToFood(usda); payload.gtinUpc = payload.gtinUpc ?? code;
           const saved = await upsertFood(admin, payload);
           const enriched = await enrich(admin, [toResult(saved as Record<string, unknown>, code)]);
-          return Response.json({ ok: true, data: enriched[0] }, { headers: cors });
+          return Response.json({ ok: true, data: stripInternal(enriched)[0] }, { headers: cors });
         }
       }
       return Response.json({ ok: false, error: "not_found", code }, { headers: cors });
@@ -380,8 +449,12 @@ Deno.serve(async (req) => {
         results = dedupe(results);
       }
 
-      const enriched = await enrich(admin, results.slice(0, 15));
-      return Response.json({ ok: true, data: enriched }, { headers: cors });
+      // Enrichit un pool plus large que la limite finale : si des doublons
+      // saturent les 15 premiers résultats bruts, le pass de dédup qui suit
+      // doit encore avoir de quoi retenir un représentant par produit.
+      const enriched = await enrich(admin, results.slice(0, 30));
+      const deduped = selectBestPerProduct(enriched).slice(0, 15);
+      return Response.json({ ok: true, data: stripInternal(deduped) }, { headers: cors });
     }
 
     return Response.json({ ok: false, error: "unknown type" }, { headers: cors });
