@@ -53,7 +53,7 @@ import type { MealSlug } from "@/lib/nutrition/meals";
 
 import { BarcodeScannerSheet } from "@/components/BarcodeScannerSheet";
 import { MealScanSheet } from "@/components/fitness/MealScanSheet";
-import { NutritionSheet } from "@/components/fitness/NutritionSheet";
+import { FoodLibrarySheet } from "@/components/fitness/FoodLibrarySheet";
 import { MealPlanSheet } from "@/components/fitness/MealPlanSheet";
 import { GoalsSheet } from "@/components/fitness/GoalsSheet";
 import { NutritionAnalysisSheet } from "@/components/fitness/NutritionAnalysisSheet";
@@ -67,7 +67,7 @@ import { SwipeableNutritionItem } from "@/components/fitness/SwipeableNutritionI
 import { useCreateSavedMeal } from "@/hooks/use-saved-meals";
 import { getWeightBadge } from "@/lib/nutrition/utils";
 import { MEAL_LABELS, MEAL_SLUGS, isMealSlug } from "@/lib/nutrition/meals";
-import type { MealPrefill, NutritionEntry } from "@/lib/nutrition/utils";
+import type { NutritionEntry } from "@/lib/nutrition/utils";
 
 // ─── Config visuelle par repas ─────────────────────────────────────────────
 const MEAL_VISUALS: Record<
@@ -144,12 +144,11 @@ export function NutritionTab() {
   const [copyOpen, setCopyOpen] = useState(false);
   const [copyFrom, setCopyFrom] = useState(() => format(subDays(new Date(), 1), "yyyy-MM-dd"));
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [open, setOpen] = useState(false);
+  const [libraryOpen, setLibraryOpen] = useState(false);
   const [goalsOpen, setGoalsOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
   const [barcodeOpen, setBarcodeOpen] = useState(false);
-  const [prefill, setPrefill] = useState<MealPrefill | null>(null);
   const [weightEditItem, setWeightEditItem] = useState<NutritionEntry | null>(null);
   const [analysisOpen, setAnalysisOpen] = useState(false);
   const [savedOpen, setSavedOpen] = useState(false);
@@ -185,11 +184,6 @@ export function NutritionTab() {
     }
     return result;
   }, [data]);
-
-  const openManual = () => {
-    setPrefill(null);
-    setOpen(true);
-  };
 
   const saveAsFavorite = (m: {
     name: string | null;
@@ -728,7 +722,7 @@ export function NutritionTab() {
         onClose={() => setCommandCenterOpen(false)}
         onAction={(action) => {
           setCommandCenterOpen(false);
-          if (action === "manual") openManual();
+          if (action === "manual") setLibraryOpen(true);
           else if (action === "scan") setScanOpen(true);
           else if (action === "barcode") setBarcodeOpen(true);
           else if (action === "voice") setVoiceOpen(true);
@@ -745,7 +739,7 @@ export function NutritionTab() {
         }}
       />
 
-      {open && <NutritionSheet date={date} prefill={prefill} onClose={() => setOpen(false)} />}
+      {libraryOpen && <FoodLibrarySheet date={date} onClose={() => setLibraryOpen(false)} />}
       {goalsOpen && <GoalsSheet current={goals ?? null} onClose={() => setGoalsOpen(false)} />}
       {planOpen && <MealPlanSheet onClose={() => setPlanOpen(false)} />}
       {historyOpen && <NutritionHistorySheet onClose={() => setHistoryOpen(false)} />}

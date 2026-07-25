@@ -82,3 +82,8 @@ export function searchLocalFoods(query: string): FoodSuggestion[] {
   if (q.length < 2) return [];
   return LOCAL_FOODS.filter((f) => normalize(f.name).includes(q)).slice(0, 6);
 }
+
+/** Catalogue local complet — pour un affichage immédiat (bibliothèque « Tous »), sans recherche. */
+export function listLocalFoods(): FoodSuggestion[] {
+  return LOCAL_FOODS;
+}
