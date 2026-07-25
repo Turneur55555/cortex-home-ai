@@ -8,6 +8,8 @@ interface RankIllustrationProps {
   rankKey: RankKey;
   label: string;
   className?: string;
+  /** Style additionnel appliqué à l'élément final (ex. masque de fondu, zoom) — jamais de couleur RankTheme ici, uniquement des effets géométriques propres au conteneur appelant. */
+  style?: React.CSSProperties;
 }
 
 /**
@@ -22,7 +24,7 @@ interface RankIllustrationProps {
  * le thème du rang (RankTheme) : même en l'absence d'art officiel, l'univers
  * visuel reste cohérent.
  */
-export function RankIllustration({ rankKey, label, className }: RankIllustrationProps) {
+export function RankIllustration({ rankKey, label, className, style }: RankIllustrationProps) {
   const src = getRankIllustration(rankKey) ?? getPlaceholderIllustration();
 
   if (!src) {
@@ -36,6 +38,7 @@ export function RankIllustration({ rankKey, label, className }: RankIllustration
         style={{
           borderColor: `${theme.secondary}40`,
           boxShadow: rankGlowShadow(theme.glow, 0, 24, -12),
+          ...style,
         }}
       >
         <ImageOff className="h-6 w-6 opacity-70" style={{ color: theme.secondary }} aria-hidden />
@@ -61,6 +64,7 @@ export function RankIllustration({ rankKey, label, className }: RankIllustration
       loading="lazy"
       decoding="async"
       className={cn("object-cover object-top", className)}
+      style={style}
     />
   );
 }

@@ -111,17 +111,30 @@ function ProgressionPage() {
             className="rank-glint-layer pointer-events-none absolute inset-0 opacity-40"
           />
           <div className="relative flex flex-col items-center">
-            <div
-              className="relative h-40 w-40 overflow-hidden rounded-[20px]"
-              style={{
-                boxShadow: `${rankRingInset(theme.secondary, "55")}, ${rankGlowShadow(theme.glow, 0, 32, -8)}`,
-                background: "rgba(0,0,0,0.25)",
-              }}
-            >
+            {/* Médaillon du rang — l'illustration fait corps avec la plaque
+                (aucun cadre carré visible) : ratio 4:5 intégral (aucun
+                rognage du disque ni du titre gravé, cf. assets/ranks/
+                FORMAT.md), léger zoom + masque radial qui fond
+                progressivement les bords dans plateSurface — pas de
+                nouvelle couleur, uniquement la surface déjà en place qui
+                transparaît. Halo ambiant en dessous = même rankGlowShadow
+                que le reste de la plaque, pas une réinvention. */}
+            <div className="relative aspect-[4/5] w-44">
+              <div
+                aria-hidden
+                className="pointer-events-none absolute -inset-10 rounded-full blur-3xl"
+                style={{ background: theme.glow, opacity: 0.55 }}
+              />
               <RankIllustration
                 rankKey={progress.title.key}
                 label={progress.title.label}
-                className="h-full w-full"
+                className="relative h-full w-full scale-110"
+                style={{
+                  maskImage:
+                    "radial-gradient(ellipse 88% 96% at 50% 50%, black 60%, transparent 100%)",
+                  WebkitMaskImage:
+                    "radial-gradient(ellipse 88% 96% at 50% 50%, black 60%, transparent 100%)",
+                }}
               />
             </div>
             <p
