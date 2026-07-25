@@ -1,7 +1,43 @@
 # Mémoire projet — cortex-home-ai
 
 ## Dernière mise à jour
-2026-07-24
+2026-07-25
+
+## Refonte page « Progression RPG » — Journal des promotions + correctif MEMORY erroné (2026-07-25)
+Demande : simplifier `/progression`, supprimer le doublon avec la carte de l'accueil, et transformer
+« Historique des promotions » en la SEULE chronologie officielle, alimentée automatiquement.
+- **Supprimé** : la section « Historique de progression » (ladder statique des 6 Titres
+  Mortel→Primordial, doublon exact de l'historique des promotions) et ses imports (`RANK_TIERS`,
+  `Lock`, `Check`) dans `progression.tsx`.
+- **Nouvelle table `rank_promotions`** (migration `20260725130000_rpg_promotion_history.sql`,
+  appliquée en prod via MCP Supabase + `types.ts` régénéré) : `user_id`, `tier_index` (0..29),
+  `xp_at_promotion`, `created_at`. RLS lecture seule (`auth.uid() = user_id`), aucune policy
+  INSERT/UPDATE/DELETE cliente — écriture exclusivement via un trigger `SECURITY DEFINER`
+  (`record_rank_promotions`, `AFTER INSERT OR UPDATE OF xp ON user_stats`) qui compare l'ancien/nouveau
+  palier via `compute_tier_index_from_xp()` (copie SQL LECTURE SEULE de `XP_THRESHOLDS`/`tierForXp`,
+  garde-fou de parité testé par `titleConfig.sql-parity.test.ts`, même pattern que
+  `characterLevel.sql-parity.test.ts`). **Aucun calcul d'XP ni moteur de progression modifié** :
+  `titleProgress.ts` reste l'unique source d'affichage, cette table ne fait que dater des
+  franchissements déjà décidés ailleurs. Backfill inclus dans la même migration (XP au seuil, pas
+  l'XP actuelle, pour les paliers déjà franchis par les joueurs existants).
+- **Nouveau code pur** : `src/lib/fitness/rpg/promotionHistory.ts` (`buildPromotionEvents` — projette
+  les lignes brutes sur Titre/Grade via `titleConfig.ts`, sans dupliquer les libellés) +
+  `useRankPromotions.ts` (hook Supabase) + `PromotionHistoryTimeline.tsx` (cartes trophée pour un
+  nouveau Rang / étoile discrète pour un Grade, halo `RankTheme` du rang concerné via les helpers
+  existants — aucune couleur inline).
+- **Bug préexistant démasqué et corrigé** : `src/integrations/supabase/types.ts` committé était
+  drastiquement drift (38 tables au lieu de 92 réellement en base — `xp_events`, `reward_catalog`,
+  `achievement_criteria`, etc. manquaient). Régénéré depuis la base (source de vérité, cf. règle
+  CLAUDE.md). **⚠️ Correctif de l'entrée MEMORY du 2026-07-24 ci-dessous, qui était FAUSSE** : le
+  schéma réel de `foods` est `normalized_name`/`protein_g`/`carbs_g`/`fat_g` (PAS `name_normalized`/
+  `proteins`/`carbs`/`fats` comme affirmé le 24/07) — vérifié en direct contre la base de prod le
+  25/07. Cette fausse affirmation explique très probablement pourquoi `NutritionSheet.tsx` a été
+  « réparé » à l'envers par un commit Lovable ultérieur (09e5200 "Changes") : quelqu'un/Lovable a lu
+  cette mémoire et « corrigé » vers les mauvais noms de colonnes. Ré-alignée sur le schéma réel dans
+  cette session.
+- Vérifié : `npm run typecheck` 0 erreur, `npm run lint` (0 nouvelle erreur — 1322 erreurs
+  prettier/console préexistantes dans tout le repo, non liées), `vitest run` 431 passed/32 skipped
+  (+5 nouveaux tests), `vite build` OK.
 
 ## FIX build Nutrition/Documents — alignement types + migration déversement documents (2026-07-24)
 Correction des 2 erreurs TypeScript récurrentes signalées sur `NutritionSheet.tsx` et `use-documents.ts`.

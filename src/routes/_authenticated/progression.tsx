@@ -1,13 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { ArrowLeft, Flame, Dumbbell, Sparkles, Trophy, Lock, Check } from "lucide-react";
+import { ArrowLeft, Flame, Dumbbell, Sparkles, Trophy } from "lucide-react";
 import { useUserStats } from "@/hooks/useUserStats";
 import { useWorkouts } from "@/hooks/use-fitness";
 import { useActivityStreak } from "@/hooks/useActivityStreak";
+import { useRankPromotions } from "@/hooks/useRankPromotions";
 import { titleProgressForXp, nextGradeLabel } from "@/lib/fitness/rpg/titleProgress";
 import { formatXp } from "@/lib/fitness/rpg/grade";
 import { RankIllustration } from "@/components/rpg/RankIllustration";
-import { RANK_TIERS } from "@/lib/fitness/exerciseRanks";
+import { PromotionHistoryTimeline } from "@/components/profile/rpg/PromotionHistoryTimeline";
 import { EASE_OUT } from "@/components/rpg/premium/tokens";
 import {
   RANK_AMBIANCE,
@@ -21,8 +22,9 @@ import {
 /**
  * Page dédiée « Progression RPG » — fiche joueur AAA.
  * Aucune donnée inventée : tout est dérivé de user_stats.xp (Titre/Grade),
- * useWorkouts (nb de séances), useActivityStreak (série en cours). Les
- * sections sans données réelles (promotions) affichent un état vide propre.
+ * useWorkouts (nb de séances), useActivityStreak (série en cours),
+ * rank_promotions (historique des montées de Rang/Grade, écrit
+ * automatiquement en base — voir useRankPromotions).
  */
 export const Route = createFileRoute("/_authenticated/progression")({
   head: () => ({
@@ -38,6 +40,7 @@ function ProgressionPage() {
   const { data: userStats } = useUserStats();
   const { data: workouts } = useWorkouts();
   const { current: streak } = useActivityStreak();
+  const { data: promotionEvents } = useRankPromotions();
 
   const xp = userStats?.xp ?? 0;
   const progress = titleProgressForXp(xp);
@@ -252,70 +255,12 @@ function ProgressionPage() {
           </div>
         </section>
 
-        {/* ── HISTORIQUE DE PROGRESSION (ladder des rangs) ───── */}
-        <section>
-          <h2 className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-            Historique de progression
-          </h2>
-          <div className="flex flex-col gap-2">
-            {RANK_TIERS.map((tier, idx) => {
-              const isDone = idx < progress.titleIndex;
-              const isCurrent = idx === progress.titleIndex;
-              const isLocked = idx > progress.titleIndex;
-              const tTheme = rankThemeByKey(tier.key);
-              return (
-                <div
-                  key={tier.key}
-                  className="flex items-center gap-3 rounded-2xl p-3"
-                  style={{
-                    background: isCurrent
-                      ? `linear-gradient(90deg, ${tTheme.primary}22, transparent)`
-                      : "rgba(255,255,255,0.03)",
-                    boxShadow: isCurrent
-                      ? `${rankRingInset(tTheme.secondary, "60")}, ${rankGlowShadow(tTheme.glow, 0, 18, -8)}`
-                      : "inset 0 0 0 1px rgba(255,255,255,0.05)",
-                    opacity: isLocked ? 0.42 : 1,
-                    filter: isLocked ? "grayscale(0.8)" : undefined,
-                  }}
-                >
-                  <div className="h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-black/30">
-                    <RankIllustration
-                      rankKey={tier.key}
-                      label={tier.label}
-                      className="h-full w-full"
-                    />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p
-                      className="text-[13px] font-black uppercase tracking-[0.18em]"
-                      style={{ color: isLocked ? "rgba(255,255,255,0.55)" : tTheme.text }}
-                    >
-                      {tier.label}
-                    </p>
-                    <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                      {isDone ? "Rang atteint" : isCurrent ? "En cours" : "Verrouillé"}
-                    </p>
-                  </div>
-                  <div className="shrink-0 text-muted-foreground">
-                    {isDone && <Check className="h-4 w-4" style={{ color: tTheme.secondary }} />}
-                    {isLocked && <Lock className="h-4 w-4" />}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* ── HISTORIQUE DES PROMOTIONS (structure prête) ────── */}
+        {/* ── HISTORIQUE DES PROMOTIONS (seule chronologie officielle) ── */}
         <section>
           <h2 className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
             Historique des promotions
           </h2>
-          <div className="rounded-2xl bg-white/[0.03] p-5 text-center ring-1 ring-white/5">
-            <p className="text-[12px] text-muted-foreground">
-              Chaque nouvelle promotion sera consignée ici.
-            </p>
-          </div>
+          <PromotionHistoryTimeline events={promotionEvents ?? []} />
         </section>
       </div>
     </main>
