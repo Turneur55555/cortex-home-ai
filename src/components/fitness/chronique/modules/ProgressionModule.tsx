@@ -2,41 +2,31 @@
 // LES CHRONIQUES — Module « Progression ».
 //
 // Mission unique : raconter, avec les preuves, tout ce que le joueur a
-// fait et comment il évolue. Contient : le récap carrière, le Hall of
-// Fame (records personnels absolus), les courbes de tendance, les
-// exercices en perte de vitesse (oubliés / plateaux), et la Chronologie
-// des séances (chacune ouvre sa Chronique immersive). Zéro rang par
-// muscle ici (→ Légendes).
+// fait et comment il évolue. Contient : le récap carrière, les exercices
+// oubliés, les plateaux et la Chronologie des séances (chacune ouvre sa
+// Chronique immersive). Zéro rang par muscle ici (→ Légendes).
+//
+// Note (suppression Hall of Fame + Tendances, 25/07/2026) : les deux
+// sections ont été retirées de cet écran à la demande produit. Les
+// helpers `computeHallOfFame`, `computeForgotten`, `computePlateaus` et
+// le composant `WorkoutProgressCharts` restent utilisés ailleurs dans
+// l'app — on ne retire ici QUE leurs usages locaux devenus obsolètes.
 // ============================================================
 
 import { useMemo } from "react";
-import {
-  Clock,
-  Crown,
-  Flame,
-  Heart,
-  History,
-  Hourglass,
-  Layers,
-  Medal,
-  Sparkles,
-  TrendingUp,
-  Trophy,
-  Zap,
-} from "lucide-react";
+import { Heart, History, Hourglass, Sparkles, TrendingUp } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
 
 import { WorkoutCard, type WorkoutRow } from "@/components/fitness/WorkoutCard";
 import { GenericHistoryCard } from "@/components/fitness/session/GenericHistoryCard";
 import { SectionReveal } from "@/components/fitness/SectionReveal";
-import { WorkoutProgressCharts } from "@/components/fitness/WorkoutProgressCharts";
 import { formatTonnage } from "@/lib/fitness/strength";
 import { computeHallOfFame, computeForgotten, computePlateaus } from "@/lib/fitness/chronicles";
 import { useLatestBodyWeight } from "@/hooks/useLatestBodyWeight";
 import { ENGINE_REGISTRY } from "@/lib/fitness/engines/registry";
 import { isReadyEngine, type DisciplineId } from "@/lib/fitness/engines/types";
-import { AnimatedNumber, GoldCard, ModuleSectionTitle, PopIn } from "../livreParts";
+import { AnimatedNumber, ModuleSectionTitle, PopIn, GoldCard } from "../livreParts";
 
 interface Props {
   workouts: WorkoutRow[];
@@ -45,7 +35,10 @@ interface Props {
   volByName: Map<string, Array<{ date: string; volume: number }>>;
   prByGym: Map<string, Map<string, number>>;
   histByGym: Map<string, Map<string, Array<{ date: string; weight: number }>>>;
+  /** Conservé pour compatibilité avec ChroniquesPage (les Tendances ont
+   *  été supprimées : plus consommé localement). */
   nameByKey: Map<string, string>;
+  /** Idem — plus consommé localement depuis la suppression des Tendances. */
   topExercises: string[];
   imageUrls: Map<string, string> | undefined;
   latestDate: string;
@@ -62,8 +55,6 @@ export function ProgressionModule({
   volByName,
   prByGym,
   histByGym,
-  nameByKey,
-  topExercises,
   imageUrls,
   latestDate,
   onRepeatLive,
@@ -73,8 +64,8 @@ export function ProgressionModule({
 }: Props) {
   const { data: bodyWeightKg } = useLatestBodyWeight();
 
-  const hof = useMemo(
-    () => computeHallOfFame(workouts, bodyWeightKg ?? null),
+  const career = useMemo(
+    () => computeHallOfFame(workouts, bodyWeightKg ?? null).career,
     [workouts, bodyWeightKg],
   );
   const forgotten = useMemo(() => computeForgotten(workouts), [workouts]);
