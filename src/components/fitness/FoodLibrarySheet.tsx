@@ -6,9 +6,8 @@ import { WeightSelector } from "@/components/fitness/WeightSelector";
 import { MealSelect } from "@/components/fitness/MealSelect";
 import { NutritionSheet } from "@/components/fitness/NutritionSheet";
 import { useFoodSearch, getRecentFoods } from "@/hooks/useFoodSearch";
-import { useFrequentFoods } from "@/hooks/useFrequentFoods";
+import { useUsedFoods } from "@/hooks/useUsedFoods";
 import { useCustomFoods } from "@/hooks/useCustomFoods";
-import { listLocalFoods } from "@/lib/nutrition/localFoods";
 import {
   useNutritionFavorites,
   useAddFavorite,
@@ -53,7 +52,7 @@ export function FoodLibrarySheet({ date, onClose }: FoodLibrarySheetProps) {
   const [query, setQuery] = useState("");
   const [manualOpen, setManualOpen] = useState(false);
 
-  const { data: frequent } = useFrequentFoods(20);
+  const { data: usedFoods, isLoading: usedLoading } = useUsedFoods();
   const { data: customFoods, isLoading: customLoading } = useCustomFoods();
   const { data: favorites, isLoading: favLoading } = useNutritionFavorites();
   const { data: savedMeals, isLoading: mealsLoading } = useSavedMeals();
@@ -64,21 +63,16 @@ export function FoodLibrarySheet({ date, onClose }: FoodLibrarySheetProps) {
     tab === "all" && q.length >= 2,
   );
 
-  // "Tous" : catalogue immédiatement consultable (fréquents + local), la
-  // recherche catalogue (useFoodSearch, capée à 12) prend le relais dès 2
-  // caractères — jamais de chargement de milliers d'éléments.
+  // "Tous" : par défaut, les aliments déjà utilisés (triés récence puis
+  // fréquence par useUsedFoods) — immédiatement consultables, sans saisie.
+  // Dès 2 caractères, la recherche catalogue complet (useFoodSearch : local +
+  // USDA + aliments personnalisés déjà présents dans `foods`) prend le relais
+  // et remplace la liste ; elle redevient la liste des aliments utilisés dès
+  // que la recherche est vidée.
   const allFoods = useMemo<FoodSuggestion[]>(() => {
     if (q.length >= 2) return searchResults;
-    const seen = new Set<string>();
-    const list: FoodSuggestion[] = [];
-    for (const f of [...(frequent ?? []), ...listLocalFoods()]) {
-      const key = f.name.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      list.push(f);
-    }
-    return list;
-  }, [q, frequent, searchResults]);
+    return usedFoods ?? [];
+  }, [q, usedFoods, searchResults]);
 
   // "Mes aliments" : créés par l'utilisateur (foods.user_id) + récents locaux.
   const mineFoods = useMemo<FoodSuggestion[]>(() => {
@@ -149,8 +143,12 @@ export function FoodLibrarySheet({ date, onClose }: FoodLibrarySheetProps) {
             <FoodItemList
               date={date}
               foods={allFoods}
-              loading={q.length >= 2 && searchLoading}
-              emptyLabel="Aucun aliment trouvé"
+              loading={q.length >= 2 ? searchLoading : usedLoading}
+              emptyLabel={
+                q.length >= 2
+                  ? "Aucun aliment trouvé"
+                  : "Aucun aliment utilisé pour l'instant — recherchez-en un pour commencer."
+              }
             />
           </TabsContent>
 
