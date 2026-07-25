@@ -14,24 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      achievement_criteria: {
-        Row: {
-          description: string | null
-          id_prefix: string
-          requirement_type: string
-        }
-        Insert: {
-          description?: string | null
-          id_prefix: string
-          requirement_type: string
-        }
-        Update: {
-          description?: string | null
-          id_prefix?: string
-          requirement_type?: string
-        }
-        Relationships: []
-      }
       activity_log: {
         Row: {
           action: string
@@ -222,48 +204,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      badges_catalog: {
-        Row: {
-          badge_key: string
-          created_at: string
-          description: string
-          icon: string
-          id: string
-          label: string
-          rarity: string
-          requirement_type: string
-          requirement_value: number
-          sort_order: number
-          xp_reward: number
-        }
-        Insert: {
-          badge_key: string
-          created_at?: string
-          description?: string
-          icon?: string
-          id?: string
-          label: string
-          rarity?: string
-          requirement_type: string
-          requirement_value: number
-          sort_order?: number
-          xp_reward?: number
-        }
-        Update: {
-          badge_key?: string
-          created_at?: string
-          description?: string
-          icon?: string
-          id?: string
-          label?: string
-          rarity?: string
-          requirement_type?: string
-          requirement_value?: number
-          sort_order?: number
-          xp_reward?: number
-        }
-        Relationships: []
       }
       body_tracking: {
         Row: {
@@ -1620,54 +1560,6 @@ export type Database = {
         }
         Relationships: []
       }
-      goals: {
-        Row: {
-          completed_at: string | null
-          created_at: string
-          goal_type: string
-          id: string
-          is_completed: boolean
-          start_value: number | null
-          target_date: string
-          target_value: number | null
-          title: string
-          updated_at: string
-          user_id: string
-          xp_awarded: boolean
-          xp_reward: number
-        }
-        Insert: {
-          completed_at?: string | null
-          created_at?: string
-          goal_type?: string
-          id?: string
-          is_completed?: boolean
-          start_value?: number | null
-          target_date: string
-          target_value?: number | null
-          title: string
-          updated_at?: string
-          user_id: string
-          xp_awarded?: boolean
-          xp_reward?: number
-        }
-        Update: {
-          completed_at?: string | null
-          created_at?: string
-          goal_type?: string
-          id?: string
-          is_completed?: boolean
-          start_value?: number | null
-          target_date?: string
-          target_value?: number | null
-          title?: string
-          updated_at?: string
-          user_id?: string
-          xp_awarded?: boolean
-          xp_reward?: number
-        }
-        Relationships: []
-      }
       historique_imports: {
         Row: {
           categorie: string | null
@@ -2954,30 +2846,6 @@ export type Database = {
         }
         Relationships: []
       }
-      user_achievements: {
-        Row: {
-          achievement_id: string
-          id: string
-          unlocked_at: string
-          user_id: string
-          xp_reward: number
-        }
-        Insert: {
-          achievement_id: string
-          id?: string
-          unlocked_at?: string
-          user_id: string
-          xp_reward?: number
-        }
-        Update: {
-          achievement_id?: string
-          id?: string
-          unlocked_at?: string
-          user_id?: string
-          xp_reward?: number
-        }
-        Relationships: []
-      }
       user_activity: {
         Row: {
           created_at: string
@@ -3002,42 +2870,6 @@ export type Database = {
           metadata?: Json
           type?: string
           user_id?: string
-        }
-        Relationships: []
-      }
-      user_badges: {
-        Row: {
-          badge_key: string
-          description: string
-          icon: string
-          id: string
-          label: string
-          rarity: string
-          unlocked_at: string
-          user_id: string
-          xp_reward: number
-        }
-        Insert: {
-          badge_key: string
-          description?: string
-          icon?: string
-          id?: string
-          label: string
-          rarity?: string
-          unlocked_at?: string
-          user_id: string
-          xp_reward?: number
-        }
-        Update: {
-          badge_key?: string
-          description?: string
-          icon?: string
-          id?: string
-          label?: string
-          rarity?: string
-          unlocked_at?: string
-          user_id?: string
-          xp_reward?: number
         }
         Relationships: []
       }
@@ -3601,10 +3433,6 @@ export type Database = {
         }
         Returns: undefined
       }
-      claim_achievement: {
-        Args: { _achievement_id: string; _xp_reward: number }
-        Returns: undefined
-      }
       cleanup_expired_cache: { Args: never; Returns: undefined }
       cleanup_old_pdfs: { Args: never; Returns: undefined }
       compute_achievement_stats: { Args: { _uid: string }; Returns: Json }
@@ -3653,7 +3481,6 @@ export type Database = {
       soundex: { Args: { "": string }; Returns: string }
       text_soundex: { Args: { "": string }; Returns: string }
       unaccent: { Args: { "": string }; Returns: string }
-      unlock_user_badge: { Args: { _badge_key: string }; Returns: undefined }
     }
     Enums: {
       reminder_priority: "low" | "medium" | "high" | "urgent"
