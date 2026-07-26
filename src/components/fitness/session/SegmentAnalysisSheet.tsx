@@ -21,6 +21,7 @@ import {
   segmentBaseLabel,
 } from "@/lib/fitness/segmentStats";
 import { SectionCard, StatTileMini, TrendIcon } from "../ExerciseAnalysisPrimitives";
+import { Portal } from "@/components/Portal";
 
 // ============================================================
 // Fiche détaillée d'un EXERCICE de course (ex. "400m allure 5 km",
@@ -118,232 +119,234 @@ export function SegmentAnalysisSheet({
   const sessionsDesc = useMemo(() => [...stats.sessions].reverse(), [stats.sessions]);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm"
-      onClick={onClose}
-    >
+    <Portal>
       <div
-        className="flex max-h-[92vh] w-full max-w-[430px] flex-col rounded-t-3xl border-t border-border bg-card p-5 pb-[calc(2rem+env(safe-area-inset-bottom))] shadow-elevated"
-        onClick={(e) => e.stopPropagation()}
+        className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm"
+        onClick={onClose}
       >
-        {/* Header */}
-        <div className="mb-4 flex items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-2">
-            <Repeat className="h-4 w-4 shrink-0 text-primary" />
-            <div className="min-w-0">
-              <h3 className="truncate text-sm font-semibold">{displayLabel}</h3>
-              <p className="text-[11px] text-muted-foreground">
-                {stats.sessionCount > 0 ? "Fiche exercice" : "Pas encore réalisé"}
-              </p>
+        <div
+          className="flex max-h-[92vh] w-full max-w-[430px] flex-col rounded-t-3xl border-t border-border bg-card p-5 pb-[calc(2rem+env(safe-area-inset-bottom))] shadow-elevated"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className="mb-4 flex items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              <Repeat className="h-4 w-4 shrink-0 text-primary" />
+              <div className="min-w-0">
+                <h3 className="truncate text-sm font-semibold">{displayLabel}</h3>
+                <p className="text-[11px] text-muted-foreground">
+                  {stats.sessionCount > 0 ? "Fiche exercice" : "Pas encore réalisé"}
+                </p>
+              </div>
             </div>
+            <button
+              onClick={onClose}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface text-muted-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface text-muted-foreground"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
 
-        <div className="-mx-1 space-y-4 overflow-y-auto px-1">
-          {stats.sessionCount === 0 ? (
-            <p className="py-10 text-center text-[12px] leading-relaxed text-muted-foreground">
-              {narrative}
-            </p>
-          ) : (
-            <>
-              {/* Analyse (calculée, pas d'IA) */}
-              <SectionCard icon={<Sparkles className="h-3.5 w-3.5" />} title="Analyse">
-                <p className="text-[12px] leading-relaxed text-foreground/85">{narrative}</p>
-              </SectionCard>
-
-              {/* Toggle métrique (si plusieurs) */}
-              {chartableMetrics.length > 1 && (
-                <div className="flex gap-1 rounded-xl bg-surface p-1">
-                  {chartableMetrics.map((m) => (
-                    <button
-                      key={m.key}
-                      onClick={() => setMetricKey(m.key)}
-                      className={`flex-1 rounded-lg py-1.5 text-xs font-semibold transition-all ${
-                        activeMetric?.key === m.key
-                          ? "bg-card text-foreground shadow-sm"
-                          : "text-muted-foreground"
-                      }`}
-                    >
-                      {m.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {/* Graphique — un point par séance (répétitions déjà agrégées) */}
-              {chartData.length > 1 ? (
-                <ResponsiveContainer width="100%" height={160}>
-                  <LineChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-                    <CartesianGrid
-                      stroke="var(--color-border)"
-                      strokeDasharray="3 3"
-                      vertical={false}
-                    />
-                    <XAxis
-                      dataKey="date"
-                      tick={{ fontSize: 9, fill: "var(--color-muted-foreground)" }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <YAxis
-                      tick={{ fontSize: 9, fill: "var(--color-muted-foreground)" }}
-                      axisLine={false}
-                      tickLine={false}
-                      domain={["dataMin", "dataMax"]}
-                      width={32}
-                      reversed={activeMetric?.key === "pace_min_per_km"}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        background: "var(--color-popover)",
-                        border: "1px solid var(--color-border)",
-                        borderRadius: 8,
-                        fontSize: 11,
-                      }}
-                      formatter={(v: number) => [
-                        activeMetric ? formatMetricValue(activeMetric.key, v) : v,
-                        activeMetric?.label ?? "",
-                      ]}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="value"
-                      stroke="var(--color-primary)"
-                      strokeWidth={2}
-                      dot={{ r: 3, fill: "var(--color-primary)" }}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              ) : (
-                <p className="py-4 text-center text-[11px] text-muted-foreground">
-                  Encore trop peu de séances pour un graphique — reviens après ta prochaine
-                  réalisation.
-                </p>
-              )}
-
-              {/* Stat tiles */}
-              <div className="grid grid-cols-3 gap-2">
-                <StatTileMini
-                  icon={<Repeat className="h-3 w-3 text-primary" />}
-                  label="Réalisations"
-                  value={String(stats.sessionCount)}
-                />
-                {stats.metrics.map((m) => (
-                  <StatTileMini
-                    key={m.key}
-                    icon={<Trophy className="h-3 w-3 text-warning" />}
-                    label={`Meilleure ${m.label.toLowerCase()}`}
-                    value={m.bestFormatted}
-                    highlight
-                  />
-                ))}
-                {stats.estimatedDuration && (
-                  <StatTileMini
-                    icon={<CalendarClock className="h-3 w-3 text-muted-foreground" />}
-                    label="Durée estimée"
-                    value={stats.estimatedDuration.latestFormatted}
-                  />
-                )}
-              </div>
-
-              {/* Progression / tendance par métrique */}
-              {stats.metrics.some((m) => m.progressionPct != null) && (
-                <SectionCard icon={<TrendingUp className="h-3.5 w-3.5" />} title="Progression">
-                  <div className="grid grid-cols-2 gap-2">
-                    {stats.metrics
-                      .filter((m) => m.progressionPct != null)
-                      .map((m) => (
-                        <div key={m.key} className="rounded-xl bg-surface p-2.5">
-                          <div className="flex items-center justify-between">
-                            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                              {m.label}
-                            </span>
-                            <TrendIcon trend={m.trend} />
-                          </div>
-                          <div className="mt-1 flex items-baseline gap-1.5">
-                            <span className="text-sm font-bold">{m.latestFormatted}</span>
-                            <span
-                              className={`text-[10px] font-semibold ${
-                                m.trend === "up"
-                                  ? "text-green-500"
-                                  : m.trend === "down"
-                                    ? "text-destructive"
-                                    : "text-muted-foreground"
-                              }`}
-                            >
-                              {m.progressionPct! >= 0 ? "+" : ""}
-                              {m.progressionPct!.toFixed(1)}%
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                  </div>
+          <div className="-mx-1 space-y-4 overflow-y-auto px-1">
+            {stats.sessionCount === 0 ? (
+              <p className="py-10 text-center text-[12px] leading-relaxed text-muted-foreground">
+                {narrative}
+              </p>
+            ) : (
+              <>
+                {/* Analyse (calculée, pas d'IA) */}
+                <SectionCard icon={<Sparkles className="h-3.5 w-3.5" />} title="Analyse">
+                  <p className="text-[12px] leading-relaxed text-foreground/85">{narrative}</p>
                 </SectionCard>
-              )}
 
-              {/* Recommandation de surcharge progressive — emplacement réservé */}
-              <SectionCard
-                icon={<Target className="h-3.5 w-3.5" />}
-                title="Recommandation de surcharge progressive"
-              >
-                <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-                  Bientôt disponible. Cette fiche est prête à l'accueillir dès qu'un algorithme de
-                  recommandation sera construit pour cette discipline.
-                </p>
-              </SectionCard>
+                {/* Toggle métrique (si plusieurs) */}
+                {chartableMetrics.length > 1 && (
+                  <div className="flex gap-1 rounded-xl bg-surface p-1">
+                    {chartableMetrics.map((m) => (
+                      <button
+                        key={m.key}
+                        onClick={() => setMetricKey(m.key)}
+                        className={`flex-1 rounded-lg py-1.5 text-xs font-semibold transition-all ${
+                          activeMetric?.key === m.key
+                            ? "bg-card text-foreground shadow-sm"
+                            : "text-muted-foreground"
+                        }`}
+                      >
+                        {m.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
 
-              {/* Historique — UNE ligne par séance, répétitions déjà agrégées */}
-              <div>
-                <div className="mb-2 flex items-center gap-1.5">
-                  <CalendarClock className="h-3.5 w-3.5 text-primary" />
-                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Historique
-                  </span>
-                </div>
-                <div className="space-y-2">
-                  {sessionsDesc.map((s) => (
-                    <div
-                      key={s.workoutId}
-                      className="rounded-xl border border-border bg-surface p-3"
-                    >
-                      <div className="mb-1.5 flex items-center justify-between gap-2">
-                        <p className="text-[11px] font-semibold capitalize text-foreground">
-                          {s.date
-                            ? format(parseISO(s.date), "EEE d MMM yyyy", { locale: fr })
-                            : "Date inconnue"}
-                        </p>
-                        <span className="shrink-0 text-[10px] font-medium text-muted-foreground">
-                          {s.repCount} {repWord}
-                          {s.repCount > 1 ? "s" : ""}
-                        </span>
-                      </div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {Object.entries(s.metrics)
-                          .filter(([k]) => SEGMENT_METRIC_CONFIG[k])
-                          .map(([k, v]) => (
-                            <span
-                              key={k}
-                              className="rounded-lg bg-card px-2 py-1 text-[10px] font-medium text-foreground/80"
-                            >
-                              {SEGMENT_METRIC_CONFIG[k].label}: {formatMetricValue(k, v)}
-                            </span>
-                          ))}
-                      </div>
-                    </div>
+                {/* Graphique — un point par séance (répétitions déjà agrégées) */}
+                {chartData.length > 1 ? (
+                  <ResponsiveContainer width="100%" height={160}>
+                    <LineChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                      <CartesianGrid
+                        stroke="var(--color-border)"
+                        strokeDasharray="3 3"
+                        vertical={false}
+                      />
+                      <XAxis
+                        dataKey="date"
+                        tick={{ fontSize: 9, fill: "var(--color-muted-foreground)" }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <YAxis
+                        tick={{ fontSize: 9, fill: "var(--color-muted-foreground)" }}
+                        axisLine={false}
+                        tickLine={false}
+                        domain={["dataMin", "dataMax"]}
+                        width={32}
+                        reversed={activeMetric?.key === "pace_min_per_km"}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          background: "var(--color-popover)",
+                          border: "1px solid var(--color-border)",
+                          borderRadius: 8,
+                          fontSize: 11,
+                        }}
+                        formatter={(v: number) => [
+                          activeMetric ? formatMetricValue(activeMetric.key, v) : v,
+                          activeMetric?.label ?? "",
+                        ]}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="value"
+                        stroke="var(--color-primary)"
+                        strokeWidth={2}
+                        dot={{ r: 3, fill: "var(--color-primary)" }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p className="py-4 text-center text-[11px] text-muted-foreground">
+                    Encore trop peu de séances pour un graphique — reviens après ta prochaine
+                    réalisation.
+                  </p>
+                )}
+
+                {/* Stat tiles */}
+                <div className="grid grid-cols-3 gap-2">
+                  <StatTileMini
+                    icon={<Repeat className="h-3 w-3 text-primary" />}
+                    label="Réalisations"
+                    value={String(stats.sessionCount)}
+                  />
+                  {stats.metrics.map((m) => (
+                    <StatTileMini
+                      key={m.key}
+                      icon={<Trophy className="h-3 w-3 text-warning" />}
+                      label={`Meilleure ${m.label.toLowerCase()}`}
+                      value={m.bestFormatted}
+                      highlight
+                    />
                   ))}
+                  {stats.estimatedDuration && (
+                    <StatTileMini
+                      icon={<CalendarClock className="h-3 w-3 text-muted-foreground" />}
+                      label="Durée estimée"
+                      value={stats.estimatedDuration.latestFormatted}
+                    />
+                  )}
                 </div>
-              </div>
-            </>
-          )}
+
+                {/* Progression / tendance par métrique */}
+                {stats.metrics.some((m) => m.progressionPct != null) && (
+                  <SectionCard icon={<TrendingUp className="h-3.5 w-3.5" />} title="Progression">
+                    <div className="grid grid-cols-2 gap-2">
+                      {stats.metrics
+                        .filter((m) => m.progressionPct != null)
+                        .map((m) => (
+                          <div key={m.key} className="rounded-xl bg-surface p-2.5">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                                {m.label}
+                              </span>
+                              <TrendIcon trend={m.trend} />
+                            </div>
+                            <div className="mt-1 flex items-baseline gap-1.5">
+                              <span className="text-sm font-bold">{m.latestFormatted}</span>
+                              <span
+                                className={`text-[10px] font-semibold ${
+                                  m.trend === "up"
+                                    ? "text-green-500"
+                                    : m.trend === "down"
+                                      ? "text-destructive"
+                                      : "text-muted-foreground"
+                                }`}
+                              >
+                                {m.progressionPct! >= 0 ? "+" : ""}
+                                {m.progressionPct!.toFixed(1)}%
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  </SectionCard>
+                )}
+
+                {/* Recommandation de surcharge progressive — emplacement réservé */}
+                <SectionCard
+                  icon={<Target className="h-3.5 w-3.5" />}
+                  title="Recommandation de surcharge progressive"
+                >
+                  <p className="text-[11.5px] leading-relaxed text-muted-foreground">
+                    Bientôt disponible. Cette fiche est prête à l'accueillir dès qu'un algorithme de
+                    recommandation sera construit pour cette discipline.
+                  </p>
+                </SectionCard>
+
+                {/* Historique — UNE ligne par séance, répétitions déjà agrégées */}
+                <div>
+                  <div className="mb-2 flex items-center gap-1.5">
+                    <CalendarClock className="h-3.5 w-3.5 text-primary" />
+                    <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Historique
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {sessionsDesc.map((s) => (
+                      <div
+                        key={s.workoutId}
+                        className="rounded-xl border border-border bg-surface p-3"
+                      >
+                        <div className="mb-1.5 flex items-center justify-between gap-2">
+                          <p className="text-[11px] font-semibold capitalize text-foreground">
+                            {s.date
+                              ? format(parseISO(s.date), "EEE d MMM yyyy", { locale: fr })
+                              : "Date inconnue"}
+                          </p>
+                          <span className="shrink-0 text-[10px] font-medium text-muted-foreground">
+                            {s.repCount} {repWord}
+                            {s.repCount > 1 ? "s" : ""}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {Object.entries(s.metrics)
+                            .filter(([k]) => SEGMENT_METRIC_CONFIG[k])
+                            .map(([k, v]) => (
+                              <span
+                                key={k}
+                                className="rounded-lg bg-card px-2 py-1 text-[10px] font-medium text-foreground/80"
+                              >
+                                {SEGMENT_METRIC_CONFIG[k].label}: {formatMetricValue(k, v)}
+                              </span>
+                            ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
-    </div>
+    </Portal>
   );
 }
 

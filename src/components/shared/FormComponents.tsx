@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { ChevronLeft, Loader2, Plus, X } from "lucide-react";
+import { Portal } from "@/components/Portal";
 
 export function FabAdd({ onClick, label }: { onClick: () => void; label: string }) {
   return (
@@ -19,7 +20,6 @@ export function FabAdd({ onClick, label }: { onClick: () => void; label: string 
   );
 }
 
-
 export function Sheet({
   title,
   children,
@@ -30,29 +30,31 @@ export function Sheet({
   onClose: () => void;
 }) {
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm"
-      onClick={onClose}
-    >
+    <Portal>
       <div
-        className="max-h-[92vh] w-full max-w-[430px] overflow-y-auto rounded-t-3xl border-t border-border bg-card p-5 shadow-elevated"
-        style={{ paddingBottom: "calc(1.25rem + env(safe-area-inset-bottom))" }}
-        onClick={(e) => e.stopPropagation()}
+        className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm"
+        onClick={onClose}
       >
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-bold">{title}</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-11 w-11 items-center justify-center rounded-full bg-surface text-muted-foreground active:scale-95"
-            aria-label="Fermer"
-          >
-            <X className="h-4 w-4" />
-          </button>
+        <div
+          className="max-h-[92vh] w-full max-w-[430px] overflow-y-auto rounded-t-3xl border-t border-border bg-card p-5 shadow-elevated"
+          style={{ paddingBottom: "calc(1.25rem + env(safe-area-inset-bottom))" }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-lg font-bold">{title}</h2>
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-surface text-muted-foreground active:scale-95"
+              aria-label="Fermer"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          {children}
         </div>
-        {children}
       </div>
-    </div>
+    </Portal>
   );
 }
 
@@ -92,42 +94,42 @@ export function FullscreenSheet({
   }, [onClose]);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex flex-col bg-background animate-in slide-in-from-bottom duration-200"
-      role="dialog"
-      aria-modal="true"
-      aria-label={title}
-    >
-      <header
-        className="sticky top-0 z-10 flex items-center gap-3 border-b border-border bg-background/95 px-5 backdrop-blur-md"
-        style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top))", paddingBottom: "0.75rem" }}
-      >
-        <button
-          type="button"
-          onClick={onClose}
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border text-muted-foreground transition-colors hover:text-foreground"
-          aria-label={`Retour ${backLabel}`}
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </button>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-            {backLabel}
-          </p>
-          <h1 className="truncate text-base font-bold tracking-tight text-foreground">{title}</h1>
-          {subtitle && (
-            <p className="truncate text-[11px] text-muted-foreground">{subtitle}</p>
-          )}
-        </div>
-        {actions}
-      </header>
+    <Portal>
       <div
-        className="flex-1 overflow-y-auto px-5 pt-5"
-        style={{ paddingBottom: "calc(2rem + env(safe-area-inset-bottom))" }}
+        className="fixed inset-0 z-50 flex flex-col bg-background animate-in slide-in-from-bottom duration-200"
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
       >
-        {children}
+        <header
+          className="sticky top-0 z-10 flex items-center gap-3 border-b border-border bg-background/95 px-5 backdrop-blur-md"
+          style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top))", paddingBottom: "0.75rem" }}
+        >
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border text-muted-foreground transition-colors hover:text-foreground"
+            aria-label={`Retour ${backLabel}`}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[10px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
+              {backLabel}
+            </p>
+            <h1 className="truncate text-base font-bold tracking-tight text-foreground">{title}</h1>
+            {subtitle && <p className="truncate text-[11px] text-muted-foreground">{subtitle}</p>}
+          </div>
+          {actions}
+        </header>
+        <div
+          className="flex-1 overflow-y-auto px-5 pt-5"
+          style={{ paddingBottom: "calc(2rem + env(safe-area-inset-bottom))" }}
+        >
+          {children}
+        </div>
       </div>
-    </div>
+    </Portal>
   );
 }
 

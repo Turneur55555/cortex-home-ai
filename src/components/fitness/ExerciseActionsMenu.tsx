@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { MoreVertical, X } from "lucide-react";
+import { Portal } from "@/components/Portal";
 
 export interface ExerciseMenuAction {
   key: string;
@@ -51,52 +52,56 @@ export function ExerciseActionsMenu({ title, actions, triggerClassName, ariaLabe
       </button>
 
       {open && (
-        <div
-          className="fixed inset-0 z-[80] flex items-end justify-center"
-          onClick={(e) => {
-            e.stopPropagation();
-            setOpen(false);
-          }}
-        >
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+        <Portal>
           <div
-            className="relative w-full max-w-[430px] rounded-t-3xl border-t border-border bg-card p-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] shadow-elevated"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-[80] flex items-end justify-center"
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpen(false);
+            }}
           >
-            <div className="mb-3 flex items-center justify-between px-1">
-              <p className="truncate text-sm font-semibold">{title}</p>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-white/5 text-muted-foreground"
-                aria-label="Fermer"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="flex flex-col gap-1">
-              {actions.map((a) => (
+            <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+            <div
+              className="relative w-full max-w-[430px] rounded-t-3xl border-t border-border bg-card p-4 pb-[calc(1.5rem+env(safe-area-inset-bottom))] shadow-elevated"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="mb-3 flex items-center justify-between px-1">
+                <p className="truncate text-sm font-semibold">{title}</p>
                 <button
-                  key={a.key}
                   type="button"
-                  disabled={a.disabled}
-                  onClick={() => {
-                    setOpen(false);
-                    a.onClick();
-                  }}
-                  className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-colors disabled:opacity-40 ${
-                    a.destructive
-                      ? "text-destructive hover:bg-destructive/10"
-                      : "text-foreground hover:bg-white/[0.06]"
-                  }`}
+                  onClick={() => setOpen(false)}
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-white/5 text-muted-foreground"
+                  aria-label="Fermer"
                 >
-                  <span className={a.destructive ? "text-destructive" : "text-primary"}>{a.icon}</span>
-                  {a.label}
+                  <X className="h-4 w-4" />
                 </button>
-              ))}
+              </div>
+              <div className="flex flex-col gap-1">
+                {actions.map((a) => (
+                  <button
+                    key={a.key}
+                    type="button"
+                    disabled={a.disabled}
+                    onClick={() => {
+                      setOpen(false);
+                      a.onClick();
+                    }}
+                    className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition-colors disabled:opacity-40 ${
+                      a.destructive
+                        ? "text-destructive hover:bg-destructive/10"
+                        : "text-foreground hover:bg-white/[0.06]"
+                    }`}
+                  >
+                    <span className={a.destructive ? "text-destructive" : "text-primary"}>
+                      {a.icon}
+                    </span>
+                    {a.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
+        </Portal>
       )}
     </>
   );

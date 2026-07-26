@@ -21,6 +21,7 @@ import { computeRecentExercises, identityKey } from "@/lib/fitness/recentExercis
 import { useLastExerciseSessions } from "@/hooks/useLastExerciseSession";
 import { RestTimerBar } from "./RestTimerBar";
 import { ExerciseAnalysisSheet } from "./ExerciseAnalysisSheet";
+import { Portal } from "@/components/Portal";
 import { useUserExercisePhotos, resolveCustomExerciseMuscles } from "@/hooks/useUserExercisePhotos";
 
 // ─── Main view ───────────────────────────────────────────────────────────────
@@ -234,30 +235,32 @@ export function ActiveWorkoutView({
 
       {/* ── Confirm cancel ── */}
       {confirmCancel && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-          <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-lg">
-            <h3 className="text-lg font-bold text-destructive">Annuler la séance ?</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Toutes les données seront perdues. Cette action est irréversible.
-            </p>
-            <div className="mt-4 flex gap-2">
-              <button
-                type="button"
-                onClick={() => setConfirmCancel(false)}
-                className="flex-1 rounded-xl border border-border py-2.5 text-sm font-medium"
-              >
-                Garder
-              </button>
-              <button
-                type="button"
-                onClick={handleCancel}
-                className="flex-1 rounded-xl bg-destructive py-2.5 text-sm font-semibold text-destructive-foreground"
-              >
-                Annuler
-              </button>
+        <Portal>
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+            <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-lg">
+              <h3 className="text-lg font-bold text-destructive">Annuler la séance ?</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Toutes les données seront perdues. Cette action est irréversible.
+              </p>
+              <div className="mt-4 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmCancel(false)}
+                  className="flex-1 rounded-xl border border-border py-2.5 text-sm font-medium"
+                >
+                  Garder
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCancel}
+                  className="flex-1 rounded-xl bg-destructive py-2.5 text-sm font-semibold text-destructive-foreground"
+                >
+                  Annuler
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        </Portal>
       )}
 
       {/* ── Exercise cards ── */}

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { AnimatePresence, motion, useDragControls } from "framer-motion";
+import { Portal } from "@/components/Portal";
 import {
   Activity,
   AlertTriangle,
@@ -633,8 +634,8 @@ export function NutritionTab() {
                                         )}
                                       </div>
                                       <p className="mt-0.5 text-xs text-muted-foreground">
-                                        {m.calories ?? 0} kcal · L{m.fats ?? 0} G{m.carbs ?? 0}{" "}
-                                        P{m.proteins ?? 0}
+                                        {m.calories ?? 0} kcal · L{m.fats ?? 0} G{m.carbs ?? 0} P
+                                        {m.proteins ?? 0}
                                       </p>
                                     </div>
                                     <motion.button
@@ -751,48 +752,50 @@ export function NutritionTab() {
       {recipeLogOpen && <RecipeLogSheet date={date} onClose={() => setRecipeLogOpen(false)} />}
       {voiceOpen && <VoiceLogSheet date={date} onClose={() => setVoiceOpen(false)} />}
       {copyOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm"
-          onClick={() => setCopyOpen(false)}
-        >
+        <Portal>
           <div
-            className="mb-20 w-full max-w-sm rounded-2xl border border-border bg-card p-5 shadow-elevated"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm"
+            onClick={() => setCopyOpen(false)}
           >
-            <p className="mb-3 text-sm font-semibold">Copier une journée</p>
-            <input
-              type="date"
-              value={copyFrom}
-              onChange={(e) => setCopyFrom(e.target.value)}
-              className="mb-4 w-full rounded-xl border border-border bg-transparent px-3 py-2 text-sm outline-none focus:border-primary/60"
-            />
-            <div className="flex gap-3">
-              <motion.button
-                whileTap={PRESS_SMALL}
-                type="button"
-                onClick={() => setCopyOpen(false)}
-                className="flex-1 rounded-xl border border-border py-2.5 text-xs font-medium"
-              >
-                Annuler
-              </motion.button>
-              <motion.button
-                whileTap={PRESS_SMALL}
-                type="button"
-                disabled={copyDay.isPending}
-                onClick={() =>
-                  copyDay.mutate(
-                    { from: copyFrom, to: date },
-                    { onSuccess: () => setCopyOpen(false) },
-                  )
-                }
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary py-2.5 text-xs font-semibold text-primary-foreground disabled:opacity-60"
-              >
-                {copyDay.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                Copier ici
-              </motion.button>
+            <div
+              className="mb-20 w-full max-w-sm rounded-2xl border border-border bg-card p-5 shadow-elevated"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <p className="mb-3 text-sm font-semibold">Copier une journée</p>
+              <input
+                type="date"
+                value={copyFrom}
+                onChange={(e) => setCopyFrom(e.target.value)}
+                className="mb-4 w-full rounded-xl border border-border bg-transparent px-3 py-2 text-sm outline-none focus:border-primary/60"
+              />
+              <div className="flex gap-3">
+                <motion.button
+                  whileTap={PRESS_SMALL}
+                  type="button"
+                  onClick={() => setCopyOpen(false)}
+                  className="flex-1 rounded-xl border border-border py-2.5 text-xs font-medium"
+                >
+                  Annuler
+                </motion.button>
+                <motion.button
+                  whileTap={PRESS_SMALL}
+                  type="button"
+                  disabled={copyDay.isPending}
+                  onClick={() =>
+                    copyDay.mutate(
+                      { from: copyFrom, to: date },
+                      { onSuccess: () => setCopyOpen(false) },
+                    )
+                  }
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary py-2.5 text-xs font-semibold text-primary-foreground disabled:opacity-60"
+                >
+                  {copyDay.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  Copier ici
+                </motion.button>
+              </div>
             </div>
           </div>
-        </div>
+        </Portal>
       )}
       {weightEditItem && (
         <WeightEditModal
@@ -1112,128 +1115,130 @@ function NutritionCommandCenter({
   const dragControls = useDragControls();
 
   return (
-    <AnimatePresence>
-      {open && (
-        <>
-          <motion.div
-            key="backdrop"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={TRANSITION}
-            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
-            onClick={onClose}
-          />
+    <Portal>
+      <AnimatePresence>
+        {open && (
+          <>
+            <motion.div
+              key="backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={TRANSITION}
+              className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+              onClick={onClose}
+            />
 
-          <motion.div
-            key="sheet"
-            initial={{ y: "100%" }}
-            animate={{ y: 0 }}
-            exit={{ y: "100%" }}
-            transition={TRANSITION}
-            drag="y"
-            dragControls={dragControls}
-            dragListener={false}
-            dragConstraints={{ top: 0, bottom: 0 }}
-            dragElastic={{ top: 0, bottom: 0.5 }}
-            onDragEnd={(_, info) => {
-              if (info.offset.y > 120 || info.velocity.y > 600) onClose();
-            }}
-            className="fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[80vh] w-full max-w-[430px] flex-col rounded-t-3xl border-t border-border bg-card shadow-elevated"
-          >
-            <div
-              className="flex shrink-0 cursor-grab touch-none flex-col items-center pb-2 pt-3 active:cursor-grabbing"
-              onPointerDown={(e) => dragControls.start(e)}
+            <motion.div
+              key="sheet"
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={TRANSITION}
+              drag="y"
+              dragControls={dragControls}
+              dragListener={false}
+              dragConstraints={{ top: 0, bottom: 0 }}
+              dragElastic={{ top: 0, bottom: 0.5 }}
+              onDragEnd={(_, info) => {
+                if (info.offset.y > 120 || info.velocity.y > 600) onClose();
+              }}
+              className="fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[80vh] w-full max-w-[430px] flex-col rounded-t-3xl border-t border-border bg-card shadow-elevated"
             >
-              <span className="h-1.5 w-10 rounded-full bg-muted" />
-              <div className="mt-2.5 flex w-full items-center justify-between px-5">
-                <div>
-                  <p className="text-base font-bold tracking-tight">Centre de commandes</p>
-                  <p className="text-xs leading-snug text-muted-foreground">
-                    Toutes les actions Nutrition, au même endroit.
-                  </p>
+              <div
+                className="flex shrink-0 cursor-grab touch-none flex-col items-center pb-2 pt-3 active:cursor-grabbing"
+                onPointerDown={(e) => dragControls.start(e)}
+              >
+                <span className="h-1.5 w-10 rounded-full bg-muted" />
+                <div className="mt-2.5 flex w-full items-center justify-between px-5">
+                  <div>
+                    <p className="text-base font-bold tracking-tight">Centre de commandes</p>
+                    <p className="text-xs leading-snug text-muted-foreground">
+                      Toutes les actions Nutrition, au même endroit.
+                    </p>
+                  </div>
+                  <motion.button
+                    whileTap={PRESS_SMALL}
+                    type="button"
+                    onClick={onClose}
+                    aria-label="Fermer"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    <X className="h-4 w-4" />
+                  </motion.button>
                 </div>
-                <motion.button
-                  whileTap={PRESS_SMALL}
-                  type="button"
-                  onClick={onClose}
-                  aria-label="Fermer"
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  <X className="h-4 w-4" />
-                </motion.button>
               </div>
-            </div>
 
-            <div className="flex-1 overflow-y-auto px-5 pb-8 pt-3">
-              {COMMAND_SECTIONS.map((section, si) => (
-                <div
-                  key={section.key}
-                  className={si > 0 ? "mt-7 border-t border-border/60 pt-6" : ""}
-                >
-                  <div className="mb-3.5 flex items-center gap-2.5">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-base">
-                      {section.emoji}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-sm font-bold">{section.title}</p>
-                      <p className="truncate text-xs leading-snug text-muted-foreground">
-                        {section.description}
-                      </p>
+              <div className="flex-1 overflow-y-auto px-5 pb-8 pt-3">
+                {COMMAND_SECTIONS.map((section, si) => (
+                  <div
+                    key={section.key}
+                    className={si > 0 ? "mt-7 border-t border-border/60 pt-6" : ""}
+                  >
+                    <div className="mb-3.5 flex items-center gap-2.5">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-base">
+                        {section.emoji}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold">{section.title}</p>
+                        <p className="truncate text-xs leading-snug text-muted-foreground">
+                          {section.description}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-2.5">
+                      {section.items.map((it, i) => {
+                        const Icon = it.icon;
+                        return (
+                          <motion.button
+                            key={it.action}
+                            initial="hidden"
+                            animate="visible"
+                            whileTap="pressed"
+                            variants={{
+                              hidden: { opacity: 0, y: 8 },
+                              visible: {
+                                opacity: 1,
+                                y: 0,
+                                transition: { ...TRANSITION, delay: 0.02 * i },
+                              },
+                              pressed: PRESS_LARGE,
+                            }}
+                            type="button"
+                            onClick={() => onAction(it.action)}
+                            className={`relative flex items-center gap-3.5 p-4 text-left transition-colors hover:border-primary/40 hover:bg-primary/5 ${CARD}`}
+                          >
+                            <motion.span
+                              aria-hidden
+                              variants={{
+                                hidden: { opacity: 0 },
+                                visible: { opacity: 0 },
+                                pressed: { opacity: 1 },
+                              }}
+                              transition={{ duration: 0.15 }}
+                              className="pointer-events-none absolute inset-0 rounded-[inherit] bg-primary/5"
+                            />
+                            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                              <Icon className="h-6 w-6" />
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-semibold text-foreground">{it.title}</p>
+                              <p className="mt-0.5 truncate text-xs leading-snug text-muted-foreground">
+                                {it.description}
+                              </p>
+                            </div>
+                          </motion.button>
+                        );
+                      })}
                     </div>
                   </div>
-                  <div className="flex flex-col gap-2.5">
-                    {section.items.map((it, i) => {
-                      const Icon = it.icon;
-                      return (
-                        <motion.button
-                          key={it.action}
-                          initial="hidden"
-                          animate="visible"
-                          whileTap="pressed"
-                          variants={{
-                            hidden: { opacity: 0, y: 8 },
-                            visible: {
-                              opacity: 1,
-                              y: 0,
-                              transition: { ...TRANSITION, delay: 0.02 * i },
-                            },
-                            pressed: PRESS_LARGE,
-                          }}
-                          type="button"
-                          onClick={() => onAction(it.action)}
-                          className={`relative flex items-center gap-3.5 p-4 text-left transition-colors hover:border-primary/40 hover:bg-primary/5 ${CARD}`}
-                        >
-                          <motion.span
-                            aria-hidden
-                            variants={{
-                              hidden: { opacity: 0 },
-                              visible: { opacity: 0 },
-                              pressed: { opacity: 1 },
-                            }}
-                            transition={{ duration: 0.15 }}
-                            className="pointer-events-none absolute inset-0 rounded-[inherit] bg-primary/5"
-                          />
-                          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                            <Icon className="h-6 w-6" />
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-semibold text-foreground">{it.title}</p>
-                            <p className="mt-0.5 truncate text-xs leading-snug text-muted-foreground">
-                              {it.description}
-                            </p>
-                          </div>
-                        </motion.button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
+                ))}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+    </Portal>
   );
 }
 

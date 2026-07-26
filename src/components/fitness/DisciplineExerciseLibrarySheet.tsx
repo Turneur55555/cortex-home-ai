@@ -10,6 +10,7 @@ import { ENGINE_REGISTRY } from "@/lib/fitness/engines/registry";
 import type { DisciplineId } from "@/lib/fitness/engines/types";
 import { ExerciseListBrowser, type BrowserExercise } from "./ExerciseListBrowser";
 import { SegmentAnalysisSheet } from "./session/SegmentAnalysisSheet";
+import { Portal } from "@/components/Portal";
 
 // ============================================================
 // Bibliothèque d'exercices générique par discipline (Phase 1
@@ -73,45 +74,47 @@ export function DisciplineExerciseLibrarySheet({
     : "Aucun exercice pour cette discipline.";
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm"
-      onClick={onClose}
-    >
+    <Portal>
       <div
-        className="flex h-[85vh] w-full max-w-[430px] flex-col rounded-t-3xl border-t border-border bg-card p-5 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-elevated"
-        onClick={(e) => e.stopPropagation()}
+        className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm"
+        onClick={onClose}
       >
-        <div className="mb-3 flex shrink-0 items-center justify-between gap-2">
-          <div>
-            <h3 className="font-serif text-lg font-semibold italic text-foreground">La Forge</h3>
-            <p className="text-[11px] text-muted-foreground">{engineLabel}</p>
+        <div
+          className="flex h-[85vh] w-full max-w-[430px] flex-col rounded-t-3xl border-t border-border bg-card p-5 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-elevated"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="mb-3 flex shrink-0 items-center justify-between gap-2">
+            <div>
+              <h3 className="font-serif text-lg font-semibold italic text-foreground">La Forge</h3>
+              <p className="text-[11px] text-muted-foreground">{engineLabel}</p>
+            </div>
+            <button
+              onClick={onClose}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface text-muted-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
-          <button
-            onClick={onClose}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface text-muted-foreground"
-          >
-            <X className="h-4 w-4" />
-          </button>
+
+          <ExerciseListBrowser
+            items={items}
+            isLoading={isLoading}
+            query={query}
+            onQueryChange={setQuery}
+            searchPlaceholder="Rechercher un exercice…"
+            onRowTap={(item) => setSelectedLabel(item.name)}
+            emptyLabel={emptyLabel}
+          />
         </div>
 
-        <ExerciseListBrowser
-          items={items}
-          isLoading={isLoading}
-          query={query}
-          onQueryChange={setQuery}
-          searchPlaceholder="Rechercher un exercice…"
-          onRowTap={(item) => setSelectedLabel(item.name)}
-          emptyLabel={emptyLabel}
-        />
+        {selectedLabel && (
+          <SegmentAnalysisSheet
+            rawLabel={selectedLabel}
+            discipline={discipline}
+            onClose={() => setSelectedLabel(null)}
+          />
+        )}
       </div>
-
-      {selectedLabel && (
-        <SegmentAnalysisSheet
-          rawLabel={selectedLabel}
-          discipline={discipline}
-          onClose={() => setSelectedLabel(null)}
-        />
-      )}
-    </div>
+    </Portal>
   );
 }

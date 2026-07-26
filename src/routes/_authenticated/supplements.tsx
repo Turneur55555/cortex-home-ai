@@ -1,16 +1,8 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import {
-  Check,
-  ChevronLeft,
-  Loader2,
-  Pencil,
-  Pill,
-  Plus,
-  Trash2,
-  X,
-} from "lucide-react";
+import { Check, ChevronLeft, Loader2, Pencil, Pill, Plus, Trash2, X } from "lucide-react";
 import { format } from "date-fns";
+import { Portal } from "@/components/Portal";
 import {
   useAllSupplements,
   useCreateSupplement,
@@ -103,13 +95,9 @@ function SupplementsPage() {
               <li key={s.id}>
                 <button
                   type="button"
-                  onClick={() =>
-                    toggle.mutate({ supplement_id: s.id, taken: !s.taken })
-                  }
+                  onClick={() => toggle.mutate({ supplement_id: s.id, taken: !s.taken })}
                   className={`flex w-full items-center gap-3 rounded-2xl border p-3.5 text-left transition-colors ${
-                    s.taken
-                      ? "border-primary/30 bg-primary/5"
-                      : "border-border bg-card"
+                    s.taken ? "border-primary/30 bg-primary/5" : "border-border bg-card"
                   }`}
                 >
                   <span
@@ -211,18 +199,8 @@ function SupplementsPage() {
         </button>
       </section>
 
-      {addOpen && (
-        <SupplementFormSheet
-          onClose={() => setAddOpen(false)}
-          initial={null}
-        />
-      )}
-      {editing && (
-        <SupplementFormSheet
-          onClose={() => setEditing(null)}
-          initial={editing}
-        />
-      )}
+      {addOpen && <SupplementFormSheet onClose={() => setAddOpen(false)} initial={null} />}
+      {editing && <SupplementFormSheet onClose={() => setEditing(null)} initial={editing} />}
       {confirmDel && (
         <ConfirmDialog
           title={`Supprimer « ${confirmDel.name} » ?`}
@@ -237,9 +215,7 @@ function SupplementsPage() {
           pending={del.isPending}
         />
       )}
-      {historyOpen && (
-        <SupplementHistorySheet onClose={() => setHistoryOpen(false)} />
-      )}
+      {historyOpen && <SupplementHistorySheet onClose={() => setHistoryOpen(false)} />}
     </main>
   );
 }
@@ -270,41 +246,19 @@ function SupplementFormSheet({
       notes: notes.trim() || null,
     };
     if (initial) {
-      update.mutate(
-        { id: initial.id, patch: payload },
-        { onSuccess: onClose },
-      );
+      update.mutate({ id: initial.id, patch: payload }, { onSuccess: onClose });
     } else {
       create.mutate(payload, { onSuccess: onClose });
     }
   };
 
   return (
-    <Sheet
-      title={initial ? "Modifier le complément" : "Nouveau complément"}
-      onClose={onClose}
-    >
+    <Sheet title={initial ? "Modifier le complément" : "Nouveau complément"} onClose={onClose}>
       <form onSubmit={submit} className="space-y-4">
-        <Field
-          label="Nom"
-          value={name}
-          onChange={setName}
-          placeholder="Ex : Créatine"
-          required
-        />
+        <Field label="Nom" value={name} onChange={setName} placeholder="Ex : Créatine" required />
         <div className="grid grid-cols-2 gap-3">
-          <Field
-            label="Dosage"
-            value={dosage}
-            onChange={setDosage}
-            placeholder="5"
-          />
-          <Field
-            label="Unité"
-            value={unit}
-            onChange={setUnit}
-            placeholder="g / mg / gélule"
-          />
+          <Field label="Dosage" value={dosage} onChange={setDosage} placeholder="5" />
+          <Field label="Unité" value={unit} onChange={setUnit} placeholder="g / mg / gélule" />
         </div>
         <div>
           <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -330,7 +284,10 @@ function SupplementHistorySheet({ onClose }: { onClose: () => void }) {
   const { data, isLoading } = useSupplementHistory(30);
 
   const grouped = useMemo(() => {
-    const map = new Map<string, Array<{ name: string; dosage: string | null; unit: string | null }>>();
+    const map = new Map<
+      string,
+      Array<{ name: string; dosage: string | null; unit: string | null }>
+    >();
     (data ?? []).forEach((row) => {
       const r = row as unknown as {
         date: string;
@@ -358,19 +315,13 @@ function SupplementHistorySheet({ onClose }: { onClose: () => void }) {
       ) : (
         <ul className="space-y-3">
           {grouped.map(([date, sups]) => (
-            <li
-              key={date}
-              className="rounded-xl border border-border bg-card p-3"
-            >
+            <li key={date} className="rounded-xl border border-border bg-card p-3">
               <p className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 {date}
               </p>
               <ul className="space-y-1">
                 {sups.map((s, i) => (
-                  <li
-                    key={i}
-                    className="flex items-center justify-between text-sm"
-                  >
+                  <li key={i} className="flex items-center justify-between text-sm">
                     <span className="truncate">{s.name}</span>
                     {(s.dosage || s.unit) && (
                       <span className="ml-2 shrink-0 text-xs text-muted-foreground">
@@ -404,42 +355,44 @@ function ConfirmDialog({
   pending?: boolean;
 }) {
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm sm:items-center"
-      onClick={onCancel}
-    >
+    <Portal>
       <div
-        className="m-4 w-full max-w-sm rounded-2xl border border-border bg-card p-5 shadow-elevated"
-        onClick={(e) => e.stopPropagation()}
+        className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm sm:items-center"
+        onClick={onCancel}
       >
-        <div className="mb-1 flex items-start justify-between gap-3">
-          <p className="text-sm font-semibold">{title}</p>
-          <button
-            onClick={onCancel}
-            className="-mr-1 -mt-1 flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
-            aria-label="Fermer"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        <p className="mb-4 text-xs text-muted-foreground">{message}</p>
-        <div className="flex gap-3">
-          <button
-            onClick={onCancel}
-            className="flex-1 rounded-xl border border-border py-2.5 text-sm font-medium"
-          >
-            Annuler
-          </button>
-          <button
-            onClick={onConfirm}
-            disabled={pending}
-            className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-destructive py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-          >
-            {pending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            {confirmLabel}
-          </button>
+        <div
+          className="m-4 w-full max-w-sm rounded-2xl border border-border bg-card p-5 shadow-elevated"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="mb-1 flex items-start justify-between gap-3">
+            <p className="text-sm font-semibold">{title}</p>
+            <button
+              onClick={onCancel}
+              className="-mr-1 -mt-1 flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
+              aria-label="Fermer"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <p className="mb-4 text-xs text-muted-foreground">{message}</p>
+          <div className="flex gap-3">
+            <button
+              onClick={onCancel}
+              className="flex-1 rounded-xl border border-border py-2.5 text-sm font-medium"
+            >
+              Annuler
+            </button>
+            <button
+              onClick={onConfirm}
+              disabled={pending}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-destructive py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+            >
+              {pending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {confirmLabel}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </Portal>
   );
 }

@@ -21,6 +21,7 @@ import { findSimilarExercises } from "@/lib/fitness/exerciseSimilar";
 import { exerciseIllustration } from "@/lib/fitness/exerciseIllustrations";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { Portal } from "@/components/Portal";
 import {
   useFullExerciseCatalog,
   useAddExercise,
@@ -494,323 +495,329 @@ export function ExerciseExplorerSheet({
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-end justify-center" onClick={onClose}>
-      {rankedExerciseNames.length > 0 && (
-        <RankAggregator exerciseNames={rankedExerciseNames}>
-          {({ reports }) => <RankByNameSync reports={reports} onChange={setRankByName} />}
-        </RankAggregator>
-      )}
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
-
-      <div
-        className="relative flex h-[92vh] w-full max-w-[430px] flex-col rounded-t-3xl border-t border-border bg-card shadow-elevated"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Handle */}
-        <div className="flex shrink-0 justify-center pb-1 pt-3">
-          <div className="h-1 w-10 rounded-full bg-white/20" />
-        </div>
-
-        {/* Header — identique dans les deux modes */}
-        <div className="flex shrink-0 items-center justify-between px-5 pb-3">
-          <div className="flex items-center gap-2">
-            <BookOpen className="h-5 w-5 text-primary" />
-            <h2 className="text-base font-bold">Catalogue d'exercices</h2>
-            {catalog && (
-              <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
-                {catalog.length}
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setShowAdd((v) => !v)}
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/20 text-primary transition-colors active:bg-primary/30"
-              aria-label="Ajouter un exercice"
-            >
-              <Plus className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-white/5 text-muted-foreground"
-              aria-label="Fermer"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-
-        {/* Add form — identique dans les deux modes */}
-        {showAdd && (
-          <div className="mx-4 mb-3 shrink-0 rounded-2xl border border-primary/30 bg-primary/5 p-4">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-primary">
-              Nouvel exercice
-            </p>
-            <input
-              autoFocus
-              type="text"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-              placeholder="Nom de l'exercice…"
-              className="mb-3 w-full rounded-xl border border-border bg-surface px-4 py-2.5 text-sm outline-none focus:border-primary"
-            />
-            <div className="mb-3 grid grid-cols-2 gap-1.5">
-              {CATALOG_GROUPS.map((g) => (
-                <button
-                  key={g}
-                  type="button"
-                  onClick={() => setNewGroup(g)}
-                  className={`rounded-lg border px-2 py-1.5 text-[11px] font-semibold transition-colors ${
-                    newGroup === g
-                      ? "border-primary bg-primary/20 text-primary"
-                      : "border-border bg-card/50 text-muted-foreground"
-                  }`}
-                >
-                  {g}
-                </button>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setShowAdd(false)}
-                className="flex-1 rounded-xl border border-border bg-card py-2.5 text-sm font-semibold text-muted-foreground"
-              >
-                Annuler
-              </button>
-              <button
-                type="button"
-                onClick={handleAdd}
-                disabled={!newName.trim() || addExercise.isPending}
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-50"
-              >
-                {addExercise.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Plus className="h-4 w-4" />
-                )}
-                Ajouter
-              </button>
-            </div>
-          </div>
+    <Portal>
+      <div className="fixed inset-0 z-[60] flex items-end justify-center" onClick={onClose}>
+        {rankedExerciseNames.length > 0 && (
+          <RankAggregator exerciseNames={rankedExerciseNames}>
+            {({ reports }) => <RankByNameSync reports={reports} onChange={setRankByName} />}
+          </RankAggregator>
         )}
+        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
 
-        {/* Liste — identique dans les deux modes ; seul le tap principal change */}
-        <div className="flex min-h-0 flex-1 flex-col px-4">
-          <ExerciseListBrowser
-            items={items}
-            isLoading={isLoading}
-            query={query}
-            onQueryChange={setQuery}
-            autoFocusSearch={mode === "picker"}
-            groupOrder={ALL_GROUPS}
-            highlightGroups={new Set(["Mes exercices"])}
-            getPhoto={getPhoto}
-            rankByName={mode === "catalog" ? rankByName : undefined}
-            onRowTap={handleRowTap}
-            renderRowMenu={(ex) => (
-              <ExerciseActionsMenu title={ex.name} actions={buildMenuActions(ex)} />
-            )}
-            emptyLabel={query ? "Aucun résultat." : "Catalogue vide — ajoutez des exercices."}
-            trailingSearchSlot={
-              enableScan ? (
+        <div
+          className="relative flex h-[92vh] w-full max-w-[430px] flex-col rounded-t-3xl border-t border-border bg-card shadow-elevated"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Handle */}
+          <div className="flex shrink-0 justify-center pb-1 pt-3">
+            <div className="h-1 w-10 rounded-full bg-white/20" />
+          </div>
+
+          {/* Header — identique dans les deux modes */}
+          <div className="flex shrink-0 items-center justify-between px-5 pb-3">
+            <div className="flex items-center gap-2">
+              <BookOpen className="h-5 w-5 text-primary" />
+              <h2 className="text-base font-bold">Catalogue d'exercices</h2>
+              {catalog && (
+                <span className="rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                  {catalog.length}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowAdd((v) => !v)}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/20 text-primary transition-colors active:bg-primary/30"
+                aria-label="Ajouter un exercice"
+              >
+                <Plus className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-white/5 text-muted-foreground"
+                aria-label="Fermer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* Add form — identique dans les deux modes */}
+          {showAdd && (
+            <div className="mx-4 mb-3 shrink-0 rounded-2xl border border-primary/30 bg-primary/5 p-4">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-primary">
+                Nouvel exercice
+              </p>
+              <input
+                autoFocus
+                type="text"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+                placeholder="Nom de l'exercice…"
+                className="mb-3 w-full rounded-xl border border-border bg-surface px-4 py-2.5 text-sm outline-none focus:border-primary"
+              />
+              <div className="mb-3 grid grid-cols-2 gap-1.5">
+                {CATALOG_GROUPS.map((g) => (
+                  <button
+                    key={g}
+                    type="button"
+                    onClick={() => setNewGroup(g)}
+                    className={`rounded-lg border px-2 py-1.5 text-[11px] font-semibold transition-colors ${
+                      newGroup === g
+                        ? "border-primary bg-primary/20 text-primary"
+                        : "border-border bg-card/50 text-muted-foreground"
+                    }`}
+                  >
+                    {g}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={handleScanClick}
-                  disabled={scanning}
-                  aria-label="Scanner une machine"
-                  className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-2xl border border-primary/30 bg-primary/10 text-primary transition-colors active:bg-primary/20 disabled:opacity-50"
+                  onClick={() => setShowAdd(false)}
+                  className="flex-1 rounded-xl border border-border bg-card py-2.5 text-sm font-semibold text-muted-foreground"
                 >
-                  {scanning ? (
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                  ) : (
-                    <Camera className="h-5 w-5" />
-                  )}
+                  Annuler
                 </button>
-              ) : undefined
-            }
-            beforeListSlot={
-              mode === "picker" ? (
-                <>
-                  {suggestions && suggestions.length > 0 && (
-                    <section className="mb-6">
-                      <div className="mb-2 flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
-                          <Sparkles className="h-3 w-3" />
-                          Détecté par IA
-                          {detectedMachine && (
-                            <span className="ml-1 normal-case tracking-normal text-muted-foreground">
-                              · {detectedMachine}
-                            </span>
-                          )}
+                <button
+                  type="button"
+                  onClick={handleAdd}
+                  disabled={!newName.trim() || addExercise.isPending}
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary py-2.5 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+                >
+                  {addExercise.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Plus className="h-4 w-4" />
+                  )}
+                  Ajouter
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Liste — identique dans les deux modes ; seul le tap principal change */}
+          <div className="flex min-h-0 flex-1 flex-col px-4">
+            <ExerciseListBrowser
+              items={items}
+              isLoading={isLoading}
+              query={query}
+              onQueryChange={setQuery}
+              autoFocusSearch={mode === "picker"}
+              groupOrder={ALL_GROUPS}
+              highlightGroups={new Set(["Mes exercices"])}
+              getPhoto={getPhoto}
+              rankByName={mode === "catalog" ? rankByName : undefined}
+              onRowTap={handleRowTap}
+              renderRowMenu={(ex) => (
+                <ExerciseActionsMenu title={ex.name} actions={buildMenuActions(ex)} />
+              )}
+              emptyLabel={query ? "Aucun résultat." : "Catalogue vide — ajoutez des exercices."}
+              trailingSearchSlot={
+                enableScan ? (
+                  <button
+                    type="button"
+                    onClick={handleScanClick}
+                    disabled={scanning}
+                    aria-label="Scanner une machine"
+                    className="flex h-[46px] w-[46px] shrink-0 items-center justify-center rounded-2xl border border-primary/30 bg-primary/10 text-primary transition-colors active:bg-primary/20 disabled:opacity-50"
+                  >
+                    {scanning ? (
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    ) : (
+                      <Camera className="h-5 w-5" />
+                    )}
+                  </button>
+                ) : undefined
+              }
+              beforeListSlot={
+                mode === "picker" ? (
+                  <>
+                    {suggestions && suggestions.length > 0 && (
+                      <section className="mb-6">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
+                            <Sparkles className="h-3 w-3" />
+                            Détecté par IA
+                            {detectedMachine && (
+                              <span className="ml-1 normal-case tracking-normal text-muted-foreground">
+                                · {detectedMachine}
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSuggestions(null);
+                              setDetectedMachine(null);
+                            }}
+                            className="text-[11px] text-muted-foreground hover:text-foreground"
+                          >
+                            Masquer
+                          </button>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setSuggestions(null);
-                            setDetectedMachine(null);
-                          }}
-                          className="text-[11px] text-muted-foreground hover:text-foreground"
-                        >
-                          Masquer
-                        </button>
-                      </div>
-                      <ul className="space-y-1.5">
-                        {suggestions.map((s, i) => (
-                          <li key={`${s.name}-${i}`}>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const recent = recentExercises.find(
-                                  (r) => normalize(r.name) === normalize(s.name),
-                                );
-                                handlePrimaryUseAction(s.name, recent);
-                              }}
-                              className="flex w-full items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/10 px-4 py-3 text-left transition-colors active:bg-primary/20"
-                            >
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-sm font-semibold">{s.name}</span>
-                                  <span className="rounded-full bg-primary/20 px-1.5 py-0.5 text-[9px] font-semibold text-primary">
-                                    {Math.round(s.confidence * 100)}%
+                        <ul className="space-y-1.5">
+                          {suggestions.map((s, i) => (
+                            <li key={`${s.name}-${i}`}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const recent = recentExercises.find(
+                                    (r) => normalize(r.name) === normalize(s.name),
+                                  );
+                                  handlePrimaryUseAction(s.name, recent);
+                                }}
+                                className="flex w-full items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/10 px-4 py-3 text-left transition-colors active:bg-primary/20"
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-semibold">{s.name}</span>
+                                    <span className="rounded-full bg-primary/20 px-1.5 py-0.5 text-[9px] font-semibold text-primary">
+                                      {Math.round(s.confidence * 100)}%
+                                    </span>
+                                  </div>
+                                  <span className="text-[11px] text-muted-foreground">
+                                    {s.group}
+                                    {s.reason ? ` · ${s.reason}` : ""}
                                   </span>
                                 </div>
-                                <span className="text-[11px] text-muted-foreground">
-                                  {s.group}
-                                  {s.reason ? ` · ${s.reason}` : ""}
-                                </span>
-                              </div>
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    </section>
-                  )}
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </section>
+                    )}
 
-                  {showCreateNew && (
-                    <button
-                      type="button"
-                      onClick={() => handlePrimaryUseAction(query.trim())}
-                      className="mb-5 flex w-full items-center gap-3 rounded-xl border border-primary/30 bg-primary/10 p-3 text-left transition-colors active:bg-primary/20"
-                    >
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/20 text-lg font-bold text-primary">
-                        +
-                      </span>
-                      <div>
-                        <span className="block text-sm font-semibold">Créer "{query.trim()}"</span>
-                        <span className="text-[11px] text-muted-foreground">
-                          Exercice personnalisé
+                    {showCreateNew && (
+                      <button
+                        type="button"
+                        onClick={() => handlePrimaryUseAction(query.trim())}
+                        className="mb-5 flex w-full items-center gap-3 rounded-xl border border-primary/30 bg-primary/10 p-3 text-left transition-colors active:bg-primary/20"
+                      >
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/20 text-lg font-bold text-primary">
+                          +
                         </span>
-                      </div>
-                    </button>
-                  )}
+                        <div>
+                          <span className="block text-sm font-semibold">
+                            Créer "{query.trim()}"
+                          </span>
+                          <span className="text-[11px] text-muted-foreground">
+                            Exercice personnalisé
+                          </span>
+                        </div>
+                      </button>
+                    )}
 
-                  {filteredRecents.length > 0 && (
-                    <section className="mb-6">
+                    {filteredRecents.length > 0 && (
+                      <section className="mb-6">
+                        <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          <Clock className="h-3 w-3" />
+                          Exercices récents
+                        </div>
+                        <ul className="space-y-1.5">
+                          {filteredRecents.map((r) => (
+                            <li key={r.name}>
+                              <button
+                                type="button"
+                                onClick={() => handlePrimaryUseAction(r.name, r)}
+                                className="flex w-full items-center justify-between rounded-xl border border-border bg-surface px-4 py-3 text-left transition-colors active:bg-surface/60"
+                              >
+                                <span className="text-sm font-medium">{r.name}</span>
+                                {(r.lastSets || r.lastReps || r.lastWeight) && (
+                                  <span className="ml-3 shrink-0 text-[11px] text-muted-foreground">
+                                    {[
+                                      r.lastSets && r.lastReps
+                                        ? `${r.lastSets}×${r.lastReps}`
+                                        : null,
+                                      r.lastWeight ? `${r.lastWeight} kg` : null,
+                                    ]
+                                      .filter(Boolean)
+                                      .join(" · ")}
+                                  </span>
+                                )}
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </section>
+                    )}
+
+                    {items.length > 0 && (
                       <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                        <Clock className="h-3 w-3" />
-                        Exercices récents
+                        <Book className="h-3 w-3" />
+                        {normQuery ? "Catalogue" : "Tous les exercices"}
                       </div>
-                      <ul className="space-y-1.5">
-                        {filteredRecents.map((r) => (
-                          <li key={r.name}>
-                            <button
-                              type="button"
-                              onClick={() => handlePrimaryUseAction(r.name, r)}
-                              className="flex w-full items-center justify-between rounded-xl border border-border bg-surface px-4 py-3 text-left transition-colors active:bg-surface/60"
-                            >
-                              <span className="text-sm font-medium">{r.name}</span>
-                              {(r.lastSets || r.lastReps || r.lastWeight) && (
-                                <span className="ml-3 shrink-0 text-[11px] text-muted-foreground">
-                                  {[
-                                    r.lastSets && r.lastReps ? `${r.lastSets}×${r.lastReps}` : null,
-                                    r.lastWeight ? `${r.lastWeight} kg` : null,
-                                  ]
-                                    .filter(Boolean)
-                                    .join(" · ")}
-                                </span>
-                              )}
-                            </button>
-                          </li>
-                        ))}
-                      </ul>
-                    </section>
-                  )}
+                    )}
+                  </>
+                ) : undefined
+              }
+            />
+          </div>
 
-                  {items.length > 0 && (
-                    <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                      <Book className="h-3 w-3" />
-                      {normQuery ? "Catalogue" : "Tous les exercices"}
-                    </div>
-                  )}
-                </>
-              ) : undefined
-            }
-          />
+          {enableScan && (
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={handleFile}
+            />
+          )}
         </div>
 
-        {enableScan && (
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            onChange={handleFile}
+        {/* Fiche d'analyse — page de référence de l'exercice, dans les deux modes */}
+        {openExercise && (
+          <ExerciseAnalysisSheet
+            exerciseName={openExercise.name}
+            weightHistory={
+              histByName.get(keyForBrowserExercise(openExercise.name, openExercise.id)) ?? []
+            }
+            volumeHistory={
+              volByName.get(keyForBrowserExercise(openExercise.name, openExercise.id)) ?? []
+            }
+            pr={prByName.get(keyForBrowserExercise(openExercise.name, openExercise.id))}
+            imageUrl={getPhoto(openExercise.name, openExercise.id)}
+            onClose={() => setOpenExercise(null)}
+            actions={analysisActionsFor(openExercise)}
+            similarExercises={similarFor(openExercise)}
+            onSelectSimilar={(name) => {
+              const found = items.find((i) => normalize(i.name) === normalize(name));
+              if (found) setOpenExercise(found);
+            }}
+          />
+        )}
+
+        {/* Modifier */}
+        {editingExercise && (
+          <EditExerciseSheet
+            name={editName}
+            group={editGroup}
+            pending={updateExercise.isPending}
+            onNameChange={setEditName}
+            onGroupChange={setEditGroup}
+            onCancel={() => setEditingExercise(null)}
+            onSave={handleEditSave}
+          />
+        )}
+
+        {/* Promouvoir */}
+        {promotingExercise && (
+          <PromoteExerciseSheet
+            name={promotingExercise.name}
+            group={promoteGroup}
+            pending={promoteExercise.isPending}
+            onGroupChange={setPromoteGroup}
+            onCancel={() => setPromotingExercise(null)}
+            onConfirm={handlePromote}
           />
         )}
       </div>
-
-      {/* Fiche d'analyse — page de référence de l'exercice, dans les deux modes */}
-      {openExercise && (
-        <ExerciseAnalysisSheet
-          exerciseName={openExercise.name}
-          weightHistory={
-            histByName.get(keyForBrowserExercise(openExercise.name, openExercise.id)) ?? []
-          }
-          volumeHistory={
-            volByName.get(keyForBrowserExercise(openExercise.name, openExercise.id)) ?? []
-          }
-          pr={prByName.get(keyForBrowserExercise(openExercise.name, openExercise.id))}
-          imageUrl={getPhoto(openExercise.name, openExercise.id)}
-          onClose={() => setOpenExercise(null)}
-          actions={analysisActionsFor(openExercise)}
-          similarExercises={similarFor(openExercise)}
-          onSelectSimilar={(name) => {
-            const found = items.find((i) => normalize(i.name) === normalize(name));
-            if (found) setOpenExercise(found);
-          }}
-        />
-      )}
-
-      {/* Modifier */}
-      {editingExercise && (
-        <EditExerciseSheet
-          name={editName}
-          group={editGroup}
-          pending={updateExercise.isPending}
-          onNameChange={setEditName}
-          onGroupChange={setEditGroup}
-          onCancel={() => setEditingExercise(null)}
-          onSave={handleEditSave}
-        />
-      )}
-
-      {/* Promouvoir */}
-      {promotingExercise && (
-        <PromoteExerciseSheet
-          name={promotingExercise.name}
-          group={promoteGroup}
-          pending={promoteExercise.isPending}
-          onGroupChange={setPromoteGroup}
-          onCancel={() => setPromotingExercise(null)}
-          onConfirm={handlePromote}
-        />
-      )}
-    </div>
+    </Portal>
   );
 }
 

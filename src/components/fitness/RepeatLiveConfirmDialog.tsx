@@ -9,6 +9,8 @@
 // primaire au lieu de destructive.
 // ============================================================
 
+import { Portal } from "@/components/Portal";
+
 export function RepeatLiveConfirmDialog({
   workoutName,
   onConfirm,
@@ -19,33 +21,35 @@ export function RepeatLiveConfirmDialog({
   onCancel: () => void;
 }) {
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm"
-      onClick={onCancel}
-    >
+    <Portal>
       <div
-        className="mb-20 w-full max-w-sm rounded-2xl border border-border bg-card p-5 shadow-elevated"
-        onClick={(e) => e.stopPropagation()}
+        className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 backdrop-blur-sm"
+        onClick={onCancel}
       >
-        <p className="mb-1 text-sm font-semibold">Refaire « {workoutName} » en live ?</p>
-        <p className="mb-4 text-xs text-muted-foreground">
-          Une séance active démarre immédiatement, pré-remplie avec les exercices de cette séance.
-        </p>
-        <div className="flex gap-3">
-          <button
-            onClick={onCancel}
-            className="flex-1 rounded-xl border border-border py-2.5 text-sm font-medium"
-          >
-            Annuler
-          </button>
-          <button
-            onClick={onConfirm}
-            className="flex-1 rounded-xl bg-gradient-primary py-2.5 text-sm font-semibold text-primary-foreground"
-          >
-            Refaire
-          </button>
+        <div
+          className="mb-20 w-full max-w-sm rounded-2xl border border-border bg-card p-5 shadow-elevated"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <p className="mb-1 text-sm font-semibold">Refaire « {workoutName} » en live ?</p>
+          <p className="mb-4 text-xs text-muted-foreground">
+            Une séance active démarre immédiatement, pré-remplie avec les exercices de cette séance.
+          </p>
+          <div className="flex gap-3">
+            <button
+              onClick={onCancel}
+              className="flex-1 rounded-xl border border-border py-2.5 text-sm font-medium"
+            >
+              Annuler
+            </button>
+            <button
+              onClick={onConfirm}
+              className="flex-1 rounded-xl bg-gradient-primary py-2.5 text-sm font-semibold text-primary-foreground"
+            >
+              Refaire
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </Portal>
   );
 }
