@@ -32,6 +32,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
+import { Portal } from "@/components/Portal";
 
 // ── Contrat JSON du bilan (identique à la sortie de l'Edge analyze-workout) ──
 
@@ -120,7 +121,13 @@ export function AnalysisSheetShell({
   onClose: () => void;
   children: React.ReactNode;
 }) {
+  // Portal : appelé depuis des cartes `<li>` premium (overflow-hidden +
+  // backdrop-blur-xl, ex. GenericHistoryCard/WorkoutCard) — sans Portal,
+  // ces ancêtres deviennent le containing block de ce `fixed` (backdrop-filter
+  // + transform créent un containing block, spec CSS) et leur overflow-hidden
+  // rogne la sheet en haut et en bas. Voir Portal.tsx.
   return (
+    <Portal>
     <div className="fixed inset-0 z-50 flex items-end justify-center">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
 
@@ -185,6 +192,7 @@ export function AnalysisSheetShell({
         </div>
       </div>
     </div>
+    </Portal>
   );
 }
 

@@ -32,6 +32,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { Portal } from "@/components/Portal";
 import { useExerciseSetHistory } from "@/hooks/useExerciseSetHistory";
 import { useExerciseAnalysis } from "@/hooks/useExerciseAnalysis";
 import { useDeepExerciseAI } from "@/hooks/useDeepExerciseAI";
@@ -238,7 +239,12 @@ export function ExerciseAnalysisSheet({
     else dragX.set(0);
   };
 
+  // Portal : ce panneau plein écran doit échapper aux cartes `<li>` premium
+  // (overflow-hidden + backdrop-blur-xl) qui l'appellent — sinon Safari fait
+  // de ces cartes le containing block du `fixed`, et l'`overflow-hidden` de
+  // la carte rogne le panneau en haut et en bas (voir Portal.tsx).
   return (
+    <Portal>
     <div className="fixed inset-0 z-50">
       {/* Voile qui s'estompe pendant le swipe-back — donne la profondeur iOS */}
       <motion.div
@@ -600,6 +606,6 @@ export function ExerciseAnalysisSheet({
         </div>
       </motion.div>
     </div>
-
+    </Portal>
   );
 }
