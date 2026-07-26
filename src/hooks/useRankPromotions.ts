@@ -16,13 +16,13 @@ export function useRankPromotions() {
     enabled: !!user,
     staleTime: 30_000,
     queryFn: async (): Promise<PromotionEvent[]> => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("rank_promotions")
         .select("tier_index, xp_at_promotion, created_at")
         .eq("user_id", user!.id)
         .order("tier_index", { ascending: false });
       if (error) throw error;
-      return buildPromotionEvents(data ?? []);
+      return buildPromotionEvents((data ?? []) as any);
     },
   });
 }
