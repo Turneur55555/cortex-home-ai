@@ -248,8 +248,8 @@ export function ExerciseAnalysisSheet({
       />
 
       {/* Page — push depuis la droite, swipe-back horizontal */}
-      <motion.div
-        className="absolute inset-0 flex flex-col bg-background"
+        <motion.div
+          className="absolute inset-0 flex flex-col overflow-hidden bg-background"
         initial={{ x: "100%" }}
         animate={{ x: 0 }}
         exit={{ x: "100%" }}
@@ -263,7 +263,7 @@ export function ExerciseAnalysisSheet({
       >
         {/* Header sticky — bouton Retour iOS + titre centré */}
         <div
-          className="sticky top-0 z-10 border-b border-border/60 bg-background/85 backdrop-blur-xl"
+          className="sticky top-0 z-10 shrink-0 border-b border-border/60 bg-background/85 backdrop-blur-xl"
           style={{ paddingTop: "env(safe-area-inset-top)" }}
         >
           <div className="relative flex h-12 items-center px-2">
@@ -293,13 +293,16 @@ export function ExerciseAnalysisSheet({
         </div>
 
         <div
-          className="flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 pt-4"
+          className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 pt-4"
           style={{
             // Réserve la hauteur réelle de la BottomNav (publiée par
             // BottomNav via --bottom-nav-height, safe-area déjà incluse)
             // + un confort de 2rem sous la dernière carte, pour que le
             // « Déséquilibres détectés » ne passe jamais sous la barre —
-            // sur iPhone (avec/sans Dynamic Island) comme sur Android.
+            // sur iPhone (avec/sans Dynamic Island) comme sur Android. Le
+            // `min-h-0` est indispensable : sans lui, ce flex child garde sa
+            // hauteur de contenu et le padding est calculé mais coupé par la
+            // page fixe au lieu de devenir l'espace de fin du vrai scroll.
             paddingBottom:
               "calc(var(--bottom-nav-height, 5.75rem) + env(safe-area-inset-bottom) + 2rem)",
           }}
