@@ -1,7 +1,10 @@
 # Mémoire projet — cortex-home-ai
 
 ## Dernière mise à jour
-2026-07-25
+2026-07-26
+
+## FIX Chroniques > Progression — fiche d'analyse coupée en bas iPhone (2026-07-26)
+Diagnostic : « Déséquilibres détectés » est rendu par `ExerciseAnalysisSheet` via `SectionCard`. Le conteneur censé scroller est le `div` interne `flex-1 overflow-y-auto` de la page plein écran. Le paddingBottom existant était bien déclaré, mais un flex child sans `min-h-0` conserve une hauteur minimale basée sur son contenu : le contenu déborde alors dans la page fixe au lieu de créer un vrai espace de fin de scroll. Correction : page `motion.div` en `overflow-hidden`, header `shrink-0`, scroll container `min-h-0 flex-1 overflow-y-auto`, en conservant le padding dynamique `calc(var(--bottom-nav-height, 5.75rem) + env(safe-area-inset-bottom) + 2rem)`. `--bottom-nav-height` reste publié par `BottomNav` via `ResizeObserver` sur `documentElement`; la BottomNav est `z-30`, la fiche plein écran `z-50`, donc elle ne doit pas passer visuellement au-dessus de la fiche.
 
 ## Refonte page « Progression RPG » — Journal des promotions + correctif MEMORY erroné (2026-07-25)
 Demande : simplifier `/progression`, supprimer le doublon avec la carte de l'accueil, et transformer
