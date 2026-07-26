@@ -294,7 +294,15 @@ export function ExerciseAnalysisSheet({
 
         <div
           className="flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 pt-4"
-          style={{ paddingBottom: "calc(2rem + env(safe-area-inset-bottom))" }}
+          style={{
+            // Réserve la hauteur réelle de la BottomNav (publiée par
+            // BottomNav via --bottom-nav-height, safe-area déjà incluse)
+            // + un confort de 2rem sous la dernière carte, pour que le
+            // « Déséquilibres détectés » ne passe jamais sous la barre —
+            // sur iPhone (avec/sans Dynamic Island) comme sur Android.
+            paddingBottom:
+              "calc(var(--bottom-nav-height, 5.75rem) + env(safe-area-inset-bottom) + 2rem)",
+          }}
         >
           {/* Sous-titre contextuel — vestige de l'ancien header, gardé pour ne rien perdre */}
           <p className="-mt-1 text-[11px] uppercase tracking-wider text-muted-foreground">
