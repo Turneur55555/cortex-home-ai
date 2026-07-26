@@ -51,14 +51,22 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
       const { b64, mime } = await fileToBase64Compressed(file);
       setPreview(`data:${mime};base64,${b64}`);
       if (!b64 || b64.length < 100) throw new Error("Image vide ou illisible. Réessaie.");
+      // Timeout client (100s) : marge au-dessus du pire cas côté edge (Gemini 45s
+      // + fallback OpenAI 45s). Sans ça, un hang réseau après l'envoi de la requête
+      // laisse le spinner tourner indéfiniment (aucune erreur ne remonte jamais).
       const { data, error } = await supabase.functions.invoke("scan-meal", {
         body: { image_base64: b64, mime_type: mime },
+        timeout: 100_000,
       });
       if (error) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const err = error as any;
+        if (err?.name === "FunctionsFetchError" && err?.context?.name === "AbortError") {
+          throw new Error("Délai dépassé : le service met trop de temps à répondre. Réessaie.");
+        }
         let detail = "";
         try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const ctx = (error as any).context;
+          const ctx = err.context;
           if (ctx && typeof ctx.json === "function") {
             const body = await ctx.json();
             detail = body?.error ?? "";
