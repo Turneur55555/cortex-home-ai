@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
-import { Apple, Bookmark, Loader2, Plus, Search, Star, Trash2, X } from "lucide-react";
+import { Apple, Loader2, Plus, Search, Star, Trash2, X } from "lucide-react";
 import { FullscreenSheet } from "@/components/shared/FormComponents";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { WeightSelector } from "@/components/fitness/WeightSelector";
 import { MealSelect } from "@/components/fitness/MealSelect";
 import { NutritionSheet } from "@/components/fitness/NutritionSheet";
+import { SavedMealsList } from "@/components/fitness/SavedMealsList";
 import { useFoodSearch, getRecentFoods } from "@/hooks/useFoodSearch";
 import { useUsedFoods } from "@/hooks/useUsedFoods";
 import { useCustomFoods } from "@/hooks/useCustomFoods";
@@ -14,12 +15,7 @@ import {
   useDeleteFavorite,
   type NutritionFavorite,
 } from "@/hooks/use-nutrition-favorites";
-import {
-  useSavedMeals,
-  useLogSavedMeal,
-  useDeleteSavedMeal,
-  type SavedMeal,
-} from "@/hooks/use-saved-meals";
+import { useSavedMeals, type SavedMeal } from "@/hooks/use-saved-meals";
 import { useAddNutrition } from "@/hooks/use-fitness";
 import {
   buildGramPresets,
@@ -436,100 +432,5 @@ function FavoritesList({
 }
 
 // ─── "Mes repas" ────────────────────────────────────────────────────────────
-
-function SavedMealsList({
-  date,
-  meals,
-  loading,
-}: {
-  date: string;
-  meals: SavedMeal[];
-  loading: boolean;
-}) {
-  const logMeal = useLogSavedMeal();
-  const delMeal = useDeleteSavedMeal();
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-
-  if (loading && meals.length === 0) {
-    return (
-      <div className="flex h-24 items-center justify-center">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  if (meals.length === 0) {
-    return (
-      <div className="rounded-2xl border border-dashed border-border p-6 text-center">
-        <Bookmark className="mx-auto h-7 w-7 text-muted-foreground" />
-        <p className="mt-2 text-sm font-medium">Aucun repas enregistré</p>
-      </div>
-    );
-  }
-
-  return (
-    <ul className="space-y-2">
-      {meals.map((meal) => {
-        const kcal = meal.saved_meal_items.reduce(
-          (sum, i) => sum + (i.calories ?? 0) * (i.serving_count ?? 1),
-          0,
-        );
-        const expanded = expandedId === meal.id;
-        return (
-          <li key={meal.id} className="rounded-xl border border-border bg-card p-3">
-            <button
-              type="button"
-              onClick={() => setExpandedId(expanded ? null : meal.id)}
-              className="flex w-full items-center gap-3 text-left"
-            >
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-muted">
-                <Bookmark className="h-4 w-4 text-muted-foreground" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{meal.name}</p>
-                <p className="text-[10px] text-muted-foreground">
-                  {Math.round(kcal)} kcal · {meal.saved_meal_items.length} aliment
-                  {meal.saved_meal_items.length > 1 ? "s" : ""}
-                </p>
-              </div>
-            </button>
-
-            {expanded && (
-              <ul className="mt-2 space-y-1 border-t border-border/50 pt-2">
-                {meal.saved_meal_items.map((item) => (
-                  <li
-                    key={item.id}
-                    className="flex items-center justify-between text-xs text-muted-foreground"
-                  >
-                    <span className="truncate">{item.name}</span>
-                    <span className="shrink-0">{item.calories ?? 0} kcal</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            <div className="mt-2 flex gap-2">
-              <button
-                type="button"
-                onClick={() => delMeal.mutate(meal.id)}
-                className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground active:text-destructive"
-                aria-label="Supprimer le repas"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => logMeal.mutate({ id: meal.id, date, meal: meal.meal })}
-                disabled={logMeal.isPending}
-                className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg bg-foreground text-xs font-semibold text-background disabled:opacity-60"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Ajouter à la journée
-              </button>
-            </div>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
+// Rendu par le composant partagé SavedMealsList (@/components/fitness/SavedMealsList),
+// réutilisé tel quel par SavedMealsSheet — voir l'appel dans le JSX ci-dessus.
