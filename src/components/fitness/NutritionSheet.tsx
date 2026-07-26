@@ -52,21 +52,18 @@ async function saveCustomFood(
     if (!user) return;
     const normalized = normalizeFoodName(name);
     if (normalized.length < 2) return;
-    await supabase.from("foods").upsert(
+    await supabase.from("food_custom_foods").upsert(
       {
-        source: "custom",
-        source_id: `user:${user.id}:${normalized}`,
         user_id: user.id,
         name,
-        normalized_name: normalized,
-        calories: per100.calories,
-        protein_g: per100.proteins,
-        carbs_g: per100.carbs,
-        fat_g: per100.fats,
-        language: "fr",
+        calories: per100.calories ?? 0,
+        proteins: per100.proteins ?? 0,
+        carbs: per100.carbs ?? 0,
+        fats: per100.fats ?? 0,
       },
-      { onConflict: "source,source_id" },
+      { onConflict: "user_id,name" },
     );
+
   } catch {
     /* best-effort */
   }

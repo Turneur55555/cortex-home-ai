@@ -3,9 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { FoodSuggestion } from "@/services/foodSuggestion";
 
 /**
- * Aliments personnels créés par l'utilisateur — table `foods`, RLS `user_id = auth.uid()`
- * (voir supabase/migrations/20260618101644_nutrition_foods_custom_user_rls.sql).
- * Alimenté par NutritionSheet.saveCustomFood() lors d'une saisie manuelle avec poids total.
+ * Aliments personnels créés par l'utilisateur — table `food_custom_foods`.
  */
 export function useCustomFoods() {
   return useQuery({
@@ -17,8 +15,8 @@ export function useCustomFoods() {
       } = await supabase.auth.getUser();
       if (!user) return [];
       const { data, error } = await supabase
-        .from("foods")
-        .select("id, name, brand, image_url, calories, protein_g, carbs_g, fat_g")
+        .from("food_custom_foods")
+        .select("id, name, brand, calories, proteins, carbs, fats")
         .eq("user_id", user.id)
         .order("updated_at", { ascending: false })
         .limit(100);
@@ -27,11 +25,11 @@ export function useCustomFoods() {
         id: r.id,
         name: r.name,
         brand: r.brand ?? undefined,
-        image: r.image_url ?? undefined,
-        calories: r.calories,
-        proteins: r.protein_g,
-        carbs: r.carbs_g,
-        fats: r.fat_g,
+        image: undefined,
+        calories: Number(r.calories ?? 0),
+        proteins: Number(r.proteins ?? 0),
+        carbs: Number(r.carbs ?? 0),
+        fats: Number(r.fats ?? 0),
         source: "custom" as const,
       }));
     },
