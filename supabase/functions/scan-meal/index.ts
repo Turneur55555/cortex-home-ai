@@ -303,12 +303,20 @@ Deno.serve(async (req) => {
     }
 
     if (!aiJson) {
-      return fail(
-        aiErrors.some((e) => e.includes("Limite") || e.includes("épuisés"))
-          ? "Limite d'utilisation IA atteinte. Réessaie dans quelques instants."
-          : "Le service d'analyse IA est temporairement indisponible.",
-        aiErrors,
-      );
+      // Distinction volontaire : ces erreurs viennent du 429/402 renvoyé par
+      // Gemini/OpenAI eux-mêmes (clé API partagée par toute l'app), PAS du
+      // quota par utilisateur (celui-là est déjà filtré plus haut par
+      // checkRateLimit, ligne ~262, avec son propre message). Les confondre
+      // fait croire à tort à l'utilisateur qu'il a personnellement épuisé
+      // son usage IA.
+      const creditsExhausted = aiErrors.some((e) => e.includes("épuisés"));
+      const providerRateLimited = aiErrors.some((e) => e.includes("Limite"));
+      const msg = creditsExhausted
+        ? "Crédits IA épuisés côté fournisseur (Gemini/OpenAI) — indépendant de ton usage, réessaie plus tard."
+        : providerRateLimited
+          ? "Le service IA est momentanément surchargé (limite du fournisseur, pas la tienne). Réessaie dans quelques instants."
+          : "Le service d'analyse IA est temporairement indisponible.";
+      return fail(msg, aiErrors);
     }
 
     const parsed = extractFromAiResponse(aiJson);
