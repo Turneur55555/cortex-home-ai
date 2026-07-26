@@ -1,19 +1,14 @@
 import { useMemo, useState } from "react";
-import { ChevronDown, ChevronLeft, ChevronUp, Loader2, Plus, Trash2, Utensils, X } from "lucide-react";
+import { ChevronLeft, Plus, X } from "lucide-react";
 import { FullscreenSheet as Sheet, Field, SubmitButton } from "@/components/shared/FormComponents";
 import { FoodAutocomplete } from "@/components/FoodAutocomplete";
-import { MEAL_LABELS, scalePer100, type MealSlug } from "@/lib/nutrition/meals";
+import { scalePer100, type MealSlug } from "@/lib/nutrition/meals";
 import { formatDecimal, parseDecimal } from "@/lib/nutrition/weight";
 import type { FoodSuggestion } from "@/services/foodSuggestion";
 import { MealSelect } from "@/components/fitness/MealSelect";
 import { WeightSelector } from "@/components/fitness/WeightSelector";
-import {
-  useSavedMeals,
-  useCreateSavedMeal,
-  useLogSavedMeal,
-  useDeleteSavedMeal,
-  type SavedMeal,
-} from "@/hooks/use-saved-meals";
+import { SavedMealsList } from "@/components/fitness/SavedMealsList";
+import { useSavedMeals, useCreateSavedMeal } from "@/hooks/use-saved-meals";
 
 type BuilderItem = {
   key: string;
@@ -32,22 +27,11 @@ const scale = scalePer100;
 
 const isUuid = (v: string) => /^[0-9a-f-]{36}$/i.test(v);
 
-export function SavedMealsSheet({
-  date,
-  onClose,
-}: {
-  date: string;
-  onClose: () => void;
-}) {
+export function SavedMealsSheet({ date, onClose }: { date: string; onClose: () => void }) {
   const { data: meals, isLoading } = useSavedMeals();
   const create = useCreateSavedMeal();
-  const logMeal = useLogSavedMeal();
-  const del = useDeleteSavedMeal();
 
   const [mode, setMode] = useState<"list" | "build">("list");
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  // Moment de journée choisi par repas, au moment de l'ajout au journal.
-  const [mealByMeal, setMealByMeal] = useState<Record<string, string>>({});
 
   // État du builder
   const [name, setName] = useState("");
@@ -76,8 +60,7 @@ export function SavedMealsSheet({
 
   const setGrams = (key: string, grams: number) =>
     setItems((prev) => prev.map((it) => (it.key === key ? { ...it, grams } : it)));
-  const removeItem = (key: string) =>
-    setItems((prev) => prev.filter((it) => it.key !== key));
+  const removeItem = (key: string) => setItems((prev) => prev.filter((it) => it.key !== key));
 
   const totals = useMemo(
     () =>
@@ -138,9 +121,6 @@ export function SavedMealsSheet({
     );
   };
 
-  const mealTotal = (m: SavedMeal) =>
-    m.saved_meal_items.reduce((s, i) => s + (i.calories ?? 0), 0);
-
   return (
     <Sheet
       title={mode === "build" ? "Composer un repas" : "Mes repas enregistrés"}
@@ -157,103 +137,7 @@ export function SavedMealsSheet({
             Composer un repas
           </button>
 
-          {isLoading && (
-            <div className="flex h-20 items-center justify-center">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-            </div>
-          )}
-
-          {!isLoading && (!meals || meals.length === 0) && (
-            <div className="rounded-2xl border border-border bg-surface p-6 text-center">
-              <Utensils className="mx-auto h-7 w-7 text-muted-foreground" />
-              <p className="mt-2 text-sm font-medium">Aucun repas enregistré</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Compose un repas une fois, ajoute-le en 1 tap les jours suivants.
-              </p>
-            </div>
-          )}
-
-          <ul className="space-y-2">
-            {(meals ?? []).map((m) => (
-              <li
-                key={m.id}
-                className="rounded-xl border border-border bg-card p-3 shadow-card"
-              >
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setExpandedId((id) => (id === m.id ? null : m.id))}
-                    className="min-w-0 flex-1 text-left"
-                  >
-                    <p className="truncate text-sm font-semibold">{m.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {m.meal ? `${(MEAL_LABELS as Record<string, string>)[m.meal] ?? m.meal} · ` : ""}
-                      {m.saved_meal_items.length} aliment
-                      {m.saved_meal_items.length > 1 ? "s" : ""} ·{" "}
-                      {Math.round(mealTotal(m))} kcal
-                    </p>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setExpandedId((id) => (id === m.id ? null : m.id))}
-                    className="flex h-11 w-11 items-center justify-center rounded-lg text-muted-foreground active:bg-muted"
-                    aria-label="Voir les ingrédients"
-                  >
-                    {expandedId === m.id ? (
-                      <ChevronUp className="h-3.5 w-3.5" />
-                    ) : (
-                      <ChevronDown className="h-3.5 w-3.5" />
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => del.mutate(m.id)}
-                    className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                    aria-label="Supprimer le repas"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-                {expandedId === m.id && m.saved_meal_items.length > 0 && (
-                  <ul className="mt-2 space-y-1 border-t border-border pt-2">
-                    {m.saved_meal_items
-                      .sort((a, b) => a.sort_order - b.sort_order)
-                      .map((item) => (
-                        <li key={item.id} className="flex items-center justify-between text-xs">
-                          <span className="truncate text-foreground/80">{item.name}</span>
-                          <span className="ml-2 shrink-0 text-muted-foreground">
-                            {item.calories ?? 0} kcal
-                          </span>
-                        </li>
-                      ))}
-                  </ul>
-                )}
-                <div className="mt-2 flex items-center gap-2">
-                  <MealSelect
-                    value={(mealByMeal[m.id] ?? m.meal ?? "dejeuner") as MealSlug}
-                    onChange={(meal) => setMealByMeal((prev) => ({ ...prev, [m.id]: meal }))}
-                    label={null}
-                    className="min-w-0 flex-1 rounded-lg border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none focus:border-primary"
-                  />
-                  <button
-                    type="button"
-                    onClick={() =>
-                      logMeal.mutate({
-                        id: m.id,
-                        date,
-                        meal: mealByMeal[m.id] ?? m.meal ?? "dejeuner",
-                      })
-                    }
-                    disabled={logMeal.isPending}
-                    className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl bg-gradient-primary px-3 text-xs font-semibold text-primary-foreground shadow-glow disabled:opacity-60"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    Ajouter
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
+          <SavedMealsList date={date} meals={meals ?? []} loading={isLoading} />
         </div>
       )}
 
@@ -292,9 +176,7 @@ export function SavedMealsSheet({
                   className="space-y-2 rounded-xl border border-border bg-surface p-2.5"
                 >
                   <div className="flex items-center gap-2">
-                    <p className="min-w-0 flex-1 truncate text-sm font-medium">
-                      {it.name}
-                    </p>
+                    <p className="min-w-0 flex-1 truncate text-sm font-medium">{it.name}</p>
                     <button
                       type="button"
                       onClick={() => removeItem(it.key)}
@@ -318,9 +200,8 @@ export function SavedMealsSheet({
                   />
                   <p className="text-[11px] text-muted-foreground">
                     {Math.round(scale(it.per100.calories, it.grams) ?? 0)} kcal · L
-                    {scale(it.per100.fats, it.grams) ?? 0} G
-                    {scale(it.per100.carbs, it.grams) ?? 0} P
-                    {scale(it.per100.proteins, it.grams) ?? 0}
+                    {scale(it.per100.fats, it.grams) ?? 0} G{scale(it.per100.carbs, it.grams) ?? 0}{" "}
+                    P{scale(it.per100.proteins, it.grams) ?? 0}
                   </p>
                 </li>
               ))}
@@ -328,16 +209,11 @@ export function SavedMealsSheet({
           )}
 
           <div className="rounded-xl bg-surface px-3 py-2 text-center text-xs">
-            <span className="font-bold text-primary">
-              {Math.round(totals.calories)}
-            </span>{" "}
-            kcal · L{Math.round(totals.fats)} G{Math.round(totals.carbs)} P
-            {Math.round(totals.proteins)}
+            <span className="font-bold text-primary">{Math.round(totals.calories)}</span> kcal · L
+            {Math.round(totals.fats)} G{Math.round(totals.carbs)} P{Math.round(totals.proteins)}
           </div>
 
-          <SubmitButton pending={create.isPending}>
-            Enregistrer le repas
-          </SubmitButton>
+          <SubmitButton pending={create.isPending}>Enregistrer le repas</SubmitButton>
         </form>
       )}
     </Sheet>
