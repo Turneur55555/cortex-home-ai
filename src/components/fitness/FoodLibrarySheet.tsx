@@ -431,6 +431,6 @@ function FavoritesList({
   );
 }
 
-// ─── "Mes repas" ────────────────────────────────────────────────────────────
+// ─── "Repas" ────────────────────────────────────────────────────────────────
 // Rendu par le composant partagé SavedMealsList (@/components/fitness/SavedMealsList),
-// réutilisé tel quel par SavedMealsSheet — voir l'appel dans le JSX ci-dessus.
+// seule bibliothèque de repas enregistrés de l'app — voir l'appel dans le JSX ci-dessus.
