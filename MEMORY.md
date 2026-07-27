@@ -1,7 +1,39 @@
 # Mémoire projet — cortex-home-ai
 
 ## Dernière mise à jour
-2026-07-26
+2026-07-27
+
+## Refactor UX — Bibliothèque des repas unifiée (2026-07-27)
+Objectif : supprimer le doublon entre l'écran dédié "Mes repas enregistrés" (`SavedMealsSheet`) et
+l'onglet "Repas" de `FoodLibrarySheet` — une seule source de vérité désormais : Nutrition → Mes
+aliments → Repas.
+- **`SavedMealsSheet.tsx` supprimé.** Le mode "build" (composeur inline) a été extrait en composant
+  autonome **`MealEditor.tsx`** (`src/components/fitness/MealEditor.tsx`), qui fonctionne en deux
+  modes (`mode="create"` | `"edit"`, prop `meal?: SavedMeal | null` pour le préremplissage). Utilisé à
+  la fois pour créer et pour éditer un repas enregistré — aucune deuxième implémentation du builder.
+- **`SavedMealsList.tsx`** est maintenant la bibliothèque complète (bouton "Composer un repas" +
+  liste + édition) — plus seulement une liste passive. Ajout d'un menu `⋮` (`SavedMealActionMenu`,
+  inline dans le fichier, même pattern que `MealActionMenu.tsx`) avec **Modifier / Dupliquer /
+  Supprimer**, remplace l'ancienne corbeille directe. "Modifier" ouvre `MealEditor` en mode edit en
+  overlay (`FullscreenSheet` empilée, même pattern que `NutritionSheet` dans `FoodLibrarySheet`).
+- **DB** : migration `20260727120000_saved_meal_update_duplicate_rpcs.sql` — RPC
+  `update_saved_meal(p_id, p_name, p_meal, p_items)` (remplace intégralement les items, delete+
+  reinsert, symétrique de `create_saved_meal`) et `duplicate_saved_meal(p_id)` (copie repas + items,
+  suffixe " (copie)"), toutes deux ownership-check via `auth.uid()`. Appliquées en prod via MCP
+  Supabase, `types.ts` régénéré (la régénération a aussi corrigé une dérive de schéma préexistante
+  sur plusieurs tables non liées — DB fait foi).
+- **`use-saved-meals.ts`** : `SavedMealItem`/le `select` de `useSavedMeals` étendus avec
+  `food_id`/`base_*`/`consumed_*` (nécessaires pour reconstruire le builder en mode edit). Nouveaux
+  hooks `useUpdateSavedMeal()`, `useDuplicateSavedMeal()`.
+- **Centre de commandes (`NutritionTab.tsx`)** : section "Ajouter" ne garde que "Ajouter un aliment"
+  (retrait de "Ajouter une recette" → `RecipeLogSheet` et "Repas enregistrés" → ancien
+  `SavedMealsSheet`). Retrait aussi de "Favoris" dans la section "Outils" (doublon avec l'onglet
+  Favoris de `FoodLibrarySheet`, cf. règle "un seul point d'entrée"). `RecipeLogSheet.tsx` et
+  `FavoritesSheet.tsx` restent dans le repo (non supprimés, juste déréférencés — la demande portait
+  sur le Centre de commandes, pas sur la suppression de ces écrans).
+- **Test garde-fou** `mealSelectCoverage.test.ts` mis à jour : `SavedMealsSheet.tsx` → `MealEditor.tsx`
+  dans la liste des écrans qui doivent rendre `<MealSelect>`.
+- `npm run typecheck` / `npx vitest run` / eslint sur les fichiers touchés : tous verts.
 
 ## FIX Chroniques > Progression — fiche d'analyse coupée en bas iPhone (2026-07-26)
 Diagnostic : « Déséquilibres détectés » est rendu par `ExerciseAnalysisSheet` via `SectionCard`. Le conteneur censé scroller est le `div` interne `flex-1 overflow-y-auto` de la page plein écran. Le paddingBottom existant était bien déclaré, mais un flex child sans `min-h-0` conserve une hauteur minimale basée sur son contenu : le contenu déborde alors dans la page fixe au lieu de créer un vrai espace de fin de scroll. Correction : page `motion.div` en `overflow-hidden`, header `shrink-0`, scroll container `min-h-0 flex-1 overflow-y-auto`, en conservant le padding dynamique `calc(var(--bottom-nav-height, 5.75rem) + env(safe-area-inset-bottom) + 2rem)`. `--bottom-nav-height` reste publié par `BottomNav` via `ResizeObserver` sur `documentElement`; la BottomNav est `z-30`, la fiche plein écran `z-50`, donc elle ne doit pas passer visuellement au-dessus de la fiche.

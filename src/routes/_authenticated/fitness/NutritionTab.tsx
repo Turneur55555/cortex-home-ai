@@ -6,8 +6,6 @@ import {
   AlertTriangle,
   Apple,
   Barcode,
-  BookOpen,
-  Bookmark,
   Calendar,
   CalendarRange,
   Camera,
@@ -60,9 +58,6 @@ import { GoalsSheet } from "@/components/fitness/GoalsSheet";
 import { NutritionAnalysisSheet } from "@/components/fitness/NutritionAnalysisSheet";
 import { WeightEditModal } from "@/components/fitness/WeightEditModal";
 import { NutritionHistorySheet } from "@/components/fitness/NutritionHistorySheet";
-import { SavedMealsSheet } from "@/components/fitness/SavedMealsSheet";
-import { FavoritesSheet } from "@/components/fitness/FavoritesSheet";
-import { RecipeLogSheet } from "@/components/fitness/RecipeLogSheet";
 import { VoiceLogSheet } from "@/components/fitness/VoiceLogSheet";
 import { SwipeableNutritionItem } from "@/components/fitness/SwipeableNutritionItem";
 import { useCreateSavedMeal } from "@/hooks/use-saved-meals";
@@ -152,9 +147,6 @@ export function NutritionTab() {
   const [barcodeOpen, setBarcodeOpen] = useState(false);
   const [weightEditItem, setWeightEditItem] = useState<NutritionEntry | null>(null);
   const [analysisOpen, setAnalysisOpen] = useState(false);
-  const [savedOpen, setSavedOpen] = useState(false);
-  const [favSheetOpen, setFavSheetOpen] = useState(false);
-  const [recipeLogOpen, setRecipeLogOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [commandCenterOpen, setCommandCenterOpen] = useState(false);
   const createSavedMeal = useCreateSavedMeal();
@@ -728,9 +720,6 @@ export function NutritionTab() {
           else if (action === "barcode") setBarcodeOpen(true);
           else if (action === "voice") setVoiceOpen(true);
           else if (action === "analysis") setAnalysisOpen(true);
-          else if (action === "recipe") setRecipeLogOpen(true);
-          else if (action === "favorites") setFavSheetOpen(true);
-          else if (action === "saved") setSavedOpen(true);
           else if (action === "history") setHistoryOpen(true);
           else if (action === "plan") setPlanOpen(true);
           else if (action === "goals") setGoalsOpen(true);
@@ -747,9 +736,6 @@ export function NutritionTab() {
       {scanOpen && <MealScanSheet onClose={() => setScanOpen(false)} date={date} />}
       {barcodeOpen && <BarcodeScannerSheet date={date} onClose={() => setBarcodeOpen(false)} />}
       {analysisOpen && <NutritionAnalysisSheet onClose={() => setAnalysisOpen(false)} />}
-      {savedOpen && <SavedMealsSheet date={date} onClose={() => setSavedOpen(false)} />}
-      {favSheetOpen && <FavoritesSheet date={date} onClose={() => setFavSheetOpen(false)} />}
-      {recipeLogOpen && <RecipeLogSheet date={date} onClose={() => setRecipeLogOpen(false)} />}
       {voiceOpen && <VoiceLogSheet date={date} onClose={() => setVoiceOpen(false)} />}
       {copyOpen && (
         <Portal>
@@ -974,11 +960,8 @@ type CommandAction =
   | "barcode"
   | "voice"
   | "analysis"
-  | "favorites"
-  | "saved"
   | "history"
   | "plan"
-  | "recipe"
   | "copy-yesterday"
   | "copy-day"
   | "goals";
@@ -1003,25 +986,13 @@ const COMMAND_SECTIONS: CommandSection[] = [
     key: "add",
     emoji: "🍽",
     title: "Ajouter",
-    description: "Enregistre un aliment, une recette ou un repas déjà prêt.",
+    description: "Enregistre un aliment dans ton journal.",
     items: [
       {
         action: "manual",
         icon: Apple,
         title: "Ajouter un aliment",
         description: "Rechercher et ajouter un aliment manuellement.",
-      },
-      {
-        action: "recipe",
-        icon: BookOpen,
-        title: "Ajouter une recette",
-        description: "Choisir une recette et l'ajouter à ton journal.",
-      },
-      {
-        action: "saved",
-        icon: Bookmark,
-        title: "Repas enregistrés",
-        description: "Réutiliser un repas que tu as déjà enregistré.",
       },
     ],
   },
@@ -1092,12 +1063,6 @@ const COMMAND_SECTIONS: CommandSection[] = [
         icon: Target,
         title: "Objectifs",
         description: "Définir tes objectifs caloriques et macros.",
-      },
-      {
-        action: "favorites",
-        icon: Star,
-        title: "Favoris",
-        description: "Retrouver tes aliments et repas favoris.",
       },
     ],
   },

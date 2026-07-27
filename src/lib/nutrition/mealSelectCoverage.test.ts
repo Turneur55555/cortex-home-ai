@@ -16,9 +16,9 @@ const SCREENS_THAT_MUST_RENDER_MEAL_SELECT = [
   "src/components/fitness/RecipeLogSheet.tsx", // Création / ajout d'une recette
   "src/components/fitness/MealPlanSheet.tsx", // Planning de repas
   "src/components/fitness/FavoritesSheet.tsx", // Favoris
-  "src/components/fitness/FoodLibrarySheet.tsx", // Bibliothèque d'aliments (Tous/Mes aliments/Favoris)
+  "src/components/fitness/FoodLibrarySheet.tsx", // Bibliothèque d'aliments (Tous/Mes aliments/Favoris/Repas)
   "src/components/fitness/SavedMealsList.tsx", // Repas enregistrés — implémentation partagée
-  "src/components/fitness/SavedMealsSheet.tsx", // Repas enregistrés (composeur + liste)
+  "src/components/fitness/MealEditor.tsx", // Éditeur de repas (création/édition unifiées)
 ];
 
 describe("Sélecteur Repas — présence sur tous les écrans de journalisation", () => {

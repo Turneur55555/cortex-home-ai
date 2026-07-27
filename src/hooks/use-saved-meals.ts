@@ -10,12 +10,20 @@ import type { Json } from "@/integrations/supabase/types";
 
 export type SavedMealItem = {
   id: string;
+  food_id: string | null;
   name: string;
   calories: number | null;
   proteins: number | null;
   carbs: number | null;
   fats: number | null;
+  base_calories: number | null;
+  base_proteins: number | null;
+  base_carbs: number | null;
+  base_fats: number | null;
   serving_count: number | null;
+  consumed_quantity: number | null;
+  consumed_unit: string | null;
+  consumed_grams_per_unit: number | null;
   sort_order: number;
 };
 
@@ -51,7 +59,7 @@ export function useSavedMeals() {
       const { data, error } = await supabase
         .from("saved_meals")
         .select(
-          "id, name, meal, saved_meal_items(id, name, calories, proteins, carbs, fats, serving_count, sort_order)",
+          "id, name, meal, saved_meal_items(id, food_id, name, calories, proteins, carbs, fats, base_calories, base_proteins, base_carbs, base_fats, serving_count, consumed_quantity, consumed_unit, consumed_grams_per_unit, sort_order)",
         )
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -63,11 +71,7 @@ export function useSavedMeals() {
 export function useCreateSavedMeal() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: {
-      name: string;
-      meal: string | null;
-      items: NewSavedMealItem[];
-    }) => {
+    mutationFn: async (input: { name: string; meal: string | null; items: NewSavedMealItem[] }) => {
       const { error } = await supabase.rpc("create_saved_meal", {
         p_name: input.name,
         p_meal: input.meal,
@@ -77,6 +81,46 @@ export function useCreateSavedMeal() {
     },
     onSuccess: () => {
       toast.success("Repas enregistré");
+      qc.invalidateQueries({ queryKey: ["saved_meals"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+}
+
+export function useUpdateSavedMeal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      id: string;
+      name: string;
+      meal: string | null;
+      items: NewSavedMealItem[];
+    }) => {
+      const { error } = await supabase.rpc("update_saved_meal", {
+        p_id: input.id,
+        p_name: input.name,
+        p_meal: input.meal,
+        p_items: input.items as unknown as Json,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Repas mis à jour");
+      qc.invalidateQueries({ queryKey: ["saved_meals"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+}
+
+export function useDuplicateSavedMeal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.rpc("duplicate_saved_meal", { p_id: id });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Repas dupliqué");
       qc.invalidateQueries({ queryKey: ["saved_meals"] });
     },
     onError: (e: Error) => toast.error(e.message),
