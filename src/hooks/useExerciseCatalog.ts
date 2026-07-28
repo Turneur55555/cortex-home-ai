@@ -9,6 +9,12 @@ export type DbCatalogRow = {
   category: string | null;
   sort_order: number;
   created_at: string;
+  // Additif (dataset externe hasaneyldrm/exercises-dataset, voir
+  // docs/architecture/exercises-dataset-integration.md) : absents (undefined)
+  // pour les exercices non enrichis, jamais requis par l'affichage existant.
+  aliases?: string[] | null;
+  media?: unknown;
+  description?: string | null;
 };
 
 const CACHE_KEY = ["fitness", "exercise-catalog"] as const;
@@ -90,7 +96,11 @@ export function useFullExerciseCatalog(discipline: DisciplineId = "muscu") {
 
 // ── Convertit les lignes DB en CatalogExercise (pour ExercisePicker) ────────
 export function dbRowsToCatalog(rows: DbCatalogRow[]): CatalogExercise[] {
-  return rows.map((r) => ({ name: r.name, group: r.category ?? "" }));
+  return rows.map((r) => ({
+    name: r.name,
+    group: r.category ?? "",
+    ...(r.aliases && r.aliases.length > 0 ? { aliases: r.aliases } : {}),
+  }));
 }
 
 // ── Mutations ─────────────────────────────────────────────────────────────────

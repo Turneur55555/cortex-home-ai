@@ -1,6 +1,11 @@
 export type CatalogExercise = {
   name: string;
   group: string;
+  // Additif (dataset externe hasaneyldrm/exercises-dataset, voir
+  // docs/architecture/exercises-dataset-integration.md) : synonymes/traductions
+  // permettant de retrouver un exercice par un nom alternatif ("lat pulldown"
+  // retrouve "Tirage vertical"). Absent pour les exercices sans enrichissement.
+  aliases?: string[];
 };
 
 export function normalize(s: string): string {
@@ -13,13 +18,12 @@ export function normalize(s: string): string {
     .trim();
 }
 
-export function searchExercises(
-  query: string,
-  catalog: CatalogExercise[],
-): CatalogExercise[] {
+export function searchExercises(query: string, catalog: CatalogExercise[]): CatalogExercise[] {
   const q = normalize(query);
   if (!q) return catalog;
-  return catalog.filter((e) => normalize(e.name).includes(q));
+  return catalog.filter(
+    (e) => normalize(e.name).includes(q) || (e.aliases ?? []).some((a) => normalize(a).includes(q)),
+  );
 }
 
 export const CATALOG_GROUPS: string[] = [
@@ -35,8 +39,6 @@ export const CATALOG_GROUPS: string[] = [
   "Polyarticulaire",
   "Cardio",
 ];
-
-
 
 export const EXERCISE_CATALOG: CatalogExercise[] = [
   // Pectoraux

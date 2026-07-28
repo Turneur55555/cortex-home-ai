@@ -28,6 +28,7 @@ import { Route as AuthenticatedCorpsRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedRapportsIndexRouteImport } from './routes/_authenticated/rapports/index'
 import { Route as AuthenticatedFitnessIndexRouteImport } from './routes/_authenticated/fitness/index'
 import { Route as AuthenticatedRapportsIdRouteImport } from './routes/_authenticated/rapports/$id'
+import { Route as AuthenticatedAdminExercisesRouteImport } from './routes/_authenticated/admin/exercises'
 
 const Char91indexChar93Route = Char91indexChar93RouteImport.update({
   id: '/index',
@@ -129,6 +130,12 @@ const AuthenticatedRapportsIdRoute = AuthenticatedRapportsIdRouteImport.update({
   path: '/rapports/$id',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedAdminExercisesRoute =
+  AuthenticatedAdminExercisesRouteImport.update({
+    id: '/admin/exercises',
+    path: '/admin/exercises',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -146,6 +153,7 @@ export interface FileRoutesByFullPath {
   '/sante-nutritionnelle': typeof AuthenticatedSanteNutritionnelleRoute
   '/seances': typeof AuthenticatedSeancesRoute
   '/supplements': typeof AuthenticatedSupplementsRoute
+  '/admin/exercises': typeof AuthenticatedAdminExercisesRoute
   '/rapports/$id': typeof AuthenticatedRapportsIdRoute
   '/fitness/': typeof AuthenticatedFitnessIndexRoute
   '/rapports/': typeof AuthenticatedRapportsIndexRoute
@@ -166,6 +174,7 @@ export interface FileRoutesByTo {
   '/seances': typeof AuthenticatedSeancesRoute
   '/supplements': typeof AuthenticatedSupplementsRoute
   '/': typeof AuthenticatedIndexRoute
+  '/admin/exercises': typeof AuthenticatedAdminExercisesRoute
   '/rapports/$id': typeof AuthenticatedRapportsIdRoute
   '/fitness': typeof AuthenticatedFitnessIndexRoute
   '/rapports': typeof AuthenticatedRapportsIndexRoute
@@ -188,6 +197,7 @@ export interface FileRoutesById {
   '/_authenticated/seances': typeof AuthenticatedSeancesRoute
   '/_authenticated/supplements': typeof AuthenticatedSupplementsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
+  '/_authenticated/admin/exercises': typeof AuthenticatedAdminExercisesRoute
   '/_authenticated/rapports/$id': typeof AuthenticatedRapportsIdRoute
   '/_authenticated/fitness/': typeof AuthenticatedFitnessIndexRoute
   '/_authenticated/rapports/': typeof AuthenticatedRapportsIndexRoute
@@ -210,6 +220,7 @@ export interface FileRouteTypes {
     | '/sante-nutritionnelle'
     | '/seances'
     | '/supplements'
+    | '/admin/exercises'
     | '/rapports/$id'
     | '/fitness/'
     | '/rapports/'
@@ -230,6 +241,7 @@ export interface FileRouteTypes {
     | '/seances'
     | '/supplements'
     | '/'
+    | '/admin/exercises'
     | '/rapports/$id'
     | '/fitness'
     | '/rapports'
@@ -251,6 +263,7 @@ export interface FileRouteTypes {
     | '/_authenticated/seances'
     | '/_authenticated/supplements'
     | '/_authenticated/'
+    | '/_authenticated/admin/exercises'
     | '/_authenticated/rapports/$id'
     | '/_authenticated/fitness/'
     | '/_authenticated/rapports/'
@@ -399,6 +412,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedRapportsIdRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/admin/exercises': {
+      id: '/_authenticated/admin/exercises'
+      path: '/admin/exercises'
+      fullPath: '/admin/exercises'
+      preLoaderRoute: typeof AuthenticatedAdminExercisesRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
   }
 }
 
@@ -414,6 +434,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedSeancesRoute: typeof AuthenticatedSeancesRoute
   AuthenticatedSupplementsRoute: typeof AuthenticatedSupplementsRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
+  AuthenticatedAdminExercisesRoute: typeof AuthenticatedAdminExercisesRoute
   AuthenticatedRapportsIdRoute: typeof AuthenticatedRapportsIdRoute
   AuthenticatedFitnessIndexRoute: typeof AuthenticatedFitnessIndexRoute
   AuthenticatedRapportsIndexRoute: typeof AuthenticatedRapportsIndexRoute
@@ -432,6 +453,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedSeancesRoute: AuthenticatedSeancesRoute,
   AuthenticatedSupplementsRoute: AuthenticatedSupplementsRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
+  AuthenticatedAdminExercisesRoute: AuthenticatedAdminExercisesRoute,
   AuthenticatedRapportsIdRoute: AuthenticatedRapportsIdRoute,
   AuthenticatedFitnessIndexRoute: AuthenticatedFitnessIndexRoute,
   AuthenticatedRapportsIndexRoute: AuthenticatedRapportsIndexRoute,

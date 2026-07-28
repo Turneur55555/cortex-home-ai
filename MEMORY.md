@@ -1006,3 +1006,253 @@ Rapport : `AUDIT_NUTRITION.md` (dossier Drive). Note avant : 64/100.
   aucun outil MCP disponible en session pour poser une branch protection GitHub (bloquerait de
   toute façon ce mode de push direct de Lovable, à valider avec l'utilisateur avant d'y toucher).
   L'auto-heal `fix-push` referme la fenêtre de risque sans ce changement de workflow.
+
+## Intégration dataset externe `hasaneyldrm/exercises-dataset` (2026-07-28, session Claude Cowork)
+Doc complète : `docs/architecture/exercises-dataset-integration.md`. **Infrastructure posée, import réel PAS exécuté** (nécessite décision explicite de Nathan + secrets prod, voir runbook §8 de la doc).
+- **Principe** : `exercise_reference` reste l'unique référentiel d'identité (conforme à
+  `exercise-central-architecture.md`) — le dataset externe n'introduit jamais de 2e table
+  d'identité. Il enrichit des lignes existantes (colonnes `description`/`media`/`config`/`aliases`,
+  déjà présentes et réservées à cet usage) ou en crée de nouvelles, jamais ne supprime/recrée.
+- **Moteur de correspondance** (`supabase/functions/_shared/exerciseDatasetMatching.ts`, réexporté
+  côté client dans `src/lib/fitness/exerciseDatasetMatching.ts` — même pattern que `_shared/meals.ts`)
+  : score nom (Dice sur tokens, poids 0.85) + muscle/catégorie (poids 0.15, insuffisant seul pour
+  fusionner). Seuils : ≥0.82 fusion auto, ≤0.35 création, entre les deux → file de revue
+  `exercise_dataset_candidates` (nouvelle table, RLS service_role only, pas de fusion automatique).
+  Limite documentée du dataset : le nom d'exercice n'existe qu'en anglais (seules les instructions
+  sont traduites en FR) → beaucoup de paires partiront en revue plutôt qu'en fusion auto, c'est le
+  comportement voulu (priorité absolue à la non-fusion en cas de doute).
+- **Migration** `20260728123000_exercises_dataset_enrichment.sql` : colonnes `dataset_source`/
+  `dataset_exercise_id`/`dataset_synced_at` sur `exercise_reference` (nullable, index unique
+  partiel anti-doublon d'import) + table `exercise_dataset_candidates`. Aucune autre table touchée.
+- **Edge function** `import-exercises-dataset` (auth `CRON_SECRET`/service role, même pattern que
+  `cleanup-pdfs`) : `dry_run: true` par défaut, jamais d'écriture sans `{"dry_run": false}` explicite.
+  Enrichissement additif strict (ne remplit que les champs NULL, relit avant écriture).
+- **Recherche** : `CatalogExercise.aliases?` (additif) + `searchExercises` cherche aussi dans les
+  aliases ; `DbCatalogRow`/`dbRowsToCatalog` propagent `aliases` si présents. Permettra à terme
+  "lat pulldown"/"traction poulie" de retrouver le même exercice une fois les aliases peuplés.
+- **Tests** : `exerciseDatasetMatching.test.ts` (12 cas, scoring/seuils/aliases). Suite complète
+  (454 tests) + `tsc --noEmit` + eslint : 0 erreur après cette session.
+- **Reste à faire (hors périmètre session, voir doc §8)** : exécution réelle du dry-run puis de
+  l'import contre la prod (décision Nathan), revue manuelle de la file d'attente, éventuel système
+  de rôle admin pour une UI de revue, cache Storage + conversion WebP des médias (différé, médias
+  servis en lien direct pour l'instant).
+
+## Renforcement moteur de correspondance dataset — couche de traduction EN<->FR (2026-07-28, même session, v2)
+Demande de Nathan : le dataset externe n'expose les noms qu'en anglais, l'appli est 100% FR — il
+fallait une couche de traduction/alias pour maximiser les fusions automatiques sûres et minimiser
+les doublons. Toujours infrastructure only, import réel non exécuté.
+- **Nouveau module `supabase/functions/_shared/exerciseTranslations.ts`** (réexporté
+  `src/lib/fitness/exerciseTranslations.ts`) : dictionnaire exact EN->FR haute précision (~90
+  exercices, inclut les exemples de Nathan : Bench Press→Développé couché, Lat Pulldown→Tirage
+  vertical, Seated Cable Row→Tirage horizontal assis, Face Pull, Romanian Deadlift→Soulevé de terre
+  roumain), dictionnaire phrase best-effort (repli), dictionnaires muscle/équipement EN->FR,
+  heuristique inverse `extractEquipmentFromFrenchLabel` (déduit l'équipement implicite d'un nom
+  Cortex existant, ex. "Développé couché barre" → "barre", puisqu'il n'y a pas de colonne équipement
+  dédiée). `normalizeForMatch` extrait dans `_shared/textNormalize.ts` pour casser la dépendance
+  circulaire entre ce module et le moteur de scoring.
+- **Moteur de scoring passé de 2 à 5 signaux** (`exerciseDatasetMatching.ts`) : nom (0.55, 1 si
+  exact — candidats = nom FR fourni + traduction exacte + traduction phrase + nom EN + alias
+  existants), muscle principal (0.20), muscles secondaires (0.10, actif seulement si l'existant a
+  déjà été enrichi une fois), équipement (0.10, via `config.equipment` ou heuristique), catégorie
+  (0.05). **Garde-fou vérifié par test** : les 4 signaux d'appoint combinés plafonnent à 0.45,
+  toujours < `AUTO_MERGE_THRESHOLD` (0.82) — aucune fusion automatique possible sans un minimum de
+  correspondance de nom, même avec accord parfait muscle/équipement/catégorie.
+- **`buildAliasesForDatasetRecord`** — génère alias FR+EN dédupliqués (exclut le nom canonique),
+  **réellement persistés** par l'edge function sur `exercise_reference.aliases` (union, jamais de
+  remplacement) pour `auto_merge` et `create_new` ; proposés (non appliqués) dans `match_reasons`
+  pour `needs_review`. C'est ce qui rend la recherche bilingue effective une fois l'import exécuté.
+  `config` stocke désormais les valeurs FR traduites comme clés primaires (`muscle_group`,
+  `secondary_muscles`, `equipment`) + `*_en` pour audit. Le nom canonique d'un exercice nouvellement
+  créé est maintenant le nom FR traduit, jamais le nom EN brut du dataset.
+- **Tests** : +11 (`exerciseTranslations.test.ts`) et +11 (`exerciseDatasetMatching.test.ts`,
+  23 au total) — dont le garde-fou anti-fusion-sans-nom et un test qui vérifie que "Lat Pulldown"
+  fusionne avec "Tirage vertical" via la seule traduction exacte, sans alias préexistant. Suite
+  complète 472 tests + `tsc --noEmit` + eslint : 0 erreur.
+- Doc mise à jour : `docs/architecture/exercises-dataset-integration.md` §3/§3bis (nouvelle
+  section)/§5/§6/§7/§9.
+
+## Rapport de dry-run + sauvegarde/restauration import dataset (2026-07-29, même session, v3)
+Demande de Nathan avant tout import réel : (1) rapport complet du dry-run avec liste intégrale des
+correspondances ambiguës et décomposition par signal, (2) sauvegarde complète réversible avant la
+première écriture réelle, (3) aucune écriture sans validation explicite de sa part. Toujours
+infrastructure only — import réel non exécuté.
+- **`scoreCandidate` expose désormais un `breakdown`** (`MatchBreakdown` : nom/muscle
+  principal/muscles secondaires/équipement/catégorie, 0..1 chacun), calculé pour toutes les paires
+  y compris en cas de nom exact (utile pour le rapport même si non déterminant du score final dans
+  ce cas).
+- **Nouveau module `supabase/functions/_shared/exerciseDatasetReport.ts`** (réexporté
+  `src/lib/fitness/exerciseDatasetReport.ts`) : `buildDryRunReport(counts, ambiguousMatches, dryRun)`
+  génère un texte avec compteurs globaux + liste COMPLÈTE (jamais tronquée) des correspondances
+  `needs_review`, au format exact demandé par Nathan ("Nom : 86 %", "Muscle principal : 100 %",
+  etc., "Score global : X %", "Décision : Validation manuelle"). `import-exercises-dataset` retourne
+  désormais `report` (texte) + `ambiguousMatches` (array structuré) dans sa réponse, en dry-run
+  comme en run réel.
+- **`dry_run: true` (par défaut) ne fait plus AUCUNE écriture, même pas une sauvegarde** — seul un
+  `select` en lecture seule + calcul du rapport. Aucune fusion/création/mise en revue n'a lieu tant
+  que `dry_run:false` n'est pas explicitement demandé.
+- **Sauvegarde/restauration** (`supabase/migrations/20260729120000_exercises_dataset_import_snapshot.sql`,
+  additive) : 3 nouvelles tables — `exercise_reference_import_runs` (une ligne par run réel, jamais
+  par dry-run), `exercise_reference_import_backup` (copie JSON complète de CHAQUE ligne
+  `exercise_reference` de la discipline muscu avant la moindre écriture — pas seulement celles
+  touchées), `exercise_reference_import_created` (journal des lignes créées, pour suppression au
+  rollback). Fonction SQL `restore_exercise_reference_import(run_id)` (SECURITY DEFINER,
+  service_role only) : supprime les lignes créées par ce run (FK `ON DELETE SET NULL` déjà en place,
+  aucune perte de séance/série/répétition/charge) puis restaure l'état exact des lignes enrichies.
+  Nouvelle edge function `restore-exercises-dataset-import` (même auth CRON_SECRET/service role)
+  expose cette fonction via RPC. Le run réel écrit le `run_id` (UUID généré côté edge function) dans
+  la réponse — à conserver pour un rollback éventuel.
+- Choix documenté (doc §12) : snapshot ciblé transactionnel plutôt qu'un `pg_dump` externe (pas
+  d'accès shell depuis une edge function ; plus précis, ne touche que ce que l'import a modifié) ;
+  PITR/backups Supabase mentionnés comme filet complémentaire optionnel, non requis.
+- Limite assumée : si l'utilisateur journalise une séance sur un exercice nouvellement créé avant un
+  rollback, restaurer supprime la ligne créée (FK → NULL, aucune perte de données utilisateur, mais
+  perte du lien d'identité précis) — rollback à faire au plus tôt après un import réel.
+- **Tests** : +7 (`exerciseDatasetReport.test.ts`). Suite complète 480 tests + `tsc --noEmit` +
+  eslint + `validate-supabase.mjs` : 0 erreur.
+- Doc mise à jour : `docs/architecture/exercises-dataset-integration.md` §5/§6/§7/§8 (runbook étapes
+  3/6/7/8)/§9/§11 (nouvelle section)/§12 (nouvelle section).
+
+## Premier vrai dry-run + analyse des causes d'ambiguïté + renforcement dictionnaire (2026-07-30, même session, v4)
+Nathan a demandé d'exécuter réellement le dry-run (lecture seule, contre la prod bcwfvpwxzlmkxobvbtzp)
+puis, voyant seulement 37/167 fusions automatiques, une phase d'analyse pour améliorer la qualité du
+matching SANS baisser les seuils. Toujours aucune écriture, aucun import réel.
+- **Premier dry-run réel** : lecture SQL de `exercise_reference` (167 lignes muscu, colonnes dataset_*
+  pas encore déployées en prod — confirmé au passage) + téléchargement réel du dataset (1324 records)
+  + exécution du moteur via nouveau script `scripts/dry-run-exercises-dataset.ts` (réutilise les
+  modules `_shared`, aucun déploiement d'edge function nécessaire). Résultat : 37 fusions auto, 537
+  créations, 750 revues, 167→704 après import. Rapport interactif publié en artifact (750 lignes
+  filtrables/triables, tableau avec décomposition par signal) :
+  https://claude.ai/code/artifact/ac5c768e-8f36-46d2-8a18-ee9a04ade097
+- **Analyse des 750 ambiguïtés** (classification par pattern de `breakdown`) : ~30% "score bas proche
+  du seuil de création" (candidats qui devraient probablement être `create_new`), ~30% "granularité du
+  catalogue" (Cortex n'a qu'UNE ligne générique par mouvement de base — ex. une seule "Squat barre" —
+  quand le dataset détaille des dizaines de variantes nommées partageant la même catégorie/muscle sans
+  être le même exercice), ~14% "variante technique nommée" (hack/zercher/sumo/jump squat — nécessite un
+  jugement humain alias-vs-nouveau, pas un manque de dictionnaire), ~1.5% vrai manque de traduction
+  résiduel, ~24% cas mixtes.
+- **Exploitation des données Cortex existantes** (lecture seule) : `exercises`/`workout_template_exercises`
+  — **constat négatif honnête** : aucune variance de libellé exploitable (tout est déjà canonicalisé par
+  `ExerciseResolutionService` depuis la Phase 3, pas de réservoir de synonymes caché). `exercise_history`
+  (write-only) est la SEULE source avec une vraie variance (échappe à la résolution), mais concerne des
+  blocs Pilates/échauffement sans équivalent dataset. `exercises.muscle_groups` (IA, exercices custom) :
+  piste réelle mais petit volume (<10 lignes `category` null concernées) — documentée comme amélioration
+  possible future, non appliquée (aurait été une écriture, hors périmètre analyse). Pas de table
+  favoris pour les exercices (seulement nutrition) — absence constatée, pas supposée.
+- **Améliorations dictionnaire appliquées** (`exerciseTranslations.ts`, aucun seuil/poids touché) :
+  correction d'un mauvais rapprochement ("barbell sumo deadlift" partait vers "roumain barre" au lieu
+  de "Soulevé de terre sumo" qui existe pourtant — ajout d'une entrée exacte) ; "lever"/"sled"→"machine"
+  (préfixes ExerciseDB génériques, 72+13 occurrences réelles comptées dans le dataset) ; "kneeling"/
+  "rear"/"twist" ; muscles "spine"→"dos" (19x), "cardivascular system"→"cardio" (29x, relie enfin les
+  exercices cardio dataset à la catégorie Cardio Cortex), "serratus anterior"/"levator scapulae"→
+  "épaules" ; équipements "sled machine"/"assisted"/"roller"/"bosu ball" (comptages réels vérifiés via
+  `collections.Counter` sur les 1324 records, pas des suppositions). 2 synonymes exacts supplémentaires
+  ("barbell full squat", "cable kneeling crunch").
+- **Régression détectée ET corrigée avant livraison** : "front"→"avant" cassait 2 fusions existantes
+  ("Barre au front" = skull crusher) car "front" est aussi un mot FRANÇAIS déjà produit par une autre
+  règle — la substitution en cascade repassait dessus et le corrompait en "barre au avant". Retiré,
+  test de non-régression ajouté (`exerciseTranslations.test.ts`). Leçon documentée en commentaire :
+  toute nouvelle entrée EN->FR doit être vérifiée contre les sorties FR déjà produites.
+- **Renormalisation du scoring envisagée puis écartée** : traiter un signal manquant comme "neutre"
+  plutôt que "0" aurait pu, dans certaines configs, laisser un seul signal faible compter comme si
+  tous étaient présents — cassant l'invariant garde-fou. Décision : gain uniquement par le vocabulaire,
+  jamais par la mécanique de score.
+- **Second dry-run réel (après améliorations)** : 48 fusions auto (+11, +30%), 522 créations (-15),
+  754 revues (+4, hausse attendue — des exercices auparavant `create_new` par manque total de signal
+  ont maintenant un score juste suffisant pour `needs_review`, comportement voulu), **0 régression
+  vérifiée empiriquement** (comparaison ligne à ligne des 37 fusions initiales, toutes encore présentes
+  + 11 nouvelles). Rapport v2 republié à la même URL (avant/après, causes filtrable par catégorie).
+- **Conclusion transmise à Nathan** : la limite résiduelle vient à ~44% de la granularité du catalogue
+  Cortex (une ligne générique par famille vs dataset très détaillé) — nécessite un choix éditorial
+  (nouvel exercice vs alias, famille par famille), pas un problème d'algorithme ni de données non
+  exploitées. Recommandation : ne pas pousser plus loin par l'algorithme, traiter les ~104 "variantes
+  techniques nommées" comme un travail de curation de contenu si souhaité.
+- **Tests** : +7 (`exerciseTranslations.test.ts`, 18 au total). Suite complète 487 tests + `tsc --noEmit`
+  + eslint : 0 erreur.
+- Doc mise à jour : `docs/architecture/exercises-dataset-integration.md` §5/§7/§13 (nouvelle section
+  complète : méthode, causes, améliorations, résultats mesurés, réponse structurée sur la limite du
+  taux de fusion).
+
+## Bibliothèque d'exercices — changement de stratégie, multi-média, fusion manuelle, admin UI (2026-07-31, v5)
+Nathan a demandé un changement de principe fondamental : Cortex reste TOUJOURS la source de vérité,
+le dataset n'enrichit jamais automatiquement — **plus aucune fusion automatique, quel que soit le
+score**. Chaque enregistrement du dataset devient une fiche `exercise_reference` indépendante (hors
+doublons techniques évidents), et toute fusion avec l'existant devient une décision manuelle depuis
+une interface d'administration. Migration écrite mais volontairement **non appliquée à la
+production** (vérifié : colonnes/tables absentes en base) ; import réel jamais exécuté.
+- **Nouveau schéma** (`20260731120000_exercise_library_admin.sql`, additif) : `exercise_families`
+  (regroupement d'affichage type "Développé couché" → barre/haltères/incliné..., jamais une identité
+  — `exercise_reference.family_id` nullable) ; `exercise_reference.archived_at`/`merged_into_id`
+  (soft-delete + traçabilité fusion) ; `exercise_media` (photos/GIF/vidéos multiples, un seul
+  "principal" par type via index unique partiel, `source` cortex/dataset, la colonne `media` jsonb
+  existante reste un résumé legacy non touché) ; `exercise_similarity_pairs` (suggestions
+  exercice↔exercice, `status` suggested/dismissed/merged, jamais appliquées automatiquement) ;
+  `exercise_merge_log` (état exact avant fusion + IDs précis de toutes les lignes déplacées —
+  permet une annulation exacte, pas approximative).
+- **4 fonctions SQL SECURITY DEFINER** (service_role only) : `merge_exercise_references` (repointe
+  toutes les références vers la ligne conservée — contrairement au rollback d'import qui met à NULL,
+  ici on repointe pour que l'historique de l'exercice archivé continue de compter ; enrichissement
+  additif ; archive jamais ne supprime), `undo_exercise_merge` (restauration exacte via le journal),
+  `archive_exercise_reference`/`restore_exercise_reference` (réversibles), et
+  `delete_exercise_reference_if_unused` (suppression physique uniquement si non référencé nulle
+  part, sinon retourne false — ne supprime jamais une donnée utilisateur).
+- **Import réécrit** (`import-exercises-dataset`) : ne calcule plus de score vs l'existant. Filtre
+  seulement les doublons techniques évidents (`_shared/exerciseDatasetDedup.ts` — même exercice
+  répété avec juste un marqueur de démo différent : pov caméra, "v. 2", genre du modèle), puis crée
+  CHAQUE enregistrement restant comme fiche indépendante + entrées `exercise_media`. Collision de
+  nom FR → désambiguïsation en ajoutant le nom EN entre parenthèses (jamais de fusion silencieuse).
+  `dry_run: true` par défaut inchangé.
+- **Nouveau job `detect-exercise-similarities`** : réutilise le moteur à 5 signaux existant SANS
+  dupliquer la logique — nouvelle fonction `scoreExercisePair(a, b)` dans
+  `exerciseDatasetMatching.ts` adapte un exercice Cortex en pseudo-enregistrement dataset pour
+  réappeler `scoreCandidate` tel quel. Calcule O(n²) sur tous les exercices actifs (~1500 après
+  import complet → ~1,1M paires, documenté comme acceptable pour un job ponctuel), stocke les paires
+  au-dessus d'un seuil en `status='suggested'`, ne réécrit jamais une paire déjà tranchée
+  manuellement (dismissed/merged).
+- **Nouvelle edge function `admin-exercise-actions`** (merge/undo_merge/archive/restore/delete/
+  dismiss_pair) : PAS le pattern CRON_SECRET des jobs batch — auth via `_shared/adminAuth.ts`
+  (`requireAdminUser`) qui vérifie que le JWT Supabase Auth de l'utilisateur correspond à
+  `ADMIN_EMAIL` (secret, attal.nathan@gmail.com). **Limite assumée** : pas de vrai système de rôle
+  côté Cortex (déjà documenté ailleurs) — allow-list par email suffisante pour une app à propriétaire
+  unique, à remplacer si Cortex accueille plusieurs comptes.
+- **Interface d'administration** : nouvelle route `/admin/exercises` (3 onglets — Recherche & fusion
+  avec comparaison côte à côte et score calculé côté client via `compareExercises`/
+  `scoreExercisePair` ; Suggestions de similarité ; Fusions récentes avec annulation). Toutes les
+  mutations passent par l'edge function, jamais un accès écriture direct (RLS service_role only sur
+  les nouvelles tables). Gate applicatif côté UI (email) + vrai gate côté serveur (edge function).
+- **Non construit dans cette passe** (fondations posées, UI à ajouter ensuite) : gestion fine des
+  médias (réorganiser/choisir principal/supprimer un par un — `exercise_media` + `useExerciseMedia`
+  prêts), assignation de famille depuis l'UI (`exercise_families` prêt, pas d'écran dédié).
+- **Note types.ts** : les hooks (`useExerciseAdmin.ts`) interrogent des tables pas encore dans
+  `types.ts` (migration non appliquée) — passent par un cast `as any` documenté en commentaire,
+  à retirer après application de la migration + `npm run gen:types`.
+- **Vérifications** : `npm run build` (vite) exécuté avec succès — régénère `routeTree.gen.ts` avec
+  la nouvelle route `/admin/exercises` (fichier généré, committé comme d'habitude dans ce projet).
+  Suite de tests complète + `tsc --noEmit` + eslint + `validate:supabase` : tous verts. +12 tests
+  (`exerciseDatasetDedup.test.ts` 8 cas + 4 cas `scoreExercisePair` dans
+  `exerciseDatasetMatching.test.ts`).
+- Doc mise à jour : `docs/architecture/exercises-dataset-integration.md` §14 (nouvelle section
+  complète : principe, schéma, import réécrit, détection de similarité, admin UI, auth, limites,
+  tests, runbook à jour).
+
+## Vérification pré-merge + déploiement 100% automatisé (2026-07-31, même session)
+Nathan a demandé confirmation que le merge sur `main` rend la fonctionnalité bibliothèque
+d'exercices entièrement opérationnelle sans étape manuelle (sauf l'import du dataset, qui doit
+rester manuel). Vérification faite sur les vrais workflows CI, pas une supposition :
+- **Correction de compréhension importante** : `migrate.yml` applique la migration AUTOMATIQUEMENT
+  au merge (job `migrate`, condition push sur main hors PR, `supabase db push --include-all`) — ce
+  n'est pas une étape en attente, c'est le merge lui-même qui déclenche l'application. Migration
+  re-vérifiée strictement additive (aucun DROP/TRUNCATE, seuls DELETE dans
+  `delete_exercise_reference_if_unused`, exécuté seulement sur appel explicite UI).
+- **2 vrais gaps trouvés et corrigés** : (1) `deploy-functions.yml` a une liste explicite de
+  fonctions déployées qui n'incluait aucune des 4 nouvelles (import-exercises-dataset,
+  restore-exercises-dataset-import, detect-exercise-similarities, admin-exercise-actions) — ajoutées
+  à la liste ; (2) `admin-exercise-actions` dépendait d'un secret `ADMIN_EMAIL` jamais posé (aurait
+  donné 500 systématique après un déploiement pourtant réussi) — corrigé en mettant l'email en dur
+  (`DEFAULT_ADMIN_EMAIL` dans `_shared/adminAuth.ts`) avec repli sur le secret s'il est posé plus
+  tard, zéro configuration manuelle requise.
+- Confirmé : rien ne déclenche automatiquement l'import réel du dataset (`dry_run: true` reste le
+  défaut, aucun cron/trigger ne l'appelle) — reste 100% manuel comme voulu.
+- Re-vérifié après corrections : `tsc --noEmit`, 499 tests, eslint, `validate:supabase`, validité
+  YAML du workflow modifié — tous verts.
+- Doc mise à jour : `docs/architecture/exercises-dataset-integration.md` §14.4/§14.7/§15 (nouvelle
+  section de vérification pré-merge).
