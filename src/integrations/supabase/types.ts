@@ -947,6 +947,83 @@ export type Database = {
         }
         Relationships: []
       }
+      exercise_dataset_candidates: {
+        Row: {
+          candidate_exercise_reference_id: string | null
+          created_at: string
+          dataset_exercise_id: string
+          dataset_name: string
+          dataset_payload: Json
+          dataset_source: string
+          id: string
+          match_reasons: Json | null
+          match_score: number | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string
+        }
+        Insert: {
+          candidate_exercise_reference_id?: string | null
+          created_at?: string
+          dataset_exercise_id: string
+          dataset_name: string
+          dataset_payload: Json
+          dataset_source: string
+          id?: string
+          match_reasons?: Json | null
+          match_score?: number | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+        }
+        Update: {
+          candidate_exercise_reference_id?: string | null
+          created_at?: string
+          dataset_exercise_id?: string
+          dataset_name?: string
+          dataset_payload?: Json
+          dataset_source?: string
+          id?: string
+          match_reasons?: Json | null
+          match_score?: number | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exercise_dataset_candidates_candidate_exercise_reference_i_fkey"
+            columns: ["candidate_exercise_reference_id"]
+            isOneToOne: false
+            referencedRelation: "exercise_reference"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      exercise_families: {
+        Row: {
+          category: string | null
+          created_at: string
+          discipline_id: string
+          id: string
+          name: string
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          discipline_id?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          discipline_id?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
       exercise_history: {
         Row: {
           exercise_name: string
@@ -980,46 +1057,159 @@ export type Database = {
         }
         Relationships: []
       }
+      exercise_media: {
+        Row: {
+          attribution: string | null
+          created_at: string
+          exercise_reference_id: string
+          id: string
+          is_primary: boolean
+          media_type: string
+          sort_order: number
+          source: string
+          storage_path: string | null
+          url: string | null
+        }
+        Insert: {
+          attribution?: string | null
+          created_at?: string
+          exercise_reference_id: string
+          id?: string
+          is_primary?: boolean
+          media_type: string
+          sort_order?: number
+          source?: string
+          storage_path?: string | null
+          url?: string | null
+        }
+        Update: {
+          attribution?: string | null
+          created_at?: string
+          exercise_reference_id?: string
+          id?: string
+          is_primary?: boolean
+          media_type?: string
+          sort_order?: number
+          source?: string
+          storage_path?: string | null
+          url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exercise_media_exercise_reference_id_fkey"
+            columns: ["exercise_reference_id"]
+            isOneToOne: false
+            referencedRelation: "exercise_reference"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      exercise_merge_log: {
+        Row: {
+          affected_exercise_ids: string[]
+          affected_illustration_ids: string[]
+          affected_media_ids: string[]
+          affected_workout_segment_ids: string[]
+          archived_exercise_id: string
+          before_archived_state: Json
+          before_kept_state: Json
+          id: string
+          kept_exercise_id: string
+          notes: string | null
+          performed_at: string
+          performed_by: string | null
+          undone_at: string | null
+        }
+        Insert: {
+          affected_exercise_ids?: string[]
+          affected_illustration_ids?: string[]
+          affected_media_ids?: string[]
+          affected_workout_segment_ids?: string[]
+          archived_exercise_id: string
+          before_archived_state: Json
+          before_kept_state: Json
+          id?: string
+          kept_exercise_id: string
+          notes?: string | null
+          performed_at?: string
+          performed_by?: string | null
+          undone_at?: string | null
+        }
+        Update: {
+          affected_exercise_ids?: string[]
+          affected_illustration_ids?: string[]
+          affected_media_ids?: string[]
+          affected_workout_segment_ids?: string[]
+          archived_exercise_id?: string
+          before_archived_state?: Json
+          before_kept_state?: Json
+          id?: string
+          kept_exercise_id?: string
+          notes?: string | null
+          performed_at?: string
+          performed_by?: string | null
+          undone_at?: string | null
+        }
+        Relationships: []
+      }
       exercise_reference: {
         Row: {
           aliases: string[] | null
+          archived_at: string | null
           category: string | null
           config: Json | null
           created_at: string | null
           created_by: string | null
+          dataset_exercise_id: string | null
+          dataset_source: string | null
+          dataset_synced_at: string | null
           description: string | null
           discipline_id: string
+          family_id: string | null
           id: string
           is_active: boolean
           media: Json | null
+          merged_into_id: string | null
           name: string
           sort_order: number | null
         }
         Insert: {
           aliases?: string[] | null
+          archived_at?: string | null
           category?: string | null
           config?: Json | null
           created_at?: string | null
           created_by?: string | null
+          dataset_exercise_id?: string | null
+          dataset_source?: string | null
+          dataset_synced_at?: string | null
           description?: string | null
           discipline_id: string
+          family_id?: string | null
           id?: string
           is_active?: boolean
           media?: Json | null
+          merged_into_id?: string | null
           name: string
           sort_order?: number | null
         }
         Update: {
           aliases?: string[] | null
+          archived_at?: string | null
           category?: string | null
           config?: Json | null
           created_at?: string | null
           created_by?: string | null
+          dataset_exercise_id?: string | null
+          dataset_source?: string | null
+          dataset_synced_at?: string | null
           description?: string | null
           discipline_id?: string
+          family_id?: string | null
           id?: string
           is_active?: boolean
           media?: Json | null
+          merged_into_id?: string | null
           name?: string
           sort_order?: number | null
         }
@@ -1031,7 +1221,121 @@ export type Database = {
             referencedRelation: "disciplines"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "exercise_reference_family_id_fkey"
+            columns: ["family_id"]
+            isOneToOne: false
+            referencedRelation: "exercise_families"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exercise_reference_merged_into_id_fkey"
+            columns: ["merged_into_id"]
+            isOneToOne: false
+            referencedRelation: "exercise_reference"
+            referencedColumns: ["id"]
+          },
         ]
+      }
+      exercise_reference_import_backup: {
+        Row: {
+          exercise_reference_id: string
+          id: string
+          row_data: Json
+          run_id: string
+          taken_at: string
+        }
+        Insert: {
+          exercise_reference_id: string
+          id?: string
+          row_data: Json
+          run_id: string
+          taken_at?: string
+        }
+        Update: {
+          exercise_reference_id?: string
+          id?: string
+          row_data?: Json
+          run_id?: string
+          taken_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exercise_reference_import_backup_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "exercise_reference_import_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      exercise_reference_import_created: {
+        Row: {
+          created_at: string
+          exercise_reference_id: string
+          id: string
+          run_id: string
+        }
+        Insert: {
+          created_at?: string
+          exercise_reference_id: string
+          id?: string
+          run_id: string
+        }
+        Update: {
+          created_at?: string
+          exercise_reference_id?: string
+          id?: string
+          run_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exercise_reference_import_created_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "exercise_reference_import_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      exercise_reference_import_runs: {
+        Row: {
+          completed_at: string | null
+          dataset_source: string
+          id: string
+          notes: string | null
+          records_auto_merged: number | null
+          records_created: number | null
+          records_queued_for_review: number | null
+          records_total: number | null
+          rolled_back_at: string | null
+          started_at: string
+        }
+        Insert: {
+          completed_at?: string | null
+          dataset_source: string
+          id: string
+          notes?: string | null
+          records_auto_merged?: number | null
+          records_created?: number | null
+          records_queued_for_review?: number | null
+          records_total?: number | null
+          rolled_back_at?: string | null
+          started_at?: string
+        }
+        Update: {
+          completed_at?: string | null
+          dataset_source?: string
+          id?: string
+          notes?: string | null
+          records_auto_merged?: number | null
+          records_created?: number | null
+          records_queued_for_review?: number | null
+          records_total?: number | null
+          rolled_back_at?: string | null
+          started_at?: string
+        }
+        Relationships: []
       }
       exercise_sets: {
         Row: {
@@ -1079,6 +1383,51 @@ export type Database = {
             columns: ["exercise_id"]
             isOneToOne: false
             referencedRelation: "exercises"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      exercise_similarity_pairs: {
+        Row: {
+          computed_at: string
+          exercise_id_a: string
+          exercise_id_b: string
+          id: string
+          reasons: Json | null
+          score: number
+          status: string
+        }
+        Insert: {
+          computed_at?: string
+          exercise_id_a: string
+          exercise_id_b: string
+          id?: string
+          reasons?: Json | null
+          score: number
+          status?: string
+        }
+        Update: {
+          computed_at?: string
+          exercise_id_a?: string
+          exercise_id_b?: string
+          id?: string
+          reasons?: Json | null
+          score?: number
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exercise_similarity_pairs_exercise_id_a_fkey"
+            columns: ["exercise_id_a"]
+            isOneToOne: false
+            referencedRelation: "exercise_reference"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exercise_similarity_pairs_exercise_id_b_fkey"
+            columns: ["exercise_id_b"]
+            isOneToOne: false
+            referencedRelation: "exercise_reference"
             referencedColumns: ["id"]
           },
         ]
@@ -3400,6 +3749,7 @@ export type Database = {
         Args: { uid: string }
         Returns: undefined
       }
+      archive_exercise_reference: { Args: { p_id: string }; Returns: undefined }
       award_character_xp: {
         Args: {
           _amount: number
@@ -3516,6 +3866,10 @@ export type Database = {
         Returns: string
       }
       daitch_mokotoff: { Args: { "": string }; Returns: string[] }
+      delete_exercise_reference_if_unused: {
+        Args: { p_id: string }
+        Returns: boolean
+      }
       deposit_document_analysis: {
         Args: { p_document_id: string; p_modules: Json }
         Returns: Json
@@ -3541,9 +3895,21 @@ export type Database = {
         Args: { p_date?: string; p_meal?: string; p_meal_id: string }
         Returns: number
       }
+      merge_exercise_references: {
+        Args: { p_archive_id: string; p_keep_id: string }
+        Returns: string
+      }
       recompute_recipe_nutrition: {
         Args: { p_recipe: string }
         Returns: undefined
+      }
+      restore_exercise_reference: { Args: { p_id: string }; Returns: undefined }
+      restore_exercise_reference_import: {
+        Args: { p_run_id: string }
+        Returns: {
+          deleted_count: number
+          restored_count: number
+        }[]
       }
       revoke_character_xp_for_workout: {
         Args: { _workout_id: string }
@@ -3553,6 +3919,10 @@ export type Database = {
       soundex: { Args: { "": string }; Returns: string }
       text_soundex: { Args: { "": string }; Returns: string }
       unaccent: { Args: { "": string }; Returns: string }
+      undo_exercise_merge: {
+        Args: { p_merge_log_id: string }
+        Returns: undefined
+      }
       update_saved_meal: {
         Args: { p_id: string; p_items?: Json; p_meal?: string; p_name: string }
         Returns: undefined
