@@ -5,7 +5,7 @@
 
 import { normalize } from "./exerciseCatalog";
 
-export type RankKey = "mortel" | "guerrier" | "heros" | "titan" | "olympien" | "primordial";
+export type RankKey = "mortel" | "guerrier" | "heros" | "colosse" | "olympien" | "titan";
 
 export interface RankTierColors {
   primary: string; // couleur dominante
@@ -60,8 +60,8 @@ export const RANK_TIERS: RankTier[] = [
     },
   },
   {
-    key: "titan",
-    label: "Titan",
+    key: "colosse",
+    label: "Colosse",
     motif: "flame",
     colors: {
       primary: "#b91c1c",
@@ -86,8 +86,8 @@ export const RANK_TIERS: RankTier[] = [
     },
   },
   {
-    key: "primordial",
-    label: "Primordial",
+    key: "titan",
+    label: "Titan",
     motif: "cosmos",
     colors: {
       // Blanc cosmique / argent / gris froid (médaillon fracturé, poussière
@@ -108,7 +108,7 @@ export const TOTAL_TIERS = RANK_TIERS.length * LEVELS_PER_RANK; // 30
 /**
  * État affichable d'un rang. Le calcul du tierIndex vit désormais dans
  * `lib/fitness/rank/engine.ts` (moteur Rang/Maîtrise, basé sur la force
- * relative + confirmation dans le temps pour Olympien/Primordial — plus sur
+ * relative + confirmation dans le temps pour Olympien/Titan — plus sur
  * une XP cumulative). Les champs xp/currentTierXp/nextTierXp/xpToNext
  * portent ici un pourcentage de Maîtrise (0..100), pas une XP.
  */

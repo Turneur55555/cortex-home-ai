@@ -8,8 +8,8 @@ plier au format, jamais le code qui s'adapte au fichier.
 
 ## Fichier
 
-- Nom : `<clé-de-rang>.webp` (`mortel`, `guerrier`, `heros`, `titan`,
-  `olympien`, `primordial`) — exactement la `key` de `RANK_TIERS`
+- Nom : `<clé-de-rang>.webp` (`mortel`, `guerrier`, `heros`, `colosse`,
+  `olympien`, `titan`) — exactement la `key` de `RANK_TIERS`
   (`src/lib/fitness/exerciseRanks.ts`).
 - Format : WebP, fond opaque (pas de transparence — certains conteneurs sont
   carrés, un fond transparent laisserait apparaître l'arrière-plan de la

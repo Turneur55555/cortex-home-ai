@@ -36,10 +36,10 @@ describe("titleProgressForXp", () => {
     expect(p.xpToNext).toBe(XP_THRESHOLDS[6] - (XP_THRESHOLDS[5] + 100));
   });
 
-  it("atteint le palier suprême (Primordial — Omniscient) et plafonne", () => {
+  it("atteint le palier suprême (Titan — Omniscient) et plafonne", () => {
     const p = titleProgressForXp(XP_THRESHOLDS[TOTAL_TIERS - 1] + 1_000_000);
     expect(p.tierIndex).toBe(TOTAL_TIERS - 1);
-    expect(p.title.key).toBe("primordial");
+    expect(p.title.key).toBe("titan");
     expect(p.grade).toBe("Omniscient");
     expect(p.isMax).toBe(true);
     expect(p.xpNextThreshold).toBeNull();

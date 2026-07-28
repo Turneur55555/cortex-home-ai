@@ -233,7 +233,7 @@ export function computeRankState(
 
   let confirmedTierIndex = Math.floor(rawTierPosition);
 
-  // Confirmation en cascade, Primordial d'abord (la plus stricte) puis
+  // Confirmation en cascade, Titan d'abord (la plus stricte) puis
   // Olympien : chaque gate exige plusieurs séances qualifiantes ÉTALÉES sur
   // une durée minimale (minSpanDays), pas seulement un cluster récent — ce
   // sont les deux seuls rangs qui doivent représenter une vraie référence

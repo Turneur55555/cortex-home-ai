@@ -31,8 +31,8 @@ Le Lot **R1** pose cette colonne vertébrale.
 
 | Sous-système | Fichiers | Rôle réel |
 |---|---|---|
-| **Moteur Rang/Maîtrise** | `src/lib/fitness/rank/` (`engine.ts`, `config.ts`, `types.ts`, `familyClassification.ts`) | Rang par exercice (0→29 = 6 rangs × 5 niveaux) depuis la **force relative** (1RM estimé / poids de corps par famille) + modificateurs volume/qualité, **gates de confirmation** Olympien/Primordial, décroissance d'inactivité. Maîtrise (0-100 %) = consolidation + momentum. Pur, config-driven, testé (283 lignes). |
-| **DA « Reliquary »** | `exerciseRanks.ts`, `rankVisuals.ts`, `rarityVisuals.ts`, `RankAmbientParticles`, `MasteryBar`, `ExerciseRank{Badge,Card,Strip}` | Mythologie grecque (Mortel→Guerrier→Héros→Titan→Olympien→Primordial), atmosphères, sigils, particules. |
+| **Moteur Rang/Maîtrise** | `src/lib/fitness/rank/` (`engine.ts`, `config.ts`, `types.ts`, `familyClassification.ts`) | Rang par exercice (0→29 = 6 rangs × 5 niveaux) depuis la **force relative** (1RM estimé / poids de corps par famille) + modificateurs volume/qualité, **gates de confirmation** Olympien/Titan, décroissance d'inactivité. Maîtrise (0-100 %) = consolidation + momentum. Pur, config-driven, testé (283 lignes). |
+| **DA « Reliquary »** | `exerciseRanks.ts`, `rankVisuals.ts`, `rarityVisuals.ts`, `RankAmbientParticles`, `MasteryBar`, `ExerciseRank{Badge,Card,Strip}` | Mythologie grecque (Mortel→Guerrier→Héros→Colosse→Olympien→Titan), atmosphères, sigils, particules. |
 | **Badges** (serveur) | `badges.ts`, `useBadgeSystem.ts`, tables `badges_catalog`/`user_badges` | Débloqués client, persistés, 7 critères, récompensent de l'**XP**. |
 | **Succès** (client, additif) | `src/lib/profile/achievements/` (~180 succès, 14 catégories) | Recalculés en direct, jamais persistés. **Système parallèle aux badges.** |
 
@@ -69,7 +69,7 @@ Le Lot **R1** pose cette colonne vertébrale.
 
 - Le moteur Rang/Maîtrise (séparation Rang = niveau réel / Maîtrise = progression).
 - La force relative (1RM/poids de corps) comme signal primaire.
-- Les gates de confirmation Olympien/Primordial (anti-triche, prestige réel).
+- Les gates de confirmation Olympien/Titan (anti-triche, prestige réel).
 - L'architecture propre : `lib/` pur, `hooks/` branchent Supabase, `components/` affichent.
 - L'architecture additive des succès (`tierBuilder.ts`).
 - **Accueil = fiche de personnage** (décision d'archi « AAA » à conserver).

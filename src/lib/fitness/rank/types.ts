@@ -15,7 +15,7 @@ export type ExerciseFamily =
 
 export interface RatioFamilyStandard {
   unit: "ratio";
-  /** Ratio 1RM estimé / poids de corps marquant le DÉBUT de Guerrier, Héros, Titan, Olympien, Primordial. */
+  /** Ratio 1RM estimé / poids de corps marquant le DÉBUT de Guerrier, Héros, Colosse, Olympien, Titan. */
   boundaries: [number, number, number, number, number];
 }
 
@@ -57,8 +57,8 @@ export interface MasteryWeights {
 /**
  * Un palier de confirmation : pour prétendre à un tierIndex >= fromTierIndex,
  * il faut réunir plusieurs performances qualifiantes ÉTALÉES DANS LE TEMPS,
- * pas seulement un pic récent. Olympien et Primordial ont chacun leur propre
- * gate, Primordial nettement plus exigeant — ce sont les deux seuls rangs
+ * pas seulement un pic récent. Olympien et Titan ont chacun leur propre
+ * gate, Titan nettement plus exigeant — ce sont les deux seuls rangs
  * qui doivent représenter une vraie référence, pas juste un bon niveau.
  */
 export interface ConfirmationGate {
@@ -75,7 +75,7 @@ export interface ConfirmationGate {
 }
 
 export interface ConfirmationRules {
-  /** Triées par fromTierIndex décroissant (Primordial avant Olympien). */
+  /** Triées par fromTierIndex décroissant (Titan avant Olympien). */
   gates: ConfirmationGate[];
 }
 

@@ -11,7 +11,7 @@ import { Portal } from "@/components/Portal";
 /**
  * Cinématique de montée de rang — "Reliquary".
  * Séquence 2.6s : fondu → rayons → badge → flash → texte → particules.
- * Confettis uniquement pour Olympien et Primordial.
+ * Confettis uniquement pour Olympien et Titan.
  */
 export function RankUpOverlay({ rank, onDone }: { rank: RankState | null; onDone: () => void }) {
   useEffect(() => {
@@ -23,7 +23,7 @@ export function RankUpOverlay({ rank, onDone }: { rank: RankState | null; onDone
         /* noop */
       }
     }
-    const highTier = rank.rank.key === "olympien" || rank.rank.key === "primordial";
+    const highTier = rank.rank.key === "olympien" || rank.rank.key === "titan";
     if (highTier) {
       setTimeout(() => {
         confetti({

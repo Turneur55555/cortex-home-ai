@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { getPlaceholderIllustration, getRankIllustration } from "./index";
 
-const RANK_KEYS = ["mortel", "guerrier", "heros", "titan", "olympien", "primordial"] as const;
+const RANK_KEYS = ["mortel", "guerrier", "heros", "colosse", "olympien", "titan"] as const;
 
 describe("getRankIllustration", () => {
   it("retourne l'illustration propre à chaque rang, jamais celle d'un autre", () => {

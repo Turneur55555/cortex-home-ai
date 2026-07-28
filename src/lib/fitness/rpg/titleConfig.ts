@@ -26,9 +26,9 @@ export const GRADE_NAMES_BY_TITLE: Record<
   mortel: ["Éveillé", "Initié", "Aguerri", "Accompli", "Émérite"],
   guerrier: ["Aspirant", "Vétéran", "Redoutable", "Inflexible", "Invaincu"],
   heros: ["Célèbre", "Admiré", "Glorieux", "Légendaire", "Mythique"],
-  titan: ["Colossal", "Implacable", "Dominateur", "Inébranlable", "Souverain"],
+  colosse: ["Colossal", "Implacable", "Dominateur", "Inébranlable", "Souverain"],
   olympien: ["Exalté", "Ascendant", "Sublime", "Éternel", "Divin"],
-  primordial: ["Originel", "Ancestral", "Suprême", "Absolu", "Omniscient"],
+  titan: ["Originel", "Ancestral", "Suprême", "Absolu", "Omniscient"],
 };
 
 /**
@@ -42,9 +42,9 @@ export const GRADE_NAMES_BY_TITLE: Record<
  * exercise_rank_up. Simulation sur 4 profils (Débutant 2 séances/sem →
  * Extrême quasi quotidien) de 1 semaine à 5 ans :
  *  - Débutant  : Héros III (1 an) → Olympien II (5 ans)
- *  - Régulier  : Héros V (1 an) → Primordial I (5 ans)
- *  - Passionné : Titan III (1 an) → Primordial III (5 ans)
- *  - Extrême   : Titan IV (1 an) → Primordial IV (5 ans, Grade V encore
+ *  - Régulier  : Héros V (1 an) → Titan I (5 ans)
+ *  - Passionné : Colosse III (1 an) → Titan III (5 ans)
+ *  - Extrême   : Colosse IV (1 an) → Titan IV (5 ans, Grade V encore
  *    hors de portée — aucun profil ne plafonne avant 5 ans).
  */
 export const XP_THRESHOLDS: readonly number[] = [
@@ -67,7 +67,7 @@ export const XP_THRESHOLDS: readonly number[] = [
   25450,
   30500,
   36400,
-  43000, // Titan
+  43000, // Colosse
   50000,
   55550,
   63700,
@@ -77,7 +77,7 @@ export const XP_THRESHOLDS: readonly number[] = [
   116600,
   148200,
   185100,
-  226000, // Primordial
+  226000, // Titan
 ];
 
 if (XP_THRESHOLDS.length !== TOTAL_TIERS) {

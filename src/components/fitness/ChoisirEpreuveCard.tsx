@@ -4,7 +4,7 @@ import { Swords, ChevronRight } from "lucide-react";
 /**
  * Action principale du module Séances — remplace visuellement l'ancien
  * bouton "Nouvelle séance". Reprend les matériaux "Reliquary" (atmosphère
- * Titan par défaut, filet métallique, halo rouge), pour signifier "entre
+ * Colosse par défaut, filet métallique, halo rouge), pour signifier "entre
  * dans l'arène". Ne change AUCUNE logique : c'est le même déclencheur que
  * l'ancien FAB / StartWorkoutSheet.
  */

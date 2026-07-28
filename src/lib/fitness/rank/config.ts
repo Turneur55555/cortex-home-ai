@@ -28,12 +28,12 @@ export const DEFAULT_RANK_ENGINE_CONFIG: RankEngineConfig = {
   },
 
   // Confirmation des rangs sommet : en dessous du tier 20 (Olympien), une
-  // seule séance suffit à être crédité pleinement. Olympien et Primordial
-  // exigent chacun une constance démontrée — Primordial nettement plus.
+  // seule séance suffit à être crédité pleinement. Olympien et Titan
+  // exigent chacun une constance démontrée — Titan nettement plus.
   confirmation: {
     gates: [
       {
-        // Primordial (tiers 25-29) : la référence absolue sur l'exercice.
+        // Titan (tiers 25-29) : la référence absolue sur l'exercice.
         fromTierIndex: 25,
         sessionsRequired: 5,
         minSpanDays: 60,

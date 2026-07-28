@@ -1,8 +1,8 @@
 // ============================================================
 // Nommage des Grades (P2) — purement présentiel.
 //
-// Chaque famille de Rang (Mortel, Guerrier, Héros, Titan, Olympien,
-// Primordial) contient LEVELS_PER_RANK positions ; l'ancien affichage
+// Chaque famille de Rang (Mortel, Guerrier, Héros, Colosse, Olympien,
+// Titan) contient LEVELS_PER_RANK positions ; l'ancien affichage
 // utilisait des chiffres romains (I..V). P2 remplace ce libellé par un
 // GRADE nommé, plus lisible pour le joueur ("Accompli" plutôt que "III").
 //
@@ -23,9 +23,9 @@ export const GRADE_NAMES: Record<RankKey, readonly [string, string, string, stri
   mortel: ["Éveillé", "Initié", "Aguerri", "Accompli", "Émérite"],
   guerrier: ["Écuyer", "Combattant", "Champion", "Vainqueur", "Invaincu"],
   heros: ["Célèbre", "Admiré", "Glorieux", "Légendaire", "Mythique"],
-  titan: ["Colossal", "Implacable", "Dominateur", "Inébranlable", "Souverain"],
+  colosse: ["Colossal", "Implacable", "Dominateur", "Inébranlable", "Souverain"],
   olympien: ["Divin", "Sacré", "Céleste", "Immortel", "Exalté"],
-  primordial: ["Originel", "Ancestral", "Absolu", "Transcendant", "Omnipotent"],
+  titan: ["Originel", "Ancestral", "Absolu", "Transcendant", "Omnipotent"],
 };
 
 /** Libellé du grade pour une famille de rang et une position 1..LEVELS_PER_RANK. */

@@ -17,9 +17,9 @@
 // si les deux divergent.
 // ============================================================
 
-export type RankKey = "mortel" | "guerrier" | "heros" | "titan" | "olympien" | "primordial";
+export type RankKey = "mortel" | "guerrier" | "heros" | "colosse" | "olympien" | "titan";
 
-export const RANK_KEYS: RankKey[] = ["mortel", "guerrier", "heros", "titan", "olympien", "primordial"];
+export const RANK_KEYS: RankKey[] = ["mortel", "guerrier", "heros", "colosse", "olympien", "titan"];
 export const LEVELS_PER_RANK = 5;
 export const TOTAL_TIERS = RANK_KEYS.length * LEVELS_PER_RANK; // 30
 

@@ -1,7 +1,7 @@
 // ============================================================
 // RankTheme — UNIQUE système de thème piloté par le rang.
 //
-// Toute couleur affichée pour un rang (Mortel..Primordial) doit transiter
+// Toute couleur affichée pour un rang (Mortel..Titan) doit transiter
 // par ce module : une seule source de données (`RANK_TIERS` dans
 // `exerciseRanks.ts`), un seul point d'accès (`rankTierByKey` /
 // `rankThemeByKey`), un seul jeu de formules pour les effets visuels
@@ -150,7 +150,7 @@ export const RANK_AMBIANCE: Record<RankKey, RankAmbiance> = {
     sweepDuration: 5,
   },
   // flame — lave/magma, brutale et explosive : halo large et chaud, pulsation rapide et nerveuse.
-  titan: {
+  colosse: {
     shadowBlur: 46,
     shadowSpread: -16,
     grainOpacity: 0.48,
@@ -174,7 +174,7 @@ export const RANK_AMBIANCE: Record<RankKey, RankAmbiance> = {
     sweepDuration: 4.5,
   },
   // cosmos — argent/cristal, mystique et intemporelle : grain le plus fin, halo le plus vaste et le plus lent.
-  primordial: {
+  titan: {
     shadowBlur: 60,
     shadowSpread: -4,
     grainOpacity: 0.18,
@@ -244,7 +244,7 @@ export function applyRankTheme(key: RankKey): void {
   //
   // Important : la base mélangée doit être STRICTEMENT neutre (chroma 0) —
   // toute teinte résiduelle (l'ancien violet fixe, oklch(... 280)) fausserait
-  // la couleur perçue de chaque matériau (un gris Mortel ou un rouge Titan
+  // la couleur perçue de chaque matériau (un gris Mortel ou un rouge Colosse
   // reviendrait légèrement violet). D'où oklch(L 0 0) ci-dessous.
   root.style.setProperty(
     "--surface",

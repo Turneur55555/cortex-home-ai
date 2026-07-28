@@ -1256,3 +1256,38 @@ rester manuel). Vérification faite sur les vrais workflows CI, pas une supposit
   YAML du workflow modifié — tous verts.
 - Doc mise à jour : `docs/architecture/exercises-dataset-integration.md` §14.4/§14.7/§15 (nouvelle
   section de vérification pré-merge).
+
+## Rang par exercice — migration des illustrations + renommage Titan→Colosse, Primordial→Titan (2026-08-01)
+- **Assets** : les 6 illustrations officielles (`src/assets/ranks/*.webp`) remplacées par de nouveaux
+  exports (fist émergeant de gravats, style "Reliquary"). Les fichiers reçus n'étaient PAS conformes
+  au format attendu (carrés 1:1, fond blanc opaque avec parfois un checkerboard de fausse
+  transparence baké dans les pixels, y compris dans des poches enclavées non connectées au bord —
+  ex. le triangle entre l'avant-bras et les deux têtes d'haltère). Traitement automatisé appliqué
+  (script `process_rank.py`, non versionné — un-shot) : détourage par composantes connexes
+  (near-white + faible saturation, `scipy.ndimage.label`), retrait de tout composant touchant le
+  bord OU dépassant une aire minimale (capture les poches enclavées), décontamination couleur
+  (dé-multiplication alpha en supposant fond blanc, évite les liserés blancs sur fond sombre),
+  recadrage sur le bbox du sujet puis composition centrée sur un canevas 960×1200 (4:5 exact,
+  multiple du format `FORMAT.md`), export WebP avec alpha réelle, qualité ajustée par fichier pour
+  rester sous 250 Ko.
+- **Renommage de taxonomie** (RankKey) — MÊME position de tier, MÊMES couleurs/motif/XP, seuls la
+  clé et le libellé changent :
+  - `titan` (tiers 15-19, motif flame/lave) → **`colosse`**
+  - `primordial` (tiers 25-29, motif cosmos/argent) → **`titan`**
+  - Nouvel ordre : Mortel → Guerrier → Héros → **Colosse** → Olympien → **Titan**.
+  - Fichiers modifiés : `exerciseRanks.ts` (RANK_TIERS/RankKey), `rpg/grade.ts` et
+    `rpg/titleConfig.ts` (GRADE_NAMES par clé), `rpg/rankTheme.ts` (RANK_AMBIANCE + commentaires),
+    `RankUpOverlay.tsx` (confettis sur `olympien`/`titan`), miroir serveur
+    `supabase/functions/_shared/rankEngine.ts` (RANK_KEYS), tests associés
+    (`rankTheme.test.ts`, `assets/ranks/index.test.ts`, `titleProgress.test.ts`,
+    `rank/engine.test.ts`), commentaires narratifs dans `rank/{config,engine,types}.ts` et
+    `docs/architecture/rpg-vision-et-r1-niveau-personnage.md`.
+  - **Supabase** : migration `20260801120000_rank_titan_colosse_rename.sql` renomme les
+    `source_key` du `reward_catalog` (`exercise_rank_up_titan` → `exercise_rank_up_colosse`,
+    `exercise_rank_up_primordial` → `exercise_rank_up_titan`) sans toucher `xp_events` (l'historique
+    déjà versé garde son ancien libellé, comme tout journal — pas de réécriture rétroactive).
+    `award_exercise_rank_up` construit son `source_key` dynamiquement (`'exercise_rank_up_' ||
+    _titre_key`), donc aucun changement de fonction SQL nécessaire.
+  - Non touché (hors périmètre) : "Scan des Titans" (BodyMap, nom de feature sans lien avec
+    RankKey) et `rarityVisuals.ts` (palette de rareté des badges/Légendes — domaine produit séparé,
+    règle CLAUDE.md).

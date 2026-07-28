@@ -120,7 +120,7 @@ const profiles: Profile[] = [
     sessions: [session(addDays(NOW, 0), 10, 12)],
   },
   {
-    label: "9. Élite — référence Primordial confirmée sur 15 séances / 104j",
+    label: "9. Élite — référence Titan confirmée sur 15 séances / 104j",
     exercise: "Développé couché",
     bodyweight: 80,
     sessions: [
@@ -174,7 +174,7 @@ describe("moteur Rang/Maîtrise — profils représentatifs", () => {
     expect(beginner.confirmedTierIndex).toBeLessThan(10);
 
     // 2. Intermédiaire 1ère séance : plafond potentiel en zone Olympien,
-    // mais NON confirmé → capé juste sous le seuil (Titan haut), mastery élevée.
+    // mais NON confirmé → capé juste sous le seuil (Colosse haut), mastery élevée.
     const interFirst = computeRankState(
       DEFAULT_RANK_ENGINE_CONFIG,
       "Tirage vertical prise serrée",
@@ -258,7 +258,7 @@ describe("moteur Rang/Maîtrise — profils représentatifs", () => {
     );
     expect(isolation.family).toBe("isolation");
 
-    // 9. Référence Primordial : seule une constance longue et étalée y donne accès.
+    // 9. Référence Titan : seule une constance longue et étalée y donne accès.
     const elite = computeRankState(
       DEFAULT_RANK_ENGINE_CONFIG,
       "Développé couché",
@@ -269,7 +269,7 @@ describe("moteur Rang/Maîtrise — profils représentatifs", () => {
     expect(elite.confirmedTierIndex).toBeGreaterThanOrEqual(25);
 
     // Un sous-ensemble de seulement 4 séances (extrait des 4 dernières) ne
-    // suffit PAS à confirmer Primordial : ni l'expérience (15 requises), ni
+    // suffit PAS à confirmer Titan : ni l'expérience (15 requises), ni
     // l'étalement dans le temps ne sont réunis avec si peu de séances.
     const eliteTooFewSessions = computeRankState(
       DEFAULT_RANK_ENGINE_CONFIG,

@@ -24,7 +24,7 @@ import {
  * la main : les couleurs/halos passent par les helpers `rankTheme.ts`, le grain
  * et le rythme par les utilitaires partagés (`.bg-rank-grain`,
  * `.animate-rank-breathe`, `.rank-glint-layer`, tous alimentés par
- * `RANK_AMBIANCE` via `applyRankTheme`). Résultat : passer de Guerrier à Titan
+ * `RANK_AMBIANCE` via `applyRankTheme`). Résultat : passer de Guerrier à Colosse
  * ne change pas une teinte, cela REFORGE l'objet dans une autre matière
  * (cuivre → lave, grain, biseau, rythme de lumière et reflets compris).
  *

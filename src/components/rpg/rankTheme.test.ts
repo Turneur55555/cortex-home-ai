@@ -31,7 +31,7 @@ describe("rankThemeByKey", () => {
   });
 
   it("retourne un thème différent pour deux rangs différents", () => {
-    expect(rankThemeByKey("mortel")).not.toEqual(rankThemeByKey("primordial"));
+    expect(rankThemeByKey("mortel")).not.toEqual(rankThemeByKey("titan"));
   });
 });
 
@@ -115,9 +115,9 @@ describe("RANK_AMBIANCE", () => {
     expect(new Set(profiles).size).toBe(RANK_TIERS.length);
   });
 
-  it("Primordial respire plus lentement (plus vaste) que Titan (plus nerveux)", () => {
-    expect(RANK_AMBIANCE.primordial.haloDuration).toBeGreaterThan(RANK_AMBIANCE.titan.haloDuration);
-    expect(RANK_AMBIANCE.primordial.shadowBlur).toBeGreaterThan(RANK_AMBIANCE.titan.shadowBlur);
+  it("Titan respire plus lentement (plus vaste) que Colosse (plus nerveux)", () => {
+    expect(RANK_AMBIANCE.titan.haloDuration).toBeGreaterThan(RANK_AMBIANCE.colosse.haloDuration);
+    expect(RANK_AMBIANCE.titan.shadowBlur).toBeGreaterThan(RANK_AMBIANCE.colosse.shadowBlur);
   });
 
   it("Mortel est le plus sobre : grain le plus grossier, halo le plus discret", () => {
@@ -127,14 +127,14 @@ describe("RANK_AMBIANCE", () => {
     expect(RANK_AMBIANCE.mortel.shadowBlur).toBe(Math.min(...blurs));
   });
 
-  it("Primordial a le grain le plus fin (poussière d'étoiles) de tous les rangs", () => {
+  it("Titan a le grain le plus fin (poussière d'étoiles) de tous les rangs", () => {
     const grains = RANK_TIERS.map((t) => RANK_AMBIANCE[t.key].grainScale);
-    expect(RANK_AMBIANCE.primordial.grainScale).toBe(Math.min(...grains));
+    expect(RANK_AMBIANCE.titan.grainScale).toBe(Math.min(...grains));
   });
 
-  it("Titan a le passage de lumière le plus fréquent (braises nerveuses)", () => {
+  it("Colosse a le passage de lumière le plus fréquent (braises nerveuses)", () => {
     const sweeps = RANK_TIERS.map((t) => RANK_AMBIANCE[t.key].sweepDuration);
-    expect(RANK_AMBIANCE.titan.sweepDuration).toBe(Math.min(...sweeps));
+    expect(RANK_AMBIANCE.colosse.sweepDuration).toBe(Math.min(...sweeps));
   });
 });
 

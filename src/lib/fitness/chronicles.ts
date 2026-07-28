@@ -649,12 +649,12 @@ export function computeBadges(workouts: WorkoutLike[]): ChronicleBadge[] {
 // ─── LOT C3 — Projection sur l'échelle de rangs RPG existante ─────────────────
 //
 // Purement PRÉSENTATIONNELLE : projette un volume cumulé sur la MÊME échelle
-// à 30 paliers (6 rangs × 5 niveaux : Mortel → Primordial) que le profil
+// à 30 paliers (6 rangs × 5 niveaux : Mortel → Titan) que le profil
 // principal. Ne recalcule AUCUN rang du moteur RPG (rank/engine.ts) — le
 // résultat est destiné à être passé tel quel à `toRankState` (le builder
 // d'affichage déjà utilisé par le Profil), pour habiller les spécialisations
 // dans le même univers visuel. Échelle logarithmique : ~1 t = bas de Mortel,
-// ~1 000 t cumulées ≈ Olympien I, Primordial reste une aspiration lointaine.
+// ~1 000 t cumulées ≈ Olympien I, Titan reste une aspiration lointaine.
 
 export function projectVolumeToRankTier(volumeKg: number): {
   tierIndex: number;

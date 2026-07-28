@@ -27,7 +27,7 @@ export type RewardSourceKey = (typeof REWARD_SOURCES)[keyof typeof REWARD_SOURCE
  *    volume/1RM) — détecté 100% serveur à la clôture de séance
  *    (`award_xp_on_workout_complete`), rendement décroissant hebdomadaire
  *    partagé ('exercise_progress').
- *  - `exercise_rank_up_<titre>` (mortel/guerrier/heros/titan/olympien/primordial) :
+ *  - `exercise_rank_up_<titre>` (mortel/guerrier/heros/colosse/olympien/titan) :
  *    déclenché automatiquement à la clôture de séance
  *    (`useVerifyExerciseRanksForSession`), jamais par une action manuelle.
  */

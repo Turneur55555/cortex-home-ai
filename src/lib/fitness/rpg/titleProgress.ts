@@ -18,7 +18,7 @@ import { GRADE_NAMES_BY_TITLE, LEVELS_PER_TITLE, TOTAL_TIERS, XP_THRESHOLDS } fr
 export interface TitleProgress {
   /** Palier global 0..29. */
   tierIndex: number;
-  /** Titre (Mortel..Primordial), réutilise le libellé/couleurs du Rang par exercice. */
+  /** Titre (Mortel..Titan), réutilise le libellé/couleurs du Rang par exercice. */
   title: RankTier;
   /** Index du Titre, 0..5. */
   titleIndex: number;
