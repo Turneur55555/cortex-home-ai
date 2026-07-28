@@ -25,7 +25,7 @@ export function useCreateCustomFoodWithBarcode() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (input: CreateCustomFoodInput) => {
-      const { data, error } = await supabase.rpc("create_custom_food_with_barcode", {
+      const { data, error } = await (supabase.rpc as any)("create_custom_food_with_barcode", {
         p_barcode: input.barcode,
         p_name: input.name,
         p_brand: input.brand ?? undefined,
