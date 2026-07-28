@@ -1,18 +1,65 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { Camera, Loader2, History, ChevronRight, AlertCircle, Package, Apple } from "lucide-react";
+import {
+  Camera,
+  Loader2,
+  History,
+  ChevronRight,
+  AlertCircle,
+  Package,
+  Apple,
+  PackagePlus,
+  RotateCcw,
+} from "lucide-react";
 import { BrowserMultiFormatReader } from "@zxing/browser";
 import type { Result } from "@zxing/library";
 import { toast } from "sonner";
 // useAddStockItem removed: Maison/stocks module deleted.
 import { useAddNutrition } from "@/hooks/use-fitness";
+import { useCreateCustomFoodWithBarcode } from "@/hooks/useCreateCustomFoodWithBarcode";
 import { FullscreenSheet as Sheet } from "@/components/shared/FormComponents";
 import { computeMacros, type ProductNutriments } from "@/lib/nutrition/macros";
 import { lookupBarcode } from "@/services/foodCatalog";
 import { WeightSelector } from "@/components/fitness/WeightSelector";
-import { calculateNutritionFromGrams, formatDecimal, per100FromFood } from "@/lib/nutrition/weight";
+import {
+  calculateNutritionFromGrams,
+  formatDecimal,
+  parseDecimal,
+  per100FromFood,
+} from "@/lib/nutrition/weight";
 import { detectMealFromHour } from "@/lib/nutrition/meals";
 import { MealSelect } from "@/components/fitness/MealSelect";
 import type { FoodSuggestion } from "@/services/foodSuggestion";
+
+/** Unités proposées pour la quantité du produit à la création — "pièce" n'a pas de conversion en grammes. */
+const SERVING_UNITS = [
+  { value: "g", label: "g" },
+  { value: "ml", label: "ml" },
+  { value: "piece", label: "pièce" },
+] as const;
+
+interface CustomFoodForm {
+  name: string;
+  brand: string;
+  category: string;
+  quantity: string;
+  unit: (typeof SERVING_UNITS)[number]["value"];
+  calories: string;
+  fats: string;
+  carbs: string;
+  proteins: string;
+}
+
+const EMPTY_CUSTOM_FOOD_FORM: CustomFoodForm = {
+  name: "",
+  brand: "",
+  category: "",
+  quantity: "",
+  unit: "g",
+  calories: "",
+  fats: "",
+  carbs: "",
+  proteins: "",
+};
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -85,6 +132,12 @@ export function BarcodeScannerSheet({
   const [history, setHistory] = useState<Product[]>([]);
   const [camStatus, setCamStatus] = useState<"idle" | "active" | "denied">("idle");
 
+  // Code-barres introuvable dans OpenFoodFacts/USDA — propose la création.
+  const [notFoundCode, setNotFoundCode] = useState<string | null>(null);
+  const [creatingFood, setCreatingFood] = useState(false);
+  const [customFoodForm, setCustomFoodForm] = useState<CustomFoodForm>(EMPTY_CUSTOM_FOOD_FORM);
+  const createCustomFood = useCreateCustomFoodWithBarcode();
+
   // Poids courant — unique source de vérité pour la quantité consommée.
   const [weightText, setWeightText] = useState("");
   // Repas — même sélecteur que "Nouvel aliment" (NutritionSheet).
@@ -145,13 +198,13 @@ export function BarcodeScannerSheet({
 
     setError(null);
     setProduct(null);
+    setNotFoundCode(null);
     setLoading(true);
     try {
       const result = await lookupBarcode(code);
       if (controller.signal.aborted) return;
       if (!result) {
-        setError(`Produit introuvable : ${code}`);
-        toast.error("Produit introuvable");
+        setNotFoundCode(code);
       } else {
         const p: Product = {
           barcode: code,
@@ -189,6 +242,8 @@ export function BarcodeScannerSheet({
   const startCamera = useCallback(async () => {
     setError(null);
     setProduct(null);
+    setNotFoundCode(null);
+    setCreatingFood(false);
     try {
       setCamStatus("active");
       setScanning(true);
@@ -261,6 +316,82 @@ export function BarcodeScannerSheet({
     }
   };
 
+  const openCreateForm = () => {
+    setCustomFoodForm(EMPTY_CUSTOM_FOOD_FORM);
+    setCreatingFood(true);
+  };
+
+  const handleCancelCreate = () => {
+    setCreatingFood(false);
+    setCustomFoodForm(EMPTY_CUSTOM_FOOD_FORM);
+  };
+
+  const handleRetryScan = () => {
+    setNotFoundCode(null);
+    setCreatingFood(false);
+    setError(null);
+    startCamera();
+  };
+
+  const handleCreateFood = async () => {
+    if (!notFoundCode) return;
+    const name = customFoodForm.name.trim();
+    if (!name) {
+      toast.error("Le nom du produit est requis");
+      return;
+    }
+    const caloriesNum = parseDecimal(customFoodForm.calories);
+    const fatsNum = parseDecimal(customFoodForm.fats);
+    const carbsNum = parseDecimal(customFoodForm.carbs);
+    const proteinsNum = parseDecimal(customFoodForm.proteins);
+    const qtyNum = parseDecimal(customFoodForm.quantity);
+    const servingGrams =
+      qtyNum != null && qtyNum > 0 && customFoodForm.unit !== "piece" ? qtyNum : null;
+    const brand = customFoodForm.brand.trim();
+    const category = customFoodForm.category.trim();
+
+    try {
+      await createCustomFood.mutateAsync({
+        barcode: notFoundCode,
+        name,
+        brand: brand || undefined,
+        category: category || undefined,
+        calories: caloriesNum,
+        proteins: proteinsNum,
+        carbs: carbsNum,
+        fats: fatsNum,
+        servingGrams,
+        servingUnit: customFoodForm.unit,
+      });
+
+      const p: Product = {
+        barcode: notFoundCode,
+        product_name: name,
+        brands: brand || undefined,
+        nutriments: {
+          "energy-kcal_100g": caloriesNum ?? undefined,
+          proteins_100g: proteinsNum ?? undefined,
+          carbohydrates_100g: carbsNum ?? undefined,
+          fat_100g: fatsNum ?? undefined,
+        },
+      };
+      setProduct(p);
+      setWeightText(formatDecimal(servingGrams ?? 100));
+      setHistory((h) => [p, ...h.filter((x) => x.barcode !== notFoundCode)].slice(0, 8));
+      setNotFoundCode(null);
+      setCreatingFood(false);
+      setCustomFoodForm(EMPTY_CUSTOM_FOOD_FORM);
+      toast.success("Produit créé — disponible pour tous vos futurs scans");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "";
+      if (msg.includes("barcode_exists")) {
+        toast.error("Ce code-barres existe déjà dans le catalogue");
+      } else {
+        toast.error("Erreur lors de la création du produit");
+      }
+    }
+  };
+
   const scoreKey = product?.nutrition_grades?.toLowerCase() ?? "";
 
   return (
@@ -327,6 +458,204 @@ export function BarcodeScannerSheet({
           <div className="flex items-center gap-3 rounded-2xl border border-destructive/20 bg-destructive/10 p-4 text-destructive">
             <AlertCircle className="h-5 w-5 shrink-0" />
             <p className="text-sm font-medium">{error}</p>
+          </div>
+        )}
+
+        {/* Produit introuvable — proposer sa création */}
+        {notFoundCode && !creatingFood && !loading && (
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-4 rounded-2xl border border-border bg-surface p-5 shadow-elevated">
+            <div className="flex flex-col items-center gap-3 text-center">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+                <PackagePlus className="h-7 w-7" />
+              </div>
+              <h3 className="text-base font-bold">Produit introuvable</h3>
+              <p className="text-sm text-muted-foreground">
+                Ce produit n'existe pas encore dans votre base de données. Vous pouvez le créer une
+                seule fois afin qu'il soit disponible pour tous vos futurs scans.
+              </p>
+              <p className="text-[11px] font-mono text-muted-foreground">{notFoundCode}</p>
+            </div>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={openCreateForm}
+                className="flex items-center justify-center gap-2 rounded-xl bg-gradient-primary py-3 text-sm font-bold text-primary-foreground shadow-glow active:scale-95 transition-transform"
+              >
+                <PackagePlus className="h-4 w-4" />
+                Créer le produit
+              </button>
+              <button
+                onClick={handleRetryScan}
+                className="flex items-center justify-center gap-2 rounded-xl border border-border bg-surface-elevated py-2.5 text-sm font-semibold hover:bg-muted"
+              >
+                <RotateCcw className="h-4 w-4" />
+                Réessayer le scan
+              </button>
+              <button
+                onClick={onClose}
+                className="py-2 text-sm font-semibold text-muted-foreground hover:text-foreground"
+              >
+                Annuler
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Création du produit personnalisé */}
+        {creatingFood && notFoundCode && (
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 space-y-4 rounded-2xl border border-border bg-surface p-4 shadow-elevated">
+            <div>
+              <h3 className="text-sm font-bold">Créer le produit</h3>
+              <p className="text-[11px] text-muted-foreground font-mono">{notFoundCode}</p>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  Nom du produit *
+                </label>
+                <input
+                  type="text"
+                  value={customFoodForm.name}
+                  onChange={(e) => setCustomFoodForm((f) => ({ ...f, name: e.target.value }))}
+                  placeholder="ex. Yaourt nature"
+                  className="w-full rounded-xl border border-border bg-card px-3 py-2.5 text-sm outline-none focus:border-primary"
+                  autoFocus
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Marque
+                  </label>
+                  <input
+                    type="text"
+                    value={customFoodForm.brand}
+                    onChange={(e) => setCustomFoodForm((f) => ({ ...f, brand: e.target.value }))}
+                    className="w-full rounded-xl border border-border bg-card px-3 py-2.5 text-sm outline-none focus:border-primary"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Catégorie
+                  </label>
+                  <input
+                    type="text"
+                    value={customFoodForm.category}
+                    onChange={(e) => setCustomFoodForm((f) => ({ ...f, category: e.target.value }))}
+                    className="w-full rounded-xl border border-border bg-card px-3 py-2.5 text-sm outline-none focus:border-primary"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Quantité
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={customFoodForm.quantity}
+                    onChange={(e) => setCustomFoodForm((f) => ({ ...f, quantity: e.target.value }))}
+                    placeholder="ex. 330"
+                    className="w-full rounded-xl border border-border bg-card px-3 py-2.5 text-sm outline-none focus:border-primary"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Unité
+                  </label>
+                  <select
+                    value={customFoodForm.unit}
+                    onChange={(e) =>
+                      setCustomFoodForm((f) => ({
+                        ...f,
+                        unit: e.target.value as CustomFoodForm["unit"],
+                      }))
+                    }
+                    className="w-full rounded-xl border border-border bg-card px-3 py-2.5 text-sm outline-none focus:border-primary"
+                  >
+                    {SERVING_UNITS.map((u) => (
+                      <option key={u.value} value={u.value}>
+                        {u.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Valeurs nutritionnelles pour 100 g
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="mb-1 block text-[11px] text-muted-foreground">Calories</label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={customFoodForm.calories}
+                    onChange={(e) => setCustomFoodForm((f) => ({ ...f, calories: e.target.value }))}
+                    placeholder="kcal"
+                    className="w-full rounded-xl border border-border bg-card px-3 py-2.5 text-sm outline-none focus:border-primary"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-[11px] text-muted-foreground">Lipides</label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={customFoodForm.fats}
+                    onChange={(e) => setCustomFoodForm((f) => ({ ...f, fats: e.target.value }))}
+                    placeholder="g"
+                    className="w-full rounded-xl border border-border bg-card px-3 py-2.5 text-sm outline-none focus:border-primary"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-[11px] text-muted-foreground">Glucides</label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={customFoodForm.carbs}
+                    onChange={(e) => setCustomFoodForm((f) => ({ ...f, carbs: e.target.value }))}
+                    placeholder="g"
+                    className="w-full rounded-xl border border-border bg-card px-3 py-2.5 text-sm outline-none focus:border-primary"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-[11px] text-muted-foreground">Protéines</label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={customFoodForm.proteins}
+                    onChange={(e) => setCustomFoodForm((f) => ({ ...f, proteins: e.target.value }))}
+                    placeholder="g"
+                    className="w-full rounded-xl border border-border bg-card px-3 py-2.5 text-sm outline-none focus:border-primary"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={handleCancelCreate}
+                className="flex-1 rounded-xl border border-border bg-surface-elevated py-3 text-sm font-semibold hover:bg-muted"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleCreateFood}
+                disabled={createCustomFood.isPending || !customFoodForm.name.trim()}
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-primary py-3 text-sm font-bold text-primary-foreground shadow-glow disabled:opacity-60"
+              >
+                {createCustomFood.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <PackagePlus className="h-4 w-4" />
+                )}
+                Créer
+              </button>
+            </div>
           </div>
         )}
 
