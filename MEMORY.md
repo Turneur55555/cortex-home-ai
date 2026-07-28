@@ -1,7 +1,37 @@
 # Mémoire projet — cortex-home-ai
 
 ## Dernière mise à jour
-2026-07-27
+2026-07-28
+
+## Scan code-barres — création de produit quand introuvable (2026-07-28, branche `claude/missing-product-creation-6zzm6o`)
+Demande : quand un scan de code-barres ne retourne rien (ni OpenFoodFacts ni USDA ni le catalogue
+`foods`), ne plus se contenter d'afficher "Produit introuvable" — proposer à l'utilisateur de créer
+le produit lui-même, disponible immédiatement et pour tous ses futurs scans.
+- **Aucune nouvelle table `foods_custom` créée** (contrairement à la demande initiale) : le catalogue
+  unifié `foods` (source='custom', `user_id`) + la table de liaison `food_barcodes` existaient déjà et
+  sont exactement le mécanisme que `food-lookup` (edge function, `type:"barcode"`) interroge en premier
+  (`food_barcodes.select("barcode, foods(*)")`) — créer une table séparée aurait dupliqué ce système et
+  rendu le produit invisible du pipeline de recherche existant. Conforme à la règle CLAUDE.md "jamais
+  de doublons de composants/tables".
+- **Migration `20260728120000_custom_food_barcode_creation.sql`** (appliquée en direct via MCP Supabase,
+  `types.ts` régénéré) : nouvelle RPC **`create_custom_food_with_barcode`** (SECURITY INVOKER — repose
+  sur `foods_insert_own` déjà en place + 2 nouvelles policies INSERT bornées à "un aliment qui m'appartient"
+  sur `food_barcodes`/`food_servings`, jusqu'ici lecture seule pour les utilisateurs, écriture réservée au
+  service role de l'edge function). Insère atomiquement `foods` (source='custom') + `food_barcodes`
+  (unique) + une portion par défaut optionnelle (`food_servings`, si quantité/unité fournies et
+  convertibles en grammes). Rejette un code-barres déjà existant (`barcode_exists`).
+- **`BarcodeScannerSheet.tsx`** : sur `lookupBarcode()` retournant `null`, nouvel état `notFoundCode`
+  remplace l'ancien simple toast d'erreur — affiche un écran dédié (titre/texte/3 boutons : Créer le
+  produit / Réessayer le scan / Annuler) puis un formulaire de création (nom*, marque, catégorie,
+  quantité+unité g/ml/pièce, calories/lipides/glucides/protéines pour 100 g). Code-barres et auteur
+  préremplis automatiquement (jamais saisis). À la création réussie, le produit rejoint directement le
+  flux existant (WeightSelector + MealSelect + ajout nutrition) sans re-fetch — même Product shape que
+  le retour OpenFoodFacts.
+- Nouveau hook `useCreateCustomFoodWithBarcode.ts` (mutation React Query, invalide `custom_foods`).
+- Vérifié : `tsc --noEmit` 0 erreur, `vitest run` 441 passed/32 skipped (inchangé, pas de nouveau test
+  unitaire ce lot — logique 100% SQL/RPC + formulaire, cohérent avec le reste du catalogue foods), eslint
+  clean sur les fichiers touchés (3 erreurs prettier préexistantes dans `BarcodeScannerSheet.tsx`,
+  confirmées par diff contre la base avant modification, non liées), `vite build` OK.
 
 ## Refactor UX — Bibliothèque des repas unifiée (2026-07-27)
 Objectif : supprimer le doublon entre l'écran dédié "Mes repas enregistrés" (`SavedMealsSheet`) et

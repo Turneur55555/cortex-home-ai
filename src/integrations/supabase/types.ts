@@ -3440,6 +3440,77 @@ export type Database = {
       compute_level_from_xp: { Args: { _xp: number }; Returns: number }
       compute_season_tier: { Args: { _ps: number }; Returns: number }
       compute_tier_index_from_xp: { Args: { _xp: number }; Returns: number }
+      create_custom_food_with_barcode: {
+        Args: {
+          p_barcode: string
+          p_brand?: string
+          p_calories?: number
+          p_carbs_g?: number
+          p_category?: string
+          p_fat_g?: number
+          p_name: string
+          p_protein_g?: number
+          p_serving_grams?: number
+          p_serving_unit?: string
+        }
+        Returns: {
+          barcode: string | null
+          brand: string | null
+          calcium_mg: number | null
+          calories: number | null
+          carbs_g: number | null
+          category: string | null
+          copper_mg: number | null
+          country: string | null
+          created_at: string
+          fat_g: number | null
+          fiber_g: number | null
+          id: string
+          image_url: string | null
+          iron_mg: number | null
+          language: string | null
+          magnesium_mg: number | null
+          manganese_mg: number | null
+          micros: Json | null
+          name: string
+          normalized_name: string
+          phosphorus_mg: number | null
+          potassium_mg: number | null
+          protein_g: number | null
+          saturated_fat_g: number | null
+          search_tsv: unknown
+          selenium_ug: number | null
+          serving_type: string | null
+          sodium_mg: number | null
+          source: string
+          source_id: string | null
+          subcategory: string | null
+          sugars_g: number | null
+          updated_at: string
+          user_id: string | null
+          verified: boolean
+          vitamin_a_ug: number | null
+          vitamin_b1_mg: number | null
+          vitamin_b12_ug: number | null
+          vitamin_b2_mg: number | null
+          vitamin_b3_mg: number | null
+          vitamin_b5_mg: number | null
+          vitamin_b6_mg: number | null
+          vitamin_b9_ug: number | null
+          vitamin_c_mg: number | null
+          vitamin_d_ug: number | null
+          vitamin_e_mg: number | null
+          vitamin_k_ug: number | null
+          water_g: number | null
+          zinc_mg: number | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "foods"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       create_saved_meal: {
         Args: { p_items?: Json; p_meal?: string; p_name: string }
         Returns: string
