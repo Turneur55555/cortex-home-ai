@@ -11,9 +11,7 @@ import { RankIllustration } from "@/components/rpg/RankIllustration";
 import { PromotionHistoryTimeline } from "@/components/profile/rpg/PromotionHistoryTimeline";
 import { EASE_OUT } from "@/components/rpg/premium/tokens";
 import {
-  RANK_AMBIANCE,
   rankGlowShadow,
-  rankRelief,
   rankRingInset,
   rankTextGlow,
   rankThemeByKey,
@@ -45,7 +43,6 @@ function ProgressionPage() {
   const xp = userStats?.xp ?? 0;
   const progress = titleProgressForXp(xp);
   const theme = rankThemeByKey(progress.title.key);
-  const amb = RANK_AMBIANCE[progress.title.key];
   const nextGrade = nextGradeLabel(progress);
   const percent = progress.isMax
     ? 100
@@ -62,23 +59,6 @@ function ProgressionPage() {
     (sum, w: { duration_minutes?: number | null }) => sum + (w.duration_minutes ?? 0),
     0,
   );
-
-  // Surface forgée (même recette que la carte de la home, pour cohérence).
-  const mix = amb.surfaceMix;
-  const plateSurface =
-    `radial-gradient(120% 85% at 50% -18%, color-mix(in oklch, ${theme.secondary} 42%, transparent), transparent 58%),` +
-    `linear-gradient(158deg,` +
-    ` color-mix(in oklch, ${theme.primary} ${mix + 22}%, oklch(0.22 0 0)) 0%,` +
-    ` color-mix(in oklch, ${theme.primary} ${mix + 10}%, oklch(0.16 0 0)) 52%,` +
-    ` color-mix(in oklch, ${theme.primary} ${Math.max(mix - 6, 0)}%, oklch(0.1 0 0)) 100%)`;
-
-  const plateShadow = [
-    "0 24px 54px -22px rgba(0,0,0,0.8)",
-    "0 8px 18px -12px rgba(0,0,0,0.55)",
-    rankRelief(theme, amb.reliefAlpha),
-    rankRingInset(theme.secondary, "45"),
-    rankGlowShadow(theme.glow, 0, 0, Math.round(amb.shadowBlur * 0.7)),
-  ].join(", ");
 
   return (
     <main className="flex flex-1 flex-col pb-8 pt-[max(0.75rem,calc(env(safe-area-inset-top)+0.375rem))]">
@@ -98,61 +78,38 @@ function ProgressionPage() {
 
       <div className="flex flex-col gap-5 px-5">
         {/* ── EN-TÊTE : illustration + rang + grade ─────────────── */}
+        {/* Pas de carte : l'asset flotte directement sur le fond de page —
+            aucun panneau/fond/ombre/bordure/padding/coin arrondi derrière lui
+            (validé par Nathan). Seuls le texte du rang/grade et l'espacement
+            avec la carte Progression ci-dessous sont conservés. */}
         <motion.section
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.55, ease: EASE_OUT }}
-          className="relative overflow-hidden rounded-[24px] p-5"
-          style={{ background: plateSurface, boxShadow: plateShadow }}
+          className="flex flex-col items-center"
         >
-          <div aria-hidden className="bg-rank-grain pointer-events-none absolute inset-0" />
-          <div
-            aria-hidden
-            className="rank-glint-layer pointer-events-none absolute inset-0 opacity-40"
-          />
-          <div className="relative flex flex-col items-center">
-            {/* Médaillon du rang — l'illustration fait corps avec la plaque
-                (aucun cadre carré visible) : ratio 4:5 intégral (aucun
-                rognage du disque ni du titre gravé, cf. assets/ranks/
-                FORMAT.md), léger zoom + masque radial qui fond
-                progressivement les bords dans plateSurface — pas de
-                nouvelle couleur, uniquement la surface déjà en place qui
-                transparaît. Halo ambiant en dessous = même rankGlowShadow
-                que le reste de la plaque, pas une réinvention. */}
-            <div className="relative aspect-[4/5] w-44">
-              <div
-                aria-hidden
-                className="pointer-events-none absolute -inset-10 rounded-full blur-3xl"
-                style={{ background: theme.glow, opacity: 0.55 }}
-              />
-              <RankIllustration
-                rankKey={progress.title.key}
-                label={progress.title.label}
-                className="relative h-full w-full scale-110"
-                style={{
-                  maskImage:
-                    "radial-gradient(ellipse 88% 96% at 50% 50%, black 60%, transparent 100%)",
-                  WebkitMaskImage:
-                    "radial-gradient(ellipse 88% 96% at 50% 50%, black 60%, transparent 100%)",
-                }}
-              />
-            </div>
-            <p
-              className="mt-4 text-[22px] font-black uppercase tracking-[0.22em]"
-              style={{
-                color: theme.text,
-                textShadow: rankTextGlow(theme.glow, 18, "0 1px 0 rgba(0,0,0,0.6)"),
-              }}
-            >
-              {progress.title.label}
-            </p>
-            <p
-              className="mt-1 text-[13px] font-semibold uppercase tracking-[0.18em]"
-              style={{ color: theme.secondary }}
-            >
-              {progress.grade}
-            </p>
+          <div className="relative aspect-[4/5] w-44">
+            <RankIllustration
+              rankKey={progress.title.key}
+              label={progress.title.label}
+              className="h-full w-full"
+            />
           </div>
+          <p
+            className="mt-4 text-[22px] font-black uppercase tracking-[0.22em]"
+            style={{
+              color: theme.text,
+              textShadow: rankTextGlow(theme.glow, 18, "0 1px 0 rgba(0,0,0,0.6)"),
+            }}
+          >
+            {progress.title.label}
+          </p>
+          <p
+            className="mt-1 text-[13px] font-semibold uppercase tracking-[0.18em]"
+            style={{ color: theme.secondary }}
+          >
+            {progress.grade}
+          </p>
         </motion.section>
 
         {/* ── XP TOTALE ───────────────────────────────────────── */}
