@@ -7,8 +7,10 @@ import type { MuscleRecovery } from "@/lib/fitness/recovery";
 import { RECOVERY_COLORS, RECOVERY_LEGEND } from "@/lib/fitness/recovery";
 import {
   LIB_SLUG_TO_MUSCLE,
+  MUSCLE_TO_LIB_SLUG,
   recoveryMapToLibData,
 } from "@/lib/fitness/mapping/reactBodyHighlighter.map";
+import type { MuscleContribution, MuscleRole } from "@/lib/fitness/analysis";
 
 // ─── Shared type (re-exported so CorpsTab doesn't define its own) ─────────────
 
@@ -282,4 +284,48 @@ function MeasurementBodyMap({ latest, onZoneClick }: MeasurementProps) {
 export function BodyMap(props: BodyMapProps) {
   if (props.mode === "recovery") return <RecoveryBodyMap {...props} />;
   return <MeasurementBodyMap {...props} />;
+}
+
+// ─── Fiche exercice — muscles sollicités (principal/secondaire/stabilisateur) ─
+//
+// Réutilise le même SVG anatomique (ModelViews) que les deux modes
+// ci-dessus — jamais un second rendu de silhouette. Un rôle = une intensité
+// de surbrillance (stabilisateur < secondaire < principal), pas de couleur
+// par muscle individuel : la lisibilité prime sur le détail.
+
+const EXERCISE_ROLE_ORDER: MuscleRole[] = ["stabilizer", "secondary", "primary"];
+const EXERCISE_ROLE_COLORS: readonly string[] = ["#a78bfa40", "#a78bfaa8", "#22d3ee"];
+
+export function ExerciseMuscleBodyMap({ muscles }: { muscles: MuscleContribution[] }) {
+  const data = useMemo(() => {
+    const byRole: Record<MuscleRole, MuscleId[]> = { primary: [], secondary: [], stabilizer: [] };
+    for (const m of muscles) byRole[m.role].push(m.id);
+
+    return EXERCISE_ROLE_ORDER.map((role, idx) => {
+      const ids = Array.from(new Set(byRole[role]));
+      const slugs = ids.flatMap((id) => {
+        const raw = MUSCLE_TO_LIB_SLUG[id];
+        return Array.isArray(raw) ? raw : [raw];
+      });
+      return { name: role, muscles: slugs as Muscle[], frequency: idx + 1 };
+    }).filter((entry) => entry.muscles.length > 0);
+  }, [muscles]);
+
+  if (data.length === 0) return null;
+
+  return (
+    <div
+      className="rounded-2xl border p-3"
+      style={{ borderColor: "rgba(167,139,250,0.16)", background: "#0b0f18" }}
+    >
+      <ModelViews
+        data={data}
+        highlightedColors={EXERCISE_ROLE_COLORS}
+        onClick={() => {}}
+        bodyColor="#151a26"
+        maxWidthPx={300}
+        labelClassName="mb-0.5 text-[8.5px] font-semibold uppercase tracking-wider text-white/25"
+      />
+    </div>
+  );
 }

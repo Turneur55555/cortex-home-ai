@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { ExerciseRankBadge } from "./ExerciseRankBadge";
-import { ExerciseAnalysisSheet } from "./ExerciseAnalysisSheet";
+import { ExerciseSheet } from "./ExerciseSheet";
 import { useExerciseProgression } from "@/hooks/useExerciseProgression";
 import { gradeName } from "@/lib/fitness/rpg/grade";
 
@@ -132,7 +132,7 @@ export function ExerciseRankStrip({
       </div>
 
       {openKey && (
-        <ExerciseAnalysisSheet
+        <ExerciseSheet
           exerciseName={nameByKey.get(openKey) ?? openKey}
           weightHistory={histByName.get(openKey) ?? []}
           volumeHistory={volByName.get(openKey) ?? []}

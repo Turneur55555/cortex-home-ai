@@ -38,7 +38,7 @@ import {
 } from "@/hooks/use-fitness";
 import { ExerciseListBrowser, type BrowserExercise } from "./ExerciseListBrowser";
 import { ExerciseActionsMenu, type ExerciseMenuAction } from "./ExerciseActionsMenu";
-import { ExerciseAnalysisSheet, type ExerciseAnalysisActions } from "./ExerciseAnalysisSheet";
+import { ExerciseSheet, type ExerciseSheetActions } from "./ExerciseSheet";
 import { RankAggregator, type ProbeResult } from "./RankAggregator";
 import type { RankState } from "@/lib/fitness/exerciseRanks";
 import type { RecentExercise } from "@/lib/fitness/recentExercises";
@@ -423,7 +423,7 @@ export function ExerciseExplorerSheet({
     return actions;
   };
 
-  const analysisActionsFor = (ex: BrowserExercise): ExerciseAnalysisActions => {
+  const analysisActionsFor = (ex: BrowserExercise): ExerciseSheetActions => {
     const custom = isCustom(ex.id);
     const row = findRow(ex.id);
     return {
@@ -772,7 +772,7 @@ export function ExerciseExplorerSheet({
 
         {/* Fiche d'analyse — page de référence de l'exercice, dans les deux modes */}
         {openExercise && (
-          <ExerciseAnalysisSheet
+          <ExerciseSheet
             exerciseName={openExercise.name}
             weightHistory={
               histByName.get(keyForBrowserExercise(openExercise.name, openExercise.id)) ?? []

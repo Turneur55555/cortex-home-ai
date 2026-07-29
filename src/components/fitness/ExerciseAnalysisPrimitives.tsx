@@ -3,10 +3,10 @@ import { RECOVERY_COLORS, RECOVERY_LABELS } from "@/lib/fitness/recovery";
 import type { MuscleContribution, Trend } from "@/lib/fitness/analysis";
 
 // ============================================================
-// Petits éléments visuels partagés par ExerciseAnalysisSheet (fiche d'un
-// exercice déjà pratiqué) et ExerciseDiscoveryPage (fiche "encyclopédie"
-// d'un exercice jamais pratiqué). Centralisés ici pour que les deux pages
-// restent visuellement cohérentes sans dupliquer de style.
+// Petits éléments visuels partagés par les sections de la fiche exercice
+// (src/components/fitness/exercise-sheet/) et ExerciseSheet.tsx.
+// Centralisés ici pour que toutes les sections restent visuellement
+// cohérentes sans dupliquer de style.
 // ============================================================
 
 export function SectionCard({

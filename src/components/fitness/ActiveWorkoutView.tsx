@@ -20,7 +20,7 @@ import { ExercisePickerSheet, type PickedExercise } from "./ExercisePickerSheet"
 import { computeRecentExercises, identityKey } from "@/lib/fitness/recentExercises";
 import { useLastExerciseSessions } from "@/hooks/useLastExerciseSession";
 import { RestTimerBar } from "./RestTimerBar";
-import { ExerciseAnalysisSheet } from "./ExerciseAnalysisSheet";
+import { ExerciseSheet } from "./ExerciseSheet";
 import { Portal } from "@/components/Portal";
 import { useUserExercisePhotos, resolveCustomExerciseMuscles } from "@/hooks/useUserExercisePhotos";
 
@@ -325,7 +325,7 @@ export function ActiveWorkoutView({
 
       {/* Fiche détaillée exercice */}
       {statsTarget && (
-        <ExerciseAnalysisSheet
+        <ExerciseSheet
           exerciseName={statsTarget.name}
           weightHistory={histByName.get(statsTarget.key) ?? []}
           volumeHistory={volByName.get(statsTarget.key) ?? []}
