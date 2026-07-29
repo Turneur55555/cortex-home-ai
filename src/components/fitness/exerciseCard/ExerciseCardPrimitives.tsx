@@ -9,45 +9,64 @@
 
 import { useRef } from "react";
 import { Camera, ChevronDown, Dumbbell, Loader2, Plus, type LucideIcon } from "lucide-react";
+import type { RankState } from "@/lib/fitness/exerciseRanks";
+import { rankBadgeStyle } from "@/components/rpg/rankTheme";
 
 // ─── Carte ───────────────────────────────────────────────────────────────────
+//
+// Carte de séance V2 (2026-07-29) — nettement plus compacte (~30-40% de
+// hauteur en moins) : padding réduit, coins toujours arrondis mais moins
+// larges, mêmes codes visuels (bordure, ombre douce, animation d'entrée).
 
 export function ExerciseCardContainer({ children }: { children: React.ReactNode }) {
   return (
-    <div className="overflow-hidden rounded-[24px] border border-white/5 bg-surface/80 p-4 shadow-[0_4px_24px_-12px_rgba(0,0,0,0.5)] animate-in fade-in slide-in-from-bottom-2 duration-300">
+    <div className="overflow-hidden rounded-[20px] border border-white/5 bg-surface/80 p-3 shadow-[0_4px_24px_-12px_rgba(0,0,0,0.5)] animate-in fade-in slide-in-from-bottom-2 duration-300">
       {children}
     </div>
   );
 }
 
 // ─── Photo + upload ──────────────────────────────────────────────────────────
+//
+// Priorité d'affichage du média (2e itération carte de séance) : photo du
+// dataset > GIF du dataset (anime nativement via <img>) > photo utilisateur
+// > icône haltère générique — l'icône ne doit plus apparaître que pour les
+// rares exercices sans média d'aucune sorte.
 
 export function ExercisePhotoTile({
   imageUrl,
+  datasetPhotoUrl,
+  datasetGifUrl,
   name,
   onOpenPreview,
   onPickPhoto,
   uploading,
 }: {
+  /** Photo utilisateur (repli si aucun média dataset). */
   imageUrl: string | null;
+  /** Photo du dataset — priorité 1. Absent pour les exercices non enrichis. */
+  datasetPhotoUrl?: string | null;
+  /** GIF du dataset — priorité 2 (avant la photo utilisateur). */
+  datasetGifUrl?: string | null;
   name: string;
   onOpenPreview?: () => void;
   onPickPhoto: (file: File) => void;
   uploading: boolean;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const displayUrl = datasetPhotoUrl ?? datasetGifUrl ?? imageUrl;
   return (
-    <div className="relative h-[72px] w-[72px] shrink-0">
+    <div className="relative h-16 w-16 shrink-0">
       <button
         type="button"
         onClick={onOpenPreview}
         aria-label="Voir la photo et les détails"
-        className="flex h-full w-full items-center justify-center overflow-hidden rounded-2xl bg-black/25 ring-1 ring-white/10 transition-opacity active:opacity-70"
+        className="flex h-full w-full items-center justify-center overflow-hidden rounded-xl bg-black/25 ring-1 ring-white/10 transition-opacity active:opacity-70"
       >
-        {imageUrl ? (
-          <img src={imageUrl} alt={name} className="h-full w-full object-contain" loading="lazy" />
+        {displayUrl ? (
+          <img src={displayUrl} alt={name} className="h-full w-full object-cover" loading="lazy" />
         ) : (
-          <Dumbbell className="h-7 w-7 text-primary/70" />
+          <Dumbbell className="h-6 w-6 text-primary/70" />
         )}
       </button>
       <button
@@ -55,9 +74,13 @@ export function ExercisePhotoTile({
         onClick={() => fileRef.current?.click()}
         disabled={uploading}
         aria-label="Ajouter une photo"
-        className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full bg-card border border-border shadow-sm text-primary transition-colors hover:bg-primary/10 disabled:opacity-50"
+        className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-card border border-border shadow-sm text-primary transition-colors hover:bg-primary/10 disabled:opacity-50"
       >
-        {uploading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Camera className="h-3 w-3" />}
+        {uploading ? (
+          <Loader2 className="h-2.5 w-2.5 animate-spin" />
+        ) : (
+          <Camera className="h-2.5 w-2.5" />
+        )}
       </button>
       <input
         ref={fileRef}
@@ -72,6 +95,32 @@ export function ExercisePhotoTile({
         }}
       />
     </div>
+  );
+}
+
+// ─── Badges discrets ─────────────────────────────────────────────────────────
+
+/** Badge court (groupe musculaire, équipement, type de mouvement…) — très
+ *  discret, pour ne jamais alourdir l'en-tête compact de la carte. */
+export function ExerciseCardBadge({ label }: { label: string }) {
+  return (
+    <span className="rounded-full bg-white/5 px-1.5 py-0 text-[9px] font-medium capitalize leading-[16px] text-muted-foreground">
+      {label}
+    </span>
+  );
+}
+
+/** Badge de rang RPG — une pill élégante et discrète (pas une carte), teintée
+ *  par la couleur officielle du rang via rankTheme (jamais une couleur
+ *  réassemblée à la main). */
+export function RankBadgePill({ rank }: { rank: RankState }) {
+  return (
+    <span
+      className="inline-flex items-center rounded-full px-1.5 py-0 text-[9px] font-bold uppercase leading-[16px] tracking-wider"
+      style={rankBadgeStyle(rank.rank.colors)}
+    >
+      {rank.rank.label}
+    </span>
   );
 }
 
@@ -95,16 +144,16 @@ export function ExerciseCardHeader({
   actions: React.ReactNode;
 }) {
   return (
-    <div className="flex items-start gap-3">
+    <div className="flex items-start gap-2.5">
       {photo}
 
-      <button type="button" onClick={onToggleCollapse} className="min-w-0 flex-1 pt-0.5 text-left">
+      <button type="button" onClick={onToggleCollapse} className="min-w-0 flex-1 text-left">
         <div className="flex items-start gap-1.5">
-          <h3 className="line-clamp-2 flex-1 text-[17px] font-semibold leading-tight tracking-tight">
+          <h3 className="line-clamp-1 flex-1 text-[14px] font-semibold leading-tight tracking-tight">
             {title}
           </h3>
           <ChevronDown
-            className={`mt-0.5 h-4 w-4 shrink-0 text-muted-foreground/70 transition-transform duration-200 ${
+            className={`mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/60 transition-transform duration-200 ${
               collapsed ? "" : "rotate-180"
             }`}
           />
@@ -112,10 +161,10 @@ export function ExerciseCardHeader({
 
         {metaLine}
 
-        {badges && <div className="mt-1.5 flex flex-wrap items-center gap-1.5">{badges}</div>}
+        {badges && <div className="mt-1 flex flex-wrap items-center gap-1">{badges}</div>}
       </button>
 
-      <div className="flex shrink-0 flex-col gap-1.5">{actions}</div>
+      <div className="flex shrink-0 flex-col gap-1">{actions}</div>
     </div>
   );
 }

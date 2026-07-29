@@ -1,4 +1,8 @@
 import { identityKey } from "@/lib/fitness/recentExercises";
+import { computeRankState } from "@/lib/fitness/rank/engine";
+import { DEFAULT_RANK_ENGINE_CONFIG } from "@/lib/fitness/rank/config";
+import { toRankState } from "@/hooks/useExerciseProgression";
+import type { RankState } from "@/lib/fitness/exerciseRanks";
 
 type WorkoutWithExercises = {
   id: string;
@@ -14,6 +18,15 @@ type WorkoutWithExercises = {
     image_path?: string | null;
     /** Étape 4.6 : priorité d'identité (voir identityKey), additif. */
     exercise_reference_id?: string | null;
+    /** Carte de séance V2 (2026-07-29) : séries détaillées déjà chargées par
+     *  useWorkouts (`exercises(*, exercise_sets(...))`) — permet de calculer
+     *  le rang RPG de chaque exercice en un seul passage client, sans
+     *  requête supplémentaire par exercice (voir computeRanksByName). */
+    exercise_sets?: Array<{
+      reps: number | null;
+      weight: number | null;
+      completed?: boolean | null;
+    }> | null;
   }> | null;
 };
 
@@ -119,4 +132,51 @@ export function computeRecentPRs(
     rows.push({ name: nameByKey.get(key) ?? key, weight: pr, date: atPr[0].date });
   }
   return rows.sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, limit);
+}
+
+/**
+ * Rang RPG de chaque exercice, calculé en un seul passage sur les séances
+ * déjà chargées (`useWorkouts`, qui contient déjà `exercise_sets` imbriqués)
+ * — aucune requête supplémentaire, contrairement à `RankAggregator` (une
+ * sonde `useExerciseProgression` par exercice, coûteuse pour 20-30
+ * exercices dans une carte de séance). Utilisé par ActiveExerciseCard pour
+ * afficher le badge de rang directement sur la carte.
+ */
+export function computeRanksByName(
+  workouts: WorkoutWithExercises[] | null | undefined,
+  bodyweightKg: number,
+): Map<string, RankState> {
+  const sessionsByKey = new Map<
+    string,
+    Array<{
+      workoutId: string;
+      date: string;
+      sets: Array<{ reps: number | null; weight: number | null }>;
+    }>
+  >();
+  const nameByKey = new Map<string, string>();
+
+  for (const w of workouts ?? []) {
+    for (const ex of w.exercises ?? []) {
+      if (!ex.name.trim()) continue;
+      const sets = (ex.exercise_sets ?? [])
+        .filter((s) => s.completed && s.reps != null && s.reps > 0)
+        .map((s) => ({ reps: s.reps, weight: s.weight }));
+      if (sets.length === 0) continue;
+
+      const key = identityKey({ name: ex.name, exercise_reference_id: ex.exercise_reference_id });
+      if (!nameByKey.has(key)) nameByKey.set(key, ex.name.trim());
+      const list = sessionsByKey.get(key) ?? [];
+      list.push({ workoutId: w.id, date: w.date, sets });
+      sessionsByKey.set(key, list);
+    }
+  }
+
+  const ranks = new Map<string, RankState>();
+  for (const [key, sessions] of sessionsByKey) {
+    const name = nameByKey.get(key) ?? key;
+    const result = computeRankState(DEFAULT_RANK_ENGINE_CONFIG, name, sessions, bodyweightKg);
+    ranks.set(key, toRankState(result.confirmedTierIndex, result.masteryPercent));
+  }
+  return ranks;
 }

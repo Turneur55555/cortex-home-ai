@@ -61,15 +61,16 @@ function escapeForIlike(value: string): string {
 
 export interface CatalogMediaEntry {
   primaryPhotoUrl: string | null;
+  primaryGifUrl: string | null;
   hasGif: boolean;
   hasVideo: boolean;
 }
 
 // ── Médias du catalogue — une seule requête pour toute la bibliothèque
 //    (exercise_media est petit, ~2500 lignes) plutôt qu'une requête par
-//    exercice affiché. Utilisé par ExerciseListBrowser via les écrans
-//    Catalogue/Picker pour remplacer l'icône générique par le vrai média
-//    du dataset (miniature + pastille GIF/Vidéo) dès qu'il existe. ──────
+//    exercice affiché. Utilisé par ExerciseListBrowser (Catalogue/Picker) ET
+//    ActiveExerciseCard (carte de séance) pour remplacer l'icône générique
+//    par le vrai média du dataset (photo, puis GIF) dès qu'il existe. ──────
 export function useExerciseCatalogMedia() {
   return useQuery({
     queryKey: ["fitness", "exercise-catalog-media"],
@@ -83,12 +84,16 @@ export function useExerciseCatalogMedia() {
       for (const row of data ?? []) {
         const entry = map.get(row.exercise_reference_id) ?? {
           primaryPhotoUrl: null,
+          primaryGifUrl: null,
           hasGif: false,
           hasVideo: false,
         };
         if (row.media_type === "image" && row.is_primary && row.url)
           entry.primaryPhotoUrl = row.url;
-        if (row.media_type === "gif") entry.hasGif = true;
+        if (row.media_type === "gif") {
+          entry.hasGif = true;
+          if (row.is_primary && row.url) entry.primaryGifUrl = row.url;
+        }
         if (row.media_type === "video") entry.hasVideo = true;
         map.set(row.exercise_reference_id, entry);
       }

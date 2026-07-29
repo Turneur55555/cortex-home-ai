@@ -15,7 +15,7 @@ import { WorkoutTimer } from "./WorkoutTimer";
 import { ActiveExerciseCard } from "./exerciseCard/ActiveExerciseCard";
 import { AddExerciseButton } from "./exerciseCard/ExerciseCardPrimitives";
 import { exerciseIllustration } from "@/lib/fitness/exerciseIllustrations";
-import { computePRs } from "@/utils/fitness/exercise-stats";
+import { computePRs, computeRanksByName } from "@/utils/fitness/exercise-stats";
 import { ExercisePickerSheet, type PickedExercise } from "./ExercisePickerSheet";
 import { computeRecentExercises, identityKey } from "@/lib/fitness/recentExercises";
 import { useLastExerciseSessions } from "@/hooks/useLastExerciseSession";
@@ -23,6 +23,12 @@ import { RestTimerBar } from "./RestTimerBar";
 import { ExerciseSheet } from "./ExerciseSheet";
 import { Portal } from "@/components/Portal";
 import { useUserExercisePhotos, resolveCustomExerciseMuscles } from "@/hooks/useUserExercisePhotos";
+import { useExerciseCatalogMedia } from "@/hooks/useExerciseCatalogEntry";
+import { useFullExerciseCatalog } from "@/hooks/useExerciseCatalog";
+import { useBodyMeasurements } from "@/hooks/useBodyTracking";
+import { deriveExerciseBadges } from "@/lib/fitness/exerciseBadges";
+
+const DEFAULT_BODYWEIGHT_KG = 75;
 
 // ─── Main view ───────────────────────────────────────────────────────────────
 
@@ -50,6 +56,15 @@ export function ActiveWorkoutView({
 
   const { data: userPhotos } = useUserExercisePhotos();
 
+  // Carte de séance V2 (2026-07-29) — trois requêtes batchées (une pour
+  // toute la bibliothèque/l'utilisateur, jamais une par carte) : médias du
+  // dataset (photo/GIF), métadonnées du catalogue (groupe/équipement), poids
+  // de corps pour le rang RPG. Le rang lui-même est calculé en mémoire à
+  // partir de `allWorkouts` (déjà chargé), voir computeRanksByName.
+  const { data: catalogMedia } = useExerciseCatalogMedia();
+  const { data: fullCatalog } = useFullExerciseCatalog("muscu");
+  const { data: measurements } = useBodyMeasurements();
+
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -58,6 +73,20 @@ export function ActiveWorkoutView({
   const { prByName, histByName, volByName } = useMemo(
     () => computePRs((allWorkouts ?? []).filter((w) => w.id !== workout.id)),
     [allWorkouts, workout.id],
+  );
+
+  const catalogById = useMemo(() => {
+    const map = new Map<string, { category: string | null; equipment: string | null }>();
+    for (const row of fullCatalog ?? []) {
+      map.set(row.id, { category: row.category, equipment: row.config?.equipment ?? null });
+    }
+    return map;
+  }, [fullCatalog]);
+
+  const bodyweightKg = measurements?.find((m) => m.weight != null)?.weight ?? DEFAULT_BODYWEIGHT_KG;
+  const ranksByName = useMemo(
+    () => computeRanksByName(allWorkouts, bodyweightKg),
+    [allWorkouts, bodyweightKg],
   );
 
   // Dernières séances de TOUS les exercices (groupé : fin du N+1).
@@ -277,12 +306,23 @@ export function ActiveWorkoutView({
               (ex.image_path ? imageUrls?.get(ex.image_path) : null) ??
               userPhotos?.get(identityKey(ex)) ??
               exerciseIllustration(ex.name);
+            const datasetEntry = ex.exercise_reference_id
+              ? catalogMedia?.get(ex.exercise_reference_id)
+              : undefined;
+            const catalogMeta = ex.exercise_reference_id
+              ? catalogById.get(ex.exercise_reference_id)
+              : undefined;
+            const badges = catalogMeta ? deriveExerciseBadges(ex.name, catalogMeta) : [];
             return (
               <ActiveExerciseCard
                 kind="muscu"
                 key={ex.id}
                 exercise={ex}
                 imageUrl={exImage}
+                datasetPhotoUrl={datasetEntry?.primaryPhotoUrl ?? null}
+                datasetGifUrl={datasetEntry?.primaryGifUrl ?? null}
+                catalogBadges={badges}
+                rank={ranksByName.get(identityKey(ex)) ?? null}
                 lastSession={lastSessions.get(identityKey(ex)) ?? null}
                 pr={prByName.get(identityKey(ex)) ?? null}
                 recoveryMap={recoveryMap}

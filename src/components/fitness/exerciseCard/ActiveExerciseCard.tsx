@@ -86,7 +86,9 @@ import {
   parseMetricInput,
   toDisplayString,
 } from "../session/ActiveSegmentCard";
+import type { RankState } from "@/lib/fitness/exerciseRanks";
 import {
+  ExerciseCardBadge,
   ExerciseCardConfirmDelete,
   ExerciseCardContainer,
   ExerciseCardHeader,
@@ -96,6 +98,7 @@ import {
   ExerciseCardSetRow,
   ExerciseCardStatField,
   ExercisePhotoTile,
+  RankBadgePill,
 } from "./ExerciseCardPrimitives";
 
 // ─── Props publiques : un seul composant, discriminé par discipline ────────
@@ -104,6 +107,14 @@ type MuscuCardProps = {
   kind: "muscu";
   exercise: ActiveExercise;
   imageUrl: string | null;
+  /** Photo/GIF du dataset — priorité sur `imageUrl` (voir ExercisePhotoTile). */
+  datasetPhotoUrl?: string | null;
+  datasetGifUrl?: string | null;
+  /** Badges courts dérivés du catalogue (groupe/équipement/type de mouvement),
+   *  calculés une seule fois pour toute la séance (voir ActiveWorkoutView). */
+  catalogBadges?: string[];
+  /** Rang RPG déjà calculé (voir computeRanksByName) — jamais recalculé ici. */
+  rank?: RankState | null;
   lastSession: LastSession | null;
   pr: number | null;
   recoveryMap?: Map<MuscleId, MuscleRecovery>;
@@ -293,6 +304,10 @@ function SetRow({
 function MuscuExerciseCard({
   exercise,
   imageUrl,
+  datasetPhotoUrl,
+  datasetGifUrl,
+  catalogBadges = [],
+  rank,
   lastSession,
   pr,
   recoveryMap,
@@ -436,49 +451,37 @@ function MuscuExerciseCard({
   const handleDeleteSet = (id: string) => deleteSet.mutate(id);
   const handleDeleteExercise = () => deleteExercises.mutate([exercise.id]);
 
-  const metaLine = (
-    <div className="mt-1.5 flex items-center gap-1.5 text-[12px] text-muted-foreground">
-      <span className="tabular-nums">
-        {sortedSets.length} série{sortedSets.length > 1 ? "s" : ""}
-        {doneCount > 0 && <span className="text-success"> ({doneCount}✓)</span>}
-      </span>
-      {maxWeight != null && (
-        <>
-          <span className="text-muted-foreground/30">•</span>
-          <span className="tabular-nums">{maxWeight} kg max</span>
-        </>
-      )}
-      {volume > 0 && (
-        <>
-          <span className="text-muted-foreground/30">•</span>
-          <span className="tabular-nums text-muted-foreground/70">{volLabel} kg</span>
-        </>
-      )}
-    </div>
-  );
-
+  // Carte de séance V2 — en-tête très dense : rang (pill), record, dernière
+  // charge, récupération, puis groupe musculaire/équipement/type (catalogue).
+  // Uniquement ce qui est utile pendant une séance ; le reste (historique
+  // complet, courbes, variantes…) appartient à la fiche détaillée
+  // (onOpenStats → ExerciseSheet).
   const badges = (
     <>
+      {rank && <RankBadgePill rank={rank} />}
       {isPR && (
-        <span className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-bold text-warning">
-          <Trophy className="h-3 w-3" />
+        <span className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-1.5 py-0 text-[9px] font-bold leading-[16px] text-warning">
+          <Trophy className="h-2.5 w-2.5" />
           {isNewPR ? "Nouveau record" : `Record ${pr} kg`}
         </span>
       )}
       {lastSummary && (
-        <span className="inline-flex items-center gap-1 rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
-          <History className="h-3 w-3" />
+        <span className="inline-flex items-center gap-1 rounded-full bg-white/5 px-1.5 py-0 text-[9px] font-medium leading-[16px] text-muted-foreground">
+          <History className="h-2.5 w-2.5" />
           {lastSummary.weight ?? "—"} kg × {lastSummary.reps ?? "—"}
         </span>
       )}
       {fatigued.map((rec) => (
         <span
           key={rec.id}
-          className="inline-flex items-center gap-1 rounded-full bg-orange-500/15 px-2 py-0.5 text-[10px] font-bold text-orange-400"
+          className="inline-flex items-center gap-1 rounded-full bg-orange-500/15 px-1.5 py-0 text-[9px] font-bold leading-[16px] text-orange-400"
           title={`${rec.label} peu récupéré — ${rec.hoursRemaining != null ? Math.round(rec.hoursRemaining) + "h restantes" : ""}`}
         >
           ⚠ {rec.label}
         </span>
+      ))}
+      {catalogBadges.slice(0, 3).map((label) => (
+        <ExerciseCardBadge key={label} label={label} />
       ))}
     </>
   );
@@ -489,6 +492,8 @@ function MuscuExerciseCard({
         photo={
           <ExercisePhotoTile
             imageUrl={imageUrl}
+            datasetPhotoUrl={datasetPhotoUrl}
+            datasetGifUrl={datasetGifUrl}
             name={exercise.name}
             onOpenPreview={onOpenStats}
             onPickPhoto={handlePhotoFile}
@@ -498,7 +503,6 @@ function MuscuExerciseCard({
         title={exercise.name}
         collapsed={collapsed}
         onToggleCollapse={() => setCollapsed((c) => !c)}
-        metaLine={metaLine}
         badges={badges}
         actions={
           <>
@@ -528,6 +532,27 @@ function MuscuExerciseCard({
 
       {!collapsed && (
         <div className="animate-in fade-in slide-in-from-top-1 duration-200">
+          {/* Détail chiffré — masqué carte fermée (voir badges de l'en-tête
+              pour l'essentiel : record, dernière charge, récupération). */}
+          <div className="mt-2.5 flex items-center gap-1.5 text-[12px] text-muted-foreground">
+            <span className="tabular-nums">
+              {sortedSets.length} série{sortedSets.length > 1 ? "s" : ""}
+              {doneCount > 0 && <span className="text-success"> ({doneCount}✓)</span>}
+            </span>
+            {maxWeight != null && (
+              <>
+                <span className="text-muted-foreground/30">•</span>
+                <span className="tabular-nums">{maxWeight} kg max</span>
+              </>
+            )}
+            {volume > 0 && (
+              <>
+                <span className="text-muted-foreground/30">•</span>
+                <span className="tabular-nums text-muted-foreground/70">{volLabel} kg</span>
+              </>
+            )}
+          </div>
+
           {lastSession && lastSession.sets.length > 0 && (
             <button
               type="button"
