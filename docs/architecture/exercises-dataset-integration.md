@@ -462,3 +462,43 @@ suivantes de cette même fonctionnalité). Reproduit puis vérifié résolu via 
 (`git worktree` + `git merge --no-commit`) avant de pousser le correctif — le mécanisme de
 vérification pré-merge (§15) a fonctionné exactement comme prévu : aucune régression n'a atteint
 `main`.
+
+## 16. Enrichissement de l'interface admin (2026-07-29, premier retour utilisateur post-merge)
+
+Après le premier merge de la bibliothèque d'exercices, Nathan a testé l'interface `/admin/exercises`
+et remonté deux incidents (corrigés séparément, voir historique de commits `f45cc20`/`83312a8` —
+email admin remplacé + bug de casse sur le gate client) puis demandé cinq améliorations d'usage,
+implémentées ici :
+
+- **Groupe musculaire jamais vide** — `src/lib/fitness/muscleGroupInference.ts` (nouveau, testé).
+  `resolveMuscleGroup` : `category` existante → `config.muscle_group` (futur enrichissement
+  dataset) → déduction depuis le nom (réutilise `exerciseToMuscles`/`MUSCLE_META` de
+  `muscleMapping.ts`, aucune règle dupliquée) → repli neutre `"Non catégorisé"`. Deux angles morts
+  du moteur partagé corrigés localement, sans toucher `muscleMapping.ts` (utilisé par le calcul de
+  récupération musculaire, hors périmètre de cette demande) : rotations d'épaule anciennement
+  happées par la règle générique "oblique|rotation", et "développé" non qualifié (ex. "Développé
+  convergent") qui ne matchait aucune règle pectoraux existante.
+- **Backfill des données existantes** — migration `20260802120000_backfill_exercise_category.sql` :
+  60 exercices Cortex sans `category` (essentiellement des blocs extraits de PDF de programmes)
+  corrigés un par un (UPDATE nominatif, idempotent sur `category IS NULL`), chaque valeur vérifiée
+  manuellement contre le nom réel plutôt qu'une règle générique appliquée en aveugle. Vérifié par
+  requête en lecture seule contre la production avant merge (60/60 noms correspondent exactement).
+  Portée strictement `category` — aucune séance/série/répétition/charge/record touchée.
+- **Statistiques d'usage** — nouvelle action `usage_stats` sur l'edge function
+  `admin-exercise-actions` (service_role) : nombre de séances distinctes + utilisations totales +
+  "a déjà été fusionné" par exercice. Ne peut pas passer par un accès client direct : `exercises`
+  est en RLS "propriétaire uniquement", un accès direct n'agrégerait que les séances de la personne
+  connectée. Hook `useExerciseUsageStats`.
+- **Présence de médias en un coup d'œil** — `useExerciseMediaSummary` (accès client direct,
+  `exercise_media` est lisible par tout le monde) : badges Photo/GIF/Vidéo sur chaque ligne de la
+  liste, seulement quand au moins un média du type existe.
+- **Provenance affichée partout** — `deriveExerciseOrigin` : Cortex / Dataset / Fusionné (Fusionné
+  si l'exercice a déjà reçu une fusion non annulée via `exercise_merge_log`), utilisé aussi bien
+  dans la liste que dans la comparaison.
+- **Comparaison avant fusion enrichie** — `CompareCard` affiche désormais, pour chaque fiche :
+  provenance, compteurs de médias par type, groupe musculaire (résolu), muscles secondaires,
+  équipement, catégorie, instructions, alias, variantes (même famille ou non) — et un bandeau
+  recalculé à chaque changement de sélection indiquant precisément quels champs seront complétés
+  sur la fiche conservée (reflète exactement la logique additive `coalesce` de
+  `merge_exercise_references` : seuls les champs `NULL` de la fiche conservée sont complétés,
+  jamais un remplacement).

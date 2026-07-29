@@ -1292,3 +1292,38 @@ rester manuel). Vérification faite sur les vrais workflows CI, pas une supposit
   - Non touché (hors périmètre) : "Scan des Titans" (BodyMap, nom de feature sans lien avec
     RankKey) et `rarityVisuals.ts` (palette de rareté des badges/Légendes — domaine produit séparé,
     règle CLAUDE.md).
+- **Bibliothèque d'exercices v6 — enrichissement de l'interface admin** (2026-07-29, suite au
+  premier retour utilisateur post-merge PR #24) :
+  - **`src/lib/fitness/muscleGroupInference.ts`** (nouveau, pure logique, testé) : garantit qu'un
+    groupe musculaire est TOUJOURS affiché (plus jamais de badge vide). `resolveMuscleGroup(row,
+    name)` : `category` existante → `config.muscle_group` → déduction depuis le nom (réutilise
+    `exerciseToMuscles`/`MUSCLE_META` de `muscleMapping.ts`, zéro duplication de règles) → repli
+    neutre `"Non catégorisé"`. Deux angles morts corrigés localement (sans toucher
+    `muscleMapping.ts`, utilisé par le calcul de récupération) : rotations d'épaule anciennement
+    happées par la règle générique "oblique|rotation" (→ Épaules), "développé" non qualifié (→
+    Pectoraux) ; plus deux buckets neutres pour les mouvements sans muscle dominant (Échauffement,
+    Récupération, Polyarticulaire pour les mouvements combinés/full body).
+  - **Migration `20260802120000_backfill_exercise_category.sql`** : backfill un par un (60 UPDATE
+    `WHERE category IS NULL AND name = '...'`, idempotent) des 60 exercices Cortex existants sans
+    catégorie (essentiellement des blocs extraits de PDF de programmes) — vérifié ligne à ligne
+    contre `resolveMuscleGroup`, jamais une règle générique appliquée en aveugle. Portée strictement
+    `category` (métadonnée de catalogue) — aucune séance/série/répétition/charge/record touchée.
+  - **`useExerciseUsageStats`** (nouveau, `useExerciseAdmin.ts`) : nombre de séances distinctes +
+    utilisations totales + "a déjà été fusionné" par exercice, via une nouvelle action edge function
+    `usage_stats` (service_role) sur `admin-exercise-actions` — nécessaire car `exercises` est en
+    RLS "propriétaire uniquement" (un accès client direct n'agrégerait que les séances de la
+    personne connectée, pas l'usage réel de tout Cortex).
+  - **`useExerciseMediaSummary`** (nouveau) : présence photo/GIF/vidéo par exercice — requête
+    directe côté client (`exercise_media` est lisible par tout le monde, pas besoin de service_role).
+  - **`deriveExerciseOrigin`** (nouveau) : Cortex / Dataset / Fusionné — "Fusionné" si l'exercice a
+    déjà reçu une fusion non annulée (`exercise_merge_log.kept_exercise_id`), sinon Dataset si
+    `dataset_source` est renseigné, sinon Cortex.
+  - **Liste de recherche** (`exercises.tsx`) enrichie par ligne : badge groupe musculaire (jamais
+    vide), badge provenance, badges médias (Photo/GIF/Vidéo si présents), compteur "X séances · Y
+    utilisations".
+  - **`CompareCard`** repensé en véritable comparaison avant fusion : nom + provenance de chaque
+    fiche, compteurs de médias par type, groupe musculaire/muscles secondaires/équipement/
+    catégorie/instructions/alias/variantes (même famille) côte à côte, **et** un bandeau dynamique
+    "si « X » est conservée, les champs suivants seront complétés depuis « Y »" recalculé à chaque
+    changement de sélection — reflète exactement la logique additive de `merge_exercise_references`
+    (coalesce sur les champs NULL uniquement, jamais un remplacement).

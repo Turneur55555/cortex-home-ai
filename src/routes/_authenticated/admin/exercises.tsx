@@ -13,8 +13,16 @@ import {
   useRestoreExercise,
   useDeleteExercise,
   useDismissSimilarityPair,
+  useExerciseUsageStats,
+  useExerciseMediaSummary,
+  useExerciseMedia,
+  deriveExerciseOrigin,
   type ExerciseRow,
+  type ExerciseOrigin,
+  type ExerciseUsageStats,
+  type ExerciseMediaSummary,
 } from "@/hooks/useExerciseAdmin";
+import { resolveMuscleGroup } from "@/lib/fitness/muscleGroupInference";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -87,6 +95,52 @@ function AdminExercisesPage() {
   );
 }
 
+const ORIGIN_LABEL: Record<ExerciseOrigin, string> = {
+  cortex: "Cortex",
+  dataset: "Dataset",
+  merged: "Fusionné",
+};
+
+const ORIGIN_BADGE_VARIANT: Record<ExerciseOrigin, "secondary" | "outline"> = {
+  cortex: "secondary",
+  dataset: "outline",
+  merged: "outline",
+};
+
+function OriginBadge({ origin }: { origin: ExerciseOrigin }) {
+  return <Badge variant={ORIGIN_BADGE_VARIANT[origin]}>{ORIGIN_LABEL[origin]}</Badge>;
+}
+
+function MediaBadges({ media }: { media: ExerciseMediaSummary | undefined }) {
+  if (!media || (!media.hasPhoto && !media.hasGif && !media.hasVideo)) return null;
+  return (
+    <>
+      {media.hasPhoto && (
+        <Badge variant="outline" className="text-xs">
+          Photo
+        </Badge>
+      )}
+      {media.hasGif && (
+        <Badge variant="outline" className="text-xs">
+          GIF
+        </Badge>
+      )}
+      {media.hasVideo && (
+        <Badge variant="outline" className="text-xs">
+          Vidéo
+        </Badge>
+      )}
+    </>
+  );
+}
+
+function usageLabel(stats: ExerciseUsageStats | undefined): string {
+  const sessionCount = stats?.sessionCount ?? 0;
+  const totalUses = stats?.totalUses ?? 0;
+  if (totalUses === 0) return "Jamais utilisé";
+  return `${sessionCount} séance${sessionCount > 1 ? "s" : ""} · ${totalUses} utilisation${totalUses > 1 ? "s" : ""}`;
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // Onglet Recherche & fusion
 // ─────────────────────────────────────────────────────────────────────────
@@ -98,6 +152,10 @@ function SearchAndMergeTab() {
   const archiveMutation = useArchiveExercise();
   const restoreMutation = useRestoreExercise();
   const deleteMutation = useDeleteExercise();
+
+  const ids = (results ?? []).map((row) => row.id);
+  const { data: usageStats } = useExerciseUsageStats(ids);
+  const { data: mediaSummary } = useExerciseMediaSummary(ids);
 
   function toggleSelect(row: ExerciseRow) {
     setSelected((prev) => {
@@ -143,7 +201,12 @@ function SearchAndMergeTab() {
         {!isLoading && (results ?? []).length === 0 && (
           <div className="p-4 text-sm text-muted-foreground">Aucun exercice trouvé.</div>
         )}
-        {(results ?? []).map((row) => (
+        {(results ?? []).map((row) => {
+          const stats = usageStats?.[row.id];
+          const media = mediaSummary?.[row.id];
+          const origin = deriveExerciseOrigin(row, stats?.hasBeenMerged ?? false);
+          const muscleGroup = resolveMuscleGroup(row, row.name);
+          return (
           <div
             key={row.id}
             className="flex items-center justify-between gap-3 border-b p-3 last:border-b-0"
@@ -153,12 +216,14 @@ function SearchAndMergeTab() {
               onClick={() => toggleSelect(row)}
               aria-pressed={!!selected.find((r) => r.id === row.id)}
             >
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="font-medium">{row.name}</span>
-                {row.category && <Badge variant="secondary">{row.category}</Badge>}
+                <Badge variant="secondary">{muscleGroup}</Badge>
+                <OriginBadge origin={origin} />
                 {!row.is_active && <Badge variant="outline">Archivé</Badge>}
-                {row.dataset_source && <Badge variant="outline">dataset</Badge>}
+                <MediaBadges media={media} />
               </div>
+              <div className="mt-0.5 text-xs text-muted-foreground">{usageLabel(stats)}</div>
               {row.aliases && row.aliases.length > 0 && (
                 <div className="mt-0.5 text-xs text-muted-foreground">
                   Alias : {row.aliases.join(", ")}
@@ -213,10 +278,34 @@ function SearchAndMergeTab() {
               </Button>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
+}
+
+interface CompareField {
+  label: string;
+  value: (row: ExerciseRow) => string | null;
+}
+
+const COMPARE_FIELDS: CompareField[] = [
+  { label: "Groupe musculaire", value: (row) => resolveMuscleGroup(row, row.name) },
+  { label: "Muscles secondaires", value: (row) => row.config?.secondary_muscles?.join(", ") ?? null },
+  { label: "Équipement", value: (row) => row.config?.equipment ?? null },
+  { label: "Catégorie", value: (row) => row.category ?? null },
+  { label: "Instructions", value: (row) => row.description ?? null },
+  { label: "Alias", value: (row) => (row.aliases && row.aliases.length > 0 ? row.aliases.join(", ") : null) },
+];
+
+function mediaCounts(media: { media_type: string }[] | undefined) {
+  const list = media ?? [];
+  return {
+    photos: list.filter((m) => m.media_type === "image").length,
+    gifs: list.filter((m) => m.media_type === "gif").length,
+    videos: list.filter((m) => m.media_type === "video").length,
+  };
 }
 
 function CompareCard({ a, b, onClose }: { a: ExerciseRow; b: ExerciseRow; onClose: () => void }) {
@@ -225,9 +314,19 @@ function CompareCard({ a, b, onClose }: { a: ExerciseRow; b: ExerciseRow; onClos
   const mergeMutation = useMergeExercises();
   const result = compareExercises(a, b);
   const pct = Math.round(result.score * 100);
+  const { data: mediaA } = useExerciseMedia(a.id);
+  const { data: mediaB } = useExerciseMedia(b.id);
+  const { data: usageStats } = useExerciseUsageStats([a.id, b.id]);
+  const originA = deriveExerciseOrigin(a, usageStats?.[a.id]?.hasBeenMerged ?? false);
+  const originB = deriveExerciseOrigin(b, usageStats?.[b.id]?.hasBeenMerged ?? false);
+  const countsA = mediaCounts(mediaA);
+  const countsB = mediaCounts(mediaB);
+  const sameFamily = a.family_id !== null && a.family_id === b.family_id;
+
+  const keep = keepSide === "a" ? a : b;
+  const other = keepSide === "a" ? b : a;
 
   function confirmMerge() {
-    const keep = keepSide === "a" ? a : b;
     const archive = keepSide === "a" ? b : a;
     mergeMutation.mutate(
       { keep_id: keep.id, archive_id: archive.id },
@@ -258,25 +357,51 @@ function CompareCard({ a, b, onClose }: { a: ExerciseRow; b: ExerciseRow; onClos
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
-          {[a, b].map((row) => (
-            <div key={row.id} className="rounded-md border p-3 text-sm">
-              <div className="font-medium">{row.name}</div>
-              <div className="text-xs text-muted-foreground">Catégorie : {row.category ?? "—"}</div>
-              <div className="text-xs text-muted-foreground">
-                Muscle principal : {row.config?.muscle_group ?? "—"}
+          {[
+            { row: a, origin: originA, counts: countsA },
+            { row: b, origin: originB, counts: countsB },
+          ].map(({ row, origin, counts }) => (
+            <div key={row.id} className="space-y-2 rounded-md border p-3 text-sm">
+              <div className="flex items-center gap-2">
+                <span className="font-medium">{row.name}</span>
+                <OriginBadge origin={origin} />
               </div>
-              <div className="text-xs text-muted-foreground">
-                Équipement : {row.config?.equipment ?? "—"}
+              <div className="flex flex-wrap gap-1">
+                <Badge variant="outline" className="text-xs">
+                  Photos : {counts.photos}
+                </Badge>
+                <Badge variant="outline" className="text-xs">
+                  GIF : {counts.gifs}
+                </Badge>
+                <Badge variant="outline" className="text-xs">
+                  Vidéos : {counts.videos}
+                </Badge>
               </div>
+              {COMPARE_FIELDS.map((field) => (
+                <div key={field.label} className="text-xs text-muted-foreground">
+                  {field.label} : {field.value(row) ?? "—"}
+                </div>
+              ))}
               <div className="text-xs text-muted-foreground">
-                Alias : {row.aliases && row.aliases.length > 0 ? row.aliases.join(", ") : "—"}
-              </div>
-              <div className="text-xs text-muted-foreground">
-                Source : {row.dataset_source ? "dataset" : "Cortex"}
+                Variantes : {sameFamily ? "même famille que l'autre fiche" : "—"}
               </div>
             </div>
           ))}
         </div>
+
+        <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
+          Si « {keep.name} » est conservée : les champs suivants sont vides sur la fiche conservée et
+          seront complétés depuis « {other.name} » —{" "}
+          {COMPARE_FIELDS.filter((field) => !field.value(keep) && field.value(other)).map((field) => (
+            <Badge key={field.label} variant="secondary" className="mr-1">
+              + {field.label}
+            </Badge>
+          ))}
+          {COMPARE_FIELDS.every((field) => field.value(keep) || !field.value(other)) && (
+            <span>aucun — la fiche conservée a déjà toutes ces informations.</span>
+          )}
+        </div>
+
         <Button onClick={() => setMergeOpen(true)}>Fusionner ces deux fiches…</Button>
       </CardContent>
 

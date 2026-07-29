@@ -74,6 +74,26 @@ export interface MergeLogRow {
   archivedName?: string;
 }
 
+export interface ExerciseUsageStats {
+  sessionCount: number;
+  totalUses: number;
+  hasBeenMerged: boolean;
+}
+
+export interface ExerciseMediaSummary {
+  hasPhoto: boolean;
+  hasGif: boolean;
+  hasVideo: boolean;
+}
+
+export type ExerciseOrigin = "cortex" | "dataset" | "merged";
+
+/** Provenance affichée (Cortex / Dataset / Fusionné) — jamais ambiguë. */
+export function deriveExerciseOrigin(row: ExerciseRow, hasBeenMerged: boolean): ExerciseOrigin {
+  if (hasBeenMerged) return "merged";
+  return row.dataset_source ? "dataset" : "cortex";
+}
+
 const DISCIPLINE = "muscu";
 
 async function invokeAdminAction<T>(body: Record<string, unknown>): Promise<T> {
@@ -133,6 +153,56 @@ export function useExerciseMedia(exerciseId: string | null) {
       if (error) throw error;
       return (data ?? []) as ExerciseMediaRow[];
     },
+  });
+}
+
+// ── Statistiques d'usage (nombre de séances, utilisations totales, a déjà
+//    été fusionné) — passe par admin-exercise-actions (service_role) car
+//    `exercises` est protégé par une RLS "propriétaire uniquement" : un
+//    accès direct depuis le client n'agrégerait que les séances de la
+//    personne connectée, pas l'usage réel de tout Cortex. ────────────────
+export function useExerciseUsageStats(ids: string[]) {
+  const sortedIds = [...ids].sort();
+  return useQuery({
+    queryKey: ["admin", "exercise-usage-stats", sortedIds],
+    enabled: sortedIds.length > 0,
+    queryFn: async (): Promise<Record<string, ExerciseUsageStats>> => {
+      const data = await invokeAdminAction<{ stats: Record<string, ExerciseUsageStats> }>({
+        action: "usage_stats",
+        ids: sortedIds,
+      });
+      return data.stats;
+    },
+    staleTime: 30_000,
+  });
+}
+
+// ── Présence de médias (photo/gif/vidéo) par exercice — `exercise_media`
+//    est lisible par tout le monde (voir migration), pas besoin de passer
+//    par le service_role ici. ─────────────────────────────────────────────
+export function useExerciseMediaSummary(ids: string[]) {
+  const sortedIds = [...ids].sort();
+  return useQuery({
+    queryKey: ["admin", "exercise-media-summary", sortedIds],
+    enabled: sortedIds.length > 0,
+    queryFn: async (): Promise<Record<string, ExerciseMediaSummary>> => {
+      const { data, error } = await admin
+        .from("exercise_media")
+        .select("exercise_reference_id, media_type")
+        .in("exercise_reference_id", sortedIds);
+      if (error) throw error;
+      const summary: Record<string, ExerciseMediaSummary> = {};
+      for (const id of sortedIds) summary[id] = { hasPhoto: false, hasGif: false, hasVideo: false };
+      for (const row of (data ?? []) as Array<{ exercise_reference_id: string; media_type: string }>) {
+        const entry = summary[row.exercise_reference_id];
+        if (!entry) continue;
+        if (row.media_type === "image") entry.hasPhoto = true;
+        if (row.media_type === "gif") entry.hasGif = true;
+        if (row.media_type === "video") entry.hasVideo = true;
+      }
+      return summary;
+    },
+    staleTime: 30_000,
   });
 }
 
