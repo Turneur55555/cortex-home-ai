@@ -48,7 +48,7 @@ export const Route = createFileRoute("/_authenticated/admin/exercises")({
 // l'edge function admin-exercise-actions (voir _shared/adminAuth.ts), qui
 // vérifie l'email de l'utilisateur authentifié avant toute écriture. Ceci
 // n'évite qu'un aller-retour inutile pour un compte non autorisé.
-const ADMIN_EMAIL = "attal.nathan@gmail.com";
+const ADMIN_EMAIL = "Turneur555@gmail.com";
 
 function AdminExercisesPage() {
   const { user } = useAuth();

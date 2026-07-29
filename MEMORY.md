@@ -1211,7 +1211,8 @@ production** (vérifié : colonnes/tables absentes en base) ; import réel jamai
 - **Nouvelle edge function `admin-exercise-actions`** (merge/undo_merge/archive/restore/delete/
   dismiss_pair) : PAS le pattern CRON_SECRET des jobs batch — auth via `_shared/adminAuth.ts`
   (`requireAdminUser`) qui vérifie que le JWT Supabase Auth de l'utilisateur correspond à
-  `ADMIN_EMAIL` (secret, attal.nathan@gmail.com). **Limite assumée** : pas de vrai système de rôle
+  `ADMIN_EMAIL` (secret, Turneur555@gmail.com — changé le 2026-07-29, était attal.nathan@gmail.com).
+  **Limite assumée** : pas de vrai système de rôle
   côté Cortex (déjà documenté ailleurs) — allow-list par email suffisante pour une app à propriétaire
   unique, à remplacer si Cortex accueille plusieurs comptes.
 - **Interface d'administration** : nouvelle route `/admin/exercises` (3 onglets — Recherche & fusion

@@ -22,7 +22,7 @@
 // de changer l'email sans redéployer de code).
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-const DEFAULT_ADMIN_EMAIL = "attal.nathan@gmail.com";
+const DEFAULT_ADMIN_EMAIL = "Turneur555@gmail.com";
 
 export interface AdminAuthResult {
   ok: true;
