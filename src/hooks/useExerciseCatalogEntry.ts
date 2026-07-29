@@ -76,12 +76,19 @@ export function useExerciseCatalogMedia() {
     queryKey: ["fitness", "exercise-catalog-media"],
     staleTime: 5 * 60 * 1000,
     queryFn: async (): Promise<Map<string, CatalogMediaEntry>> => {
-      const { data, error } = await supabase
+      // `exercise_media` n'est pas encore dans les types générés : cast local.
+      const { data, error } = await (supabase as any)
         .from("exercise_media")
         .select("exercise_reference_id, media_type, url, is_primary");
       if (error) throw error;
       const map = new Map<string, CatalogMediaEntry>();
-      for (const row of data ?? []) {
+      const rows = (data ?? []) as Array<{
+        exercise_reference_id: string;
+        media_type: string | null;
+        url: string | null;
+        is_primary: boolean | null;
+      }>;
+      for (const row of rows) {
         const entry = map.get(row.exercise_reference_id) ?? {
           primaryPhotoUrl: null,
           primaryGifUrl: null,
