@@ -117,7 +117,10 @@ export function useExerciseCatalogEntry(exerciseName: string | null | undefined)
     queryFn: async (): Promise<ExerciseCatalogEntry | null> => {
       if (!exerciseName) return null;
 
-      const { data: row, error } = await supabase
+      // Colonnes `aliases`/`config`/`family_id`/`is_active` et table
+      // `exercise_media` absentes des types générés : cast local, shape
+      // décrite explicitement ci-dessous.
+      const { data: rawRow, error } = await (supabase as any)
         .from("exercise_reference")
         .select(
           "id, name, category, aliases, description, config, family_id, dataset_source, merged_at",
@@ -127,7 +130,18 @@ export function useExerciseCatalogEntry(exerciseName: string | null | undefined)
         .ilike("name", escapeForIlike(exerciseName.trim()))
         .maybeSingle();
       if (error) throw error;
-      if (!row) return null;
+      if (!rawRow) return null;
+      const row = rawRow as {
+        id: string;
+        name: string;
+        category: string | null;
+        aliases: string[] | null;
+        description: string | null;
+        config: Record<string, unknown> | null;
+        family_id: string | null;
+        dataset_source: string | null;
+        merged_at: string | null;
+      };
 
       const config = (row.config ?? {}) as Record<string, unknown>;
       const secondaryMuscles = Array.isArray(config.secondary_muscles)
@@ -140,15 +154,15 @@ export function useExerciseCatalogEntry(exerciseName: string | null | undefined)
           )
         : [];
 
-      const [mediaResult, variantsResult] = await Promise.all([
-        supabase
+      const [mediaResult, variantsResult] = (await Promise.all([
+        (supabase as any)
           .from("exercise_media")
           .select("id, media_type, url, is_primary, attribution")
           .eq("exercise_reference_id", row.id)
           .order("media_type")
           .order("sort_order"),
         row.family_id
-          ? supabase
+          ? (supabase as any)
               .from("exercise_reference")
               .select("id, name")
               .eq("family_id", row.family_id)
@@ -156,7 +170,21 @@ export function useExerciseCatalogEntry(exerciseName: string | null | undefined)
               .neq("id", row.id)
               .order("name")
           : Promise.resolve({ data: [] as Array<{ id: string; name: string }>, error: null }),
-      ]);
+      ])) as [
+        {
+          data:
+            | Array<{
+                id: string;
+                media_type: string | null;
+                url: string | null;
+                is_primary: boolean | null;
+                attribution: string | null;
+              }>
+            | null;
+          error: unknown;
+        },
+        { data: Array<{ id: string; name: string }> | null; error: unknown },
+      ];
       if (mediaResult.error) throw mediaResult.error;
       if (variantsResult.error) throw variantsResult.error;
 
