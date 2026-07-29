@@ -113,18 +113,19 @@ Deno.serve(async (req) => {
         return jsonResponse({ dismissed: true });
       }
       // Lecture seule — nombre de séances distinctes et d'utilisations
-      // totales par exercice, plus s'il a déjà reçu une fusion (non
-      // annulée). Passe par le service_role car `exercises` est protégé par
-      // une RLS "propriétaire uniquement" (voir docs/architecture/
+      // totales par exercice. Passe par le service_role car `exercises` est
+      // protégé par une RLS "propriétaire uniquement" (voir docs/architecture/
       // exercises-dataset-integration.md §14) : depuis le client, seule la
       // personne connectée verrait ses propres séances, jamais l'usage réel
-      // agrégé de tout Cortex.
+      // agrégé de tout Cortex. (La provenance "Fusionné" ne passe plus par
+      // ici : `exercise_reference.merged_at` — colonne lisible par tous — la
+      // porte directement, voir `deriveExerciseOrigin`.)
       case "usage_stats": {
         const ids = (body?.ids as string[] | undefined) ?? [];
         if (!Array.isArray(ids) || ids.length === 0) return jsonResponse({ stats: {} });
 
-        const stats: Record<string, { sessionCount: number; totalUses: number; hasBeenMerged: boolean }> = {};
-        for (const id of ids) stats[id] = { sessionCount: 0, totalUses: 0, hasBeenMerged: false };
+        const stats: Record<string, { sessionCount: number; totalUses: number }> = {};
+        for (const id of ids) stats[id] = { sessionCount: 0, totalUses: 0 };
 
         const { data: usageRows, error: usageError } = await supa
           .from("exercises")
@@ -141,17 +142,6 @@ Deno.serve(async (req) => {
         }
         for (const [id, sessions] of Object.entries(sessionsByExercise)) {
           stats[id].sessionCount = sessions.size;
-        }
-
-        const { data: mergeRows, error: mergeError } = await supa
-          .from("exercise_merge_log")
-          .select("kept_exercise_id")
-          .in("kept_exercise_id", ids)
-          .is("undone_at", null);
-        if (mergeError) return jsonResponse({ error: mergeError.message }, 400);
-        for (const row of mergeRows ?? []) {
-          const id = row.kept_exercise_id as string;
-          if (stats[id]) stats[id].hasBeenMerged = true;
         }
 
         return jsonResponse({ stats });

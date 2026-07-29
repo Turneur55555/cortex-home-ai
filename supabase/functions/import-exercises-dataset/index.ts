@@ -31,6 +31,7 @@ import {
 } from "../_shared/exerciseTranslations.ts";
 import { deduplicateDatasetRecords, type DedupInput } from "../_shared/exerciseDatasetDedup.ts";
 import { normalizeForMatch } from "../_shared/textNormalize.ts";
+import { requireAdminOrCron } from "../_shared/adminAuth.ts";
 
 const DATASET_SOURCE = "hasaneyldrm/exercises-dataset";
 const DATASET_JSON_URL =
@@ -115,21 +116,19 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const authHeader = req.headers.get("Authorization") ?? "";
-    const provided = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : authHeader;
-    const cronSecret = Deno.env.get("CRON_SECRET");
-    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-    const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-    if (!SERVICE_ROLE_KEY || !cronSecret) {
-      return new Response(JSON.stringify({ error: "Service indisponible" }), {
-        status: 500,
+    const auth = await requireAdminOrCron(req);
+    if (!auth.ok) {
+      return new Response(JSON.stringify({ error: auth.error }), {
+        status: auth.status,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    if (provided !== cronSecret && provided !== SERVICE_ROLE_KEY) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
+
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+    const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    if (!SERVICE_ROLE_KEY) {
+      return new Response(JSON.stringify({ error: "Service indisponible" }), {
+        status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }

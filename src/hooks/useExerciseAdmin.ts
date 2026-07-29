@@ -47,6 +47,7 @@ export interface ExerciseRow {
   is_active: boolean;
   archived_at: string | null;
   merged_into_id: string | null;
+  merged_at: string | null;
   dataset_source: string | null;
   family_id: string | null;
   created_at: string;
@@ -77,7 +78,6 @@ export interface MergeLogRow {
 export interface ExerciseUsageStats {
   sessionCount: number;
   totalUses: number;
-  hasBeenMerged: boolean;
 }
 
 export interface ExerciseMediaSummary {
@@ -87,11 +87,54 @@ export interface ExerciseMediaSummary {
 }
 
 export type ExerciseOrigin = "cortex" | "dataset" | "merged";
+export type LibraryFilter = "all" | "cortex" | "dataset" | "merged" | "archived";
 
-/** Provenance affichée (Cortex / Dataset / Fusionné) — jamais ambiguë. */
-export function deriveExerciseOrigin(row: ExerciseRow, hasBeenMerged: boolean): ExerciseOrigin {
-  if (hasBeenMerged) return "merged";
+/**
+ * Provenance affichée (Cortex / Dataset / Fusionné) — jamais ambiguë.
+ * `merged_at` (posé par `merge_exercise_references`, restauré par
+ * `undo_exercise_merge`) prévaut sur l'origine d'import d'origine : une
+ * fiche dataset qui a ensuite reçu une fusion devient "Fusionné".
+ */
+export function deriveExerciseOrigin(row: Pick<ExerciseRow, "merged_at" | "dataset_source">): ExerciseOrigin {
+  if (row.merged_at) return "merged";
   return row.dataset_source ? "dataset" : "cortex";
+}
+
+export interface LibraryStats {
+  total: number;
+  cortex: number;
+  dataset: number;
+  merged: number;
+  archived: number;
+}
+
+/** Statistiques globales de la bibliothèque — lecture directe, RLS "lisible par tous". */
+export function useLibraryStats() {
+  return useQuery({
+    queryKey: ["admin", "library-stats"],
+    queryFn: async (): Promise<LibraryStats> => {
+      const base = () =>
+        admin.from("exercise_reference").select("id", { count: "exact", head: true }).eq("discipline_id", DISCIPLINE);
+
+      const [{ count: total }, { count: archived }, { count: merged }, { count: dataset }, { count: cortex }] =
+        await Promise.all([
+          base(),
+          base().eq("is_active", false),
+          base().eq("is_active", true).not("merged_at", "is", null),
+          base().eq("is_active", true).is("merged_at", null).not("dataset_source", "is", null),
+          base().eq("is_active", true).is("merged_at", null).is("dataset_source", null),
+        ]);
+
+      return {
+        total: total ?? 0,
+        archived: archived ?? 0,
+        merged: merged ?? 0,
+        dataset: dataset ?? 0,
+        cortex: cortex ?? 0,
+      };
+    },
+    staleTime: 15_000,
+  });
 }
 
 const DISCIPLINE = "muscu";
@@ -103,20 +146,31 @@ async function invokeAdminAction<T>(body: Record<string, unknown>): Promise<T> {
   return data as T;
 }
 
-// ── Recherche ────────────────────────────────────────────────────────────
-export function useExerciseSearch(query: string, includeArchived: boolean) {
+// ── Recherche — sur toute la bibliothèque (Cortex + Dataset + Fusionnés),
+//    filtrable par provenance. "all" est le comportement par défaut :
+//    tous les exercices actifs, quelle que soit leur origine (les archivés
+//    ont leur propre filtre dédié, ils n'apparaissent jamais dans "all"). ──
+export function useExerciseSearch(query: string, filter: LibraryFilter = "all") {
   return useQuery({
-    queryKey: ["admin", "exercises", "search", query, includeArchived],
+    queryKey: ["admin", "exercises", "search", query, filter],
     queryFn: async (): Promise<ExerciseRow[]> => {
       let q = admin
         .from("exercise_reference")
         .select(
-          "id, name, category, aliases, description, config, is_active, archived_at, merged_into_id, dataset_source, family_id, created_at",
+          "id, name, category, aliases, description, config, is_active, archived_at, merged_into_id, merged_at, dataset_source, family_id, created_at",
         )
         .eq("discipline_id", DISCIPLINE)
         .order("name")
         .limit(100);
-      if (!includeArchived) q = q.eq("is_active", true);
+
+      if (filter === "archived") {
+        q = q.eq("is_active", false);
+      } else {
+        q = q.eq("is_active", true);
+        if (filter === "cortex") q = q.is("merged_at", null).is("dataset_source", null);
+        if (filter === "dataset") q = q.is("merged_at", null).not("dataset_source", "is", null);
+        if (filter === "merged") q = q.not("merged_at", "is", null);
+      }
       if (query.trim()) q = q.ilike("name", `%${query.trim()}%`);
       const { data, error } = await q;
       if (error) throw error;
@@ -156,11 +210,11 @@ export function useExerciseMedia(exerciseId: string | null) {
   });
 }
 
-// ── Statistiques d'usage (nombre de séances, utilisations totales, a déjà
-//    été fusionné) — passe par admin-exercise-actions (service_role) car
-//    `exercises` est protégé par une RLS "propriétaire uniquement" : un
-//    accès direct depuis le client n'agrégerait que les séances de la
-//    personne connectée, pas l'usage réel de tout Cortex. ────────────────
+// ── Statistiques d'usage (nombre de séances, utilisations totales) — passe
+//    par admin-exercise-actions (service_role) car `exercises` est protégé
+//    par une RLS "propriétaire uniquement" : un accès direct depuis le
+//    client n'agrégerait que les séances de la personne connectée, pas
+//    l'usage réel de tout Cortex. ─────────────────────────────────────────
 export function useExerciseUsageStats(ids: string[]) {
   const sortedIds = [...ids].sort();
   return useQuery({
@@ -250,6 +304,69 @@ export function useMergeLog() {
       }));
     },
     staleTime: 15_000,
+  });
+}
+
+export interface ImportDatasetSummary {
+  datasetRecords: number;
+  technicalDuplicatesSkipped: number;
+  skippedNoName: number;
+  createdIndependentFiches: number;
+  dryRun: boolean;
+  runId: string | null;
+  errors: string[];
+}
+
+// ── Import du dataset externe — bouton "Importer le dataset" de l'onglet
+//    dédié. dry_run:true (comportement par défaut du hook) n'écrit jamais
+//    rien, seulement un résumé ; dry_run:false crée réellement les fiches
+//    (voir import-exercises-dataset). Passe par requireAdminOrCron (même
+//    edge function que le job batch), pas admin-exercise-actions. ────────
+export function useImportDataset() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (dryRun: boolean): Promise<ImportDatasetSummary> => {
+      const { data, error } = await supabase.functions.invoke("import-exercises-dataset", {
+        body: { dry_run: dryRun },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data as ImportDatasetSummary;
+    },
+    onSuccess: (summary) => {
+      if (!summary.dryRun) {
+        qc.invalidateQueries({ queryKey: ["admin", "exercises"] });
+        qc.invalidateQueries({ queryKey: ["admin", "library-stats"] });
+      }
+    },
+  });
+}
+
+export interface DetectSimilaritiesSummary {
+  exercisesAnalyzed: number;
+  pairsFound: number;
+  dryRun: boolean;
+  written: number;
+  skippedAlreadyDecided: number;
+  errors: string[];
+}
+
+// ── Détection de similarité — bouton "Lancer la détection de similarité",
+//    typiquement après un import réel, pour peupler l'onglet "Suggestions". ─
+export function useDetectSimilarities() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (dryRun: boolean): Promise<DetectSimilaritiesSummary> => {
+      const { data, error } = await supabase.functions.invoke("detect-exercise-similarities", {
+        body: { dry_run: dryRun },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data as DetectSimilaritiesSummary;
+    },
+    onSuccess: (summary) => {
+      if (!summary.dryRun) qc.invalidateQueries({ queryKey: ["admin", "similarity-pairs"] });
+    },
   });
 }
 

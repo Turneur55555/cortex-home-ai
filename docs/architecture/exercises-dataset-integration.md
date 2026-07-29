@@ -502,3 +502,42 @@ implémentées ici :
   sur la fiche conservée (reflète exactement la logique additive `coalesce` de
   `merge_exercise_references` : seuls les champs `NULL` de la fiche conservée sont complétés,
   jamais un remplacement).
+
+## 17. Bibliothèque unique et déclenchement de l'import depuis l'UI (2026-07-29)
+
+Nathan a demandé que `/admin/exercises` devienne le centre de gestion complet de **toute** la
+bibliothèque (Cortex + Dataset + Fusionnés), pas seulement les exercices Cortex, avec filtres,
+statistiques globales et un déclenchement de l'import/de la détection de similarité directement
+depuis l'interface (jusqu'ici accessibles uniquement via des appels d'edge function server-to-server,
+CRON_SECRET/service_role).
+
+- **`exercise_reference.merged_at`** (migration `20260803120000`, nullable, additive) — horodatage
+  de la dernière fusion reçue par une fiche restée "conservée". Posé par `merge_exercise_references`
+  (enrichissement), restauré par `undo_exercise_merge`. Remplace l'ancienne détection "Fusionné" qui
+  interrogeait `exercise_merge_log` (service_role uniquement) : une colonne simple, lisible par tous
+  comme le reste de `exercise_reference`, permet de filtrer/compter côté client sans round-trip
+  service_role et reste correcte à l'échelle (contrairement à un filtrage post-fetch limité aux 100
+  lignes visibles).
+- **Taxonomie de provenance, mutuellement exclusive** : `archived` (is_active=false, prioritaire),
+  sinon `merged` (merged_at renseigné — une fiche dataset ensuite fusionnée devient "Fusionné", pas
+  "Dataset"), sinon `dataset` (dataset_source renseigné), sinon `cortex`. Utilisée à la fois pour les
+  5 filtres de la recherche (Tous/Cortex/Dataset/Fusionnés/Archivés, "Tous" par défaut) et pour le
+  bandeau de statistiques globales (`useLibraryStats`, 5 requêtes `count: 'exact', head: true`,
+  aucune limite de pagination contrairement à la liste de recherche).
+- **`requireAdminOrCron`** (`_shared/adminAuth.ts`) — passerelle commune ajoutée devant
+  `import-exercises-dataset` et `detect-exercise-similarities` : essaie d'abord le secret partagé
+  historique (CRON_SECRET/service_role, préserve l'appel batch existant), puis retombe sur
+  `requireAdminUser` (JWT utilisateur) pour permettre un déclenchement direct depuis le navigateur
+  via les nouveaux boutons "Dry-run" / "Importer le dataset" / "Lancer la détection de similarité"
+  de l'onglet "Import du dataset".
+- **Résumé pré-import honnête** : Cortex actuel, dataset à importer et doublons techniques ignorés
+  viennent directement du dry-run (`import-exercises-dataset` calcule déjà ces chiffres). "Fusions
+  potentielles" et "exercices à valider" ne sont **pas** estimés avant l'import — la philosophie
+  "bibliothèque complète" (§14.2) n'associe plus aucun score de correspondance à l'import lui-même,
+  seule la détection de similarité post-import (job séparé, jamais automatique) les calcule. Le
+  texte de l'interface le dit explicitement plutôt que d'inventer un chiffre non fiable, et un
+  bouton "Lancer la détection de similarité" apparaît juste après un import réel pour fermer la
+  boucle sans quitter la page.
+- `dry_run` reste `true` par défaut sur les deux jobs ; le bouton "Importer le dataset" exige un
+  dry-run préalable dans la session (résumé affiché) puis une confirmation explicite dans une
+  boîte de dialogue avant tout import réel.

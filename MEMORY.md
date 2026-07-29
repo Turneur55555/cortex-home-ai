@@ -1317,7 +1317,25 @@ rester manuel). Vérification faite sur les vrais workflows CI, pas une supposit
     directe côté client (`exercise_media` est lisible par tout le monde, pas besoin de service_role).
   - **`deriveExerciseOrigin`** (nouveau) : Cortex / Dataset / Fusionné — "Fusionné" si l'exercice a
     déjà reçu une fusion non annulée (`exercise_merge_log.kept_exercise_id`), sinon Dataset si
-    `dataset_source` est renseigné, sinon Cortex.
+    `dataset_source` est renseigné, sinon Cortex. **Mise à jour 2026-07-29** : remplacé par la
+    colonne `exercise_reference.merged_at` (migration `20260803120000`, posée par
+    `merge_exercise_references`/restaurée par `undo_exercise_merge`) — lisible par tous, permet un
+    filtrage/comptage 100% côté client sans passer par `exercise_merge_log` (service_role).
+- **Bibliothèque d'exercices v7 — bibliothèque unique + import depuis l'UI** (2026-07-29) :
+  - `/admin/exercises` gère désormais TOUTE la bibliothèque (Cortex + Dataset + Fusionnés), pas
+    seulement Cortex : 5 filtres (Tous par défaut/Cortex/Dataset/Fusionnés/Archivés, tous appliqués
+    server-side via `merged_at`/`dataset_source`/`is_active` — scalable, pas de filtrage post-fetch
+    limité aux 100 lignes), bandeau `useLibraryStats` (5 `count: 'exact', head: true`, sans limite).
+  - **`requireAdminOrCron`** (`_shared/adminAuth.ts`) : passerelle ajoutée devant
+    `import-exercises-dataset` et `detect-exercise-similarities` (jusqu'ici CRON_SECRET/service_role
+    uniquement) — essaie le secret partagé, retombe sur `requireAdminUser` (JWT navigateur), sans
+    rien casser côté appel batch existant.
+  - Nouvel onglet **"Import du dataset"** : résumé honnête pré-import (Cortex actuel, dataset à
+    importer, doublons techniques ignorés — tous calculés par le dry-run réel) ; **"Fusions
+    potentielles"/"à valider" ne sont volontairement PAS estimés avant import** (l'import ne fait
+    plus de scoring depuis la refonte "bibliothèque complète" §14.2 — seule la détection de
+    similarité post-import, déclenchable en un clic juste après, les calcule). Boutons Dry-run /
+    Importer le dataset (confirmation obligatoire) / Lancer la détection de similarité.
   - **Liste de recherche** (`exercises.tsx`) enrichie par ligne : badge groupe musculaire (jamais
     vide), badge provenance, badges médias (Photo/GIF/Vidéo si présents), compteur "X séances · Y
     utilisations".

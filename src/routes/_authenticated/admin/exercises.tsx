@@ -16,19 +16,22 @@ import {
   useExerciseUsageStats,
   useExerciseMediaSummary,
   useExerciseMedia,
+  useLibraryStats,
+  useImportDataset,
+  useDetectSimilarities,
   deriveExerciseOrigin,
   type ExerciseRow,
   type ExerciseOrigin,
   type ExerciseUsageStats,
   type ExerciseMediaSummary,
+  type LibraryFilter,
+  type ImportDatasetSummary,
 } from "@/hooks/useExerciseAdmin";
 import { resolveMuscleGroup } from "@/lib/fitness/muscleGroupInference";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
@@ -72,14 +75,17 @@ function AdminExercisesPage() {
       <header>
         <h1 className="text-xl font-semibold">Bibliothèque d'exercices</h1>
         <p className="text-sm text-muted-foreground">
-          Cortex reste la source de vérité — aucune fusion n'est jamais automatique.
+          Cortex reste la source de vérité — aucune fusion n'est jamais automatique. Une seule
+          bibliothèque : Cortex, Dataset et Fusionnés.
         </p>
       </header>
+      <LibraryStatsBar />
       <Tabs defaultValue="search">
         <TabsList>
           <TabsTrigger value="search">Recherche & fusion</TabsTrigger>
           <TabsTrigger value="similarity">Suggestions de similarité</TabsTrigger>
           <TabsTrigger value="history">Fusions récentes</TabsTrigger>
+          <TabsTrigger value="import">Import du dataset</TabsTrigger>
         </TabsList>
         <TabsContent value="search" className="mt-4">
           <SearchAndMergeTab />
@@ -90,7 +96,37 @@ function AdminExercisesPage() {
         <TabsContent value="history" className="mt-4">
           <HistoryTab />
         </TabsContent>
+        <TabsContent value="import" className="mt-4">
+          <ImportDatasetTab />
+        </TabsContent>
       </Tabs>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Bandeau de statistiques globales — toute la bibliothèque, tous filtres confondus
+// ─────────────────────────────────────────────────────────────────────────
+function LibraryStatsBar() {
+  const { data: stats, isLoading } = useLibraryStats();
+  if (isLoading || !stats) {
+    return <div className="text-sm text-muted-foreground">Chargement des statistiques…</div>;
+  }
+  const items: Array<{ label: string; value: number }> = [
+    { label: "Total", value: stats.total },
+    { label: "Cortex", value: stats.cortex },
+    { label: "Dataset", value: stats.dataset },
+    { label: "Fusionnés", value: stats.merged },
+    { label: "Archivés", value: stats.archived },
+  ];
+  return (
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+      {items.map((item) => (
+        <div key={item.label} className="rounded-md border p-2 text-center">
+          <div className="text-lg font-semibold">{item.value}</div>
+          <div className="text-xs text-muted-foreground">{item.label}</div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -141,14 +177,22 @@ function usageLabel(stats: ExerciseUsageStats | undefined): string {
   return `${sessionCount} séance${sessionCount > 1 ? "s" : ""} · ${totalUses} utilisation${totalUses > 1 ? "s" : ""}`;
 }
 
+const FILTER_OPTIONS: Array<{ value: LibraryFilter; label: string }> = [
+  { value: "all", label: "Tous" },
+  { value: "cortex", label: "Cortex" },
+  { value: "dataset", label: "Dataset" },
+  { value: "merged", label: "Fusionnés" },
+  { value: "archived", label: "Archivés" },
+];
+
 // ─────────────────────────────────────────────────────────────────────────
-// Onglet Recherche & fusion
+// Onglet Recherche & fusion — sur toute la bibliothèque, "Tous" par défaut
 // ─────────────────────────────────────────────────────────────────────────
 function SearchAndMergeTab() {
   const [query, setQuery] = useState("");
-  const [includeArchived, setIncludeArchived] = useState(false);
+  const [filter, setFilter] = useState<LibraryFilter>("all");
   const [selected, setSelected] = useState<ExerciseRow[]>([]);
-  const { data: results, isLoading } = useExerciseSearch(query, includeArchived);
+  const { data: results, isLoading } = useExerciseSearch(query, filter);
   const archiveMutation = useArchiveExercise();
   const restoreMutation = useRestoreExercise();
   const deleteMutation = useDeleteExercise();
@@ -170,20 +214,22 @@ function SearchAndMergeTab() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
         <Input
-          placeholder="Rechercher un exercice…"
+          placeholder="Rechercher un exercice — Cortex, dataset ou fusionné…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           className="max-w-xs"
         />
-        <div className="flex items-center gap-2">
-          <Switch
-            id="include-archived"
-            checked={includeArchived}
-            onCheckedChange={setIncludeArchived}
-          />
-          <Label htmlFor="include-archived" className="text-sm">
-            Inclure les archivés
-          </Label>
+        <div className="flex flex-wrap gap-1">
+          {FILTER_OPTIONS.map((opt) => (
+            <Button
+              key={opt.value}
+              size="sm"
+              variant={filter === opt.value ? "default" : "outline"}
+              onClick={() => setFilter(opt.value)}
+            >
+              {opt.label}
+            </Button>
+          ))}
         </div>
         {selected.length > 0 && (
           <span className="text-xs text-muted-foreground">
@@ -204,7 +250,7 @@ function SearchAndMergeTab() {
         {(results ?? []).map((row) => {
           const stats = usageStats?.[row.id];
           const media = mediaSummary?.[row.id];
-          const origin = deriveExerciseOrigin(row, stats?.hasBeenMerged ?? false);
+          const origin = deriveExerciseOrigin(row);
           const muscleGroup = resolveMuscleGroup(row, row.name);
           return (
           <div
@@ -316,9 +362,8 @@ function CompareCard({ a, b, onClose }: { a: ExerciseRow; b: ExerciseRow; onClos
   const pct = Math.round(result.score * 100);
   const { data: mediaA } = useExerciseMedia(a.id);
   const { data: mediaB } = useExerciseMedia(b.id);
-  const { data: usageStats } = useExerciseUsageStats([a.id, b.id]);
-  const originA = deriveExerciseOrigin(a, usageStats?.[a.id]?.hasBeenMerged ?? false);
-  const originB = deriveExerciseOrigin(b, usageStats?.[b.id]?.hasBeenMerged ?? false);
+  const originA = deriveExerciseOrigin(a);
+  const originB = deriveExerciseOrigin(b);
   const countsA = mediaCounts(mediaA);
   const countsB = mediaCounts(mediaB);
   const sameFamily = a.family_id !== null && a.family_id === b.family_id;
@@ -569,6 +614,151 @@ function HistoryTab() {
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Onglet Import du dataset
+// ─────────────────────────────────────────────────────────────────────────
+function ImportDatasetTab() {
+  const { data: stats } = useLibraryStats();
+  const importMutation = useImportDataset();
+  const detectMutation = useDetectSimilarities();
+  const [lastDryRun, setLastDryRun] = useState<ImportDatasetSummary | null>(null);
+  const [lastRealImport, setLastRealImport] = useState<ImportDatasetSummary | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  function runDryRun() {
+    importMutation.mutate(true, {
+      onSuccess: (summary) => setLastDryRun(summary),
+      onError: (e) => toast.error(e instanceof Error ? e.message : "Échec du dry-run."),
+    });
+  }
+
+  function runRealImport() {
+    importMutation.mutate(false, {
+      onSuccess: (summary) => {
+        setLastRealImport(summary);
+        setConfirmOpen(false);
+        toast.success(`${summary.createdIndependentFiches} exercice(s) importé(s).`);
+      },
+      onError: (e) => toast.error(e instanceof Error ? e.message : "Échec de l'import."),
+    });
+  }
+
+  function runDetection() {
+    detectMutation.mutate(false, {
+      onSuccess: (summary) =>
+        toast.success(
+          `${summary.written} suggestion(s) de similarité ajoutée(s) sur ${summary.pairsFound} paire(s) détectée(s).`,
+        ),
+      onError: (e) => toast.error(e instanceof Error ? e.message : "Échec de la détection."),
+    });
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Importer le dataset externe</CardTitle>
+          <CardDescription>
+            Chaque exercice du dataset devient une fiche indépendante (hors doublons techniques
+            évidents) — jamais une fusion automatique avec un exercice Cortex existant. Les
+            similarités éventuelles se consultent ensuite depuis l'onglet "Suggestions de
+            similarité", jamais appliquées sans validation manuelle.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <div className="rounded-md border p-2 text-center">
+              <div className="text-lg font-semibold">{stats?.cortex ?? "—"}</div>
+              <div className="text-xs text-muted-foreground">Exercices Cortex (actuel)</div>
+            </div>
+            <div className="rounded-md border p-2 text-center">
+              <div className="text-lg font-semibold">
+                {lastDryRun?.createdIndependentFiches ?? "—"}
+              </div>
+              <div className="text-xs text-muted-foreground">Dataset à importer</div>
+            </div>
+            <div className="rounded-md border p-2 text-center">
+              <div className="text-lg font-semibold">
+                {lastDryRun?.technicalDuplicatesSkipped ?? "—"}
+              </div>
+              <div className="text-xs text-muted-foreground">Doublons techniques ignorés</div>
+            </div>
+          </div>
+
+          {!lastDryRun && (
+            <p className="text-xs text-muted-foreground">
+              Lance d'abord un dry-run pour voir le résumé exact avant tout import réel — aucune
+              écriture n'a lieu tant que l'import réel n'est pas explicitement confirmé.
+            </p>
+          )}
+
+          {lastDryRun && (
+            <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
+              Dernier dry-run : {lastDryRun.datasetRecords} enregistrements analysés,{" "}
+              {lastDryRun.createdIndependentFiches} nouvelle(s) fiche(s) seraient créées,{" "}
+              {lastDryRun.technicalDuplicatesSkipped} doublon(s) technique(s) ignoré(s)
+              {lastDryRun.skippedNoName > 0 && `, ${lastDryRun.skippedNoName} sans nom ignoré(s)`}.
+              Les fusions potentielles et exercices à valider se calculent après l'import via la
+              détection de similarité (bouton ci-dessous).
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={runDryRun} disabled={importMutation.isPending}>
+              Dry-run
+            </Button>
+            <Button
+              onClick={() => setConfirmOpen(true)}
+              disabled={!lastDryRun || importMutation.isPending}
+            >
+              Importer le dataset
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {lastRealImport && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Import terminé</CardTitle>
+            <CardDescription>
+              {lastRealImport.createdIndependentFiches} fiche(s) créée(s). Lance la détection de
+              similarité pour peupler l'onglet "Suggestions de similarité" avec ces nouveaux
+              exercices.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={runDetection} disabled={detectMutation.isPending}>
+              Lancer la détection de similarité
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Importer réellement le dataset ?</DialogTitle>
+            <DialogDescription>
+              {lastDryRun?.createdIndependentFiches} fiche(s) indépendante(s) vont être créées dans
+              la bibliothèque (aucun exercice Cortex existant n'est modifié ni fusionné). Cette
+              opération est journalisée et peut être restaurée exactement en cas de besoin.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmOpen(false)}>
+              Annuler
+            </Button>
+            <Button onClick={runRealImport} disabled={importMutation.isPending}>
+              Confirmer l'import réel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

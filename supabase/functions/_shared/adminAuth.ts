@@ -74,3 +74,24 @@ export async function requireAdminUser(req: Request): Promise<AdminAuthResult | 
 
   return { ok: true, userId: data.user.id, email: data.user.email! };
 }
+
+/**
+ * Passerelle commune pour les jobs historiquement CRON_SECRET/service_role
+ * (import-exercises-dataset, detect-exercise-similarities) qui doivent
+ * désormais aussi être déclenchables depuis l'interface d'administration par
+ * un utilisateur Cortex authentifié (bouton "Importer le dataset" / "Lancer
+ * la détection de similarité"). Essaie d'abord le pattern batch existant
+ * (secret partagé), puis retombe sur `requireAdminUser` (JWT utilisateur) —
+ * aucun des deux appelants historiques (cron GitHub Actions, futur) n'est
+ * cassé, le navigateur passe simplement par la seconde branche.
+ */
+export async function requireAdminOrCron(req: Request): Promise<AdminAuthResult | AdminAuthFailure> {
+  const authHeader = req.headers.get("Authorization") ?? "";
+  const provided = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : authHeader;
+  const cronSecret = Deno.env.get("CRON_SECRET");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if ((cronSecret && provided === cronSecret) || (serviceRoleKey && provided === serviceRoleKey)) {
+    return { ok: true, userId: "service", email: "service-role@cron" };
+  }
+  return requireAdminUser(req);
+}
