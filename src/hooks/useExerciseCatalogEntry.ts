@@ -194,7 +194,7 @@ export function useExerciseCatalogEntry(exerciseName: string | null | undefined)
           id: m.id,
           type: m.media_type as ExerciseMediaItem["type"],
           url: m.url,
-          isPrimary: m.is_primary,
+          isPrimary: !!m.is_primary,
           attribution: m.attribution,
         }));
 
