@@ -1169,6 +1169,7 @@ export type Database = {
           id: string
           is_active: boolean
           media: Json | null
+          merged_at: string | null
           merged_into_id: string | null
           name: string
           sort_order: number | null
@@ -1189,6 +1190,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           media?: Json | null
+          merged_at?: string | null
           merged_into_id?: string | null
           name: string
           sort_order?: number | null
@@ -1209,6 +1211,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           media?: Json | null
+          merged_at?: string | null
           merged_into_id?: string | null
           name?: string
           sort_order?: number | null
