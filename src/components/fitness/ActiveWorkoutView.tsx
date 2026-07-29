@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { BookOpen, CheckCircle2, Flame, Loader2, MoreVertical, XCircle } from "lucide-react";
+import { BookOpen, CheckCircle2, Loader2, MoreVertical, XCircle } from "lucide-react";
 import type { ActiveWorkout } from "@/hooks/use-fitness";
 import {
   useAddExerciseToActiveWorkout,
@@ -10,7 +10,6 @@ import {
 } from "@/hooks/use-fitness";
 import type { MuscleId } from "@/lib/fitness/muscleMapping";
 import type { MuscleRecovery } from "@/lib/fitness/recovery";
-import { useFitnessStreak } from "@/hooks/useFitnessStreak";
 import { WorkoutTimer } from "./WorkoutTimer";
 import { ActiveExerciseCard } from "./exerciseCard/ActiveExerciseCard";
 import { AddExerciseButton } from "./exerciseCard/ExerciseCardPrimitives";
@@ -49,8 +48,6 @@ export function ActiveWorkoutView({
   const cancel = useCancelWorkout();
   const addExercise = useAddExerciseToActiveWorkout();
   const { data: allWorkouts } = useWorkouts();
-
-  const streak = useFitnessStreak(allWorkouts);
 
   const { data: userPhotos } = useUserExercisePhotos();
 
@@ -132,124 +129,72 @@ export function ActiveWorkoutView({
     await cancel.mutateAsync(workout.id);
   };
 
-  const totalSeries = (workout.exercises ?? []).reduce(
-    (acc, ex) => acc + (ex.exercise_sets?.length ?? 0),
-    0,
-  );
-
   return (
     <div className="flex flex-col gap-4">
-      {/* ── Header card ── */}
-      <div className="relative overflow-hidden rounded-3xl border border-white/5 bg-gradient-to-b from-card/95 to-card/70 shadow-[0_10px_40px_-15px_rgba(0,0,0,0.6)] backdrop-blur-xl">
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-primary/12 to-transparent"
-        />
-
-        <div className="relative px-5 pt-5 pb-4">
-          {/* Top row */}
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                {/* Live pulse */}
-                <span className="relative flex h-2.5 w-2.5 shrink-0">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
-                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-green-400" />
-                </span>
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-green-400">
-                  Séance en cours
-                </span>
-                {/* Streak badge motivationnel */}
-                {streak.current > 0 && (
-                  <span className="inline-flex items-center gap-0.5 rounded-full bg-orange-500/15 px-2 py-0.5 text-[10px] font-bold text-orange-400">
-                    <Flame className="h-3 w-3" />
-                    {streak.current} sem.
-                  </span>
-                )}
-              </div>
-              <h2 className="mt-1 text-xl font-bold leading-tight tracking-tight">
-                {workout.name}
-              </h2>
-              {workout.gym_location && workout.gym_location !== "Salle inconnue" && (
-                <p className="mt-0.5 text-sm text-muted-foreground">{workout.gym_location}</p>
-              )}
+      {/* ── Bandeau de séance — V2 (2026-07-29) : ~45% plus bas qu'avant.
+          Uniquement statut, nom, timer, bouton Terminer, menu — les
+          cartes d'exercices doivent commencer beaucoup plus haut. ── */}
+      <div className="relative overflow-hidden rounded-2xl border border-white/5 bg-gradient-to-b from-card/95 to-card/70 shadow-[0_6px_24px_-14px_rgba(0,0,0,0.6)] backdrop-blur-xl">
+        <div className="relative flex items-center justify-between gap-3 px-4 py-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5">
+              <span className="relative flex h-2 w-2 shrink-0">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-green-400" />
+              </span>
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-green-400">
+                Séance en cours
+              </span>
             </div>
-
-            {/* Timer + menu */}
-            <div className="flex shrink-0 items-center gap-2">
-              <WorkoutTimer createdAt={workout.created_at} />
-              <button
-                type="button"
-                onClick={() => setMenuOpen((v) => !v)}
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-white/5 text-muted-foreground transition-all active:scale-90"
-                aria-label="Menu séance"
-              >
-                <MoreVertical className="h-4 w-4" />
-              </button>
-            </div>
+            <h2 className="mt-0.5 truncate text-[15px] font-bold leading-tight tracking-tight">
+              {workout.name}
+            </h2>
           </div>
 
-          {/* Stats mini */}
-          <div className="mt-3 flex gap-3 text-[11px] text-muted-foreground">
-            <span>
-              <strong className="text-foreground">{(workout.exercises ?? []).length}</strong>{" "}
-              exercice{(workout.exercises ?? []).length > 1 ? "s" : ""}
-            </span>
-            <span>·</span>
-            <span>
-              <strong className="text-foreground">{totalSeries}</strong> série
-              {totalSeries > 1 ? "s" : ""}
-            </span>
-          </div>
-
-          {/* Dropdown menu */}
-          {menuOpen && (
-            <div
-              className="absolute right-4 top-14 z-20 min-w-[180px] overflow-hidden rounded-2xl border border-border bg-card shadow-elevated"
-              onBlur={() => setMenuOpen(false)}
+          <div className="flex shrink-0 items-center gap-2">
+            <WorkoutTimer createdAt={workout.created_at} />
+            <button
+              type="button"
+              onClick={handleFinish}
+              disabled={finish.isPending}
+              className="flex h-8 items-center gap-1.5 rounded-full bg-gradient-primary px-3 text-[12px] font-semibold text-primary-foreground shadow-glow disabled:opacity-50"
             >
-              <button
-                type="button"
-                onClick={() => {
-                  setMenuOpen(false);
-                  handleFinish();
-                }}
-                className="flex w-full items-center gap-3 px-4 py-3 text-sm font-medium transition-colors hover:bg-primary/10"
-              >
-                <CheckCircle2 className="h-4 w-4 text-green-400" />
-                Terminer la séance
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setMenuOpen(false);
-                  setConfirmCancel(true);
-                }}
-                className="flex w-full items-center gap-3 border-t border-border px-4 py-3 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10"
-              >
-                <XCircle className="h-4 w-4" />
-                Annuler la séance
-              </button>
-            </div>
-          )}
+              {finish.isPending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <CheckCircle2 className="h-3.5 w-3.5" />
+              )}
+              Terminer
+            </button>
+            <button
+              type="button"
+              onClick={() => setMenuOpen((v) => !v)}
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-white/5 text-muted-foreground transition-all active:scale-90"
+              aria-label="Menu séance"
+            >
+              <MoreVertical className="h-4 w-4" />
+            </button>
+          </div>
         </div>
 
-        {/* Primary CTA */}
-        <div className="px-5 pb-5">
-          <button
-            type="button"
-            onClick={handleFinish}
-            disabled={finish.isPending}
-            className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-primary text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-50"
+        {menuOpen && (
+          <div
+            className="absolute right-4 top-12 z-20 min-w-[180px] overflow-hidden rounded-2xl border border-border bg-card shadow-elevated"
+            onBlur={() => setMenuOpen(false)}
           >
-            {finish.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <CheckCircle2 className="h-4 w-4" />
-            )}
-            Terminer la séance
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={() => {
+                setMenuOpen(false);
+                setConfirmCancel(true);
+              }}
+              className="flex w-full items-center gap-3 px-4 py-3 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10"
+            >
+              <XCircle className="h-4 w-4" />
+              Annuler la séance
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ── Confirm cancel ── */}

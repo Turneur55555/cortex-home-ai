@@ -64,16 +64,6 @@ export function rankTextGlow(glow: string, blur: number, extra?: string): string
   return extra ? `0 0 ${blur}px ${glow}, ${extra}` : `0 0 ${blur}px ${glow}`;
 }
 
-/** Fond + texte d'un badge discret teinté par le rang (pill compacte, sans
- *  halo ni relief — pour les endroits où seule une couleur plate suffit,
- *  ex. la carte de séance). */
-export function rankBadgeStyle(
-  theme: Pick<RankTheme, "primary" | "secondary">,
-  alphaHex = "22",
-): { background: string; color: string } {
-  return { background: `${theme.primary}${alphaHex}`, color: theme.secondary };
-}
-
 /**
  * Grain de matériau — bruit procédural partagé par les 6 rangs (une seule
  * texture, jamais réinventée par rang : ce qui différencie le "métal" perçu

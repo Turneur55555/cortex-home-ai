@@ -10,7 +10,7 @@
 import { useRef } from "react";
 import { Camera, ChevronDown, Dumbbell, Loader2, Plus, type LucideIcon } from "lucide-react";
 import type { RankState } from "@/lib/fitness/exerciseRanks";
-import { rankBadgeStyle } from "@/components/rpg/rankTheme";
+import { rankTextGlow } from "@/components/rpg/rankTheme";
 
 // ─── Carte ───────────────────────────────────────────────────────────────────
 //
@@ -20,7 +20,7 @@ import { rankBadgeStyle } from "@/components/rpg/rankTheme";
 
 export function ExerciseCardContainer({ children }: { children: React.ReactNode }) {
   return (
-    <div className="overflow-hidden rounded-[20px] border border-white/5 bg-surface/80 p-3 shadow-[0_4px_24px_-12px_rgba(0,0,0,0.5)] animate-in fade-in slide-in-from-bottom-2 duration-300">
+    <div className="overflow-hidden rounded-[18px] border border-white/5 bg-surface/80 p-2.5 shadow-[0_4px_24px_-12px_rgba(0,0,0,0.5)] animate-in fade-in slide-in-from-bottom-2 duration-300">
       {children}
     </div>
   );
@@ -56,7 +56,7 @@ export function ExercisePhotoTile({
   const fileRef = useRef<HTMLInputElement>(null);
   const displayUrl = datasetPhotoUrl ?? datasetGifUrl ?? imageUrl;
   return (
-    <div className="relative h-16 w-16 shrink-0">
+    <div className="relative h-20 w-20 shrink-0">
       <button
         type="button"
         onClick={onOpenPreview}
@@ -66,7 +66,7 @@ export function ExercisePhotoTile({
         {displayUrl ? (
           <img src={displayUrl} alt={name} className="h-full w-full object-cover" loading="lazy" />
         ) : (
-          <Dumbbell className="h-6 w-6 text-primary/70" />
+          <Dumbbell className="h-7 w-7 text-primary/70" />
         )}
       </button>
       <button
@@ -98,19 +98,21 @@ export function ExercisePhotoTile({
   );
 }
 
-// ─── Badges discrets ─────────────────────────────────────────────────────────
+// ─── Identité de rang ────────────────────────────────────────────────────────
 
-/** Badge de rang RPG — une pill élégante et discrète (pas une carte), teintée
- *  par la couleur officielle du rang via rankTheme (jamais une couleur
- *  réassemblée à la main). */
-export function RankBadgePill({ rank }: { rank: RankState }) {
+/** Rang RPG — l'identité de l'exercice (V3, 2026-07-29) : seul sur sa ligne,
+ *  sous le nom, dans la couleur officielle du rang avec la même lueur de
+ *  texte que la carte de rang complète (rankTextGlow, ExerciseRankCard) —
+ *  jamais une couleur réassemblée à la main. */
+export function RankNameLine({ rank }: { rank: RankState }) {
+  const { colors } = rank.rank;
   return (
-    <span
-      className="inline-flex items-center rounded-full px-1.5 py-0 text-[9px] font-bold uppercase leading-[16px] tracking-wider"
-      style={rankBadgeStyle(rank.rank.colors)}
+    <p
+      className="text-[13px] font-extrabold uppercase leading-tight tracking-[0.1em]"
+      style={{ color: colors.text, textShadow: rankTextGlow(colors.glow, 10) }}
     >
       {rank.rank.label}
-    </span>
+    </p>
   );
 }
 

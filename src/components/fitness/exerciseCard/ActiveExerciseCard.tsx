@@ -97,7 +97,7 @@ import {
   ExerciseCardSetRow,
   ExerciseCardStatField,
   ExercisePhotoTile,
-  RankBadgePill,
+  RankNameLine,
 } from "./ExerciseCardPrimitives";
 
 // ─── Props publiques : un seul composant, discriminé par discipline ────────
@@ -435,27 +435,26 @@ function MuscuExerciseCard({
   const handleDeleteSet = (id: string) => deleteSet.mutate(id);
   const handleDeleteExercise = () => deleteExercises.mutate([exercise.id]);
 
-  // Carte de séance V3 (2026-07-29, retour de Nathan) — séparation stricte
-  // saisie/consultation : la carte ne sert QU'À enregistrer les séries.
-  // En-tête réduit à rang + record + nombre de séries effectuées. Tout le
-  // reste (groupe musculaire, équipement, type, badges, historique...)
-  // n'existe plus que dans la fiche détaillée (bouton statistiques →
-  // ExerciseSheet) — jamais dupliqué ici.
+  // Carte de séance V4 (2026-07-29, retour de Nathan) — hiérarchie verticale
+  // stricte sous le nom : Rang (identité de l'exercice, seul sur sa ligne,
+  // grand et lumineux) → Record → Séries. Plus jamais tout sur une seule
+  // ligne. Le reste (groupe musculaire, équipement, type, historique...)
+  // n'existe que dans la fiche détaillée (bouton statistiques → ExerciseSheet).
   const badges = (
-    <>
-      {rank && <RankBadgePill rank={rank} />}
+    <div className="mt-0.5 w-full space-y-0.5">
+      {rank && <RankNameLine rank={rank} />}
       {isPR && (
-        <span className="inline-flex items-center gap-1 rounded-full bg-warning/15 px-1.5 py-0 text-[9px] font-bold leading-[16px] text-warning">
-          <Trophy className="h-2.5 w-2.5" />
+        <p className="flex items-center gap-1 text-[11px] font-semibold text-warning">
+          <Trophy className="h-3 w-3" />
           {isNewPR ? "Nouveau record" : `Record ${pr} kg`}
-        </span>
+        </p>
       )}
       {sortedSets.length > 0 && (
-        <span className="inline-flex items-center gap-1 rounded-full bg-white/5 px-1.5 py-0 text-[9px] font-medium leading-[16px] text-muted-foreground">
-          {doneCount}/{sortedSets.length} série{sortedSets.length > 1 ? "s" : ""}
-        </span>
+        <p className="text-[11px] text-muted-foreground tabular-nums">
+          {doneCount} / {sortedSets.length} série{sortedSets.length > 1 ? "s" : ""}
+        </p>
       )}
-    </>
+    </div>
   );
 
   return (

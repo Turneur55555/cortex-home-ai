@@ -17,7 +17,7 @@ export function WorkoutTimer({ createdAt }: { createdAt: string }) {
     return () => clearInterval(id);
   }, []);
   return (
-    <div className="rounded-xl border border-border bg-white/5 px-4 py-2 text-2xl font-bold tabular-nums leading-none">
+    <div className="flex h-8 items-center rounded-lg border border-border bg-white/5 px-2.5 text-[13px] font-bold tabular-nums leading-none">
       {computeElapsed(createdAt)}
     </div>
   );
