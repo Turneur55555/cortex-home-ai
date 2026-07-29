@@ -1,14 +1,14 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion, useMotionValue, useTransform, type PanInfo } from "framer-motion";
 import { ChevronLeft, Pencil, Plus, Star, Trash2, Zap } from "lucide-react";
 import { Portal } from "@/components/Portal";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useExerciseAnalysis } from "@/hooks/useExerciseAnalysis";
 import { useExerciseCatalogEntry } from "@/hooks/useExerciseCatalogEntry";
-import { exerciseDifficulty } from "@/lib/fitness/exerciseRanks";
-import { RELEVANCE_LABELS } from "@/lib/fitness/analysis";
+import { deriveExerciseBadges } from "@/lib/fitness/exerciseBadges";
 import { ExerciseActionsMenu, type ExerciseMenuAction } from "./ExerciseActionsMenu";
-import { StarRating } from "./ExerciseAnalysisPrimitives";
-import { ExerciseMediaSection } from "./exercise-sheet/ExerciseMedia";
+import { ExerciseHero } from "./exercise-sheet/ExerciseHero";
+import { ExerciseMediaGrid } from "./exercise-sheet/ExerciseMedia";
 import { ExercisePresentationCard } from "./exercise-sheet/ExercisePresentation";
 import { ExerciseTechniqueCard, ExerciseMistakesCard } from "./exercise-sheet/ExerciseTechnique";
 import { ExerciseMuscleSection } from "./exercise-sheet/ExerciseMuscleSection";
@@ -21,13 +21,13 @@ import {
 import { ExerciseAIAdviceCard } from "./exercise-sheet/ExerciseAIAdvice";
 
 // ============================================================
-// Fiche exercice — nouvelle génération (2026-07-29). Remplace
-// ExerciseAnalysisSheet + ExerciseDiscoveryPage : une seule expérience,
-// identique quelle que soit l'origine de l'exercice (Cortex, importé du
-// dataset, fusionné) et quel que soit son historique (déjà pratiqué ou
-// non). Le média (photo/GIF/vidéo du dataset) est l'élément principal de
-// la page ; toutes les sections omettent silencieusement les données
-// absentes plutôt que d'en inventer (voir composants de
+// Fiche exercice — 2e itération (2026-07-29). Le Hero (média + rang RPG)
+// reste toujours visible au-dessus, sans scroll : le rang est la
+// récompense principale du joueur, il doit se voir immédiatement à
+// l'ouverture. Le reste de la fiche est organisé en onglets (inspiré de
+// "Mes aliments" — @/components/ui/tabs) plutôt qu'un long scroll unique.
+// Un onglet dont le contenu serait entièrement vide n'apparaît pas — aucune
+// section vide affichée, jamais de donnée inventée (voir composants de
 // exercise-sheet/ pour le détail par section).
 // ============================================================
 
@@ -40,6 +40,8 @@ export interface ExerciseSheetActions {
   onDelete?: () => void;
   onPromote?: () => void;
 }
+
+type SheetTab = "overview" | "technique" | "muscles" | "progression" | "media" | "variants";
 
 export function ExerciseSheet({
   exerciseName,
@@ -123,20 +125,46 @@ export function ExerciseSheet({
   }, [actions, primaryActionFn, primaryActionLabel]);
 
   // Badges du Hero — dérivés de signaux déjà validés ailleurs (moteur
-  // d'analyse + catalogue), jamais un champ fabriqué : groupe musculaire
-  // (catalogue), équipement (dataset), polyarticulaire/isolation (moteur de
-  // difficulté déjà utilisé par computePhysicalImpact), traits physiques
-  // dominants (score ≥ 60).
+  // d'analyse + catalogue), jamais un champ fabriqué (voir lib/fitness/exerciseBadges).
   const heroBadges = useMemo(() => {
-    const chips: string[] = [];
-    if (catalog?.category) chips.push(catalog.category);
-    if (catalog?.equipment) chips.push(catalog.equipment);
-    chips.push(exerciseDifficulty(exerciseName) >= 1.4 ? "Polyarticulaire" : "Isolation");
+    const chips = deriveExerciseBadges(exerciseName, {
+      category: catalog?.category,
+      equipment: catalog?.equipment,
+    });
     for (const t of analysis?.physicalImpact ?? []) {
       if (t.score >= 60 && !chips.includes(t.label)) chips.push(t.label);
     }
     return chips.slice(0, 5);
   }, [catalog, analysis, exerciseName]);
+
+  // Contenu de chaque onglet — un onglet dont le contenu serait entièrement
+  // vide (aucune donnée) n'apparaît pas dans la barre.
+  const hasTechnique = (catalog?.instructionSteps.length ?? 0) > 0;
+  const hasMuscles = (analysis?.muscles.length ?? 0) > 0 || !!catalog?.equipment;
+  const hasMedia = (catalog?.media.length ?? 0) > 0;
+  const hasVariants = (catalog?.variants.length ?? 0) > 0 || (similarExercises?.length ?? 0) > 0;
+
+  const availableTabs = useMemo(() => {
+    const list: SheetTab[] = ["overview"];
+    if (hasTechnique) list.push("technique");
+    if (hasMuscles) list.push("muscles");
+    list.push("progression");
+    if (hasMedia) list.push("media");
+    if (hasVariants) list.push("variants");
+    return list;
+  }, [hasTechnique, hasMuscles, hasMedia, hasVariants]);
+
+  const [tab, setTab] = useState<SheetTab>("overview");
+  const activeTab = availableTabs.includes(tab) ? tab : availableTabs[0];
+
+  const TAB_LABELS: Record<SheetTab, string> = {
+    overview: "Vue d'ensemble",
+    technique: "Technique",
+    muscles: "Muscles",
+    progression: "Progression",
+    media: "Médias",
+    variants: "Variantes",
+  };
 
   // Page plein écran (transition push iOS + swipe-back).
   const dragX = useMotionValue(0);
@@ -214,70 +242,87 @@ export function ExerciseSheet({
                 "calc(var(--bottom-nav-height, 5.75rem) + env(safe-area-inset-bottom) + 2rem)",
             }}
           >
-            {/* Hero média — toujours en premier, badges dérivés dedans */}
-            <ExerciseMediaSection
+            {/* Hero — média + rang, toujours visible en premier, avant tout scroll */}
+            <ExerciseHero
               exerciseName={exerciseName}
               media={catalog?.media ?? []}
               fallbackImageUrl={imageUrl}
-              badges={heroBadges.map((label) => (
-                <span
-                  key={label}
-                  className="rounded-full bg-white/15 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white backdrop-blur-sm"
-                >
-                  {label}
-                </span>
-              ))}
+              badges={heroBadges}
+              aliases={catalog?.aliases ?? []}
+              analysis={analysis}
             />
 
-            {catalog && catalog.aliases.length > 0 && (
-              <p className="-mt-2 text-center text-[10.5px] text-muted-foreground">
-                Aussi appelé : {catalog.aliases.join(", ")}
-              </p>
-            )}
+            {/* Onglets — le reste de la fiche, jamais un long scroll unique */}
+            <Tabs value={activeTab} onValueChange={(v) => setTab(v as SheetTab)}>
+              <TabsList className="h-auto w-full justify-start gap-1 overflow-x-auto bg-transparent p-0">
+                {availableTabs.map((t) => (
+                  <TabsTrigger
+                    key={t}
+                    value={t}
+                    className="shrink-0 rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-semibold data-[state=active]:border-primary data-[state=active]:bg-primary/15 data-[state=active]:text-primary data-[state=active]:shadow-none"
+                  >
+                    {TAB_LABELS[t]}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
 
-            {analysis && (
-              <div className="flex items-center justify-between rounded-2xl border border-primary/20 bg-primary/[0.06] px-4 py-2.5">
-                <StarRating stars={analysis.relevance.stars} />
-                <span className="rounded-full bg-primary/15 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
-                  {RELEVANCE_LABELS[analysis.relevance.label]}
-                </span>
-              </div>
-            )}
+              <TabsContent value="overview" className="mt-4 space-y-4">
+                <ExercisePresentationCard
+                  description={catalog?.description ?? null}
+                  smartSummary={analysis?.smartSummary}
+                />
+                {analysis && <ExerciseAIAdviceCard analysis={analysis} />}
+              </TabsContent>
 
-            <ExercisePresentationCard
-              description={catalog?.description ?? null}
-              smartSummary={analysis?.smartSummary}
-            />
+              {hasTechnique && (
+                <TabsContent value="technique" className="mt-4 space-y-4">
+                  <ExerciseTechniqueCard steps={catalog?.instructionSteps ?? []} />
+                  <ExerciseMistakesCard />
+                </TabsContent>
+              )}
 
-            <ExerciseTechniqueCard steps={catalog?.instructionSteps ?? []} />
-            <ExerciseMistakesCard />
+              {hasMuscles && (
+                <TabsContent value="muscles" className="mt-4 space-y-4">
+                  <ExerciseMuscleSection
+                    muscles={analysis?.muscles ?? []}
+                    equipment={catalog?.equipment}
+                  />
+                  <ExercisePhysicalImpactCard impact={analysis?.physicalImpact ?? []} />
+                </TabsContent>
+              )}
 
-            <ExerciseMuscleSection
-              muscles={analysis?.muscles ?? []}
-              equipment={catalog?.equipment}
-            />
+              <TabsContent value="progression" className="mt-4 space-y-4">
+                {sessionCount > 0 ? (
+                  <ExerciseProgressionSection
+                    exerciseName={exerciseName}
+                    weightHistory={weightHistory}
+                    volumeHistory={volumeHistory}
+                    pr={pr}
+                    analysis={analysis}
+                  />
+                ) : (
+                  <div className="rounded-2xl border border-border bg-surface/60 p-4 text-center text-xs text-muted-foreground">
+                    Pas encore pratiqué — lance-toi pour débloquer la progression et les records.
+                  </div>
+                )}
+              </TabsContent>
 
-            <ExercisePhysicalImpactCard impact={analysis?.physicalImpact ?? []} />
+              {hasMedia && (
+                <TabsContent value="media" className="mt-4">
+                  <ExerciseMediaGrid exerciseName={exerciseName} media={catalog?.media ?? []} />
+                </TabsContent>
+              )}
 
-            {sessionCount > 0 ? (
-              <ExerciseProgressionSection
-                exerciseName={exerciseName}
-                weightHistory={weightHistory}
-                volumeHistory={volumeHistory}
-                pr={pr}
-                analysis={analysis}
-              />
-            ) : (
-              <div className="rounded-2xl border border-border bg-surface/60 p-4 text-center text-xs text-muted-foreground">
-                Pas encore pratiqué — lance-toi pour débloquer le rang, la progression et les
-                records.
-              </div>
-            )}
-
-            {analysis && <ExerciseAIAdviceCard analysis={analysis} />}
-
-            <ExerciseVariantsCard variants={catalog?.variants ?? []} onSelect={onSelectSimilar} />
-            <ExerciseSimilarCard items={similarExercises ?? []} onSelect={onSelectSimilar} />
+              {hasVariants && (
+                <TabsContent value="variants" className="mt-4 space-y-4">
+                  <ExerciseVariantsCard
+                    variants={catalog?.variants ?? []}
+                    onSelect={onSelectSimilar}
+                  />
+                  <ExerciseSimilarCard items={similarExercises ?? []} onSelect={onSelectSimilar} />
+                </TabsContent>
+              )}
+            </Tabs>
 
             {primaryActionLabel && primaryActionFn && (
               <button

@@ -15,6 +15,7 @@ export type DbCatalogRow = {
   aliases?: string[] | null;
   media?: unknown;
   description?: string | null;
+  config?: { equipment?: string | null } | null;
 };
 
 const CACHE_KEY = ["fitness", "exercise-catalog"] as const;

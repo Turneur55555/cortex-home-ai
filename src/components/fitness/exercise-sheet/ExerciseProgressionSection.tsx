@@ -15,15 +15,13 @@ import { useExerciseSetHistory } from "@/hooks/useExerciseSetHistory";
 import { buildSessionStats, currentBests } from "@/lib/fitness/progression";
 import { formatTonnage } from "@/lib/fitness/strength";
 import { SectionCard, StatTileMini, TrendIcon } from "../ExerciseAnalysisPrimitives";
-import { ExerciseRankCard } from "../ExerciseRankCard";
 import type { ExerciseAnalysis } from "@/lib/fitness/analysis";
 
 // ============================================================
-// Progression personnelle — rang RPG, maîtrise, graphiques, records,
-// comparaison à la séance précédente, historique de séries. Reprend le
-// moteur existant (buildSessionStats/currentBests, ExerciseRankCard) sans
-// changement de logique, uniquement une présentation cohérente avec le
-// reste de la nouvelle fiche.
+// Progression personnelle — graphiques, records, comparaison à la séance
+// précédente, historique de séries. Le rang RPG (ExerciseRankCard) est
+// affiché dans le Hero de la fiche, pas ici — cette section ne montre que
+// le détail chiffré, pas le rang lui-même (évite la double apparition).
 // ============================================================
 
 type Tab = "weight" | "volume" | "1rm";
@@ -111,8 +109,6 @@ export function ExerciseProgressionSection({
 
   return (
     <div className="space-y-4">
-      <ExerciseRankCard exerciseName={exerciseName} />
-
       <div className="flex gap-1 rounded-xl bg-surface p-1">
         {tabs.map((t) => (
           <button

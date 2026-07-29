@@ -141,6 +141,77 @@ export function ExerciseMediaSection({
   );
 }
 
+// ============================================================
+// Grille "Médias" (onglet dédié) — regroupe Photos / GIF / Vidéos par
+// type, chaque miniature ouvre le même plein écran swipeable que le Hero.
+// Masquée entièrement par l'appelant quand `media` est vide (aucune donnée
+// inventée).
+// ============================================================
+
+const MEDIA_GROUP_LABEL: Record<ExerciseMediaItem["type"], string> = {
+  image: "Photos",
+  gif: "GIF",
+  video: "Vidéos",
+};
+
+export function ExerciseMediaGrid({
+  exerciseName,
+  media,
+}: {
+  exerciseName: string;
+  media: ExerciseMediaItem[];
+}) {
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const items = useMemo(() => sortMedia(media), [media]);
+
+  if (items.length === 0) return null;
+
+  const groups: Array<[ExerciseMediaItem["type"], ExerciseMediaItem[]]> = (
+    ["image", "gif", "video"] as const
+  )
+    .map(
+      (type) =>
+        [type, items.filter((m) => m.type === type)] as [
+          ExerciseMediaItem["type"],
+          ExerciseMediaItem[],
+        ],
+    )
+    .filter(([, list]) => list.length > 0);
+
+  return (
+    <div className="space-y-4">
+      {groups.map(([type, list]) => (
+        <div key={type}>
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+            {MEDIA_GROUP_LABEL[type]} ({list.length})
+          </p>
+          <div className="grid grid-cols-3 gap-2">
+            {list.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setLightboxIndex(items.indexOf(item))}
+                className="relative aspect-square overflow-hidden rounded-xl ring-1 ring-white/10"
+              >
+                <MediaFrame item={item} className="h-full w-full object-cover" />
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+
+      {lightboxIndex != null && (
+        <MediaLightbox
+          items={items}
+          exerciseName={exerciseName}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
+      )}
+    </div>
+  );
+}
+
 function MediaLightbox({
   items,
   fallbackImageUrl,

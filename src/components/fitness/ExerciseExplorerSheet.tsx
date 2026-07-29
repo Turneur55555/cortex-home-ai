@@ -31,6 +31,8 @@ import {
   type DbCatalogRow,
 } from "@/hooks/useExerciseCatalog";
 import { useUserExercisePhotos } from "@/hooks/useUserExercisePhotos";
+import { useExerciseCatalogMedia } from "@/hooks/useExerciseCatalogEntry";
+import { deriveExerciseBadges } from "@/lib/fitness/exerciseBadges";
 import {
   useActiveWorkout,
   useAddExerciseToActiveWorkout,
@@ -164,6 +166,7 @@ export function ExerciseExplorerSheet({
 }: ExerciseExplorerSheetProps) {
   const { data: catalog, isLoading } = useFullExerciseCatalog(discipline);
   const { data: userPhotos } = useUserExercisePhotos();
+  const { data: catalogMedia } = useExerciseCatalogMedia();
   const addExercise = useAddExercise(discipline);
   const deleteExercise = useDeleteExercise();
   const updateExercise = useUpdateExercise();
@@ -215,7 +218,31 @@ export function ExerciseExplorerSheet({
       const userUrl = userPhotos.get(keyForBrowserExercise(name, id));
       if (userUrl) return userUrl;
     }
+    if (id && catalogMedia) {
+      const datasetUrl = catalogMedia.get(id)?.primaryPhotoUrl;
+      if (datasetUrl) return datasetUrl;
+    }
     return exerciseIllustration(name);
+  };
+
+  // Badges de la ligne du catalogue (groupe/équipement/type de mouvement) +
+  // pastille GIF/Vidéo sur la miniature — jamais affichés pour un exercice
+  // "custom__" (pas de ligne exercise_reference, donc pas de config/media).
+  const badgesFor = (ex: BrowserExercise): string[] => {
+    const row = findRow(ex.id);
+    if (!row) return [];
+    return deriveExerciseBadges(ex.name, {
+      category: row.category,
+      equipment: row.config?.equipment,
+    });
+  };
+
+  const mediaBadgeFor = (ex: BrowserExercise): "gif" | "video" | null => {
+    const entry = catalogMedia?.get(ex.id);
+    if (!entry) return null;
+    if (entry.hasGif) return "gif";
+    if (entry.hasVideo) return "video";
+    return null;
   };
 
   // Illustration de rang dans le Catalogue (2026-07-22) — uniquement les
@@ -611,6 +638,8 @@ export function ExerciseExplorerSheet({
               groupOrder={ALL_GROUPS}
               highlightGroups={new Set(["Mes exercices"])}
               getPhoto={getPhoto}
+              badges={badgesFor}
+              mediaBadge={mediaBadgeFor}
               rankByName={mode === "catalog" ? rankByName : undefined}
               onRowTap={handleRowTap}
               renderRowMenu={(ex) => (

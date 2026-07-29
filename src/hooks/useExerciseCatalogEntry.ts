@@ -59,6 +59,44 @@ function escapeForIlike(value: string): string {
   return value.replace(/[\\%_]/g, (match) => `\\${match}`);
 }
 
+export interface CatalogMediaEntry {
+  primaryPhotoUrl: string | null;
+  hasGif: boolean;
+  hasVideo: boolean;
+}
+
+// ── Médias du catalogue — une seule requête pour toute la bibliothèque
+//    (exercise_media est petit, ~2500 lignes) plutôt qu'une requête par
+//    exercice affiché. Utilisé par ExerciseListBrowser via les écrans
+//    Catalogue/Picker pour remplacer l'icône générique par le vrai média
+//    du dataset (miniature + pastille GIF/Vidéo) dès qu'il existe. ──────
+export function useExerciseCatalogMedia() {
+  return useQuery({
+    queryKey: ["fitness", "exercise-catalog-media"],
+    staleTime: 5 * 60 * 1000,
+    queryFn: async (): Promise<Map<string, CatalogMediaEntry>> => {
+      const { data, error } = await supabase
+        .from("exercise_media")
+        .select("exercise_reference_id, media_type, url, is_primary");
+      if (error) throw error;
+      const map = new Map<string, CatalogMediaEntry>();
+      for (const row of data ?? []) {
+        const entry = map.get(row.exercise_reference_id) ?? {
+          primaryPhotoUrl: null,
+          hasGif: false,
+          hasVideo: false,
+        };
+        if (row.media_type === "image" && row.is_primary && row.url)
+          entry.primaryPhotoUrl = row.url;
+        if (row.media_type === "gif") entry.hasGif = true;
+        if (row.media_type === "video") entry.hasVideo = true;
+        map.set(row.exercise_reference_id, entry);
+      }
+      return map;
+    },
+  });
+}
+
 export function useExerciseCatalogEntry(exerciseName: string | null | undefined) {
   return useQuery({
     queryKey: ["fitness", "exercise-catalog-entry", exerciseName ? normalize(exerciseName) : null],

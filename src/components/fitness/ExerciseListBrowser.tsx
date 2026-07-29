@@ -26,6 +26,13 @@ interface Props<T extends BrowserExercise> {
   /** Groupes mis en avant visuellement (ex: "Mes exercices"). */
   highlightGroups?: Set<string>;
   getPhoto?: (name: string) => string | null | undefined;
+  /** Badges courts affichés sous le nom (groupe musculaire, équipement,
+   *  polyarticulaire/isolation…) — voir lib/fitness/exerciseBadges. Absent
+   *  ⇒ aucun badge (comportement inchangé pour les appelants existants). */
+  badges?: (item: T) => string[];
+  /** Pastille média sur la miniature (GIF/Vidéo) quand ce type existe pour
+   *  l'exercice — absent ⇒ pas de pastille. */
+  mediaBadge?: (item: T) => "gif" | "video" | null;
   /**
    * Rang RPG déjà atteint pour un exercice (clé = nom d'exercice, comme
    * `useExerciseProgression`) — fourni uniquement par les écrans où le
@@ -63,6 +70,8 @@ export function ExerciseListBrowser<T extends BrowserExercise>({
   groupOrder,
   highlightGroups,
   getPhoto,
+  badges,
+  mediaBadge,
   rankByName,
   onRowTap,
   renderRowMenu,
@@ -184,6 +193,8 @@ export function ExerciseListBrowser<T extends BrowserExercise>({
                     const rank = rankByName?.get(ex.name);
                     const photo = getPhoto?.(ex.name);
                     const menu = renderRowMenu?.(ex);
+                    const chips = badges?.(ex) ?? [];
+                    const media = mediaBadge?.(ex) ?? null;
                     return (
                       <li key={ex.id} className="flex items-center gap-1">
                         <button
@@ -200,12 +211,19 @@ export function ExerciseListBrowser<T extends BrowserExercise>({
                               />
                             </div>
                           ) : photo ? (
-                            <img
-                              src={photo}
-                              alt={ex.name}
-                              loading="lazy"
-                              className="h-10 w-10 shrink-0 rounded-lg object-cover ring-1 ring-white/10"
-                            />
+                            <div className="relative h-10 w-10 shrink-0">
+                              <img
+                                src={photo}
+                                alt={ex.name}
+                                loading="lazy"
+                                className="h-10 w-10 rounded-lg object-cover ring-1 ring-white/10"
+                              />
+                              {media && (
+                                <span className="absolute -bottom-1 -right-1 rounded bg-primary px-1 text-[7px] font-bold uppercase text-primary-foreground">
+                                  {media === "gif" ? "GIF" : "Vidéo"}
+                                </span>
+                              )}
+                            </div>
                           ) : (
                             <div className="h-10 w-10 shrink-0 rounded-lg bg-white/5" />
                           )}
@@ -214,6 +232,18 @@ export function ExerciseListBrowser<T extends BrowserExercise>({
                             {rank && (
                               <span className="block truncate text-[10px] uppercase tracking-wider text-muted-foreground">
                                 {gradeName(rank.rank.key, rank.levelInRank)}
+                              </span>
+                            )}
+                            {!rank && chips.length > 0 && (
+                              <span className="mt-0.5 flex flex-wrap gap-1">
+                                {chips.slice(0, 2).map((c) => (
+                                  <span
+                                    key={c}
+                                    className="rounded-full bg-white/5 px-1.5 py-0 text-[9px] font-medium capitalize text-muted-foreground"
+                                  >
+                                    {c}
+                                  </span>
+                                ))}
                               </span>
                             )}
                           </span>
