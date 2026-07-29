@@ -52,7 +52,7 @@ const ADMIN_EMAIL = "Turneur555@gmail.com";
 
 function AdminExercisesPage() {
   const { user } = useAuth();
-  if ((user?.email ?? "").toLowerCase() !== ADMIN_EMAIL) {
+  if ((user?.email ?? "").toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
     return (
       <div className="mx-auto max-w-lg p-8 text-center text-muted-foreground">
         Cette page est réservée à l'administration de la bibliothèque d'exercices.
