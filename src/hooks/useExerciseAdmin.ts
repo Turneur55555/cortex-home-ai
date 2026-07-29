@@ -100,6 +100,30 @@ export function deriveExerciseOrigin(row: Pick<ExerciseRow, "merged_at" | "datas
   return row.dataset_source ? "dataset" : "cortex";
 }
 
+export interface CompletenessResult {
+  percent: number;
+  missing: string[];
+}
+
+const COMPLETENESS_CHECKS: Array<{ label: string; has: (row: ExerciseRow, media?: ExerciseMediaSummary) => boolean }> = [
+  { label: "Photo", has: (_row, media) => !!media?.hasPhoto },
+  { label: "GIF", has: (_row, media) => !!media?.hasGif },
+  { label: "Vidéo", has: (_row, media) => !!media?.hasVideo },
+  { label: "Groupe musculaire", has: (row) => !!row.category },
+  { label: "Muscles secondaires", has: (row) => (row.config?.secondary_muscles?.length ?? 0) > 0 },
+  { label: "Équipement", has: (row) => !!row.config?.equipment },
+  { label: "Instructions", has: (row) => !!row.description },
+  { label: "Alias", has: (row) => (row.aliases?.length ?? 0) > 0 },
+  { label: "Variantes", has: (row) => !!row.family_id },
+];
+
+/** Score de complétude (0-100) + liste des informations manquantes. */
+export function computeCompleteness(row: ExerciseRow, media?: ExerciseMediaSummary): CompletenessResult {
+  const missing = COMPLETENESS_CHECKS.filter((c) => !c.has(row, media)).map((c) => c.label);
+  const percent = Math.round(((COMPLETENESS_CHECKS.length - missing.length) / COMPLETENESS_CHECKS.length) * 100);
+  return { percent, missing };
+}
+
 export interface LibraryStats {
   total: number;
   cortex: number;
@@ -311,6 +335,7 @@ export interface ImportDatasetSummary {
   datasetRecords: number;
   technicalDuplicatesSkipped: number;
   skippedNoName: number;
+  alreadyImportedSkipped: number;
   createdIndependentFiches: number;
   dryRun: boolean;
   runId: string | null;

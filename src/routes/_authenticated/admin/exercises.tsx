@@ -20,6 +20,7 @@ import {
   useImportDataset,
   useDetectSimilarities,
   deriveExerciseOrigin,
+  computeCompleteness,
   type ExerciseRow,
   type ExerciseOrigin,
   type ExerciseUsageStats,
@@ -252,6 +253,7 @@ function SearchAndMergeTab() {
           const media = mediaSummary?.[row.id];
           const origin = deriveExerciseOrigin(row);
           const muscleGroup = resolveMuscleGroup(row, row.name);
+          const completeness = computeCompleteness(row, media);
           return (
           <div
             key={row.id}
@@ -268,8 +270,14 @@ function SearchAndMergeTab() {
                 <OriginBadge origin={origin} />
                 {!row.is_active && <Badge variant="outline">Archivé</Badge>}
                 <MediaBadges media={media} />
+                <Badge variant="outline">{completeness.percent}% complet</Badge>
               </div>
               <div className="mt-0.5 text-xs text-muted-foreground">{usageLabel(stats)}</div>
+              {completeness.missing.length > 0 && (
+                <div className="mt-0.5 text-xs text-muted-foreground">
+                  Manque : {completeness.missing.join(", ")}
+                </div>
+              )}
               {row.aliases && row.aliases.length > 0 && (
                 <div className="mt-0.5 text-xs text-muted-foreground">
                   Alias : {row.aliases.join(", ")}
@@ -701,8 +709,10 @@ function ImportDatasetTab() {
               Dernier dry-run : {lastDryRun.datasetRecords} enregistrements analysés,{" "}
               {lastDryRun.createdIndependentFiches} nouvelle(s) fiche(s) seraient créées,{" "}
               {lastDryRun.technicalDuplicatesSkipped} doublon(s) technique(s) ignoré(s)
-              {lastDryRun.skippedNoName > 0 && `, ${lastDryRun.skippedNoName} sans nom ignoré(s)`}.
-              Les fusions potentielles et exercices à valider se calculent après l'import via la
+              {lastDryRun.skippedNoName > 0 && `, ${lastDryRun.skippedNoName} sans nom ignoré(s)`}
+              {lastDryRun.alreadyImportedSkipped > 0 &&
+                `, ${lastDryRun.alreadyImportedSkipped} déjà importé(s) précédemment (ignorés — reprise sûre)`}
+              . Les fusions potentielles et exercices à valider se calculent après l'import via la
               détection de similarité (bouton ci-dessous).
             </div>
           )}

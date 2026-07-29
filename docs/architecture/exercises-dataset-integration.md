@@ -541,3 +541,55 @@ CRON_SECRET/service_role).
 - `dry_run` reste `true` par défaut sur les deux jobs ; le bouton "Importer le dataset" exige un
   dry-run préalable dans la session (résumé affiché) puis une confirmation explicite dans une
   boîte de dialogue avant tout import réel.
+
+## 18. Premier import réel — incident, diagnostic et correctifs (2026-07-29)
+
+Nathan a lancé le premier import réel depuis l'onglet "Import du dataset" livré en §17. Constaté
+lors de la vérification post-import (demandée pour la "étape finale" — administrer 100% de la
+bibliothèque) : le run (`exercise_reference_import_runs` id `5bf14b98...`) s'est arrêté à **774
+fiches créées sur 1324**, sans erreur journalisée et sans que `completed_at` soit jamais posé —
+cause probable : timeout de l'edge function sur un traitement strictement séquentiel de >1300
+enregistrements (plusieurs aller-retours DB par enregistrement). **Aucune donnée utilisateur
+touchée** — vérifié : `exercises` (342 lignes), `workout_segments` (12), `merged_at` (0 fusion) tous
+inchangés, cohérent avec l'architecture (le job n'écrit jamais que des lignes `exercise_reference`/
+`exercise_media`/`exercise_reference_import_created` NOUVELLES).
+
+Trois bugs réels trouvés en vérifiant les 774 fiches déjà créées, corrigés dans
+`import-exercises-dataset/index.ts` :
+
+1. **URLs de médias cassées** — `record.image`/`record.gif_url` sont des chemins RELATIFS au dépôt
+   du dataset (`images/0001-....jpg`), jamais des URLs absolues. Le code stockait ce chemin brut
+   comme `url`, produisant une image/GIF invalide pour les 774 fiches. Corrigé
+   (`toAbsoluteDatasetUrl`, préfixe `raw.githubusercontent.com/.../main/`) — vérifié par requête
+   HTTP directe sur l'URL reconstruite (200 OK) avant de généraliser le correctif.
+2. **Catégorie trop grossière et non capitalisée** — le `category` de la fiche importée utilisait
+   `record.category`/`body_part` du dataset (ex. "upper arms" -> "bras"), pas le `muscle_group`/
+   `target`, plus précis, déjà utilisé pour `config.muscle_group`. Conséquence mesurée : 240 des 774
+   fiches classées "bras" au lieu de Biceps/Triceps/Avant-bras réels, en minuscules (incohérent avec
+   le vocabulaire Cortex existant, capitalisé). Corrigé : priorité à `muscle_group`/`target` (repli
+   sur `category` seulement si absent), capitalisation de la première lettre uniquement
+   (`capitalizeFirst` — jamais `toUpperCase()`/`initcap()`, qui casserait "Avant-bras" en
+   "Avant-Bras"). Les 774 fiches déjà en base ont été corrigées rétroactivement par une UPDATE
+   ciblée (recalcul depuis `config.muscle_group`, déjà correct) — portée strictement `category`,
+   aucune séance/série/répétition/charge/record touché.
+3. **Non-résumable** — relancer l'import (dry_run:false) sans vérification aurait retraité les 1324
+   enregistrements, et pour les 774 déjà présents, le nom traduit étant déjà "pris"
+   (`takenNames`), créé une fiche EN DOUBLE désambiguïsée par le nom anglais au lieu de simplement
+   continuer. Corrigé : l'import charge désormais aussi les `dataset_exercise_id` déjà liés à
+   `dataset_source` et les exclut avant traitement — un nouveau champ `alreadyImportedSkipped`
+   dans le résumé rend ce comptage visible dans l'UI.
+
+Complément dictionnaire (`MUSCLE_TRANSLATIONS_EN_TO_FR`) : `ankles`, `rotator cuff`, `wrist(s)`,
+`rhomboids`, `hands`, `soleus` — gaps résiduels observés sur l'échantillon réel (~1-2% des fiches).
+
+**Portée de cette session** : les correctifs sont livrés et déployés ; les 774 fiches déjà en base
+ont été réparées (catégorie) directement en production via le MCP Supabase (lecture/écriture SQL
+ciblée, hors périmètre des migrations car aucune modification de schéma). Les **509 enregistrements
+restants** (1324 − 41 doublons techniques − 774 déjà créés) n'ont volontairement pas été insérés
+depuis cette session : le faire aurait exigé de faire transiter plusieurs centaines de Ko de texte
+(descriptions, JSON de configuration) à travers le contexte de conversation pour construire les
+`INSERT` SQL manuellement, un coût disproportionné face au bénéfice — l'edge function corrigée et
+désormais reprenable est le bon outil pour terminer le travail. **Un nouveau clic sur "Importer le
+dataset" (dry-run puis import réel) complète l'import** : il ignorera automatiquement les 774 déjà
+présents et ne créera que les 509 manquants, dans un volume largement sous le seuil qui avait
+provoqué le timeout précédent.

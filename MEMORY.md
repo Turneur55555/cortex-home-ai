@@ -1345,3 +1345,22 @@ rester manuel). Vérification faite sur les vrais workflows CI, pas une supposit
     "si « X » est conservée, les champs suivants seront complétés depuis « Y »" recalculé à chaque
     changement de sélection — reflète exactement la logique additive de `merge_exercise_references`
     (coalesce sur les champs NULL uniquement, jamais un remplacement).
+- **Premier import réel — incident et correctifs (2026-07-29, voir doc §18)** : run interrompu à
+  774/1324 (timeout probable, aucune donnée utilisateur touchée — vérifié). 3 bugs réels trouvés et
+  corrigés dans `import-exercises-dataset/index.ts` : (1) URLs de médias relatives jamais préfixées
+  (`toAbsoluteDatasetUrl`, base `raw.githubusercontent.com/.../main/`) ; (2) `category` construite
+  depuis le champ dataset trop grossier (`category`/`body_part`, ex. "bras" pour 240 fiches) au lieu
+  du plus précis `muscle_group`/`target` déjà utilisé par `config.muscle_group`, jamais capitalisée
+  (`capitalizeFirst`, jamais `toUpperCase()`/`initcap()` qui casserait "Avant-bras") ; (3) import non
+  résumable — reprise sûre ajoutée (exclut les `dataset_exercise_id` déjà liés à `dataset_source`
+  avant traitement, nouveau champ résumé `alreadyImportedSkipped`). Les 774 fiches déjà en base ont
+  été réparées rétroactivement (catégorie recalculée depuis `config.muscle_group`, déjà correct) via
+  SQL ciblé en production (pas une migration — aucune modification de schéma). Dictionnaire
+  `MUSCLE_TRANSLATIONS_EN_TO_FR` complété (ankles/rotator cuff/wrist(s)/rhomboids/hands/soleus).
+  **Les 509 enregistrements restants n'ont pas été insérés depuis cette session** (coût de contexte
+  disproportionné pour transiter les données manuellement) — l'edge function corrigée et reprenable
+  termine l'import au prochain clic sur "Importer le dataset", en ignorant automatiquement les 774
+  déjà présents.
+- **`computeCompleteness`** (nouveau, `useExerciseAdmin.ts`) : score 0-100 + liste des informations
+  manquantes (photo/GIF/vidéo/groupe musculaire/muscles secondaires/équipement/instructions/alias/
+  variantes), affiché en badge sur chaque ligne de la liste de recherche.

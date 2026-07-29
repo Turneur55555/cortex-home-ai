@@ -363,6 +363,17 @@ export const MUSCLE_TRANSLATIONS_EN_TO_FR: Record<string, string> = {
   "cardiovascular system": "cardio",
   "serratus anterior": "épaules",
   "levator scapulae": "épaules",
+  // Ajouts 2026-08 (résidu observé après l'import réel — `target`/
+  // `muscle_group` du dataset couvre des groupes plus fins que la liste
+  // ci-dessus pour une minorité d'exercices, ex. "ankles", "rotator cuff").
+  ankles: "chevilles",
+  ankle: "chevilles",
+  "rotator cuff": "épaules",
+  wrist: "avant-bras",
+  wrists: "avant-bras",
+  rhomboids: "dos",
+  hands: "avant-bras",
+  soleus: "mollets",
 };
 
 /** Équipement (`equipment`) EN->FR. */

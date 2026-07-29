@@ -34,9 +34,19 @@ import { normalizeForMatch } from "../_shared/textNormalize.ts";
 import { requireAdminOrCron } from "../_shared/adminAuth.ts";
 
 const DATASET_SOURCE = "hasaneyldrm/exercises-dataset";
-const DATASET_JSON_URL =
-  "https://raw.githubusercontent.com/hasaneyldrm/exercises-dataset/main/data/exercises.json";
+const DATASET_REPO_RAW_BASE = "https://raw.githubusercontent.com/hasaneyldrm/exercises-dataset/main/";
+const DATASET_JSON_URL = `${DATASET_REPO_RAW_BASE}data/exercises.json`;
 const DISCIPLINE = "muscu";
+
+// `record.image`/`record.gif_url` sont des chemins RELATIFS au dépôt du
+// dataset (ex. "images/0001-2gPfomN.jpg"), jamais des URLs absolues — vérifié
+// contre le JSON réel (2026-08). Sans ce préfixe, les médias importés
+// pointeraient vers un chemin invalide, jamais affichable dans l'app.
+function toAbsoluteDatasetUrl(relativePath: string | null | undefined): string | null {
+  if (!relativePath) return null;
+  if (/^https?:\/\//.test(relativePath)) return relativePath;
+  return `${DATASET_REPO_RAW_BASE}${relativePath}`;
+}
 
 function buildCors(req: Request) {
   const origin = req.headers.get("origin") ?? "";
@@ -73,6 +83,7 @@ interface ImportSummary {
   datasetRecords: number;
   technicalDuplicatesSkipped: number;
   skippedNoName: number;
+  alreadyImportedSkipped: number;
   createdIndependentFiches: number;
   dryRun: boolean;
   runId: string | null;
@@ -81,6 +92,16 @@ interface ImportSummary {
 
 function toMuscleGroup(record: RawDatasetRecord): string | null {
   return record.muscle_group ?? record.target ?? record.body_part ?? null;
+}
+
+// Première lettre en majuscule uniquement (jamais `toUpperCase()` entier ni
+// `initcap`, qui capitaliserait aussi après un tiret — "avant-bras" doit
+// rester "Avant-bras", pas "Avant-Bras") — aligne le vocabulaire dataset sur
+// celui déjà utilisé par les catégories Cortex existantes (Pectoraux, Dos,
+// Jambes, Épaules...).
+function capitalizeFirst(value: string): string {
+  if (!value) return value;
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 function frenchInstructions(record: RawDatasetRecord): string | null {
@@ -153,7 +174,24 @@ Deno.serve(async (req) => {
     const withName = records.filter((r) => (r.name ?? "").trim().length > 0);
     const skippedNoName = records.length - withName.length;
 
-    const { kept, skipped: technicalDuplicates } = deduplicateDatasetRecords(withName);
+    const { kept: keptBeforeResume, skipped: technicalDuplicates } = deduplicateDatasetRecords(withName);
+
+    // Reprise sûre : un run précédent peut avoir été interrompu (timeout de
+    // l'edge function sur un dataset de 1300+ enregistrements traités
+    // séquentiellement — observé en production le 2026-07-29, run
+    // 5bf14b98-3d3c-46e8-955e-61f284bae4af, 774/1324 créés puis arrêt sans
+    // erreur). Sans cette vérification, relancer l'import recréerait une
+    // fiche en doublon (désambiguïsée par le nom anglais) pour chaque
+    // enregistrement déjà importé, au lieu de simplement continuer là où le
+    // run précédent s'est arrêté.
+    const { data: alreadyImportedRows, error: alreadyErr } = await supa
+      .from("exercise_reference")
+      .select("dataset_exercise_id")
+      .eq("dataset_source", DATASET_SOURCE)
+      .not("dataset_exercise_id", "is", null);
+    if (alreadyErr) throw alreadyErr;
+    const alreadyImportedIds = new Set((alreadyImportedRows ?? []).map((r) => r.dataset_exercise_id as string));
+    const kept = keptBeforeResume.filter((r) => !alreadyImportedIds.has(String(r.id)));
 
     // Noms déjà pris (Cortex existant + dataset déjà inséré dans ce run) —
     // garantit qu'aucune fiche indépendante ne viole la contrainte unique
@@ -180,6 +218,7 @@ Deno.serve(async (req) => {
       datasetRecords: records.length,
       technicalDuplicatesSkipped: technicalDuplicates.length,
       skippedNoName,
+      alreadyImportedSkipped: keptBeforeResume.length - kept.length,
       createdIndependentFiches: 0,
       dryRun,
       runId,
@@ -199,23 +238,33 @@ Deno.serve(async (req) => {
 
       const description = frenchInstructions(record);
       const config = buildConfigPayload(record);
+      const absoluteImageUrl = toAbsoluteDatasetUrl(record.image);
+      const absoluteGifUrl = toAbsoluteDatasetUrl(record.gif_url);
       const media = {
         source: "gymvisual",
         attribution: record.attribution ?? "© Gym visual — https://gymvisual.com/",
-        thumbnail_url: record.image ?? null,
-        gif_url: record.gif_url ?? null,
+        thumbnail_url: absoluteImageUrl,
+        gif_url: absoluteGifUrl,
         media_id: record.media_id ?? null,
       };
+
+      // Priorité au signal muscle le plus PRÉCIS (`muscle_group`/`target`),
+      // pas au `category`/`body_part` du dataset (bien plus grossier — ex.
+      // "upper arms" -> "bras" pour un curl biceps ET une extension triceps,
+      // alors que `muscle_group` distingue déjà "biceps"/"triceps"/"avant-
+      // bras" — vérifié empiriquement le 2026-08 : 240 fiches sur les 774
+      // premières importées se sont retrouvées classées "bras" au lieu du
+      // muscle réel). `record.category` ne sert plus que de repli si aucun
+      // signal plus fin n'existe.
+      const rawCategorySignal = toMuscleGroup(record) ?? record.category;
+      const translatedCategory = translateMuscleToFrench(rawCategorySignal) ?? rawCategorySignal;
 
       const { data: insertedRow, error: insertErr } = await supa
         .from("exercise_reference")
         .insert({
           discipline_id: DISCIPLINE,
           name: canonicalName,
-          category:
-            translateMuscleToFrench(record.category ?? toMuscleGroup(record)) ??
-            record.category ??
-            toMuscleGroup(record),
+          category: translatedCategory ? capitalizeFirst(translatedCategory) : null,
           description,
           media,
           config,
@@ -240,22 +289,22 @@ Deno.serve(async (req) => {
       }
 
       const mediaRows = [
-        record.image
+        absoluteImageUrl
           ? {
               exercise_reference_id: insertedRow?.id,
               media_type: "image" as const,
-              url: record.image,
+              url: absoluteImageUrl,
               source: "dataset" as const,
               attribution: media.attribution,
               is_primary: true,
               sort_order: 0,
             }
           : null,
-        record.gif_url
+        absoluteGifUrl
           ? {
               exercise_reference_id: insertedRow?.id,
               media_type: "gif" as const,
-              url: record.gif_url,
+              url: absoluteGifUrl,
               source: "dataset" as const,
               attribution: media.attribution,
               is_primary: true,
