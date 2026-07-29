@@ -100,16 +100,6 @@ export function ExercisePhotoTile({
 
 // ─── Badges discrets ─────────────────────────────────────────────────────────
 
-/** Badge court (groupe musculaire, équipement, type de mouvement…) — très
- *  discret, pour ne jamais alourdir l'en-tête compact de la carte. */
-export function ExerciseCardBadge({ label }: { label: string }) {
-  return (
-    <span className="rounded-full bg-white/5 px-1.5 py-0 text-[9px] font-medium capitalize leading-[16px] text-muted-foreground">
-      {label}
-    </span>
-  );
-}
-
 /** Badge de rang RPG — une pill élégante et discrète (pas une carte), teintée
  *  par la couleur officielle du rang via rankTheme (jamais une couleur
  *  réassemblée à la main). */

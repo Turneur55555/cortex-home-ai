@@ -88,7 +88,6 @@ import {
 } from "../session/ActiveSegmentCard";
 import type { RankState } from "@/lib/fitness/exerciseRanks";
 import {
-  ExerciseCardBadge,
   ExerciseCardConfirmDelete,
   ExerciseCardContainer,
   ExerciseCardHeader,
@@ -110,9 +109,6 @@ type MuscuCardProps = {
   /** Photo/GIF du dataset — priorité sur `imageUrl` (voir ExercisePhotoTile). */
   datasetPhotoUrl?: string | null;
   datasetGifUrl?: string | null;
-  /** Badges courts dérivés du catalogue (groupe/équipement/type de mouvement),
-   *  calculés une seule fois pour toute la séance (voir ActiveWorkoutView). */
-  catalogBadges?: string[];
   /** Rang RPG déjà calculé (voir computeRanksByName) — jamais recalculé ici. */
   rank?: RankState | null;
   lastSession: LastSession | null;
@@ -306,7 +302,6 @@ function MuscuExerciseCard({
   imageUrl,
   datasetPhotoUrl,
   datasetGifUrl,
-  catalogBadges = [],
   rank,
   lastSession,
   pr,
@@ -341,8 +336,6 @@ function MuscuExerciseCard({
     null,
   );
 
-  const volume = sortedSets.reduce((acc, s) => acc + (s.reps ?? 0) * (s.weight ?? 0), 0);
-
   const doneCount = sortedSets.filter((s) => s.completed).length;
 
   const isPR = maxWeight != null && pr != null && maxWeight >= pr;
@@ -356,15 +349,6 @@ function MuscuExerciseCard({
       sets[0],
     );
   }, [lastSession]);
-
-  const volLabel = volume >= 1000 ? `${(volume / 1000).toFixed(1)}k` : `${volume}`;
-
-  const fatigued = useMemo(() => {
-    if (!recoveryMap) return [];
-    return exerciseToMuscles(exercise.name)
-      .map((id) => recoveryMap.get(id))
-      .filter((rec): rec is MuscleRecovery => rec != null && rec.status === "fatigued");
-  }, [exercise.name, recoveryMap]);
 
   const suggestion = useMemo(() => {
     if (!lastSummary?.weight || !lastSummary?.reps) return null;
@@ -451,11 +435,12 @@ function MuscuExerciseCard({
   const handleDeleteSet = (id: string) => deleteSet.mutate(id);
   const handleDeleteExercise = () => deleteExercises.mutate([exercise.id]);
 
-  // Carte de séance V2 — en-tête très dense : rang (pill), record, dernière
-  // charge, récupération, puis groupe musculaire/équipement/type (catalogue).
-  // Uniquement ce qui est utile pendant une séance ; le reste (historique
-  // complet, courbes, variantes…) appartient à la fiche détaillée
-  // (onOpenStats → ExerciseSheet).
+  // Carte de séance V3 (2026-07-29, retour de Nathan) — séparation stricte
+  // saisie/consultation : la carte ne sert QU'À enregistrer les séries.
+  // En-tête réduit à rang + record + nombre de séries effectuées. Tout le
+  // reste (groupe musculaire, équipement, type, badges, historique...)
+  // n'existe plus que dans la fiche détaillée (bouton statistiques →
+  // ExerciseSheet) — jamais dupliqué ici.
   const badges = (
     <>
       {rank && <RankBadgePill rank={rank} />}
@@ -465,24 +450,11 @@ function MuscuExerciseCard({
           {isNewPR ? "Nouveau record" : `Record ${pr} kg`}
         </span>
       )}
-      {lastSummary && (
+      {sortedSets.length > 0 && (
         <span className="inline-flex items-center gap-1 rounded-full bg-white/5 px-1.5 py-0 text-[9px] font-medium leading-[16px] text-muted-foreground">
-          <History className="h-2.5 w-2.5" />
-          {lastSummary.weight ?? "—"} kg × {lastSummary.reps ?? "—"}
+          {doneCount}/{sortedSets.length} série{sortedSets.length > 1 ? "s" : ""}
         </span>
       )}
-      {fatigued.map((rec) => (
-        <span
-          key={rec.id}
-          className="inline-flex items-center gap-1 rounded-full bg-orange-500/15 px-1.5 py-0 text-[9px] font-bold leading-[16px] text-orange-400"
-          title={`${rec.label} peu récupéré — ${rec.hoursRemaining != null ? Math.round(rec.hoursRemaining) + "h restantes" : ""}`}
-        >
-          ⚠ {rec.label}
-        </span>
-      ))}
-      {catalogBadges.slice(0, 3).map((label) => (
-        <ExerciseCardBadge key={label} label={label} />
-      ))}
     </>
   );
 
@@ -509,7 +481,7 @@ function MuscuExerciseCard({
             <ExerciseCardIconButton
               icon={BarChart3}
               onClick={() => onOpenStats?.()}
-              label="Statistiques de l'exercice"
+              label="Voir la fiche détaillée de l'exercice"
             />
             <ExerciseCardIconButton
               icon={Trash2}
@@ -532,27 +504,6 @@ function MuscuExerciseCard({
 
       {!collapsed && (
         <div className="animate-in fade-in slide-in-from-top-1 duration-200">
-          {/* Détail chiffré — masqué carte fermée (voir badges de l'en-tête
-              pour l'essentiel : record, dernière charge, récupération). */}
-          <div className="mt-2.5 flex items-center gap-1.5 text-[12px] text-muted-foreground">
-            <span className="tabular-nums">
-              {sortedSets.length} série{sortedSets.length > 1 ? "s" : ""}
-              {doneCount > 0 && <span className="text-success"> ({doneCount}✓)</span>}
-            </span>
-            {maxWeight != null && (
-              <>
-                <span className="text-muted-foreground/30">•</span>
-                <span className="tabular-nums">{maxWeight} kg max</span>
-              </>
-            )}
-            {volume > 0 && (
-              <>
-                <span className="text-muted-foreground/30">•</span>
-                <span className="tabular-nums text-muted-foreground/70">{volLabel} kg</span>
-              </>
-            )}
-          </div>
-
           {lastSession && lastSession.sets.length > 0 && (
             <button
               type="button"
