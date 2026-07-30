@@ -407,30 +407,17 @@ function MuscuExerciseCard({
   const handleDeleteExercise = () => deleteExercises.mutate([exercise.id]);
 
   // Carte de séance V5 (2026-07-30, retour de Nathan) — hiérarchie verticale
-  // stricte sous le nom : Fanion de rang (identité de l'exercice, seul sur
-  // sa ligne, parfaitement centré) → Record → Séries. Plus jamais tout sur
-  // une seule ligne, et plus de texte coloré : le fanion est l'unique
-  // représentation du rang ici. Le reste (groupe musculaire, équipement,
-  // type, historique...) n'existe que dans la fiche détaillée (bouton
-  // statistiques → ExerciseSheet).
-  const badges = (
-    <div className="mt-0.5 w-full space-y-0.5">
-      {rank && (
-        <div className="flex w-full justify-center">
-          <RankFlag rankKey={rank.rank.key} label={rank.rank.label} />
-        </div>
-      )}
-      {isPR && (
-        <p className="flex items-center gap-1 text-[11px] font-semibold text-warning">
-          <Trophy className="h-3 w-3" />
-          {isNewPR ? "Nouveau record" : `Record ${pr} kg`}
-        </p>
-      )}
-      {sortedSets.length > 0 && (
-        <p className="text-[11px] text-muted-foreground tabular-nums">
-          {doneCount} / {sortedSets.length} série{sortedSets.length > 1 ? "s" : ""}
-        </p>
-      )}
+  // stricte sous le nom : Fanion de rang, seul sur sa ligne, parfaitement
+  // centré — plus jamais de texte coloré, le fanion est l'unique
+  // représentation du rang ici. Carte fermée (V6, 2026-07-30, retour de
+  // Nathan) : SEULS la miniature, le nom et le fanion restent visibles —
+  // record et compteur de séries ne s'affichent qu'une fois la carte
+  // dépliée par l'utilisateur (voir plus bas). Le reste (groupe musculaire,
+  // équipement, type, historique...) n'existe que dans la fiche détaillée
+  // (bouton statistiques → ExerciseSheet).
+  const badges = rank && (
+    <div className="mt-0.5 flex w-full justify-center">
+      <RankFlag rankKey={rank.rank.key} label={rank.rank.label} />
     </div>
   );
 
@@ -476,6 +463,23 @@ function MuscuExerciseCard({
           onCancel={() => setConfirmDeleteEx(false)}
           onConfirm={handleDeleteExercise}
         />
+      )}
+
+      {!collapsed && (isPR || sortedSets.length > 0) && (
+        <div className="mt-2 flex items-center justify-center gap-2 text-[11px]">
+          {isPR && (
+            <span className="flex items-center gap-1 font-semibold text-warning">
+              <Trophy className="h-3 w-3" />
+              {isNewPR ? "Nouveau record" : `Record ${pr} kg`}
+            </span>
+          )}
+          {isPR && sortedSets.length > 0 && <span className="text-muted-foreground/30">•</span>}
+          {sortedSets.length > 0 && (
+            <span className="text-muted-foreground tabular-nums">
+              {doneCount} / {sortedSets.length} série{sortedSets.length > 1 ? "s" : ""}
+            </span>
+          )}
+        </div>
       )}
 
       {!collapsed && (

@@ -33,8 +33,8 @@ export function RankFlag({ rankKey, label, className }: RankFlagProps) {
       alt={`Rang ${label}`}
       loading="lazy"
       decoding="async"
-      className={cn("h-8 w-auto object-contain", className)}
-      style={{ filter: rankFlagGlow(glow, 6) }}
+      className={cn("h-10 w-auto object-contain", className)}
+      style={{ filter: rankFlagGlow(glow, 2) }}
     />
   );
 }
