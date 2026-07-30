@@ -9,8 +9,6 @@
 
 import { useRef } from "react";
 import { Camera, ChevronDown, Dumbbell, Loader2, Plus, type LucideIcon } from "lucide-react";
-import type { RankState } from "@/lib/fitness/exerciseRanks";
-import { rankTextGlow } from "@/components/rpg/rankTheme";
 
 // ─── Carte ───────────────────────────────────────────────────────────────────
 //
@@ -56,7 +54,7 @@ export function ExercisePhotoTile({
   const fileRef = useRef<HTMLInputElement>(null);
   const displayUrl = datasetPhotoUrl ?? datasetGifUrl ?? imageUrl;
   return (
-    <div className="relative h-20 w-20 shrink-0">
+    <div className="relative h-24 w-24 shrink-0">
       <button
         type="button"
         onClick={onOpenPreview}
@@ -95,24 +93,6 @@ export function ExercisePhotoTile({
         }}
       />
     </div>
-  );
-}
-
-// ─── Identité de rang ────────────────────────────────────────────────────────
-
-/** Rang RPG — l'identité de l'exercice (V3, 2026-07-29) : seul sur sa ligne,
- *  sous le nom, dans la couleur officielle du rang avec la même lueur de
- *  texte que la carte de rang complète (rankTextGlow, ExerciseRankCard) —
- *  jamais une couleur réassemblée à la main. */
-export function RankNameLine({ rank }: { rank: RankState }) {
-  const { colors } = rank.rank;
-  return (
-    <p
-      className="text-[13px] font-extrabold uppercase leading-tight tracking-[0.1em]"
-      style={{ color: colors.text, textShadow: rankTextGlow(colors.glow, 10) }}
-    >
-      {rank.rank.label}
-    </p>
   );
 }
 

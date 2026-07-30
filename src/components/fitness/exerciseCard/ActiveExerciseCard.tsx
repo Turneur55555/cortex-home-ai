@@ -45,7 +45,6 @@ import {
   Trash2,
   Trophy,
   X,
-  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { ActiveExercise, ActiveSet } from "@/hooks/use-fitness";
@@ -59,9 +58,7 @@ import { useUpsertExercisePhoto } from "@/hooks/useUserExercisePhotos";
 import { restTimer } from "@/hooks/useRestTimer";
 import type { LastSession, LastSessionSet } from "@/hooks/useLastExerciseSession";
 import type { MuscleId } from "@/lib/fitness/muscleMapping";
-import { exerciseToMuscles } from "@/lib/fitness/muscleMapping";
 import type { MuscleRecovery } from "@/lib/fitness/recovery";
-import { recommendLoad } from "@/lib/fitness/loadRecommendation";
 import { estimate1RM } from "@/lib/fitness/strength";
 import type { ActiveGenericSegment } from "@/hooks/useGenericActiveSession";
 import {
@@ -87,6 +84,7 @@ import {
   toDisplayString,
 } from "../session/ActiveSegmentCard";
 import type { RankState } from "@/lib/fitness/exerciseRanks";
+import { RankFlag } from "@/components/rpg/RankFlag";
 import {
   ExerciseCardConfirmDelete,
   ExerciseCardContainer,
@@ -97,7 +95,6 @@ import {
   ExerciseCardSetRow,
   ExerciseCardStatField,
   ExercisePhotoTile,
-  RankNameLine,
 } from "./ExerciseCardPrimitives";
 
 // ─── Props publiques : un seul composant, discriminé par discipline ────────
@@ -305,7 +302,6 @@ function MuscuExerciseCard({
   rank,
   lastSession,
   pr,
-  recoveryMap,
   onOpenStats,
 }: Omit<MuscuCardProps, "kind">) {
   const addSet = useAddExerciseSet();
@@ -315,7 +311,11 @@ function MuscuExerciseCard({
   const upsertPhoto = useUpsertExercisePhoto();
 
   const [confirmDeleteEx, setConfirmDeleteEx] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
+  // Carte fermée par défaut (retour Nathan 2026-07-30) — l'ouverture est
+  // TOUJOURS une décision explicite de l'utilisateur (flèche), jamais une
+  // conséquence d'un ajout/suppression de série ou d'un refetch : ce state
+  // local n'est modifié que par onToggleCollapse ci-dessous.
+  const [collapsed, setCollapsed] = useState(true);
 
   const handlePhotoFile = (file: File) => {
     upsertPhoto.mutate({ exerciseName: exercise.name, file, exerciseId: exercise.id });
@@ -340,35 +340,6 @@ function MuscuExerciseCard({
 
   const isPR = maxWeight != null && pr != null && maxWeight >= pr;
   const isNewPR = maxWeight != null && pr != null && maxWeight > pr;
-
-  const lastSummary = useMemo(() => {
-    const sets = lastSession?.sets ?? [];
-    if (sets.length === 0) return null;
-    return sets.reduce<LastSessionSet>(
-      (best, cur) => ((cur.weight ?? 0) > (best.weight ?? 0) ? cur : best),
-      sets[0],
-    );
-  }, [lastSession]);
-
-  const suggestion = useMemo(() => {
-    if (!lastSummary?.weight || !lastSummary?.reps) return null;
-    let minFraction: number | null = null;
-    if (recoveryMap) {
-      for (const id of exerciseToMuscles(exercise.name)) {
-        const rec = recoveryMap.get(id);
-        if (rec?.hoursRemaining != null) {
-          const f = Math.max(0, 1 - Math.max(0, rec.hoursRemaining) / rec.recoveryWindowHours);
-          if (minFraction == null || f < minFraction) minFraction = f;
-        }
-      }
-    }
-    const result = recommendLoad({
-      last: { weight: lastSummary.weight, reps: lastSummary.reps },
-      recoveryFraction: minFraction,
-    });
-    if (result.weight == null || !result.recoveryLimited) return null;
-    return result.weight;
-  }, [lastSummary, recoveryMap, exercise.name]);
 
   const [isBusy, setIsBusy] = useState(false);
 
@@ -435,14 +406,20 @@ function MuscuExerciseCard({
   const handleDeleteSet = (id: string) => deleteSet.mutate(id);
   const handleDeleteExercise = () => deleteExercises.mutate([exercise.id]);
 
-  // Carte de séance V4 (2026-07-29, retour de Nathan) — hiérarchie verticale
-  // stricte sous le nom : Rang (identité de l'exercice, seul sur sa ligne,
-  // grand et lumineux) → Record → Séries. Plus jamais tout sur une seule
-  // ligne. Le reste (groupe musculaire, équipement, type, historique...)
-  // n'existe que dans la fiche détaillée (bouton statistiques → ExerciseSheet).
+  // Carte de séance V5 (2026-07-30, retour de Nathan) — hiérarchie verticale
+  // stricte sous le nom : Fanion de rang (identité de l'exercice, seul sur
+  // sa ligne, parfaitement centré) → Record → Séries. Plus jamais tout sur
+  // une seule ligne, et plus de texte coloré : le fanion est l'unique
+  // représentation du rang ici. Le reste (groupe musculaire, équipement,
+  // type, historique...) n'existe que dans la fiche détaillée (bouton
+  // statistiques → ExerciseSheet).
   const badges = (
     <div className="mt-0.5 w-full space-y-0.5">
-      {rank && <RankNameLine rank={rank} />}
+      {rank && (
+        <div className="flex w-full justify-center py-0.5">
+          <RankFlag rankKey={rank.rank.key} label={rank.rank.label} />
+        </div>
+      )}
       {isPR && (
         <p className="flex items-center gap-1 text-[11px] font-semibold text-warning">
           <Trophy className="h-3 w-3" />
@@ -515,17 +492,6 @@ function MuscuExerciseCard({
             </button>
           )}
 
-          {suggestion != null && (
-            <div className="mt-2 flex items-center gap-2 rounded-xl bg-primary/[0.07] px-3 py-2 text-[12px]">
-              <Zap className="h-3.5 w-3.5 shrink-0 text-primary" />
-              <span className="text-muted-foreground">Suggéré :</span>
-              <span className="font-bold text-primary">{suggestion} kg</span>
-              <span className="text-muted-foreground/60">
-                × {lastSummary?.reps} reps · récup. incomplète
-              </span>
-            </div>
-          )}
-
           <div className="mt-3">
             {sortedSets.length === 0 ? (
               <p className="rounded-2xl bg-white/[0.02] py-5 text-center text-xs text-muted-foreground/50">
@@ -574,7 +540,9 @@ function GenericExerciseCard({
   const reorderSegment = useReorderGenericSegment();
   const addSegment = useAddGenericSegment();
 
-  const [collapsed, setCollapsed] = useState(false);
+  // Carte fermée par défaut (même règle que MuscuExerciseCard) — seule la
+  // flèche de l'utilisateur bascule ce state.
+  const [collapsed, setCollapsed] = useState(true);
   const [confirmDeleteEx, setConfirmDeleteEx] = useState(false);
 
   const doneCount = group.instances.filter((s) => s.completed).length;

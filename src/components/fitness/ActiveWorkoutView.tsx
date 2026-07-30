@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { BookOpen, CheckCircle2, Loader2, MoreVertical, XCircle } from "lucide-react";
 import type { ActiveWorkout } from "@/hooks/use-fitness";
 import {
@@ -60,9 +60,28 @@ export function ActiveWorkoutView({
   const { data: catalogMedia } = useExerciseCatalogMedia();
   const { data: measurements } = useBodyMeasurements();
 
+  // Menu "..." — le bandeau a `backdrop-blur-xl` + `overflow-hidden`, ce qui
+  // fait de lui le containing block de tout descendant `position: fixed`
+  // (spec CSS Filter Effects) : un menu fixed à l'intérieur serait rogné au
+  // cadre du bandeau. Portal (voir Portal.tsx) fait sortir le menu de cet
+  // arbre ; sa position est mesurée depuis le bouton pour rester ancrée.
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuAnchor, setMenuAnchor] = useState<{ top: number; right: number } | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+
+  const toggleMenu = () => {
+    if (menuOpen) {
+      setMenuOpen(false);
+      return;
+    }
+    const rect = menuButtonRef.current?.getBoundingClientRect();
+    if (rect) {
+      setMenuAnchor({ top: rect.bottom + 8, right: window.innerWidth - rect.right });
+    }
+    setMenuOpen(true);
+  };
 
   // PRs from history (excluding the active workout itself)
   const { prByName, histByName, volByName } = useMemo(
@@ -167,8 +186,9 @@ export function ActiveWorkoutView({
               Terminer
             </button>
             <button
+              ref={menuButtonRef}
               type="button"
-              onClick={() => setMenuOpen((v) => !v)}
+              onClick={toggleMenu}
               className="flex h-8 w-8 items-center justify-center rounded-full bg-white/5 text-muted-foreground transition-all active:scale-90"
               aria-label="Menu séance"
             >
@@ -176,11 +196,14 @@ export function ActiveWorkoutView({
             </button>
           </div>
         </div>
+      </div>
 
-        {menuOpen && (
+      {menuOpen && menuAnchor && (
+        <Portal>
+          <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
           <div
-            className="absolute right-4 top-12 z-20 min-w-[180px] overflow-hidden rounded-2xl border border-border bg-card shadow-elevated"
-            onBlur={() => setMenuOpen(false)}
+            className="fixed z-50 min-w-[180px] overflow-hidden rounded-2xl border border-border bg-card shadow-elevated animate-in fade-in zoom-in-95 duration-150"
+            style={{ top: menuAnchor.top, right: menuAnchor.right }}
           >
             <button
               type="button"
@@ -194,8 +217,8 @@ export function ActiveWorkoutView({
               Annuler la séance
             </button>
           </div>
-        )}
-      </div>
+        </Portal>
+      )}
 
       {/* ── Confirm cancel ── */}
       {confirmCancel && (
