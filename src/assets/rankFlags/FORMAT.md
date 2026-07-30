@@ -12,9 +12,9 @@ Contrat que tout fanion déposé dans ce dossier doit respecter.
 
 ## Dimensions et ratio
 
-- Ratio bandeau horizontal, environ **4.3:1** (ex. 831 × 190 px). `RankFlag`
-  affiche l'image en `object-contain` (jamais recadrée) : un ratio proche de
-  celui-ci s'intègre sans adaptation.
+- Ratio bandeau horizontal, environ **3.8:1 à 4:1** (ex. 530 × 135 px).
+  `RankFlag` affiche l'image en `object-contain` (jamais recadrée) : un ratio
+  proche de celui-ci s'intègre sans adaptation.
 
 ## Usage
 
