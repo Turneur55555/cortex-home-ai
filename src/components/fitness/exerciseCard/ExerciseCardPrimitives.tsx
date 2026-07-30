@@ -18,7 +18,7 @@ import { Camera, ChevronDown, Dumbbell, Loader2, Plus, type LucideIcon } from "l
 
 export function ExerciseCardContainer({ children }: { children: React.ReactNode }) {
   return (
-    <div className="overflow-hidden rounded-[18px] border border-white/5 bg-surface/80 p-2.5 shadow-[0_4px_24px_-12px_rgba(0,0,0,0.5)] animate-in fade-in slide-in-from-bottom-2 duration-300">
+    <div className="overflow-hidden rounded-[18px] border border-white/5 bg-surface/80 p-2 shadow-[0_4px_24px_-12px_rgba(0,0,0,0.5)] animate-in fade-in slide-in-from-bottom-2 duration-300">
       {children}
     </div>
   );
@@ -54,7 +54,7 @@ export function ExercisePhotoTile({
   const fileRef = useRef<HTMLInputElement>(null);
   const displayUrl = datasetPhotoUrl ?? datasetGifUrl ?? imageUrl;
   return (
-    <div className="relative h-24 w-24 shrink-0">
+    <div className="relative h-[104px] w-[104px] shrink-0">
       <button
         type="button"
         onClick={onOpenPreview}

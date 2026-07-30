@@ -64,6 +64,14 @@ export function rankTextGlow(glow: string, blur: number, extra?: string): string
   return extra ? `0 0 ${blur}px ${glow}, ${extra}` : `0 0 ${blur}px ${glow}`;
 }
 
+/** Halo très discret derrière une image de rang à silhouette non rectangulaire
+ *  (fanion) — `filter: drop-shadow` épouse la forme réelle des pixels
+ *  visibles, contrairement à un `box-shadow` qui éclairerait tout le
+ *  rectangle englobant transparent. */
+export function rankFlagGlow(glow: string, blur: number): string {
+  return `drop-shadow(0 0 ${blur}px ${glow})`;
+}
+
 /**
  * Grain de matériau — bruit procédural partagé par les 6 rangs (une seule
  * texture, jamais réinventée par rang : ce qui différencie le "métal" perçu

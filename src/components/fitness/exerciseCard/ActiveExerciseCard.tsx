@@ -416,7 +416,7 @@ function MuscuExerciseCard({
   const badges = (
     <div className="mt-0.5 w-full space-y-0.5">
       {rank && (
-        <div className="flex w-full justify-center py-0.5">
+        <div className="flex w-full justify-center">
           <RankFlag rankKey={rank.rank.key} label={rank.rank.label} />
         </div>
       )}
