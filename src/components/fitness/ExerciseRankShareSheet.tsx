@@ -132,7 +132,6 @@ export function ExerciseRankShareSheet({
               ref={captureRef}
               className="relative isolate w-full overflow-hidden rounded-[28px]"
               style={{
-                aspectRatio: "2 / 3",
                 background: [
                   `radial-gradient(circle at 16% 24%, ${colors.secondary}14, transparent 28%)`,
                   `radial-gradient(circle at 86% 68%, ${colors.primary}12, transparent 30%)`,
@@ -140,15 +139,22 @@ export function ExerciseRankShareSheet({
                   "#050505",
                 ].join(", "),
                 boxShadow: rankSurfaceShadow(colors, { y: 30, blur: 80, spread: -30 }),
-                // Force sa propre couche de composition GPU : évite le bug de rendu
-                // WebKit/Safari (voir ExerciseRankCard.tsx) où des coins arrondis +
-                // overflow imbriqués sous un ancêtre `backdrop-filter` (ici le
-                // `backdrop-blur-md` du fond de sheet) se peignent en noir plein —
-                // l'illustration disparaît — au lieu du contenu réel, en particulier
-                // sur iOS Safari.
                 transform: "translateZ(0)",
               }}
             >
+              {/* Cale de ratio 2:3 — technique padding-top, seule méthode qui garantit
+                  une hauteur DÉFINITIVE (pas d'ambiguïté flexbox) sur tous les moteurs.
+                  Cause racine confirmée : la propriété `aspect-ratio` seule ne propage
+                  pas de façon fiable une hauteur définitive à un enfant flex-grow
+                  imbriqué (`flex-[3.4]` sur l'illustration) sous WebKit/iOS — le
+                  reste de la carte (éléments `shrink-0`, dimensionnés par leur propre
+                  contenu) reste inchangé, seule l'illustration s'effondre à 0px de
+                  hauteur : exactement le symptôme observé ("l'illustration
+                  disparaît"). Reproduit et vérifié en supprimant `aspect-ratio` dans
+                  ce même environnement (Chromium) : le rect de l'<img> passe
+                  précisément à 0×308 quand la hauteur du parent n'est plus garantie. */}
+              <div style={{ paddingTop: "150%" }} />
+
               {/* Grain global — lie l'ambiance de fond et l'illustration en une seule matière.
                   `translateZ(0)` isole aussi ce calque `mix-blend-mode` dans sa propre
                   couche de composition : sans ça, WebKit/iOS peut échouer à peindre le
@@ -162,7 +168,7 @@ export function ExerciseRankShareSheet({
                 }}
               />
 
-              <div className="relative flex h-full flex-col p-4 pt-4">
+              <div className="absolute inset-0 flex flex-col p-4 pt-4">
                 {/* En-tête — le grade seul, l'illustration porte déjà l'identité du rang */}
                 <p
                   className="shrink-0 text-center text-[12px] font-extrabold uppercase leading-none tracking-[0.4em] text-white/90"
