@@ -42,28 +42,31 @@ function purgeStaleSession() {
   }
 }
 
-// Valeurs de repli : instance Supabase actuelle du projet (clé anon, non
-// secrète). Permet de ne rien casser si les variables VITE_SUPABASE_* ne
-// sont pas encore configurées dans l'environnement (ex. Lovable Cloud).
-const FALLBACK_SUPABASE_URL = "https://bcwfvpwxzlmkxobvbtzp.supabase.co";
-const FALLBACK_SUPABASE_PUBLISHABLE_KEY =
+// SOURCE DE VÉRITÉ UNIQUE (décision du 31/07/2026) : le projet Supabase
+// autorisé est bcwfvpwxzlmkxobvbtzp. Les variables VITE_SUPABASE_* injectées
+// par l'environnement d'exécution (Lovable Cloud peut pointer vers une autre
+// instance) sont IGNORÉES si elles ne correspondent pas à ce projet, afin que
+// preview, publication et CI parlent tous à la même base.
+const CANONICAL_SUPABASE_URL = `https://${EXPECTED_PROJECT_ID}.supabase.co`;
+const CANONICAL_SUPABASE_PUBLISHABLE_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJjd2Z2cHd4emxta3hvYnZidHpwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5MjU5NzgsImV4cCI6MjA5NDUwMTk3OH0.wYsoYUMaYDuEv91TbpFBz3fAGTAXO6eh3vHuWrLbsek";
 
 function createSupabaseClient() {
-  const SUPABASE_URL =
-    (import.meta.env.VITE_SUPABASE_URL as string | undefined) || FALLBACK_SUPABASE_URL;
-  const SUPABASE_PUBLISHABLE_KEY =
-    (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined) ||
-    FALLBACK_SUPABASE_PUBLISHABLE_KEY;
+  const envUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+  const envKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
 
-  if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
-    const missing = [
-      ...(!SUPABASE_URL ? ["SUPABASE_URL"] : []),
-      ...(!SUPABASE_PUBLISHABLE_KEY ? ["SUPABASE_PUBLISHABLE_KEY"] : []),
-    ];
-    const message = `Missing Supabase environment variable(s): ${missing.join(", ")}. Connect Supabase in Lovable Cloud.`;
-    throw new Error(message);
+  const envMatchesCanonicalProject = !!envUrl && envUrl.includes(EXPECTED_PROJECT_ID);
+
+  if (envUrl && !envMatchesCanonicalProject && typeof console !== "undefined") {
+    console.warn(
+      `[supabase] VITE_SUPABASE_URL pointe vers une autre instance (${envUrl}) — ignorée au profit de ${CANONICAL_SUPABASE_URL}.`,
+    );
   }
+
+  const SUPABASE_URL = envMatchesCanonicalProject ? envUrl! : CANONICAL_SUPABASE_URL;
+  const SUPABASE_PUBLISHABLE_KEY = envMatchesCanonicalProject
+    ? envKey || CANONICAL_SUPABASE_PUBLISHABLE_KEY
+    : CANONICAL_SUPABASE_PUBLISHABLE_KEY;
 
   purgeStaleSession();
 
