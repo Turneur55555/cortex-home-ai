@@ -9,12 +9,6 @@ import {
   TOTAL_TIERS,
   type RankState,
 } from "@/lib/fitness/exerciseRanks";
-import { estimateWorkoutCalories } from "@/lib/fitness/calories";
-
-/** Durée moyenne (effort + repos) d'une série de musculation, en minutes —
- *  base pour estimer les calories brûlées cumulées sur un exercice en
- *  l'absence de durée de séance réelle par exercice. */
-const MINUTES_PER_SET = 0.75;
 
 const ROMAN = ["I", "II", "III", "IV", "V"];
 /** Poids de corps utilisé tant que l'utilisateur n'en a renseigné aucun. */
@@ -56,10 +50,6 @@ export interface ExerciseProgressionSnapshot {
   nextRankHint: string | null;
   best: ExerciseBest;
   sessionCount: number;
-  /** Nombre total de séries enregistrées, toutes séances confondues. */
-  totalSets: number;
-  /** Estimation des calories brûlées cumulées sur cet exercice (MET musculation). */
-  estimatedCalories: number;
   /** false = poids de corps par défaut utilisé, le rang est approximatif. */
   bodyweightKnown: boolean;
 }
@@ -81,12 +71,8 @@ export function useExerciseProgression(
     const bodyweightKg = latestWeight ?? DEFAULT_BODYWEIGHT_KG;
 
     const best: ExerciseBest = { tonnage: 0, weight: 0, reps: 0, oneRM: 0 };
-    let totalSets = 0;
-    let totalTonnage = 0;
     for (const s of sessions) {
       const m = computeSessionMetrics(s);
-      totalSets += s.sets.length;
-      totalTonnage += m.tonnage;
       if (m.tonnage > best.tonnage) best.tonnage = m.tonnage;
       if (m.topWeight > best.weight) {
         best.weight = m.topWeight;
@@ -96,12 +82,6 @@ export function useExerciseProgression(
       }
       if (m.best1RM > best.oneRM) best.oneRM = m.best1RM;
     }
-    const estimatedCalories =
-      estimateWorkoutCalories({
-        durationMinutes: totalSets * MINUTES_PER_SET,
-        volumeKg: totalTonnage,
-        bodyWeightKg: latestWeight,
-      }) ?? 0;
 
     const loading = historyLoading || bodyLoading;
 
@@ -123,8 +103,6 @@ export function useExerciseProgression(
       nextRankHint: loading ? null : (result?.nextRankHint ?? null),
       best,
       sessionCount: sessions.length,
-      totalSets,
-      estimatedCalories,
       bodyweightKnown: latestWeight != null,
     };
   }, [data, measurements, historyLoading, bodyLoading, exerciseName]);

@@ -83,17 +83,8 @@ function TrophyTile({
 
 export function ExerciseRankCard({ exerciseName }: { exerciseName: string }) {
   const { user } = useAuth();
-  const {
-    rank,
-    masteryPercent,
-    nextRankHint,
-    best,
-    sessionCount,
-    totalSets,
-    estimatedCalories,
-    bodyweightKnown,
-    isLoading,
-  } = useExerciseProgression(exerciseName);
+  const { rank, masteryPercent, nextRankHint, best, sessionCount, bodyweightKnown, isLoading } =
+    useExerciseProgression(exerciseName);
   const [rankUp, setRankUp] = useState<RankState | null>(null);
   const [shareOpen, setShareOpen] = useState(false);
   const initialisedRef = useRef(false);
@@ -286,10 +277,7 @@ export function ExerciseRankCard({ exerciseName }: { exerciseName: string }) {
         <ExerciseRankShareSheet
           exerciseName={exerciseName}
           rank={rank}
-          masteryPercent={masteryPercent}
           best={best}
-          totalSets={totalSets}
-          estimatedCalories={estimatedCalories}
           onClose={() => setShareOpen(false)}
         />
       )}
