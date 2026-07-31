@@ -130,7 +130,7 @@ export function ExerciseRankShareSheet({
             {/* Carte à capturer — ratio 2:3, affiche de victoire : illustration → record → résultat */}
             <div
               ref={captureRef}
-              className="relative w-full overflow-hidden rounded-[28px]"
+              className="relative isolate w-full overflow-hidden rounded-[28px]"
               style={{
                 aspectRatio: "2 / 3",
                 background: [
@@ -140,12 +140,26 @@ export function ExerciseRankShareSheet({
                   "#050505",
                 ].join(", "),
                 boxShadow: rankSurfaceShadow(colors, { y: 30, blur: 80, spread: -30 }),
+                // Force sa propre couche de composition GPU : évite le bug de rendu
+                // WebKit/Safari (voir ExerciseRankCard.tsx) où des coins arrondis +
+                // overflow imbriqués sous un ancêtre `backdrop-filter` (ici le
+                // `backdrop-blur-md` du fond de sheet) se peignent en noir plein —
+                // l'illustration disparaît — au lieu du contenu réel, en particulier
+                // sur iOS Safari.
+                transform: "translateZ(0)",
               }}
             >
-              {/* Grain global — lie l'ambiance de fond et l'illustration en une seule matière */}
+              {/* Grain global — lie l'ambiance de fond et l'illustration en une seule matière.
+                  `translateZ(0)` isole aussi ce calque `mix-blend-mode` dans sa propre
+                  couche de composition : sans ça, WebKit/iOS peut échouer à peindre le
+                  calque qu'il est censé mélanger (même bug racine que ci-dessus). */}
               <div
                 className="pointer-events-none absolute inset-0 opacity-[0.07] mix-blend-overlay"
-                style={{ backgroundImage: MATERIAL_GRAIN, backgroundSize: "180px" }}
+                style={{
+                  backgroundImage: MATERIAL_GRAIN,
+                  backgroundSize: "180px",
+                  transform: "translateZ(0)",
+                }}
               />
 
               <div className="relative flex h-full flex-col p-4 pt-4">
@@ -179,7 +193,10 @@ export function ExerciseRankShareSheet({
                       background: `radial-gradient(ellipse at 50% 55%, ${colors.glow}, transparent 55%)`,
                     }}
                   />
-                  <div className="relative h-full w-full overflow-hidden rounded-[24px]">
+                  <div
+                    className="relative isolate h-full w-full overflow-hidden rounded-[24px]"
+                    style={{ transform: "translateZ(0)" }}
+                  >
                     <RankIllustration
                       rankKey={rank.rank.key}
                       label={rank.rank.label}
@@ -188,7 +205,11 @@ export function ExerciseRankShareSheet({
                     {/* Grain/débris — texture procédurale partagée du système de rang */}
                     <div
                       className="pointer-events-none absolute inset-0 opacity-25 mix-blend-overlay"
-                      style={{ backgroundImage: MATERIAL_GRAIN, backgroundSize: "160px" }}
+                      style={{
+                        backgroundImage: MATERIAL_GRAIN,
+                        backgroundSize: "160px",
+                        transform: "translateZ(0)",
+                      }}
                     />
                     <div
                       className="pointer-events-none absolute inset-0"
