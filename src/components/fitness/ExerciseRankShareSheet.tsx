@@ -1,16 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toPng } from "html-to-image";
-import { Share2, Download, X, Loader2 } from "lucide-react";
+import { Share2, Download, X, Loader2, Dumbbell, Flame, Target } from "lucide-react";
 import { RankIllustration } from "@/components/rpg/RankIllustration";
-import { rankGlowShadow, rankRingInset, rankSurfaceShadow } from "@/components/rpg/rankTheme";
+import { rankRingInset, rankSurfaceShadow, rankTextGlow } from "@/components/rpg/rankTheme";
 import type { RankState } from "@/lib/fitness/exerciseRanks";
 import { gradeName } from "@/lib/fitness/rpg/grade";
+import { inferMuscleGroupFromName } from "@/lib/fitness/muscleGroupInference";
 import type { ExerciseBest } from "@/hooks/useExerciseProgression";
 import { Portal } from "@/components/Portal";
 
 /**
- * Carte de partage 4:5 — pensée pour Instagram, Threads, X.
+ * Carte de partage 2:3 — pensée pour Instagram, Threads, X.
  * Identique visuellement à la fiche mais isolée et exportable.
  */
 export function ExerciseRankShareSheet({
@@ -18,17 +19,23 @@ export function ExerciseRankShareSheet({
   rank,
   masteryPercent,
   best,
+  totalSets,
+  estimatedCalories,
   onClose,
 }: {
   exerciseName: string;
   rank: RankState;
   masteryPercent: number;
   best: ExerciseBest;
+  totalSets: number;
+  estimatedCalories: number;
   onClose: () => void;
 }) {
   const captureRef = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState<null | "share" | "download">(null);
   const { colors } = rank.rank;
+  const grade = gradeName(rank.rank.key, rank.levelInRank);
+  const muscleGroup = inferMuscleGroupFromName(exerciseName) ?? "Corps entier";
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -58,7 +65,7 @@ export function ExerciseRankShareSheet({
         share?: (d: ShareData) => Promise<void>;
       };
       if (nav.canShare?.({ files: [file] }) && nav.share) {
-        const gradeLabel = `${rank.rank.label} — ${gradeName(rank.rank.key, rank.levelInRank)}`;
+        const gradeLabel = `${rank.rank.label} — ${grade}`;
         await nav.share({
           files: [file],
           title: `${gradeLabel} — ${exerciseName}`,
@@ -120,103 +127,168 @@ export function ExerciseRankShareSheet({
             exit={{ y: 40, opacity: 0 }}
             transition={{ type: "spring", stiffness: 220, damping: 24 }}
             onClick={(e) => e.stopPropagation()}
-            className="flex w-full max-w-[360px] flex-col items-center gap-4 px-5 pb-8"
+            className="flex w-full max-w-[380px] flex-col items-center gap-4 px-5 pb-8"
           >
-            {/* Carte à capturer — ratio 4:5, l'illustration officielle du rang EST la carte */}
+            {/* Carte à capturer — ratio 2:3, l'illustration officielle du rang EST la carte */}
             <div
               ref={captureRef}
-              className="relative w-full overflow-hidden rounded-3xl"
+              className="relative w-full overflow-hidden rounded-[28px]"
               style={{
-                aspectRatio: "4 / 5",
+                aspectRatio: "2 / 3",
+                background: "#050505",
                 boxShadow: rankSurfaceShadow(colors, { y: 30, blur: 80, spread: -30 }),
               }}
             >
-              <RankIllustration
-                rankKey={rank.rank.key}
-                label={rank.rank.label}
-                className="absolute inset-0 h-full w-full"
-              />
-              <div
-                className="pointer-events-none absolute inset-0"
-                style={{
-                  background:
-                    "linear-gradient(180deg, rgba(0,0,0,0.55) 0%, transparent 32%, transparent 55%, rgba(0,0,0,0.85) 100%)",
-                }}
-              />
-
-              <div className="relative flex h-full flex-col items-center justify-between p-6 pt-8">
-                {/* Signature haut + grade officiel (info absente de l'illustration) */}
-                <div className="flex w-full items-center justify-between">
-                  <p
-                    className="text-[9px] font-bold uppercase tracking-[0.4em]"
-                    style={{ color: colors.secondary, opacity: 0.9 }}
-                  >
-                    iCortex · Rang
+              <div className="relative flex h-full flex-col p-4 pt-5">
+                {/* En-tête — ICORTEX + Rang·Grade, sans pictogramme */}
+                <div className="flex shrink-0 flex-col items-center gap-1 text-center">
+                  <p className="text-[11px] font-bold uppercase tracking-[0.55em] text-white/45">
+                    iCortex
                   </p>
-                  <span className="rounded-md bg-black/60 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-white backdrop-blur-sm">
-                    {gradeName(rank.rank.key, rank.levelInRank)}
-                  </span>
+                  <p
+                    className="text-[11px] font-extrabold uppercase tracking-[0.3em]"
+                    style={{ color: colors.secondary }}
+                  >
+                    {rank.rank.label} • {grade}
+                  </p>
                 </div>
 
-                {/* Exercice (le rang est porté par l'illustration elle-même) */}
-                <p
-                  className="text-center text-[11px] uppercase tracking-[0.28em] text-white/85 line-clamp-1"
-                  style={{ textShadow: "0 1px 8px rgba(0,0,0,0.85)" }}
+                {/* Titre — nom de l'exercice, immense, centré */}
+                <h2
+                  className="mt-1.5 shrink-0 text-center font-serif text-[21px] font-extrabold uppercase leading-[1.08] tracking-wide text-white"
+                  style={{ textShadow: rankTextGlow(colors.glow, 20, "0 1px 6px rgba(0,0,0,0.6)") }}
                 >
                   {exerciseName}
-                </p>
+                </h2>
 
-                {/* Stats */}
-                <div className="grid w-full grid-cols-3 gap-2">
-                  <ShareStat
-                    value={best.weight > 0 ? `${best.weight}` : "—"}
-                    unit="kg"
-                    label="PR"
-                    featured
-                    colors={colors}
+                {/* Illustration monumentale — ne doit jamais empiéter sur l'interface */}
+                <div className="relative my-2 min-h-0 flex-1 overflow-hidden rounded-2xl">
+                  <RankIllustration
+                    rankKey={rank.rank.key}
+                    label={rank.rank.label}
+                    className="absolute inset-0 h-full w-full"
                   />
-                  <ShareStat
-                    value={`×${best.reps || "—"}`}
-                    unit="reps"
-                    label="Série"
-                    colors={colors}
-                  />
-                  <ShareStat
-                    value={best.oneRM > 0 ? `${Math.round(best.oneRM)}` : "—"}
-                    unit="kg"
-                    label="1RM"
-                    colors={colors}
+                  <div
+                    className="pointer-events-none absolute inset-0"
+                    style={{
+                      background:
+                        "linear-gradient(180deg, rgba(0,0,0,0.35) 0%, transparent 22%, transparent 78%, rgba(0,0,0,0.5) 100%)",
+                    }}
                   />
                 </div>
 
-                {/* Maîtrise + signature */}
-                <div className="w-full">
-                  <div className="mb-1.5 flex items-center justify-between text-[9px] font-semibold uppercase tracking-[0.2em]">
-                    <span className="text-white/50">Maîtrise</span>
-                    <span style={{ color: colors.secondary }}>
-                      {rank.isMax ? "MAX" : `${Math.round(masteryPercent)}%`}
+                {/* Bloc performance — record + stats équilibrées + maîtrise */}
+                <div
+                  className="shrink-0 rounded-2xl p-2.5"
+                  style={{
+                    background:
+                      "linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.015))",
+                    boxShadow: rankRingInset(colors.primary, "35"),
+                  }}
+                >
+                  <p
+                    className="text-center text-[8.5px] font-bold uppercase tracking-[0.35em]"
+                    style={{ color: colors.secondary }}
+                  >
+                    ✦ Nouveau record ✦
+                  </p>
+                  <div className="mt-0.5 flex items-baseline justify-center gap-1.5">
+                    <span className="font-serif text-[26px] font-extrabold leading-none text-white">
+                      {best.weight > 0 ? best.weight : "—"}
+                    </span>
+                    <span
+                      className="text-[10px] font-bold uppercase tracking-wider"
+                      style={{ color: colors.secondary }}
+                    >
+                      kg
+                    </span>
+                    <span className="mx-0.5 text-lg font-light text-white/40">×</span>
+                    <span className="font-serif text-[26px] font-extrabold leading-none text-white">
+                      {best.reps > 0 ? best.reps : "—"}
+                    </span>
+                    <span
+                      className="text-[10px] font-bold uppercase tracking-wider"
+                      style={{ color: colors.secondary }}
+                    >
+                      reps
                     </span>
                   </div>
-                  <div
-                    className="h-2 overflow-hidden rounded-full"
-                    style={{
-                      background: "rgba(0,0,0,0.55)",
-                      boxShadow: "inset 0 1px 2px rgba(0,0,0,0.7)",
-                    }}
-                  >
-                    <div
-                      className="h-full rounded-full"
-                      style={{
-                        width: `${Math.max(0, Math.min(100, masteryPercent))}%`,
-                        background: colors.gradient,
-                        boxShadow: rankGlowShadow(colors.glow, 0, 10, 0),
-                      }}
+
+                  <div className="mt-2 grid grid-cols-2 gap-1.5">
+                    <ShareStat
+                      value={best.tonnage > 0 ? Math.round(best.tonnage) : "—"}
+                      unit="kg"
+                      label="Volume"
+                      colors={colors}
+                    />
+                    <ShareStat
+                      value={best.oneRM > 0 ? Math.round(best.oneRM) : "—"}
+                      unit="kg"
+                      label="1RM estimé"
+                      colors={colors}
                     />
                   </div>
-                  <p className="mt-3 text-center text-[9px] uppercase tracking-[0.3em] text-white/35">
-                    icortex.app
-                  </p>
+
+                  <div className="mt-2">
+                    <div className="mb-1 flex items-center justify-between text-[8.5px] font-semibold uppercase tracking-[0.2em]">
+                      <span className="text-white/50">Maîtrise</span>
+                      <span style={{ color: colors.secondary }}>
+                        {rank.isMax ? "MAX" : `${Math.round(masteryPercent)}%`}
+                      </span>
+                    </div>
+                    <div
+                      className="h-1.5 overflow-hidden rounded-full"
+                      style={{
+                        background: "rgba(0,0,0,0.55)",
+                        boxShadow: "inset 0 1px 2px rgba(0,0,0,0.7)",
+                      }}
+                    >
+                      <div
+                        className="h-full rounded-full"
+                        style={{
+                          width: `${Math.max(0, Math.min(100, masteryPercent))}%`,
+                          background: colors.gradient,
+                        }}
+                      />
+                    </div>
+                  </div>
                 </div>
+
+                {/* Pied de carte — Séries / Calories / Focus musculaire */}
+                <div
+                  className="mt-2 flex shrink-0 items-stretch justify-between rounded-2xl px-3 py-1.5"
+                  style={{
+                    background: "rgba(255,255,255,0.03)",
+                    boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.06)",
+                  }}
+                >
+                  <FooterStat
+                    icon={Dumbbell}
+                    value={`${totalSets}`}
+                    label="Séries"
+                    colors={colors}
+                  />
+                  <div className="w-px shrink-0 bg-white/10" />
+                  <FooterStat
+                    icon={Flame}
+                    value={`${estimatedCalories}`}
+                    unit="kcal"
+                    label="Calories"
+                    colors={colors}
+                  />
+                  <div className="w-px shrink-0 bg-white/10" />
+                  <FooterStat
+                    icon={Target}
+                    value={muscleGroup}
+                    label="Focus musculaire"
+                    colors={colors}
+                  />
+                </div>
+
+                {/* Branding — discret */}
+                <p className="mt-2.5 shrink-0 text-center text-[9px] uppercase tracking-[0.3em] text-white/30">
+                  icortex.app
+                </p>
               </div>
             </div>
 
@@ -229,7 +301,12 @@ export function ExerciseRankShareSheet({
                 style={{
                   background: `linear-gradient(180deg, ${colors.primary}, ${colors.primary}cc)`,
                   color: colors.text,
-                  boxShadow: rankGlowShadow(colors.glow, 10, 26, -12),
+                  boxShadow: rankSurfaceShadow(colors, {
+                    ringAlpha: "40",
+                    y: 10,
+                    blur: 26,
+                    spread: -12,
+                  }),
                 }}
               >
                 {busy === "share" ? (
@@ -263,34 +340,56 @@ function ShareStat({
   unit,
   label,
   colors,
-  featured = false,
 }: {
   value: string | number;
   unit: string;
   label: string;
-  colors: { primary: string; secondary: string; glow: string };
-  featured?: boolean;
+  colors: { primary: string; secondary: string };
 }) {
   return (
     <div
-      className="rounded-xl p-2 text-center"
+      className="rounded-lg p-1.5 text-center"
       style={{
-        background: "linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.02))",
-        boxShadow: featured
-          ? rankRingInset(colors.primary, "55")
-          : "inset 0 0 0 1px rgba(255,255,255,0.06)",
+        background: "linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.015))",
+        boxShadow: rankRingInset(colors.primary, "30"),
       }}
     >
-      <div
-        className="font-serif text-xl font-bold leading-none"
-        style={{ color: featured ? colors.secondary : "#f5f5f4" }}
-      >
+      <div className="font-serif text-base font-bold leading-none text-white">
+        {value}{" "}
+        <span className="text-[10px] font-bold uppercase" style={{ color: colors.secondary }}>
+          {unit}
+        </span>
+      </div>
+      <div className="mt-1 text-[7.5px] font-semibold uppercase tracking-[0.16em] text-white/45">
+        {label}
+      </div>
+    </div>
+  );
+}
+
+function FooterStat({
+  icon: Icon,
+  value,
+  unit,
+  label,
+  colors,
+}: {
+  icon: typeof Dumbbell;
+  value: string;
+  unit?: string;
+  label: string;
+  colors: { secondary: string };
+}) {
+  return (
+    <div className="flex flex-1 flex-col items-center gap-0.5 px-1 text-center">
+      <Icon className="h-3 w-3" style={{ color: colors.secondary }} />
+      <div className="font-serif text-[12px] font-bold leading-none text-white">
         {value}
+        {unit && (
+          <span className="ml-0.5 text-[8px] font-bold uppercase text-white/50">{unit}</span>
+        )}
       </div>
-      <div className="mt-0.5 text-[8px] font-bold uppercase tracking-[0.2em] text-white/55">
-        {unit}
-      </div>
-      <div className="mt-1 text-[8px] font-semibold uppercase tracking-[0.18em] text-white/40">
+      <div className="text-[7px] font-semibold uppercase tracking-[0.12em] text-white/40">
         {label}
       </div>
     </div>
