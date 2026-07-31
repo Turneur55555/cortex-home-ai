@@ -1364,3 +1364,46 @@ rester manuel). Vérification faite sur les vrais workflows CI, pas une supposit
 - **`computeCompleteness`** (nouveau, `useExerciseAdmin.ts`) : score 0-100 + liste des informations
   manquantes (photo/GIF/vidéo/groupe musculaire/muscles secondaires/équipement/instructions/alias/
   variantes), affiché en badge sur chaque ligne de la liste de recherche.
+- **Refonte « Santé nutritionnelle » — Phase 1 (2026-07-31)** : `sante-nutritionnelle.tsx` était
+  100% mock (`SCORE`/`PILLARS`/`MACROS`/`MICRONUTRIENTS`/`INSIGHTS` en constantes statiques, aucun
+  hook) ; accès/route/emplacement dans le menu Profil inchangés. Transformée en tableau de bord réel
+  à 6 sections (Métabolisme, Corps, Nutrition, Activité, Santé, Analyse IA), chaque indicateur non
+  encore disponible affichant un état « À venir » propre plutôt qu'une valeur inventée.
+  - **`src/lib/fitness/metabolism.ts`** (nouveau, pur, + tests) : `computeBMR` (Mifflin-St Jeor),
+    `computeTDEE`, `computeBMI`, `bmiCategory`, `ACTIVITY_LEVELS`, `GOAL_DELTAS` — extrait de la
+    logique jusque-là dupliquée en dur dans `GoalsSheet.tsx` (calculateur TDEE de la sheet Objectifs
+    nutrition). `GoalsSheet.tsx` refactorée pour consommer ces fonctions au lieu de sa propre copie.
+  - **`src/lib/fitness/activitySummary.ts`** (nouveau, pur, + tests) : `computeWeeklyActivitySummary`
+    — nombre de séances + calories brûlées estimées sur les 7 derniers jours, réutilise
+    `workoutTonnage` (`strength.ts`) et `estimateWorkoutCalories` (`calories.ts`, déjà responsable de
+    l'estimation affichée par séance dans `WorkoutCard`) plutôt que de dupliquer le calcul.
+  - **`src/hooks/useDailyActivity.ts`** (nouveau) : `useLatestActivity()` lit le dernier relevé de la
+    table existante `daily_activity` (steps/active_calories/avg_hr/resting_hr, alimentée par l'import
+    Apple Health — `HealthDataPanel`) ; jusqu'ici cette table n'était consommée par aucun hook.
+  - **`src/components/fitness/ComingSoonTile.tsx`** / **`ComingSoonCard.tsx`** (nouveaux) : variantes
+    « à venir » de `StatTile` (tuile, même gabarit, bordure pointillée) et d'une grande carte premium
+    (Analyse IA) — réutilisables partout où un indicateur n'est pas encore implémenté.
+  - **Données réelles reconnectées** : poids/IMC (`useBodyMeasurements` + `computeBMI`, nouveau —
+    aucun IMC n'existait avant dans le code), macros/calories du jour + objectifs
+    (`useNutrition`+`useNutritionGoals`+`useNutritionTotals`, déjà existants), séances/calories
+    brûlées 7j (`useWorkouts` + `computeWeeklyActivitySummary`), pas/FC (`useLatestActivity`).
+  - **TDEE** affiché = `nutrition_goals.calories` (réutilisation directe, pas de nouveau calcul) ;
+    état « à définir » avec lien vers `/nutrition` si absent.
+  - **BMR décision clé** : aucune donnée d'âge/sexe/niveau d'activité n'existe nulle part dans le
+    schéma (poids → `body_tracking`, taille → `user_preferences.height_cm` seulement) ; les stocker
+    demanderait une nouvelle table **consommée** par le frontend, ce que le garde-fou CI
+    `supabase-types.yml` (PR bloquante si `types.ts` dérive de la base, table pas encore appliquée
+    tant que la migration n'est pas mergée sur `main`) empêche de faire en toute sécurité dans une
+    seule PR. Migration `20260805090000_metabolic_profile_foundation.sql` créée (table
+    `metabolic_profile`, RLS propriétaire, trigger `updated_at` réutilisant
+    `set_nutrition_goals_updated_at`) mais **volontairement non consommée** par le frontend dans
+    cette phase — fondation prête pour une phase ultérieure une fois `types.ts` régénéré après
+    merge. BMR affiche donc « À venir » en V1.
+  - **Objectif de poids** : aucune fonctionnalité de ce type n'existait déjà dans Cortex (recherché
+    `target_weight`/`weight_goal` — aucun résultat ; la table `goals` avec `goal_type = 'weight_loss'`
+    existe mais n'est lue par aucun hook, origine/statut incertains) → affiché « à venir » plutôt que
+    de brancher sur une table orpheline non confirmée.
+  - Hydratation, sommeil, HRV, récupération, stress, NEAT/EAT/TEF/dépense adaptative/adaptation
+    métabolique, masse grasse/musculaire, tour de taille, analyse corporelle IA, temps actif :
+    aucune donnée nulle part dans le schéma → « À venir » partout, sections prêtes à accueillir ces
+    données sans reprise de layout.
