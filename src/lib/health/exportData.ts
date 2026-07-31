@@ -11,7 +11,6 @@ const TABLES = [
   "nutrition",
   "nutrition_goals",
   "nutrition_favorites",
-  "goals",
   "user_badges",
   "user_stats",
   "user_activity",
