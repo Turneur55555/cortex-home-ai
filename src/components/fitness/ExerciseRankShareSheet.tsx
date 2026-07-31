@@ -15,6 +15,142 @@ import { gradeName } from "@/lib/fitness/rpg/grade";
 import type { ExerciseBest } from "@/hooks/useExerciseProgression";
 import { Portal } from "@/components/Portal";
 
+// ============================================================
+// MODE DEBUG TEMPORAIRE — diagnostic de la disparition de l'illustration
+// sur iOS Safari. À retirer une fois la cause confirmée sur appareil réel.
+// N'affecte aucune mise en page : n'ajoute qu'un panneau de lecture et deux
+// contours (rouge = conteneur, vert = <img>), tous deux `pointer-events-none`.
+// ============================================================
+const DEBUG_MODE = true;
+
+interface IllustrationDiag {
+  containerW: number;
+  containerH: number;
+  imgW: number;
+  imgH: number;
+  naturalWidth: number;
+  naturalHeight: number;
+  complete: boolean;
+  currentSrc: string;
+  display: string;
+  visibility: string;
+  opacity: string;
+  zIndex: string;
+}
+
+function useIllustrationDiag(containerRef: React.RefObject<HTMLDivElement | null>) {
+  const [diag, setDiag] = useState<IllustrationDiag | { error: string } | null>(null);
+
+  useEffect(() => {
+    if (!DEBUG_MODE) return;
+    let cancelled = false;
+
+    function scan() {
+      if (cancelled) return;
+      const container = containerRef.current;
+      if (!container) {
+        setDiag({ error: "conteneur introuvable (ref non montée)" });
+        return;
+      }
+      const img = container.querySelector("img");
+      if (!img) {
+        setDiag({ error: "AUCUNE BALISE <img> DANS LE DOM" });
+        return;
+      }
+      const containerRect = container.getBoundingClientRect();
+      const imgRect = img.getBoundingClientRect();
+      const cs = window.getComputedStyle(img);
+      setDiag({
+        containerW: containerRect.width,
+        containerH: containerRect.height,
+        imgW: imgRect.width,
+        imgH: imgRect.height,
+        naturalWidth: img.naturalWidth,
+        naturalHeight: img.naturalHeight,
+        complete: img.complete,
+        currentSrc: img.currentSrc || "(vide)",
+        display: cs.display,
+        visibility: cs.visibility,
+        opacity: cs.opacity,
+        zIndex: cs.zIndex,
+      });
+    }
+
+    scan();
+    const interval = window.setInterval(scan, 400);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [containerRef]);
+
+  return diag;
+}
+
+function DiagRow({ label, value }: { label: string; value: string | number | boolean }) {
+  return (
+    <div className="flex justify-between gap-3">
+      <span className="text-white/50">{label}</span>
+      <span className="break-all text-right text-lime-300">{String(value)}</span>
+    </div>
+  );
+}
+
+/** Panneau de lecture — affiche les métriques réelles de l'illustration en direct. */
+function IllustrationDebugPanel({ diag }: { diag: IllustrationDiag | { error: string } | null }) {
+  const [copied, setCopied] = useState(false);
+
+  async function copyDiag() {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(diag, null, 2));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* clipboard indisponible (contexte non https, ou permission refusée) */
+    }
+  }
+
+  return (
+    <div className="pointer-events-none fixed inset-x-2 top-16 z-[9999] max-h-[55vh] overflow-auto rounded-md bg-black/90 p-2 font-mono text-[9px] leading-tight text-white shadow-2xl">
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <p className="font-bold text-red-400">DEBUG — illustration</p>
+        <button
+          onClick={copyDiag}
+          disabled={!diag}
+          className="pointer-events-auto rounded bg-white/20 px-2 py-0.5 text-[9px] font-bold text-white"
+        >
+          {copied ? "Copié !" : "Copier"}
+        </button>
+      </div>
+      {!diag && <p className="text-white/50">Analyse…</p>}
+      {diag && "error" in diag && <p className="font-bold text-red-400">{diag.error}</p>}
+      {diag && !("error" in diag) && (
+        <div className="space-y-0.5">
+          <DiagRow
+            label="conteneur W×H"
+            value={`${diag.containerW.toFixed(1)} × ${diag.containerH.toFixed(1)}`}
+          />
+          <DiagRow
+            label="img (rendu) W×H"
+            value={`${diag.imgW.toFixed(1)} × ${diag.imgH.toFixed(1)}`}
+          />
+          <DiagRow label="naturalWidth" value={diag.naturalWidth} />
+          <DiagRow label="naturalHeight" value={diag.naturalHeight} />
+          <DiagRow label="complete" value={diag.complete} />
+          <DiagRow label="display" value={diag.display} />
+          <DiagRow label="visibility" value={diag.visibility} />
+          <DiagRow label="opacity" value={diag.opacity} />
+          <DiagRow label="z-index" value={diag.zIndex} />
+          <div className="mt-1 border-t border-white/20 pt-1">
+            <span className="text-white/50">currentSrc</span>
+            <p className="break-all text-lime-300">{diag.currentSrc}</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /**
  * Carte de partage 2:3 — une affiche de victoire, pas une fiche de stats :
  * illustration monumentale, "RECORD BATTU", résultat brut. Rien d'autre.
@@ -31,6 +167,8 @@ export function ExerciseRankShareSheet({
   onClose: () => void;
 }) {
   const captureRef = useRef<HTMLDivElement>(null);
+  const illustrationContainerRef = useRef<HTMLDivElement>(null);
+  const illustrationDiag = useIllustrationDiag(illustrationContainerRef);
   const [busy, setBusy] = useState<null | "share" | "download">(null);
   const { colors } = rank.rank;
   const grade = gradeName(rank.rank.key, rank.levelInRank);
@@ -119,6 +257,8 @@ export function ExerciseRankShareSheet({
             <X className="h-4 w-4" />
           </button>
 
+          {DEBUG_MODE && <IllustrationDebugPanel diag={illustrationDiag} />}
+
           <motion.div
             initial={{ y: 40, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
@@ -186,7 +326,13 @@ export function ExerciseRankShareSheet({
                 </h2>
 
                 {/* Illustration monumentale — dominante, mais jamais devant le texte */}
-                <div className="relative mt-3.5 min-h-0 flex-[3.4] overflow-visible rounded-[24px]">
+                <div
+                  ref={illustrationContainerRef}
+                  className="relative mt-3.5 min-h-0 flex-[3.4] overflow-visible rounded-[24px]"
+                  style={
+                    DEBUG_MODE ? { outline: "3px solid red", outlineOffset: "-3px" } : undefined
+                  }
+                >
                   <div
                     className="pointer-events-none absolute -inset-6 rounded-[40px]"
                     style={{
@@ -207,6 +353,11 @@ export function ExerciseRankShareSheet({
                       rankKey={rank.rank.key}
                       label={rank.rank.label}
                       className="absolute inset-0 h-full w-full"
+                      style={
+                        DEBUG_MODE
+                          ? { outline: "3px solid lime", outlineOffset: "-3px" }
+                          : undefined
+                      }
                     />
                     {/* Grain/débris — texture procédurale partagée du système de rang */}
                     <div
