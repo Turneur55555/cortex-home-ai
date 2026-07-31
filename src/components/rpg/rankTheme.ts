@@ -64,6 +64,17 @@ export function rankTextGlow(glow: string, blur: number, extra?: string): string
   return extra ? `0 0 ${blur}px ${glow}, ${extra}` : `0 0 ${blur}px ${glow}`;
 }
 
+/** Finition métallique (texte gravé ou bordure de plaque) — un dégradé vertical
+ *  clair→teinte→sombre construit uniquement à partir des couleurs officielles
+ *  du rang, jamais d'une teinte inventée : c'est ce qui rend chaque rang
+ *  identifiable jusque dans ses ornements premium (acier pour Héros, bronze
+ *  pour Guerrier, lave pour Colosse…). */
+export function rankMetallicGradient(
+  theme: Pick<RankTheme, "primary" | "secondary" | "text">,
+): string {
+  return `linear-gradient(180deg, ${theme.text} 0%, ${theme.secondary} 45%, ${theme.primary} 100%)`;
+}
+
 /** Halo très discret derrière une image de rang à silhouette non rectangulaire
  *  (fanion) — `filter: drop-shadow` épouse la forme réelle des pixels
  *  visibles, contrairement à un `box-shadow` qui éclairerait tout le

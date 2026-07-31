@@ -5,7 +5,8 @@ import { Share2, Download, X, Loader2 } from "lucide-react";
 import { RankIllustration } from "@/components/rpg/RankIllustration";
 import {
   MATERIAL_GRAIN,
-  rankRingInset,
+  rankMetallicGradient,
+  rankRelief,
   rankSurfaceShadow,
   rankTextGlow,
 } from "@/components/rpg/rankTheme";
@@ -132,40 +133,42 @@ export function ExerciseRankShareSheet({
               className="relative w-full overflow-hidden rounded-[28px]"
               style={{
                 aspectRatio: "2 / 3",
-                background: `radial-gradient(ellipse 130% 85% at 50% 38%, ${colors.glow}26, transparent 62%), #050505`,
+                background: [
+                  `radial-gradient(circle at 16% 24%, ${colors.secondary}14, transparent 28%)`,
+                  `radial-gradient(circle at 86% 68%, ${colors.primary}12, transparent 30%)`,
+                  `radial-gradient(ellipse 60% 42% at 50% 42%, ${colors.glow}, transparent 70%)`,
+                  "#050505",
+                ].join(", "),
                 boxShadow: rankSurfaceShadow(colors, { y: 30, blur: 80, spread: -30 }),
               }}
             >
-              <div className="relative flex h-full flex-col p-4 pt-5">
-                {/* En-tête — grade + petit ornement, l'illustration porte déjà l'identité du rang */}
-                <div className="shrink-0 text-center">
-                  <div
-                    className="mx-auto h-1.5 w-1.5 rotate-45"
-                    style={{
-                      background: colors.secondary,
-                      boxShadow: rankTextGlow(colors.glow, 6),
-                    }}
-                  />
-                  <p
-                    className="mt-1 text-[12px] font-extrabold uppercase tracking-[0.4em] text-white/90"
-                    style={{ textShadow: rankTextGlow(colors.glow, 14) }}
-                  >
-                    {grade}
-                  </p>
-                </div>
+              {/* Grain global — lie l'ambiance de fond et l'illustration en une seule matière */}
+              <div
+                className="pointer-events-none absolute inset-0 opacity-[0.07] mix-blend-overlay"
+                style={{ backgroundImage: MATERIAL_GRAIN, backgroundSize: "180px" }}
+              />
+
+              <div className="relative flex h-full flex-col p-4 pt-4">
+                {/* En-tête — le grade seul, l'illustration porte déjà l'identité du rang */}
+                <p
+                  className="shrink-0 text-center text-[12px] font-extrabold uppercase leading-none tracking-[0.4em] text-white/90"
+                  style={{ textShadow: rankTextGlow(colors.glow, 14) }}
+                >
+                  {grade}
+                </p>
 
                 {/* Nom de l'exercice — indispensable : c'est ce que le partage raconte */}
                 <h2
-                  className="mt-1 shrink-0 text-center font-serif text-[21px] font-extrabold uppercase leading-[1.08] tracking-wide text-white"
+                  className="shrink-0 text-center font-serif text-[21px] font-extrabold uppercase leading-[1.08] tracking-wide text-white"
                   style={{ textShadow: rankTextGlow(colors.glow, 18, "0 1px 6px rgba(0,0,0,0.6)") }}
                 >
                   {exerciseName}
                 </h2>
 
                 {/* Illustration monumentale — dominante, mais jamais devant le texte */}
-                <div className="relative mt-2 min-h-0 flex-[3] overflow-visible rounded-[24px]">
+                <div className="relative mt-3.5 min-h-0 flex-[3.4] overflow-visible rounded-[24px]">
                   <div
-                    className="pointer-events-none absolute -inset-5 rounded-[36px]"
+                    className="pointer-events-none absolute -inset-6 rounded-[40px]"
                     style={{
                       background: `radial-gradient(ellipse at 50% 40%, ${colors.glow}, transparent 70%)`,
                     }}
@@ -197,80 +200,77 @@ export function ExerciseRankShareSheet({
                   </div>
                 </div>
 
-                {/* Bloc victoire — RECORD BATTU en gradient signature du rang */}
+                {/* Bloc victoire — titre de trophée, gravé dans le métal du rang */}
                 <div className="mt-2 flex shrink-0 flex-col items-center">
                   <div
-                    className="h-px w-16"
+                    className="h-px w-14"
                     style={{
                       background: `linear-gradient(90deg, transparent, ${colors.primary}80, transparent)`,
                     }}
                   />
                   <p
-                    className="mt-1.5 bg-clip-text text-center text-[26px] font-extrabold uppercase leading-none tracking-[0.06em] text-transparent"
+                    className="mt-1.5 bg-clip-text text-center font-serif text-[27px] italic font-extrabold uppercase leading-none tracking-[0.14em] text-transparent"
                     style={{
-                      backgroundImage: colors.gradient,
-                      filter: `drop-shadow(0 0 18px ${colors.glow})`,
+                      backgroundImage: rankMetallicGradient(colors),
+                      filter: `drop-shadow(0 0 32px ${colors.glow}) drop-shadow(0 2px 3px rgba(0,0,0,0.5))`,
                     }}
                   >
                     Record battu
                   </p>
                 </div>
 
-                {/* Plaque de résultat — bloc premium, pas une simple ligne de texte */}
+                {/* Plaque de résultat — trophée métallique : bordure gravée, relief, sheen */}
                 <div
-                  className="relative mt-2 shrink-0 overflow-hidden rounded-2xl px-3 py-3"
+                  className="relative mt-2 shrink-0 overflow-hidden rounded-2xl p-px"
                   style={{
-                    background:
-                      "linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.015))",
-                    boxShadow: `inset 0 1px 0 rgba(255,255,255,0.08), ${rankRingInset(colors.primary, "45")}`,
+                    background: rankMetallicGradient(colors),
+                    boxShadow: "0 10px 24px -12px rgba(0,0,0,0.7)",
                   }}
                 >
-                  {[
-                    "top-1.5 left-1.5",
-                    "top-1.5 right-1.5",
-                    "bottom-1.5 left-1.5",
-                    "bottom-1.5 right-1.5",
-                  ].map((pos) => (
-                    <span
-                      key={pos}
-                      className={`absolute ${pos} h-1.5 w-1.5 rotate-45`}
+                  <div
+                    className="relative overflow-hidden rounded-[15px] px-3 py-2"
+                    style={{
+                      background: "linear-gradient(180deg, #161616 0%, #0a0a0a 55%, #050505 100%)",
+                      boxShadow: rankRelief(colors, 0.22),
+                    }}
+                  >
+                    {/* Sheen — reflet diagonal discret, la signature d'une surface polie */}
+                    <div
+                      className="pointer-events-none absolute inset-0"
                       style={{
-                        background: colors.secondary,
-                        boxShadow: rankTextGlow(colors.glow, 4),
+                        background:
+                          "linear-gradient(115deg, transparent 38%, rgba(255,255,255,0.07) 50%, transparent 62%)",
                       }}
                     />
-                  ))}
-                  <div className="flex items-baseline justify-center">
-                    <span
-                      className="font-serif text-[64px] font-extrabold leading-none text-white"
-                      style={{ textShadow: "0 4px 20px rgba(0,0,0,0.6)" }}
-                    >
-                      {best.weight > 0 ? best.weight : "—"}
-                    </span>
-                    <span
-                      className="ml-1 text-[14px] font-bold uppercase tracking-wide"
-                      style={{ color: colors.secondary }}
-                    >
-                      kg
-                    </span>
-                    <span className="mx-2 text-[28px] font-light leading-none text-white/35">
-                      ×
-                    </span>
-                    <span
-                      className="font-serif text-[64px] font-extrabold leading-none"
-                      style={{
-                        color: colors.secondary,
-                        textShadow: rankTextGlow(colors.glow, 24, "0 4px 20px rgba(0,0,0,0.6)"),
-                      }}
-                    >
-                      {best.reps > 0 ? best.reps : "—"}
-                    </span>
-                    <span
-                      className="ml-1 text-[14px] font-bold uppercase tracking-wide"
-                      style={{ color: colors.secondary }}
-                    >
-                      reps
-                    </span>
+                    <div className="relative flex items-baseline justify-center">
+                      <span
+                        className="font-serif text-[74px] font-extrabold leading-none text-white"
+                        style={{ textShadow: "0 4px 20px rgba(0,0,0,0.6)" }}
+                      >
+                        {best.weight > 0 ? best.weight : "—"}
+                      </span>
+                      <span className="ml-1 text-[11px] font-bold uppercase tracking-wide text-white/45">
+                        kg
+                      </span>
+                      <span className="mx-2 text-[32px] font-light leading-none text-white/45">
+                        ×
+                      </span>
+                      <span
+                        className="font-serif text-[74px] font-extrabold leading-none"
+                        style={{
+                          color: colors.secondary,
+                          textShadow: rankTextGlow(colors.glow, 26, "0 4px 20px rgba(0,0,0,0.6)"),
+                        }}
+                      >
+                        {best.reps > 0 ? best.reps : "—"}
+                      </span>
+                      <span
+                        className="ml-1 text-[11px] font-bold uppercase tracking-wide"
+                        style={{ color: `${colors.secondary}90` }}
+                      >
+                        reps
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
