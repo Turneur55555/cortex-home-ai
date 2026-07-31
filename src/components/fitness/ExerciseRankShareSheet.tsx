@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toPng } from "html-to-image";
-import { Share2, Download, X, Loader2, Dumbbell, Flame, Target } from "lucide-react";
+import { Share2, Download, X, Loader2, Dumbbell, Flame, Target, Sparkles } from "lucide-react";
 import { RankIllustration } from "@/components/rpg/RankIllustration";
 import { rankRingInset, rankSurfaceShadow, rankTextGlow } from "@/components/rpg/rankTheme";
 import type { RankState } from "@/lib/fitness/exerciseRanks";
@@ -162,7 +162,7 @@ export function ExerciseRankShareSheet({
                 </h2>
 
                 {/* Illustration monumentale — ne doit jamais empiéter sur l'interface */}
-                <div className="relative my-2 min-h-0 flex-1 overflow-hidden rounded-2xl">
+                <div className="relative my-1.5 min-h-0 flex-1 overflow-hidden rounded-2xl">
                   <RankIllustration
                     rankKey={rank.rank.key}
                     label={rank.rank.label}
@@ -177,23 +177,39 @@ export function ExerciseRankShareSheet({
                   />
                 </div>
 
-                {/* Bloc performance — record + stats équilibrées + maîtrise */}
+                {/* Bloc performance — point focal de la carte : le record domine visuellement,
+                    les stats et la maîtrise sont volontairement plus discrètes en dessous. */}
                 <div
-                  className="shrink-0 rounded-2xl p-2.5"
+                  className="relative shrink-0 overflow-hidden rounded-2xl p-2.5"
                   style={{
                     background:
-                      "linear-gradient(180deg,rgba(255,255,255,0.05),rgba(255,255,255,0.015))",
-                    boxShadow: rankRingInset(colors.primary, "35"),
+                      "linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.015))",
+                    boxShadow: `inset 0 1px 0 rgba(255,255,255,0.07), ${rankRingInset(colors.primary, "40")}`,
                   }}
                 >
-                  <p
-                    className="text-center text-[8.5px] font-bold uppercase tracking-[0.35em]"
-                    style={{ color: colors.secondary }}
-                  >
-                    ✦ Nouveau record ✦
-                  </p>
-                  <div className="mt-0.5 flex items-baseline justify-center gap-1.5">
-                    <span className="font-serif text-[26px] font-extrabold leading-none text-white">
+                  {/* Halo radial derrière le record — attire l'œil en premier */}
+                  <div
+                    className="pointer-events-none absolute inset-x-0 top-0 h-24"
+                    style={{
+                      background: `radial-gradient(ellipse 70% 100% at 50% 0%, ${colors.glow}, transparent 75%)`,
+                    }}
+                  />
+
+                  <div className="relative flex items-center justify-center gap-1.5">
+                    <Sparkles className="h-2.5 w-2.5" style={{ color: colors.secondary }} />
+                    <p
+                      className="text-[9px] font-bold uppercase tracking-[0.35em]"
+                      style={{ color: colors.secondary }}
+                    >
+                      Nouveau record
+                    </p>
+                    <Sparkles className="h-2.5 w-2.5" style={{ color: colors.secondary }} />
+                  </div>
+                  <div className="relative mt-0.5 flex items-baseline justify-center gap-1.5">
+                    <span
+                      className="font-serif text-[30px] font-extrabold leading-none text-white"
+                      style={{ textShadow: rankTextGlow(colors.glow, 16) }}
+                    >
                       {best.weight > 0 ? best.weight : "—"}
                     </span>
                     <span
@@ -202,8 +218,11 @@ export function ExerciseRankShareSheet({
                     >
                       kg
                     </span>
-                    <span className="mx-0.5 text-lg font-light text-white/40">×</span>
-                    <span className="font-serif text-[26px] font-extrabold leading-none text-white">
+                    <span className="mx-0.5 text-lg font-light text-white/35">×</span>
+                    <span
+                      className="font-serif text-[30px] font-extrabold leading-none text-white"
+                      style={{ textShadow: rankTextGlow(colors.glow, 16) }}
+                    >
                       {best.reps > 0 ? best.reps : "—"}
                     </span>
                     <span
@@ -214,7 +233,14 @@ export function ExerciseRankShareSheet({
                     </span>
                   </div>
 
-                  <div className="mt-2 grid grid-cols-2 gap-1.5">
+                  <div
+                    className="relative mx-auto mt-2 h-px w-full"
+                    style={{
+                      background: `linear-gradient(90deg, transparent, ${colors.primary}55, transparent)`,
+                    }}
+                  />
+
+                  <div className="relative mt-2 grid grid-cols-2 gap-1.5">
                     <ShareStat
                       value={best.tonnage > 0 ? Math.round(best.tonnage) : "—"}
                       unit="kg"
@@ -229,7 +255,7 @@ export function ExerciseRankShareSheet({
                     />
                   </div>
 
-                  <div className="mt-2">
+                  <div className="relative mt-2">
                     <div className="mb-1 flex items-center justify-between text-[8.5px] font-semibold uppercase tracking-[0.2em]">
                       <span className="text-white/50">Maîtrise</span>
                       <span style={{ color: colors.secondary }}>
@@ -256,7 +282,7 @@ export function ExerciseRankShareSheet({
 
                 {/* Pied de carte — Séries / Calories / Focus musculaire */}
                 <div
-                  className="mt-2 flex shrink-0 items-stretch justify-between rounded-2xl px-3 py-1.5"
+                  className="mt-1.5 flex shrink-0 items-stretch justify-between rounded-2xl px-3 py-1.5"
                   style={{
                     background: "rgba(255,255,255,0.03)",
                     boxShadow: "inset 0 0 0 1px rgba(255,255,255,0.06)",
@@ -286,7 +312,7 @@ export function ExerciseRankShareSheet({
                 </div>
 
                 {/* Branding — discret */}
-                <p className="mt-2.5 shrink-0 text-center text-[9px] uppercase tracking-[0.3em] text-white/30">
+                <p className="mt-2 shrink-0 text-center text-[9px] uppercase tracking-[0.3em] text-white/30">
                   icortex.app
                 </p>
               </div>
@@ -348,7 +374,7 @@ function ShareStat({
 }) {
   return (
     <div
-      className="rounded-lg p-1.5 text-center"
+      className="rounded-xl p-1.5 text-center"
       style={{
         background: "linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.015))",
         boxShadow: rankRingInset(colors.primary, "30"),
