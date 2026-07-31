@@ -96,13 +96,48 @@ function DiagRow({ label, value }: { label: string; value: string | number | boo
   );
 }
 
-/** Panneau de lecture — affiche les métriques réelles de l'illustration en direct. */
-function IllustrationDebugPanel({ diag }: { diag: IllustrationDiag | { error: string } | null }) {
+// Chaque effet décoratif de la carte, isolé en interrupteur indépendant.
+// Tout à `false` = exactement `<div><img /></div>`, sans la moindre classe
+// décorative — le point de départ demandé pour la bissection. On réactive
+// un interrupteur à la fois jusqu'à ce que l'illustration disparaisse à
+// nouveau : celui qu'on vient de cocher est la cause.
+const EFFECT_LABELS = {
+  cardIsolate: "carte : isolation: isolate",
+  cardTransform: "carte : transform: translateZ(0)",
+  cardGrain: "carte : grain global (mix-blend-mode)",
+  illuGlow1: "illustration : halo radial n°1",
+  illuGlow2: "illustration : halo radial n°2",
+  illuWrapperIsolate: "wrapper img : isolation: isolate",
+  illuWrapperTransform: "wrapper img : transform: translateZ(0)",
+  illuGrain: "wrapper img : grain (mix-blend-mode)",
+  illuFade: "wrapper img : dégradé de fondu (assombrit les bords)",
+} as const;
+
+type EffectKey = keyof typeof EFFECT_LABELS;
+
+const ALL_EFFECTS_OFF = Object.fromEntries(
+  (Object.keys(EFFECT_LABELS) as EffectKey[]).map((k) => [k, false]),
+) as Record<EffectKey, boolean>;
+
+/** Panneau de lecture + interrupteurs de bissection — affiche les métriques
+ *  réelles de l'illustration en direct, et permet de réactiver chaque effet
+ *  décoratif un par un directement sur l'appareil réel. */
+function IllustrationDebugPanel({
+  diag,
+  effects,
+  onToggle,
+  onResetAll,
+}: {
+  diag: IllustrationDiag | { error: string } | null;
+  effects: Record<EffectKey, boolean>;
+  onToggle: (key: EffectKey) => void;
+  onResetAll: (value: boolean) => void;
+}) {
   const [copied, setCopied] = useState(false);
 
   async function copyDiag() {
     try {
-      await navigator.clipboard.writeText(JSON.stringify(diag, null, 2));
+      await navigator.clipboard.writeText(JSON.stringify({ diag, effects }, null, 2));
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
@@ -111,13 +146,13 @@ function IllustrationDebugPanel({ diag }: { diag: IllustrationDiag | { error: st
   }
 
   return (
-    <div className="pointer-events-none fixed inset-x-2 top-16 z-[9999] max-h-[55vh] overflow-auto rounded-md bg-black/90 p-2 font-mono text-[9px] leading-tight text-white shadow-2xl">
+    <div className="fixed inset-x-2 top-16 z-[9999] max-h-[70vh] overflow-auto rounded-md bg-black/90 p-2 font-mono text-[9px] leading-tight text-white shadow-2xl">
       <div className="mb-1 flex items-center justify-between gap-2">
         <p className="font-bold text-red-400">DEBUG — illustration</p>
         <button
           onClick={copyDiag}
           disabled={!diag}
-          className="pointer-events-auto rounded bg-white/20 px-2 py-0.5 text-[9px] font-bold text-white"
+          className="rounded bg-white/20 px-2 py-0.5 text-[9px] font-bold text-white"
         >
           {copied ? "Copié !" : "Copier"}
         </button>
@@ -147,6 +182,43 @@ function IllustrationDebugPanel({ diag }: { diag: IllustrationDiag | { error: st
           </div>
         </div>
       )}
+
+      <div className="mt-2 border-t border-white/20 pt-2">
+        <div className="mb-1 flex items-center justify-between">
+          <p className="font-bold text-red-400">
+            Bissection — tout OFF = &lt;div&gt;&lt;img/&gt;&lt;/div&gt; nu
+          </p>
+          <div className="flex gap-1">
+            <button
+              onClick={() => onResetAll(false)}
+              className="rounded bg-white/20 px-1.5 py-0.5 font-bold text-white"
+            >
+              Tout OFF
+            </button>
+            <button
+              onClick={() => onResetAll(true)}
+              className="rounded bg-white/20 px-1.5 py-0.5 font-bold text-white"
+            >
+              Tout ON
+            </button>
+          </div>
+        </div>
+        <div className="space-y-1">
+          {(Object.keys(EFFECT_LABELS) as EffectKey[]).map((key) => (
+            <label key={key} className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={effects[key]}
+                onChange={() => onToggle(key)}
+                className="h-3.5 w-3.5"
+              />
+              <span className={effects[key] ? "text-lime-300" : "text-white/60"}>
+                {EFFECT_LABELS[key]}
+              </span>
+            </label>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -169,6 +241,15 @@ export function ExerciseRankShareSheet({
   const captureRef = useRef<HTMLDivElement>(null);
   const illustrationContainerRef = useRef<HTMLDivElement>(null);
   const illustrationDiag = useIllustrationDiag(illustrationContainerRef);
+  const [effects, setEffects] = useState<Record<EffectKey, boolean>>(ALL_EFFECTS_OFF);
+  const toggleEffect = (key: EffectKey) => setEffects((prev) => ({ ...prev, [key]: !prev[key] }));
+  const resetAllEffects = (value: boolean) =>
+    setEffects(
+      Object.fromEntries(Object.keys(EFFECT_LABELS).map((k) => [k, value])) as Record<
+        EffectKey,
+        boolean
+      >,
+    );
   const [busy, setBusy] = useState<null | "share" | "download">(null);
   const { colors } = rank.rank;
   const grade = gradeName(rank.rank.key, rank.levelInRank);
@@ -257,7 +338,14 @@ export function ExerciseRankShareSheet({
             <X className="h-4 w-4" />
           </button>
 
-          {DEBUG_MODE && <IllustrationDebugPanel diag={illustrationDiag} />}
+          {DEBUG_MODE && (
+            <IllustrationDebugPanel
+              diag={illustrationDiag}
+              effects={effects}
+              onToggle={toggleEffect}
+              onResetAll={resetAllEffects}
+            />
+          )}
 
           <motion.div
             initial={{ y: 40, opacity: 0 }}
@@ -270,7 +358,11 @@ export function ExerciseRankShareSheet({
             {/* Carte à capturer — ratio 2:3, affiche de victoire : illustration → record → résultat */}
             <div
               ref={captureRef}
-              className="relative isolate w-full overflow-hidden rounded-[28px]"
+              className={
+                DEBUG_MODE
+                  ? `relative w-full overflow-hidden rounded-[28px] ${effects.cardIsolate ? "isolate" : ""}`
+                  : "relative isolate w-full overflow-hidden rounded-[28px]"
+              }
               style={{
                 background: [
                   `radial-gradient(circle at 16% 24%, ${colors.secondary}14, transparent 28%)`,
@@ -279,7 +371,7 @@ export function ExerciseRankShareSheet({
                   "#050505",
                 ].join(", "),
                 boxShadow: rankSurfaceShadow(colors, { y: 30, blur: 80, spread: -30 }),
-                transform: "translateZ(0)",
+                transform: !DEBUG_MODE || effects.cardTransform ? "translateZ(0)" : undefined,
               }}
             >
               {/* Cale de ratio 2:3 — technique padding-top, seule méthode qui garantit
@@ -299,14 +391,16 @@ export function ExerciseRankShareSheet({
                   `translateZ(0)` isole aussi ce calque `mix-blend-mode` dans sa propre
                   couche de composition : sans ça, WebKit/iOS peut échouer à peindre le
                   calque qu'il est censé mélanger (même bug racine que ci-dessus). */}
-              <div
-                className="pointer-events-none absolute inset-0 opacity-[0.07] mix-blend-overlay"
-                style={{
-                  backgroundImage: MATERIAL_GRAIN,
-                  backgroundSize: "180px",
-                  transform: "translateZ(0)",
-                }}
-              />
+              {(!DEBUG_MODE || effects.cardGrain) && (
+                <div
+                  className="pointer-events-none absolute inset-0 opacity-[0.07] mix-blend-overlay"
+                  style={{
+                    backgroundImage: MATERIAL_GRAIN,
+                    backgroundSize: "180px",
+                    transform: "translateZ(0)",
+                  }}
+                />
+              )}
 
               <div className="absolute inset-0 flex flex-col p-4 pt-4">
                 {/* En-tête — le grade seul, l'illustration porte déjà l'identité du rang */}
@@ -333,21 +427,32 @@ export function ExerciseRankShareSheet({
                     DEBUG_MODE ? { outline: "3px solid red", outlineOffset: "-3px" } : undefined
                   }
                 >
+                  {(!DEBUG_MODE || effects.illuGlow1) && (
+                    <div
+                      className="pointer-events-none absolute -inset-6 rounded-[40px]"
+                      style={{
+                        background: `radial-gradient(ellipse at 50% 40%, ${colors.glow}, transparent 70%)`,
+                      }}
+                    />
+                  )}
+                  {(!DEBUG_MODE || effects.illuGlow2) && (
+                    <div
+                      className="pointer-events-none absolute -inset-2 rounded-[28px] opacity-70"
+                      style={{
+                        background: `radial-gradient(ellipse at 50% 55%, ${colors.glow}, transparent 55%)`,
+                      }}
+                    />
+                  )}
                   <div
-                    className="pointer-events-none absolute -inset-6 rounded-[40px]"
+                    className={
+                      DEBUG_MODE
+                        ? `relative h-full w-full overflow-hidden rounded-[24px] ${effects.illuWrapperIsolate ? "isolate" : ""}`
+                        : "relative isolate h-full w-full overflow-hidden rounded-[24px]"
+                    }
                     style={{
-                      background: `radial-gradient(ellipse at 50% 40%, ${colors.glow}, transparent 70%)`,
+                      transform:
+                        !DEBUG_MODE || effects.illuWrapperTransform ? "translateZ(0)" : undefined,
                     }}
-                  />
-                  <div
-                    className="pointer-events-none absolute -inset-2 rounded-[28px] opacity-70"
-                    style={{
-                      background: `radial-gradient(ellipse at 50% 55%, ${colors.glow}, transparent 55%)`,
-                    }}
-                  />
-                  <div
-                    className="relative isolate h-full w-full overflow-hidden rounded-[24px]"
-                    style={{ transform: "translateZ(0)" }}
                   >
                     <RankIllustration
                       rankKey={rank.rank.key}
@@ -360,21 +465,25 @@ export function ExerciseRankShareSheet({
                       }
                     />
                     {/* Grain/débris — texture procédurale partagée du système de rang */}
-                    <div
-                      className="pointer-events-none absolute inset-0 opacity-25 mix-blend-overlay"
-                      style={{
-                        backgroundImage: MATERIAL_GRAIN,
-                        backgroundSize: "160px",
-                        transform: "translateZ(0)",
-                      }}
-                    />
-                    <div
-                      className="pointer-events-none absolute inset-0"
-                      style={{
-                        background:
-                          "linear-gradient(180deg, rgba(0,0,0,0.32) 0%, transparent 22%, transparent 70%, rgba(0,0,0,0.68) 100%)",
-                      }}
-                    />
+                    {(!DEBUG_MODE || effects.illuGrain) && (
+                      <div
+                        className="pointer-events-none absolute inset-0 opacity-25 mix-blend-overlay"
+                        style={{
+                          backgroundImage: MATERIAL_GRAIN,
+                          backgroundSize: "160px",
+                          transform: "translateZ(0)",
+                        }}
+                      />
+                    )}
+                    {(!DEBUG_MODE || effects.illuFade) && (
+                      <div
+                        className="pointer-events-none absolute inset-0"
+                        style={{
+                          background:
+                            "linear-gradient(180deg, rgba(0,0,0,0.32) 0%, transparent 22%, transparent 70%, rgba(0,0,0,0.68) 100%)",
+                        }}
+                      />
+                    )}
                   </div>
                 </div>
 
