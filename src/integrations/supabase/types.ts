@@ -208,6 +208,9 @@ export type Database = {
       body_tracking: {
         Row: {
           body_fat: number | null
+          body_fat_max_percent: number | null
+          body_fat_method: string | null
+          body_fat_min_percent: number | null
           chest: number | null
           created_at: string
           date: string
@@ -226,6 +229,9 @@ export type Database = {
         }
         Insert: {
           body_fat?: number | null
+          body_fat_max_percent?: number | null
+          body_fat_method?: string | null
+          body_fat_min_percent?: number | null
           chest?: number | null
           created_at?: string
           date: string
@@ -244,6 +250,9 @@ export type Database = {
         }
         Update: {
           body_fat?: number | null
+          body_fat_max_percent?: number | null
+          body_fat_method?: string | null
+          body_fat_min_percent?: number | null
           chest?: number | null
           created_at?: string
           date?: string
