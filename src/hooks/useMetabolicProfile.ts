@@ -42,6 +42,8 @@ export function useMetabolicProfile() {
 export interface MetabolicProfileInput {
   sex: BiologicalSex;
   age: number;
+  /** Niveau d'activité quotidienne HORS SPORT (voir lib/fitness/neat.ts NEAT_ACTIVITY_LEVELS) — optionnel. */
+  activityLevel?: number | null;
 }
 
 export function useUpsertMetabolicProfile() {
@@ -52,9 +54,15 @@ export function useUpsertMetabolicProfile() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      const { error } = await supabase
-        .from("metabolic_profile")
-        .upsert({ user_id: user.id, sex: input.sex, age: input.age }, { onConflict: "user_id" });
+      const { error } = await supabase.from("metabolic_profile").upsert(
+        {
+          user_id: user.id,
+          sex: input.sex,
+          age: input.age,
+          activity_level: input.activityLevel ?? null,
+        },
+        { onConflict: "user_id" },
+      );
       if (error) throw error;
     },
     onSuccess: () => {

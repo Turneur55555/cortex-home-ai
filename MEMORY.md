@@ -1528,3 +1528,31 @@ rester manuel). Vérification faite sur les vrais workflows CI, pas une supposit
     en paramètre à `computeNEAT`) — aucun refactor de `eat.ts`/`tef.ts`/`metabolism.ts` nécessaire.
   - **Pas de nouvelle table** : NEAT calculé à la volée depuis `daily_activity` (déjà existante,
     Phase 1) + EAT/poids/taille déjà chargés par la page.
+- **Correction Phase 2D — indépendance Cortex (2026-08-01)** : règle produit permanente posée par
+  Nathan — BMR/EAT/TEF/NEAT/futur TDEE doivent fonctionner sans AUCUNE source externe (Apple Health,
+  montres connectées…), qui restent des améliorations facultatives, jamais un prérequis. La V1 du
+  NEAT (ci-dessus) priorisait `daily_activity.active_calories`/`steps`, alimentés uniquement par
+  l'import Apple Health — corrigé.
+  - **Nouvelle méthode principale « Cortex-native »** (`estimateNeatFromActivityLevel`,
+    `lib/fitness/neat.ts`) : `NEAT = BMR × niveau d'activité quotidienne HORS SPORT`. Fonctionne
+    avec le seul profil Cortex (âge/sexe/poids/taille/niveau déclaré), zéro donnée externe.
+  - **`NEAT_ACTIVITY_LEVELS`** (nouveau, 4 niveaux : Très sédentaire 0.15 / Peu actif 0.25 / Actif
+    0.35 / Très actif 0.5) — coefficients volontairement DISTINCTS des multiplicateurs TDEE
+    classiques (`metabolism.ts` ACTIVITY_LEVELS 1.2–1.9, qui incluent déjà l'exercice et compteraient
+    le sport deux fois avec l'EAT). Valeurs inspirées de la littérature NEAT (Levine et al., part du
+    NEAT dans la dépense journalière ~15–50 % selon le niveau d'activité occupationnelle), appliquées
+    au BMR plutôt qu'au TDEE total pour rester conservateur et simple. Réutilise la colonne
+    `metabolic_profile.activity_level` existante (contrainte `CHECK (activity_level > 0)` déjà
+    compatible, aucune migration nécessaire) — sémantique redéfinie proprement (ce n'est plus un
+    multiplicateur TDEE classique) plutôt que réutilisée aveuglément comme demandé.
+  - **Nouvelle priorité `computeNEAT`** : (1) Cortex-native — toujours tenté en premier ; (2) repli
+    optionnel `active_calories − EAT` (wearable) ; (3) repli optionnel pas × poids ; (4) données
+    insuffisantes. L'EAT n'entre JAMAIS dans le calcul Cortex-native (testé explicitement : le NEAT
+    est strictement identique quel que soit le nombre de séances loggées le même jour).
+  - **`MetabolicProfileSheet`** étendue : sélecteur du niveau d'activité hors sport (4 choix,
+    libellés + descriptions reprenant `NEAT_ACTIVITY_LEVELS`), toujours la même sheet réutilisée
+    (aucune nouvelle page). Nouveau bandeau « Niveau d'activité non renseigné » dans Métabolisme,
+    distinct du bandeau BMR existant (évite un message trompeur si âge/sexe sont déjà complets).
+  - **Confirmation indépendance** : un utilisateur peut installer Cortex, renseigner profil/poids/
+    nutrition/séances, sans connecter aucun service externe, et obtenir BMR + EAT + TEF + NEAT.
+    Testé explicitement (`neat.test.ts`, describe "Apple Health independence").

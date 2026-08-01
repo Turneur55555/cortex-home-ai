@@ -35,7 +35,7 @@ import { bmiCategory, computeBMI, computeBMR } from "@/lib/fitness/metabolism";
 import { computeWeeklyActivitySummary } from "@/lib/fitness/activitySummary";
 import { computeDailyEAT } from "@/lib/fitness/eat";
 import { computeTEF } from "@/lib/fitness/tef";
-import { computeNEAT } from "@/lib/fitness/neat";
+import { computeNEAT, isNeatActivityLevel } from "@/lib/fitness/neat";
 import { localDateYMD } from "@/lib/dates";
 import { StatTile } from "@/components/fitness/StatTile";
 import { ComingSoonTile } from "@/components/fitness/ComingSoonTile";
@@ -94,6 +94,10 @@ function SanteNutritionnellePage() {
   const metabolicAge = metabolicProfile?.age ?? null;
   const metabolicProfileIncomplete =
     !metabolicProfileLoading && (metabolicSex == null || metabolicAge == null);
+  const activityLevelMissing =
+    !metabolicProfileLoading &&
+    !metabolicProfileIncomplete &&
+    !isNeatActivityLevel(metabolicProfile?.activity_level);
   const bmr =
     metabolicSex != null && metabolicAge != null && weight != null && prefs.height_cm != null
       ? computeBMR(metabolicSex, metabolicAge, weight, prefs.height_cm)
@@ -103,6 +107,8 @@ function SanteNutritionnellePage() {
   const dailyEAT = computeDailyEAT(workouts ?? undefined, weight, today);
   const dailyTEF = computeTEF(totals);
   const dailyNEAT = computeNEAT({
+    bmr,
+    activityLevel: metabolicProfile?.activity_level,
     activeCalories: todayActivity?.active_calories,
     steps: todayActivity?.steps,
     weightKg: weight,
@@ -161,7 +167,7 @@ function SanteNutritionnellePage() {
             <ComingSoonTile icon={<TrendingUp className="h-4 w-4" />} label="Objectif calorique" />
           )}
           <ComingSoonTile icon={<Gauge className="h-4 w-4" />} label="Dépense adaptative" />
-          {todayActivityLoading ? (
+          {todayActivityLoading || metabolicProfileLoading ? (
             <Skeleton className="h-[84px] rounded-2xl" />
           ) : dailyNEAT.kcal != null ? (
             <StatTile
@@ -231,11 +237,32 @@ function SanteNutritionnellePage() {
             </button>
           </div>
         )}
+        {activityLevelMissing && (
+          <div className="mt-2 flex items-center justify-between gap-3 rounded-2xl border border-border bg-card px-4 py-3 shadow-card">
+            <div className="min-w-0">
+              <p className="text-xs font-medium">Niveau d'activité non renseigné</p>
+              <p className="text-[11px] text-muted-foreground">
+                Nécessaire pour estimer ton NEAT sans appareil connecté.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowMetabolicSheet(true)}
+              className="shrink-0 rounded-full border border-white/8 bg-white/[0.04] px-3 py-1.5 text-[11px] font-semibold text-foreground transition-colors hover:border-primary/30"
+            >
+              Compléter mon profil métabolique
+            </button>
+          </div>
+        )}
       </Section>
 
       {showMetabolicSheet && (
         <MetabolicProfileSheet
-          current={{ sex: metabolicSex, age: metabolicAge }}
+          current={{
+            sex: metabolicSex,
+            age: metabolicAge,
+            activityLevel: metabolicProfile?.activity_level ?? null,
+          }}
           onClose={() => setShowMetabolicSheet(false)}
         />
       )}
