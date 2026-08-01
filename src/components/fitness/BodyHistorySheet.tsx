@@ -15,6 +15,7 @@ import {
   isKnownBodyFatMethod,
   type BodyFatMethod,
 } from "@/lib/fitness/bodyComposition";
+import { useBodyPhotoAnalyses, useDeleteBodyPhotoAnalysis } from "@/hooks/useBodyPhotoEstimate";
 
 type Row = NonNullable<ReturnType<typeof useBodyMeasurements>["data"]>[number];
 
@@ -34,6 +35,8 @@ const FIELDS: Array<{ key: keyof Row; label: string; unit: string }> = [
 export function BodyHistorySheet({ onClose }: { onClose: () => void }) {
   const { data, isLoading } = useBodyMeasurements();
   const del = useDeleteBodyMeasurement();
+  const { data: photoAnalyses } = useBodyPhotoAnalyses();
+  const deletePhotoAnalysis = useDeleteBodyPhotoAnalysis();
   const [editing, setEditing] = useState<Row | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
@@ -142,7 +145,10 @@ export function BodyHistorySheet({ onClose }: { onClose: () => void }) {
                       {isKnownBodyFatMethod(r.body_fat_method) &&
                         typeof r.body_fat === "number" && (
                           <p className="mt-2 text-[10px] font-medium text-muted-foreground">
-                            MG mesurée via {BODY_FAT_METHOD_LABELS[r.body_fat_method].toLowerCase()}
+                            {typeof r.body_fat_min_percent === "number" &&
+                            typeof r.body_fat_max_percent === "number"
+                              ? `MG estimée ${r.body_fat_min_percent}–${r.body_fat_max_percent} % (${BODY_FAT_METHOD_LABELS[r.body_fat_method].toLowerCase()}, indicatif)`
+                              : `MG mesurée via ${BODY_FAT_METHOD_LABELS[r.body_fat_method].toLowerCase()}`}
                           </p>
                         )}
 
@@ -183,7 +189,23 @@ export function BodyHistorySheet({ onClose }: { onClose: () => void }) {
                   onClick={async () => {
                     const id = confirmId;
                     setConfirmId(null);
-                    await del.mutateAsync(id);
+                    // Une mesure issue d'une analyse photo doit d'abord
+                    // supprimer les fichiers Storage (§37 du brief Phase
+                    // 6C) — jamais d'orphelins. Sinon, suppression simple
+                    // de la ligne (comportement inchangé Phase 6A/6B).
+                    const analysis = photoAnalyses?.find((a) => a.bodyTrackingId === id);
+                    if (analysis) {
+                      await deletePhotoAnalysis.mutateAsync({
+                        bodyTrackingId: id,
+                        paths: [
+                          analysis.frontPath,
+                          analysis.sidePath,
+                          ...(analysis.backPath ? [analysis.backPath] : []),
+                        ],
+                      });
+                    } else {
+                      await del.mutateAsync(id);
+                    }
                   }}
                   className="flex-1 rounded-xl bg-destructive py-2.5 text-sm font-semibold text-white"
                 >

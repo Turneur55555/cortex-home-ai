@@ -205,6 +205,62 @@ export type Database = {
           },
         ]
       }
+      body_photo_analyses: {
+        Row: {
+          back_path: string | null
+          body_tracking_id: string
+          created_at: string
+          engine_version: string
+          front_path: string
+          id: string
+          max_percent: number
+          min_percent: number
+          reference_percent: number
+          side_path: string
+          status: string
+          user_id: string
+          warnings: string[]
+        }
+        Insert: {
+          back_path?: string | null
+          body_tracking_id: string
+          created_at?: string
+          engine_version: string
+          front_path: string
+          id?: string
+          max_percent: number
+          min_percent: number
+          reference_percent: number
+          side_path: string
+          status?: string
+          user_id: string
+          warnings?: string[]
+        }
+        Update: {
+          back_path?: string | null
+          body_tracking_id?: string
+          created_at?: string
+          engine_version?: string
+          front_path?: string
+          id?: string
+          max_percent?: number
+          min_percent?: number
+          reference_percent?: number
+          side_path?: string
+          status?: string
+          user_id?: string
+          warnings?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "body_photo_analyses_body_tracking_id_fkey"
+            columns: ["body_tracking_id"]
+            isOneToOne: false
+            referencedRelation: "body_tracking"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       body_tracking: {
         Row: {
           body_fat: number | null
