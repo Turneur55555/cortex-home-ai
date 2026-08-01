@@ -1,5 +1,14 @@
-// Pure domain helpers for metabolic estimates (BMR/TDEE/BMI).
+// Pure domain helpers for metabolic estimates (BMR/BMI).
 // No React, no Supabase, no UI tokens.
+//
+// Le TDEE et la recommandation calorique NE vivent PLUS ici — voir
+// lib/fitness/tdee.ts (TDEE modélisé Cortex-native, BMR+NEAT+EAT+TEF) et
+// lib/fitness/calorieStrategy.ts (Phase 4A/4B, recommandation par objectif/
+// rythme, seule source de vérité pour la recommandation calorique).
+// L'ancien `computeTDEE` (multiplicateur d'activité classique) et
+// `computeCalorieTarget` (±300 kcal fixes, floor 1200 non justifié) ont été
+// retirés en Phase 4B : ils produisaient une recommandation concurrente,
+// moins précise, jamais Cortex-native.
 
 export type BiologicalSex = "homme" | "femme";
 
@@ -16,20 +25,6 @@ export function isValidMetabolicAge(age: number): boolean {
   return Number.isInteger(age) && age > 0 && age < 130;
 }
 
-export const ACTIVITY_LEVELS = [
-  { value: "1.2", label: "Sédentaire (peu ou pas d'exercice)" },
-  { value: "1.375", label: "Légèrement actif (1-3 j/sem)" },
-  { value: "1.55", label: "Modérément actif (3-5 j/sem)" },
-  { value: "1.725", label: "Très actif (6-7 j/sem)" },
-  { value: "1.9", label: "Extrêmement actif (sport + travail physique)" },
-] as const;
-
-export const GOAL_DELTAS = [
-  { value: "seche", label: "Sèche (−300 kcal)", delta: -300 },
-  { value: "maintien", label: "Maintien", delta: 0 },
-  { value: "prise", label: "Prise de masse (+300 kcal)", delta: 300 },
-] as const;
-
 /**
  * Métabolisme de base (BMR), formule de Mifflin-St Jeor, kcal/jour.
  * Retourne null si une entrée est invalide.
@@ -43,24 +38,6 @@ export function computeBMR(
   if (![age, weightKg, heightCm].every((v) => Number.isFinite(v) && v > 0)) return null;
   const base = 10 * weightKg + 6.25 * heightCm - 5 * age;
   return Math.round(sex === "homme" ? base + 5 : base - 161);
-}
-
-/**
- * Dépense quotidienne estimée (TDEE) = BMR × niveau d'activité, kcal/jour.
- * Ne représente que la dépense — jamais un objectif calorique (voir
- * `computeCalorieTarget` pour l'ajustement déficit/surplus).
- */
-export function computeTDEE(bmr: number, activityLevel: number): number {
-  return Math.round(bmr * activityLevel);
-}
-
-/**
- * Objectif calorique quotidien = TDEE + ajustement d'objectif
- * (déficit/surplus), kcal/jour. Distinct du TDEE : ceci est une cible
- * nutritionnelle, pas une estimation de dépense.
- */
-export function computeCalorieTarget(tdee: number, goalDeltaKcal = 0): number {
-  return Math.max(1200, Math.round(tdee) + goalDeltaKcal);
 }
 
 /** IMC = poids (kg) / taille (m)². Retourne null si une entrée est invalide. */

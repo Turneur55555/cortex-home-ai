@@ -309,6 +309,51 @@ export type Database = {
         }
         Relationships: []
       }
+      calorie_goal_adjustments: {
+        Row: {
+          applied_calories: number
+          created_at: string
+          goal: string | null
+          id: string
+          mode: string
+          previous_calories: number | null
+          reason: string | null
+          recommended_calories: number | null
+          reference_source: string | null
+          reference_tdee_kcal: number | null
+          target_rate: string | null
+          user_id: string
+        }
+        Insert: {
+          applied_calories: number
+          created_at?: string
+          goal?: string | null
+          id?: string
+          mode: string
+          previous_calories?: number | null
+          reason?: string | null
+          recommended_calories?: number | null
+          reference_source?: string | null
+          reference_tdee_kcal?: number | null
+          target_rate?: string | null
+          user_id: string
+        }
+        Update: {
+          applied_calories?: number
+          created_at?: string
+          goal?: string | null
+          id?: string
+          mode?: string
+          previous_calories?: number | null
+          reason?: string | null
+          recommended_calories?: number | null
+          reference_source?: string | null
+          reference_tdee_kcal?: number | null
+          target_rate?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       contrats: {
         Row: {
           created_at: string
@@ -2236,39 +2281,51 @@ export type Database = {
       nutrition_goals: {
         Row: {
           activity_factor: number | null
+          calorie_strategy_mode: string
           calories: number | null
           carbs: number | null
           created_at: string
           fats: number | null
           fiber_g: number | null
+          goal: string | null
+          last_auto_adjustment_at: string | null
           objective: string | null
           proteins: number | null
+          target_rate: string | null
           updated_at: string
           user_id: string
           weight_kg: number | null
         }
         Insert: {
           activity_factor?: number | null
+          calorie_strategy_mode?: string
           calories?: number | null
           carbs?: number | null
           created_at?: string
           fats?: number | null
           fiber_g?: number | null
+          goal?: string | null
+          last_auto_adjustment_at?: string | null
           objective?: string | null
           proteins?: number | null
+          target_rate?: string | null
           updated_at?: string
           user_id: string
           weight_kg?: number | null
         }
         Update: {
           activity_factor?: number | null
+          calorie_strategy_mode?: string
           calories?: number | null
           carbs?: number | null
           created_at?: string
           fats?: number | null
           fiber_g?: number | null
+          goal?: string | null
+          last_auto_adjustment_at?: string | null
           objective?: string | null
           proteins?: number | null
+          target_rate?: string | null
           updated_at?: string
           user_id?: string
           weight_kg?: number | null
@@ -3777,6 +3834,19 @@ export type Database = {
     Functions: {
       _seed_home_categories_for_user: {
         Args: { uid: string }
+        Returns: undefined
+      }
+      apply_calorie_goal_adjustment: {
+        Args: {
+          _applied_calories: number
+          _goal?: string
+          _mode: string
+          _reason?: string
+          _recommended_calories?: number
+          _reference_source?: string
+          _reference_tdee_kcal?: number
+          _target_rate?: string
+        }
         Returns: undefined
       }
       archive_exercise_reference: { Args: { p_id: string }; Returns: undefined }
