@@ -1676,3 +1676,68 @@ rester manuel). Vérification faite sur les vrais workflows CI, pas une supposit
     composition réelle du tissu perdu/gagné — eau/muscle/gras) ; la régression sur moyenne glissante
     reste un modèle simple (pas de détection d'outlier statistique, pas de pondération par qualité de
     mesure) ; aucune fusion avec le TDEE modélisé n'est effectuée (Phase 3B).
+- **Régression `types.ts`/lockfile sur `main` corrigée hors phase (2026-08-01)** : entre la fusion
+  Phase 2E et la reprise du travail Phase 3A, un push direct non-Claude (`Changes`/`Work in progress`/
+  `Corrigé garde-fou Supabase`) a écrasé `src/integrations/supabase/types.ts` (121→42 tables
+  committées) et contourné les erreurs TypeScript résultantes avec des `(supabase as any)` dans
+  `useMetabolicProfile.ts` au lieu de régénérer — violation directe de la règle CLAUDE.md "la base
+  Supabase fait foi, jamais de correctif de contournement". Le même push a aussi bumpé
+  `@lovable.dev/vite-tanstack-config` dans `package.json` (2.8.4→2.8.5) sans régénérer
+  `package-lock.json`, cassant `npm ci` en CI (même classe de bug déjà rencontrée et documentée plus
+  tôt dans le projet). CI était rouge sur `main` (Typecheck + Supabase Types Sync en échec).
+  Corrigé en deux commits directs sur `main` (validés utilisateur avant action) : régénération de
+  `types.ts` depuis la base live via Supabase MCP (vérifié conforme, 83 tables via
+  `check-supabase-types.mjs`) + retrait des `as any` devenus inutiles ; puis `npm install` pour
+  resynchroniser `package-lock.json`, vérifié par un `npm ci` propre depuis `node_modules` vidé. CI
+  repassée au vert avant de reprendre la synchronisation Phase 3A.
+- **Phase 3B — calibration du TDEE adaptatif (2026-08-01, branche
+  `claude/phase3b-adaptive-tdee-calibration`, NON mergée dans `main`)** : troisième niveau de TDEE,
+  combinaison PRUDENTE du TDEE modélisé et du TDEE observé (Phase 3A) — jamais un remplacement brutal
+  de l'un par l'autre, même à confiance maximale.
+  - **`lib/fitness/adaptiveTdeeCalibration.ts`** (logique pure) : `computeAdaptiveTdeeCalibration(input)`.
+    - **Entrées** : `modeledTdeeKcal`, `observedTdeeKcal`, `observedStatus`, `observedConfidence` — ces
+      deux derniers réutilisent directement les types `AdaptiveTdeeStatus`/`AdaptiveTdeeConfidence` de
+      la Phase 3A (aucune deuxième notion de confiance recréée).
+    - **Formule** : `adaptiveTdee = modeled + appliedCorrection`, où
+      `appliedCorrection = clamp(rawDelta × weight, ±maxCorrection)`, `rawDelta = observed − modeled`.
+      Équivalent à `modeled × (1−weight) + observed × weight`.
+    - **Poids centralisés** `ADAPTIVE_TDEE_CALIBRATION_WEIGHTS[status][confidence]`, tous **strictement
+      < 1** : `insufficient_data`→0 ; `early_estimate`→0.15 (toutes confiances) ; `established`→0.3
+      (low, cas défensif)/0.35 (medium)/**0.5 (high)**. Coefficients conservateurs choisis par défaut,
+      pas ceux suggérés à titre d'exemple dans le brief.
+    - **États** : `model_only` (observé indisponible/insuffisant OU modélisé invalide → adaptatif =
+      modélisé, correction = 0) ; `calibrating` (`early_estimate`) ; `adapted` (`established`).
+    - **Garde-fou double** : plafond absolu `MAX_CORRECTION_KCAL=400` ET relatif
+      `MAX_CORRECTION_PERCENT=15 %` (le plus conservateur des deux) — une correction ne peut jamais
+      dépasser ce plafond, quel que soit l'écart brut. Second garde-fou en amont : si
+      `|rawDelta|/modeled > DIVERGENCE_SUSPECT_PERCENT (25 %)`, le poids est amorti (`×
+      DIVERGENCE_DAMPING_FACTOR=0.5`) AVANT même le plafond — un signal très divergent (ex. observé
+      3800 vs modélisé 2500) ne fait donc jamais dériver le résultat près de l'observation brute
+      (testé explicitement, `divergenceSuspected: true` exposé dans le résultat, jamais nommé
+      "adaptation métabolique" — juste "écart important, signal traité avec prudence").
+    - **Aucune correction automatique** de `nutrition_goals.calories`, macros, ni diagnostic
+      d'adaptation métabolique — purement informatif/estimatif.
+    - **Résultat structuré** : `state`, `adaptiveTdeeKcal` (`null` uniquement si `modeledTdeeKcal`
+      indisponible — aucune ancre), `modeledTdeeKcal`, `observedTdeeKcal`, `observedWeight`,
+      `rawDeltaKcal`, `appliedCorrectionKcal`, `divergenceSuspected`, `confidence` (pass-through 3A),
+      `reason` (explicable, ex. "correction de -70 kcal appliquée au modèle (poids observé 50 %)").
+  - **`sante-nutritionnelle.tsx`** : nouvelle tuile "TDEE adaptatif" juste après "TDEE observé"
+    (section Métabolisme — les trois niveaux TDEE modélisé/observé/adaptatif sont désormais côte à
+    côte). Caption "Modèle initial" (`model_only`) / "Calibration en cours" (`calibrating`) / "Basé
+    sur ton historique" (`adapted`). `ComingSoonTile` seulement si le TDEE modélisé lui-même est
+    indisponible (pas d'ancre) — sinon toujours une valeur réelle, jamais 0 fabriqué.
+  - **Tests** (`adaptiveTdeeCalibration.test.ts`, 31 tests) : `model_only` (observé absent, données
+    insuffisantes), `calibrating` (petit delta +/-, confiance faible), `adapted` (medium/high, observé
+    </>/= modélisé), garde-fous (divergence aberrante 2500 vs 3800 — testé conforme à l'exemple du
+    brief, NaN/Infinity/négatif/nul côté observé ET modélisé, correction max toujours respectée, poids
+    toujours < 1 sur toute la matrice status×confidence), cohérence (`adaptive = modeled + correction`,
+    signe de la correction, non-mutation des entrées), 4 scénarios synthétiques (stable, sur/sous-
+    estimé, aberrant), et vérification qu'aucune clé objectif/macro n'apparaît dans le résultat.
+    L'exemple d'explicabilité du brief (modèle 2620, observé 2480 → correction -70, adaptatif 2550)
+    passe exactement avec les coefficients retenus.
+  - `npx tsc --noEmit` / `npx eslint` / `npx vitest run` (682 passed) / `npm run build` : tous verts.
+  - **Limites connues** : les seuils/poids sont des choix conservateurs raisonnés, pas calibrés sur des
+    données réelles d'utilisateurs Cortex ; pas de stabilisation temporelle inter-jours (chaque appel
+    recalcule indépendamment à partir de l'état du jour — aucune persistance de snapshot ajoutée,
+    volontairement reporté plutôt que sur-ingénieré) ; le "signal suspect" n'identifie pas la cause
+    (tracking incomplet / eau / poids erroné) — juste qu'il existe.
