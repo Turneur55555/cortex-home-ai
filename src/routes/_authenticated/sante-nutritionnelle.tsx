@@ -27,7 +27,7 @@ import { useLatestBodyWeight } from "@/hooks/useLatestBodyWeight";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { useActivityForDate, useLatestActivity } from "@/hooks/useDailyActivity";
 import { useMetabolicProfile } from "@/hooks/useMetabolicProfile";
-import { useNutrition } from "@/hooks/useNutritionData";
+import { useNutrition, useNutritionRange } from "@/hooks/useNutritionData";
 import { useNutritionGoals } from "@/hooks/useNutritionGoals";
 import { useNutritionTotals } from "@/hooks/useNutritionTotals";
 import { findLatestValue, findPreviousValue } from "@/lib/fitness/body";
@@ -37,7 +37,8 @@ import { computeDailyEAT } from "@/lib/fitness/eat";
 import { computeTEF } from "@/lib/fitness/tef";
 import { computeNEAT, isNeatActivityLevel } from "@/lib/fitness/neat";
 import { computeDailyTDEE } from "@/lib/fitness/tdee";
-import { localDateYMD } from "@/lib/dates";
+import { ADAPTIVE_TDEE_THRESHOLDS, computeAdaptiveTdee } from "@/lib/fitness/adaptiveTdee";
+import { addDaysYMD, localDateYMD } from "@/lib/dates";
 import { StatTile } from "@/components/fitness/StatTile";
 import { ComingSoonTile } from "@/components/fitness/ComingSoonTile";
 import { InsufficientDataTile } from "@/components/fitness/InsufficientDataTile";
@@ -77,6 +78,15 @@ function SanteNutritionnellePage() {
   const { data: nutritionRows, isLoading: nutritionLoading } = useNutrition(today);
   const { data: nutritionGoals } = useNutritionGoals();
   const { totals, remaining } = useNutritionTotals(nutritionRows, nutritionGoals ?? null);
+
+  const adaptiveWindowStart = addDaysYMD(
+    today,
+    -(ADAPTIVE_TDEE_THRESHOLDS.ANALYSIS_WINDOW_DAYS - 1),
+  );
+  const { data: nutritionRangeRows, isLoading: nutritionRangeLoading } = useNutritionRange(
+    adaptiveWindowStart,
+    today,
+  );
 
   const { data: workouts, isLoading: workoutsLoading } = useWorkouts();
   const { data: activity } = useLatestActivity();
@@ -122,6 +132,13 @@ function SanteNutritionnellePage() {
     neat: { kcal: dailyNEAT.kcal, method: dailyNEAT.method },
     eatKcal: dailyEAT.kcal,
     tefKcal: dailyTEF.totalKcal,
+  });
+
+  const adaptiveTdee = computeAdaptiveTdee({
+    weightSamples: bodyRows ?? [],
+    nutritionLogs: nutritionRangeRows ?? [],
+    modeledTdeeKcal: dailyTDEE.totalKcal,
+    today,
   });
 
   const calorieGoal = nutritionGoals?.calories ?? null;
@@ -187,7 +204,24 @@ function SanteNutritionnellePage() {
           ) : (
             <ComingSoonTile icon={<TrendingUp className="h-4 w-4" />} label="Objectif calorique" />
           )}
-          <ComingSoonTile icon={<Gauge className="h-4 w-4" />} label="Dépense adaptative" />
+          {bodyLoading || nutritionRangeLoading ? (
+            <Skeleton className="h-[84px] rounded-2xl" />
+          ) : adaptiveTdee.status === "insufficient_data" ? (
+            <InsufficientDataTile icon={<Gauge className="h-4 w-4" />} label="TDEE observé" />
+          ) : (
+            <StatTile
+              icon={<Gauge className="h-4 w-4" />}
+              label="TDEE observé"
+              value={`${adaptiveTdee.status === "early_estimate" ? "~" : ""}${adaptiveTdee.observedTdeeKcal}`}
+              unit="kcal/j"
+              caption={
+                adaptiveTdee.status === "early_estimate"
+                  ? "Estimation précoce"
+                  : "Basé sur tes données"
+              }
+              title={`Dépense estimée à partir de tes calories réellement consommées et de l'évolution de ton poids — ${adaptiveTdee.reason}`}
+            />
+          )}
           {todayActivityLoading || metabolicProfileLoading ? (
             <Skeleton className="h-[84px] rounded-2xl" />
           ) : dailyNEAT.kcal != null ? (

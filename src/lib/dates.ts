@@ -10,6 +10,13 @@ export function localDateYMD(d: Date = new Date()): string {
   return `${y}-${m}-${day}`;
 }
 
+/** Ajoute (ou retranche) `delta` jours à une date locale yyyy-MM-dd. */
+export function addDaysYMD(dateYMD: string, delta: number): string {
+  const d = new Date(`${dateYMD}T00:00:00`);
+  d.setDate(d.getDate() + delta);
+  return localDateYMD(d);
+}
+
 /** Lundi de la semaine courante, en date locale. */
 export function localWeekStartYMD(d: Date = new Date()): string {
   const copy = new Date(d);
