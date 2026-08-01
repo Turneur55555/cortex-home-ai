@@ -25,8 +25,7 @@ export function useMetabolicProfile() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return null;
-      // `metabolic_profile` n'est pas encore dans les types générés → cast.
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("metabolic_profile")
         .select("sex, age, activity_level")
         .eq("user_id", user.id)
@@ -57,7 +56,7 @@ export function useUpsertMetabolicProfile() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      const { error } = await (supabase as any).from("metabolic_profile").upsert(
+      const { error } = await supabase.from("metabolic_profile").upsert(
         {
           user_id: user.id,
           sex: input.sex,
