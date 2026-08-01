@@ -49,13 +49,11 @@ function purgeStaleSession() {
 }
 
 // SOURCE DE VÉRITÉ UNIQUE (décision du 31/07/2026) : le projet Supabase
-// autorisé est bcwfvpwxzlmkxobvbtzp. Les variables VITE_SUPABASE_* injectées
-// par l'environnement d'exécution (Lovable Cloud peut pointer vers une autre
-// instance) sont IGNORÉES si elles ne correspondent pas à ce projet, afin que
-// preview, publication et CI parlent tous à la même base.
-const CANONICAL_SUPABASE_URL = `https://${EXPECTED_PROJECT_ID}.supabase.co`;
-const CANONICAL_SUPABASE_PUBLISHABLE_KEY =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJjd2Z2cHd4emxta3hvYnZidHpwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5MjU5NzgsImV4cCI6MjA5NDUwMTk3OH0.wYsoYUMaYDuEv91TbpFBz3fAGTAXO6eh3vHuWrLbsek";
+// autorisé est bcwfvpwxzlmkxobvbtzp (voir src/config/supabase-project.ts pour
+// le détail et la procédure de suppression). Les variables VITE_SUPABASE_*
+// injectées par l'environnement (Lovable Cloud pointe vers une autre instance)
+// sont IGNORÉES si elles ne correspondent pas à ce projet, afin que preview,
+// publication et CI parlent tous à la même base.
 
 function createSupabaseClient() {
   const envUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
