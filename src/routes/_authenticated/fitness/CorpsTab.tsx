@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { BodyHistorySheet } from "@/components/fitness/BodyHistorySheet";
 import { EstimateBodyFatSheet } from "@/components/fitness/EstimateBodyFatSheet";
+import { EstimatePhotoBodyFatSheet } from "@/components/fitness/EstimatePhotoBodyFatSheet";
 import {
   Area,
   AreaChart,
@@ -71,6 +72,7 @@ export function CorpsTab() {
   const [period, setPeriod] = useState<"semaine" | "mois" | "trimestre">("trimestre");
   const [historyOpen, setHistoryOpen] = useState(false);
   const [estimateSheetOpen, setEstimateSheetOpen] = useState(false);
+  const [estimatePhotoSheetOpen, setEstimatePhotoSheetOpen] = useState(false);
 
   const openWithFocus = (f: MeasurementField | null) => {
     setFocusField(f);
@@ -206,6 +208,7 @@ export function CorpsTab() {
         snapshot={bodyCompositionSnapshot}
         onAddClick={() => setQuickField({ key: "body_fat", label: "Masse grasse %", unit: "%" })}
         onEstimateClick={() => setEstimateSheetOpen(true)}
+        onEstimatePhotoClick={() => setEstimatePhotoSheetOpen(true)}
       />
 
       <div className="rounded-2xl border border-border bg-card p-4 shadow-card">
@@ -347,6 +350,12 @@ export function CorpsTab() {
         <EstimateBodyFatSheet
           latestWeightKg={latestWeight}
           onClose={() => setEstimateSheetOpen(false)}
+        />
+      )}
+      {estimatePhotoSheetOpen && (
+        <EstimatePhotoBodyFatSheet
+          latestWeightKg={latestWeight}
+          onClose={() => setEstimatePhotoSheetOpen(false)}
         />
       )}
     </section>
@@ -905,10 +914,12 @@ function BodyCompositionCard({
   snapshot,
   onAddClick,
   onEstimateClick,
+  onEstimatePhotoClick,
 }: {
   snapshot: ReturnType<typeof computeBodyCompositionSnapshot> | null;
   onAddClick: () => void;
   onEstimateClick: () => void;
+  onEstimatePhotoClick: () => void;
 }) {
   if (!snapshot || snapshot.bodyFatPercent == null) {
     return (
@@ -916,7 +927,7 @@ function BodyCompositionCard({
         <p className="text-xs font-medium text-muted-foreground/70">
           Composition corporelle non renseignée
         </p>
-        <div className="mt-2 flex items-center justify-center gap-3">
+        <div className="mt-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5">
           <button
             type="button"
             onClick={onAddClick}
@@ -931,6 +942,14 @@ function BodyCompositionCard({
             className="text-[11px] font-semibold text-primary"
           >
             Estimer avec mes mensurations
+          </button>
+          <span className="text-[11px] text-muted-foreground/50">·</span>
+          <button
+            type="button"
+            onClick={onEstimatePhotoClick}
+            className="text-[11px] font-semibold text-primary"
+          >
+            Estimer avec des photos
           </button>
         </div>
       </div>
@@ -991,18 +1010,25 @@ function BodyCompositionCard({
         </p>
       )}
 
-      <div className="mt-3 flex items-center justify-between gap-1.5">
-        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-          {methodLabel && <span className="font-medium text-foreground">{methodLabel}</span>}
-          {methodLabel && confidenceLabel && <span>·</span>}
-          {confidenceLabel && <span>{confidenceLabel}</span>}
-        </div>
+      <div className="mt-3 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+        {methodLabel && <span className="font-medium text-foreground">{methodLabel}</span>}
+        {methodLabel && confidenceLabel && <span>·</span>}
+        {confidenceLabel && <span>{confidenceLabel}</span>}
+      </div>
+      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
         <button
           type="button"
           onClick={onEstimateClick}
           className="text-[11px] font-semibold text-primary"
         >
           Estimer avec mes mensurations
+        </button>
+        <button
+          type="button"
+          onClick={onEstimatePhotoClick}
+          className="text-[11px] font-semibold text-primary"
+        >
+          Estimer avec des photos
         </button>
       </div>
     </div>

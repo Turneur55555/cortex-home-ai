@@ -2348,3 +2348,118 @@ rester manuel). Vérification faite sur les vrais workflows CI, pas une supposit
     (assumé, hérité de Phase 6A) ; aucune donnée de test réelle (mensurations physiques) disponible
     pour valider empiriquement la formule contre une DEXA réelle — seule la cohérence mathématique de
     l'implémentation vs. la formule publiée a été vérifiée.
+
+## Estimation Body Fat par photos — Phase 6C (2026-08-12, même session)
+- **Phase 6B mergée dans `main`** avant ce travail (merge + CI vérifiée verte : migration appliquée,
+  colonnes/types conformes, RLS intacte, aucun `as any`) — condition préalable du brief remplie avant
+  toute ouverture de Phase 6C.
+- **Audit préalable obligatoire (§14 du brief, condition d'arrêt spéciale)** : avant d'écrire la moindre
+  ligne d'estimation, audit dédié de l'architecture photo existante ET du moteur de vision disponible.
+  Résultat : Gemini 2.5 Flash (+ GPT-4o `OPENAI_API_KEY` en fallback) est DÉJÀ en production pour
+  l'analyse d'image via `scan-meal`/`analyze-pdf` (endpoint OpenAI-compatible
+  `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`, `GEMINI_API_KEY`, image
+  passée en `data:{mime};base64,{b64}`, `tool_choice` forcé pour un JSON strict). Décision : RÉUTILISER
+  ce pattern exact (même provider, même modèle, même style d'appel) — aucun nouveau fournisseur externe
+  ajouté, donc aucune décision d'architecture/confidentialité nouvelle à faire valider. Si ce moteur
+  n'avait pas existé, la phase se serait arrêtée à l'architecture seule (upload/modèle/UI/contrat/tests)
+  sans jamais brancher un fournisseur non approuvé — conformément à l'instruction explicite du brief.
+- **Bucket Storage dédié `body-composition-photos`** (migration `20260812090000_body_fat_photo_
+  estimation.sql`) : **privé** (`public = false`), limite 10 Mo, `allowed_mime_types = ARRAY['image/
+  jpeg']` uniquement. 4 policies RLS Storage (`select`/`insert`/`update`/`delete`, `TO authenticated`),
+  prédicat `bucket_id = 'body-composition-photos' AND auth.uid()::text = (storage.foldername(name))[1]`
+  — convention de chemin `{user_id}/{analysis_id}/{vue}.jpg`, segment[1] = propriétaire, vérifié
+  manuellement pour éviter le bug historique connu de `exercise-images` (segment décalé → 403 silencieux
+  après coup). Aucune URL publique, aucun chemin prévisible permettant de contourner la RLS.
+- **Table `body_photo_analyses`** (nouvelle) : `id`, `user_id` (FK CASCADE), `body_tracking_id` (FK
+  CASCADE, NOT NULL — une analyse photo est toujours rattachée à UNE mesure `body_tracking`), `status`
+  (CHECK `'success'`), `front_path`/`side_path` (NOT NULL), `back_path` (nullable, vue optionnelle),
+  `min_percent`/`max_percent`/`reference_percent` (double precision, CHECK 1-70, `min ≤ reference ≤
+  max`), `engine_version` (CHECK IN `('photo_body_fat_v1')` — identifiant STABLE distinct de
+  `body_fat_method`, même discipline que Phase 6B `body_fat_formula`), `warnings` (text[]). RLS `FOR ALL
+  USING/WITH CHECK (auth.uid() = user_id)`. Extension `body_tracking_body_fat_formula_check` (+
+  `'photo_body_fat_v1'`) et `rate_limits_action_check` (+ `'estimate_body_fat_photo'`). Table 87/87
+  (86→87, vérifié). Aucune image stockée en base — uniquement les chemins Storage (§ jamais l'image
+  elle-même dans Postgres).
+- **Edge function `estimate-body-fat-photo`** (déployée, ACTIVE) : adaptée directement de `scan-meal`
+  (même squelette CORS/auth/rate-limit/fallback Gemini→OpenAI). `checkRateLimit(..., "estimate_body_
+  fat_photo", 6)` — 6 appels/fenêtre, plus restrictif que `scan-meal` car l'analyse corporelle est plus
+  sensible. Schéma JSON forcé (`tool_choice` obligatoire) : uniquement `status` (`success` |
+  `insufficient_quality` | `failed`), `minPercent`/`maxPercent` (jamais un point unique), `warnings`.
+  Prompt système avec 5 règles absolues : TOUJOURS une fourchette (jamais un nombre précis), largeur
+  minimale de 3 points imposée dans le prompt ET re-vérifiée côté domaine (double garde-fou), aucun
+  langage de diagnostic médical, aucune tentative d'identification/reconnaissance faciale, chemin
+  explicite `insufficient_quality` si les photos ne permettent pas une analyse fiable. Toujours HTTP 200
+  même en échec (`{error}` dans le corps), convention identique à toutes les autres fonctions IA du
+  projet. `front`/`side` obligatoires (validation taille/longueur), `back` optionnel.
+- **`lib/fitness/bodyFatPhotoEstimate.ts`** (logique pure, zéro import React/Supabase) :
+  `PHOTO_BODY_FAT_ENGINE_VERSION = "photo_body_fat_v1"`, `PHOTO_ESTIMATE_MIN_RANGE_WIDTH_PERCENT = 3`
+  (règle produit prudente documentée — PAS une certitude scientifique — élargie symétriquement autour
+  du point milieu si le modèle renvoie une fourchette trop étroite), `normalizePhotoEstimateResponse`
+  (adaptateur unique : le JSON brut du provider `RawPhotoEstimateResponse` n'est JAMAIS vu par l'UI/les
+  hooks, uniquement le type domaine `PhotoBodyFatEstimate` normalisé) — `referencePercent` est TOUJOURS
+  le point milieu déterministe recalculé, jamais une valeur indépendante fournie par le modèle.
+  `confidence` réutilise EXCLUSIVEMENT `getBodyFatConfidence("photo_estimate")` du mapping centralisé
+  Phase 6A (`low`) — aucun second système de confiance, jamais un pourcentage de confiance affiché
+  (l'UI affiche "Estimation indicative", jamais un chiffre). `computeFatMassRange`/
+  `computeLeanMassRange` (nouvelles, fourchette kg à partir de la fourchette % + poids, avec vérification
+  explicite d'inversion des bornes) — distinctes des fonctions point-unique de Phase 6A, pas de
+  duplication car le contrat d'entrée diffère (plage vs. valeur).
+- **UI `EstimatePhotoBodyFatSheet.tsx`** : déclenchée depuis une 3e action "Estimer avec des photos" sur
+  la carte "Composition corporelle" de `/corps` (état vide ET rempli). Flux : sélection face+profil
+  obligatoires / dos optionnel (upload `<input type="file" accept="image/*">` + `capture="environment"`
+  pour la caméra, 100 % PWA-compatible, aucune dépendance native) → **consentement explicite** via le
+  bouton "Analyser mes photos" (jamais d'analyse automatique dès qu'une photo est choisie) → preview de
+  la fourchette (+ masse grasse/maigre en kg si poids renseigné) AVANT tout enregistrement → "Enregistrer"
+  (upload Storage + création `body_tracking`/`body_photo_analyses`) ou "Recommencer" (efface tout,
+  aucun appel serveur). Compression réutilisée via `fileToBase64Compressed` (`lib/nutrition/utils.ts`,
+  déjà existante — pas de nouvelle dépendance) : le passage systématique par `<canvas>.toDataURL(
+  "image/jpeg")` produit un JPEG neuf sans aucun bloc EXIF (donc sans GPS) — strip EXIF "gratuit" par
+  ré-encodage, sauf repli exotique HEIC non-canvas (rare, documenté comme limite connue). Aucune donnée
+  biométrique/identité stockée, aucun langage de diagnostic médical dans l'UI.
+- **Persistance (`useBodyPhotoEstimate.ts`)** : architecture "analyse éphémère puis persistance sur
+  confirmation" — les photos ne transitent qu'en base64 vers l'edge function tant que l'utilisateur n'a
+  pas cliqué "Enregistrer" après avoir vu un résultat `success` ; c'est seulement à ce moment qu'elles
+  sont uploadées dans Storage. `useSaveBodyPhotoAnalysis` : 1) crée `body_tracking` (méthode
+  `photo_estimate`, `body_fat_min_percent`/`body_fat_max_percent` repris du système de fourchette
+  Phase 6B/6A, jamais un écrasement silencieux d'une mesure d'une autre méthode le même jour — un
+  nouveau row est toujours créé) ; 2) upload Storage ; 3) crée `body_photo_analyses`. Rollback best-
+  effort à chaque étape : en cas d'échec après l'étape 1, suppression des fichiers déjà uploadés PUIS
+  suppression de la ligne `body_tracking` orpheline — évite délibérément la lacune connue de
+  `use-documents.ts` (`useDeposeDocument`) qui ne nettoie pas les objets Storage en cas d'échec.
+  `useDeleteBodyPhotoAnalysis` : suppression Storage D'ABORD puis suppression `body_tracking` (cascade
+  automatique vers `body_photo_analyses` via FK) — jamais d'orphelins Storage. `BodyHistorySheet.tsx`
+  affiche la fourchette (`"MG estimée {min}–{max} % (photo_estimate, indicatif)"`) quand elle existe, et
+  route la suppression vers le flux photo-aware (Storage + DB) plutôt que le flux point-unique.
+- **Scope strictement respecté** (§35/§36 du brief) : aucune modification de `macroStrategy.ts`/
+  `calorieStrategy.ts`/`tdee.ts`/`bmr.ts`/`neat.ts`/`nutrition_goals` (`git diff --stat` sur ces
+  fichiers : vide, confirmé) ; aucune automatisation déclenchée (aucun changement de calories/macros/
+  objectif, aucune notification) ; aucun objectif BF/poids cible/prédiction de date ; aucune
+  reconnaissance faciale ; aucun coach IA additionnel ; aucune intégration wearable.
+- **Sécurité — 3 tests SQL en transaction `BEGIN...ROLLBACK`** (jamais rien committé) simulant deux
+  utilisateurs authentifiés distincts via `set_config('request.jwt.claim.sub', ...)` +
+  `set_config('role', 'authenticated', true)` : (1) isolation RLS table `body_photo_analyses` dans les
+  deux sens (propriétaire voit ses données, autre utilisateur ne voit rien, DELETE d'un autre
+  utilisateur sans effet) ; (2) isolation RLS `storage.objects` du nouveau bucket dans les deux sens ;
+  (3) tentative d'écriture malveillante simulée dans le dossier d'un autre utilisateur
+  (`INSERT INTO storage.objects ... name = '{autre_user}/...'`) — **bloquée avec succès**
+  (`malicious_object_exists = 0` après tentative). `get_advisors(type:"security")` : aucune nouvelle
+  alerte imputable à cette phase.
+- **Tests** (`bodyFatPhotoEstimate.test.ts`, 19 tests) : validité de fourchette/point milieu,
+  élargissement à la largeur minimale, entrées invalides (`min > max`, négatif, NaN/Infinity, hors
+  bornes BF), calcul masse grasse (exemple du brief vérifié : 80 kg / 14-16 % → 11.2-12.8 kg) et masse
+  maigre (exemple du brief vérifié : 80 kg / 14-16 % → 67.2-68.8 kg, avec vérification explicite
+  d'inversion des bornes), cas sans poids connu. 902 tests au total (883+19), tous verts au premier
+  passage.
+- `npx tsc --noEmit` / `npx vitest run` (902 passed) / `npm run build` : tous verts. Aucun `as any`
+  introduit. `node scripts/validate-supabase.mjs` : migrations idempotentes OK.
+- **Vérification visuelle mobile NON effectuée** — même limite que toutes les phases précédentes de
+  cette session : `/corps` étant protégée par authentification, aucune session Supabase réelle n'est
+  disponible dans ce sandbox pour naviguer au-delà de `/login`.
+- **Limites connues** : le moteur Gemini/GPT-4o n'a jamais été validé empiriquement contre une mesure
+  DEXA réelle (aucune donnée de test disponible) — l'estimation reste, comme documenté dans l'UI, une
+  approximation indicative et non une mesure clinique ; le repli HEIC non-canvas de
+  `fileToBase64Compressed` ne garantit pas le strip EXIF (cas rare) ; pas de limite explicite sur le
+  nombre total d'analyses historisées par utilisateur (mêmes règles de rétention que les autres méthodes
+  de `body_tracking`, hors scope de cette phase).
+- **Livrée sur la branche dédiée `claude/phase6c-body-fat-photo-estimation`, NON fusionnée dans `main`**
+  conformément à l'instruction explicite du brief.
