@@ -85,14 +85,24 @@ function walk(dir) {
 SCAN_DIRS.forEach(walk);
 
 // 4 — variables d'environnement
+// SUPABASE_PROJECT_REF est une variable que NOUS contrôlons (repository vars) :
+// toute divergence est une erreur bloquante.
 const envRef = process.env.SUPABASE_PROJECT_REF;
 if (envRef && envRef !== EXPECTED_REF) {
   errors.push(`SUPABASE_PROJECT_REF="${envRef}" diverge de "${EXPECTED_REF}".`);
 }
+
+// VITE_SUPABASE_URL / SUPABASE_URL sont injectées automatiquement par
+// l'intégration Lovable Cloud (autre projet), hors de notre contrôle, et
+// neutralisées volontairement par src/integrations/supabase/client.ts.
+// On avertit sans faire échouer : seule une référence présente dans le dépôt
+// (voir étapes 1-3) est bloquante.
 for (const name of ["VITE_SUPABASE_URL", "SUPABASE_URL"]) {
   const value = process.env[name];
   if (value && !value.includes(EXPECTED_REF)) {
-    errors.push(`${name}="${value}" ne pointe pas vers "${EXPECTED_REF}".`);
+    console.warn(
+      `⚠️  ${name} pointe vers une autre instance (injection Lovable Cloud) — ignorée par client.ts.`,
+    );
   }
 }
 
