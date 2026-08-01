@@ -18,6 +18,7 @@
 // TENDANCE lissée, jamais sur des points bruts.
 
 import { movingAverage } from "./body";
+import { KCAL_PER_KG_BODY_MASS } from "./energyConstants";
 
 // ---------------------------------------------------------------------
 // Constantes centralisées — seuils et coefficients, modifiables ici sans
@@ -30,15 +31,12 @@ export const ADAPTIVE_TDEE_THRESHOLDS = {
   /** Largeur du lissage de la tendance de poids (moyenne glissante). */
   SMOOTHING_WINDOW_DAYS: 7,
   /**
-   * kcal ≈ équivalent énergétique d'1 kg de masse corporelle. Approximation
-   * de départ (littérature historique, ~3500 kcal/lb ≈ 7700 kcal/kg) — PAS
-   * une constante physiologique exacte (la composition du tissu perdu/gagné
-   * — gras vs eau vs muscle — la fait varier réellement). Centralisée ici
-   * pour pouvoir être remplacée par un modèle plus fin plus tard sans
-   * changer la logique du moteur. Volontairement appliquée uniquement à une
-   * TENDANCE lissée (jamais à une variation brute 24-48h, voir plus haut).
+   * kcal ≈ équivalent énergétique d'1 kg de masse corporelle — voir
+   * `energyConstants.ts` (seul point de vérité, également réutilisé par
+   * `calorieStrategy.ts` Phase 4A). Volontairement appliquée uniquement à
+   * une TENDANCE lissée (jamais à une variation brute 24-48h, voir plus haut).
    */
-  KCAL_PER_KG: 7700,
+  KCAL_PER_KG: KCAL_PER_KG_BODY_MASS,
   /** Seuils pour le statut "early_estimate" (estimation précoce, prudente). */
   EARLY: {
     MIN_CALENDAR_DAYS: 7,

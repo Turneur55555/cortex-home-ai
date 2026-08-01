@@ -1792,3 +1792,83 @@ rester manuel). Vérification faite sur les vrais workflows CI, pas une supposit
     selon les données manquantes précises de l'utilisateur) ; aucun composant de progression visuelle
     (barre) pour les critères de calibration en attente — affichés en valeurs `actuel / requis` textuelles
     uniquement, jugé suffisant pour cette phase (pas de sur-ingénierie).
+- **Phase 4A — moteur de stratégie calorique (2026-08-01, branche
+  `claude/phase4a-calorie-strategy`, NON mergée dans `main`)** : première recommandation calorique
+  Cortex-native, déterministe, explicable. Ne modifie JAMAIS `nutrition_goals.calories` — le bouton
+  "Appliquer" reste désactivé (§13/§19 du brief), aucune écriture automatique.
+  - **Audit préalable (ancien système)** : `lib/fitness/metabolism.ts` contient un système LÉGACY
+    distinct, toujours utilisé par `GoalsSheet.tsx` (calculateur repliable "Calculer mes besoins
+    (TDEE)" dans la Sheet "Mes objectifs quotidiens") : `computeTDEE(bmr, activityLevel)` (multiplicateur
+    Harris-Benedict classique 1.2–1.9, PAS le TDEE Cortex-native BMR+NEAT+EAT+TEF), `GOAL_DELTAS`
+    (sèche/maintien/prise à -300/0/+300 kcal FIXES, pas relatifs au poids), `computeCalorieTarget`
+    (`Math.max(1200, tdee+delta)`, floor sans justification documentée). C'est le SEUL écrivain de
+    `nutrition_goals.calories` (`useUpsertNutritionGoals`), via un flux déjà manuel (Calculer → Appliquer
+    → Enregistrer). **Non modifié/supprimé en Phase 4A** (fonctionnel, hors scope strict) — signalé comme
+    doublon candidat pour une consolidation future (Phase 4B+ : soit migrer ce calculateur vers le
+    nouveau moteur Cortex-native, soit les garder délibérément distincts). Aucun `goal_type`/rythme/poids
+    cible n'existe dans le schéma `nutrition_goals` actuel (`user_id, calories, proteins, carbs, fats,
+    created_at, updated_at` uniquement) — confirmé par audit direct des migrations.
+  - **`lib/fitness/energyConstants.ts`** (nouveau) : extraction de `KCAL_PER_KG_BODY_MASS = 7700` en
+    point de vérité unique, réutilisé par `adaptiveTdee.ts` (Phase 3A, refactoré pour l'importer au lieu
+    de dupliquer la valeur) ET `calorieStrategy.ts` (Phase 4A) — zéro duplication.
+  - **`lib/fitness/calorieStrategy.ts`** (logique pure) : `computeCalorieStrategy(input)`.
+    - **Source TDEE** : `pickReferenceTdee` — priorité au TDEE ADAPTATIF (Phase 3B,
+      `calibration.state !== "model_only"`), repli sur le TDEE MODÉLISÉ sinon ; `referenceSource:
+      "adaptive"|"modeled"` exposé. Un nouvel utilisateur (aucune donnée observée, `model_only`) reçoit
+      donc une recommandation dès que son profil métabolique est complet, sans attendre le TDEE observé.
+    - **3 objectifs** (chaînes NEUVES, délibérément non mélangées aux legacy `seche/maintien/prise`) :
+      `fat_loss`/`maintenance`/`muscle_gain`. UI FR : "Perte de graisse"/"Maintien"/"Prise de masse".
+    - **Rythmes centralisés** `CALORIE_STRATEGY_RATES`, exprimés en % du poids corporel/semaine (pas en
+      kcal fixes) : perte `slow` 0.25 %, `moderate` 0.5 %, `fast` 0.75 % ; prise `slow` 0.125 %,
+      `moderate` 0.25 % (volontairement ~moitié des rythmes de perte — surplus progressif, pas de bulk
+      agressif par défaut).
+    - **Maintien** : `recommendedCalories = referenceTdeeKcal` exactement (pas d'arrondi au pas de 25 —
+      la valeur est déjà un entier produit en amont), `dailyDeltaKcal = 0` toujours.
+    - **Perte/prise** : `magnitude = poids × %/semaine × KCAL_PER_KG_BODY_MASS / 7` ; signe négatif pour
+      `fat_loss`, positif pour `muscle_gain` ; puis garde-fous puis arrondi au pas de 25 kcal
+      (`CALORIE_STRATEGY_ROUNDING_STEP_KCAL`) pour éviter une pseudo-précision (ex. "2 137 kcal").
+    - **Garde-fous centralisés** `CALORIE_STRATEGY_GUARDRAILS` : `MAX_DEFICIT_KCAL=1000`,
+      `MAX_SURPLUS_KCAL=500` (plafonnent le delta AVANT arrondi), `ABSOLUTE_MIN_FLOOR_KCAL=1200` —
+      **audité** : c'était le floor legacy de `computeCalorieTarget` (`Math.max(1200,...)`), sans
+      justification individuelle (sexe/taille/état de santé) dans le code d'origine. Conservé
+      uniquement comme garde-fou de dernier recours contre une valeur absurde, **toujours accompagné**
+      de `limited:true` + `limitReasons` explicite plutôt que présenté comme un minimum médical
+      personnalisé — jamais un `recommendationLimited` silencieux.
+    - **Convention de signe unique** : `dailyDeltaKcal = recommendedCalories − referenceTdeeKcal`,
+      recalculée APRÈS arrondi/plafonds pour garantir la cohérence `recommendedCalories =
+      referenceTdeeKcal + dailyDeltaKcal` en toute circonstance (testé explicitement).
+    - **Résultat structuré** : `goal`, `referenceTdeeKcal`, `referenceSource`, `recommendedCalories`
+      (`null` si non calculable — jamais fabriqué), `dailyDeltaKcal`, `targetRate` (`null` en
+      maintenance), `estimatedWeeklyWeightChangeKg/Percent` (dérivés du delta RÉELLEMENT appliqué, donc
+      honnêtes même après plafonnement), `limited`, `limitReasons`.
+    - **Données insuffisantes** : poids manquant/invalide pour perte/prise → `recommendedCalories:null`
+      + raison explicite ; aucun TDEE exploitable → idem, quel que soit l'objectif.
+    - `compareCalorieGoal(current, recommended)` : fonction pure séparée, `differenceKcal =
+      recommended − current` (`null` si l'un des deux manque) — prépare le futur bouton "Appliquer" sans
+      jamais écrire en base cette phase.
+    - **Architecture manual/automatic** documentée en tête de fichier (type `CalorieStrategyMode =
+      "manual"|"automatic"`, non consommé en 4A) : emplacement recommandé pour la préférence en 4B —
+      étendre `nutrition_goals` (déjà 1 ligne/utilisateur) avec `goal`, `target_rate`,
+      `calorie_strategy_mode`, `last_auto_adjustment_at` (pour le délai minimal entre ajustements
+      automatiques) — pas de nouvelle table anticipée, aucune migration créée en 4A (mode non actif).
+  - **`sante-nutritionnelle.tsx`** : nouvelle section "Stratégie calorique" (sélecteur d'objectif 3
+    boutons + sélecteur de rythme conditionnel), carte compacte TDEE de référence/apport recommandé/
+    rythme estimé, comparaison objectif actuel vs recommandation, bouton "Appliquer" **visuellement
+    présent mais désactivé** (`disabled`, `cursor-not-allowed`, tooltip explicite "bientôt disponible")
+    — aucune écriture, juste l'emplacement préparé comme autorisé par le brief. Pas de recalcul
+    automatique des macros.
+  - **Tests** (`calorieStrategy.test.ts`, 38 tests) : perte (rythmes croissants, poids/TDEE variés,
+    signe, garde-fou, arrondi), maintien (source modeled/adaptive, delta=0, pas d'arrondi parasite),
+    prise (symétrique), source TDEE (adaptive/modeled/indisponible), comparaison objectif (<, >, =,
+    absent), robustesse (NaN/Infinity/négatif/nul/poids ou rythme manquant/objectif ou rythme inconnu/
+    valeurs extrêmes/jamais négatif/protection contre recommandation extrême), autonomie Cortex-native,
+    cohérence des rythmes centralisés.
+  - `npx tsc --noEmit` / `npx eslint` / `npx vitest run` (741 passed) / `npm run build` : tous verts.
+  - **Vérification visuelle mobile NON effectuée** — même limitation d'environnement que Phase 3C
+    (`EAFNOSUPPORT` sur bind IPv6 `:::8080`), retestée et reconfirmée, non simulée.
+  - **Limites connues** : les seuils de rythme/garde-fous sont des choix conservateurs raisonnés, non
+    calibrés sur des données réelles ; le calculateur legacy de `GoalsSheet.tsx` reste actif en
+    parallèle du nouveau moteur (doublon fonctionnel non résolu, signalé pour 4B) ; aucune persistance
+    de l'objectif/rythme choisi par l'utilisateur (state React local, remis à `maintenance`/`moderate`
+    à chaque ouverture de page — attendu tant que `calorie_strategy_mode`/`goal`/`target_rate` ne sont
+    pas persistés en 4B).

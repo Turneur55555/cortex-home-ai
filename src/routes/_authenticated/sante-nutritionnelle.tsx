@@ -40,6 +40,14 @@ import { computeDailyTDEE } from "@/lib/fitness/tdee";
 import { ADAPTIVE_TDEE_THRESHOLDS, computeAdaptiveTdee } from "@/lib/fitness/adaptiveTdee";
 import { computeAdaptiveTdeeCalibration } from "@/lib/fitness/adaptiveTdeeCalibration";
 import { buildMetabolicAnalysis } from "@/lib/fitness/metabolicAnalysis";
+import {
+  CALORIE_STRATEGY_RATES,
+  compareCalorieGoal,
+  computeCalorieStrategy,
+  type CalorieStrategyGoal,
+  type FatLossRate,
+  type MuscleGainRate,
+} from "@/lib/fitness/calorieStrategy";
 import { addDaysYMD, localDateYMD } from "@/lib/dates";
 import { StatTile } from "@/components/fitness/StatTile";
 import { ComingSoonTile } from "@/components/fitness/ComingSoonTile";
@@ -73,6 +81,8 @@ function SanteNutritionnellePage() {
   const today = localDateYMD();
   const [showMetabolicSheet, setShowMetabolicSheet] = useState(false);
   const [showAnalysisSheet, setShowAnalysisSheet] = useState(false);
+  const [strategyGoal, setStrategyGoal] = useState<CalorieStrategyGoal>("maintenance");
+  const [strategyRate, setStrategyRate] = useState<FatLossRate | MuscleGainRate>("moderate");
 
   const { data: bodyRows, isLoading: bodyLoading } = useBodyMeasurements();
   const { data: latestWeight } = useLatestBodyWeight();
@@ -160,6 +170,17 @@ function SanteNutritionnellePage() {
     calibration: adaptiveTdeeCalibration,
     calorieGoalKcal: calorieGoal,
   });
+
+  const calorieStrategy = computeCalorieStrategy({
+    goal: strategyGoal,
+    rate: strategyGoal === "maintenance" ? undefined : strategyRate,
+    weightKg: weight,
+    calibration: adaptiveTdeeCalibration,
+  });
+  const calorieGoalComparison = compareCalorieGoal(
+    calorieGoal,
+    calorieStrategy.recommendedCalories,
+  );
 
   const caloriesPct = pct(totals.calories, nutritionGoals?.calories);
   const proteinsPct = pct(totals.proteins, nutritionGoals?.proteins);
@@ -360,6 +381,143 @@ function SanteNutritionnellePage() {
             >
               Compléter mon profil métabolique
             </button>
+          </div>
+        )}
+      </Section>
+
+      {/* Stratégie calorique */}
+      <Section title="Stratégie calorique">
+        <div className="flex rounded-xl border border-border bg-card/50 p-0.5">
+          {(
+            [
+              { value: "fat_loss", label: "Perte de graisse" },
+              { value: "maintenance", label: "Maintien" },
+              { value: "muscle_gain", label: "Prise de masse" },
+            ] as const
+          ).map((g) => (
+            <button
+              key={g.value}
+              type="button"
+              onClick={() => setStrategyGoal(g.value)}
+              className={
+                "flex-1 rounded-lg py-1.5 text-[11px] font-semibold transition-colors " +
+                (strategyGoal === g.value
+                  ? "bg-gradient-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground")
+              }
+            >
+              {g.label}
+            </button>
+          ))}
+        </div>
+
+        {strategyGoal !== "maintenance" && (
+          <div className="mt-2 flex gap-1.5">
+            {Object.entries(CALORIE_STRATEGY_RATES[strategyGoal]).map(([key, rate]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setStrategyRate(key as FatLossRate | MuscleGainRate)}
+                className={
+                  "flex-1 rounded-full border px-2 py-1.5 text-[11px] font-medium transition-colors " +
+                  (strategyRate === key
+                    ? "border-primary bg-primary/10 text-foreground"
+                    : "border-border bg-surface text-muted-foreground")
+                }
+              >
+                {rate.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {calorieStrategy.recommendedCalories == null ? (
+          <div className="mt-2 rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-4 text-center">
+            <p className="text-xs font-medium text-muted-foreground/70">
+              Recommandation indisponible
+            </p>
+            {calorieStrategy.limitReasons[0] && (
+              <p className="mt-1 text-[11px] text-muted-foreground/50">
+                {calorieStrategy.limitReasons[0]}
+              </p>
+            )}
+          </div>
+        ) : (
+          <div className="mt-2 rounded-2xl border border-white/5 bg-gradient-to-b from-card/95 to-card/70 p-4 shadow-card">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  TDEE de référence
+                </p>
+                <p className="text-sm font-bold">{calorieStrategy.referenceTdeeKcal} kcal</p>
+                <p className="text-[10px] text-muted-foreground/60">
+                  {calorieStrategy.referenceSource === "adaptive" ? "Adaptatif" : "Modélisé"}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Apport recommandé
+                </p>
+                <p className="text-sm font-bold text-primary">
+                  {calorieStrategy.recommendedCalories} kcal
+                </p>
+                {calorieStrategy.dailyDeltaKcal !== 0 && (
+                  <p className="text-[10px] text-muted-foreground/60">
+                    {calorieStrategy.dailyDeltaKcal! > 0 ? "+" : ""}
+                    {calorieStrategy.dailyDeltaKcal} kcal/j
+                  </p>
+                )}
+              </div>
+            </div>
+            {calorieStrategy.estimatedWeeklyWeightChangeKg != null &&
+              calorieStrategy.estimatedWeeklyWeightChangeKg !== 0 && (
+                <p className="mt-2.5 text-[11px] text-muted-foreground">
+                  Rythme estimé : {calorieStrategy.estimatedWeeklyWeightChangeKg > 0 ? "+" : ""}
+                  {calorieStrategy.estimatedWeeklyWeightChangeKg} kg/semaine
+                </p>
+              )}
+
+            <div className="my-3 border-t border-border" />
+
+            <div className="flex items-center justify-between gap-2 text-xs">
+              <span className="text-muted-foreground">Objectif actuel</span>
+              <span className="font-semibold">
+                {calorieGoalComparison.currentCalories != null
+                  ? `${calorieGoalComparison.currentCalories} kcal`
+                  : "Non défini"}
+              </span>
+            </div>
+            <div className="mt-1 flex items-center justify-between gap-2 text-xs">
+              <span className="text-muted-foreground">Recommandation Cortex</span>
+              <span className="font-semibold">
+                {calorieGoalComparison.recommendedCalories} kcal
+              </span>
+            </div>
+            {calorieGoalComparison.differenceKcal != null &&
+              calorieGoalComparison.differenceKcal !== 0 && (
+                <div className="mt-1 flex items-center justify-between gap-2 text-xs">
+                  <span className="text-muted-foreground">Écart</span>
+                  <span className="font-semibold">
+                    {calorieGoalComparison.differenceKcal > 0 ? "+" : ""}
+                    {calorieGoalComparison.differenceKcal} kcal
+                  </span>
+                </div>
+              )}
+
+            <button
+              type="button"
+              disabled
+              title="Bientôt disponible — l'application automatique de l'objectif n'est pas encore active"
+              className="mt-3 w-full cursor-not-allowed rounded-xl border border-border bg-surface py-2 text-[11px] font-semibold text-muted-foreground/50"
+            >
+              Appliquer (bientôt disponible)
+            </button>
+
+            {calorieStrategy.limited && calorieStrategy.limitReasons.length > 0 && (
+              <p className="mt-2.5 text-[11px] leading-relaxed text-muted-foreground">
+                {calorieStrategy.limitReasons.join(" ")}
+              </p>
+            )}
           </div>
         )}
       </Section>
