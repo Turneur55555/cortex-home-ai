@@ -2116,3 +2116,41 @@ rester manuel). Vérification faite sur les vrais workflows CI, pas une supposit
     par un appel RPC réel depuis un test) ; les verrous s'évaluent seulement au chargement/re-render de
     Santé nutritionnelle (mêmes points d'entrée que Phase 4B, pas de nouveau déclencheur ajouté) ;
     UI verrous/mode macros non vérifiée visuellement (authentification requise, voir ci-dessus).
+- **Correctif critique — signup cassé (2026-08-01, branche `claude/fix-signup-home-categories-trigger`,
+  migration `20260810090000_fix_signup_broken_home_categories_trigger.sql`)** : tout nouveau signup
+  échouait en production.
+  - **Cause exacte** : le trigger `on_auth_user_created_home_categories` sur `auth.users` (AFTER
+    INSERT) appelle `public.seed_default_home_categories()`, qui appelle
+    `public._seed_home_categories_for_user(uuid)`, laquelle `INSERT INTO public.home_categories` —
+    table supprimée par `20260714145745_ae103805-61da-4ed3-8d66-58d07c94cdf4.sql` (nettoyage de
+    l'ancienne fonctionnalité "Home" : `items`, `home_subcategories`, `home_categories`). Cette
+    migration a supprimé les tables + `ensure_home_categories_for_me()` mais a OUBLIÉ le trigger et ses
+    deux fonctions — laissées orphelines, cassant tout `INSERT INTO auth.users` avec
+    `relation "public.home_categories" does not exist`.
+  - **Audit** : `home_categories`/`home_subcategories`/`items` confirmés absents en base (`information_
+    schema.tables`). `_seed_home_categories_for_user` n'a qu'un seul appelant
+    (`seed_default_home_categories`), lui-même appelé uniquement par ce trigger — chaîne isolée, aucune
+    autre fonction/trigger/frontend n'y fait référence (grep `src/` : uniquement l'artefact généré dans
+    `types.ts`, pas un appelant réel). **Classification : A — totalement obsolète**, aucune architecture
+    de remplacement. Les DEUX triggers de `auth.users` ont été audités : `on_auth_user_created` (→
+    `handle_new_user`, écrit dans `public.profiles`, table existante et saine) laissé strictement
+    intact — aucun autre bug de ce type détecté sur `auth.users`.
+  - **Correction** : `DROP TRIGGER on_auth_user_created_home_categories` + `DROP FUNCTION
+    seed_default_home_categories()` + `DROP FUNCTION _seed_home_categories_for_user(uuid)` — solution
+    minimale, aucune donnée perdue (aucune table de données touchée, uniquement du code mort).
+  - **Test signup réel (transaction `BEGIN...ROLLBACK`, jamais commit)** : `INSERT INTO auth.users`
+    isolé → `handle_new_user` se déclenche correctement, `public.profiles` reçoit la ligne attendue
+    (id/email/full_name/role par défaut) — confirmé par `SELECT` avant tout changement de rôle simulé.
+    (Une vérification ultérieure sous rôle `authenticated` simulé montrait `profile_created: 0` — pas
+    un nouveau bug, juste RLS sur `profiles` bloquant ce rôle simulé pour ce SELECT diagnostique,
+    sans rapport avec la création réelle déjà prouvée en amont.)
+  - **Retest RPC combinée Phase 5B** (`apply_calorie_goal_adjustment`, Calories Auto + Macros Auto,
+    transaction rollbackée) : **succès complet** — `nutrition_goals` (calories 2000→2100,
+    proteins/carbs/fats 150/200/65→160/220/65, `last_auto_adjustment_at` renseigné),
+    `calorie_goal_adjustments` (previous_calories=2000, applied_calories=2100),
+    `macro_goal_adjustments` (previous/applied cohérents) — tout écrit atomiquement dans le même appel
+    RPC, confirmé par `ROLLBACK` sans effet persistant. La limitation documentée en Phase 5B est levée.
+  - Types.ts régénéré pour CETTE branche (base = `origin/main` SANS les colonnes Phase 6A, encore non
+    mergée) — diff isolé : uniquement `_seed_home_categories_for_user` retiré de `Functions`, rien
+    d'autre. `npx tsc`/`eslint`/`vitest` (822 passed, baseline pré-6A)/`build` : tous verts.
+    `validate-supabase.mjs` : idempotent OK.
