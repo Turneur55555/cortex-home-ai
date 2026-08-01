@@ -5,6 +5,8 @@ import {
   computeBMR,
   computeCalorieTarget,
   computeTDEE,
+  isBiologicalSex,
+  isValidMetabolicAge,
 } from "./metabolism";
 
 describe("computeBMR", () => {
@@ -20,6 +22,43 @@ describe("computeBMR", () => {
     expect(computeBMR("homme", 0, 80, 180)).toBeNull();
     expect(computeBMR("homme", 30, -1, 180)).toBeNull();
     expect(computeBMR("homme", 30, 80, NaN)).toBeNull();
+  });
+
+  it("returns null when weight or height is missing (incomplete body data)", () => {
+    expect(computeBMR("homme", 30, NaN, 180)).toBeNull();
+    expect(computeBMR("femme", 30, 65, NaN)).toBeNull();
+  });
+});
+
+describe("isBiologicalSex", () => {
+  it("accepts only the two known values", () => {
+    expect(isBiologicalSex("homme")).toBe(true);
+    expect(isBiologicalSex("femme")).toBe(true);
+  });
+
+  it("rejects anything else, including null and unexpected strings", () => {
+    expect(isBiologicalSex(null)).toBe(false);
+    expect(isBiologicalSex(undefined)).toBe(false);
+    expect(isBiologicalSex("")).toBe(false);
+    expect(isBiologicalSex("autre")).toBe(false);
+    expect(isBiologicalSex(1)).toBe(false);
+  });
+});
+
+describe("isValidMetabolicAge", () => {
+  it("accepts integers strictly between 0 and 130", () => {
+    expect(isValidMetabolicAge(1)).toBe(true);
+    expect(isValidMetabolicAge(30)).toBe(true);
+    expect(isValidMetabolicAge(129)).toBe(true);
+  });
+
+  it("rejects zero, negative, non-integer, and out-of-range values", () => {
+    expect(isValidMetabolicAge(0)).toBe(false);
+    expect(isValidMetabolicAge(-1)).toBe(false);
+    expect(isValidMetabolicAge(130)).toBe(false);
+    expect(isValidMetabolicAge(200)).toBe(false);
+    expect(isValidMetabolicAge(30.5)).toBe(false);
+    expect(isValidMetabolicAge(NaN)).toBe(false);
   });
 });
 
@@ -38,6 +77,34 @@ describe("computeCalorieTarget", () => {
 
   it("never returns below the 1200 kcal floor", () => {
     expect(computeCalorieTarget(800, -1000)).toBe(1200);
+  });
+});
+
+describe("metabolic profile → BMR composition (sante-nutritionnelle.tsx logic)", () => {
+  type Profile = { sex: string | null; age: number | null } | null;
+
+  function resolveBMR(profile: Profile, weightKg: number | null, heightCm: number | null) {
+    const sex = profile && isBiologicalSex(profile.sex) ? profile.sex : null;
+    const age = profile?.age ?? null;
+    if (sex == null || age == null || weightKg == null || heightCm == null) return null;
+    return computeBMR(sex, age, weightKg, heightCm);
+  }
+
+  it("returns null when the metabolic profile is missing", () => {
+    expect(resolveBMR(null, 80, 180)).toBeNull();
+  });
+
+  it("returns null when age is missing even with a valid sex", () => {
+    expect(resolveBMR({ sex: "homme", age: null }, 80, 180)).toBeNull();
+  });
+
+  it("returns null when body data (weight/height) is missing, even with a complete profile", () => {
+    expect(resolveBMR({ sex: "homme", age: 30 }, null, 180)).toBeNull();
+    expect(resolveBMR({ sex: "homme", age: 30 }, 80, null)).toBeNull();
+  });
+
+  it("computes the BMR once profile and body data are both available", () => {
+    expect(resolveBMR({ sex: "homme", age: 30 }, 80, 180)).toBe(1780);
   });
 });
 

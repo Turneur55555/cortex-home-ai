@@ -3,6 +3,19 @@
 
 export type BiologicalSex = "homme" | "femme";
 
+/** Type guard pour une valeur de sexe biologique brute (ex. colonne Supabase `string | null`). */
+export function isBiologicalSex(value: unknown): value is BiologicalSex {
+  return value === "homme" || value === "femme";
+}
+
+/**
+ * Âge valide pour le profil métabolique — entier, borné comme la contrainte
+ * `CHECK (age > 0 AND age < 130)` de la table `metabolic_profile`.
+ */
+export function isValidMetabolicAge(age: number): boolean {
+  return Number.isInteger(age) && age > 0 && age < 130;
+}
+
 export const ACTIVITY_LEVELS = [
   { value: "1.2", label: "Sédentaire (peu ou pas d'exercice)" },
   { value: "1.375", label: "Légèrement actif (1-3 j/sem)" },

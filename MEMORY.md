@@ -1407,3 +1407,33 @@ rester manuel). Vérification faite sur les vrais workflows CI, pas une supposit
     métabolique, masse grasse/musculaire, tour de taille, analyse corporelle IA, temps actif :
     aucune donnée nulle part dans le schéma → « À venir » partout, sections prêtes à accueillir ces
     données sans reprise de layout.
+- **Phase 2A — Profil métabolique + BMR réel (2026-08-05)** :
+  - **Découverte préalable (étape 0)** : `types.ts` committé ne listait que 42 tables alors que la
+    base en expose 83 — dérive préexistante sans rapport avec cette phase, scénario documenté dans
+    `docs/architecture/supabase-types-source-of-truth.md` (régénération Lovable qui écrase les
+    tables créées par nos migrations, dont `metabolic_profile`). Régénéré depuis la base via le MCP
+    Supabase (jamais édité à la main), `tsc`/tests passent sans régression sur le fichier régénéré,
+    `scripts/check-supabase-types.mjs` confirme la conformité. **Root cause probable de l'auto-heal
+    CI resté silencieux depuis le 23/07** : hypothèse à vérifier par Nathan côté secrets CI
+    (`SUPABASE_ACCESS_TOKEN`/`SUPABASE_PROJECT_REF`), la garantie 4 (tsc doit passer après
+    régénération) n'expliquait pas le blocage ici — tsc passait bien sur le fichier régénéré.
+  - **`src/hooks/useMetabolicProfile.ts`** (nouveau) : `useMetabolicProfile()` (lecture
+    sexe/âge/activity_level, RLS + `.eq("user_id", user.id)` en défense en profondeur) +
+    `useUpsertMetabolicProfile()` (écriture âge+sexe uniquement — `activity_level` non demandé en
+    V1, réservé à une phase TDEE future). Poids/taille jamais dupliqués dans cette table : réutilisés
+    depuis `body_tracking` (`useBodyMeasurements`/`useLatestBodyWeight`) et
+    `user_preferences.height_cm` (`useUserPreferences`).
+  - **`src/components/fitness/MetabolicProfileSheet.tsx`** (nouveau) : sheet cohérente avec le
+    Design System (`Sheet`/`Field`/`SubmitButton` de `FormComponents.tsx`, même famille que
+    `GoalsSheet`), ouverte depuis Santé nutritionnelle — ne demande que âge + sexe biologique,
+    validation `isValidMetabolicAge` (miroir du `CHECK` SQL) avant soumission.
+  - **`isBiologicalSex`/`isValidMetabolicAge`** (nouveau, `lib/fitness/metabolism.ts`) : guards purs
+    réutilisés par le hook (normalisation de la colonne `sex: string | null`) et la sheet
+    (validation avant écriture) — aucune duplication de règle entre les deux.
+  - **Santé nutritionnelle → Métabolisme** : tuile BMR réelle (`computeBMR`, réutilisé tel quel,
+    aucune formule dupliquée dans le composant) dès que sexe+âge+poids+taille sont tous disponibles ;
+    sinon bandeau discret « Profil métabolique incomplet » + action « Compléter mon profil
+    métabolique » ouvrant la sheet. Le BMR se recalcule automatiquement à chaque changement de poids/
+    taille/âge/sexe car dérivé directement des données réactives (React Query), aucun cache propre.
+  - **Hors scope (conforme à la consigne)** : NEAT/EAT/TEF/TDEE réel/TDEE adaptatif/adaptation
+    métabolique/prédictions/coach IA restent « À venir » — aucun de ces éléments touché.

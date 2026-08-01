@@ -21,21 +21,23 @@ import {
   Wheat,
   Zap,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useBodyMeasurements, useWorkouts } from "@/hooks/use-fitness";
 import { useLatestBodyWeight } from "@/hooks/useLatestBodyWeight";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { useLatestActivity } from "@/hooks/useDailyActivity";
+import { useMetabolicProfile } from "@/hooks/useMetabolicProfile";
 import { useNutrition } from "@/hooks/useNutritionData";
 import { useNutritionGoals } from "@/hooks/useNutritionGoals";
 import { useNutritionTotals } from "@/hooks/useNutritionTotals";
 import { findLatestValue, findPreviousValue } from "@/lib/fitness/body";
-import { bmiCategory, computeBMI } from "@/lib/fitness/metabolism";
+import { bmiCategory, computeBMI, computeBMR } from "@/lib/fitness/metabolism";
 import { computeWeeklyActivitySummary } from "@/lib/fitness/activitySummary";
 import { localDateYMD } from "@/lib/dates";
 import { StatTile } from "@/components/fitness/StatTile";
 import { ComingSoonTile } from "@/components/fitness/ComingSoonTile";
 import { ComingSoonCard } from "@/components/fitness/ComingSoonCard";
+import { MetabolicProfileSheet } from "@/components/fitness/MetabolicProfileSheet";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export const Route = createFileRoute("/_authenticated/sante-nutritionnelle")({
@@ -60,10 +62,12 @@ const BMI_LABELS: Record<ReturnType<typeof bmiCategory>, string> = {
 
 function SanteNutritionnellePage() {
   const today = localDateYMD();
+  const [showMetabolicSheet, setShowMetabolicSheet] = useState(false);
 
   const { data: bodyRows, isLoading: bodyLoading } = useBodyMeasurements();
   const { data: latestWeight } = useLatestBodyWeight();
   const { prefs } = useUserPreferences();
+  const { data: metabolicProfile, isLoading: metabolicProfileLoading } = useMetabolicProfile();
 
   const { data: nutritionRows, isLoading: nutritionLoading } = useNutrition(today);
   const { data: nutritionGoals } = useNutritionGoals();
@@ -80,6 +84,15 @@ function SanteNutritionnellePage() {
       : null;
   const bmi =
     weight != null && prefs.height_cm != null ? computeBMI(weight, prefs.height_cm) : null;
+
+  const metabolicSex = metabolicProfile?.sex ?? null;
+  const metabolicAge = metabolicProfile?.age ?? null;
+  const metabolicProfileIncomplete =
+    !metabolicProfileLoading && (metabolicSex == null || metabolicAge == null);
+  const bmr =
+    metabolicSex != null && metabolicAge != null && weight != null && prefs.height_cm != null
+      ? computeBMR(metabolicSex, metabolicAge, weight, prefs.height_cm)
+      : null;
 
   const weeklyActivity = computeWeeklyActivitySummary(workouts ?? undefined, weight, 7);
 
@@ -112,7 +125,16 @@ function SanteNutritionnellePage() {
       {/* Métabolisme */}
       <Section title="Métabolisme">
         <div className="grid grid-cols-3 gap-2">
-          <ComingSoonTile icon={<Flame className="h-4 w-4" />} label="Métabolisme de base" />
+          {bmr != null ? (
+            <StatTile
+              icon={<Flame className="h-4 w-4" />}
+              label="Métabolisme de base"
+              value={String(bmr)}
+              unit="kcal/j"
+            />
+          ) : (
+            <ComingSoonTile icon={<Flame className="h-4 w-4" />} label="Métabolisme de base" />
+          )}
           <ComingSoonTile icon={<Zap className="h-4 w-4" />} label="TDEE" />
           {calorieGoal != null ? (
             <StatTile
@@ -147,7 +169,31 @@ function SanteNutritionnellePage() {
             pour voir ton objectif calorique quotidien.
           </p>
         )}
+        {metabolicProfileIncomplete && (
+          <div className="mt-2 flex items-center justify-between gap-3 rounded-2xl border border-border bg-card px-4 py-3 shadow-card">
+            <div className="min-w-0">
+              <p className="text-xs font-medium">Profil métabolique incomplet</p>
+              <p className="text-[11px] text-muted-foreground">
+                Âge et sexe biologique manquants pour calculer ton BMR.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowMetabolicSheet(true)}
+              className="shrink-0 rounded-full border border-white/8 bg-white/[0.04] px-3 py-1.5 text-[11px] font-semibold text-foreground transition-colors hover:border-primary/30"
+            >
+              Compléter mon profil métabolique
+            </button>
+          </div>
+        )}
       </Section>
+
+      {showMetabolicSheet && (
+        <MetabolicProfileSheet
+          current={{ sex: metabolicSex, age: metabolicAge }}
+          onClose={() => setShowMetabolicSheet(false)}
+        />
+      )}
 
       {/* Corps */}
       <Section title="Corps">
