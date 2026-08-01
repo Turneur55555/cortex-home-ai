@@ -61,12 +61,19 @@ export const MACRO_STRATEGY_COEFFICIENTS = {
   FAT_G_PER_KG_MIN: 0.8,
   FAT_MIN_PERCENT_OF_CALORIES: 0.2,
   /**
-   * Garde-fou §5 du brief : la composition corporelle (`body_tracking.
-   * body_fat`) est optionnelle, saisie manuellement, et non fiable pour
-   * tous les utilisateurs — le moteur ne s'appuie JAMAIS dessus. À la
-   * place, le poids utilisé pour les calculs g/kg (protéines ET lipides)
-   * est plafonné : au-delà, un poids corporel très élevé ne fait plus
-   * grimper la recommandation en grammes de façon non bornée.
+   * Garde-fou §5 du brief Phase 5 : la composition corporelle (`body_
+   * tracking.body_fat`) reste optionnelle, et le moteur retombe TOUJOURS
+   * sur le poids corporel total par défaut — jamais de blocage/formulaire
+   * obligatoire. À la place, le poids utilisé pour les calculs g/kg
+   * (protéines ET lipides) est plafonné : au-delà, un poids corporel très
+   * élevé ne fait plus grimper la recommandation en grammes de façon non
+   * bornée. Depuis la Phase 7, un appelant qui dispose d'une composition
+   * corporelle suffisamment récente et fiable peut fournir
+   * `MacroStrategyInput.proteinTargetOverrideG` (calculé depuis la masse
+   * maigre, voir `bodyCompositionForNutrition.ts`) pour remplacer
+   * uniquement l'étape protéines de ce pipeline — le plafond ci-dessous
+   * continue de s'appliquer à la masse maigre dans ce cas (voir
+   * `computeLeanMassProteinTargetG`), jamais retiré.
    */
   BODYWEIGHT_CAP_KG: 120,
   /** Arrondi humain des macros affichées — évite "163.7 g". */
@@ -77,11 +84,25 @@ export const MACRO_STRATEGY_COEFFICIENTS = {
    * (variable la plus flexible) rapproche le total, sans boucle.
    */
   CALORIE_TOLERANCE_KCAL: 50,
+  /**
+   * Garde-fou Phase 7 (§24/§41 du brief) : même quand une nouvelle
+   * composition corporelle rend un réalignement AUTOMATIQUE des protéines
+   * éligible, un seul ajustement automatique ne peut jamais s'écarter de
+   * plus de cette valeur (en grammes) par rapport à la valeur ACTIVE —
+   * règle produit conservatrice et volontairement ronde, pas une
+   * certitude physiologique. Voir `clampAutomaticProteinTarget`. Ne
+   * s'applique jamais à une application MANUELLE (clic explicite de
+   * l'utilisateur = pas de saut « caché »).
+   */
+  MAX_AUTO_PROTEIN_ADJUSTMENT_STEP_G: 30,
 } as const;
 
 // ---------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------
+
+/** D'où vient la cible protéique retenue par `computeMacroStrategy` — exposé pour l'UI (§14/§27 du brief Phase 7), jamais utilisé pour changer le comportement du pipeline lui-même. */
+export type ProteinBasis = "body_weight" | "lean_mass";
 
 export interface MacroStrategyInput {
   /** Enveloppe calorique à répartir — généralement `nutrition_goals.calories`, mais toute valeur permet de simuler une autre enveloppe. */
@@ -100,6 +121,18 @@ export interface MacroStrategyInput {
   lockedProteinsG?: number | null;
   lockedCarbsG?: number | null;
   lockedFatsG?: number | null;
+  /**
+   * Phase 7 (§7/§11 du brief) : cible protéique déjà calculée depuis la
+   * masse maigre (voir `computeLeanMassProteinTargetG` dans
+   * `bodyCompositionForNutrition.ts`), en grammes, à utiliser À LA PLACE
+   * de `poids × PROTEIN_G_PER_KG[goal]` pour cette seule étape du
+   * pipeline — tout le reste (lipides, glucides, arrondi, enveloppe,
+   * verrous) reste strictement identique. `undefined`/`null`/négatif/non
+   * fini = ignoré, comportement Phase 5 inchangé (repli poids corporel).
+   * Un verrou protéines actif reste TOUJOURS prioritaire sur cette valeur
+   * (le verrou n'appelle même pas ce chemin, voir `computeMacroStrategyLocked`).
+   */
+  proteinTargetOverrideG?: number | null;
 }
 
 export interface MacroStrategyResult {
@@ -110,9 +143,11 @@ export interface MacroStrategyResult {
   proteinsG: number | null;
   fatsG: number | null;
   carbsG: number | null;
-  /** Coefficient g/kg réellement utilisé (avant plafond de poids) — `null` si la macro est verrouillée (aucun coefficient appliqué) ou non calculable. */
+  /** Coefficient g/kg réellement utilisé (avant plafond de poids) — `null` si la macro est verrouillée, si un `proteinTargetOverrideG` a été utilisé (voir `proteinBasis`), ou non calculable. */
   proteinTargetGPerKg: number | null;
   fatTargetGPerKg: number | null;
+  /** `"lean_mass"` uniquement si `proteinTargetOverrideG` a été fourni ET utilisé (protéines non verrouillées) — `"body_weight"` sinon, y compris quand les protéines sont verrouillées. */
+  proteinBasis: ProteinBasis;
   /** P×4 + C×4 + L×9 sur les valeurs ARRONDIES retournées. */
   macroCalories: number | null;
   /** `macroCalories - calorieTarget`. Jamais caché, même après le nudge de tolérance. */
@@ -132,6 +167,11 @@ export interface MacroStrategyResult {
 
 function isValidPositiveFinite(value: number | null | undefined): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+/** Comme `isValidPositiveFinite`, mais `0` est accepté (une cible protéique dérivée d'une masse maigre nulle n'a pas de sens en pratique, mais ce n'est pas cette fonction qui doit le décider — elle ne fait que valider la forme). */
+function isValidNonNegativeFinite(value: number | null | undefined): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
 }
 
 function isKnownGoal(value: string): value is CalorieStrategyGoal {
@@ -157,6 +197,7 @@ function unavailable(
     carbsG: null,
     proteinTargetGPerKg: null,
     fatTargetGPerKg: null,
+    proteinBasis: "body_weight",
     macroCalories: null,
     calorieDifference: null,
     limited: true,
@@ -204,6 +245,10 @@ export function computeMacroStrategy(input: MacroStrategyInput): MacroStrategyRe
   }
   const goal = input.goal;
 
+  const overrideProteinG = isValidNonNegativeFinite(input.proteinTargetOverrideG)
+    ? input.proteinTargetOverrideG
+    : null;
+
   const lockedProteinG = normalizeLock(input.lockedProteinsG);
   const lockedCarbsG = normalizeLock(input.lockedCarbsG);
   const lockedFatG = normalizeLock(input.lockedFatsG);
@@ -215,6 +260,7 @@ export function computeMacroStrategy(input: MacroStrategyInput): MacroStrategyRe
       lockedProteinG,
       lockedCarbsG,
       lockedFatG,
+      overrideProteinG,
     );
   }
 
@@ -226,10 +272,13 @@ export function computeMacroStrategy(input: MacroStrategyInput): MacroStrategyRe
     );
   }
 
-  const proteinTargetGPerKg = MACRO_STRATEGY_COEFFICIENTS.PROTEIN_G_PER_KG[goal];
+  const proteinBasis: ProteinBasis = overrideProteinG != null ? "lean_mass" : "body_weight";
+  const proteinTargetGPerKg =
+    overrideProteinG != null ? null : MACRO_STRATEGY_COEFFICIENTS.PROTEIN_G_PER_KG[goal];
   const fatTargetGPerKg = MACRO_STRATEGY_COEFFICIENTS.FAT_G_PER_KG_MIN;
 
-  const targetProteinG = weightForGPerKg * proteinTargetGPerKg;
+  const targetProteinG =
+    overrideProteinG != null ? overrideProteinG : weightForGPerKg * (proteinTargetGPerKg as number);
   const fatFloorFromWeightG = weightForGPerKg * fatTargetGPerKg;
   const fatFloorFromCaloriesG =
     (calorieTarget * MACRO_STRATEGY_COEFFICIENTS.FAT_MIN_PERCENT_OF_CALORIES) / 9;
@@ -297,6 +346,7 @@ export function computeMacroStrategy(input: MacroStrategyInput): MacroStrategyRe
     carbsG,
     proteinTargetGPerKg,
     fatTargetGPerKg,
+    proteinBasis,
     macroCalories,
     calorieDifference,
     limited: limitReasons.length > 0,
@@ -322,6 +372,7 @@ function computeMacroStrategyLocked(
   lockedProteinG: number | null,
   lockedCarbsG: number | null,
   lockedFatG: number | null,
+  overrideProteinG: number | null,
 ): MacroStrategyResult {
   const { ROUNDING_STEP_G, CALORIE_TOLERANCE_KCAL } = MACRO_STRATEGY_COEFFICIENTS;
   const limitReasons: string[] = [];
@@ -356,6 +407,7 @@ function computeMacroStrategyLocked(
       fatsG: fatG,
       proteinTargetGPerKg: null,
       fatTargetGPerKg: null,
+      proteinBasis: "body_weight",
       macroCalories,
       calorieDifference,
       limited: limitReasons.length > 0,
@@ -382,6 +434,7 @@ function computeMacroStrategyLocked(
       fatsG: fatG,
       proteinTargetGPerKg: null,
       fatTargetGPerKg: null,
+      proteinBasis: "body_weight",
       macroCalories,
       calorieDifference: macroCalories - calorieTarget,
       limited: true,
@@ -407,12 +460,17 @@ function computeMacroStrategyLocked(
   let remaining = budget;
   let budgetExhausted = false;
 
-  // Étape protéines
+  // Étape protéines — un override masse maigre (Phase 7) remplace le
+  // calcul poids×coefficient UNIQUEMENT si les protéines ne sont pas
+  // verrouillées (le verrou reste prioritaire, §18/§19 du brief Phase 7).
+  const proteinBasis: ProteinBasis =
+    lockedProteinG == null && overrideProteinG != null ? "lean_mass" : "body_weight";
   let proteinG: number;
   if (lockedProteinG != null) {
     proteinG = lockedProteinG;
   } else {
-    const targetProteinG = weightForGPerKg * proteinTargetGPerKg;
+    const targetProteinG =
+      overrideProteinG != null ? overrideProteinG : weightForGPerKg * proteinTargetGPerKg;
     const targetProteinCal = targetProteinG * 4;
     if (targetProteinCal >= remaining) {
       proteinG = remaining / 4;
@@ -497,8 +555,10 @@ function computeMacroStrategyLocked(
     proteinsG: proteinG,
     fatsG: fatG,
     carbsG,
-    proteinTargetGPerKg: lockedProteinG != null ? null : proteinTargetGPerKg,
+    proteinTargetGPerKg:
+      lockedProteinG != null || overrideProteinG != null ? null : proteinTargetGPerKg,
     fatTargetGPerKg: lockedFatG != null ? null : fatTargetGPerKgConst,
+    proteinBasis,
     macroCalories,
     calorieDifference,
     limited: limitReasons.length > 0,
@@ -564,6 +624,28 @@ export function compareMacros(
 // (§27 : aucune écriture pour un écart nul) + de la protection `useRef`
 // côté appelant (même pattern que Phase 4B).
 // ---------------------------------------------------------------------
+
+/**
+ * Garde-fou Phase 7 (§24/§41) : plafonne l'écart, en grammes, entre une
+ * cible protéique brute (issue de la masse maigre) et la valeur de
+ * protéines ACTIVE, pour un réalignement AUTOMATIQUE uniquement. À
+ * appeler par le composant qui construit `proteinTargetOverrideG` avant
+ * de le transmettre à `computeMacroStrategy`, uniquement quand le mode
+ * est automatique — jamais pour une application manuelle (l'utilisateur
+ * voit et choisit d'appliquer la pleine recommandation).
+ */
+export function clampAutomaticProteinTarget(
+  rawTargetProteinG: number,
+  currentProteinsG: number | null,
+): number {
+  if (currentProteinsG == null || !Number.isFinite(currentProteinsG)) {
+    return rawTargetProteinG;
+  }
+  const { MAX_AUTO_PROTEIN_ADJUSTMENT_STEP_G } = MACRO_STRATEGY_COEFFICIENTS;
+  const upperBound = currentProteinsG + MAX_AUTO_PROTEIN_ADJUSTMENT_STEP_G;
+  const lowerBound = Math.max(0, currentProteinsG - MAX_AUTO_PROTEIN_ADJUSTMENT_STEP_G);
+  return Math.min(upperBound, Math.max(lowerBound, rawTargetProteinG));
+}
 
 export type AutoMacroAdjustmentReason =
   | "manual_mode"

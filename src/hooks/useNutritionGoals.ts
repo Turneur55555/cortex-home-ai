@@ -181,6 +181,8 @@ export function useApplyCalorieGoal() {
       proteinLocked?: boolean | null;
       carbsLocked?: boolean | null;
       fatLocked?: boolean | null;
+      /** Phase 7 — raison de l'ajustement MACROS combiné (ex. `"lean_mass"`), voir migration 20260813090000. N'affecte jamais `calorie_goal_adjustments.reason` (paramètre `reason` ci-dessus, inchangé). */
+      macroReason?: string | null;
     }) => {
       const { error } = await supabase.rpc("apply_calorie_goal_adjustment", {
         _mode: input.mode,
@@ -207,6 +209,7 @@ export function useApplyCalorieGoal() {
         _protein_locked: input.proteinLocked ?? undefined,
         _carbs_locked: input.carbsLocked ?? undefined,
         _fat_locked: input.fatLocked ?? undefined,
+        _macro_reason: input.macroReason ?? undefined,
       });
       if (error) throw error;
     },
@@ -289,6 +292,8 @@ export function useApplyMacroGoal() {
       proteinLocked?: boolean | null;
       carbsLocked?: boolean | null;
       fatLocked?: boolean | null;
+      /** Phase 7 — raison de l'ajustement (ex. `"lean_mass"` quand une composition corporelle exploitable a influencé la cible protéique), voir migration 20260813090000. */
+      reason?: string | null;
     }) => {
       const { error } = await supabase.rpc("apply_macro_goal_adjustment", {
         _mode: input.mode,
@@ -306,6 +311,7 @@ export function useApplyMacroGoal() {
         _protein_locked: input.proteinLocked ?? undefined,
         _carbs_locked: input.carbsLocked ?? undefined,
         _fat_locked: input.fatLocked ?? undefined,
+        _reason: input.reason ?? undefined,
       });
       if (error) throw error;
     },
@@ -365,6 +371,8 @@ export interface MacroGoalAdjustmentEntry {
   appliedProteins: number;
   appliedCarbs: number;
   appliedFats: number;
+  /** Phase 7 — `null` pour tout ajustement antérieur à la migration 20260813090000, ou pour un ajustement qui n'en a pas fourni. */
+  reason: string | null;
 }
 
 /** Dernier ajustement de macros appliqué (manuel ou automatique) — affichage compact "Dernier ajustement macros" (§37 du brief Phase 5B). */
@@ -380,7 +388,7 @@ export function useLastMacroGoalAdjustment() {
       const { data, error } = await supabase
         .from("macro_goal_adjustments")
         .select(
-          "created_at, mode, previous_proteins, previous_carbs, previous_fats, applied_proteins, applied_carbs, applied_fats",
+          "created_at, mode, previous_proteins, previous_carbs, previous_fats, applied_proteins, applied_carbs, applied_fats, reason",
         )
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
@@ -397,6 +405,7 @@ export function useLastMacroGoalAdjustment() {
         appliedProteins: data.applied_proteins,
         appliedCarbs: data.applied_carbs,
         appliedFats: data.applied_fats,
+        reason: data.reason,
       };
     },
   });
