@@ -29,7 +29,7 @@ const persistentStorage = {
 // Empêche l'ancien token irbeaqabrrbbpstcvtsw de survivre après migration.
 function purgeStaleSession() {
   if (typeof window === "undefined") return;
-  const storageKey = `sb-${EXPECTED_PROJECT_ID}-auth-token`;
+  const storageKey = SUPABASE_AUTH_STORAGE_KEY;
   for (let i = localStorage.length - 1; i >= 0; i--) {
     const key = localStorage.key(i);
     if (!key) continue;
@@ -77,7 +77,7 @@ function createSupabaseClient() {
   return createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
     auth: {
       storage: typeof window !== "undefined" ? persistentStorage : undefined,
-      storageKey: `sb-${EXPECTED_PROJECT_ID}-auth-token`,
+      storageKey: SUPABASE_AUTH_STORAGE_KEY,
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: true,
