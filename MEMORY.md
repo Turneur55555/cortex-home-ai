@@ -2131,6 +2131,48 @@ rester manuel). Vérification faite sur les vrais workflows CI, pas une supposit
     ici pour action séparée. Le reste de la vérification RPC (schéma, contraintes, `DROP FUNCTION`
     propre de l'ancienne signature à 8 paramètres, absence d'overload ambigu) a été fait par inspection
     statique — logique jugée correcte mais jamais exécutée par un appel authentifié réel.
+- **Correctif critique — signup cassé (2026-08-01, branche `claude/fix-signup-home-categories-trigger`,
+  migration `20260810090000_fix_signup_broken_home_categories_trigger.sql`, mergé dans `main` SHA
+  `ef54adf`)** : tout nouveau signup échouait en production.
+  - **Cause exacte** : le trigger `on_auth_user_created_home_categories` sur `auth.users` (AFTER
+    INSERT) appelle `public.seed_default_home_categories()`, qui appelle
+    `public._seed_home_categories_for_user(uuid)`, laquelle `INSERT INTO public.home_categories` —
+    table supprimée par `20260714145745_ae103805-61da-4ed3-8d66-58d07c94cdf4.sql` (nettoyage de
+    l'ancienne fonctionnalité "Home" : `items`, `home_subcategories`, `home_categories`). Cette
+    migration a supprimé les tables + `ensure_home_categories_for_me()` mais a OUBLIÉ le trigger et ses
+    deux fonctions — laissées orphelines, cassant tout `INSERT INTO auth.users` avec
+    `relation "public.home_categories" does not exist`.
+  - **Audit** : `home_categories`/`home_subcategories`/`items` confirmés absents en base (`information_
+    schema.tables`). `_seed_home_categories_for_user` n'a qu'un seul appelant
+    (`seed_default_home_categories`), lui-même appelé uniquement par ce trigger — chaîne isolée, aucune
+    autre fonction/trigger/frontend n'y fait référence (grep `src/` : uniquement l'artefact généré dans
+    `types.ts`, pas un appelant réel). **Classification : A — totalement obsolète**, aucune architecture
+    de remplacement. Les DEUX triggers de `auth.users` ont été audités : `on_auth_user_created` (→
+    `handle_new_user`, écrit dans `public.profiles`, table existante et saine) laissé strictement
+    intact — aucun autre bug de ce type détecté sur `auth.users`.
+  - **Correction** : `DROP TRIGGER on_auth_user_created_home_categories` + `DROP FUNCTION
+    seed_default_home_categories()` + `DROP FUNCTION _seed_home_categories_for_user(uuid)` — solution
+    minimale, aucune donnée perdue (aucune table de données touchée, uniquement du code mort).
+  - **Test signup réel (transaction `BEGIN...ROLLBACK`, jamais commit)** : `INSERT INTO auth.users`
+    isolé → `handle_new_user` se déclenche correctement, `public.profiles` reçoit la ligne attendue
+    (id/email/full_name/role par défaut) — confirmé par `SELECT` avant tout changement de rôle simulé.
+    (Une vérification ultérieure sous rôle `authenticated` simulé montrait `profile_created: 0` — pas
+    un nouveau bug, juste RLS sur `profiles` bloquant ce rôle simulé pour ce SELECT diagnostique,
+    sans rapport avec la création réelle déjà prouvée en amont.)
+  - **Retest RPC combinée Phase 5B** (`apply_calorie_goal_adjustment`, Calories Auto + Macros Auto,
+    transaction rollbackée) : **succès complet** — `nutrition_goals` (calories 2000→2100,
+    proteins/carbs/fats 150/200/65→160/220/65, `last_auto_adjustment_at` renseigné),
+    `calorie_goal_adjustments` (previous_calories=2000, applied_calories=2100),
+    `macro_goal_adjustments` (previous/applied cohérents) — tout écrit atomiquement dans le même appel
+    RPC, confirmé par `ROLLBACK` sans effet persistant. La limitation documentée en Phase 5B est levée.
+  - `npx tsc`/`eslint`/`vitest` (822 passed, baseline pré-6A)/`build` : tous verts.
+    `validate-supabase.mjs` : idempotent OK. CI complète verte sur `main` (7/7 : Typecheck, Supabase
+    Migrations, Supabase Types Sync, RLS Regression Tests, Audit Git↔Supabase Drift, Meal Slugs Sync
+    Check, Supabase project ref). **Note technique** : entre ce merge et celui de Phase 6A, un job CI
+    (`ci: auto-corrige la dérive types.ts après migration`) a détecté et rattaché à `main` les colonnes
+    `body_fat_method`/`body_fat_min_percent`/`body_fat_max_percent` en avance sur leur migration —
+    conséquence de la restauration temporaire de ces colonnes en base avant de fusionner Phase 6A juste
+    après (même migration, donc résolu par ce merge lui-même, jamais une incohérence durable).
 - **Phase 6A — fondation composition corporelle (2026-08-01, branche `claude/phase6a-body-fat-foundation`,
   NON mergée dans `main`)** : Body Fat avec provenance/confiance + masse grasse/masse maigre dérivées.
   - **Déviation consciente vs. le brief reçu** : le brief supposait une section "Corps" DANS

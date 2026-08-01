@@ -3916,10 +3916,6 @@ export type Database = {
       }
     }
     Functions: {
-      _seed_home_categories_for_user: {
-        Args: { uid: string }
-        Returns: undefined
-      }
       apply_calorie_goal_adjustment: {
         Args: {
           _applied_calories: number
