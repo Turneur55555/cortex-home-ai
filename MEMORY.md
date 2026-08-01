@@ -2116,9 +2116,24 @@ rester manuel). Vérification faite sur les vrais workflows CI, pas une supposit
     par un appel RPC réel depuis un test) ; les verrous s'évaluent seulement au chargement/re-render de
     Santé nutritionnelle (mêmes points d'entrée que Phase 4B, pas de nouveau déclencheur ajouté) ;
     UI verrous/mode macros non vérifiée visuellement (authentification requise, voir ci-dessus).
+  - Phase 5B mergée dans `main` le 2026-08-01, SHA de merge `65e1e58`. CI complète verte (Typecheck,
+    Supabase Migrations, Supabase Types Sync, RLS Regression Tests, Audit Git↔Supabase Drift, Meal
+    Slugs Sync Check, Supabase project ref). Test authentifié de la RPC combinée
+    `apply_calorie_goal_adjustment` (Calories Auto + Macros Auto) tenté en toute sécurité via une
+    transaction SQL `BEGIN...ROLLBACK` (jamais commit) avant Phase 6A : **bloqué par un bug
+    pré-existant, sans rapport avec cette phase** — le trigger `on_auth_user_created_home_categories`
+    sur `auth.users` référence encore `public.home_categories`, une table supprimée (migration
+    `20260619080840_drop_health_data_imports.sql`-adjacente ou postérieure) — toute insertion de test
+    dans `auth.users` échoue avec `relation "public.home_categories" does not exist`, et le rôle
+    utilisé par le MCP Supabase n'a pas les droits pour désactiver ce trigger (`must be owner of table
+    users`). **⚠️ Ce bug casserait potentiellement TOUT nouveau signup utilisateur réel en
+    production** — hors scope Phase 5B/6A (élargissement de scope non autorisé), signalé explicitement
+    ici pour action séparée. Le reste de la vérification RPC (schéma, contraintes, `DROP FUNCTION`
+    propre de l'ancienne signature à 8 paramètres, absence d'overload ambigu) a été fait par inspection
+    statique — logique jugée correcte mais jamais exécutée par un appel authentifié réel.
 - **Correctif critique — signup cassé (2026-08-01, branche `claude/fix-signup-home-categories-trigger`,
-  migration `20260810090000_fix_signup_broken_home_categories_trigger.sql`)** : tout nouveau signup
-  échouait en production.
+  migration `20260810090000_fix_signup_broken_home_categories_trigger.sql`, mergé dans `main` SHA
+  `ef54adf`)** : tout nouveau signup échouait en production.
   - **Cause exacte** : le trigger `on_auth_user_created_home_categories` sur `auth.users` (AFTER
     INSERT) appelle `public.seed_default_home_categories()`, qui appelle
     `public._seed_home_categories_for_user(uuid)`, laquelle `INSERT INTO public.home_categories` —
@@ -2150,7 +2165,107 @@ rester manuel). Vérification faite sur les vrais workflows CI, pas une supposit
     `calorie_goal_adjustments` (previous_calories=2000, applied_calories=2100),
     `macro_goal_adjustments` (previous/applied cohérents) — tout écrit atomiquement dans le même appel
     RPC, confirmé par `ROLLBACK` sans effet persistant. La limitation documentée en Phase 5B est levée.
-  - Types.ts régénéré pour CETTE branche (base = `origin/main` SANS les colonnes Phase 6A, encore non
-    mergée) — diff isolé : uniquement `_seed_home_categories_for_user` retiré de `Functions`, rien
-    d'autre. `npx tsc`/`eslint`/`vitest` (822 passed, baseline pré-6A)/`build` : tous verts.
-    `validate-supabase.mjs` : idempotent OK.
+  - `npx tsc`/`eslint`/`vitest` (822 passed, baseline pré-6A)/`build` : tous verts.
+    `validate-supabase.mjs` : idempotent OK. CI complète verte sur `main` (7/7 : Typecheck, Supabase
+    Migrations, Supabase Types Sync, RLS Regression Tests, Audit Git↔Supabase Drift, Meal Slugs Sync
+    Check, Supabase project ref). **Note technique** : entre ce merge et celui de Phase 6A, un job CI
+    (`ci: auto-corrige la dérive types.ts après migration`) a détecté et rattaché à `main` les colonnes
+    `body_fat_method`/`body_fat_min_percent`/`body_fat_max_percent` en avance sur leur migration —
+    conséquence de la restauration temporaire de ces colonnes en base avant de fusionner Phase 6A juste
+    après (même migration, donc résolu par ce merge lui-même, jamais une incohérence durable).
+- **Phase 6A — fondation composition corporelle (2026-08-01, branche `claude/phase6a-body-fat-foundation`,
+  NON mergée dans `main`)** : Body Fat avec provenance/confiance + masse grasse/masse maigre dérivées.
+  - **Déviation consciente vs. le brief reçu** : le brief supposait une section "Corps" DANS
+    `sante-nutritionnelle.tsx` ("Profil → Santé nutritionnelle → section Corps"). Audit : ce n'est plus
+    la structure réelle depuis la refonte nav de juin 2026 — `/corps` est un onglet top-level séparé
+    (`CorpsTab.tsx`), sibling de `/sante-nutritionnelle` et `/nutrition`, pas une sous-section de
+    celle-ci. Décision : intégrer dans le VRAI emplacement existant (`/corps`) plutôt que de forcer un
+    emplacement obsolète — respecte l'intention explicite ("pas de nouvelle entrée de navigation",
+    "réutiliser l'existant") mieux qu'une correspondance littérale avec un texte de brief écrit avant
+    la refonte nav. Pas un "conflit fonctionnel ambigu" bloquant : l'intention était claire, seul le
+    chemin précis était stale.
+  - **Audit préalable (déterminant)** : `body_tracking` est DÉJÀ la table "mesure corporelle datée"
+    (weight/body_fat/muscle_mass/mensurations sur la MÊME ligne, RLS `auth.uid()=user_id` déjà
+    correcte, hooks CRUD déjà génériques `useAddBodyMeasurement`/`useUpdateBodyMeasurement`/
+    `useDeleteBodyMeasurement` via `TablesInsert`/`TablesUpdate` — aucun changement de hook nécessaire,
+    les nouvelles colonnes nullable traversent automatiquement). `body_fat`/`muscle_mass` ne sont PAS
+    des colonnes mortes : déjà lues/écrites par `CorpsTab.tsx` (`BodyMeasurementSheet`,
+    `QuickMeasurementSheet`), `BodyHistorySheet.tsx` (édition), `lib/fitness/body.ts#computeFormScore`,
+    `lib/fitness/analysis/profile.ts` (inférence d'objectif), et le pipeline de dépôt de documents
+    (`20260723160000_document_deposit_pipeline.sql`). `compute_nutrition_targets` reste inerte
+    (hors scope, déjà documenté). **Décision : ÉTENDRE `body_tracking`, PAS de nouvelle table** (§2 du
+    brief) — le "snapshot poids↔BF" (§12/§13) est déjà résolu structurellement puisque `weight` et
+    `body_fat` sont sur la MÊME ligne : aucune colonne `weight_kg_at_measurement` nécessaire, une ligne
+    avec `body_fat` renseigné mais `weight` NULL donne simplement des masses indisponibles (§33),
+    jamais un poids fabriqué depuis une autre date.
+  - **Migration `20260809090000_body_composition_foundation.sql`** : `body_tracking` +
+    `body_fat_method` (text nullable, CHECK IN manual/dexa/bioimpedance/measurements/photo_estimate),
+    `body_fat_min_percent`/`body_fat_max_percent` (double precision nullable, mêmes bornes 1-70 que le
+    CHECK existant `body_tracking_body_fat_check`, CHECK min≤max). **La CONFIANCE n'est PAS stockée**
+    — mapping centralisé côté TS (`BODY_FAT_METHOD_CONFIDENCE`), jamais figée en base pour rester
+    ajustable sans migration (§8 du brief). RLS déjà correcte, s'applique automatiquement aux nouvelles
+    colonnes. Appliquée via `execute_sql` MCP. Vérifié : 86 tables (inchangé, confirmant qu'aucune
+    nouvelle table n'a été créée), colonnes présentes. `types.ts` régénéré, diff propre (+9 lignes,
+    additions uniquement).
+  - **`lib/fitness/bodyComposition.ts`** (nouveau, logique pure) :
+    - `BODY_FAT_METHODS` (5 méthodes) / `BODY_FAT_DIRECT_ENTRY_METHODS` (3 saisissables en 6A :
+      manual/dexa/bioimpedance — measurements/photo_estimate préparées dans le schéma et le mapping,
+      sans moteur actif ni UI, §4 du brief).
+    - `BODY_FAT_METHOD_CONFIDENCE` : mapping centralisé dexa→high, bioimpedance/measurements→medium,
+      photo_estimate/manual→low. `manual` délibérément bas (Cortex ignore la vraie provenance du
+      chiffre saisi, §8 — jamais une confiance élevée par défaut). `getBodyFatConfidence(method)`
+      gère `method:null` (mesure historique) → `low`, jamais devinée à la hausse.
+    - `computeFatMass(weightKg, bodyFatPercent)` = weight×BF/100 ; `computeLeanMass` = weight−fatMass.
+      **`leanMassKg` explicitement documenté comme n'étant PAS `muscleMassKg`** (§11) — jamais
+      labellisé "Masse musculaire" côté UI à partir de ce calcul.
+    - `computeBodyCompositionSnapshot(measurement)` : enrichit une mesure brute (poids/BF/méthode)
+      avec confiance + masses dérivées, à LA LECTURE (rien stocké, §14). `null` honnête partout si
+      donnée insuffisante — jamais 0 fabriqué.
+    - `areBodyFatMethodsComparable(a,b)` : `true` UNIQUEMENT si méthodes identiques ET connues (deux
+      `null` ⇒ non comparable — provenance inconnue des deux côtés n'implique pas une comparaison
+      fiable). `computeBodyCompositionTrend(rows)` : compare les deux mesures les plus RÉCENTES avec
+      BF renseigné ; si méthodes différentes → `comparable:false` + raison explicite, jamais une
+      tendance présentée comme fiable entre DEXA et impédancemètre (§18/§19). Historique brut
+      uniquement — aucun lissage (§20, volontairement reporté).
+    - `bodyFatRangeMidpoint` préparé pour les estimations par intervalle (Phases 6B/6C), non utilisé
+      dans l'UI 6A (§5/§34 : ne pas complexifier si non nécessaire, mais ne pas bloquer l'évolution).
+  - **UI (`CorpsTab.tsx`)** : nouvelle carte "Composition corporelle" (poids, MG %, masse grasse
+    estimée en kg, masse maigre en kg, méthode + confiance affichées sous la valeur) insérée après le
+    Score forme existant. État vide explicite ("Composition corporelle non renseignée" + CTA), jamais
+    un `0 %` fabriqué (§32). Sélecteur de méthode (pills Manuel/DEXA/Impédancemètre) ajouté au
+    formulaire complet ET au `QuickMeasurementSheet` dédié au Body Fat, avec préremplissage du poids
+    depuis la dernière pesée connue (visible, éditable — §27, jamais une resaisie forcée ni une valeur
+    cachée). `BodyHistorySheet.tsx` : méthode affichée par entrée dans l'historique + éditable dans le
+    formulaire de modification. Modification/suppression déjà supportées nativement (hooks génériques
+    existants, §30 satisfait sans changement).
+  - **Confirmation §37/§38/§39** : `macroStrategy.ts`/`calorieStrategy.ts`/`tdee.ts`/`neat.ts`/
+    `metabolism.ts` non touchés cette phase (seule référence à `body_fat` dans ces fichiers = le
+    commentaire Phase 5A pré-existant expliquant pourquoi `macroStrategy.ts` l'ignore délibérément).
+    Aucune écriture automatique de `nutrition_goals.calories/proteins/carbs/fats` déclenchée par une
+    mesure Body Fat.
+  - **Préparation 6B/6C** : `body_fat_min_percent`/`body_fat_max_percent` + méthodes
+    `measurements`/`photo_estimate` déjà dans le modèle (schéma + mapping confiance + labels) sans
+    formule ni analyse implémentée — les futures phases n'auront qu'à brancher un moteur, jamais de
+    migration supplémentaire pour la provenance elle-même.
+  - **Tests** (`bodyComposition.test.ts`, 36 tests) : calculs de base (80kg/20%→16kg/64kg, décimales,
+    poids/BF faibles/élevés, invalides/NaN/Infinity/négatifs), bornes 1-70, midpoint d'intervalle,
+    mapping confiance (aucun pourcentage inventé, toutes méthodes couvertes), validation méthode,
+    snapshot (BF+poids, BF sans poids → masses indisponibles, sans BF, intervalle, méthode inconnue),
+    comparabilité (même méthode/méthodes différentes/inconnues), tendance (aucune mesure, une seule,
+    plusieurs même méthode, méthodes différentes signalées, ordre chronologique avec lignes sans BF
+    ignorées, poids manquant sur une mesure). 858 tests au total (858 = 822 + 36).
+  - `npx tsc --noEmit` / `npx eslint` (fichiers modifiés) / `npx vitest run` (858 passed) / `npm run
+    build` : tous verts. `node scripts/validate-supabase.mjs` : migrations idempotentes OK. Aucun
+    `as any` introduit.
+  - **Vérification visuelle mobile NON effectuée** — `vite dev` a de nouveau démarré avec succès dans
+    ce sandbox, mais `/corps` étant protégée par authentification, la navigation redirige vers
+    `/login` sans session Supabase disponible ; l'écran réel avec la nouvelle carte "Composition
+    corporelle" n'a pas pu être capturé. Même warning d'hydratation pré-existant sur `/login`
+    (`AppShell`/`loading-screen.tsx`), sans rapport avec les fichiers de cette phase.
+  - **Limites connues** : le bug pré-existant `on_auth_user_created_home_categories` (voir note Phase
+    5B ci-dessus) casse toute création d'utilisateur de test — signalé, non corrigé (hors scope) ;
+    "Masse gr." dans les Stat cards existantes de `CorpsTab.tsx` affiche en réalité `muscle_mass` avec
+    un libellé trompeur ("Masse grasse" au clic) — bug PRÉ-EXISTANT, non lié à cette phase, non corrigé
+    (scope creep évité), signalé ici pour visibilité ; UI composition corporelle non vérifiée
+    visuellement (authentification requise) ; pas de lissage/estimation robuste du Body Fat (assumé,
+    §20) ; pas de normalisation inter-méthodes (assumé, §18/§19, préparé architecturalement).
