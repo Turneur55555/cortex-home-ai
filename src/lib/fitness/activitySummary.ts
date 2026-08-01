@@ -1,27 +1,9 @@
 // Pure domain helpers for the weekly activity summary (Santé nutritionnelle
 // module, section "Activité"). No React, no Supabase, no UI tokens.
 
-import { estimateWorkoutCalories } from "./calories";
-import { workoutTonnage } from "./strength";
+import { estimateSessionCalories, type WorkoutForEAT } from "./eat";
 
-type SetForSummary = {
-  reps?: number | string | null;
-  weight?: number | string | null;
-  completed?: boolean | null;
-};
-
-type ExerciseForSummary = {
-  sets?: number | null;
-  reps?: number | null;
-  weight?: number | null;
-  exercise_sets?: SetForSummary[] | null;
-};
-
-export type WorkoutForSummary = {
-  date: string;
-  duration_minutes: number | null;
-  exercises?: ExerciseForSummary[] | null;
-};
+export type WorkoutForSummary = WorkoutForEAT;
 
 export interface WeeklyActivitySummary {
   sessionCount: number;
@@ -30,8 +12,8 @@ export interface WeeklyActivitySummary {
 
 /**
  * Nombre de séances et calories brûlées estimées sur les `days` derniers
- * jours. Réutilise `workoutTonnage` et `estimateWorkoutCalories`, déjà
- * responsables de l'estimation calorique affichée par séance (WorkoutCard).
+ * jours. Réutilise `estimateSessionCalories` (eat.ts) — même estimateur
+ * par séance que le tuile EAT, jamais une seconde logique concurrente.
  */
 export function computeWeeklyActivitySummary(
   workouts: ReadonlyArray<WorkoutForSummary> | undefined,
@@ -46,13 +28,8 @@ export function computeWeeklyActivitySummary(
 
   let caloriesBurned = 0;
   for (const w of recent) {
-    const volume = workoutTonnage(w.exercises ?? []);
-    const calories = estimateWorkoutCalories({
-      durationMinutes: w.duration_minutes ?? 0,
-      volumeKg: volume,
-      bodyWeightKg: bodyWeightKg ?? null,
-    });
-    if (calories != null) caloriesBurned += calories;
+    const estimate = estimateSessionCalories(w, bodyWeightKg);
+    if (estimate != null) caloriesBurned += estimate.kcal;
   }
 
   return { sessionCount: recent.length, caloriesBurned: Math.round(caloriesBurned) };

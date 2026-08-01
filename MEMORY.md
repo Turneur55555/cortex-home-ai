@@ -1437,3 +1437,38 @@ rester manuel). Vérification faite sur les vrais workflows CI, pas une supposit
     taille/âge/sexe car dérivé directement des données réactives (React Query), aucun cache propre.
   - **Hors scope (conforme à la consigne)** : NEAT/EAT/TEF/TDEE réel/TDEE adaptatif/adaptation
     métabolique/prédictions/coach IA restent « À venir » — aucun de ces éléments touché.
+- **Correctif CI — lockfile désynchronisé (2026-08-01)** : `npm ci` échouait depuis fin juillet sur
+  `typecheck.yml` + `supabase-types.yml` (`package-lock.json` pointait vers
+  `@lovable.dev/vite-tanstack-config@2.7.7`/`vite-plugin-hmr-gate@1.1.4`, `package.json` exigeait déjà
+  `2.8.4`/`^1.3.3`) — **cause racine identifiée** du drift `types.ts` de la Phase 2A (l'étape
+  régénération de `migrate.yml` était `skip`, jamais atteinte, faute d'install réussie). Régénéré via
+  `npm install` (aucune dépendance changée intentionnellement, `package.json` intact, `bun.lock` déjà
+  correct). `typecheck.yml` re-vérifié vert sur `main` après le fix.
+- **Phase 2B — EAT réel (2026-08-01)** :
+  - **`src/lib/fitness/eat.ts`** (nouveau, pur, testé) : `estimateSessionCalories` (par séance, toute
+    discipline confondue) + `computeDailyEAT` (somme du jour donné, `sessionCount`, jamais d'activité
+    inventée — 0 séance ⇒ 0 kcal). Priorité de calcul par séance : (1) estimation déjà produite par le
+    moteur de la discipline si présente dans `workouts.metadata` (`caloriesEstimate`/`calories_estimate`,
+    ex. Guided — jamais recalculée) ; (2) muscu : `estimateWorkoutCalories` + `workoutTonnage` existants,
+    comportement inchangé de `WorkoutCard` ; (3) autres disciplines (cardio/course/HYROX/freeform) : même
+    formule MET × poids × durée mais intensité `"moderate"` explicite — corrige le biais de l'ancien
+    appel direct qui, faute de tonnage, retombait à tort sur l'intensité `"light"` pour un effort
+    cardio/course pourtant significatif.
+  - **`computeWeeklyActivitySummary`** (`activitySummary.ts`, Phase 1) refactorée pour appeler
+    `estimateSessionCalories` au lieu de dupliquer l'appel `workoutTonnage`+`estimateWorkoutCalories` —
+    un seul estimateur par séance pour toute la page (carte "Activité (7j)" et tuile EAT), plus de
+    logique concurrente. Corrige au passage le même biais d'intensité pour la carte 7 jours.
+  - **`StatTile`** (`components/fitness/StatTile.tsx`) : nouvelle prop optionnelle `caption` (texte
+    discret sous le libellé, ex. "Estimation") — non-breaking, réutilisée pour la tuile EAT afin de
+    préparer l'affichage futur d'un niveau de confiance sans construire de scoring maintenant.
+  - **Architecture "sources futures"** (Apple Health/Watch, Garmin, Whoop, Fitbit) : `CalorieEstimate`
+    porte déjà `source: "computed" | "device"` — seul `"computed"` existe aujourd'hui ; aucune
+    intégration développée, juste l'emplacement de type prêt pour qu'un futur moteur de sélection de
+    source (priorité device > computed, anti double-comptage) s'y branche sans casser l'existant.
+  - **Découverte discipline par défaut** : `workouts.discipline` vaut `"muscu"` (pas `"musculation"`) en
+    base — vérifié dans les migrations, aligné sur la convention déjà utilisée par `WorkoutCard.tsx`
+    (`(w.discipline ?? "muscu") === "muscu"`).
+  - **Pas de nouvelle table** : EAT recalculé à la volée depuis `useWorkouts()` (déjà chargé) +
+    poids (`body_tracking`/`useLatestBodyWeight`) — aucune donnée calculable persistée.
+  - **Hors scope (conforme à la consigne)** : NEAT/TEF/TDEE réel/TDEE adaptatif/adaptation
+    métabolique/balance énergétique/prédictions/coach IA — tous inchangés, toujours « À venir ».
