@@ -1,7 +1,13 @@
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "./types";
+import {
+  SUPABASE_AUTH_STORAGE_KEY,
+  SUPABASE_PROJECT_REF,
+  SUPABASE_PUBLISHABLE_KEY as CANONICAL_SUPABASE_PUBLISHABLE_KEY,
+  SUPABASE_URL as CANONICAL_SUPABASE_URL,
+} from "@/config/supabase-project";
 
-const EXPECTED_PROJECT_ID = "bcwfvpwxzlmkxobvbtzp";
+const EXPECTED_PROJECT_ID = SUPABASE_PROJECT_REF;
 
 const persistentStorage = {
   getItem(key: string) {
