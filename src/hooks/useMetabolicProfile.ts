@@ -57,7 +57,7 @@ export function useUpsertMetabolicProfile() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      const { error } = await supabase.from("metabolic_profile").upsert(
+      const { error } = await (supabase as any).from("metabolic_profile").upsert(
         {
           user_id: user.id,
           sex: input.sex,
