@@ -25,7 +25,7 @@ import { useState, type ReactNode } from "react";
 import { useBodyMeasurements, useWorkouts } from "@/hooks/use-fitness";
 import { useLatestBodyWeight } from "@/hooks/useLatestBodyWeight";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
-import { useLatestActivity } from "@/hooks/useDailyActivity";
+import { useActivityForDate, useLatestActivity } from "@/hooks/useDailyActivity";
 import { useMetabolicProfile } from "@/hooks/useMetabolicProfile";
 import { useNutrition } from "@/hooks/useNutritionData";
 import { useNutritionGoals } from "@/hooks/useNutritionGoals";
@@ -35,9 +35,11 @@ import { bmiCategory, computeBMI, computeBMR } from "@/lib/fitness/metabolism";
 import { computeWeeklyActivitySummary } from "@/lib/fitness/activitySummary";
 import { computeDailyEAT } from "@/lib/fitness/eat";
 import { computeTEF } from "@/lib/fitness/tef";
+import { computeNEAT } from "@/lib/fitness/neat";
 import { localDateYMD } from "@/lib/dates";
 import { StatTile } from "@/components/fitness/StatTile";
 import { ComingSoonTile } from "@/components/fitness/ComingSoonTile";
+import { InsufficientDataTile } from "@/components/fitness/InsufficientDataTile";
 import { ComingSoonCard } from "@/components/fitness/ComingSoonCard";
 import { MetabolicProfileSheet } from "@/components/fitness/MetabolicProfileSheet";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -77,6 +79,7 @@ function SanteNutritionnellePage() {
 
   const { data: workouts, isLoading: workoutsLoading } = useWorkouts();
   const { data: activity } = useLatestActivity();
+  const { data: todayActivity, isLoading: todayActivityLoading } = useActivityForDate(today);
 
   const weight = findLatestValue(bodyRows, "weight") ?? latestWeight ?? null;
   const previousWeight = findPreviousValue(bodyRows, "weight");
@@ -99,6 +102,13 @@ function SanteNutritionnellePage() {
   const weeklyActivity = computeWeeklyActivitySummary(workouts ?? undefined, weight, 7);
   const dailyEAT = computeDailyEAT(workouts ?? undefined, weight, today);
   const dailyTEF = computeTEF(totals);
+  const dailyNEAT = computeNEAT({
+    activeCalories: todayActivity?.active_calories,
+    steps: todayActivity?.steps,
+    weightKg: weight,
+    heightCm: prefs.height_cm,
+    eatKcal: dailyEAT.kcal,
+  });
 
   const calorieGoal = nutritionGoals?.calories ?? null;
 
@@ -151,7 +161,20 @@ function SanteNutritionnellePage() {
             <ComingSoonTile icon={<TrendingUp className="h-4 w-4" />} label="Objectif calorique" />
           )}
           <ComingSoonTile icon={<Gauge className="h-4 w-4" />} label="Dépense adaptative" />
-          <ComingSoonTile icon={<Footprints className="h-4 w-4" />} label="NEAT" />
+          {todayActivityLoading ? (
+            <Skeleton className="h-[84px] rounded-2xl" />
+          ) : dailyNEAT.kcal != null ? (
+            <StatTile
+              icon={<Footprints className="h-4 w-4" />}
+              label="NEAT"
+              value={String(dailyNEAT.kcal)}
+              unit="kcal/j"
+              caption="Estimation"
+              title="Non-Exercise Activity Thermogenesis — activité quotidienne non sportive (marche, déplacements, tâches)"
+            />
+          ) : (
+            <InsufficientDataTile icon={<Footprints className="h-4 w-4" />} label="NEAT" />
+          )}
           <StatTile
             icon={<Timer className="h-4 w-4" />}
             label="EAT"

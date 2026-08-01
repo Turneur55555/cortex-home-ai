@@ -1499,3 +1499,32 @@ rester manuel). Vérification faite sur les vrais workflows CI, pas une supposit
     totalement indépendant de BMR/EAT/NEAT/objectif calorique (le futur TDEE les agrégera).
   - **Pas de nouvelle table** : calculé à la volée depuis `useNutrition`/`useNutritionTotals` déjà
     chargés par la page — aucune donnée calculable persistée.
+- **Phase 2D — NEAT réel estimé (2026-08-01)** :
+  - **Audit préalable (`src/lib/health/appleHealth.ts`)** — réponse à la question posée par
+    Nathan : **`daily_activity.active_calories` PEUT inclure les calories des entraînements.** C'est
+    la somme de tous les échantillons HealthKit `HKQuantityTypeIdentifierActiveEnergyBurned` du
+    jour, et Apple ne sépare pas "exercice structuré" du reste de l'activité active dans cette
+    quantité — une séance suivie par l'Apple Watch contribue à `active_calories` au même titre que
+    la marche. `daily_activity.steps` est de la même façon une vraie somme journalière de tous les
+    échantillons `StepCount` (pas un relevé instantané, jamais à re-sommer). `"apple_health"` est
+    aujourd'hui la SEULE source de `daily_activity` (aucune autre intégration existante) — hypothèse
+    documentée dans le code, à réviser si une source future a une sémantique différente.
+  - **`src/lib/fitness/neat.ts`** (nouveau, pur, testé — 23 tests) : `computeNEAT({activeCalories,
+    steps, weightKg, heightCm, eatKcal})`, priorité stricte à une seule méthode :
+    (A) `active_calories` moins l'EAT du même jour (`Math.max(0, activeCalories - eat)` — anti
+    double-comptage EAT/NEAT, jamais négatif) ; (B) sinon `estimateStepsCalories` (pas × poids,
+    modèle MET × poids × durée identique à `calories.ts` — MET marche 3.0, vitesse 4.8 km/h,
+    foulée = taille × 0.0041 si connue sinon 0.75 m par défaut) ; (C) sinon `insufficient_data`
+    (`kcal: null`) — **jamais** de fallback `BMR × coefficient d'activité` dans cette phase.
+  - **`useActivityForDate(date)`** (nouveau, `hooks/useDailyActivity.ts`) : contrairement à
+    `useLatestActivity()` (dernier relevé connu, PAS nécessairement aujourd'hui — piège identifié
+    par l'audit), interroge `daily_activity WHERE date = date demandée`. `useLatestActivity`
+    inchangée (toujours utilisée telle quelle pour "Pas (dernier relevé)"/FC dans les sections
+    Activité/Santé, dont le libellé assume déjà "dernier relevé").
+  - **`InsufficientDataTile`** (nouveau, `components/fitness/InsufficientDataTile.tsx`) : distincte
+    de `ComingSoonTile` — la fonctionnalité existe, seule la donnée manque. Jamais un "0 kcal" qui
+    laisserait croire à une mesure réelle quand aucune donnée objective n'est disponible (Niveau C).
+  - **BMR/EAT/TEF non modifiés** : `computeDailyEAT` réutilisé tel quel (juste appelé, `.kcal` passé
+    en paramètre à `computeNEAT`) — aucun refactor de `eat.ts`/`tef.ts`/`metabolism.ts` nécessaire.
+  - **Pas de nouvelle table** : NEAT calculé à la volée depuis `daily_activity` (déjà existante,
+    Phase 1) + EAT/poids/taille déjà chargés par la page.
