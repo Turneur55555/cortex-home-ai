@@ -1955,3 +1955,66 @@ rester manuel). Vérification faite sur les vrais workflows CI, pas une supposit
     été vérifiée que par inspection de schéma/contraintes, pas par un appel RPC réel depuis un test) ;
     l'auto-ajustement ne s'évalue qu'au chargement de Santé nutritionnelle (pas d'autre point d'entrée
     pertinent identifié cette phase).
+- **Phase 5A — moteur de stratégie des macronutriments (2026-08-01, branche
+  `claude/phase5a-macro-strategy`, NON mergée dans `main`)** : première recommandation macros
+  Cortex-native, déterministe, explicable. Ne modifie JAMAIS `nutrition_goals.proteins/carbs/fats`.
+  - **Audit préalable** : re-confirmé `compute_nutrition_targets` (RPC DB découverte en Phase 4B)
+    toujours 0 appelant frontend — inerte, non supprimé (hors scope). Découverte : le formulaire
+    manuel `GoalsSheet.tsx` a son propre pré-remplissage 35/32/33 % (`computeMacrosFromCalories`) —
+    **volontairement conservé** (documenté/renommé en commentaire, pas remplacé) : c'est un "vite
+    fait" pour un formulaire d'édition manuelle, pas une recommandation Cortex compétitrice —
+    distinction explicite ajoutée en commentaire pour lever toute ambiguïté future, plutôt qu'un
+    rewire risqué (poids/objectif non disponibles dans ce petit composant) pour une phase déjà large.
+  - **`lib/fitness/macroStrategy.ts`** (logique pure) : `computeMacroStrategy(input)`.
+    - **Entrées** : `calories` (objectif ACTIF `nutrition_goals.calories`, jamais une recommandation
+      Cortex pas encore appliquée — §2 du brief), `bodyWeightKg`, `goal`. Simuler une autre enveloppe
+      = rappeler la même fonction avec un autre `calories` (pas de fonction séparée nécessaire).
+    - **Protéines** : g/kg de poids TOTAL par objectif (`fat_loss`=2.2, `muscle_gain`=2.0,
+      `maintenance`=1.8 — `PROTEIN_G_PER_KG`), jamais un % des calories (testé explicitement : même
+      poids/objectif, calories 2000→2500, protéines identiques). Poids plafonné à
+      `BODYWEIGHT_CAP_KG=120` pour ce calcul uniquement (§5 : `body_tracking.body_fat` optionnel/non
+      fiable pour tous → le moteur n'en dépend JAMAIS, garde-fou sur le poids total à la place).
+    - **Lipides** : cible = max(poids×`FAT_G_PER_KG_MIN`(0.8), calories×`FAT_MIN_PERCENT_OF_CALORIES`
+      (20%)/9) — protection à la fois absolue et relative à l'enveloppe.
+    - **Glucides** : calories restantes après protéines+lipides / 4, jamais négatif.
+    - **Enveloppe contrainte** : priorité protéines > lipides > glucides. Si protéines+lipides
+      dépassent l'enveloppe → lipides réduits au maximum compatible, glucides à 0, `limited:true` +
+      raison explicite (jamais silencieux). Cas extrême (protéines seules dépassent déjà) → toute
+      l'enveloppe en protéines, reste à 0. Testé sur l'exemple exact du brief (1200 kcal, ~200g
+      protéines + ~73g lipides visés → jamais de glucides négatifs).
+    - **Arrondi** : pas de 5g (`ROUNDING_STEP_G`) sur les 3 macros.
+    - **Cohérence énergétique** : `macroCalories` recalculé sur les valeurs ARRONDIES via
+      `calculateCaloriesFromMacros` (réutilisé depuis `lib/nutrition/macros.ts` — "seule source de
+      vérité" déjà documentée dans ce fichier pour la règle d'Atwater P×4+C×4+L×9, jamais dupliquée).
+      Tolérance `CALORIE_TOLERANCE_KCAL=50` : au-delà, UN SEUL nudge des glucides (variable la plus
+      flexible) rapproche le total, jamais de boucle, jamais caché (`calorieDifference` toujours
+      exposé).
+    - **Résultat structuré** : `goal`, `calorieTarget`, `bodyWeightKg`, `proteinsG/fatsG/carbsG`
+      (`null` uniquement si non calculable — jamais fabriqué), `proteinTargetGPerKg`/`fatTargetGPerKg`
+      (coefficients réellement utilisés, pour l'explicabilité), `macroCalories`, `calorieDifference`,
+      `limited`, `limitReasons`.
+    - **Préparation des futurs verrous** (§21, PAS implémenté) : pipeline séquentiel
+      protéines→lipides→glucides documenté comme conçu pour qu'un futur paramètre `locks` remplace une
+      étape calculée par une valeur imposée, sans réécrire la logique.
+    - `compareMacros(current, recommended)` : fonction pure séparée, `differenceG = recommended −
+      current` par macro (`null` si l'un des deux manque) — prépare un futur bouton "Appliquer" sans
+      jamais écrire en base cette phase (aucun mode manual/automatic touché, règle absolue Phase 5A).
+  - **`sante-nutritionnelle.tsx`** : nouvelle section "Répartition recommandée" (carte compacte
+    calories actives → P/G/L, comparaison actuel→recommandé par macro, explication courte, raisons de
+    contrainte si `limited`) — read-only, aucun bouton "Appliquer" fonctionnel pour les macros (hors
+    scope 5A). Se recalcule automatiquement si l'objectif calorique actif change (dépend directement
+    de `nutritionGoals.calories`), sans écriture automatique des macros.
+  - **Tests** (`macroStrategy.test.ts`, 37 tests) : protéines (par objectif, par poids, stabilité vs
+    calories, plafond poids élevé, poids faible, invalide), lipides (plancher, poids/objectifs variés,
+    enveloppe confortable/contrainte), glucides (calcul du restant, jamais négatif, enveloppes
+    extrêmes, arrondi), enveloppe impossible (exemple exact du brief + cas extrême), cohérence
+    calorique + tolérance, changement de calories à poids/objectif fixes, comparaison (4 cas),
+    robustesse (NaN/Infinity/négatif/nul/objectif invalide/enveloppes extrêmes), autonomie
+    Cortex-native, simulation d'une autre enveloppe.
+  - `npx tsc --noEmit` / `npx eslint` / `npx vitest run` (795 passed) / `npm run build` : tous verts.
+  - **Vérification visuelle mobile NON effectuée** — même limitation d'environnement que les phases
+    précédentes (`EAFNOSUPPORT` sur bind IPv6 `:::8080`), retestée une 4e fois, non simulée.
+  - **Limites connues** : coefficients g/kg raisonnés mais non individualisés (pas de body fat/masse
+    maigre par design, §5) ; le pré-remplissage 35/32/33 % de `GoalsSheet` reste un doublon fonctionnel
+    mineur assumé (documenté, pas un moteur de recommandation) ; pas encore de verrous macros ni
+    d'écriture automatique (Phase 5B).

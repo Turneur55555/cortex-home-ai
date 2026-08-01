@@ -8,7 +8,18 @@ interface GoalsSheetProps {
   onClose: () => void;
 }
 
-/** Répartition standard : 35% protéines · 32% glucides · 33% lipides */
+/**
+ * Pré-remplissage RAPIDE et volontairement générique (35/32/33 %) quand
+ * l'utilisateur tape une calorie à la main dans ce formulaire — PAS une
+ * recommandation Cortex. Distinct de `lib/fitness/macroStrategy.ts` (Phase
+ * 5A, seule source de vérité pour la RECOMMANDATION macros personnalisée :
+ * protéines/lipides basés sur le poids et l'objectif, pas un pourcentage
+ * fixe des calories). Volontairement non remplacé par ce nouveau moteur ici
+ * pour ne pas complexifier ce petit formulaire d'édition manuelle avec des
+ * dépendances supplémentaires (poids, objectif) — l'utilisateur voit et
+ * peut affiner la vraie recommandation Cortex dans la section "Répartition
+ * recommandée" de Santé nutritionnelle avant de revenir éditer ici.
+ */
 function computeMacrosFromCalories(kcal: number) {
   return {
     proteins: Math.round((kcal * 0.35) / 4),
@@ -18,11 +29,11 @@ function computeMacrosFromCalories(kcal: number) {
 }
 
 /**
- * Édition MANUELLE des objectifs nutritionnels quotidiens — distincte de la
- * RECOMMANDATION Cortex (section "Stratégie calorique" de Santé
- * nutritionnelle, `lib/fitness/calorieStrategy.ts`, seule source de vérité
- * pour la recommandation calorique personnalisée depuis la Phase 4A/4B).
- * Ne contient plus de calculateur TDEE intégré (retiré en Phase 4B — il
+ * Édition MANUELLE des objectifs nutritionnels quotidiens — distincte des
+ * RECOMMANDATIONS Cortex : calories (section "Stratégie calorique",
+ * `lib/fitness/calorieStrategy.ts`, Phase 4A/4B) et macros (section
+ * "Répartition recommandée", `lib/fitness/macroStrategy.ts`, Phase 5A). Ne
+ * contient plus de calculateur TDEE intégré (retiré en Phase 4B — il
  * produisait une recommandation concurrente basée sur un multiplicateur
  * d'activité classique et des deltas ±300 kcal fixes, jamais Cortex-native).
  */
