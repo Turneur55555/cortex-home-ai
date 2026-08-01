@@ -39,12 +39,14 @@ import { computeNEAT, isNeatActivityLevel } from "@/lib/fitness/neat";
 import { computeDailyTDEE } from "@/lib/fitness/tdee";
 import { ADAPTIVE_TDEE_THRESHOLDS, computeAdaptiveTdee } from "@/lib/fitness/adaptiveTdee";
 import { computeAdaptiveTdeeCalibration } from "@/lib/fitness/adaptiveTdeeCalibration";
+import { buildMetabolicAnalysis } from "@/lib/fitness/metabolicAnalysis";
 import { addDaysYMD, localDateYMD } from "@/lib/dates";
 import { StatTile } from "@/components/fitness/StatTile";
 import { ComingSoonTile } from "@/components/fitness/ComingSoonTile";
 import { InsufficientDataTile } from "@/components/fitness/InsufficientDataTile";
 import { ComingSoonCard } from "@/components/fitness/ComingSoonCard";
 import { MetabolicProfileSheet } from "@/components/fitness/MetabolicProfileSheet";
+import { MetabolicAnalysisSheet } from "@/components/fitness/MetabolicAnalysisSheet";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export const Route = createFileRoute("/_authenticated/sante-nutritionnelle")({
@@ -70,6 +72,7 @@ const BMI_LABELS: Record<ReturnType<typeof bmiCategory>, string> = {
 function SanteNutritionnellePage() {
   const today = localDateYMD();
   const [showMetabolicSheet, setShowMetabolicSheet] = useState(false);
+  const [showAnalysisSheet, setShowAnalysisSheet] = useState(false);
 
   const { data: bodyRows, isLoading: bodyLoading } = useBodyMeasurements();
   const { data: latestWeight } = useLatestBodyWeight();
@@ -150,6 +153,13 @@ function SanteNutritionnellePage() {
   });
 
   const calorieGoal = nutritionGoals?.calories ?? null;
+
+  const metabolicAnalysis = buildMetabolicAnalysis({
+    dailyTDEE,
+    adaptiveTdee,
+    calibration: adaptiveTdeeCalibration,
+    calorieGoalKcal: calorieGoal,
+  });
 
   const caloriesPct = pct(totals.calories, nutritionGoals?.calories);
   const proteinsPct = pct(totals.proteins, nutritionGoals?.proteins);
@@ -285,6 +295,21 @@ function SanteNutritionnellePage() {
             />
           )}
         </div>
+        <div className="mt-2 flex items-center justify-between gap-3 rounded-2xl border border-border bg-card px-4 py-3 shadow-card">
+          <div className="min-w-0">
+            <p className="text-xs font-medium">Comprendre ton TDEE adaptatif</p>
+            <p className="text-[11px] text-muted-foreground">
+              Modélisé, observé, adaptatif — le détail du calcul.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowAnalysisSheet(true)}
+            className="shrink-0 rounded-full border border-white/8 bg-white/[0.04] px-3 py-1.5 text-[11px] font-semibold text-foreground transition-colors hover:border-primary/30"
+          >
+            Voir l'analyse
+          </button>
+        </div>
         <div className="mt-2 grid grid-cols-1">
           <ComingSoonTile
             icon={<TrendingDown className="h-4 w-4" />}
@@ -347,6 +372,13 @@ function SanteNutritionnellePage() {
             activityLevel: metabolicProfile?.activity_level ?? null,
           }}
           onClose={() => setShowMetabolicSheet(false)}
+        />
+      )}
+
+      {showAnalysisSheet && (
+        <MetabolicAnalysisSheet
+          analysis={metabolicAnalysis}
+          onClose={() => setShowAnalysisSheet(false)}
         />
       )}
 

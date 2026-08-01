@@ -1741,3 +1741,54 @@ rester manuel). Vérification faite sur les vrais workflows CI, pas une supposit
     recalcule indépendamment à partir de l'état du jour — aucune persistance de snapshot ajoutée,
     volontairement reporté plutôt que sur-ingénieré) ; le "signal suspect" n'identifie pas la cause
     (tracking incomplet / eau / poids erroné) — juste qu'il existe.
+- **Phase 3C — explicabilité du moteur métabolique (2026-08-01, branche
+  `claude/phase3c-metabolic-explainability`, NON mergée dans `main`)** : couche de transparence pour
+  les 3 niveaux de TDEE (modélisé/observé/adaptatif) — aucun algorithme métabolique modifié, uniquement
+  présentation/explication.
+  - **`lib/fitness/metabolicAnalysis.ts`** (logique pure de présentation, zéro React) :
+    `buildMetabolicAnalysis(input)` assemble un `MetabolicAnalysisViewModel` unique à partir des
+    résultats déjà calculés (`DailyTDEE` Phase 2E, `AdaptiveTdeeResult` Phase 3A,
+    `AdaptiveTdeeCalibrationResult` Phase 3B) — aucune formule recalculée, uniquement formatage/
+    libellés/agrégation d'affichage. Un seul objet passé au composant (pas 25 props indépendantes).
+    - Libellés centralisés : `CONFIDENCE_COPY` (Faible/Moyenne/Élevée + description qualitative,
+      jamais un pourcentage — "95 % fiable" explicitement interdit), `CALIBRATION_STATE_COPY`
+      (`model_only`→"Modèle initial", `calibrating`→"Calibration en cours", `adapted`→"Calibré" —
+      réutilise les états 3B, aucun système parallèle), `MODELED_COMPONENT_LABELS` (BMR→"Métabolisme
+      de base", NEAT→"Activité quotidienne", EAT→"Entraînement", TEF→"Digestion", avec l'acronyme en
+      info secondaire).
+    - **Données insuffisantes** (`observed.available === false`) : `buildCalibrationProgress` expose
+      des CRITÈRES de progression (pesées actuel/requis, couverture nutritionnelle %, jours) calqués
+      sur les seuils `ESTABLISHED` de la Phase 3A (8 pesées/60 %/14 j) — jamais un nombre de jours
+      restants fabriqué, uniquement l'écart entre l'état actuel et le seuil visé.
+    - Explication de la correction non-totale (`CALIBRATION_PARTIAL_CORRECTION_EXPLANATION`) vs.
+      explication de divergence suspecte (`DIVERGENCE_SUSPECTED_EXPLANATION`, testée pour ne contenir
+      AUCUN diagnostic de cause — "métabolisme ralenti"/"adaptation métabolique"/"mauvais tracking"/
+      "rétention d'eau" explicitement absents).
+  - **`components/fitness/MetabolicAnalysisSheet.tsx`** : Sheet bottom-sheet (réutilise `Sheet` de
+    `shared/FormComponents.tsx`, même pattern que `MetabolicProfileSheet`, pas de nouvelle page/
+    composant générique créé). Sections : TDEE adaptatif en tête, bloc "Écart inhabituel détecté" si
+    `divergenceSuspected`, calcul détaillé (modélisé → observé → écart brut → correction → adaptatif),
+    composition du TDEE modélisé (4 lignes + total), TDEE observé (période/pesées/couverture/apport
+    moyen/tendance/confiance) ou état d'attente avec critères de progression, objectif calorique
+    affiché séparément avec rappel explicite "distinct de la dépense estimée", et un `<details>`
+    "Comment Cortex calcule ces valeurs ?" pour l'explicabilité (§16) sans surcharger la vue par défaut.
+  - **`sante-nutritionnelle.tsx`** : la fiche principale n'est PAS transformée en tableau — un simple
+    CTA "Voir l'analyse" (même pattern que les bandeaux "Compléter mon profil métabolique" existants)
+    ouvre la nouvelle Sheet ; `metabolicAnalysis` construit une seule fois via `buildMetabolicAnalysis`
+    à partir des résultats déjà en mémoire (`dailyTDEE`, `adaptiveTdee`, `adaptiveTdeeCalibration`,
+    `calorieGoal`).
+  - **Tests** (`metabolicAnalysis.test.ts`, 21 tests) : composition modélisée (complete/incomplete),
+    observé disponible (established) avec toutes les métriques, observé indisponible avec critères de
+    progression réels (pas de date fabriquée), early_estimate partiel, les 3 états de calibration
+    (`model_only`/`calibrating`/`adapted`), correction positive/négative/nulle, explication standard vs.
+    divergence suspecte (vérifie l'absence de mots de diagnostic), séparation objectif calorique/
+    dépense, robustesse (aucune exception sur un input complet).
+  - `npx tsc --noEmit` / `npx eslint` / `npx vitest run` (703 passed) / `npm run build` : tous verts.
+  - **Vérification visuelle mobile NON effectuée** : tentative de lancer `vite dev` (avec/sans
+    `--host`/`HOST` env) échoue systématiquement dans ce sandbox avec
+    `EAFNOSUPPORT: address family not supported :::8080` (le serveur dev tente un bind IPv6 dual-stack
+    non supporté par l'environnement) — limitation d'environnement, pas du code. Non simulée/prétendue.
+  - **Limites connues** : le contenu du `<details>` explicatif est statique (pas encore contextualisé
+    selon les données manquantes précises de l'utilisateur) ; aucun composant de progression visuelle
+    (barre) pour les critères de calibration en attente — affichés en valeurs `actuel / requis` textuelles
+    uniquement, jugé suffisant pour cette phase (pas de sur-ingénierie).
