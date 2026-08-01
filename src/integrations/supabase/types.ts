@@ -208,9 +208,12 @@ export type Database = {
       body_tracking: {
         Row: {
           body_fat: number | null
+          body_fat_formula: string | null
+          body_fat_height_cm: number | null
           body_fat_max_percent: number | null
           body_fat_method: string | null
           body_fat_min_percent: number | null
+          body_fat_sex: string | null
           chest: number | null
           created_at: string
           date: string
@@ -219,6 +222,7 @@ export type Database = {
           left_arm: number | null
           left_thigh: number | null
           muscle_mass: number | null
+          neck: number | null
           notes: string | null
           right_arm: number | null
           right_thigh: number | null
@@ -229,9 +233,12 @@ export type Database = {
         }
         Insert: {
           body_fat?: number | null
+          body_fat_formula?: string | null
+          body_fat_height_cm?: number | null
           body_fat_max_percent?: number | null
           body_fat_method?: string | null
           body_fat_min_percent?: number | null
+          body_fat_sex?: string | null
           chest?: number | null
           created_at?: string
           date: string
@@ -240,6 +247,7 @@ export type Database = {
           left_arm?: number | null
           left_thigh?: number | null
           muscle_mass?: number | null
+          neck?: number | null
           notes?: string | null
           right_arm?: number | null
           right_thigh?: number | null
@@ -250,9 +258,12 @@ export type Database = {
         }
         Update: {
           body_fat?: number | null
+          body_fat_formula?: string | null
+          body_fat_height_cm?: number | null
           body_fat_max_percent?: number | null
           body_fat_method?: string | null
           body_fat_min_percent?: number | null
+          body_fat_sex?: string | null
           chest?: number | null
           created_at?: string
           date?: string
@@ -261,6 +272,7 @@ export type Database = {
           left_arm?: number | null
           left_thigh?: number | null
           muscle_mass?: number | null
+          neck?: number | null
           notes?: string | null
           right_arm?: number | null
           right_thigh?: number | null
