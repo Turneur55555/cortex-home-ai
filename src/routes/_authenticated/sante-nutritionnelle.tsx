@@ -34,6 +34,7 @@ import { findLatestValue, findPreviousValue } from "@/lib/fitness/body";
 import { bmiCategory, computeBMI, computeBMR } from "@/lib/fitness/metabolism";
 import { computeWeeklyActivitySummary } from "@/lib/fitness/activitySummary";
 import { computeDailyEAT } from "@/lib/fitness/eat";
+import { computeTEF } from "@/lib/fitness/tef";
 import { localDateYMD } from "@/lib/dates";
 import { StatTile } from "@/components/fitness/StatTile";
 import { ComingSoonTile } from "@/components/fitness/ComingSoonTile";
@@ -97,6 +98,7 @@ function SanteNutritionnellePage() {
 
   const weeklyActivity = computeWeeklyActivitySummary(workouts ?? undefined, weight, 7);
   const dailyEAT = computeDailyEAT(workouts ?? undefined, weight, today);
+  const dailyTEF = computeTEF(totals);
 
   const calorieGoal = nutritionGoals?.calories ?? null;
 
@@ -158,7 +160,18 @@ function SanteNutritionnellePage() {
             caption="Estimation"
             title="Exercise Activity Thermogenesis — énergie dépensée pendant tes séances enregistrées aujourd'hui"
           />
-          <ComingSoonTile icon={<Flame className="h-4 w-4" />} label="TEF" />
+          {nutritionLoading ? (
+            <Skeleton className="h-[84px] rounded-2xl" />
+          ) : (
+            <StatTile
+              icon={<Flame className="h-4 w-4" />}
+              label="TEF"
+              value={String(dailyTEF.totalKcal)}
+              unit="kcal/j"
+              caption="Estimation"
+              title="Thermic Effect of Food — énergie dépensée pour digérer les aliments réellement consommés aujourd'hui"
+            />
+          )}
         </div>
         <div className="mt-2 grid grid-cols-1">
           <ComingSoonTile

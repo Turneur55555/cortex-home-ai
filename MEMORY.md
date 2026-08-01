@@ -1472,3 +1472,30 @@ rester manuel). Vérification faite sur les vrais workflows CI, pas une supposit
     poids (`body_tracking`/`useLatestBodyWeight`) — aucune donnée calculable persistée.
   - **Hors scope (conforme à la consigne)** : NEAT/TEF/TDEE réel/TDEE adaptatif/adaptation
     métabolique/balance énergétique/prédictions/coach IA — tous inchangés, toujours « À venir ».
+- **Phase 2C — TEF réel estimé (2026-08-01)** :
+  - **`src/lib/fitness/tef.ts`** (nouveau, pur, testé) : `computeTEF({ proteins, carbs, fats })` —
+    grammes réellement consommés (jamais les objectifs) → kcal via Atwater (P×4, G×4, L×9) × un
+    coefficient thermique par macro (`TEF_COEFFICIENTS`, seul point de vérité, doc dans le code) :
+    protéines 25 %, glucides 7.5 %, lipides 2.5 %. Chaque sous-total (`proteinTEF`/`carbsTEF`/
+    `fatTEF`) est arrondi individuellement puis `totalKcal` = somme des sous-totaux déjà arrondis
+    (jamais un arrondi séparé du total) — garantit par construction que le détail correspond
+    toujours exactement au total, sans tolérance de test nécessaire.
+  - **Aucune date interne à la fonction** : `computeTEF` est agnostique du jour — elle opère sur des
+    totaux déjà agrégés pour LA journée demandée par l'appelant (`useNutrition(date)` est déjà
+    filtré côté serveur par date, `useNutritionTotals` réduit ensuite ces lignes) ; fonctionne donc
+    pour n'importe quel jour sans code supplémentaire.
+  - **Distinction "consommation nulle" vs "donnée absente"** : `useNutrition(date)` renvoie `[]`
+    (jamais `null`) dès que la requête a chargé, même sans repas loggé ce jour-là — `totals` (le
+    `reduce` dans `useNutritionTotals`) vaut alors `{0,0,0,0}`, ce qui EST le TEF réel (rien à
+    digérer). Le seul état distinct est le chargement (`nutritionLoading`), géré côté composant par
+    le `Skeleton` déjà utilisé pour le reste de la section Nutrition — pas une préoccupation de la
+    fonction pure.
+  - **Écart calories totales ≠ macros×coefficients (fibres/alcool/arrondis/données incomplètes,
+    §5)** : assumé et documenté dans le code, jamais réattribué artificiellement à un macronutriment
+    — le TEF ne porte que sur les grammes de protéines/glucides/lipides réellement connus.
+  - **Santé nutritionnelle → Métabolisme** : tuile TEF réelle (`caption="Estimation"`, même mécanisme
+    que la tuile EAT de la Phase 2B), gérée par `nutritionLoading` (skeleton pendant le chargement,
+    jamais un flash "0 kcal" trompeur). BMR et EAT non modifiés. Pas de double comptage : TEF reste
+    totalement indépendant de BMR/EAT/NEAT/objectif calorique (le futur TDEE les agrégera).
+  - **Pas de nouvelle table** : calculé à la volée depuis `useNutrition`/`useNutritionTotals` déjà
+    chargés par la page — aucune donnée calculable persistée.
