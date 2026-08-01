@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   compareMacros,
   computeMacroStrategy,
+  evaluateAutoMacroAdjustment,
   MACRO_STRATEGY_COEFFICIENTS,
+  type AutoMacroAdjustmentInput,
   type MacroStrategyInput,
+  type MacroStrategyResult,
 } from "./macroStrategy";
 
 const base = (overrides: Partial<MacroStrategyInput>): MacroStrategyInput => ({
@@ -308,5 +311,287 @@ describe("computeMacroStrategy — simulation d'une autre enveloppe calorique", 
     expect(simulated.calorieTarget).toBe(2600);
     expect(active.calorieTarget).toBe(2200);
     expect(simulated.carbsG).not.toBe(active.carbsG);
+  });
+});
+
+// =========================================================================
+// Phase 5B — Verrous (§41 du brief : aucun lock / P / C / F / P+G / P+L /
+// G+L / P+G+L / locks compatibles / locks incompatibles / valeur 0 / valeur
+// invalide).
+// =========================================================================
+
+describe("computeMacroStrategy — verrous individuels", () => {
+  it("aucun verrou → comportement strictement identique à Phase 5A (non-régression)", () => {
+    const withoutLockFields = computeMacroStrategy(base({}));
+    const withNullLocks = computeMacroStrategy(
+      base({ lockedProteinsG: null, lockedCarbsG: null, lockedFatsG: null }),
+    );
+    expect(withNullLocks).toEqual(withoutLockFields);
+  });
+
+  it("protéines verrouillées → valeur figée exacte, non recalculée", () => {
+    const result = computeMacroStrategy(base({ lockedProteinsG: 160 }));
+    expect(result.proteinsG).toBe(160);
+    expect(result.proteinTargetGPerKg).toBeNull();
+    expect(result.allMacrosLocked).toBe(false);
+  });
+
+  it("glucides verrouillés → valeur figée exacte", () => {
+    const result = computeMacroStrategy(base({ lockedCarbsG: 220 }));
+    expect(result.carbsG).toBe(220);
+  });
+
+  it("lipides verrouillés → valeur figée exacte", () => {
+    const result = computeMacroStrategy(base({ lockedFatsG: 65 }));
+    expect(result.fatsG).toBe(65);
+    expect(result.fatTargetGPerKg).toBeNull();
+  });
+
+  it("protéines + glucides verrouillés → lipides absorbent le budget restant", () => {
+    const result = computeMacroStrategy(
+      base({ calories: 2200, lockedProteinsG: 160, lockedCarbsG: 200 }),
+    );
+    expect(result.proteinsG).toBe(160);
+    expect(result.carbsG).toBe(200);
+    expect(result.fatsG).not.toBeNull();
+    expect(result.fatsG!).toBeGreaterThanOrEqual(0);
+  });
+
+  it("protéines + lipides verrouillés → glucides = calories restantes", () => {
+    const result = computeMacroStrategy(
+      base({ calories: 2200, lockedProteinsG: 160, lockedFatsG: 65 }),
+    );
+    expect(result.proteinsG).toBe(160);
+    expect(result.fatsG).toBe(65);
+    const remaining = 2200 - 160 * 4 - 65 * 9;
+    expect(result.carbsG).toBeCloseTo(Math.round(remaining / 4 / 5) * 5, 0);
+  });
+
+  it("glucides + lipides verrouillés → protéines calculées sur le budget restant", () => {
+    const result = computeMacroStrategy(
+      base({ calories: 2200, lockedCarbsG: 200, lockedFatsG: 65 }),
+    );
+    expect(result.carbsG).toBe(200);
+    expect(result.fatsG).toBe(65);
+    expect(result.proteinsG).not.toBeNull();
+  });
+
+  it("les trois macros verrouillées → allMacrosLocked, valeurs inchangées, aucun calcul", () => {
+    const result = computeMacroStrategy(
+      base({ calories: 2200, lockedProteinsG: 160, lockedCarbsG: 220, lockedFatsG: 65 }),
+    );
+    expect(result.allMacrosLocked).toBe(true);
+    expect(result.proteinsG).toBe(160);
+    expect(result.carbsG).toBe(220);
+    expect(result.fatsG).toBe(65);
+  });
+
+  it("les trois macros verrouillées mais incohérentes avec l'objectif calorique → signalé, jamais corrigé", () => {
+    const result = computeMacroStrategy(
+      base({ calories: 1200, lockedProteinsG: 160, lockedCarbsG: 220, lockedFatsG: 65 }),
+    );
+    expect(result.allMacrosLocked).toBe(true);
+    expect(result.proteinsG).toBe(160);
+    expect(result.carbsG).toBe(220);
+    expect(result.fatsG).toBe(65);
+    expect(result.limited).toBe(true);
+  });
+
+  it("locks compatibles (somme < enveloppe) → répartition normale, aucune limitation liée aux locks", () => {
+    const result = computeMacroStrategy(
+      base({ calories: 2500, lockedProteinsG: 100, lockedFatsG: 50 }),
+    );
+    expect(result.locksIncompatible).toBe(false);
+  });
+
+  it("§14/§15 — locks incompatibles : calories dépassées par les locks seuls → bloqué, jamais réduit", () => {
+    const incompatible = computeMacroStrategy(
+      base({ calories: 1500, lockedProteinsG: 200, lockedFatsG: 100 }),
+    );
+    expect(incompatible.locksIncompatible).toBe(true);
+    expect(incompatible.limited).toBe(true);
+    expect(incompatible.proteinsG).toBe(200); // jamais réduit
+    expect(incompatible.fatsG).toBe(100); // jamais réduit
+    expect(incompatible.carbsG).toBe(0); // non verrouillé, ne peut pas être négatif
+  });
+
+  it("§14 — locks compatibles : glucides = exactement les calories restantes", () => {
+    const result = computeMacroStrategy(
+      base({ calories: 1800, lockedProteinsG: 200, lockedFatsG: 100 }),
+    );
+    expect(result.locksIncompatible).toBe(false);
+    expect(result.proteinsG).toBe(200);
+    expect(result.fatsG).toBe(100);
+    // 1800 - 800 - 900 = 100 kcal restants → 25 g de glucides.
+    expect(result.carbsG).toBe(25);
+  });
+
+  it("valeur verrouillée 0 g est acceptée (schéma l'autorise)", () => {
+    const result = computeMacroStrategy(base({ calories: 2200, lockedFatsG: 0 }));
+    expect(result.fatsG).toBe(0);
+    expect(result.allMacrosLocked).toBe(false);
+  });
+
+  it("valeur verrouillée invalide (négative/NaN/Infinity) → traitée comme non verrouillée", () => {
+    const negative = computeMacroStrategy(base({ lockedProteinsG: -10 }));
+    const nan = computeMacroStrategy(base({ lockedCarbsG: NaN }));
+    const infinite = computeMacroStrategy(base({ lockedFatsG: Infinity }));
+    const noLock = computeMacroStrategy(base({}));
+    expect(negative.proteinsG).toBe(noLock.proteinsG);
+    expect(nan.carbsG).toBe(noLock.carbsG);
+    expect(infinite.fatsG).toBe(noLock.fatsG);
+  });
+
+  it("§11 — protéines verrouillées à 160 g restent exactement 160 g quel que soit le reste", () => {
+    const result = computeMacroStrategy(
+      base({ calories: 2200, bodyWeightKg: 95, goal: "fat_loss", lockedProteinsG: 160 }),
+    );
+    expect(result.proteinsG).toBe(160);
+  });
+
+  it("§38 — hausse calorique avec protéines verrouillées : protéines strictement identiques, absorption par le reste", () => {
+    const before = computeMacroStrategy(
+      base({ calories: 2000, bodyWeightKg: 81, lockedProteinsG: 160 }),
+    );
+    const after = computeMacroStrategy(
+      base({ calories: 2200, bodyWeightKg: 81, lockedProteinsG: 160 }),
+    );
+    expect(before.proteinsG).toBe(160);
+    expect(after.proteinsG).toBe(160);
+    // La différence calorique est absorbée par les macros non verrouillées.
+    const beforeNonProteinCal = before.macroCalories! - 160 * 4;
+    const afterNonProteinCal = after.macroCalories! - 160 * 4;
+    expect(afterNonProteinCal).toBeGreaterThan(beforeNonProteinCal);
+  });
+
+  it("jamais de macro négative, même dans les cas verrouillés impossibles", () => {
+    const result = computeMacroStrategy(
+      base({ calories: 500, lockedProteinsG: 300, lockedFatsG: 100 }),
+    );
+    expect(result.proteinsG!).toBeGreaterThanOrEqual(0);
+    expect(result.carbsG!).toBeGreaterThanOrEqual(0);
+    expect(result.fatsG!).toBeGreaterThanOrEqual(0);
+  });
+
+  it("cohérence énergétique P×4+G×4+L×9 respectée sur les valeurs verrouillées + calculées", () => {
+    const result = computeMacroStrategy(base({ calories: 2200, lockedProteinsG: 160 }));
+    const recomputed = macroCaloriesOf(result.proteinsG!, result.carbsG!, result.fatsG!);
+    expect(result.macroCalories).toBe(recomputed);
+  });
+});
+
+// =========================================================================
+// Phase 5B — Mode automatique (§43/§44/§45 du brief).
+// =========================================================================
+
+function autoInput(overrides: Partial<AutoMacroAdjustmentInput>): AutoMacroAdjustmentInput {
+  const recommended: MacroStrategyResult = computeMacroStrategy(base({ calories: 2200 }));
+  return {
+    mode: "automatic",
+    recommended,
+    currentProteinsG: recommended.proteinsG! - 20,
+    currentCarbsG: recommended.carbsG,
+    currentFatsG: recommended.fatsG,
+    ...overrides,
+  };
+}
+
+describe("evaluateAutoMacroAdjustment", () => {
+  it("mode manuel → jamais éligible", () => {
+    const result = evaluateAutoMacroAdjustment(autoInput({ mode: "manual" }));
+    expect(result.eligible).toBe(false);
+    expect(result.reasons).toContain("manual_mode");
+  });
+
+  it("recommandation indisponible → non éligible", () => {
+    const unavailable = computeMacroStrategy(base({ calories: null }));
+    const result = evaluateAutoMacroAdjustment(
+      autoInput({
+        recommended: unavailable,
+        currentProteinsG: null,
+        currentCarbsG: null,
+        currentFatsG: null,
+      }),
+    );
+    expect(result.eligible).toBe(false);
+    expect(result.reasons).toContain("recommendation_unavailable");
+  });
+
+  it("toutes les macros verrouillées → non éligible, all_macros_locked", () => {
+    const allLocked = computeMacroStrategy(
+      base({ calories: 2200, lockedProteinsG: 160, lockedCarbsG: 220, lockedFatsG: 65 }),
+    );
+    const result = evaluateAutoMacroAdjustment(autoInput({ recommended: allLocked }));
+    expect(result.eligible).toBe(false);
+    expect(result.reasons).toContain("all_macros_locked");
+  });
+
+  it("locks incompatibles avec l'enveloppe → non éligible, locks_incompatible", () => {
+    const incompatible = computeMacroStrategy(
+      base({ calories: 1500, lockedProteinsG: 200, lockedFatsG: 100 }),
+    );
+    const result = evaluateAutoMacroAdjustment(autoInput({ recommended: incompatible }));
+    expect(result.eligible).toBe(false);
+    expect(result.reasons).toContain("locks_incompatible");
+  });
+
+  it("déjà aligné → non éligible, aucune écriture (§27)", () => {
+    const recommended = computeMacroStrategy(base({ calories: 2200 }));
+    const result = evaluateAutoMacroAdjustment(
+      autoInput({
+        recommended,
+        currentProteinsG: recommended.proteinsG,
+        currentCarbsG: recommended.carbsG,
+        currentFatsG: recommended.fatsG,
+      }),
+    );
+    expect(result.eligible).toBe(false);
+    expect(result.reasons).toContain("already_aligned");
+  });
+
+  it("écart réel → éligible, propose les valeurs recommandées", () => {
+    const input = autoInput({});
+    const result = evaluateAutoMacroAdjustment(input);
+    expect(result.eligible).toBe(true);
+    expect(result.reasons).toContain("eligible");
+    expect(result.proposedProteinsG).toBe(input.recommended.proteinsG);
+    expect(result.proposedCarbsG).toBe(input.recommended.carbsG);
+    expect(result.proposedFatsG).toBe(input.recommended.fatsG);
+  });
+
+  it("§45 — protéines verrouillées : les calories changent, protéines restent strictement identiques dans la proposition", () => {
+    const recommended = computeMacroStrategy(base({ calories: 2200, lockedProteinsG: 160 }));
+    const result = evaluateAutoMacroAdjustment(
+      autoInput({
+        recommended,
+        currentProteinsG: 160,
+        currentCarbsG: recommended.carbsG! - 20,
+        currentFatsG: recommended.fatsG,
+      }),
+    );
+    expect(result.eligible).toBe(true);
+    expect(result.proposedProteinsG).toBe(160);
+  });
+
+  it("§45 — glucides et lipides verrouillés simultanément : proposition respecte les deux verrous", () => {
+    const recommended = computeMacroStrategy(
+      base({ calories: 2400, lockedCarbsG: 220, lockedFatsG: 65 }),
+    );
+    const result = evaluateAutoMacroAdjustment(
+      autoInput({
+        recommended,
+        currentProteinsG: recommended.proteinsG! - 15,
+        currentCarbsG: 220,
+        currentFatsG: 65,
+      }),
+    );
+    expect(result.eligible).toBe(true);
+    expect(result.proposedCarbsG).toBe(220);
+    expect(result.proposedFatsG).toBe(65);
+  });
+
+  it("§44 — indépendance des modes : ce module ne lit jamais calorie_strategy_mode (aucune référence dans l'input)", () => {
+    const input = autoInput({});
+    expect(Object.keys(input)).not.toContain("calorieStrategyMode");
   });
 });

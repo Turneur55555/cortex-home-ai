@@ -10,6 +10,7 @@ import {
   Footprints,
   Gauge,
   HeartPulse,
+  Lock,
   Moon,
   Ruler,
   Scale,
@@ -18,6 +19,7 @@ import {
   Timer,
   TrendingDown,
   TrendingUp,
+  Unlock,
   Wheat,
   Zap,
 } from "lucide-react";
@@ -30,9 +32,12 @@ import { useMetabolicProfile } from "@/hooks/useMetabolicProfile";
 import { useNutrition, useNutritionRange } from "@/hooks/useNutritionData";
 import {
   useApplyCalorieGoal,
+  useApplyMacroGoal,
   useLastCalorieGoalAdjustment,
+  useLastMacroGoalAdjustment,
   useNutritionGoals,
   useUpdateCalorieStrategyPreference,
+  useUpdateMacroStrategyPreference,
 } from "@/hooks/useNutritionGoals";
 import { useNutritionTotals } from "@/hooks/useNutritionTotals";
 import { findLatestValue, findPreviousValue } from "@/lib/fitness/body";
@@ -55,7 +60,11 @@ import {
   type FatLossRate,
   type MuscleGainRate,
 } from "@/lib/fitness/calorieStrategy";
-import { compareMacros, computeMacroStrategy } from "@/lib/fitness/macroStrategy";
+import {
+  compareMacros,
+  computeMacroStrategy,
+  evaluateAutoMacroAdjustment,
+} from "@/lib/fitness/macroStrategy";
 import { addDaysYMD, localDateYMD } from "@/lib/dates";
 import { StatTile } from "@/components/fitness/StatTile";
 import { ComingSoonTile } from "@/components/fitness/ComingSoonTile";
@@ -90,6 +99,7 @@ function SanteNutritionnellePage() {
   const [showMetabolicSheet, setShowMetabolicSheet] = useState(false);
   const [showAnalysisSheet, setShowAnalysisSheet] = useState(false);
   const [showAutoModeConfirm, setShowAutoModeConfirm] = useState(false);
+  const [showMacroAutoModeConfirm, setShowMacroAutoModeConfirm] = useState(false);
 
   const { data: bodyRows, isLoading: bodyLoading } = useBodyMeasurements();
   const { data: latestWeight } = useLatestBodyWeight();
@@ -101,6 +111,9 @@ function SanteNutritionnellePage() {
   const updateCalorieStrategyPreference = useUpdateCalorieStrategyPreference();
   const applyCalorieGoal = useApplyCalorieGoal();
   const { data: lastCalorieAdjustment } = useLastCalorieGoalAdjustment();
+  const updateMacroStrategyPreference = useUpdateMacroStrategyPreference();
+  const applyMacroGoal = useApplyMacroGoal();
+  const { data: lastMacroAdjustment } = useLastMacroGoalAdjustment();
   const { totals, remaining } = useNutritionTotals(nutritionRows, nutritionGoals ?? null);
 
   const adaptiveWindowStart = addDaysYMD(
@@ -202,10 +215,20 @@ function SanteNutritionnellePage() {
   // Répartition macros — travaille sur l'objectif calorique ACTIF
   // (`calorieGoal`, nutrition_goals.calories), jamais sur une
   // recommandation Cortex pas encore appliquée (§2 du brief Phase 5A).
+  // Les verrous (Phase 5B) transmettent la valeur ACTIVE correspondante —
+  // jamais une valeur dédiée séparée (§4 du brief Phase 5B).
+  const macroStrategyMode = nutritionGoals?.macroStrategyMode ?? "manual";
+  const proteinLocked = nutritionGoals?.proteinLocked ?? false;
+  const carbsLocked = nutritionGoals?.carbsLocked ?? false;
+  const fatLocked = nutritionGoals?.fatLocked ?? false;
+
   const macroStrategy = computeMacroStrategy({
     calories: calorieGoal,
     bodyWeightKg: weight,
     goal: strategyGoal,
+    lockedProteinsG: proteinLocked ? (nutritionGoals?.proteins ?? null) : null,
+    lockedCarbsG: carbsLocked ? (nutritionGoals?.carbs ?? null) : null,
+    lockedFatsG: fatLocked ? (nutritionGoals?.fats ?? null) : null,
   });
   const macroComparison = compareMacros(
     {
@@ -224,6 +247,37 @@ function SanteNutritionnellePage() {
     lastAutoAdjustmentAt: nutritionGoals?.lastAutoAdjustmentAt ?? null,
     now: new Date().toISOString(),
   });
+  const calorieAutoEligible =
+    strategyMode === "automatic" &&
+    autoAdjustment.eligible &&
+    autoAdjustment.proposedCalories != null;
+
+  // Recommandation macros À LA calorie PROPOSÉE par l'ajustement
+  // automatique calorique (utile uniquement si les deux modes sont
+  // automatiques ensemble — §21/§22 du brief Phase 5B, atomicité
+  // calories+macros dans la même RPC).
+  const macroStrategyAtProposedCalories = computeMacroStrategy({
+    calories: calorieAutoEligible ? autoAdjustment.proposedCalories : calorieGoal,
+    bodyWeightKg: weight,
+    goal: strategyGoal,
+    lockedProteinsG: proteinLocked ? (nutritionGoals?.proteins ?? null) : null,
+    lockedCarbsG: carbsLocked ? (nutritionGoals?.carbs ?? null) : null,
+    lockedFatsG: fatLocked ? (nutritionGoals?.fats ?? null) : null,
+  });
+  const autoMacroAdjustmentAtCurrentCalories = evaluateAutoMacroAdjustment({
+    mode: macroStrategyMode,
+    recommended: macroStrategy,
+    currentProteinsG: nutritionGoals?.proteins ?? null,
+    currentCarbsG: nutritionGoals?.carbs ?? null,
+    currentFatsG: nutritionGoals?.fats ?? null,
+  });
+  const autoMacroAdjustmentAtProposedCalories = evaluateAutoMacroAdjustment({
+    mode: macroStrategyMode,
+    recommended: macroStrategyAtProposedCalories,
+    currentProteinsG: nutritionGoals?.proteins ?? null,
+    currentCarbsG: nutritionGoals?.carbs ?? null,
+    currentFatsG: nutritionGoals?.fats ?? null,
+  });
 
   // Évaluation à un moment concret (chargement de la page) — pas de faux
   // scheduler d'arrière-plan (Cortex est une PWA, voir calorieStrategy.ts).
@@ -231,29 +285,86 @@ function SanteNutritionnellePage() {
   // re-render plusieurs fois avant que l'invalidation React Query ne
   // rafraîchisse `lastAutoAdjustmentAt` (qui fait ensuite retomber
   // `autoAdjustment.eligible` à false via le cooldown, naturellement).
+  // `autoMacroAppliedRef` protège la même chose côté macros — jamais de
+  // cooldown pour les macros (§26 du brief Phase 5B), seule la comparaison
+  // "déjà aligné" + cette ref empêchent une double écriture.
   const autoAppliedRef = useRef(false);
+  const autoMacroAppliedRef = useRef(false);
+
+  // Cas central §21/§22 : Calories automatique ET Macros automatique se
+  // déclenchent ensemble → une SEULE RPC transactionnelle (calories +
+  // macros + les deux historiques), jamais deux appels séparés qui
+  // pourraient laisser les macros désalignées si le second échouait.
   useEffect(() => {
-    if (
-      strategyMode === "automatic" &&
-      autoAdjustment.eligible &&
-      autoAdjustment.proposedCalories != null &&
-      !autoAppliedRef.current &&
-      !applyCalorieGoal.isPending
-    ) {
+    if (calorieAutoEligible && !autoAppliedRef.current && !applyCalorieGoal.isPending) {
       autoAppliedRef.current = true;
+      const macroAuto =
+        macroStrategyMode === "automatic" && autoMacroAdjustmentAtProposedCalories.eligible;
+      if (macroAuto) {
+        autoMacroAppliedRef.current = true;
+      }
       applyCalorieGoal.mutate({
         mode: "automatic",
-        appliedCalories: autoAdjustment.proposedCalories,
+        appliedCalories: autoAdjustment.proposedCalories!,
         recommendedCalories: calorieStrategy.recommendedCalories,
         goal: strategyGoal,
         targetRate: strategyGoal === "maintenance" ? null : strategyRate,
         referenceTdeeKcal: calorieStrategy.referenceTdeeKcal,
         referenceSource: calorieStrategy.referenceSource,
         reason: `Ajustement automatique — pas maximal ${AUTO_CALORIE_ADJUSTMENT_CONFIG.MAX_AUTO_STEP_KCAL[adaptiveTdeeCalibration.state]} kcal (${adaptiveTdeeCalibration.state}).`,
+        ...(macroAuto
+          ? {
+              macroMode: "automatic" as const,
+              appliedProteins: autoMacroAdjustmentAtProposedCalories.proposedProteinsG!,
+              appliedCarbs: autoMacroAdjustmentAtProposedCalories.proposedCarbsG!,
+              appliedFats: autoMacroAdjustmentAtProposedCalories.proposedFatsG!,
+              recommendedProteins: macroStrategyAtProposedCalories.proteinsG,
+              recommendedCarbs: macroStrategyAtProposedCalories.carbsG,
+              recommendedFats: macroStrategyAtProposedCalories.fatsG,
+              proteinLocked,
+              carbsLocked,
+              fatLocked,
+            }
+          : {}),
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [strategyMode, autoAdjustment.eligible, autoAdjustment.proposedCalories]);
+  }, [
+    calorieAutoEligible,
+    autoAdjustment.proposedCalories,
+    macroStrategyMode,
+    autoMacroAdjustmentAtProposedCalories.eligible,
+  ]);
+
+  // Macros automatique SEUL (calories manuelles, ou calories automatiques
+  // mais pas éligibles ce cycle-ci) — §23/§24 du brief : ce chemin ne
+  // touche JAMAIS les calories (RPC `apply_macro_goal_adjustment`).
+  useEffect(() => {
+    if (
+      !calorieAutoEligible &&
+      macroStrategyMode === "automatic" &&
+      autoMacroAdjustmentAtCurrentCalories.eligible &&
+      !autoMacroAppliedRef.current &&
+      !applyMacroGoal.isPending
+    ) {
+      autoMacroAppliedRef.current = true;
+      applyMacroGoal.mutate({
+        mode: "automatic",
+        appliedProteins: autoMacroAdjustmentAtCurrentCalories.proposedProteinsG!,
+        appliedCarbs: autoMacroAdjustmentAtCurrentCalories.proposedCarbsG!,
+        appliedFats: autoMacroAdjustmentAtCurrentCalories.proposedFatsG!,
+        recommendedProteins: macroStrategy.proteinsG,
+        recommendedCarbs: macroStrategy.carbsG,
+        recommendedFats: macroStrategy.fatsG,
+        calorieTarget: calorieGoal,
+        goal: strategyGoal,
+        proteinLocked,
+        carbsLocked,
+        fatLocked,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calorieAutoEligible, macroStrategyMode, autoMacroAdjustmentAtCurrentCalories.eligible]);
 
   const handleGoalChange = (goal: CalorieStrategyGoal) => {
     let targetRate: FatLossRate | MuscleGainRate | null = null;
@@ -295,6 +406,56 @@ function SanteNutritionnellePage() {
       reason: "Application manuelle de la recommandation Cortex.",
     });
   };
+
+  const handleMacroModeSelect = (mode: "manual" | "automatic") => {
+    if (mode === "automatic" && macroStrategyMode !== "automatic") {
+      setShowMacroAutoModeConfirm(true);
+      return;
+    }
+    updateMacroStrategyPreference.mutate({ mode });
+  };
+
+  const confirmMacroAutomaticMode = () => {
+    updateMacroStrategyPreference.mutate({ mode: "automatic" });
+    setShowMacroAutoModeConfirm(false);
+  };
+
+  const handleMacroManualApply = () => {
+    if (
+      macroStrategy.proteinsG == null ||
+      macroStrategy.carbsG == null ||
+      macroStrategy.fatsG == null
+    ) {
+      return;
+    }
+    applyMacroGoal.mutate({
+      mode: "manual_apply",
+      appliedProteins: macroStrategy.proteinsG,
+      appliedCarbs: macroStrategy.carbsG,
+      appliedFats: macroStrategy.fatsG,
+      recommendedProteins: macroStrategy.proteinsG,
+      recommendedCarbs: macroStrategy.carbsG,
+      recommendedFats: macroStrategy.fatsG,
+      calorieTarget: calorieGoal,
+      goal: strategyGoal,
+      proteinLocked,
+      carbsLocked,
+      fatLocked,
+    });
+  };
+
+  const handleToggleLock = (which: "protein" | "carbs" | "fat") => {
+    updateMacroStrategyPreference.mutate({
+      proteinLocked: which === "protein" ? !proteinLocked : undefined,
+      carbsLocked: which === "carbs" ? !carbsLocked : undefined,
+      fatLocked: which === "fat" ? !fatLocked : undefined,
+    });
+  };
+
+  const macrosAligned =
+    macroComparison.proteins.differenceG === 0 &&
+    macroComparison.carbs.differenceG === 0 &&
+    macroComparison.fats.differenceG === 0;
 
   const caloriesPct = pct(totals.calories, nutritionGoals?.calories);
   const proteinsPct = pct(totals.proteins, nutritionGoals?.proteins);
@@ -737,6 +898,70 @@ function SanteNutritionnellePage() {
 
       {/* Répartition recommandée (macros) */}
       <Section title="Répartition recommandée">
+        {/* Mode de gestion des macros — préférence INDÉPENDANTE du mode calorique (§2 du brief Phase 5B) */}
+        <div className="mb-3">
+          <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Gestion des macros
+          </p>
+          <div className="flex rounded-xl border border-border bg-card/50 p-0.5">
+            {(
+              [
+                { value: "manual", label: "Manuel" },
+                { value: "automatic", label: "Automatique" },
+              ] as const
+            ).map((m) => (
+              <button
+                key={m.value}
+                type="button"
+                onClick={() => handleMacroModeSelect(m.value)}
+                className={
+                  "flex-1 rounded-lg py-1.5 text-[11px] font-semibold transition-colors " +
+                  (macroStrategyMode === m.value
+                    ? "bg-gradient-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground")
+                }
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {showMacroAutoModeConfirm && (
+          <div className="mb-3 rounded-2xl border border-primary/30 bg-primary/5 p-4">
+            <p className="text-xs font-semibold text-foreground">
+              Activer les macros automatiques ?
+            </p>
+            <ul className="mt-2 space-y-1 text-[11px] leading-relaxed text-muted-foreground">
+              <li>
+                • Cortex pourra ajuster tes macros pour rester cohérent avec ton objectif calorique.
+              </li>
+              <li>• Les macros verrouillées ne sont jamais modifiées.</li>
+              <li>
+                • Aucun délai artificiel : un changement de calories réaligne tes macros le jour
+                même.
+              </li>
+              <li>• Tu peux revenir en manuel à tout moment.</li>
+            </ul>
+            <div className="mt-3 flex gap-2">
+              <button
+                type="button"
+                onClick={confirmMacroAutomaticMode}
+                className="flex-1 rounded-lg bg-gradient-primary py-1.5 text-[11px] font-semibold text-primary-foreground shadow-glow"
+              >
+                Activer
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowMacroAutoModeConfirm(false)}
+                className="flex-1 rounded-lg border border-border bg-card py-1.5 text-[11px] font-semibold text-foreground"
+              >
+                Annuler
+              </button>
+            </div>
+          </div>
+        )}
+
         {macroStrategy.proteinsG == null ? (
           <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-4 text-center">
             <p className="text-xs font-medium text-muted-foreground/70">
@@ -758,18 +983,52 @@ function SanteNutritionnellePage() {
             </div>
 
             <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-              <div>
-                <p className="text-lg font-bold text-primary">{macroStrategy.proteinsG} g</p>
-                <p className="text-[10px] text-muted-foreground">Protéines</p>
-              </div>
-              <div>
-                <p className="text-lg font-bold">{macroStrategy.carbsG} g</p>
-                <p className="text-[10px] text-muted-foreground">Glucides</p>
-              </div>
-              <div>
-                <p className="text-lg font-bold">{macroStrategy.fatsG} g</p>
-                <p className="text-[10px] text-muted-foreground">Lipides</p>
-              </div>
+              {(
+                [
+                  {
+                    key: "protein" as const,
+                    label: "Protéines",
+                    value: macroStrategy.proteinsG,
+                    locked: proteinLocked,
+                  },
+                  {
+                    key: "carbs" as const,
+                    label: "Glucides",
+                    value: macroStrategy.carbsG,
+                    locked: carbsLocked,
+                  },
+                  {
+                    key: "fat" as const,
+                    label: "Lipides",
+                    value: macroStrategy.fatsG,
+                    locked: fatLocked,
+                  },
+                ] as const
+              ).map(({ key, label, value, locked }) => (
+                <div key={key} className="relative">
+                  <button
+                    type="button"
+                    onClick={() => handleToggleLock(key)}
+                    aria-label={
+                      locked
+                        ? `Déverrouiller ${label.toLowerCase()}`
+                        : `Verrouiller ${label.toLowerCase()}`
+                    }
+                    className={
+                      "absolute -top-1 right-0 rounded-full p-1 transition-colors " +
+                      (locked
+                        ? "text-primary"
+                        : "text-muted-foreground/40 hover:text-muted-foreground")
+                    }
+                  >
+                    {locked ? <Lock className="h-3 w-3" /> : <Unlock className="h-3 w-3" />}
+                  </button>
+                  <p className={"text-lg font-bold " + (key === "protein" ? "text-primary" : "")}>
+                    {value} g
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">{label}</p>
+                </div>
+              ))}
             </div>
 
             <div className="my-3 border-t border-border" />
@@ -796,11 +1055,88 @@ function SanteNutritionnellePage() {
               par la stratégie · Glucides = calories restantes.
             </p>
 
-            {macroStrategy.limited && macroStrategy.limitReasons.length > 0 && (
-              <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-                {macroStrategy.limitReasons.join(" ")}
-              </p>
+            {macroStrategyMode === "manual" ? (
+              macroStrategy.allMacrosLocked ? (
+                <p className="mt-3 text-center text-[11px] text-muted-foreground">
+                  Toutes les macros sont verrouillées — Cortex ne peut rien recalculer.
+                </p>
+              ) : macrosAligned ? (
+                <p className="mt-3 text-center text-[11px] text-muted-foreground">
+                  Tes macros sont déjà alignées.
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleMacroManualApply}
+                  disabled={applyMacroGoal.isPending}
+                  className="mt-3 w-full rounded-xl bg-gradient-primary py-2 text-[11px] font-semibold text-primary-foreground shadow-glow disabled:opacity-60"
+                >
+                  {applyMacroGoal.isPending ? "Application…" : "Appliquer"}
+                </button>
+              )
+            ) : (
+              <div className="mt-3 rounded-xl bg-white/[0.03] p-3">
+                <p className="text-[11px] font-semibold text-foreground">
+                  Macros automatiques actives
+                </p>
+                <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                  Cortex maintient tes macros cohérentes avec ton objectif calorique. Les macros
+                  verrouillées ne sont jamais modifiées.
+                </p>
+              </div>
             )}
+
+            {macroStrategy.locksIncompatible ? (
+              <p className="mt-2.5 text-[11px] leading-relaxed text-muted-foreground">
+                Impossible d'aligner complètement les macros. Les valeurs verrouillées représentent
+                déjà plus de calories que ton objectif actuel.
+              </p>
+            ) : (
+              macroStrategy.limited &&
+              macroStrategy.limitReasons.length > 0 && (
+                <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+                  {macroStrategy.limitReasons.join(" ")}
+                </p>
+              )
+            )}
+          </div>
+        )}
+
+        {lastMacroAdjustment && (
+          <div className="mt-2 rounded-2xl border border-border bg-card/50 p-3">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Dernier ajustement macros
+            </p>
+            <div className="mt-1 space-y-0.5 text-xs font-semibold">
+              <p>
+                P{" "}
+                {lastMacroAdjustment.previousProteins != null
+                  ? `${lastMacroAdjustment.previousProteins} → `
+                  : ""}
+                {lastMacroAdjustment.appliedProteins} g
+              </p>
+              <p>
+                G{" "}
+                {lastMacroAdjustment.previousCarbs != null
+                  ? `${lastMacroAdjustment.previousCarbs} → `
+                  : ""}
+                {lastMacroAdjustment.appliedCarbs} g
+              </p>
+              <p>
+                L{" "}
+                {lastMacroAdjustment.previousFats != null
+                  ? `${lastMacroAdjustment.previousFats} → `
+                  : ""}
+                {lastMacroAdjustment.appliedFats} g
+              </p>
+            </div>
+            <p className="mt-1 text-[10px] text-muted-foreground/60">
+              {lastMacroAdjustment.mode === "automatic" ? "Automatique" : "Manuel"} ·{" "}
+              {new Date(lastMacroAdjustment.createdAt).toLocaleDateString("fr-FR", {
+                day: "numeric",
+                month: "long",
+              })}
+            </p>
           </div>
         )}
       </Section>

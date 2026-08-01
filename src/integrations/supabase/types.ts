@@ -2094,6 +2094,69 @@ export type Database = {
           },
         ]
       }
+      macro_goal_adjustments: {
+        Row: {
+          applied_carbs: number
+          applied_fats: number
+          applied_proteins: number
+          calorie_target: number | null
+          carbs_locked: boolean | null
+          created_at: string
+          fat_locked: boolean | null
+          goal: string | null
+          id: string
+          mode: string
+          previous_carbs: number | null
+          previous_fats: number | null
+          previous_proteins: number | null
+          protein_locked: boolean | null
+          recommended_carbs: number | null
+          recommended_fats: number | null
+          recommended_proteins: number | null
+          user_id: string
+        }
+        Insert: {
+          applied_carbs: number
+          applied_fats: number
+          applied_proteins: number
+          calorie_target?: number | null
+          carbs_locked?: boolean | null
+          created_at?: string
+          fat_locked?: boolean | null
+          goal?: string | null
+          id?: string
+          mode: string
+          previous_carbs?: number | null
+          previous_fats?: number | null
+          previous_proteins?: number | null
+          protein_locked?: boolean | null
+          recommended_carbs?: number | null
+          recommended_fats?: number | null
+          recommended_proteins?: number | null
+          user_id: string
+        }
+        Update: {
+          applied_carbs?: number
+          applied_fats?: number
+          applied_proteins?: number
+          calorie_target?: number | null
+          carbs_locked?: boolean | null
+          created_at?: string
+          fat_locked?: boolean | null
+          goal?: string | null
+          id?: string
+          mode?: string
+          previous_carbs?: number | null
+          previous_fats?: number | null
+          previous_proteins?: number | null
+          protein_locked?: boolean | null
+          recommended_carbs?: number | null
+          recommended_fats?: number | null
+          recommended_proteins?: number | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       meal_plans: {
         Row: {
           created_at: string
@@ -2284,12 +2347,16 @@ export type Database = {
           calorie_strategy_mode: string
           calories: number | null
           carbs: number | null
+          carbs_locked: boolean
           created_at: string
+          fat_locked: boolean
           fats: number | null
           fiber_g: number | null
           goal: string | null
           last_auto_adjustment_at: string | null
+          macro_strategy_mode: string
           objective: string | null
+          protein_locked: boolean
           proteins: number | null
           target_rate: string | null
           updated_at: string
@@ -2301,12 +2368,16 @@ export type Database = {
           calorie_strategy_mode?: string
           calories?: number | null
           carbs?: number | null
+          carbs_locked?: boolean
           created_at?: string
+          fat_locked?: boolean
           fats?: number | null
           fiber_g?: number | null
           goal?: string | null
           last_auto_adjustment_at?: string | null
+          macro_strategy_mode?: string
           objective?: string | null
+          protein_locked?: boolean
           proteins?: number | null
           target_rate?: string | null
           updated_at?: string
@@ -2318,12 +2389,16 @@ export type Database = {
           calorie_strategy_mode?: string
           calories?: number | null
           carbs?: number | null
+          carbs_locked?: boolean
           created_at?: string
+          fat_locked?: boolean
           fats?: number | null
           fiber_g?: number | null
           goal?: string | null
           last_auto_adjustment_at?: string | null
+          macro_strategy_mode?: string
           objective?: string | null
+          protein_locked?: boolean
           proteins?: number | null
           target_rate?: string | null
           updated_at?: string
@@ -3839,13 +3914,40 @@ export type Database = {
       apply_calorie_goal_adjustment: {
         Args: {
           _applied_calories: number
+          _applied_carbs?: number
+          _applied_fats?: number
+          _applied_proteins?: number
+          _carbs_locked?: boolean
+          _fat_locked?: boolean
           _goal?: string
+          _macro_mode?: string
           _mode: string
+          _protein_locked?: boolean
           _reason?: string
           _recommended_calories?: number
+          _recommended_carbs?: number
+          _recommended_fats?: number
+          _recommended_proteins?: number
           _reference_source?: string
           _reference_tdee_kcal?: number
           _target_rate?: string
+        }
+        Returns: undefined
+      }
+      apply_macro_goal_adjustment: {
+        Args: {
+          _applied_carbs: number
+          _applied_fats: number
+          _applied_proteins: number
+          _calorie_target?: number
+          _carbs_locked?: boolean
+          _fat_locked?: boolean
+          _goal?: string
+          _mode: string
+          _protein_locked?: boolean
+          _recommended_carbs?: number
+          _recommended_fats?: number
+          _recommended_proteins?: number
         }
         Returns: undefined
       }
