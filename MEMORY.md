@@ -1872,3 +1872,86 @@ rester manuel). Vérification faite sur les vrais workflows CI, pas une supposit
     de l'objectif/rythme choisi par l'utilisateur (state React local, remis à `maintenance`/`moderate`
     à chaque ouverture de page — attendu tant que `calorie_strategy_mode`/`goal`/`target_rate` ne sont
     pas persistés en 4B).
+- **Phase 4B — stratégie calorique manuel/automatique (2026-08-01, branche
+  `claude/phase4b-calorie-strategy-manual-automatic`, NON mergée dans `main`)** : persistance de la
+  stratégie, bouton "Appliquer" devenu fonctionnel, mode automatique contrôlé par garde-fous,
+  historique traçable, suppression du double moteur calorique legacy.
+  - **Audit découverte majeure** : en auditant `nutrition_goals` avant migration, trouvé un
+    **troisième moteur calorique**, entièrement côté base (`compute_nutrition_targets(p_objective)`,
+    migration `20260618102110_nutrition_food_logs_and_goals.sql`) — kcal/kg de poids par objectif
+    (bulk=38/cut=26/recomp=31/maintenance=33), poids par défaut 75 kg si inconnu, écrit directement
+    `nutrition_goals` (`calories, proteins, carbs, fats, fiber_g, objective, weight_kg`). **Confirmé
+    mort côté frontend** (`grep compute_nutrition_targets src/` → 0 résultat) — jamais appelé par
+    l'app. **Non supprimé** (dropper une fonction/des colonnes DB dépasse le scope explicite de cette
+    phase, qui ne nommait que le legacy TS `metabolism.ts`/`GoalsSheet.tsx`) — signalé ici pour
+    nettoyage futur. Les colonnes `objective`/`weight_kg`/`activity_factor`/`fiber_g` restent
+    présentes en base (inertes, non lues/écrites par le frontend).
+  - **Legacy TS supprimé** (audit complet, 0 appelant restant vérifié par grep) : `computeTDEE`,
+    `computeCalorieTarget`, `GOAL_DELTAS`, `ACTIVITY_LEVELS` retirés de `metabolism.ts` ; calculateur
+    "Calculer mes besoins (TDEE)" retiré de `GoalsSheet.tsx` (imports/state/handlers associés
+    supprimés) — `GoalsSheet` reste l'éditeur MANUEL calories/macros, distinct de la recommandation
+    Cortex. Test de non-régression ajouté (`metabolism.test.ts`) : échoue si ces exports étaient
+    réintroduits. `lib/fitness/calorieStrategy.ts` est désormais la SEULE source de vérité pour la
+    recommandation calorique.
+  - **Migration `20260807090000_calorie_strategy_manual_automatic.sql`** : étend `nutrition_goals`
+    (`goal` catégorie stable fat_loss/maintenance/muscle_gain, `target_rate` catégorie stable
+    slow/moderate/fast avec CHECK combiné goal+target_rate empêchant les combinaisons invalides —
+    ex. muscle_gain+fast interdit —, `calorie_strategy_mode` manual/automatic NOT NULL DEFAULT
+    'manual', `last_auto_adjustment_at` timestamptz nullable) ; nouvelle table
+    `calorie_goal_adjustments` (historique append-only, RLS `auth.uid()=user_id`, index sur
+    `(user_id, created_at DESC)`) ; RPC transactionnelle `apply_calorie_goal_adjustment` (SECURITY
+    DEFINER + scoping manuel `auth.uid()`, même convention que `award_reward_event`) qui met à jour
+    `nutrition_goals.calories` ET insère l'historique en une seule opération logique — ne touche
+    JAMAIS proteins/carbs/fats. Aucune perte de données existantes (`ADD COLUMN IF NOT EXISTS`
+    uniquement). Appliquée via Supabase MCP `execute_sql` (évite le mismatch de version d'historique
+    de migration). Types régénérés et vérifiés conformes (`check-supabase-types.mjs`, 84 tables).
+  - **`lib/fitness/calorieStrategy.ts`** (extension) : `evaluateAutoCalorieAdjustment(input)` — pure,
+    déterministe, `now` fourni par l'appelant (jamais `Date.now()` interne). Raisons de refus :
+    `manual_mode`/`recommendation_unavailable`/`current_goal_unavailable`/`within_tolerance`/
+    `cooldown_active`, sinon `eligible`. `MIN_AUTO_ADJUSTMENT_KCAL=50` (2× le pas d'arrondi 25 kcal —
+    nettement au-dessus du bruit d'arrondi). `MAX_AUTO_STEP_KCAL` dépend de l'état de calibration
+    Phase 3B : `model_only=50` (le plus prudent — l'utilisateur a activé l'automatique mais Cortex n'a
+    encore aucune observation), `calibrating=100`, `adapted=150`. `AUTO_ADJUSTMENT_COOLDOWN_DAYS=7`
+    (aligné sur `ADAPTIVE_TDEE_THRESHOLDS.EARLY.MIN_CALENDAR_DAYS` — le plus petit grain temporel que
+    le moteur observé distingue du bruit) — ne s'applique qu'aux ajustements AUTOMATIQUES précédents ;
+    `lastAutoAdjustmentAt=null` (premier ajustement) n'est jamais bloqué par le cooldown, seulement
+    par le plafond d'amplitude. Le proposé se déplace toujours vers la recommandation sans jamais la
+    dépasser (`proposed = current + clamp(diff, -maxStep, +maxStep)`, validé sur les deux exemples
+    exacts du brief : 2000→2300 step100→2100 ; 2200→1900 step100→2100), puis arrondi à 25 kcal (même
+    point de vérité que Phase 4A).
+  - **Hooks** (`useNutritionGoals.ts`, réécrit) : `useNutritionGoals()` retourne désormais aussi
+    `goal/targetRate/calorieStrategyMode/lastAutoAdjustmentAt` (rétrocompatible, champs ajoutés) ;
+    `useUpdateCalorieStrategyPreference` (sauvegarde SEULEMENT la préférence mode/objectif/rythme,
+    jamais de calories — upsert partiel, ne touche pas les colonnes non fournies) ; `useApplyCalorieGoal`
+    (appelle la RPC transactionnelle, invalide `nutrition_goals` + `calorie_goal_adjustments`) ;
+    `useLastCalorieGoalAdjustment` (dernier ajustement, pour l'affichage compact).
+  - **`sante-nutritionnelle.tsx`** : sélecteurs objectif/rythme persistent désormais immédiatement
+    (plus de state local perdu au rechargement) ; nouveau sélecteur "Mode de gestion" (Manuel/
+    Automatique) avec confirmation explicite (§40) à la première activation d'automatique (checklist :
+    Cortex peut modifier l'objectif / ajustements plafonnés / espacés / retour manuel possible /
+    macros jamais touchées) ; bouton "Appliquer" fonctionnel en mode manuel (désactivé + message
+    "déjà aligné" si `differenceKcal===0`) ; bloc "Mode automatique actif" avec message de cooldown
+    si applicable ; bloc compact "Dernier ajustement" (`previous → applied kcal`, mode, date) si un
+    historique existe. Évaluation automatique via `useEffect` déclenché au chargement de la page
+    (jamais un faux scheduler — PWA, voir §32 du brief), protégé contre les écritures répétées par un
+    `useRef` (guard synchrone) + le cooldown lui-même (après un ajustement, `lastAutoAdjustmentAt` se
+    rafraîchit via l'invalidation React Query, ce qui fait naturellement retomber `eligible` à false
+    à la prochaine évaluation).
+  - **Tests** (`calorieStrategy.test.ts` +19, `metabolism.test.ts` +1) : mode manuel/automatique,
+    recommandation/objectif absents, sous/au-dessus du seuil, cooldown actif/terminé/à la limite/premier
+    ajustement (jamais bloqué), amplitude par état de calibration (croissante model_only<calibrating<
+    adapted), hausse/baisse/divergence énorme (jamais un saut direct), jamais au-delà de la
+    recommandation, arrondi 25 kcal, non-réintroduction du legacy (grep des exports).
+  - `npx tsc --noEmit` / `npx eslint` / `npx vitest run` (758 passed) / `npm run build` : tous verts.
+    Migration appliquée et vérifiée ; types.ts conforme (84 tables) ; aucun `as any` introduit ; diff
+    `types.ts` propre (+70 lignes, nouvelle table + nouvelles colonnes + nouvelle fonction RPC
+    uniquement, aucune troncature).
+  - **Vérification visuelle mobile NON effectuée** — même limitation d'environnement que Phases 3C/4A
+    (`EAFNOSUPPORT` sur bind IPv6 `:::8080`), retestée une troisième fois, non simulée.
+  - **Limites connues** : le troisième moteur calorique DB-side (`compute_nutrition_targets`) reste en
+    base, inerte mais non supprimé (hors scope, documenté ci-dessus) ; pas de test d'intégration
+    Supabase réel de la RPC transactionnelle (logique pure `evaluateAutoCalorieAdjustment` testée
+    exhaustivement, mais l'exécution effective de `apply_calorie_goal_adjustment` contre la base n'a
+    été vérifiée que par inspection de schéma/contraintes, pas par un appel RPC réel depuis un test) ;
+    l'auto-ajustement ne s'évalue qu'au chargement de Santé nutritionnelle (pas d'autre point d'entrée
+    pertinent identifié cette phase).

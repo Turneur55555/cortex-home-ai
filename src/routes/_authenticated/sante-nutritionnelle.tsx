@@ -21,14 +21,19 @@ import {
   Wheat,
   Zap,
 } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useBodyMeasurements, useWorkouts } from "@/hooks/use-fitness";
 import { useLatestBodyWeight } from "@/hooks/useLatestBodyWeight";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { useActivityForDate, useLatestActivity } from "@/hooks/useDailyActivity";
 import { useMetabolicProfile } from "@/hooks/useMetabolicProfile";
 import { useNutrition, useNutritionRange } from "@/hooks/useNutritionData";
-import { useNutritionGoals } from "@/hooks/useNutritionGoals";
+import {
+  useApplyCalorieGoal,
+  useLastCalorieGoalAdjustment,
+  useNutritionGoals,
+  useUpdateCalorieStrategyPreference,
+} from "@/hooks/useNutritionGoals";
 import { useNutritionTotals } from "@/hooks/useNutritionTotals";
 import { findLatestValue, findPreviousValue } from "@/lib/fitness/body";
 import { bmiCategory, computeBMI, computeBMR } from "@/lib/fitness/metabolism";
@@ -41,9 +46,11 @@ import { ADAPTIVE_TDEE_THRESHOLDS, computeAdaptiveTdee } from "@/lib/fitness/ada
 import { computeAdaptiveTdeeCalibration } from "@/lib/fitness/adaptiveTdeeCalibration";
 import { buildMetabolicAnalysis } from "@/lib/fitness/metabolicAnalysis";
 import {
+  AUTO_CALORIE_ADJUSTMENT_CONFIG,
   CALORIE_STRATEGY_RATES,
   compareCalorieGoal,
   computeCalorieStrategy,
+  evaluateAutoCalorieAdjustment,
   type CalorieStrategyGoal,
   type FatLossRate,
   type MuscleGainRate,
@@ -81,8 +88,7 @@ function SanteNutritionnellePage() {
   const today = localDateYMD();
   const [showMetabolicSheet, setShowMetabolicSheet] = useState(false);
   const [showAnalysisSheet, setShowAnalysisSheet] = useState(false);
-  const [strategyGoal, setStrategyGoal] = useState<CalorieStrategyGoal>("maintenance");
-  const [strategyRate, setStrategyRate] = useState<FatLossRate | MuscleGainRate>("moderate");
+  const [showAutoModeConfirm, setShowAutoModeConfirm] = useState(false);
 
   const { data: bodyRows, isLoading: bodyLoading } = useBodyMeasurements();
   const { data: latestWeight } = useLatestBodyWeight();
@@ -91,6 +97,9 @@ function SanteNutritionnellePage() {
 
   const { data: nutritionRows, isLoading: nutritionLoading } = useNutrition(today);
   const { data: nutritionGoals } = useNutritionGoals();
+  const updateCalorieStrategyPreference = useUpdateCalorieStrategyPreference();
+  const applyCalorieGoal = useApplyCalorieGoal();
+  const { data: lastCalorieAdjustment } = useLastCalorieGoalAdjustment();
   const { totals, remaining } = useNutritionTotals(nutritionRows, nutritionGoals ?? null);
 
   const adaptiveWindowStart = addDaysYMD(
@@ -171,6 +180,13 @@ function SanteNutritionnellePage() {
     calorieGoalKcal: calorieGoal,
   });
 
+  // Préférence de stratégie persistée (nutrition_goals.goal/target_rate/
+  // calorie_strategy_mode) — jamais un state React local reparti à zéro à
+  // chaque ouverture de page (limite connue de la Phase 4A, résolue ici).
+  const strategyMode = nutritionGoals?.calorieStrategyMode ?? "manual";
+  const strategyGoal: CalorieStrategyGoal = nutritionGoals?.goal ?? "maintenance";
+  const strategyRate: FatLossRate | MuscleGainRate = nutritionGoals?.targetRate ?? "moderate";
+
   const calorieStrategy = computeCalorieStrategy({
     goal: strategyGoal,
     rate: strategyGoal === "maintenance" ? undefined : strategyRate,
@@ -181,6 +197,86 @@ function SanteNutritionnellePage() {
     calorieGoal,
     calorieStrategy.recommendedCalories,
   );
+
+  const autoAdjustment = evaluateAutoCalorieAdjustment({
+    mode: strategyMode,
+    currentCalories: calorieGoal,
+    recommendedCalories: calorieStrategy.recommendedCalories,
+    calibrationState: adaptiveTdeeCalibration.state,
+    lastAutoAdjustmentAt: nutritionGoals?.lastAutoAdjustmentAt ?? null,
+    now: new Date().toISOString(),
+  });
+
+  // Évaluation à un moment concret (chargement de la page) — pas de faux
+  // scheduler d'arrière-plan (Cortex est une PWA, voir calorieStrategy.ts).
+  // `autoAppliedRef` protège contre les écritures répétées si la page se
+  // re-render plusieurs fois avant que l'invalidation React Query ne
+  // rafraîchisse `lastAutoAdjustmentAt` (qui fait ensuite retomber
+  // `autoAdjustment.eligible` à false via le cooldown, naturellement).
+  const autoAppliedRef = useRef(false);
+  useEffect(() => {
+    if (
+      strategyMode === "automatic" &&
+      autoAdjustment.eligible &&
+      autoAdjustment.proposedCalories != null &&
+      !autoAppliedRef.current &&
+      !applyCalorieGoal.isPending
+    ) {
+      autoAppliedRef.current = true;
+      applyCalorieGoal.mutate({
+        mode: "automatic",
+        appliedCalories: autoAdjustment.proposedCalories,
+        recommendedCalories: calorieStrategy.recommendedCalories,
+        goal: strategyGoal,
+        targetRate: strategyGoal === "maintenance" ? null : strategyRate,
+        referenceTdeeKcal: calorieStrategy.referenceTdeeKcal,
+        referenceSource: calorieStrategy.referenceSource,
+        reason: `Ajustement automatique — pas maximal ${AUTO_CALORIE_ADJUSTMENT_CONFIG.MAX_AUTO_STEP_KCAL[adaptiveTdeeCalibration.state]} kcal (${adaptiveTdeeCalibration.state}).`,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [strategyMode, autoAdjustment.eligible, autoAdjustment.proposedCalories]);
+
+  const handleGoalChange = (goal: CalorieStrategyGoal) => {
+    let targetRate: FatLossRate | MuscleGainRate | null = null;
+    if (goal === "fat_loss") {
+      targetRate = strategyGoal === "fat_loss" ? strategyRate : "moderate";
+    } else if (goal === "muscle_gain") {
+      targetRate = strategyGoal === "muscle_gain" ? (strategyRate as MuscleGainRate) : "moderate";
+    }
+    updateCalorieStrategyPreference.mutate({ mode: strategyMode, goal, targetRate });
+  };
+
+  const handleRateChange = (rate: FatLossRate | MuscleGainRate) => {
+    updateCalorieStrategyPreference.mutate({ mode: strategyMode, targetRate: rate });
+  };
+
+  const handleModeSelect = (mode: "manual" | "automatic") => {
+    if (mode === "automatic" && strategyMode !== "automatic") {
+      setShowAutoModeConfirm(true);
+      return;
+    }
+    updateCalorieStrategyPreference.mutate({ mode });
+  };
+
+  const confirmAutomaticMode = () => {
+    updateCalorieStrategyPreference.mutate({ mode: "automatic" });
+    setShowAutoModeConfirm(false);
+  };
+
+  const handleManualApply = () => {
+    if (calorieStrategy.recommendedCalories == null) return;
+    applyCalorieGoal.mutate({
+      mode: "manual_apply",
+      appliedCalories: calorieStrategy.recommendedCalories,
+      recommendedCalories: calorieStrategy.recommendedCalories,
+      goal: strategyGoal,
+      targetRate: strategyGoal === "maintenance" ? null : strategyRate,
+      referenceTdeeKcal: calorieStrategy.referenceTdeeKcal,
+      referenceSource: calorieStrategy.referenceSource,
+      reason: "Application manuelle de la recommandation Cortex.",
+    });
+  };
 
   const caloriesPct = pct(totals.calories, nutritionGoals?.calories);
   const proteinsPct = pct(totals.proteins, nutritionGoals?.proteins);
@@ -398,7 +494,7 @@ function SanteNutritionnellePage() {
             <button
               key={g.value}
               type="button"
-              onClick={() => setStrategyGoal(g.value)}
+              onClick={() => handleGoalChange(g.value)}
               className={
                 "flex-1 rounded-lg py-1.5 text-[11px] font-semibold transition-colors " +
                 (strategyGoal === g.value
@@ -417,7 +513,7 @@ function SanteNutritionnellePage() {
               <button
                 key={key}
                 type="button"
-                onClick={() => setStrategyRate(key as FatLossRate | MuscleGainRate)}
+                onClick={() => handleRateChange(key as FatLossRate | MuscleGainRate)}
                 className={
                   "flex-1 rounded-full border px-2 py-1.5 text-[11px] font-medium transition-colors " +
                   (strategyRate === key
@@ -428,6 +524,64 @@ function SanteNutritionnellePage() {
                 {rate.label}
               </button>
             ))}
+          </div>
+        )}
+
+        {/* Mode de gestion */}
+        <div className="mt-3">
+          <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Mode de gestion
+          </p>
+          <div className="flex rounded-xl border border-border bg-card/50 p-0.5">
+            {(
+              [
+                { value: "manual", label: "Manuel" },
+                { value: "automatic", label: "Automatique" },
+              ] as const
+            ).map((m) => (
+              <button
+                key={m.value}
+                type="button"
+                onClick={() => handleModeSelect(m.value)}
+                className={
+                  "flex-1 rounded-lg py-1.5 text-[11px] font-semibold transition-colors " +
+                  (strategyMode === m.value
+                    ? "bg-gradient-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground")
+                }
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {showAutoModeConfirm && (
+          <div className="mt-2 rounded-2xl border border-primary/30 bg-primary/5 p-4">
+            <p className="text-xs font-semibold text-foreground">Activer le mode automatique ?</p>
+            <ul className="mt-2 space-y-1 text-[11px] leading-relaxed text-muted-foreground">
+              <li>• Cortex pourra modifier ton objectif calorique.</li>
+              <li>• Les ajustements sont plafonnés (jamais un grand saut d'un coup).</li>
+              <li>• Ils sont espacés dans le temps, jamais quotidiens.</li>
+              <li>• Tu peux revenir en manuel à tout moment.</li>
+              <li>• Les macros ne sont jamais modifiées automatiquement.</li>
+            </ul>
+            <div className="mt-3 flex gap-2">
+              <button
+                type="button"
+                onClick={confirmAutomaticMode}
+                className="flex-1 rounded-lg bg-gradient-primary py-1.5 text-[11px] font-semibold text-primary-foreground shadow-glow"
+              >
+                Activer
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowAutoModeConfirm(false)}
+                className="flex-1 rounded-lg border border-border bg-card py-1.5 text-[11px] font-semibold text-foreground"
+              >
+                Annuler
+              </button>
+            </div>
           </div>
         )}
 
@@ -504,20 +658,61 @@ function SanteNutritionnellePage() {
                 </div>
               )}
 
-            <button
-              type="button"
-              disabled
-              title="Bientôt disponible — l'application automatique de l'objectif n'est pas encore active"
-              className="mt-3 w-full cursor-not-allowed rounded-xl border border-border bg-surface py-2 text-[11px] font-semibold text-muted-foreground/50"
-            >
-              Appliquer (bientôt disponible)
-            </button>
+            {strategyMode === "manual" ? (
+              calorieGoalComparison.differenceKcal === 0 ? (
+                <p className="mt-3 text-center text-[11px] text-muted-foreground">
+                  Ton objectif est déjà aligné avec la recommandation.
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleManualApply}
+                  disabled={applyCalorieGoal.isPending}
+                  className="mt-3 w-full rounded-xl bg-gradient-primary py-2 text-[11px] font-semibold text-primary-foreground shadow-glow disabled:opacity-60"
+                >
+                  {applyCalorieGoal.isPending ? "Application…" : "Appliquer"}
+                </button>
+              )
+            ) : (
+              <div className="mt-3 rounded-xl bg-white/[0.03] p-3">
+                <p className="text-[11px] font-semibold text-foreground">Mode automatique actif</p>
+                <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                  Cortex ajuste progressivement ton objectif calorique lorsque tes données
+                  justifient un changement.
+                </p>
+                {autoAdjustment.reasons.includes("cooldown_active") && (
+                  <p className="mt-1.5 text-[11px] text-muted-foreground/70">
+                    Prochain ajustement possible après la période de stabilisation.
+                  </p>
+                )}
+              </div>
+            )}
 
             {calorieStrategy.limited && calorieStrategy.limitReasons.length > 0 && (
               <p className="mt-2.5 text-[11px] leading-relaxed text-muted-foreground">
                 {calorieStrategy.limitReasons.join(" ")}
               </p>
             )}
+          </div>
+        )}
+
+        {lastCalorieAdjustment && (
+          <div className="mt-2 rounded-2xl border border-border bg-card/50 p-3">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Dernier ajustement
+            </p>
+            <p className="mt-1 text-xs font-semibold">
+              {lastCalorieAdjustment.previousCalories != null
+                ? `${lastCalorieAdjustment.previousCalories} → ${lastCalorieAdjustment.appliedCalories} kcal`
+                : `${lastCalorieAdjustment.appliedCalories} kcal`}
+            </p>
+            <p className="text-[10px] text-muted-foreground/60">
+              {lastCalorieAdjustment.mode === "automatic" ? "Automatique" : "Manuel"} ·{" "}
+              {new Date(lastCalorieAdjustment.createdAt).toLocaleDateString("fr-FR", {
+                day: "numeric",
+                month: "long",
+              })}
+            </p>
           </div>
         )}
       </Section>

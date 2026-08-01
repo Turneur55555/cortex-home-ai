@@ -46,7 +46,7 @@
 /**
  * Catégorie métier stable décrivant l'activité quotidienne HORS SPORT —
  * jamais les multiplicateurs TDEE classiques (1.2/1.375/1.55/1.725/1.9,
- * voir `metabolism.ts` ACTIVITY_LEVELS) : ceux-ci décrivent la dépense
+ * retirés de `metabolism.ts` en Phase 4B) : ceux-ci décrivaient la dépense
  * totale journalière en y incluant l'exercice, ce que Cortex calcule déjà
  * séparément via l'EAT — les réutiliser tels quels pour le NEAT compterait
  * le sport deux fois. Stockée telle quelle dans

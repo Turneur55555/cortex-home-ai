@@ -8,28 +8,26 @@
 // ci-dessous). Aucun recalcul automatique des macros dans cette phase.
 //
 // Architecture manual/automatic (règle produit permanente) :
-//  - MANUEL (implémenté ici) : Cortex calcule une recommandation, l'affiche
-//    à côté de l'objectif actif, et attend une validation explicite de
-//    l'utilisateur avant toute écriture (le bouton "Appliquer" n'écrit PAS
-//    encore en base en Phase 4A — voir `compareCalorieGoal`, qui prépare
-//    seulement les données que ce bouton consommera).
-//  - AUTOMATIQUE (Phase 4B+, PAS implémenté ici) : Cortex pourra appliquer
-//    automatiquement une recommandation validée par des garde-fous
-//    supplémentaires (TDEE suffisamment fiable, changement minimal
-//    significatif, changement maximal par ajustement, délai minimal entre
-//    deux ajustements, historique de la dernière modification, retour au
-//    mode manuel à tout moment). Emplacement recommandé pour stocker cette
-//    préférence : étendre `nutrition_goals` (table 1-ligne-par-utilisateur
-//    déjà utilisée pour les objectifs actifs) avec des colonnes telles que
-//    `goal` (fat_loss|maintenance|muscle_gain), `target_rate`
-//    (slow|moderate|fast), `calorie_strategy_mode` (manual|automatic) et
-//    `last_auto_adjustment_at` (timestamptz, pour le délai minimal entre
-//    deux ajustements) — pas de nouvelle table nécessaire a priori. AUCUNE
-//    migration n'est créée dans cette phase : le mode automatique n'étant
-//    pas actif, cette préférence n'a rien à persister pour l'instant.
+//  - MANUEL : Cortex calcule une recommandation, l'affiche à côté de
+//    l'objectif actif, et attend une validation explicite (bouton
+//    "Appliquer") avant toute écriture — voir `compareCalorieGoal`.
+//  - AUTOMATIQUE (Phase 4B) : Cortex peut appliquer une recommandation
+//    SANS confirmation à chaque fois, mais uniquement lorsque
+//    `evaluateAutoCalorieAdjustment` (ci-dessous) la juge éligible — jamais
+//    une écriture aveugle. Persisté dans `nutrition_goals` (migration
+//    20260807090000) : `goal`, `target_rate`, `calorie_strategy_mode`
+//    (manual par défaut, jamais activé automatiquement par la migration),
+//    `last_auto_adjustment_at` (horodatage du dernier ajustement
+//    AUTOMATIQUE uniquement — sert de base au cooldown). L'écriture réelle
+//    passe par la RPC transactionnelle `apply_calorie_goal_adjustment`
+//    (calories + historique `calorie_goal_adjustments` en une opération),
+//    jamais directement via un upsert client — voir `useApplyCalorieGoal`.
 
 import { KCAL_PER_KG_BODY_MASS } from "./energyConstants";
-import type { AdaptiveTdeeCalibrationResult } from "./adaptiveTdeeCalibration";
+import type {
+  AdaptiveTdeeCalibrationResult,
+  AdaptiveTdeeCalibrationState,
+} from "./adaptiveTdeeCalibration";
 
 // ---------------------------------------------------------------------
 // Constantes centralisées
@@ -334,4 +332,155 @@ export function compareCalorieGoal(
         ? recommendedCalories - currentCalories
         : null,
   };
+}
+
+// ---------------------------------------------------------------------
+// Mode AUTOMATIQUE — éligibilité d'un ajustement, jamais l'application
+// elle-même (voir `useApplyCalorieGoal` côté hooks). Cortex est une PWA :
+// aucun scheduler d'arrière-plan fiable n'existe lorsque l'app est fermée.
+// Cette fonction est donc conçue pour être évaluée à des moments concrets
+// (chargement de Santé nutritionnelle, action utilisateur pertinente) —
+// jamais un faux "cron" navigateur. Elle est pure et déterministe : mêmes
+// entrées (y compris `now`, fourni par l'appelant plutôt que `Date.now()`
+// interne) → même résultat, donc testable et idempotente par construction —
+// un re-render répété avec les mêmes données ne produit jamais un résultat
+// différent (la protection contre les écritures répétées vient ensuite du
+// cooldown lui-même + de l'état de mutation React Query côté appelant).
+// ---------------------------------------------------------------------
+
+export const AUTO_CALORIE_ADJUSTMENT_CONFIG = {
+  /**
+   * Écart minimal, en valeur absolue, pour justifier un ajustement
+   * automatique — évite de déclencher un update pour un écart négligeable
+   * (bruit résiduel, arrondi). Choisi à 2× le pas d'arrondi
+   * (`CALORIE_STRATEGY_ROUNDING_STEP_KCAL`) : nettement au-dessus du bruit
+   * d'arrondi lui-même, mais encore assez sensible pour rester utile.
+   */
+  MIN_AUTO_ADJUSTMENT_KCAL: 50,
+  /**
+   * Amplitude maximale d'UN SEUL ajustement automatique, kcal — jamais un
+   * saut direct vers la recommandation complète (§18/§24 du brief), et
+   * dépendante de la fiabilité de la calibration Phase 3B (§19) : plus
+   * l'observation est jeune, plus l'automatisation reste prudente, même si
+   * l'utilisateur a explicitement activé le mode automatique.
+   */
+  MAX_AUTO_STEP_KCAL: {
+    model_only: 50,
+    calibrating: 100,
+    adapted: 150,
+  } satisfies Record<AdaptiveTdeeCalibrationState, number>,
+  /**
+   * Délai minimal, en jours, entre deux ajustements AUTOMATIQUES (jamais
+   * les `manual_apply`, voir `apply_calorie_goal_adjustment`). Le TDEE
+   * observé (Phase 3A) est calculé sur une fenêtre glissante de plusieurs
+   * semaines : un ajustement quotidien réagirait au bruit de cette fenêtre
+   * plutôt qu'à une vraie tendance, et empêcherait d'observer l'effet d'un
+   * changement avant le suivant. 7 jours = la plus petite fenêtre encore
+   * jugée "établie" par `ADAPTIVE_TDEE_THRESHOLDS.EARLY.MIN_CALENDAR_DAYS`
+   * (Phase 3A) — cohérent avec le grain temporel que le moteur observé
+   * peut réellement distinguer du bruit.
+   */
+  AUTO_ADJUSTMENT_COOLDOWN_DAYS: 7,
+} as const;
+
+export type AutoCalorieAdjustmentReason =
+  | "manual_mode"
+  | "recommendation_unavailable"
+  | "current_goal_unavailable"
+  | "within_tolerance"
+  | "cooldown_active"
+  | "eligible";
+
+export interface AutoCalorieAdjustmentResult {
+  eligible: boolean;
+  reasons: AutoCalorieAdjustmentReason[];
+  currentCalories: number | null;
+  recommendedCalories: number | null;
+  /** `recommended - current`. `null` si l'un des deux manque. */
+  differenceKcal: number | null;
+  /** Cible à appliquer si `eligible`, sinon `null`. Toujours entre `current` et `recommended`, jamais au-delà. */
+  proposedCalories: number | null;
+}
+
+export interface AutoCalorieAdjustmentInput {
+  mode: CalorieStrategyMode;
+  currentCalories: number | null;
+  recommendedCalories: number | null;
+  /** État de calibration Phase 3B — dimensionne l'amplitude max autorisée. */
+  calibrationState: AdaptiveTdeeCalibrationState;
+  /** `null` si aucun ajustement automatique n'a encore eu lieu — voir §22, jamais bloqué artificiellement dans ce cas. */
+  lastAutoAdjustmentAt: string | null;
+  /** "Maintenant", ISO 8601 — fourni par l'appelant pour une fonction pure et testable. */
+  now: string;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function autoAdjustmentResult(
+  input: AutoCalorieAdjustmentInput,
+  eligible: boolean,
+  reasons: AutoCalorieAdjustmentReason[],
+  proposedCalories: number | null = null,
+): AutoCalorieAdjustmentResult {
+  return {
+    eligible,
+    reasons,
+    currentCalories: input.currentCalories,
+    recommendedCalories: input.recommendedCalories,
+    differenceKcal:
+      input.currentCalories != null && input.recommendedCalories != null
+        ? input.recommendedCalories - input.currentCalories
+        : null,
+    proposedCalories,
+  };
+}
+
+/**
+ * Détermine si un ajustement AUTOMATIQUE de `nutrition_goals.calories` est
+ * autorisé maintenant, et si oui, la valeur à proposer. Ne modifie rien —
+ * purement décisionnel (voir `useApplyCalorieGoal` pour l'écriture réelle).
+ */
+export function evaluateAutoCalorieAdjustment(
+  input: AutoCalorieAdjustmentInput,
+): AutoCalorieAdjustmentResult {
+  if (input.mode !== "automatic") {
+    return autoAdjustmentResult(input, false, ["manual_mode"]);
+  }
+  if (!isValidPositiveFinite(input.recommendedCalories)) {
+    return autoAdjustmentResult(input, false, ["recommendation_unavailable"]);
+  }
+  if (!isValidPositiveFinite(input.currentCalories)) {
+    return autoAdjustmentResult(input, false, ["current_goal_unavailable"]);
+  }
+
+  const differenceKcal = input.recommendedCalories - input.currentCalories;
+
+  if (Math.abs(differenceKcal) < AUTO_CALORIE_ADJUSTMENT_CONFIG.MIN_AUTO_ADJUSTMENT_KCAL) {
+    return autoAdjustmentResult(input, false, ["within_tolerance"]);
+  }
+
+  // Cooldown : uniquement s'il existe un ajustement automatique précédent
+  // (§22 — un premier passage en automatique n'est jamais bloqué par le
+  // cooldown, mais reste soumis au plafond d'amplitude ci-dessous).
+  if (input.lastAutoAdjustmentAt != null) {
+    const nowMs = Date.parse(input.now);
+    const lastMs = Date.parse(input.lastAutoAdjustmentAt);
+    if (Number.isFinite(nowMs) && Number.isFinite(lastMs)) {
+      const daysSinceLast = (nowMs - lastMs) / 86_400_000;
+      if (daysSinceLast < AUTO_CALORIE_ADJUSTMENT_CONFIG.AUTO_ADJUSTMENT_COOLDOWN_DAYS) {
+        return autoAdjustmentResult(input, false, ["cooldown_active"]);
+      }
+    }
+  }
+
+  const maxStep = AUTO_CALORIE_ADJUSTMENT_CONFIG.MAX_AUTO_STEP_KCAL[input.calibrationState];
+  const cappedDelta = clamp(differenceKcal, -maxStep, maxStep);
+  const proposedCalories = roundToStep(
+    input.currentCalories + cappedDelta,
+    CALORIE_STRATEGY_ROUNDING_STEP_KCAL,
+  );
+
+  return autoAdjustmentResult(input, true, ["eligible"], proposedCalories);
 }

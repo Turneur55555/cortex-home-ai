@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  AUTO_CALORIE_ADJUSTMENT_CONFIG,
   CALORIE_STRATEGY_GUARDRAILS,
   CALORIE_STRATEGY_RATES,
   compareCalorieGoal,
   computeCalorieStrategy,
+  evaluateAutoCalorieAdjustment,
+  type AutoCalorieAdjustmentInput,
   type CalorieStrategyInput,
 } from "./calorieStrategy";
 import type { AdaptiveTdeeCalibrationResult } from "./adaptiveTdeeCalibration";
@@ -350,5 +353,190 @@ describe("computeCalorieStrategy — cohérence des rythmes centralisés", () =>
     expect(moderate.weeklyBodyWeightPercent).toBeLessThan(
       CALORIE_STRATEGY_RATES.fat_loss.moderate.weeklyBodyWeightPercent,
     );
+  });
+});
+
+const NOW = "2026-08-08T12:00:00.000Z";
+const autoBase = (overrides: Partial<AutoCalorieAdjustmentInput>): AutoCalorieAdjustmentInput => ({
+  mode: "automatic",
+  currentCalories: 2000,
+  recommendedCalories: 2150,
+  calibrationState: "adapted",
+  lastAutoAdjustmentAt: null,
+  now: NOW,
+  ...overrides,
+});
+
+describe("evaluateAutoCalorieAdjustment — mode manuel", () => {
+  it("mode manual → refus (manual_mode), jamais éligible", () => {
+    const result = evaluateAutoCalorieAdjustment(autoBase({ mode: "manual" }));
+    expect(result.eligible).toBe(false);
+    expect(result.reasons).toEqual(["manual_mode"]);
+    expect(result.proposedCalories).toBeNull();
+  });
+});
+
+describe("evaluateAutoCalorieAdjustment — mode automatique, cas de base", () => {
+  it("mode automatic avec toutes les conditions réunies → éligible", () => {
+    const result = evaluateAutoCalorieAdjustment(autoBase({}));
+    expect(result.eligible).toBe(true);
+    expect(result.reasons).toEqual(["eligible"]);
+    expect(result.proposedCalories).not.toBeNull();
+  });
+
+  it("recommandation absente → non exploitable", () => {
+    const result = evaluateAutoCalorieAdjustment(autoBase({ recommendedCalories: null }));
+    expect(result.eligible).toBe(false);
+    expect(result.reasons).toEqual(["recommendation_unavailable"]);
+  });
+
+  it("objectif actuel absent → non exploitable", () => {
+    const result = evaluateAutoCalorieAdjustment(autoBase({ currentCalories: null }));
+    expect(result.eligible).toBe(false);
+    expect(result.reasons).toEqual(["current_goal_unavailable"]);
+  });
+
+  it("différence sous le seuil minimal → within_tolerance, aucun ajustement", () => {
+    const result = evaluateAutoCalorieAdjustment(
+      autoBase({ currentCalories: 2100, recommendedCalories: 2125 }),
+    );
+    expect(Math.abs(2125 - 2100)).toBeLessThan(
+      AUTO_CALORIE_ADJUSTMENT_CONFIG.MIN_AUTO_ADJUSTMENT_KCAL,
+    );
+    expect(result.eligible).toBe(false);
+    expect(result.reasons).toEqual(["within_tolerance"]);
+  });
+
+  it("différence au-dessus du seuil → éligible", () => {
+    const result = evaluateAutoCalorieAdjustment(
+      autoBase({ currentCalories: 2000, recommendedCalories: 2100 }),
+    );
+    expect(result.eligible).toBe(true);
+  });
+});
+
+describe("evaluateAutoCalorieAdjustment — cooldown", () => {
+  it("cooldown actif (dernier ajustement il y a 2 jours) → refus", () => {
+    const result = evaluateAutoCalorieAdjustment(
+      autoBase({ lastAutoAdjustmentAt: "2026-08-06T12:00:00.000Z" }),
+    );
+    expect(result.eligible).toBe(false);
+    expect(result.reasons).toEqual(["cooldown_active"]);
+  });
+
+  it("cooldown terminé (dernier ajustement il y a 8 jours) → éligible", () => {
+    const result = evaluateAutoCalorieAdjustment(
+      autoBase({ lastAutoAdjustmentAt: "2026-07-31T12:00:00.000Z" }),
+    );
+    expect(result.eligible).toBe(true);
+  });
+
+  it("cooldown exactement à la limite (7 jours pile) → éligible (>= seuil)", () => {
+    const result = evaluateAutoCalorieAdjustment(
+      autoBase({ lastAutoAdjustmentAt: "2026-08-01T12:00:00.000Z" }),
+    );
+    expect(result.eligible).toBe(true);
+  });
+
+  it("premier ajustement (lastAutoAdjustmentAt = null) → jamais bloqué par le cooldown", () => {
+    const result = evaluateAutoCalorieAdjustment(autoBase({ lastAutoAdjustmentAt: null }));
+    expect(result.eligible).toBe(true);
+    expect(result.reasons).not.toContain("cooldown_active");
+  });
+});
+
+describe("evaluateAutoCalorieAdjustment — amplitude selon calibration", () => {
+  it("model_only → step le plus conservateur", () => {
+    const result = evaluateAutoCalorieAdjustment(
+      autoBase({
+        currentCalories: 2000,
+        recommendedCalories: 2500,
+        calibrationState: "model_only",
+      }),
+    );
+    expect(result.eligible).toBe(true);
+    expect(Math.abs(result.proposedCalories! - 2000)).toBeLessThanOrEqual(
+      AUTO_CALORIE_ADJUSTMENT_CONFIG.MAX_AUTO_STEP_KCAL.model_only + 25,
+    );
+  });
+
+  it("calibrating → step intermédiaire", () => {
+    const result = evaluateAutoCalorieAdjustment(
+      autoBase({
+        currentCalories: 2000,
+        recommendedCalories: 2500,
+        calibrationState: "calibrating",
+      }),
+    );
+    expect(Math.abs(result.proposedCalories! - 2000)).toBeLessThanOrEqual(
+      AUTO_CALORIE_ADJUSTMENT_CONFIG.MAX_AUTO_STEP_KCAL.calibrating + 25,
+    );
+  });
+
+  it("adapted → step le plus large", () => {
+    const result = evaluateAutoCalorieAdjustment(
+      autoBase({ currentCalories: 2000, recommendedCalories: 2500, calibrationState: "adapted" }),
+    );
+    expect(Math.abs(result.proposedCalories! - 2000)).toBeLessThanOrEqual(
+      AUTO_CALORIE_ADJUSTMENT_CONFIG.MAX_AUTO_STEP_KCAL.adapted + 25,
+    );
+  });
+
+  it("les steps sont strictement croissants model_only < calibrating < adapted", () => {
+    const { model_only, calibrating, adapted } = AUTO_CALORIE_ADJUSTMENT_CONFIG.MAX_AUTO_STEP_KCAL;
+    expect(model_only).toBeLessThan(calibrating);
+    expect(calibrating).toBeLessThan(adapted);
+  });
+});
+
+describe("evaluateAutoCalorieAdjustment — direction et respect du plafond", () => {
+  it("hausse (recommended > current) — exemple du brief : 2000 → 2300, step 100 → proposé 2100", () => {
+    const result = evaluateAutoCalorieAdjustment(
+      autoBase({
+        currentCalories: 2000,
+        recommendedCalories: 2300,
+        calibrationState: "calibrating",
+      }),
+    );
+    expect(AUTO_CALORIE_ADJUSTMENT_CONFIG.MAX_AUTO_STEP_KCAL.calibrating).toBe(100);
+    expect(result.proposedCalories).toBe(2100);
+  });
+
+  it("baisse (recommended < current) — exemple du brief : 2200 → 1900, step 100 → proposé 2100", () => {
+    const result = evaluateAutoCalorieAdjustment(
+      autoBase({
+        currentCalories: 2200,
+        recommendedCalories: 1900,
+        calibrationState: "calibrating",
+      }),
+    );
+    expect(result.proposedCalories).toBe(2100);
+  });
+
+  it("énorme divergence — le pas maximal reste respecté, jamais un saut direct vers la recommandation", () => {
+    const result = evaluateAutoCalorieAdjustment(
+      autoBase({ currentCalories: 1800, recommendedCalories: 3500, calibrationState: "adapted" }),
+    );
+    expect(result.proposedCalories).not.toBe(3500);
+    expect(Math.abs(result.proposedCalories! - 1800)).toBeLessThanOrEqual(
+      AUTO_CALORIE_ADJUSTMENT_CONFIG.MAX_AUTO_STEP_KCAL.adapted + 25,
+    );
+  });
+
+  it("ne dépasse jamais la recommandation, quel que soit le sens", () => {
+    const up = evaluateAutoCalorieAdjustment(
+      autoBase({ currentCalories: 2000, recommendedCalories: 2050, calibrationState: "adapted" }),
+    );
+    expect(up.proposedCalories!).toBeLessThanOrEqual(2050 + 12.5);
+
+    const down = evaluateAutoCalorieAdjustment(
+      autoBase({ currentCalories: 2050, recommendedCalories: 2000, calibrationState: "adapted" }),
+    );
+    expect(down.proposedCalories!).toBeGreaterThanOrEqual(2000 - 12.5);
+  });
+
+  it("le proposé respecte la règle d'arrondi à 25 kcal", () => {
+    const result = evaluateAutoCalorieAdjustment(autoBase({}));
+    expect(result.proposedCalories! % 25).toBe(0);
   });
 });

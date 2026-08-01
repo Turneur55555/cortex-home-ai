@@ -1,13 +1,27 @@
 import { describe, expect, it } from "vitest";
+import * as metabolism from "./metabolism";
 import {
   bmiCategory,
   computeBMI,
   computeBMR,
-  computeCalorieTarget,
-  computeTDEE,
   isBiologicalSex,
   isValidMetabolicAge,
 } from "./metabolism";
+
+describe("legacy calorie engine — retiré en Phase 4B, jamais réintroduit", () => {
+  it("computeTDEE/computeCalorieTarget/GOAL_DELTAS/ACTIVITY_LEVELS n'existent plus dans metabolism.ts", () => {
+    // lib/fitness/calorieStrategy.ts est désormais la SEULE source de vérité
+    // pour la recommandation calorique (TDEE Cortex-native + rythmes
+    // relatifs au poids) — ce test échoue si ce module legacy (multiplicateur
+    // d'activité classique + deltas ±300 kcal fixes + floor 1200 non
+    // justifié) était un jour réintroduit ici.
+    const exported = Object.keys(metabolism);
+    expect(exported).not.toContain("computeTDEE");
+    expect(exported).not.toContain("computeCalorieTarget");
+    expect(exported).not.toContain("GOAL_DELTAS");
+    expect(exported).not.toContain("ACTIVITY_LEVELS");
+  });
+});
 
 describe("computeBMR", () => {
   it("computes Mifflin-St Jeor BMR for a man", () => {
@@ -59,24 +73,6 @@ describe("isValidMetabolicAge", () => {
     expect(isValidMetabolicAge(200)).toBe(false);
     expect(isValidMetabolicAge(30.5)).toBe(false);
     expect(isValidMetabolicAge(NaN)).toBe(false);
-  });
-});
-
-describe("computeTDEE", () => {
-  it("scales BMR by activity level only — no goal adjustment", () => {
-    expect(computeTDEE(1780, 1.55)).toBe(2759);
-  });
-});
-
-describe("computeCalorieTarget", () => {
-  it("applies a goal delta on top of the TDEE", () => {
-    expect(computeCalorieTarget(2759)).toBe(2759);
-    expect(computeCalorieTarget(2759, -300)).toBe(2459);
-    expect(computeCalorieTarget(2759, 300)).toBe(3059);
-  });
-
-  it("never returns below the 1200 kcal floor", () => {
-    expect(computeCalorieTarget(800, -1000)).toBe(1200);
   });
 });
 
