@@ -1955,8 +1955,8 @@ rester manuel). Vérification faite sur les vrais workflows CI, pas une supposit
     été vérifiée que par inspection de schéma/contraintes, pas par un appel RPC réel depuis un test) ;
     l'auto-ajustement ne s'évalue qu'au chargement de Santé nutritionnelle (pas d'autre point d'entrée
     pertinent identifié cette phase).
-- **Phase 5A — moteur de stratégie des macronutriments (2026-08-01, branche
-  `claude/phase5a-macro-strategy`, NON mergée dans `main`)** : première recommandation macros
+- **Phase 5A — moteur de stratégie des macronutriments (2026-08-01, mergée dans `main` le 2026-08-01,
+  SHA de merge `73f8f9f`)** : première recommandation macros
   Cortex-native, déterministe, explicable. Ne modifie JAMAIS `nutrition_goals.proteins/carbs/fats`.
   - **Audit préalable** : re-confirmé `compute_nutrition_targets` (RPC DB découverte en Phase 4B)
     toujours 0 appelant frontend — inerte, non supprimé (hors scope). Découverte : le formulaire
@@ -2018,3 +2018,101 @@ rester manuel). Vérification faite sur les vrais workflows CI, pas une supposit
     maigre par design, §5) ; le pré-remplissage 35/32/33 % de `GoalsSheet` reste un doublon fonctionnel
     mineur assumé (documenté, pas un moteur de recommandation) ; pas encore de verrous macros ni
     d'écriture automatique (Phase 5B).
+- **Phase 5B — application des macros, automatisation et verrous individuels (2026-08-01, branche
+  `claude/phase5b-macro-application-locks`, NON mergée dans `main`)** : rend la recommandation Phase 5A
+  réellement applicable (bouton "Appliquer" + mode automatique), avec verrous individuels par macro et
+  atomicité calories+macros.
+  - **Audit préalable** : `nutrition_goals`/`calorie_strategy_mode`/`apply_calorie_goal_adjustment`/
+    `calorie_goal_adjustments`/`macroStrategy.ts`/`GoalsSheet`/`useNutritionGoals` relus ; confirmé
+    `compute_nutrition_targets` (RPC DB legacy) toujours DROP (migration 20260619080840), jamais
+    réactivé ; `computeMacrosFromCalories` (pré-remplissage 35/32/33 % de `GoalsSheet`) laissé tel
+    quel — rôle distinct déjà documenté en Phase 5A, toujours pas une recommandation concurrente.
+  - **Migration `20260808090000_macro_strategy_locks_and_history.sql`** : étend `nutrition_goals`
+    avec `macro_strategy_mode` (manual/automatic, NOT NULL DEFAULT 'manual' — préférence INDÉPENDANTE
+    de `calorie_strategy_mode`, jamais activée automatiquement par la migration), `protein_locked`/
+    `carbs_locked`/`fat_locked` (boolean NOT NULL DEFAULT false — un verrou ne stocke PAS de valeur
+    dédiée, c'est la valeur ACTIVE `nutrition_goals.proteins/carbs/fats` au moment de l'activation qui
+    fait foi). Nouvelle table `macro_goal_adjustments` (historique dédié — sens temporel distinct de
+    `calorie_goal_adjustments`, RLS `auth.uid() = user_id`, index `(user_id, created_at DESC)`).
+    Nouvelle RPC `apply_macro_goal_adjustment` (macros SEULES, ne touche jamais `calories`).
+    `apply_calorie_goal_adjustment` (Phase 4B) étendue avec 10 paramètres macros optionnels (tous
+    `DEFAULT NULL`, rétrocompatibles) : lorsque les trois `_applied_proteins/carbs/fats` sont fournis,
+    met AUSSI à jour les macros et journalise `macro_goal_adjustments` dans la MÊME transaction — seul
+    moyen d'éviter l'état durable "calories mises à jour, macros encore alignées sur l'ancien objectif"
+    quand Calories automatique ET Macros automatique se déclenchent ensemble (§22 du brief). Comme
+    `CREATE OR REPLACE FUNCTION` ne remplace réellement une fonction que si la liste de TYPES de
+    paramètres est identique, l'ancienne signature à 8 paramètres a été explicitement `DROP FUNCTION`
+    avant recréation (sinon un second overload ambigu aurait coexisté). Appliquée via `execute_sql`
+    MCP (même méthode que Phases 3C/4A/4B). Vérifié post-migration : 86 tables (85 + `macro_goal_
+    adjustments`), un seul overload `apply_calorie_goal_adjustment` à 18 paramètres (pas d'ambiguïté),
+    toutes les colonnes attendues présentes sur `nutrition_goals`. `types.ts` régénéré — diff propre
+    (+102 lignes, additions uniquement, `git diff --stat` sans suppression).
+  - **`lib/fitness/macroStrategy.ts`** — verrous ajoutés à `computeMacroStrategy` (Phase 5A conservée
+    intacte : le chemin SANS verrou reste le code original inchangé, `computeMacroStrategyLocked`
+    n'est appelé que si ≥1 verrou actif — garantit zéro régression, vérifié par un test qui compare
+    bit-à-bit un appel sans verrou vs avec `locked*: null`).
+    - Pipeline verrous : calories réservées par les macros verrouillées (`lockedCalories`) ; si les
+      trois sont verrouillées → `allMacrosLocked:true`, valeurs retournées telles quelles, jamais
+      recalculées (juste signalé si incohérent avec l'enveloppe) ; si `lockedCalories > calorieTarget`
+      → `locksIncompatible:true`, verrous JAMAIS réduits, macros non verrouillées à 0, `limited:true`
+      + raison explicite ; sinon pipeline protéines→lipides→glucides Phase 5A généralisé sur le budget
+      restant (`calorieTarget - lockedCalories`), chaque étape verrouillée consommant 0 budget
+      supplémentaire (déjà réservée). Nudge de tolérance final n'ajuste jamais des glucides verrouillés
+      (signale l'impossibilité plutôt que de casser le verrou).
+    - Nouveaux champs `MacroStrategyResult.allMacrosLocked`/`locksIncompatible` (booléens structurés,
+      pas de string-matching côté appelant).
+    - `evaluateAutoMacroAdjustment` (mode automatique) : **aucun cooldown** (décision volontaire,
+      §26 — le cooldown calorique de 7 jours protège une DÉCISION, les macros n'en sont qu'une
+      CONSÉQUENCE ; si les calories changent aujourd'hui, les macros se réalignent aujourd'hui).
+      Éligibilité bloquée si `all_macros_locked`/`locks_incompatible`/déjà aligné (comparaison
+      arrondie au gramme, §27 — aucune écriture pour un écart nul) ; sinon `eligible:true` avec les
+      valeurs recommandées (déjà verrou-conscientes) à proposer.
+  - **Migration & atomicité calories+macros côté page** (`sante-nutritionnelle.tsx`) : deux `useEffect`
+    séparés + deux `useRef` (`autoAppliedRef` existant, nouveau `autoMacroAppliedRef`) implémentent les
+    4 combinaisons indépendantes manuel/automatique × calories/macros :
+    - **Calories auto + Macros auto** : UN SEUL appel `applyCalorieGoal.mutate` avec les 10 champs
+      macros optionnels renseignés (calculés à la calorie PROPOSÉE, pas l'actuelle) → une seule RPC
+      transactionnelle, jamais de fenêtre intermédiaire "calories neuves, macros anciennes". Le second
+      `useEffect` (macros seules) est explicitement empêché de se redéclencher (`autoMacroAppliedRef`
+      posé dans le premier effet dans ce cas).
+    - **Calories auto + Macros manuel** : uniquement l'effet calories se déclenche (macroAuto=false car
+      `macroStrategyMode!=='automatic'`) — macros jamais touchées automatiquement, UI affiche l'écart.
+    - **Calories manuel + Macros auto** : uniquement l'effet macros (RPC `apply_macro_goal_adjustment`,
+      ne touche jamais `calories`) — se déclenche indépendamment du mode calorique.
+    - **Calories manuel + Macros manuel** : aucun effet ne se déclenche, boutons "Appliquer" manuels
+      des deux sections gouvernent tout.
+  - **UI** : section "Répartition recommandée" étendue avec sélecteur Manuel/Automatique dédié aux
+    macros (dialogue de confirmation à la première activation, texte explicite sur les verrous jamais
+    cassés et l'absence de délai artificiel), icône verrou/déverrou par macro (bascule
+    `useUpdateMacroStrategyPreference`, verrouille la valeur ACTIVE affichée), bouton "Appliquer"
+    manuel (masqué si déjà aligné ou si `allMacrosLocked`), message dédié si `locksIncompatible`,
+    bloc "Dernier ajustement macros" compact (P/G/L avant→après, mode, date).
+  - **Tests** (`macroStrategy.test.ts`, +27 → 64 tests au total) : non-régression stricte (0 verrou ≡
+    Phase 5A via `toEqual`), verrou unique ×3, verrous combinés ×3 (P+G, P+L, G+L), 3 verrous (aligné
+    et incohérent), locks compatibles/incompatibles (exemples exacts §14/§15 du brief : 1800/1500 kcal,
+    P🔒200g+L🔒100g), valeur verrouillée à 0g, valeur verrouillée invalide (négatif/NaN/Infinity →
+    traitée comme non verrouillée), exemples exacts §11/§38 (protéines verrouillées stables après
+    hausse calorique 2000→2200), jamais négatif, cohérence énergétique. `evaluateAutoMacroAdjustment` :
+    mode manuel, recommandation indisponible, tous verrous, locks incompatibles, déjà aligné, écart
+    réel éligible, verrous individuels + hausse calorique (protéines/glucides+lipides strictement
+    stables dans la proposition), indépendance vis-à-vis de `calorie_strategy_mode` (absent de l'input
+    par construction).
+  - `npx tsc --noEmit` / `npx eslint` (fichiers modifiés) / `npx vitest run` (822 passed) / `npm run
+    build` : tous verts. `node scripts/validate-supabase.mjs` : migrations idempotentes, aucun
+    problème. Aucun `as any` introduit (grep vérifié sur tous les fichiers modifiés).
+  - **Vérification visuelle mobile PARTIELLE** — fait exceptionnel cette phase : `vite dev --host
+    127.0.0.1 --port 8080` a démarré avec succès dans ce sandbox (contrairement aux 4 phases
+    précédentes, `EAFNOSUPPORT` non reproduit cette fois). Playwright (Chromium pré-installé) a pu
+    charger l'app sans crash JS lié à cette phase, mais la route `/sante-nutritionnelle` étant protégée
+    par authentification, la navigation redirige vers `/login` sans session Supabase disponible dans ce
+    sandbox — l'écran réel avec la nouvelle UI verrous/mode macros n'a **pas** pu être capturé
+    visuellement. Un warning d'hydratation React est apparu sur `/login`, mais il concerne
+    exclusivement `AppShell`/`loading-screen.tsx` (pré-existant, sans rapport avec les fichiers touchés
+    cette phase).
+  - **Limites connues** : pas de test d'intégration Supabase réel de bout en bout de la RPC
+    transactionnelle combinée calories+macros (logique pure testée exhaustivement côté
+    `macroStrategy.ts`, mais l'exécution effective d'`apply_calorie_goal_adjustment` avec les 10
+    paramètres macros optionnels n'a été vérifiée que par inspection de schéma après application, pas
+    par un appel RPC réel depuis un test) ; les verrous s'évaluent seulement au chargement/re-render de
+    Santé nutritionnelle (mêmes points d'entrée que Phase 4B, pas de nouveau déclencheur ajouté) ;
+    UI verrous/mode macros non vérifiée visuellement (authentification requise, voir ci-dessus).
