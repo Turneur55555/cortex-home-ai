@@ -1616,3 +1616,63 @@ rester manuel). Vérification faite sur les vrais workflows CI, pas une supposit
     existantes, rien n'est persisté. Limite connue : TDEE "modélisé" uniquement (pas d'évolution du
     poids, pas de régression multi-semaines, pas de correction automatique) — volontairement hors
     scope de cette phase.
+- **Phase 3A — fondation du TDEE observé/adaptatif (2026-08-01, branche
+  `claude/phase3a-adaptive-tdee-foundation`, NON mergée dans `main`)** : second moteur, distinct du
+  TDEE modélisé (`BMR+NEAT+EAT+TEF`), qui estime statistiquement la dépense compatible avec les
+  calories réellement loggées et l'évolution réelle du poids. Observe et compare uniquement — ne
+  corrige RIEN automatiquement (ni le TDEE modélisé affiché, ni les objectifs, ni les macros) ; la
+  fusion intelligente des deux TDEE est explicitement reportée à une Phase 3B distincte.
+  - **`lib/fitness/adaptiveTdee.ts`** (logique pure) : `computeAdaptiveTdee(input)`.
+    - **Source poids** : `body_tracking` (déjà exposée par `useBodyMeasurements`, `limit(180)`,
+      aucune nouvelle table). Pas de contrainte d'unicité (user, date) en base → dédoublonnage
+      déterministe par jour : dernière pesée du jour par `created_at` (§14, testé explicitement).
+      Bornes physiologiques défensives (20–500 kg, alignées sur le `CHECK` de la table) : seul
+      l'impossible (NaN/Infinity/hors bornes) est ignoré, jamais une valeur réelle mais inhabituelle.
+    - **Source calories** : nouveau hook `useNutritionRange(start, end)` (`hooks/useNutritionData.ts`)
+      sur la table `nutrition` existante — un jour sans AUCUNE ligne n'est jamais traité comme 0 kcal
+      (exclu de la moyenne et du compte de couverture, jamais confondu avec un jeûne).
+    - **Lissage retenu** : moyenne glissante 7 jours (réutilise `movingAverage` de `lib/fitness/body.ts`,
+      déjà utilisée ailleurs dans Cortex) sur une série journalière (jours sans pesée = `null`, jamais
+      interpolés), PUIS régression linéaire sur les points lissés à FENÊTRE PLEINE uniquement (les
+      premiers jours d'une moyenne glissante ont une fenêtre partielle dont le "centre" statistique
+      diffère et biaiserait la pente — détecté via les tests sur données synthétiques 14/21/28j, corrigé
+      en excluant ces points quand assez de points à fenêtre pleine existent). `weeklyTrendKg =
+      pente_jour × 7`. Choix documenté : pas de modèle plus complexe (Kalman, EWMA multi-paramètres) —
+      injustifié vu la densité de données Cortex réelle.
+    - **Fenêtre d'analyse** : `ANALYSIS_WINDOW_DAYS = 28` jours glissants max ; la fenêtre réelle
+      retenue va de la pesée exploitable la plus ancienne (dans ces 28j) jusqu'à aujourd'hui — reflète
+      la couverture réelle plutôt qu'une fenêtre fixe artificielle.
+    - **Seuils centralisés** `ADAPTIVE_TDEE_THRESHOLDS` (calendarDays/measurementCount/densité
+      pesées/couverture nutritionnelle) : `EARLY` (7j, 4 pesées, densité 0.3, couverture 40 %) et
+      `ESTABLISHED` (14j, 8 pesées, densité 0.4, couverture 60 %) → `insufficient_data` /
+      `early_estimate` / `established`. La densité (mesures/jour de fenêtre) attrape le cas "14 jours
+      mais 2 pesées" indépendamment du nombre de jours calendaires.
+    - **Coefficient énergétique** `KCAL_PER_KG = 7700`, centralisé, documenté comme approximation (PAS
+      une constante physiologique exacte) — appliqué UNIQUEMENT à la tendance lissée, jamais à une
+      variation brute 24-48h.
+    - **Formule** : `energyEquivalentKcalPerDay = weeklyTrendKg × 7700 / 7` ;
+      `observedTdeeKcal = averageCalories − energyEquivalentKcalPerDay` (perte de poids → équivalent
+      négatif → TDEE observé > apports ; prise de poids → équivalent positif → TDEE observé <
+      apports). Exemple du brief vérifié par test : 2200 kcal/j, -0,30 kg/semaine → ≈2530 kcal/j.
+    - **Confiance** `low|medium|high` : `low` en `early_estimate` ; `established` → `high` si
+      calendarDays/mesures ≥ 2× seuil établi ET couverture ≥ 80 %, sinon `medium`.
+    - **Comparaison** avec le TDEE modélisé (`deltaKcal`/`deltaPercent`) : purement informative,
+      jamais utilisée pour corriger quoi que ce soit dans cette phase.
+    - **Protection anti-eau explicitement testée** (demande Nathan) : une pesée isolée +1 kg (rétention
+      d'eau) sur une série par ailleurs stable ne fait dévier le TDEE observé que de quelques dizaines
+      de kcal (test dédié, seuil <150 kcal) — jamais des ~1000 kcal qu'une lecture brute donnerait.
+  - **`sante-nutritionnelle.tsx`** : tuile "Dépense adaptative" (ComingSoonTile) remplacée par "TDEE
+    observé" — `InsufficientDataTile` si `insufficient_data`, sinon `StatTile` (valeur préfixée `~` et
+    caption "Estimation précoce" si `early_estimate`, caption "Basé sur tes données" si `established`).
+    Aucune refonte de l'écran, tuile réutilisant le même gabarit que les autres.
+  - **Tests** (`adaptiveTdee.test.ts`, 28 tests) : insuffisance (0 donnée, historique court, trop peu
+    de pesées, densité insuffisante, nutrition trop incomplète), poids stable, perte (-0,30 kg/sem),
+    prise (+0,20 kg/sem), qualité des données (jours non loggés jamais comptés 0, doublons de pesée
+    même jour, dates irrégulières, décimales, outliers physiologiques, NaN/Infinity, calories
+    négatives, protection anti-eau), comparaison au TDEE modélisé (>, <, ≈, absent), 3 jeux de données
+    synthétiques longs (14/21/28j) vérifiant la convergence vers une tendance connue, confiance.
+  - `npx tsc --noEmit` / `npx eslint` / `npx vitest run` (651 passed) / `npm run build` : tous verts.
+  - **Limites scientifiques connues** : `KCAL_PER_KG=7700` est une approximation historique (ignore la
+    composition réelle du tissu perdu/gagné — eau/muscle/gras) ; la régression sur moyenne glissante
+    reste un modèle simple (pas de détection d'outlier statistique, pas de pondération par qualité de
+    mesure) ; aucune fusion avec le TDEE modélisé n'est effectuée (Phase 3B).

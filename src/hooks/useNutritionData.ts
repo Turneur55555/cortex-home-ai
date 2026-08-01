@@ -20,6 +20,29 @@ export function useNutrition(date: string) {
   });
 }
 
+/**
+ * Journaux nutrition sur une plage de dates (inclusive) — utilisé par le
+ * moteur TDEE observé (lib/fitness/adaptiveTdee.ts) pour mesurer la
+ * couverture nutritionnelle sur plusieurs semaines. Ne réutilise pas
+ * `useNutrition` (une seule date) : une requête par plage évite N
+ * allers-retours. Ne récupère que les colonnes nécessaires au moteur.
+ */
+export function useNutritionRange(startDate: string, endDate: string) {
+  return useQuery({
+    queryKey: ["nutrition_range", startDate, endDate],
+    staleTime: 60_000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("nutrition")
+        .select("date, calories")
+        .gte("date", startDate)
+        .lte("date", endDate);
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
 export function useAddNutrition() {
   const qc = useQueryClient();
   return useMutation({
@@ -128,10 +151,7 @@ export function useCopyNutritionDay() {
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
       if (from === to) throw new Error("Choisis un autre jour à copier");
-      const { data: rows, error } = await supabase
-        .from("nutrition")
-        .select("*")
-        .eq("date", from);
+      const { data: rows, error } = await supabase.from("nutrition").select("*").eq("date", from);
       if (error) throw error;
       if (!rows || rows.length === 0) throw new Error("Aucun repas à copier ce jour-là");
       const clones = rows.map((r) => {
@@ -182,15 +202,7 @@ export function useDeleteNutritionMeal() {
 export function useCopyNutritionMeal() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({
-      from,
-      to,
-      meal,
-    }: {
-      from: string;
-      to: string;
-      meal: string;
-    }) => {
+    mutationFn: async ({ from, to, meal }: { from: string; to: string; meal: string }) => {
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -202,8 +214,7 @@ export function useCopyNutritionMeal() {
         .eq("date", from)
         .eq("meal", meal);
       if (error) throw error;
-      if (!rows || rows.length === 0)
-        throw new Error("Aucun aliment à copier pour ce repas");
+      if (!rows || rows.length === 0) throw new Error("Aucun aliment à copier pour ce repas");
       const clones = rows.map((r) => {
         const rec = r as Record<string, unknown>;
         const { id: _id, created_at: _ca, ...rest } = rec;
@@ -220,4 +231,3 @@ export function useCopyNutritionMeal() {
     onError: (e: Error) => toast.error(e.message),
   });
 }
-
