@@ -55,6 +55,7 @@ import {
   type FatLossRate,
   type MuscleGainRate,
 } from "@/lib/fitness/calorieStrategy";
+import { compareMacros, computeMacroStrategy } from "@/lib/fitness/macroStrategy";
 import { addDaysYMD, localDateYMD } from "@/lib/dates";
 import { StatTile } from "@/components/fitness/StatTile";
 import { ComingSoonTile } from "@/components/fitness/ComingSoonTile";
@@ -196,6 +197,23 @@ function SanteNutritionnellePage() {
   const calorieGoalComparison = compareCalorieGoal(
     calorieGoal,
     calorieStrategy.recommendedCalories,
+  );
+
+  // Répartition macros — travaille sur l'objectif calorique ACTIF
+  // (`calorieGoal`, nutrition_goals.calories), jamais sur une
+  // recommandation Cortex pas encore appliquée (§2 du brief Phase 5A).
+  const macroStrategy = computeMacroStrategy({
+    calories: calorieGoal,
+    bodyWeightKg: weight,
+    goal: strategyGoal,
+  });
+  const macroComparison = compareMacros(
+    {
+      proteins: nutritionGoals?.proteins ?? null,
+      carbs: nutritionGoals?.carbs ?? null,
+      fats: nutritionGoals?.fats ?? null,
+    },
+    macroStrategy,
   );
 
   const autoAdjustment = evaluateAutoCalorieAdjustment({
@@ -713,6 +731,76 @@ function SanteNutritionnellePage() {
                 month: "long",
               })}
             </p>
+          </div>
+        )}
+      </Section>
+
+      {/* Répartition recommandée (macros) */}
+      <Section title="Répartition recommandée">
+        {macroStrategy.proteinsG == null ? (
+          <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-4 text-center">
+            <p className="text-xs font-medium text-muted-foreground/70">
+              Recommandation indisponible
+            </p>
+            {macroStrategy.limitReasons[0] && (
+              <p className="mt-1 text-[11px] text-muted-foreground/50">
+                {macroStrategy.limitReasons[0]}
+              </p>
+            )}
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-white/5 bg-gradient-to-b from-card/95 to-card/70 p-4 shadow-card">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                Objectif actif
+              </span>
+              <span className="text-xs font-semibold">{macroStrategy.calorieTarget} kcal</span>
+            </div>
+
+            <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+              <div>
+                <p className="text-lg font-bold text-primary">{macroStrategy.proteinsG} g</p>
+                <p className="text-[10px] text-muted-foreground">Protéines</p>
+              </div>
+              <div>
+                <p className="text-lg font-bold">{macroStrategy.carbsG} g</p>
+                <p className="text-[10px] text-muted-foreground">Glucides</p>
+              </div>
+              <div>
+                <p className="text-lg font-bold">{macroStrategy.fatsG} g</p>
+                <p className="text-[10px] text-muted-foreground">Lipides</p>
+              </div>
+            </div>
+
+            <div className="my-3 border-t border-border" />
+
+            {(
+              [
+                { label: "Protéines", entry: macroComparison.proteins },
+                { label: "Glucides", entry: macroComparison.carbs },
+                { label: "Lipides", entry: macroComparison.fats },
+              ] as const
+            ).map(({ label, entry }) => (
+              <div key={label} className="mt-1 flex items-center justify-between gap-2 text-xs">
+                <span className="text-muted-foreground">{label}</span>
+                <span className="font-semibold">
+                  {entry.current != null ? `${entry.current} g` : "Non défini"}
+                  {" → "}
+                  {entry.recommended != null ? `${entry.recommended} g` : "—"}
+                </span>
+              </div>
+            ))}
+
+            <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
+              Protéines basées sur ton poids et ton objectif · Lipides = minimum nutritionnel prévu
+              par la stratégie · Glucides = calories restantes.
+            </p>
+
+            {macroStrategy.limited && macroStrategy.limitReasons.length > 0 && (
+              <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+                {macroStrategy.limitReasons.join(" ")}
+              </p>
+            )}
           </div>
         )}
       </Section>
