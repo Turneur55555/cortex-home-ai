@@ -36,6 +36,7 @@ import { computeWeeklyActivitySummary } from "@/lib/fitness/activitySummary";
 import { computeDailyEAT } from "@/lib/fitness/eat";
 import { computeTEF } from "@/lib/fitness/tef";
 import { computeNEAT, isNeatActivityLevel } from "@/lib/fitness/neat";
+import { computeDailyTDEE } from "@/lib/fitness/tdee";
 import { localDateYMD } from "@/lib/dates";
 import { StatTile } from "@/components/fitness/StatTile";
 import { ComingSoonTile } from "@/components/fitness/ComingSoonTile";
@@ -116,6 +117,13 @@ function SanteNutritionnellePage() {
     eatKcal: dailyEAT.kcal,
   });
 
+  const dailyTDEE = computeDailyTDEE({
+    bmr,
+    neat: { kcal: dailyNEAT.kcal, method: dailyNEAT.method },
+    eatKcal: dailyEAT.kcal,
+    tefKcal: dailyTEF.totalKcal,
+  });
+
   const calorieGoal = nutritionGoals?.calories ?? null;
 
   const caloriesPct = pct(totals.calories, nutritionGoals?.calories);
@@ -155,7 +163,20 @@ function SanteNutritionnellePage() {
           ) : (
             <ComingSoonTile icon={<Flame className="h-4 w-4" />} label="Métabolisme de base" />
           )}
-          <ComingSoonTile icon={<Zap className="h-4 w-4" />} label="TDEE" />
+          {todayActivityLoading || metabolicProfileLoading || nutritionLoading ? (
+            <Skeleton className="h-[84px] rounded-2xl" />
+          ) : dailyTDEE.status === "complete" ? (
+            <StatTile
+              icon={<Zap className="h-4 w-4" />}
+              label="TDEE"
+              value={String(dailyTDEE.totalKcal)}
+              unit="kcal/j"
+              caption="Estimation"
+              title="Dépense quotidienne totale = BMR + NEAT + EAT + TEF"
+            />
+          ) : (
+            <InsufficientDataTile icon={<Zap className="h-4 w-4" />} label="TDEE" />
+          )}
           {calorieGoal != null ? (
             <StatTile
               icon={<TrendingUp className="h-4 w-4" />}
