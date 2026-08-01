@@ -2269,3 +2269,82 @@ rester manuel). Vérification faite sur les vrais workflows CI, pas une supposit
     (scope creep évité), signalé ici pour visibilité ; UI composition corporelle non vérifiée
     visuellement (authentification requise) ; pas de lissage/estimation robuste du Body Fat (assumé,
     §20) ; pas de normalisation inter-méthodes (assumé, §18/§19, préparé architecturalement).
+  - Fusionnée dans `main` le 2026-08-01, SHA de merge `4232871`, après synchronisation avec le
+    correctif signup (`ef54adf`) via un merge de `origin/main` dans la branche (conflit `MEMORY.md`
+    résolu manuellement — sections concaténées dans l'ordre chronologique, `types.ts` auto-mergé
+    proprement par git). CI complète verte (Typecheck, Supabase Migrations, RLS Regression Tests,
+    Audit Git↔Supabase Drift, Supabase project ref, Meal Slugs Sync Check — Types Sync non re-déclenché
+    sur ce commit précis, déjà validé sur le commit parent identique en contenu).
+- **Phase 6B — estimation Body Fat par mensurations (2026-08-01, branche
+  `claude/phase6b-body-fat-measurements`, NON mergée dans `main`)** : première méthode indirecte
+  (`measurements`) rendue réellement utilisable, au-dessus de la fondation Phase 6A.
+  - **Audit préalable** : `body_tracking` a déjà `waist`/`hips` (pré-6A) et `body_fat`/`body_fat_
+    method`/`body_fat_min_percent`/`body_fat_max_percent` (Phase 6A) — il manquait uniquement `neck`
+    (obligatoire pour la méthode Navy) et de quoi conserver la provenance EXACTE d'une estimation
+    (formule + snapshot taille/sexe). `metabolic_profile.sex` (`"homme"|"femme"`, `lib/fitness/
+    metabolism.ts#BiologicalSex`) et `user_preferences.height_cm` déjà disponibles et réutilisés tels
+    quels (`useMetabolicProfile()`/`useUserPreferences()`) — aucune resaisie demandée à l'utilisateur.
+    Aucune contrainte `UNIQUE(user_id, date)` sur `body_tracking` (seule la PK sur `id`) : plusieurs
+    mesures/jour déjà supportées structurellement, donc une estimation par mensurations crée
+    naturellement sa PROPRE ligne sans jamais écraser une mesure DEXA/bio-impédance du même jour (§15
+    du brief) — aucun mécanisme supplémentaire nécessaire, `useAddBodyMeasurement` (INSERT simple,
+    jamais un upsert par date) suffisait déjà.
+  - **Formule retenue et documentée** : U.S. Navy Circumference Method (Hodgdon, J.A., & Beckett, M.B.,
+    1984, Naval Health Research Center — rapports 84-11 hommes / 84-29 femmes, codifiée depuis dans les
+    standards de composition corporelle de l'armée américaine, AR 600-9). Formule EXACTE (calibrée en
+    POUCES — conversion cm→inches explicite en interne, jamais les coefficients appliqués directement
+    à des centimètres, §3 du brief) :
+    - Homme : `495 / (1.0324 − 0.19077·log10(waist_in − neck_in) + 0.15456·log10(height_in)) − 450`
+    - Femme : `495 / (1.29579 − 0.35004·log10(waist_in + hip_in − neck_in) + 0.221·log10(height_in)) − 450`
+    - Mensurations requises : taille + tour de taille + tour de cou (homme) ; + tour de hanches
+      (femme) — jamais une donnée demandée sans nécessité pour le calcul (§4/§18 du brief).
+  - **Migration `20260811090000_body_fat_measurements_formula.sql`** : `body_tracking` + `neck`
+    (double precision, CHECK 15-60 cm), `body_fat_formula` (text, CHECK IN `('navy_v1')` — identifiant
+    STABLE distinct de `body_fat_method='measurements'`, §8 du brief : jamais perdre la formule exacte
+    derrière la seule catégorie), `body_fat_height_cm`/`body_fat_sex` (snapshot de la taille/sexe
+    RÉELLEMENT utilisés pour CETTE estimation — jamais recalculés avec un profil futur modifié, §7/§28
+    du brief). RLS déjà correcte, s'applique automatiquement. Appliquée via `execute_sql` MCP. Vérifié
+    post-migration : 86 tables (inchangé, aucune nouvelle table). `types.ts` régénéré, diff propre
+    (+12 lignes, additions uniquement).
+  - **`lib/fitness/bodyFatMeasurements.ts`** (nouveau, logique pure) : `estimateBodyFatFromMeasurements`
+    — validation en 2 temps (données manquantes → `missing_data` ; géométrie invalide `waist ≤ neck`
+    (homme) ou `waist+hip ≤ neck` (femme) → `invalid_measurements`, JAMAIS un NaN silencieux, §10 du
+    brief) puis calcul + arrondi centralisé à 1 décimale (§12) + vérification finale que le résultat
+    reste dans la plage plausible existante (`isValidBodyFatPercent`, 1-70 %, réutilisée depuis Phase
+    6A — pas une seconde définition). `confidence` réutilise EXCLUSIVEMENT `getBodyFatConfidence(
+    "measurements")` du mapping centralisé Phase 6A (`medium`) — aucun second système créé (§13).
+    `computeFatMass`/`computeLeanMass` de Phase 6A réutilisées telles quelles pour la prévisualisation
+    (§23) — masse maigre toujours distincte de masse musculaire (§24, règle inchangée).
+  - **UI** : nouveau composant `EstimateBodyFatSheet.tsx`, déclenché depuis la carte "Composition
+    corporelle" existante de `/corps` (état vide ET état rempli, §17 du brief) — pas de nouvelle page.
+    Affiche taille/sexe "déjà connus" en lecture seule ; si l'un des deux manque, bloque avec un
+    message explicite renvoyant au profil métabolique (pas de mini-formulaire dupliqué). Champs
+    dynamiques selon le sexe (§18 : tour de hanches affiché uniquement pour "femme"), instructions de
+    mesure courtes et spécifiques à la méthode Navy pour chaque tour (§21), poids préremplis depuis la
+    dernière pesée connue (visible/éditable, même pattern que Phase 6A). Preview live avant
+    enregistrement (Body Fat ≈ X %, méthode, confiance, masse grasse/maigre si poids disponible, §19),
+    explication courte sans jargon (§20). Bouton "Enregistrer" désactivé tant que `status !== "ok"`.
+  - **Confirmation §32** : aucune écriture automatique de `nutrition_goals`/aucune modification de
+    `macroStrategy.ts`/`calorieStrategy.ts`/`tdee.ts`/`neat.ts`/`metabolism.ts` cette phase (`git diff
+    --stat origin/main` sur ces fichiers : vide, confirmé).
+  - **Tests** (`bodyFatMeasurements.test.ts`, 25 tests) : formule homme (cas nominal calculé et
+    vérifié à la main avec `toBeCloseTo`, décimales, conversion d'unités croisée cm↔inches explicite,
+    waist proche de neck, waist≤neck invalide, NaN/Infinity/négatif/zéro), formule femme (cas nominal,
+    décimales, hanches manquantes, géométrie invalide, valeurs invalides), invariants (§27 : hausse
+    taille→BF↑, hausse cou→BF↓, hausse taille corporelle→BF↓, hausse hanches (femme)→BF↑), données
+    manquantes (sexe/taille/taille-tour/cou absents), précision (toujours 1 décimale), méthode/
+    confiance (reprend le mapping centralisé, jamais un second système). 883 tests au total (858+25).
+  - `npx tsc --noEmit` / `npx eslint` (fichiers modifiés) / `npx vitest run` (883 passed) / `npm run
+    build` : tous verts. `node scripts/validate-supabase.mjs` : migrations idempotentes OK. Aucun
+    `as any` introduit.
+  - **Vérification visuelle mobile NON effectuée** — `vite dev` a redémarré avec succès, mais `/corps`
+    étant protégée par authentification, la navigation redirige vers `/login` sans session Supabase
+    disponible dans ce sandbox ; aucune erreur JS liée à cette phase détectée (hors le warning
+    d'hydratation pré-existant sur `/login`, sans rapport).
+  - **Limites connues** : le tour de cou n'est saisissable QUE via la nouvelle sheet d'estimation, pas
+    via le formulaire de mensurations principal ni `BodyHistorySheet` (hors scope explicite de ce
+    brief, qui ne demandait que le flux d'estimation — pourrait être ajouté en historique/édition dans
+    une phase future si souhaité) ; pas de normalisation entre `measurements` et les autres méthodes
+    (assumé, hérité de Phase 6A) ; aucune donnée de test réelle (mensurations physiques) disponible
+    pour valider empiriquement la formule contre une DEXA réelle — seule la cohérence mathématique de
+    l'implémentation vs. la formule publiée a été vérifiée.

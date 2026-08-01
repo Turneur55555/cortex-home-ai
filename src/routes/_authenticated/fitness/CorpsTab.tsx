@@ -10,6 +10,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { BodyHistorySheet } from "@/components/fitness/BodyHistorySheet";
+import { EstimateBodyFatSheet } from "@/components/fitness/EstimateBodyFatSheet";
 import {
   Area,
   AreaChart,
@@ -69,6 +70,7 @@ export function CorpsTab() {
   } | null>(null);
   const [period, setPeriod] = useState<"semaine" | "mois" | "trimestre">("trimestre");
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [estimateSheetOpen, setEstimateSheetOpen] = useState(false);
 
   const openWithFocus = (f: MeasurementField | null) => {
     setFocusField(f);
@@ -203,6 +205,7 @@ export function CorpsTab() {
       <BodyCompositionCard
         snapshot={bodyCompositionSnapshot}
         onAddClick={() => setQuickField({ key: "body_fat", label: "Masse grasse %", unit: "%" })}
+        onEstimateClick={() => setEstimateSheetOpen(true)}
       />
 
       <div className="rounded-2xl border border-border bg-card p-4 shadow-card">
@@ -340,6 +343,12 @@ export function CorpsTab() {
         />
       )}
       {historyOpen && <BodyHistorySheet onClose={() => setHistoryOpen(false)} />}
+      {estimateSheetOpen && (
+        <EstimateBodyFatSheet
+          latestWeightKg={latestWeight}
+          onClose={() => setEstimateSheetOpen(false)}
+        />
+      )}
     </section>
   );
 }
@@ -895,9 +904,11 @@ function QuickMeasurementSheet({
 function BodyCompositionCard({
   snapshot,
   onAddClick,
+  onEstimateClick,
 }: {
   snapshot: ReturnType<typeof computeBodyCompositionSnapshot> | null;
   onAddClick: () => void;
+  onEstimateClick: () => void;
 }) {
   if (!snapshot || snapshot.bodyFatPercent == null) {
     return (
@@ -905,13 +916,23 @@ function BodyCompositionCard({
         <p className="text-xs font-medium text-muted-foreground/70">
           Composition corporelle non renseignée
         </p>
-        <button
-          type="button"
-          onClick={onAddClick}
-          className="mt-2 text-[11px] font-semibold text-primary"
-        >
-          Ajouter une mesure
-        </button>
+        <div className="mt-2 flex items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={onAddClick}
+            className="text-[11px] font-semibold text-primary"
+          >
+            Ajouter une mesure
+          </button>
+          <span className="text-[11px] text-muted-foreground/50">·</span>
+          <button
+            type="button"
+            onClick={onEstimateClick}
+            className="text-[11px] font-semibold text-primary"
+          >
+            Estimer avec mes mensurations
+          </button>
+        </div>
       </div>
     );
   }
@@ -970,10 +991,19 @@ function BodyCompositionCard({
         </p>
       )}
 
-      <div className="mt-3 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-        {methodLabel && <span className="font-medium text-foreground">{methodLabel}</span>}
-        {methodLabel && confidenceLabel && <span>·</span>}
-        {confidenceLabel && <span>{confidenceLabel}</span>}
+      <div className="mt-3 flex items-center justify-between gap-1.5">
+        <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          {methodLabel && <span className="font-medium text-foreground">{methodLabel}</span>}
+          {methodLabel && confidenceLabel && <span>·</span>}
+          {confidenceLabel && <span>{confidenceLabel}</span>}
+        </div>
+        <button
+          type="button"
+          onClick={onEstimateClick}
+          className="text-[11px] font-semibold text-primary"
+        >
+          Estimer avec mes mensurations
+        </button>
       </div>
     </div>
   );
