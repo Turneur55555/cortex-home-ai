@@ -1,5 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { History, Loader2, Minus, Ruler, Sparkles, TrendingDown, TrendingUp } from "lucide-react";
+import {
+  History,
+  Loader2,
+  Minus,
+  Ruler,
+  Scale,
+  Sparkles,
+  TrendingDown,
+  TrendingUp,
+} from "lucide-react";
 import { BodyHistorySheet } from "@/components/fitness/BodyHistorySheet";
 import {
   Area,
@@ -13,10 +22,7 @@ import {
 } from "recharts";
 import { format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
-import {
-  useAddBodyMeasurement,
-  useBodyMeasurements,
-} from "@/hooks/use-fitness";
+import { useAddBodyMeasurement, useBodyMeasurements } from "@/hooks/use-fitness";
 import { FabAdd, Field, FormGroup, Sheet, SubmitButton } from "@/components/shared/FormComponents";
 import type { MeasurementField } from "@/components/fitness/BodyMap";
 import {
@@ -28,6 +34,14 @@ import {
   movingAverage,
   type BodyField,
 } from "@/lib/fitness/body";
+import {
+  BODY_FAT_DIRECT_ENTRY_METHODS,
+  BODY_FAT_METHOD_LABELS,
+  CONFIDENCE_LABELS,
+  computeBodyCompositionSnapshot,
+  isKnownBodyFatMethod,
+  type BodyFatMethod,
+} from "@/lib/fitness/bodyComposition";
 
 // Re-export so existing code referencing this path still compiles
 export type { MeasurementField };
@@ -44,12 +58,15 @@ type BodyRow = {
 
 type AllBodyField = keyof BodyRow | "weight" | "muscle_mass" | "body_fat";
 
-
 export function CorpsTab() {
   const { data, isLoading } = useBodyMeasurements();
   const [open, setOpen] = useState(false);
   const [focusField, setFocusField] = useState<MeasurementField | null>(null);
-  const [quickField, setQuickField] = useState<{ key: AllBodyField; label: string; unit: string } | null>(null);
+  const [quickField, setQuickField] = useState<{
+    key: AllBodyField;
+    label: string;
+    unit: string;
+  } | null>(null);
   const [period, setPeriod] = useState<"semaine" | "mois" | "trimestre">("trimestre");
   const [historyOpen, setHistoryOpen] = useState(false);
 
@@ -122,6 +139,23 @@ export function CorpsTab() {
   const latestMuscle = findLatestValue(data, "muscle_mass");
   const latestBodyFat = findLatestValue(data, "body_fat");
 
+  // Composition corporelle (Phase 6A) — snapshot le plus récent AVEC Body
+  // Fat renseigné, poids/BF pris sur la MÊME ligne (jamais recombinés
+  // entre deux dates différentes, voir bodyComposition.ts).
+  const latestBodyFatRow = data?.find((r) => typeof r.body_fat === "number");
+  const bodyCompositionSnapshot = latestBodyFatRow
+    ? computeBodyCompositionSnapshot({
+        date: latestBodyFatRow.date,
+        weightKg: latestBodyFatRow.weight,
+        bodyFatPercent: latestBodyFatRow.body_fat,
+        bodyFatMinPercent: latestBodyFatRow.body_fat_min_percent,
+        bodyFatMaxPercent: latestBodyFatRow.body_fat_max_percent,
+        method: isKnownBodyFatMethod(latestBodyFatRow.body_fat_method)
+          ? latestBodyFatRow.body_fat_method
+          : null,
+      })
+    : null;
+
   return (
     <section className="flex flex-col gap-5">
       <div className="grid grid-cols-3 gap-3">
@@ -164,8 +198,12 @@ export function CorpsTab() {
         <span className="text-xs font-semibold text-primary">Ouvrir</span>
       </button>
 
-
       <FormScoreCard score={formScore.score} plateau={plateau} count={data?.length ?? 0} />
+
+      <BodyCompositionCard
+        snapshot={bodyCompositionSnapshot}
+        onAddClick={() => setQuickField({ key: "body_fat", label: "Masse grasse %", unit: "%" })}
+      />
 
       <div className="rounded-2xl border border-border bg-card p-4 shadow-card">
         <div className="mb-3 flex items-center justify-between gap-2">
@@ -297,6 +335,7 @@ export function CorpsTab() {
           field={quickField.key}
           label={quickField.label}
           unit={quickField.unit}
+          latestWeight={latestWeight}
           onClose={() => setQuickField(null)}
         />
       )}
@@ -348,7 +387,9 @@ function FormScoreCard({
         <div className="text-right">
           <p className={"text-2xl font-bold tabular-nums " + tone}>
             {count === 0 ? "—" : score}
-            {count > 0 && <span className="ml-0.5 text-xs font-medium text-muted-foreground">/100</span>}
+            {count > 0 && (
+              <span className="ml-0.5 text-xs font-medium text-muted-foreground">/100</span>
+            )}
           </p>
         </div>
       </div>
@@ -374,7 +415,10 @@ function Stat({
   return (
     <button
       type="button"
-      onClick={() => { navigator.vibrate?.(30); onClick?.(); }}
+      onClick={() => {
+        navigator.vibrate?.(30);
+        onClick?.();
+      }}
       disabled={!onClick}
       className="rounded-2xl border border-border bg-card p-3 shadow-card text-left active:opacity-70 disabled:cursor-default w-full"
     >
@@ -387,13 +431,10 @@ function Stat({
           <span className="ml-1 text-xs font-normal text-muted-foreground">{unit}</span>
         )}
       </p>
-      {onClick && (
-        <p className="mt-0.5 text-[9px] text-primary/70">Tap pour modifier</p>
-      )}
+      {onClick && <p className="mt-0.5 text-[9px] text-primary/70">Tap pour modifier</p>}
     </button>
   );
 }
-
 
 function BodyMeasurementSheet({
   onClose,
@@ -417,6 +458,7 @@ function BodyMeasurementSheet({
     right_thigh: "",
     notes: "",
   });
+  const [bodyFatMethod, setBodyFatMethod] = useState<BodyFatMethod | null>(null);
 
   useEffect(() => {
     if (!focusField) return;
@@ -439,6 +481,7 @@ function BodyMeasurementSheet({
       weight: num(form.weight),
       muscle_mass: num(form.muscle_mass),
       body_fat: num(form.body_fat),
+      body_fat_method: form.body_fat.trim() !== "" ? bodyFatMethod : null,
       chest: num(form.chest),
       waist: num(form.waist),
       hips: num(form.hips),
@@ -489,6 +532,30 @@ function BodyMeasurementSheet({
               onChange={(v) => setForm({ ...form, body_fat: v })}
             />
           </div>
+          {form.body_fat.trim() !== "" && (
+            <div className="mt-3">
+              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Méthode de mesure du Body Fat
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {BODY_FAT_DIRECT_ENTRY_METHODS.map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setBodyFatMethod(bodyFatMethod === m ? null : m)}
+                    className={
+                      "rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-colors " +
+                      (bodyFatMethod === m
+                        ? "bg-gradient-primary text-primary-foreground"
+                        : "border border-border bg-card/50 text-muted-foreground hover:text-foreground")
+                    }
+                  >
+                    {BODY_FAT_METHOD_LABELS[m]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </FormGroup>
 
         <FormGroup title="Tronc" subtitle="Tour en cm">
@@ -650,9 +717,7 @@ function MeasurementsCard({
               <p className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
                 {g.title}
               </p>
-              <div
-                className={`grid gap-2 ${g.items.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}
-              >
+              <div className={`grid gap-2 ${g.items.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}>
                 {g.items.map((it) => (
                   <MeasurementChip
                     key={it.key}
@@ -690,8 +755,7 @@ function MeasurementChip({
   accent: string;
   onClick?: () => void;
 }) {
-  const delta =
-    value != null && previous != null ? Math.round((value - previous) * 10) / 10 : null;
+  const delta = value != null && previous != null ? Math.round((value - previous) * 10) / 10 : null;
   // Couleur contextuelle: taille/hanches ↓ = vert, bras/cuisses ↑ = vert,
   // poitrine = neutre (peut être musculaire ou graisseux).
   const direction: "good" | "bad" | "neutral" =
@@ -700,7 +764,10 @@ function MeasurementChip({
   return (
     <button
       type="button"
-      onClick={() => { navigator.vibrate?.(30); onClick?.(); }}
+      onClick={() => {
+        navigator.vibrate?.(30);
+        onClick?.();
+      }}
       className={`relative w-full overflow-hidden rounded-xl border border-border bg-gradient-to-br ${accent} p-2.5 text-left active:opacity-70`}
     >
       <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
@@ -710,9 +777,7 @@ function MeasurementChip({
         <span className="text-lg font-bold tabular-nums text-foreground">
           {value != null ? value : "—"}
         </span>
-        {value != null && (
-          <span className="text-[10px] font-medium text-muted-foreground">cm</span>
-        )}
+        {value != null && <span className="text-[10px] font-medium text-muted-foreground">cm</span>}
       </div>
       {delta != null && (
         <div
@@ -740,39 +805,42 @@ function MeasurementChip({
   );
 }
 
-
 function QuickMeasurementSheet({
   field,
   label,
   unit,
+  latestWeight,
   onClose,
 }: {
   field: AllBodyField;
   label: string;
   unit: string;
+  /** Dernier poids connu — prérempli pour une mesure Body Fat (§27 du brief Phase 6A) : jamais redemandé si déjà disponible. */
+  latestWeight?: number | null;
   onClose: () => void;
 }) {
   const add = useAddBodyMeasurement();
   const [date, setDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [value, setValue] = useState("");
+  const isBodyFat = field === "body_fat";
+  const [method, setMethod] = useState<BodyFatMethod | null>(null);
+  const [weight, setWeight] = useState(latestWeight != null ? String(latestWeight) : "");
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const num = (v: string) => (v.trim() === "" ? null : Number(v));
-    await add.mutateAsync({ date, [field]: num(value) });
+    await add.mutateAsync({
+      date,
+      [field]: num(value),
+      ...(isBodyFat ? { body_fat_method: method, weight: num(weight) } : {}),
+    });
     onClose();
   };
 
   return (
     <Sheet title={label} onClose={onClose}>
       <form onSubmit={submit} className="space-y-4">
-        <Field
-          label="Date"
-          type="date"
-          value={date}
-          onChange={setDate}
-          required
-        />
+        <Field label="Date" type="date" value={date} onChange={setDate} required />
         <Field
           label={`${label} (${unit})`}
           type="number"
@@ -780,9 +848,133 @@ function QuickMeasurementSheet({
           value={value}
           onChange={setValue}
         />
+        {isBodyFat && (
+          <>
+            <div>
+              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Méthode
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {BODY_FAT_DIRECT_ENTRY_METHODS.map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setMethod(method === m ? null : m)}
+                    className={
+                      "rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-colors " +
+                      (method === m
+                        ? "bg-gradient-primary text-primary-foreground"
+                        : "border border-border bg-card/50 text-muted-foreground hover:text-foreground")
+                    }
+                  >
+                    {BODY_FAT_METHOD_LABELS[m]}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <Field
+              label="Poids au moment de la mesure (kg)"
+              type="number"
+              step="0.1"
+              value={weight}
+              onChange={setWeight}
+            />
+            {latestWeight != null && (
+              <p className="-mt-2 text-[11px] text-muted-foreground">
+                Prérempli avec ta dernière pesée ({latestWeight} kg) — modifiable.
+              </p>
+            )}
+          </>
+        )}
         <SubmitButton pending={add.isPending}>Enregistrer</SubmitButton>
       </form>
     </Sheet>
   );
 }
 
+function BodyCompositionCard({
+  snapshot,
+  onAddClick,
+}: {
+  snapshot: ReturnType<typeof computeBodyCompositionSnapshot> | null;
+  onAddClick: () => void;
+}) {
+  if (!snapshot || snapshot.bodyFatPercent == null) {
+    return (
+      <div className="rounded-2xl border border-dashed border-border bg-card/40 p-4 text-center">
+        <p className="text-xs font-medium text-muted-foreground/70">
+          Composition corporelle non renseignée
+        </p>
+        <button
+          type="button"
+          onClick={onAddClick}
+          className="mt-2 text-[11px] font-semibold text-primary"
+        >
+          Ajouter une mesure
+        </button>
+      </div>
+    );
+  }
+
+  const methodLabel = snapshot.method != null ? BODY_FAT_METHOD_LABELS[snapshot.method] : null;
+  const confidenceLabel =
+    snapshot.confidence != null ? CONFIDENCE_LABELS[snapshot.confidence] : null;
+
+  return (
+    <div className="rounded-2xl border border-white/5 bg-gradient-to-b from-card/95 to-card/70 p-4 shadow-card">
+      <div className="mb-3 flex items-center gap-2">
+        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/15 text-primary">
+          <Scale className="h-3.5 w-3.5" />
+        </span>
+        <h3 className="text-sm font-semibold">Composition corporelle</h3>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        {snapshot.weightKg != null && (
+          <div>
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Poids</p>
+            <p className="text-sm font-bold">{snapshot.weightKg} kg</p>
+          </div>
+        )}
+        <div>
+          <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            {snapshot.isRange ? "Masse grasse (estimation)" : "Masse grasse"}
+          </p>
+          <p className="text-sm font-bold text-primary">
+            {snapshot.isRange
+              ? `${snapshot.bodyFatMinPercent}–${snapshot.bodyFatMaxPercent} %`
+              : `${snapshot.bodyFatPercent} %`}
+          </p>
+        </div>
+        {snapshot.fatMassKg != null && (
+          <div>
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Masse grasse estimée
+            </p>
+            <p className="text-sm font-bold">{snapshot.fatMassKg} kg</p>
+          </div>
+        )}
+        {snapshot.leanMassKg != null && (
+          <div>
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Masse maigre
+            </p>
+            <p className="text-sm font-bold">{snapshot.leanMassKg} kg</p>
+          </div>
+        )}
+      </div>
+
+      {snapshot.weightKg == null && (
+        <p className="mt-2 text-[11px] text-muted-foreground">
+          Poids indisponible pour cette mesure — masse grasse/maigre non calculées.
+        </p>
+      )}
+
+      <div className="mt-3 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+        {methodLabel && <span className="font-medium text-foreground">{methodLabel}</span>}
+        {methodLabel && confidenceLabel && <span>·</span>}
+        {confidenceLabel && <span>{confidenceLabel}</span>}
+      </div>
+    </div>
+  );
+}
