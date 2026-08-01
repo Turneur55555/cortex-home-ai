@@ -33,11 +33,21 @@ export function computeBMR(
 }
 
 /**
- * Dépense quotidienne estimée (TDEE) = BMR × niveau d'activité, avec un
- * ajustement d'objectif optionnel (déficit/surplus), kcal/jour.
+ * Dépense quotidienne estimée (TDEE) = BMR × niveau d'activité, kcal/jour.
+ * Ne représente que la dépense — jamais un objectif calorique (voir
+ * `computeCalorieTarget` pour l'ajustement déficit/surplus).
  */
-export function computeTDEE(bmr: number, activityLevel: number, goalDeltaKcal = 0): number {
-  return Math.max(1200, Math.round(bmr * activityLevel) + goalDeltaKcal);
+export function computeTDEE(bmr: number, activityLevel: number): number {
+  return Math.round(bmr * activityLevel);
+}
+
+/**
+ * Objectif calorique quotidien = TDEE + ajustement d'objectif
+ * (déficit/surplus), kcal/jour. Distinct du TDEE : ceci est une cible
+ * nutritionnelle, pas une estimation de dépense.
+ */
+export function computeCalorieTarget(tdee: number, goalDeltaKcal = 0): number {
+  return Math.max(1200, Math.round(tdee) + goalDeltaKcal);
 }
 
 /** IMC = poids (kg) / taille (m)². Retourne null si une entrée est invalide. */

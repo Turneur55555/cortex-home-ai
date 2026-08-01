@@ -83,7 +83,7 @@ function SanteNutritionnellePage() {
 
   const weeklyActivity = computeWeeklyActivitySummary(workouts ?? undefined, weight, 7);
 
-  const tdeeGoal = nutritionGoals?.calories ?? null;
+  const calorieGoal = nutritionGoals?.calories ?? null;
 
   const caloriesPct = pct(totals.calories, nutritionGoals?.calories);
   const proteinsPct = pct(totals.proteins, nutritionGoals?.proteins);
@@ -112,17 +112,18 @@ function SanteNutritionnellePage() {
       {/* Métabolisme */}
       <Section title="Métabolisme">
         <div className="grid grid-cols-3 gap-2">
-          {tdeeGoal != null ? (
+          <ComingSoonTile icon={<Flame className="h-4 w-4" />} label="Métabolisme de base" />
+          <ComingSoonTile icon={<Zap className="h-4 w-4" />} label="TDEE" />
+          {calorieGoal != null ? (
             <StatTile
-              icon={<Zap className="h-4 w-4" />}
-              label="TDEE estimé"
-              value={String(tdeeGoal)}
+              icon={<TrendingUp className="h-4 w-4" />}
+              label="Objectif calorique"
+              value={String(calorieGoal)}
               unit="kcal/j"
             />
           ) : (
-            <ComingSoonTile icon={<Zap className="h-4 w-4" />} label="TDEE" />
+            <ComingSoonTile icon={<TrendingUp className="h-4 w-4" />} label="Objectif calorique" />
           )}
-          <ComingSoonTile icon={<Flame className="h-4 w-4" />} label="Métabolisme de base" />
           <ComingSoonTile icon={<Gauge className="h-4 w-4" />} label="Dépense adaptative" />
           <ComingSoonTile icon={<Footprints className="h-4 w-4" />} label="NEAT" />
           <ComingSoonTile icon={<Timer className="h-4 w-4" />} label="EAT" />
@@ -134,7 +135,7 @@ function SanteNutritionnellePage() {
             label="Adaptation métabolique"
           />
         </div>
-        {tdeeGoal == null && (
+        {calorieGoal == null && (
           <p className="mt-2 px-1 text-[11px] leading-relaxed text-muted-foreground">
             Définis tes objectifs caloriques dans{" "}
             <Link
@@ -143,7 +144,7 @@ function SanteNutritionnellePage() {
             >
               Nutrition
             </Link>{" "}
-            pour voir ta dépense quotidienne estimée.
+            pour voir ton objectif calorique quotidien.
           </p>
         )}
       </Section>

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { bmiCategory, computeBMI, computeBMR, computeTDEE } from "./metabolism";
+import {
+  bmiCategory,
+  computeBMI,
+  computeBMR,
+  computeCalorieTarget,
+  computeTDEE,
+} from "./metabolism";
 
 describe("computeBMR", () => {
   it("computes Mifflin-St Jeor BMR for a man", () => {
@@ -18,13 +24,20 @@ describe("computeBMR", () => {
 });
 
 describe("computeTDEE", () => {
-  it("scales BMR by activity level and applies a goal delta", () => {
+  it("scales BMR by activity level only — no goal adjustment", () => {
     expect(computeTDEE(1780, 1.55)).toBe(2759);
-    expect(computeTDEE(1780, 1.55, -300)).toBe(2459);
+  });
+});
+
+describe("computeCalorieTarget", () => {
+  it("applies a goal delta on top of the TDEE", () => {
+    expect(computeCalorieTarget(2759)).toBe(2759);
+    expect(computeCalorieTarget(2759, -300)).toBe(2459);
+    expect(computeCalorieTarget(2759, 300)).toBe(3059);
   });
 
   it("never returns below the 1200 kcal floor", () => {
-    expect(computeTDEE(800, 1, -1000)).toBe(1200);
+    expect(computeCalorieTarget(800, -1000)).toBe(1200);
   });
 });
 

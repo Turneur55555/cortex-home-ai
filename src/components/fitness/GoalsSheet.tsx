@@ -2,7 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import { Calculator, ChevronDown, ChevronUp, RotateCcw } from "lucide-react";
 import { useUpsertNutritionGoals, type NutritionGoals } from "@/hooks/use-fitness";
 import { Field, Sheet, SubmitButton } from "@/components/shared/FormComponents";
-import { ACTIVITY_LEVELS, computeBMR, computeTDEE, GOAL_DELTAS } from "@/lib/fitness/metabolism";
+import {
+  ACTIVITY_LEVELS,
+  computeBMR,
+  computeCalorieTarget,
+  computeTDEE,
+  GOAL_DELTAS,
+} from "@/lib/fitness/metabolism";
 
 interface GoalsSheetProps {
   current: NutritionGoals | null;
@@ -81,8 +87,8 @@ export function GoalsSheet({ current, onClose }: GoalsSheetProps) {
     activity: "1.55",
     goal: "maintien",
   });
-  const [tdeeResult, setTdeeResult] = useState<{
-    tdee: number;
+  const [calcResult, setCalcResult] = useState<{
+    calorieTarget: number;
     proteins: number;
     carbs: number;
     fats: number;
@@ -96,20 +102,21 @@ export function GoalsSheet({ current, onClose }: GoalsSheetProps) {
     const bmr = computeBMR(calc.sex === "homme" ? "homme" : "femme", age, w, h);
     if (bmr == null) return;
     const delta = GOAL_DELTAS.find((g) => g.value === calc.goal)?.delta ?? 0;
-    const tdee = computeTDEE(bmr, act, delta);
+    const tdee = computeTDEE(bmr, act);
+    const calorieTarget = computeCalorieTarget(tdee, delta);
     const proteins = Math.round(w * 1.8);
     const fats = Math.round(w * 1.0);
-    const carbs = Math.max(0, Math.round((tdee - proteins * 4 - fats * 9) / 4));
-    setTdeeResult({ tdee, proteins, carbs, fats });
+    const carbs = Math.max(0, Math.round((calorieTarget - proteins * 4 - fats * 9) / 4));
+    setCalcResult({ calorieTarget, proteins, carbs, fats });
   };
 
   const applyTDEE = () => {
-    if (!tdeeResult) return;
+    if (!calcResult) return;
     const next = {
-      calories: String(tdeeResult.tdee),
-      proteins: String(tdeeResult.proteins),
-      carbs: String(tdeeResult.carbs),
-      fats: String(tdeeResult.fats),
+      calories: String(calcResult.calorieTarget),
+      proteins: String(calcResult.proteins),
+      carbs: String(calcResult.carbs),
+      fats: String(calcResult.fats),
     };
     setForm(next);
     lastAutoRef.current = { proteins: next.proteins, carbs: next.carbs, fats: next.fats };
@@ -117,7 +124,7 @@ export function GoalsSheet({ current, onClose }: GoalsSheetProps) {
     setShowRecalcPrompt(false);
     setPulseKey((k) => k + 1);
     setShowCalc(false);
-    setTdeeResult(null);
+    setCalcResult(null);
   };
 
   const num = (v: string) => (v.trim() === "" ? null : Number(v));
@@ -253,11 +260,13 @@ export function GoalsSheet({ current, onClose }: GoalsSheetProps) {
                 </select>
               </div>
 
-              {tdeeResult && (
+              {calcResult && (
                 <div className="rounded-xl bg-primary/10 px-3 py-2 text-center text-xs">
-                  <p className="font-bold text-primary text-sm">{tdeeResult.tdee} kcal/j</p>
+                  <p className="font-bold text-primary text-sm">
+                    {calcResult.calorieTarget} kcal/j
+                  </p>
                   <p className="text-muted-foreground mt-0.5">
-                    L{tdeeResult.fats}g · G{tdeeResult.carbs}g · P{tdeeResult.proteins}g
+                    L{calcResult.fats}g · G{calcResult.carbs}g · P{calcResult.proteins}g
                   </p>
                 </div>
               )}
@@ -270,7 +279,7 @@ export function GoalsSheet({ current, onClose }: GoalsSheetProps) {
                 >
                   Calculer
                 </button>
-                {tdeeResult && (
+                {calcResult && (
                   <button
                     type="button"
                     onClick={applyTDEE}
