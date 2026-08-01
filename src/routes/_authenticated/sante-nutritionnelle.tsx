@@ -38,6 +38,7 @@ import { computeTEF } from "@/lib/fitness/tef";
 import { computeNEAT, isNeatActivityLevel } from "@/lib/fitness/neat";
 import { computeDailyTDEE } from "@/lib/fitness/tdee";
 import { ADAPTIVE_TDEE_THRESHOLDS, computeAdaptiveTdee } from "@/lib/fitness/adaptiveTdee";
+import { computeAdaptiveTdeeCalibration } from "@/lib/fitness/adaptiveTdeeCalibration";
 import { addDaysYMD, localDateYMD } from "@/lib/dates";
 import { StatTile } from "@/components/fitness/StatTile";
 import { ComingSoonTile } from "@/components/fitness/ComingSoonTile";
@@ -141,6 +142,13 @@ function SanteNutritionnellePage() {
     today,
   });
 
+  const adaptiveTdeeCalibration = computeAdaptiveTdeeCalibration({
+    modeledTdeeKcal: dailyTDEE.totalKcal,
+    observedTdeeKcal: adaptiveTdee.observedTdeeKcal,
+    observedStatus: adaptiveTdee.status,
+    observedConfidence: adaptiveTdee.confidence,
+  });
+
   const calorieGoal = nutritionGoals?.calories ?? null;
 
   const caloriesPct = pct(totals.calories, nutritionGoals?.calories);
@@ -221,6 +229,26 @@ function SanteNutritionnellePage() {
               }
               title={`Dépense estimée à partir de tes calories réellement consommées et de l'évolution de ton poids — ${adaptiveTdee.reason}`}
             />
+          )}
+          {bodyLoading || nutritionRangeLoading ? (
+            <Skeleton className="h-[84px] rounded-2xl" />
+          ) : adaptiveTdeeCalibration.adaptiveTdeeKcal != null ? (
+            <StatTile
+              icon={<Gauge className="h-4 w-4" />}
+              label="TDEE adaptatif"
+              value={String(adaptiveTdeeCalibration.adaptiveTdeeKcal)}
+              unit="kcal/j"
+              caption={
+                adaptiveTdeeCalibration.state === "adapted"
+                  ? "Basé sur ton historique"
+                  : adaptiveTdeeCalibration.state === "calibrating"
+                    ? "Calibration en cours"
+                    : "Modèle initial"
+              }
+              title={`Meilleure estimation personnalisée de Cortex (modèle + observation, sans jamais remplacer l'un par l'autre) — ${adaptiveTdeeCalibration.reason}`}
+            />
+          ) : (
+            <ComingSoonTile icon={<Gauge className="h-4 w-4" />} label="TDEE adaptatif" />
           )}
           {todayActivityLoading || metabolicProfileLoading ? (
             <Skeleton className="h-[84px] rounded-2xl" />
