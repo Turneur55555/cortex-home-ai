@@ -1579,3 +1579,40 @@ rester manuel). Vérification faite sur les vrais workflows CI, pas une supposit
   - **`useMetabolicProfile`/`MetabolicProfileSheet`** mis à jour en conséquence (upsert/lecture de
     catégories, sélecteur UI inchangé visuellement, valeurs stockées changées) — `BMR`/`EAT`/`TEF`
     et `sante-nutritionnelle.tsx` **non touchés** (compatibles sans modification, structurellement).
+- **Phase 2E — moteur TDEE (2026-08-01, branche `claude/phase2e-tdee-engine`, NON mergée dans
+  `main`)** : premier TDEE Cortex, formule stricte `TDEE = BMR + NEAT + EAT + TEF`, aucune autre
+  composante (pas d'objectif calorique, pas de déficit/surplus voulu, pas de prédiction, pas
+  d'adaptation métabolique — ce sera un futur "TDEE adaptatif" distinct).
+  - **`lib/fitness/tdee.ts`** (logique pure, zéro React/Supabase) : `computeDailyTDEE(input)` agrège
+    des composantes déjà calculées par l'appelant (ne connaît aucune date, fonctionne pour n'importe
+    quel jour). `TDEEInput.neat` accepte `{ kcal, method }` — le sous-ensemble du résultat de
+    `computeNEAT`. `status: "complete" | "incomplete"` — **complete** seulement si BMR ET NEAT sont
+    tous deux disponibles ; EAT/TEF sont TOUJOURS des nombres réels (0 = vraie valeur — pas de séance
+    /pas de macro consommé aujourd'hui — jamais "inconnu"). Si BMR ou NEAT manque → `totalKcal:
+    null`, jamais un total partiel silencieusement calculé sur les composantes disponibles (testé
+    explicitement sur l'exemple du brief : BMR=1650, EAT=300, TEF=200, NEAT=inconnu ne doit jamais
+    afficher "2150"). `confidence: "high"|"medium"|"low"` dérivée de la méthode NEAT retenue
+    (`wearable_active_calories→high`, `cortex_native→medium` par défaut, `steps_estimate→low`) —
+    documenté comme indicateur RELATIF de qualité des données, jamais un pourcentage scientifique ;
+    `null` uniquement quand `status==="incomplete"`. `safeNonNegative` ramène négatif/NaN/Infinity à
+    `null` (composante manquante) ou borne à 0 pour EAT/TEF — robustesse sans jamais fausser le total.
+  - **`computeCalorieGoalGap(tdeeTotalKcal, calorieGoalKcal)`** : écart cible = objectif − TDEE
+    (`null` si TDEE incomplet ou objectif absent/non fini). Moteur prêt, UI **reportée** (non
+    affichée cette phase, comme autorisé) — si affichée un jour, nommer explicitement "Déficit
+    cible"/"Écart cible", jamais "Déficit réel" (ne pas confondre avec le déficit réellement consommé).
+  - **`sante-nutritionnelle.tsx`** : tuile `TDEE` (section Métabolisme) remplace l'ancien
+    `ComingSoonTile` — affiche la valeur réelle (`StatTile`, caption "Estimation") quand
+    `dailyTDEE.status === "complete"`, sinon `InsufficientDataTile` (données déjà couvertes par les
+    bandeaux BMR/niveau d'activité existants). Aucun nouveau graphique — la tuile TDEE cohabite avec
+    les tuiles BMR/NEAT/EAT/TEF déjà affichées, qui restent la décomposition visible du total.
+  - **Autonomie confirmée** : testé explicitement (`tdee.test.ts`, describe "autonomie Cortex-native")
+    — profil complet + séances/nutrition Cortex, sans Apple Health/Garmin/Whoop/Fitbit, TDEE calculable.
+  - **Tests** (`tdee.test.ts`, 23 tests) : agrégation (exemple du brief, jour sans séance, décimales/
+    arrondi), données manquantes (BMR absent, NEAT absent, EAT=0 réel, TEF=0 réel, plusieurs
+    composantes absentes, non-conversion silencieuse en 0), robustesse (négatif, NaN, Infinity),
+    autonomie, cohérence (`total === bmr+neat+eat+tef`), confiance (les 3 niveaux), `computeCalorieGoalGap`.
+  - `npx tsc --noEmit` / `npx eslint` / `npx vitest run` (623 passed) / `npm run build` : tous verts.
+  - Pas de nouvelle table d'historique : le moteur recalcule à la demande à partir des données
+    existantes, rien n'est persisté. Limite connue : TDEE "modélisé" uniquement (pas d'évolution du
+    poids, pas de régression multi-semaines, pas de correction automatique) — volontairement hors
+    scope de cette phase.
