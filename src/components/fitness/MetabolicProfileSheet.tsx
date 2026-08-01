@@ -4,15 +4,15 @@ import { Field, Sheet, SubmitButton } from "@/components/shared/FormComponents";
 import { isValidMetabolicAge, type BiologicalSex } from "@/lib/fitness/metabolism";
 import {
   isNeatActivityLevel,
-  NEAT_ACTIVITY_LEVELS,
-  type NeatActivityLevelValue,
+  NEAT_ACTIVITY_LEVEL_OPTIONS,
+  type NeatActivityLevel,
 } from "@/lib/fitness/neat";
 
 interface MetabolicProfileSheetProps {
   current: {
     sex: BiologicalSex | null;
     age: number | null;
-    activityLevel: number | null;
+    activityLevel: NeatActivityLevel | null;
   } | null;
   onClose: () => void;
 }
@@ -25,13 +25,15 @@ interface MetabolicProfileSheetProps {
  * sont jamais redemandés ici : réutilisés depuis body_tracking /
  * user_preferences. Le niveau d'activité ne doit JAMAIS être confondu avec
  * la fréquence d'entraînement (déjà comptabilisée séparément via l'EAT) —
- * voir NEAT_ACTIVITY_LEVELS.
+ * voir NEAT_ACTIVITY_LEVEL_OPTIONS. Enregistre une catégorie métier stable
+ * (ex. "very_sedentary"), jamais un coefficient numérique — voir
+ * lib/fitness/neat.ts pour la correspondance catégorie → coefficient.
  */
 export function MetabolicProfileSheet({ current, onClose }: MetabolicProfileSheetProps) {
   const upsert = useUpsertMetabolicProfile();
   const [sex, setSex] = useState<BiologicalSex>(current?.sex ?? "homme");
   const [age, setAge] = useState(current?.age != null ? String(current.age) : "");
-  const [activityLevel, setActivityLevel] = useState<NeatActivityLevelValue | null>(
+  const [activityLevel, setActivityLevel] = useState<NeatActivityLevel | null>(
     isNeatActivityLevel(current?.activityLevel) ? current!.activityLevel : null,
   );
 
@@ -86,7 +88,7 @@ export function MetabolicProfileSheet({ current, onClose }: MetabolicProfileShee
             comptabilisées séparément.
           </p>
           <div className="space-y-2">
-            {NEAT_ACTIVITY_LEVELS.map((level) => (
+            {NEAT_ACTIVITY_LEVEL_OPTIONS.map((level) => (
               <button
                 key={level.value}
                 type="button"

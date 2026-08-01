@@ -2,11 +2,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { isBiologicalSex, type BiologicalSex } from "@/lib/fitness/metabolism";
+import { isNeatActivityLevel, type NeatActivityLevel } from "@/lib/fitness/neat";
 
 export interface MetabolicProfile {
   sex: BiologicalSex | null;
   age: number | null;
-  activity_level: number | null;
+  /** Catégorie métier stable (voir lib/fitness/neat.ts) — jamais un coefficient numérique. */
+  activity_level: NeatActivityLevel | null;
 }
 
 /**
@@ -33,7 +35,7 @@ export function useMetabolicProfile() {
       return {
         sex: isBiologicalSex(data.sex) ? data.sex : null,
         age: data.age,
-        activity_level: data.activity_level,
+        activity_level: isNeatActivityLevel(data.activity_level) ? data.activity_level : null,
       };
     },
   });
@@ -42,8 +44,8 @@ export function useMetabolicProfile() {
 export interface MetabolicProfileInput {
   sex: BiologicalSex;
   age: number;
-  /** Niveau d'activité quotidienne HORS SPORT (voir lib/fitness/neat.ts NEAT_ACTIVITY_LEVELS) — optionnel. */
-  activityLevel?: number | null;
+  /** Catégorie d'activité quotidienne HORS SPORT (voir lib/fitness/neat.ts) — optionnel. */
+  activityLevel?: NeatActivityLevel | null;
 }
 
 export function useUpsertMetabolicProfile() {

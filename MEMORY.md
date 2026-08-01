@@ -1556,3 +1556,26 @@ rester manuel). Vérification faite sur les vrais workflows CI, pas une supposit
   - **Confirmation indépendance** : un utilisateur peut installer Cortex, renseigner profil/poids/
     nutrition/séances, sans connecter aucun service externe, et obtenir BMR + EAT + TEF + NEAT.
     Testé explicitement (`neat.test.ts`, describe "Apple Health independence").
+- **Correctif structurel Phase 2D — catégories métier au lieu de coefficients (2026-08-01)** :
+  `metabolic_profile.activity_level` stockait directement les coefficients numériques (0.15/0.25/
+  0.35/0.50) — trop couplé à l'algorithme (modifier un coefficient aurait exigé de migrer tous les
+  profils). Corrigé.
+  - **Migration `20260806090000_metabolic_profile_activity_level_category.sql`** : convertit la
+    colonne `numeric` → `text`, backfill `CASE` des coefficients existants vers les catégories
+    (`0.15→very_sedentary`, `0.25→lightly_active`, `0.35→active`, `0.50→very_active`, guard
+    idempotent sur `data_type='numeric'`), puis `CHECK (activity_level IN (...))` sur les 4
+    catégories exactes. Table vide au moment de la migration (0 ligne, vérifié) — aucune perte de
+    donnée possible, mais le backfill reste écrit pour être sûr si des lignes existaient. Appliquée
+    directement via Supabase MCP (`execute_sql`, SQL identique au fichier de migration, pas
+    `apply_migration` — évite tout écart de version d'historique avec le fichier git ; `migrate.yml`
+    ré-exécutera cette même SQL au merge, idempotente, et enregistrera proprement la version).
+    `types.ts` régénéré et vérifié conforme (`check-supabase-types.mjs`, 83 tables).
+  - **`lib/fitness/neat.ts`** : `NeatActivityLevel` (type `"very_sedentary"|"lightly_active"|
+    "active"|"very_active"`, seule source de vérité du type) ; `NEAT_ACTIVITY_COEFFICIENTS` (Record
+    catégorie→coefficient, SEUL point de vérité des coefficients, jamais persistés) ;
+    `NEAT_ACTIVITY_LEVEL_OPTIONS` (libellés/descriptions UI, testé synchronisé avec les clés de
+    `NEAT_ACTIVITY_COEFFICIENTS`) ; `isNeatActivityLevel`/`estimateNeatFromActivityLevel` acceptent
+    désormais une chaîne de catégorie, plus un nombre.
+  - **`useMetabolicProfile`/`MetabolicProfileSheet`** mis à jour en conséquence (upsert/lecture de
+    catégories, sélecteur UI inchangé visuellement, valeurs stockées changées) — `BMR`/`EAT`/`TEF`
+    et `sante-nutritionnelle.tsx` **non touchés** (compatibles sans modification, structurellement).

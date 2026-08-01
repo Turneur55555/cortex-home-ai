@@ -2095,7 +2095,7 @@ export type Database = {
       }
       metabolic_profile: {
         Row: {
-          activity_level: number | null
+          activity_level: string | null
           age: number | null
           created_at: string
           sex: string | null
@@ -2103,7 +2103,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
-          activity_level?: number | null
+          activity_level?: string | null
           age?: number | null
           created_at?: string
           sex?: string | null
@@ -2111,7 +2111,7 @@ export type Database = {
           user_id: string
         }
         Update: {
-          activity_level?: number | null
+          activity_level?: string | null
           age?: number | null
           created_at?: string
           sex?: string | null

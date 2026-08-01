@@ -8,15 +8,24 @@
 // calorique (métriques indépendantes tant que le TDEE ne les agrège pas).
 // No React, no Supabase, no UI tokens.
 //
-// ─── Correction (voir compte-rendu) ──────────────────────────────────────
+// ─── Correction structurelle (voir compte-rendu) ─────────────────────────
+// `metabolic_profile.activity_level` stockait initialement le COEFFICIENT
+// numérique (0.15/0.25/0.35/0.50) directement — trop couplé à l'algorithme :
+// changer un coefficient aurait nécessité de migrer tous les profils
+// utilisateurs. Corrigé (migration 20260806090000) : la colonne stocke
+// désormais une CATÉGORIE MÉTIER STABLE (`NeatActivityLevel`, ex.
+// "very_sedentary"), qui décrit ce que l'utilisateur EST. Les coefficients
+// restent uniquement ici, dans `NEAT_ACTIVITY_COEFFICIENTS` — seul point de
+// vérité, modifiable sans toucher aux profils existants.
+//
+// ─── Correction d'indépendance (Phase 2D, voir compte-rendu précédent) ───
 // La version initiale de cette phase priorisait `daily_activity.
 // active_calories`/`steps`, alimentés UNIQUEMENT par l'import Apple Health
 // (voir lib/health/appleHealth.ts) — Cortex devenait donc dépendant d'une
 // source externe pour afficher un NEAT. Corrigé : la méthode PRINCIPALE est
 // désormais "Cortex-native" (profil métabolique seul, aucune donnée
-// externe). Les méthodes wearable/pas restent disponibles en repli optionnel
-// pour ne pas jeter le travail de l'audit Phase 2D, mais ne sont plus jamais
-// nécessaires au fonctionnement du moteur.
+// externe). Les méthodes wearable/pas restent disponibles en repli optionnel,
+// mais ne sont plus jamais nécessaires au fonctionnement du moteur.
 //
 // AUDIT ACTIVE_CALORIES (conservé, toujours pertinent si un jour réactivé) :
 // `daily_activity.active_calories` est alimenté par l'import Apple Health
@@ -35,51 +44,67 @@
 // ---------------------------------------------------------------------
 
 /**
- * Niveaux d'activité quotidienne HORS SPORT — distincts des multiplicateurs
- * TDEE classiques (1.2/1.375/1.55/1.725/1.9, voir `metabolism.ts`
- * ACTIVITY_LEVELS) : ceux-ci décrivent la dépense totale journalière en y
- * incluant l'exercice, ce que Cortex calcule déjà séparément via l'EAT — les
- * réutiliser tels quels pour le NEAT compterait le sport deux fois.
- *
- * Ces coefficients s'appliquent au BMR et représentent une fourchette
+ * Catégorie métier stable décrivant l'activité quotidienne HORS SPORT —
+ * jamais les multiplicateurs TDEE classiques (1.2/1.375/1.55/1.725/1.9,
+ * voir `metabolism.ts` ACTIVITY_LEVELS) : ceux-ci décrivent la dépense
+ * totale journalière en y incluant l'exercice, ce que Cortex calcule déjà
+ * séparément via l'EAT — les réutiliser tels quels pour le NEAT compterait
+ * le sport deux fois. Stockée telle quelle dans
+ * `metabolic_profile.activity_level` (colonne texte contrainte en base,
+ * voir migration 20260806090000) — le profil décrit ce que l'utilisateur
+ * EST, jamais un coefficient d'implémentation.
+ */
+export type NeatActivityLevel = "very_sedentary" | "lightly_active" | "active" | "very_active";
+
+/**
+ * Coefficients NEAT par catégorie — SEUL point de vérité, jamais persistés
+ * dans le profil utilisateur (modifier une valeur ici ne nécessite aucune
+ * migration de données). S'appliquent au BMR et représentent une fourchette
  * usuelle de la part du NEAT dans la dépense journalière selon le niveau
  * d'activité professionnelle/quotidienne (littérature NEAT — Levine et al.,
  * variations occupationnelles de ~15 % à ~50 % de la dépense journalière
  * hors exercice structuré). Valeurs centrales, conservatrices,
- * volontairement simples — à ajuster ici si de meilleures valeurs sont
- * retenues, sans toucher au reste du code.
+ * volontairement simples.
  */
-export const NEAT_ACTIVITY_LEVELS = [
+export const NEAT_ACTIVITY_COEFFICIENTS: Record<NeatActivityLevel, number> = {
+  very_sedentary: 0.15,
+  lightly_active: 0.25,
+  active: 0.35,
+  very_active: 0.5,
+};
+
+/** Libellés/descriptions UI — même catégories que NEAT_ACTIVITY_COEFFICIENTS, seul point de vérité pour l'affichage. */
+export const NEAT_ACTIVITY_LEVEL_OPTIONS: ReadonlyArray<{
+  value: NeatActivityLevel;
+  label: string;
+  description: string;
+}> = [
   {
-    value: 0.15,
+    value: "very_sedentary",
     label: "Très sédentaire",
     description: "Travail principalement assis, très peu de déplacements.",
   },
   {
-    value: 0.25,
+    value: "lightly_active",
     label: "Peu actif",
     description: "Travail assis mais déplacements réguliers dans la journée.",
   },
   {
-    value: 0.35,
+    value: "active",
     label: "Actif",
     description: "Beaucoup de marche ou travail régulièrement debout.",
   },
   {
-    value: 0.5,
+    value: "very_active",
     label: "Très actif",
     description:
       "Travail physique ou déplacements importants pendant la majeure partie de la journée.",
   },
-] as const;
+];
 
-export type NeatActivityLevelValue = (typeof NEAT_ACTIVITY_LEVELS)[number]["value"];
-
-/** Vérifie qu'une valeur numérique correspond bien à un niveau NEAT connu. */
-export function isNeatActivityLevel(
-  value: number | null | undefined,
-): value is NeatActivityLevelValue {
-  return NEAT_ACTIVITY_LEVELS.some((l) => l.value === value);
+/** Vérifie qu'une valeur brute (ex. colonne Supabase `string | null`) est une catégorie NEAT connue. */
+export function isNeatActivityLevel(value: string | null | undefined): value is NeatActivityLevel {
+  return value != null && value in NEAT_ACTIVITY_COEFFICIENTS;
 }
 
 /** Nombre fini et non négatif, sinon `null` — jamais de NaN/Infinity/valeur négative propagée. */
@@ -89,19 +114,20 @@ function safeNonNegative(value: number | null | undefined): number | null {
 }
 
 /**
- * NEAT Cortex-native = BMR × niveau d'activité quotidienne hors sport.
- * `null` si le BMR ou le niveau d'activité déclaré est absent/invalide —
- * jamais un NEAT inventé. Le sport (EAT) n'entre JAMAIS dans ce calcul :
- * seul le niveau d'activité "hors sport" déclaré par l'utilisateur compte,
- * c'est pourquoi cette fonction ne prend même pas l'EAT en paramètre.
+ * NEAT Cortex-native = BMR × coefficient du niveau d'activité quotidienne
+ * hors sport déclaré. `null` si le BMR ou le niveau d'activité est
+ * absent/invalide — jamais un NEAT inventé. Le sport (EAT) n'entre JAMAIS
+ * dans ce calcul : seul le niveau d'activité "hors sport" déclaré par
+ * l'utilisateur compte, c'est pourquoi cette fonction ne prend même pas
+ * l'EAT en paramètre.
  */
 export function estimateNeatFromActivityLevel(
   bmr: number | null | undefined,
-  activityLevel: number | null | undefined,
+  activityLevel: string | null | undefined,
 ): number | null {
   const b = safeNonNegative(bmr);
   if (b == null || b === 0 || !isNeatActivityLevel(activityLevel)) return null;
-  return Math.round(b * activityLevel);
+  return Math.round(b * NEAT_ACTIVITY_COEFFICIENTS[activityLevel]);
 }
 
 // ---------------------------------------------------------------------
@@ -168,8 +194,8 @@ export interface NeatResult {
 export interface NeatInput {
   /** BMR du jour (computeBMR) — source du calcul Cortex-native, méthode principale. */
   bmr: number | null | undefined;
-  /** Niveau d'activité quotidienne HORS SPORT déclaré (metabolic_profile.activity_level). */
-  activityLevel: number | null | undefined;
+  /** Catégorie d'activité quotidienne HORS SPORT déclarée (metabolic_profile.activity_level). */
+  activityLevel: string | null | undefined;
   /**
    * Repli optionnel (jamais requis) — `daily_activity.active_calories` du
    * jour, alimenté aujourd'hui uniquement par l'import Apple Health.
@@ -187,9 +213,10 @@ export interface NeatInput {
  * NEAT du jour. Priorité stricte — une seule méthode retenue, jamais deux
  * sources combinées/additionnées :
  *  1) **Cortex-native** (méthode principale, aucune donnée externe requise) :
- *     BMR × niveau d'activité quotidienne hors sport déclaré dans le profil
- *     métabolique. Fonctionne pour tout utilisateur ayant renseigné son
- *     profil et son poids — même sans connecter la moindre source externe ;
+ *     BMR × coefficient du niveau d'activité quotidienne hors sport déclaré
+ *     dans le profil métabolique. Fonctionne pour tout utilisateur ayant
+ *     renseigné son profil et son poids — même sans connecter la moindre
+ *     source externe ;
  *  2) sinon, repli optionnel — calories actives d'une source santé
  *     (`activeCalories`), moins l'EAT du même jour pour éviter le double
  *     comptage — clampé à 0, jamais négatif ;
