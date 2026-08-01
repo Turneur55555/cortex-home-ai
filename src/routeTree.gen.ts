@@ -10,43 +10,29 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as Char91indexChar93RouteImport } from './routes/[index]'
-import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
-import { Route as ConfidentialiteRouteImport } from './routes/confidentialite'
-import { Route as LoginRouteImport } from './routes/login'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as ConfidentialiteRouteImport } from './routes/confidentialite'
+import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
-import { Route as AuthenticatedCorpsRouteImport } from './routes/_authenticated/corps'
-import { Route as AuthenticatedDocumentsRouteImport } from './routes/_authenticated/documents'
-import { Route as AuthenticatedNutritionRouteImport } from './routes/_authenticated/nutrition'
-import { Route as AuthenticatedPreferencesAlimentairesRouteImport } from './routes/_authenticated/preferences-alimentaires'
-import { Route as AuthenticatedProfilRouteImport } from './routes/_authenticated/profil'
-import { Route as AuthenticatedProgressionRouteImport } from './routes/_authenticated/progression'
-import { Route as AuthenticatedRlsStatusRouteImport } from './routes/_authenticated/rls-status'
-import { Route as AuthenticatedSanteNutritionnelleRouteImport } from './routes/_authenticated/sante-nutritionnelle'
-import { Route as AuthenticatedSeancesRouteImport } from './routes/_authenticated/seances'
 import { Route as AuthenticatedSupplementsRouteImport } from './routes/_authenticated/supplements'
-import { Route as AuthenticatedAdminExercisesRouteImport } from './routes/_authenticated/admin/exercises'
-import { Route as AuthenticatedFitnessIndexRouteImport } from './routes/_authenticated/fitness/index'
+import { Route as AuthenticatedSeancesRouteImport } from './routes/_authenticated/seances'
+import { Route as AuthenticatedSanteNutritionnelleRouteImport } from './routes/_authenticated/sante-nutritionnelle'
+import { Route as AuthenticatedRlsStatusRouteImport } from './routes/_authenticated/rls-status'
+import { Route as AuthenticatedProgressionRouteImport } from './routes/_authenticated/progression'
+import { Route as AuthenticatedProfilRouteImport } from './routes/_authenticated/profil'
+import { Route as AuthenticatedPreferencesAlimentairesRouteImport } from './routes/_authenticated/preferences-alimentaires'
+import { Route as AuthenticatedNutritionRouteImport } from './routes/_authenticated/nutrition'
+import { Route as AuthenticatedDocumentsRouteImport } from './routes/_authenticated/documents'
+import { Route as AuthenticatedCorpsRouteImport } from './routes/_authenticated/corps'
 import { Route as AuthenticatedRapportsIndexRouteImport } from './routes/_authenticated/rapports/index'
+import { Route as AuthenticatedFitnessIndexRouteImport } from './routes/_authenticated/fitness/index'
 import { Route as AuthenticatedRapportsIdRouteImport } from './routes/_authenticated/rapports/$id'
+import { Route as AuthenticatedAdminExercisesRouteImport } from './routes/_authenticated/admin/exercises'
 
 const Char91indexChar93Route = Char91indexChar93RouteImport.update({
   id: '/index',
   path: '/index',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AuthenticatedRoute = AuthenticatedRouteImport.update({
-  id: '/_authenticated',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ConfidentialiteRoute = ConfidentialiteRouteImport.update({
-  id: '/confidentialite',
-  path: '/confidentialite',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LoginRoute = LoginRouteImport.update({
-  id: '/login',
-  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
@@ -54,57 +40,23 @@ const ResetPasswordRoute = ResetPasswordRouteImport.update({
   path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ConfidentialiteRoute = ConfidentialiteRouteImport.update({
+  id: '/confidentialite',
+  path: '/confidentialite',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthenticatedRoute = AuthenticatedRouteImport.update({
+  id: '/_authenticated',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => AuthenticatedRoute,
-} as any)
-const AuthenticatedCorpsRoute = AuthenticatedCorpsRouteImport.update({
-  id: '/corps',
-  path: '/corps',
-  getParentRoute: () => AuthenticatedRoute,
-} as any)
-const AuthenticatedDocumentsRoute = AuthenticatedDocumentsRouteImport.update({
-  id: '/documents',
-  path: '/documents',
-  getParentRoute: () => AuthenticatedRoute,
-} as any)
-const AuthenticatedNutritionRoute = AuthenticatedNutritionRouteImport.update({
-  id: '/nutrition',
-  path: '/nutrition',
-  getParentRoute: () => AuthenticatedRoute,
-} as any)
-const AuthenticatedPreferencesAlimentairesRoute =
-  AuthenticatedPreferencesAlimentairesRouteImport.update({
-    id: '/preferences-alimentaires',
-    path: '/preferences-alimentaires',
-    getParentRoute: () => AuthenticatedRoute,
-  } as any)
-const AuthenticatedProfilRoute = AuthenticatedProfilRouteImport.update({
-  id: '/profil',
-  path: '/profil',
-  getParentRoute: () => AuthenticatedRoute,
-} as any)
-const AuthenticatedProgressionRoute =
-  AuthenticatedProgressionRouteImport.update({
-    id: '/progression',
-    path: '/progression',
-    getParentRoute: () => AuthenticatedRoute,
-  } as any)
-const AuthenticatedRlsStatusRoute = AuthenticatedRlsStatusRouteImport.update({
-  id: '/rls-status',
-  path: '/rls-status',
-  getParentRoute: () => AuthenticatedRoute,
-} as any)
-const AuthenticatedSanteNutritionnelleRoute =
-  AuthenticatedSanteNutritionnelleRouteImport.update({
-    id: '/sante-nutritionnelle',
-    path: '/sante-nutritionnelle',
-    getParentRoute: () => AuthenticatedRoute,
-  } as any)
-const AuthenticatedSeancesRoute = AuthenticatedSeancesRouteImport.update({
-  id: '/seances',
-  path: '/seances',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedSupplementsRoute =
@@ -113,10 +65,58 @@ const AuthenticatedSupplementsRoute =
     path: '/supplements',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
-const AuthenticatedAdminExercisesRoute =
-  AuthenticatedAdminExercisesRouteImport.update({
-    id: '/admin/exercises',
-    path: '/admin/exercises',
+const AuthenticatedSeancesRoute = AuthenticatedSeancesRouteImport.update({
+  id: '/seances',
+  path: '/seances',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedSanteNutritionnelleRoute =
+  AuthenticatedSanteNutritionnelleRouteImport.update({
+    id: '/sante-nutritionnelle',
+    path: '/sante-nutritionnelle',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedRlsStatusRoute = AuthenticatedRlsStatusRouteImport.update({
+  id: '/rls-status',
+  path: '/rls-status',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedProgressionRoute =
+  AuthenticatedProgressionRouteImport.update({
+    id: '/progression',
+    path: '/progression',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedProfilRoute = AuthenticatedProfilRouteImport.update({
+  id: '/profil',
+  path: '/profil',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedPreferencesAlimentairesRoute =
+  AuthenticatedPreferencesAlimentairesRouteImport.update({
+    id: '/preferences-alimentaires',
+    path: '/preferences-alimentaires',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedNutritionRoute = AuthenticatedNutritionRouteImport.update({
+  id: '/nutrition',
+  path: '/nutrition',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedDocumentsRoute = AuthenticatedDocumentsRouteImport.update({
+  id: '/documents',
+  path: '/documents',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedCorpsRoute = AuthenticatedCorpsRouteImport.update({
+  id: '/corps',
+  path: '/corps',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedRapportsIndexRoute =
+  AuthenticatedRapportsIndexRouteImport.update({
+    id: '/rapports/',
+    path: '/rapports/',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 const AuthenticatedFitnessIndexRoute =
@@ -125,17 +125,17 @@ const AuthenticatedFitnessIndexRoute =
     path: '/fitness/',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
-const AuthenticatedRapportsIndexRoute =
-  AuthenticatedRapportsIndexRouteImport.update({
-    id: '/rapports/',
-    path: '/rapports/',
-    getParentRoute: () => AuthenticatedRoute,
-  } as any)
 const AuthenticatedRapportsIdRoute = AuthenticatedRapportsIdRouteImport.update({
   id: '/rapports/$id',
   path: '/rapports/$id',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedAdminExercisesRoute =
+  AuthenticatedAdminExercisesRouteImport.update({
+    id: '/admin/exercises',
+    path: '/admin/exercises',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -286,18 +286,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof Char91indexChar93RouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authenticated': {
-      id: '/_authenticated'
-      path: ''
-      fullPath: '/'
-      preLoaderRoute: typeof AuthenticatedRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/confidentialite': {
-      id: '/confidentialite'
-      path: '/confidentialite'
-      fullPath: '/confidentialite'
-      preLoaderRoute: typeof ConfidentialiteRouteImport
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -307,11 +300,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/reset-password': {
-      id: '/reset-password'
-      path: '/reset-password'
-      fullPath: '/reset-password'
-      preLoaderRoute: typeof ResetPasswordRouteImport
+    '/confidentialite': {
+      id: '/confidentialite'
+      path: '/confidentialite'
+      fullPath: '/confidentialite'
+      preLoaderRoute: typeof ConfidentialiteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_authenticated': {
+      id: '/_authenticated'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthenticatedRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/': {
@@ -321,60 +321,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    '/_authenticated/corps': {
-      id: '/_authenticated/corps'
-      path: '/corps'
-      fullPath: '/corps'
-      preLoaderRoute: typeof AuthenticatedCorpsRouteImport
-      parentRoute: typeof AuthenticatedRoute
-    }
-    '/_authenticated/documents': {
-      id: '/_authenticated/documents'
-      path: '/documents'
-      fullPath: '/documents'
-      preLoaderRoute: typeof AuthenticatedDocumentsRouteImport
-      parentRoute: typeof AuthenticatedRoute
-    }
-    '/_authenticated/nutrition': {
-      id: '/_authenticated/nutrition'
-      path: '/nutrition'
-      fullPath: '/nutrition'
-      preLoaderRoute: typeof AuthenticatedNutritionRouteImport
-      parentRoute: typeof AuthenticatedRoute
-    }
-    '/_authenticated/preferences-alimentaires': {
-      id: '/_authenticated/preferences-alimentaires'
-      path: '/preferences-alimentaires'
-      fullPath: '/preferences-alimentaires'
-      preLoaderRoute: typeof AuthenticatedPreferencesAlimentairesRouteImport
-      parentRoute: typeof AuthenticatedRoute
-    }
-    '/_authenticated/profil': {
-      id: '/_authenticated/profil'
-      path: '/profil'
-      fullPath: '/profil'
-      preLoaderRoute: typeof AuthenticatedProfilRouteImport
-      parentRoute: typeof AuthenticatedRoute
-    }
-    '/_authenticated/progression': {
-      id: '/_authenticated/progression'
-      path: '/progression'
-      fullPath: '/progression'
-      preLoaderRoute: typeof AuthenticatedProgressionRouteImport
-      parentRoute: typeof AuthenticatedRoute
-    }
-    '/_authenticated/rls-status': {
-      id: '/_authenticated/rls-status'
-      path: '/rls-status'
-      fullPath: '/rls-status'
-      preLoaderRoute: typeof AuthenticatedRlsStatusRouteImport
-      parentRoute: typeof AuthenticatedRoute
-    }
-    '/_authenticated/sante-nutritionnelle': {
-      id: '/_authenticated/sante-nutritionnelle'
-      path: '/sante-nutritionnelle'
-      fullPath: '/sante-nutritionnelle'
-      preLoaderRoute: typeof AuthenticatedSanteNutritionnelleRouteImport
+    '/_authenticated/supplements': {
+      id: '/_authenticated/supplements'
+      path: '/supplements'
+      fullPath: '/supplements'
+      preLoaderRoute: typeof AuthenticatedSupplementsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/seances': {
@@ -384,25 +335,60 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSeancesRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    '/_authenticated/supplements': {
-      id: '/_authenticated/supplements'
-      path: '/supplements'
-      fullPath: '/supplements'
-      preLoaderRoute: typeof AuthenticatedSupplementsRouteImport
+    '/_authenticated/sante-nutritionnelle': {
+      id: '/_authenticated/sante-nutritionnelle'
+      path: '/sante-nutritionnelle'
+      fullPath: '/sante-nutritionnelle'
+      preLoaderRoute: typeof AuthenticatedSanteNutritionnelleRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    '/_authenticated/admin/exercises': {
-      id: '/_authenticated/admin/exercises'
-      path: '/admin/exercises'
-      fullPath: '/admin/exercises'
-      preLoaderRoute: typeof AuthenticatedAdminExercisesRouteImport
+    '/_authenticated/rls-status': {
+      id: '/_authenticated/rls-status'
+      path: '/rls-status'
+      fullPath: '/rls-status'
+      preLoaderRoute: typeof AuthenticatedRlsStatusRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    '/_authenticated/fitness/': {
-      id: '/_authenticated/fitness/'
-      path: '/fitness'
-      fullPath: '/fitness/'
-      preLoaderRoute: typeof AuthenticatedFitnessIndexRouteImport
+    '/_authenticated/progression': {
+      id: '/_authenticated/progression'
+      path: '/progression'
+      fullPath: '/progression'
+      preLoaderRoute: typeof AuthenticatedProgressionRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/profil': {
+      id: '/_authenticated/profil'
+      path: '/profil'
+      fullPath: '/profil'
+      preLoaderRoute: typeof AuthenticatedProfilRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/preferences-alimentaires': {
+      id: '/_authenticated/preferences-alimentaires'
+      path: '/preferences-alimentaires'
+      fullPath: '/preferences-alimentaires'
+      preLoaderRoute: typeof AuthenticatedPreferencesAlimentairesRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/nutrition': {
+      id: '/_authenticated/nutrition'
+      path: '/nutrition'
+      fullPath: '/nutrition'
+      preLoaderRoute: typeof AuthenticatedNutritionRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/documents': {
+      id: '/_authenticated/documents'
+      path: '/documents'
+      fullPath: '/documents'
+      preLoaderRoute: typeof AuthenticatedDocumentsRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/corps': {
+      id: '/_authenticated/corps'
+      path: '/corps'
+      fullPath: '/corps'
+      preLoaderRoute: typeof AuthenticatedCorpsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/rapports/': {
@@ -412,11 +398,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedRapportsIndexRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/fitness/': {
+      id: '/_authenticated/fitness/'
+      path: '/fitness'
+      fullPath: '/fitness/'
+      preLoaderRoute: typeof AuthenticatedFitnessIndexRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/rapports/$id': {
       id: '/_authenticated/rapports/$id'
       path: '/rapports/$id'
       fullPath: '/rapports/$id'
       preLoaderRoute: typeof AuthenticatedRapportsIdRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/admin/exercises': {
+      id: '/_authenticated/admin/exercises'
+      path: '/admin/exercises'
+      fullPath: '/admin/exercises'
+      preLoaderRoute: typeof AuthenticatedAdminExercisesRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
   }
