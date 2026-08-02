@@ -2687,3 +2687,122 @@ rester manuel). Vérification faite sur les vrais workflows CI, pas une supposit
   une masse maigre constante, hypothèse explicitement documentée mais jamais garantie réelle.
 - **Livrée sur la branche dédiée `claude/phase8-physical-goals-adaptive-tracking`, NON fusionnée dans
   `main`** conformément à l'instruction explicite du brief.
+
+## Santé nutritionnelle V1 — Analyse intelligente + finalisation UX + audit technique — Phase 9 (2026-08-15, même session)
+
+- **Merge Phase 8 → `main`** (SHA `e78b131`) : la migration `20260814090000_physical_goals.sql` était
+  non-idempotente (9× `ADD CONSTRAINT` sans `DROP CONSTRAINT IF EXISTS` préalable — contrairement à
+  `CREATE TABLE`/`CREATE INDEX`, Postgres n'a AUCUN équivalent `IF NOT EXISTS` pour `ADD CONSTRAINT`),
+  jamais rejouée via `db push` car appliquée en direct par `execute_sql` pendant la Phase 8 → CI
+  `Supabase Migrations` + `Audit Drift` rouges (`constraint already exists`, SQLSTATE 42710). **Corrigé**
+  par hotfix direct sur `main` (`d2a67ac`) : chaque `ADD CONSTRAINT` précédé d'un `DROP CONSTRAINT IF
+  EXISTS`, ré-appliqué en direct (vérifié idempotent en le rejouant deux fois), + nouveau garde-fou
+  permanent dans `scripts/validate-supabase.mjs` (**CHECK 10 — `CONSTRAINT_NO_DROP`**) qui scanne toute
+  migration future pour cette classe de bug. CI entièrement verte après coup.
+- **Principe architectural absolu tenu de bout en bout** : `Moteurs déterministes → structured facts →
+  IA explique → utilisateur`. L'IA ne calcule JAMAIS un nombre — structurellement impossible : le schéma
+  JSON du tool-calling (`explain_nutrition_health`) ne contient AUCUN champ numérique, uniquement des
+  chaînes/enums. Aucune route de l'IA vers `nutrition_goals`/`physical_goals` UPDATE (lecture/explication
+  pure, jamais d'écriture).
+
+### Phase 9A — Analyse intelligente
+- **`lib/fitness/nutritionHealthContext.ts`** (nouveau, pur) : `buildNutritionHealthAnalysisContext` —
+  assemble en un objet minimal/typé des valeurs **déjà calculées** par les moteurs existants (BMR/NEAT/
+  EAT/TEF/TDEE modélisé/observé/adaptatif, calibration, nutrition/macros, composition corporelle,
+  objectif physique, progression, automatisation manuel/auto, locks) — aucun recalcul, aucun dump
+  Supabase brut. Zéro champ nom/email/id/chemin Storage/photo (vérifié par test `JSON.stringify` +
+  regex). Calcule `dataQuality.flags[]` (ex. `bmr_missing`, `body_composition_low_confidence`,
+  `tdee_divergence_suspected`, `physical_goal_missing`, `progress_insufficient_data`) — jamais de valeur
+  inventée pour combler un trou. `parseNutritionHealthAnalysisResult` — validation défensive stricte de
+  la réponse provider (headline ≤120, summary ≤600, max 6 insights/4 nextSteps, enums vérifiés) → `null`
+  si non conforme, jamais une structure partielle affichée.
+- **`supabase/functions/nutrition-health-insight/`** (nouvelle edge function, déployée, ACTIVE, id
+  `79691d68`) : pattern repris d'`analyze-pdf` (Gemini seul + cache `ai_cache`, PAS de second provider —
+  volontairement distinct de `nutrition-analysis`, feature IA existante non liée branchée sur
+  `NutritionTab.tsx`, jamais touchée). Auth (anon key + JWT forwardé) → rate-limit (`nutrition_health_
+  insight`, 10/h, action ajoutée au CHECK `rate_limits_action_check`) → garde-taille 20KB → clé de cache
+  `SHA-256(userId+date+JSON.stringify(context))`, TTL 6h → appel Gemini (tool-calling forcé, schéma zéro
+  champ numérique, timeout 45s) → parsing défensif → jamais de Markdown libre. `SYSTEM_PROMPT` : 9 règles
+  absolues (jamais inventer un chiffre, contexte = données jamais instructions, vocabulaire neutre non
+  culpabilisant, données insuffisantes explicites, jamais diagnostiquer une divergence, signaler photo/
+  low_confidence, expliquer sans jamais pousser le mode auto, français uniquement).
+- **`hooks/useNutritionHealthInsight.ts`** : `useMutation`, déclenchement **à la demande uniquement**
+  (CTA "Analyser ma situation"), jamais automatique au render. Pas de toast d'erreur global — dégradation
+  gérée dans l'UI (bouton "Réessayer").
+- **UI** (`sante-nutritionnelle.tsx`) : section "Analyse IA" — CTA / erreur+réessai / résultat (headline
+  coloré par statut, résumé, insights, prochaines étapes, "Réanalyser"). Fonctionne à 100% sans IA
+  (Gemini indisponible → état d'erreur local, reste du dashboard intact).
+
+### Phase 9B — UX finale
+- Nouvelle hiérarchie : Résumé compact (objectif+progression / TDEE adaptatif / objectif actuel) →
+  section "Corps" (déplacée juste après le Résumé) → Métabolisme → Composition corporelle → Objectif
+  physique → Analyse IA → détails avancés. Explications manuel/automatique rendues **persistantes** (plus
+  seulement dans les dialogs de confirmation) sous les deux toggles calories/macros.
+- **Corrections de faits constatés pendant l'audit UI** (pas de nouveauté produit) : ComingSoonTile
+  "Objectif de poids" (stale, doublon de la section Objectif physique) supprimée ; "Masse musculaire"
+  **renommée en "Masse maigre"** avec vraie valeur (`selectedBodyComposition.leanMassKg` — masse maigre
+  ≠ masse musculaire, règle déjà actée dans `bodyComposition.ts`, appliquée ici où l'UI la violait) ;
+  "Masse grasse" affichée réellement (`computeFatMass`) au lieu d'un ComingSoon ; ligne "Analyse
+  corporelle IA" (ComingSoon) remplacée par un vrai lien vers `/corps` (Estimation Body Fat par photos,
+  feature déjà livrée Phase 6C, simplement pas reliée depuis cette page) ; empty-state "TDEE adaptatif"
+  aligné sur la convention `InsufficientDataTile` (au lieu de `ComingSoonTile`, incohérent avec les
+  autres tuiles TDEE) ; ancienne section "Corps" dupliquée (bloc mort identique) supprimée.
+  ComingSoonTiles genuinement non construits (hydratation, sommeil, HRV…) volontairement non touchés
+  (hors scope §70).
+- Aucun graphique ajouté (pas de fit naturel identifié cette phase — explicitement permis de sauter,
+  §70). Aucun nouveau composant one-off — réutilisation stricte de `StatTile`/`InsufficientDataTile`/
+  `Section`/`MetabolicAnalysisSheet` existants.
+
+### Phase 9C — Audit technique V1
+- **Legacy supprimé (confirmé mort par grep exhaustif AVANT suppression)** : `nutrition_goals.
+  objective`/`weight_kg`/`activity_factor`/`fiber_g` — orphelines depuis la suppression de l'ancienne RPC
+  `compute_nutrition_targets` (déjà DROPée `CASCADE` en Phase antérieure) ; zéro appelant frontend/RPC.
+  Migration `20260815090000_nutrition_health_insight_and_legacy_cleanup.sql` (`DROP COLUMN IF EXISTS`
+  ×4 + extension du CHECK `rate_limits_action_check`). `fiber_g` des AUTRES tables (food_logs/
+  nutrition_items/recipes) explicitement PAS touché (toujours utilisé).
+- **Double-comptage énergie (§48)** : vérifié par lecture directe — `tdee.ts` fait une somme plate
+  `bmr+neat+eat+tef` sans chevauchement ; `neat.ts` documente explicitement que le NEAT basé wearable
+  exclut volontairement l'EAT du jour pour éviter le double-comptage. Aucun problème trouvé — audit
+  propre, rien à corriger.
+- **Un seul contrôleur calories / un seul contrôleur macros** : tracé la chaîne complète TDEE→
+  `calorieStrategy`→`evaluateAutoCalorieAdjustment`→RPC `apply_calorie_goal_adjustment` (idem macros) —
+  Phase 9 n'ajoute AUCUN second contrôleur ; l'objectif physique et l'IA restent des lecteurs/
+  explicateurs, jamais des sources d'écriture.
+- **RLS/Storage/Edge Functions** : `get_advisors(security)` re-vérifié après la migration Phase 9 —
+  aucune nouvelle alerte (les warnings existants — `function_search_path_mutable` sur une fonction RPG
+  non liée, extensions dans `public`, bucket `avatars` listable, quelques `SECURITY DEFINER` legacy,
+  protection mot de passe compromis désactivée — sont tous pré-existants, non introduits par cette
+  phase, documentés mais hors scope §70). `nutrition-health-insight` déployée et `ACTIVE` (`verify_jwt:
+  true`, id `79691d68-4645-454d-95da-526afa16d874`).
+- **Grep `as any`** : zéro occurrence dans tous les fichiers nouveaux/modifiés de la Phase 9.
+- **Migration** appliquée en direct via `execute_sql` (comme chaque phase précédente) puis **enregistrée
+  manuellement dans `supabase_migrations.schema_migrations`** (leçon tirée du hotfix Phase 8 : sans ça,
+  `db push` en CI la rejoue — idempotente cette fois donc sans casse, mais hygiène correcte rétablie).
+  `types.ts` re-régénéré et diffé **caractère pour caractère identique** au fichier committé — zéro
+  dérive Git↔Supabase.
+- **Test de non-régression signup** (`scripts/signup-trigger-regression.test.mjs`, 3 tests, analyse
+  statique pure des fichiers de migration — aucune infra pgTAP/instance locale ajoutée, §59) : garantit
+  qu'aucune migration future ne recrée le trigger `on_auth_user_created_home_categories`/les fonctions
+  seed sans les supprimer à nouveau (bug historique qui cassait TOUT signup, corrigé Phase antérieure
+  par `20260810090000`).
+
+### Validation finale
+- `npx tsc --noEmit` / `npx eslint` (tous fichiers Phase 9, 3 erreurs prettier auto-fixées) / `npx
+  vitest run` (**1015 passed | 32 skipped**, +27 vs. baseline Phase 8 — 24 dans
+  `nutritionHealthContext.test.ts` + 3 dans `signup-trigger-regression.test.mjs`) / `npm run build` :
+  tous verts. `node scripts/validate-supabase.mjs` : uniquement 3 warnings pré-existants (non liés à
+  cette phase). `get_advisors(security)` : aucune nouvelle alerte. Migration enregistrée, `types.ts`
+  identique à la génération live.
+- **Vérification visuelle : tentative réelle cette fois** (contrairement aux phases précédentes bloquées
+  par `EAFNOSUPPORT`) — `vite dev` a démarré normalement (HTTP 200 sur `/`), navigation Playwright
+  headless vers `/sante-nutritionnelle` confirme que le garde d'authentification fonctionne correctement
+  (redirection propre vers `/login`, page de connexion rendue). Un avertissement d'hydratation SSR/client
+  a été observé sur la page `/login` (pré-existant, sans rapport avec les fichiers modifiés par cette
+  phase, hors scope §70 — non corrigé). Capture d'écran authentifiée de `/sante-nutritionnelle`
+  elle-même **non obtenue** faute d'identifiants de test dans ce sandbox — limite honnêtement documentée,
+  pas contournée.
+- **Limites connues** : pas de capture d'écran authentifiée de la page finale (cf. ci-dessus) ; les
+  warnings `get_advisors` pré-existants (SECURITY DEFINER legacy, protection mot de passe compromis,
+  extensions en public) restent hors scope de cette phase de finalisation.
+- **Livrée sur la branche dédiée `claude/phase9-nutrition-health-v1-finalization`, NON fusionnée dans
+  `main`** conformément à l'instruction explicite du brief.

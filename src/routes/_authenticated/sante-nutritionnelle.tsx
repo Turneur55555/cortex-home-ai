@@ -71,12 +71,20 @@ import {
   selectBodyCompositionForNutrition,
   type BodyCompositionCandidate,
 } from "@/lib/fitness/bodyCompositionForNutrition";
-import { BODY_FAT_METHOD_LABELS, CONFIDENCE_LABELS } from "@/lib/fitness/bodyComposition";
+import {
+  BODY_FAT_METHOD_LABELS,
+  computeFatMass,
+  CONFIDENCE_LABELS,
+} from "@/lib/fitness/bodyComposition";
 import {
   computeBodyFatTargetProjection,
   computeGoalTrajectory,
 } from "@/lib/fitness/goalTrajectory";
-import { evaluateGoalProgress, isWeightGoalLikelyReached } from "@/lib/fitness/goalProgress";
+import {
+  evaluateGoalProgress,
+  isWeightGoalLikelyReached,
+  type GoalProgressState,
+} from "@/lib/fitness/goalProgress";
 import {
   useCancelPhysicalGoal,
   useCompletePhysicalGoal,
@@ -84,11 +92,12 @@ import {
   useUpdatePhysicalGoalRate,
 } from "@/hooks/usePhysicalGoal";
 import { PhysicalGoalSheet } from "@/components/fitness/PhysicalGoalSheet";
+import { buildNutritionHealthAnalysisContext } from "@/lib/fitness/nutritionHealthContext";
+import { useNutritionHealthInsight } from "@/hooks/useNutritionHealthInsight";
 import { addDaysYMD, localDateYMD } from "@/lib/dates";
 import { StatTile } from "@/components/fitness/StatTile";
 import { ComingSoonTile } from "@/components/fitness/ComingSoonTile";
 import { InsufficientDataTile } from "@/components/fitness/InsufficientDataTile";
-import { ComingSoonCard } from "@/components/fitness/ComingSoonCard";
 import { MetabolicProfileSheet } from "@/components/fitness/MetabolicProfileSheet";
 import { MetabolicAnalysisSheet } from "@/components/fitness/MetabolicAnalysisSheet";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -111,6 +120,15 @@ const BMI_LABELS: Record<ReturnType<typeof bmiCategory>, string> = {
   normal: "Corpulence normale",
   surpoids: "Surpoids",
   obesite: "Obésité",
+};
+
+/** Vocabulaire neutre, jamais culpabilisant (§15/§24 du brief Phase 9) — partagé entre le Résumé et la section Objectif physique. */
+const GOAL_PROGRESS_STATE_LABELS: Record<GoalProgressState, string> = {
+  insufficient_data: "Pas encore assez de données",
+  on_track: "Conforme",
+  ahead: "En avance",
+  behind: "À ajuster",
+  maintaining: "Stable",
 };
 
 /** Libellé du rythme (`CALORIE_STRATEGY_RATES`) pour un objectif physique — `fat_loss`/`muscle_gain` seulement, `maintenance` n'a pas de rythme. */
@@ -595,6 +613,81 @@ function SanteNutritionnellePage() {
   const carbsPct = pct(totals.carbs, nutritionGoals?.carbs);
   const fatsPct = pct(totals.fats, nutritionGoals?.fats);
 
+  // Phase 9A — contexte déterministe pour l'analyse intelligente : assemble
+  // UNIQUEMENT des valeurs déjà calculées ci-dessus par les moteurs
+  // existants, jamais un recalcul, jamais un dump Supabase brut, jamais de
+  // donnée personnelle (§3/§8/§22 du brief).
+  const nutritionHealthContext = buildNutritionHealthAnalysisContext({
+    bmrKcal: bmr,
+    neatKcal: dailyNEAT.kcal,
+    eatKcal: dailyEAT.kcal,
+    tefKcal: dailyTEF.totalKcal,
+    tdeeModeledKcal: dailyTDEE.totalKcal,
+    tdeeObservedKcal: adaptiveTdee.observedTdeeKcal,
+    tdeeObservedStatus: adaptiveTdee.status,
+    tdeeObservedConfidence: adaptiveTdee.confidence,
+    tdeeAdaptiveKcal: adaptiveTdeeCalibration.adaptiveTdeeKcal,
+    calibrationState: adaptiveTdeeCalibration.state,
+    divergenceSuspected: adaptiveTdeeCalibration.divergenceSuspected,
+
+    caloriesConsumedTodayKcal: totals.calories,
+    calorieGoalKcal: calorieGoal,
+    calorieRecommendationKcal: calorieStrategy.recommendedCalories,
+    calorieMode: strategyMode,
+    proteinsCurrentG: nutritionGoals?.proteins ?? null,
+    carbsCurrentG: nutritionGoals?.carbs ?? null,
+    fatsCurrentG: nutritionGoals?.fats ?? null,
+    proteinsRecommendedG: macroStrategy.proteinsG,
+    carbsRecommendedG: macroStrategy.carbsG,
+    fatsRecommendedG: macroStrategy.fatsG,
+    proteinBasis: macroStrategy.proteinBasis,
+    macroMode: macroStrategyMode,
+    proteinLocked,
+    carbsLocked,
+    fatLocked,
+
+    bodyComposition: selectedBodyComposition
+      ? {
+          weightKg: weight,
+          weightSmoothedKg: adaptiveTdee.weight.endTrendKg,
+          bodyFatPercent: selectedBodyComposition.bodyFatPercent,
+          bodyFatMinPercent: null,
+          bodyFatMaxPercent: null,
+          bodyFatMethod: selectedBodyComposition.method,
+          bodyFatConfidence: selectedBodyComposition.confidence,
+          leanMassKg: selectedBodyComposition.leanMassKg,
+          fatMassKg: computeFatMass(weight ?? 0, selectedBodyComposition.bodyFatPercent),
+          measurementAgeDays: Math.round(
+            (new Date(`${today}T00:00:00Z`).getTime() -
+              new Date(`${selectedBodyComposition.date}T00:00:00Z`).getTime()) /
+              86_400_000,
+          ),
+          dataQuality:
+            selectedBodyComposition.confidence === "low"
+              ? "low_confidence"
+              : selectedBodyComposition.confidence === "medium"
+                ? "medium_confidence"
+                : "high_confidence",
+        }
+      : null,
+    physicalGoal: physicalGoal
+      ? {
+          goal: physicalGoal.goal,
+          targetRate: physicalGoal.targetRate,
+          startingWeightKg: physicalGoal.startingWeightKg,
+          currentWeightKg: goalCurrentWeightKg,
+          targetWeightKg: physicalGoal.targetWeightKg,
+          startingBodyFatPercent: physicalGoal.startingBodyFatPercent,
+          currentBodyFatPercent: selectedBodyComposition?.bodyFatPercent ?? null,
+          targetBodyFatPercent: physicalGoal.targetBodyFatPercent,
+          estimatedDurationWeeks: physicalGoalTrajectory?.estimatedDurationWeeks ?? null,
+        }
+      : null,
+    progress: physicalGoalProgress ? { state: physicalGoalProgress.state } : null,
+  });
+
+  const nutritionHealthInsight = useNutritionHealthInsight();
+
   return (
     <main className="relative flex flex-1 flex-col overflow-hidden px-5 pb-32 pt-[max(2.5rem,env(safe-area-inset-top))]">
       {/* Header */}
@@ -613,6 +706,157 @@ function SanteNutritionnellePage() {
           </p>
         </div>
       </div>
+
+      {/* Résumé compact (§28 du brief Phase 9) — ne duplique pas les cartes
+          détaillées ci-dessous, se contente d'orienter d'un coup d'œil.
+          N'apparaît que si au moins une donnée utile existe (§36 : jamais
+          un résumé vide pour un utilisateur neuf). */}
+      {(physicalGoal ||
+        calorieGoal != null ||
+        adaptiveTdeeCalibration.adaptiveTdeeKcal != null) && (
+        <div className="mb-6 grid grid-cols-2 gap-2">
+          {physicalGoal && (
+            <div className="rounded-2xl border border-white/5 bg-card/60 p-3">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Objectif</p>
+              <p className="text-xs font-bold">
+                {physicalGoal.goal === "fat_loss"
+                  ? "Perte de gras"
+                  : physicalGoal.goal === "muscle_gain"
+                    ? "Prise de masse"
+                    : "Maintien"}
+              </p>
+              {physicalGoalProgress && (
+                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  {GOAL_PROGRESS_STATE_LABELS[physicalGoalProgress.state]}
+                </p>
+              )}
+            </div>
+          )}
+          {adaptiveTdeeCalibration.adaptiveTdeeKcal != null && (
+            <div className="rounded-2xl border border-white/5 bg-card/60 p-3">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                TDEE adaptatif
+              </p>
+              <p className="text-xs font-bold">{adaptiveTdeeCalibration.adaptiveTdeeKcal} kcal</p>
+            </div>
+          )}
+          {calorieGoal != null && (
+            <div className="rounded-2xl border border-white/5 bg-card/60 p-3">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                Objectif actuel
+              </p>
+              <p className="text-xs font-bold">{calorieGoal} kcal</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Corps — remonté avant les stratégies calorie/macros (§26/§27 du
+          brief Phase 9) : le poids est la donnée foundationnelle dont ces
+          stratégies dépendent, elle doit être visible en premier. */}
+      <Section title="Corps">
+        <div className="grid grid-cols-2 gap-2">
+          {bodyLoading ? (
+            <>
+              <Skeleton className="h-[84px] rounded-2xl" />
+              <Skeleton className="h-[84px] rounded-2xl" />
+            </>
+          ) : (
+            <>
+              {weight != null ? (
+                <StatTile
+                  icon={<Scale className="h-4 w-4" />}
+                  label="Poids actuel"
+                  value={String(weight)}
+                  unit="kg"
+                  title={
+                    weightDelta != null
+                      ? `${weightDelta > 0 ? "+" : ""}${weightDelta} kg vs mesure précédente`
+                      : undefined
+                  }
+                />
+              ) : (
+                <ComingSoonTile icon={<Scale className="h-4 w-4" />} label="Poids actuel" />
+              )}
+              {bmi != null ? (
+                <StatTile
+                  icon={<Ruler className="h-4 w-4" />}
+                  label="IMC"
+                  value={String(bmi)}
+                  title={BMI_LABELS[bmiCategory(bmi)]}
+                />
+              ) : (
+                <ComingSoonTile icon={<Ruler className="h-4 w-4" />} label="IMC" />
+              )}
+            </>
+          )}
+        </div>
+        {/* §33/§34 du brief Phase 9 : Masse grasse/maigre reprises de la
+            composition corporelle réelle (Phase 6/7) quand disponible —
+            jamais un ComingSoon générique qui ignorerait des données déjà
+            existantes. "Masse musculaire" n'est jamais affichée : Cortex ne
+            mesure QUE la masse maigre (eau+os+organes+muscle), distincte de
+            la masse musculaire (règle absolue déjà en place, bodyComposition.ts). */}
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          {selectedBodyComposition ? (
+            <>
+              <StatTile
+                icon={<Gauge className="h-4 w-4" />}
+                label="Masse grasse"
+                value={
+                  weight != null
+                    ? String(computeFatMass(weight, selectedBodyComposition.bodyFatPercent) ?? "—")
+                    : "—"
+                }
+                unit="kg"
+                title={`${BODY_FAT_METHOD_LABELS[selectedBodyComposition.method]} · ${CONFIDENCE_LABELS[selectedBodyComposition.confidence]}`}
+              />
+              <StatTile
+                icon={<Gauge className="h-4 w-4" />}
+                label="Masse maigre"
+                value={String(Math.round(selectedBodyComposition.leanMassKg * 10) / 10)}
+                unit="kg"
+                title="Eau, os, organes et muscle — pas uniquement le muscle"
+              />
+            </>
+          ) : (
+            <>
+              <ComingSoonTile icon={<Gauge className="h-4 w-4" />} label="Masse grasse" />
+              <ComingSoonTile icon={<Gauge className="h-4 w-4" />} label="Masse maigre" />
+            </>
+          )}
+        </div>
+        <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-border bg-card px-4 py-3 shadow-card">
+          <div className="min-w-0">
+            <p className="text-xs font-medium">Historique du poids et composition corporelle</p>
+            <p className="text-[11px] text-muted-foreground">
+              {bodyRows && bodyRows.length > 0
+                ? `${bodyRows.length} mesure${bodyRows.length > 1 ? "s" : ""} enregistrée${bodyRows.length > 1 ? "s" : ""}`
+                : "Aucune mesure enregistrée"}
+            </p>
+          </div>
+          <Link
+            to="/corps"
+            className="shrink-0 rounded-full border border-white/8 bg-white/[0.04] px-3 py-1.5 text-[11px] font-semibold text-foreground transition-colors hover:border-primary/30"
+          >
+            Voir tout
+          </Link>
+        </div>
+        <Link
+          to="/corps"
+          className="mt-2 flex items-center gap-3 rounded-2xl border border-white/5 bg-white/[0.02] px-4 py-3 transition-colors hover:border-primary/30"
+        >
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.04] text-muted-foreground">
+            <Scan className="h-4 w-4" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-medium">Estimation Body Fat par photos</p>
+            <p className="text-[11px] text-muted-foreground">
+              Disponible depuis l'onglet Corps — estimation indicative, jamais une mesure exacte.
+            </p>
+          </div>
+        </Link>
+      </Section>
 
       {/* Métabolisme */}
       <Section title="Métabolisme">
@@ -687,7 +931,7 @@ function SanteNutritionnellePage() {
               title={`Meilleure estimation personnalisée de Cortex (modèle + observation, sans jamais remplacer l'un par l'autre) — ${adaptiveTdeeCalibration.reason}`}
             />
           ) : (
-            <ComingSoonTile icon={<Gauge className="h-4 w-4" />} label="TDEE adaptatif" />
+            <InsufficientDataTile icon={<Gauge className="h-4 w-4" />} label="TDEE adaptatif" />
           )}
           {todayActivityLoading || metabolicProfileLoading ? (
             <Skeleton className="h-[84px] rounded-2xl" />
@@ -866,6 +1110,14 @@ function SanteNutritionnellePage() {
               </button>
             ))}
           </div>
+          {/* §31 du brief Phase 9 : explication permanente, pas seulement
+              après avoir basculé en automatique — le mode actif reste
+              toujours compréhensible sans action supplémentaire. */}
+          <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+            {strategyMode === "manual"
+              ? "Cortex recommande, tu décides quand appliquer."
+              : "Cortex peut appliquer progressivement les ajustements, dans les limites prévues."}
+          </p>
         </div>
 
         {showAutoModeConfirm && (
@@ -1058,6 +1310,11 @@ function SanteNutritionnellePage() {
               </button>
             ))}
           </div>
+          <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+            {macroStrategyMode === "manual"
+              ? "Cortex recommande, tu décides quand appliquer."
+              : "Cortex peut ajuster tes macros progressivement, sans jamais toucher aux macros verrouillées."}
+          </p>
         </div>
 
         {showMacroAutoModeConfirm && (
@@ -1320,72 +1577,6 @@ function SanteNutritionnellePage() {
         />
       )}
 
-      {/* Corps */}
-      <Section title="Corps">
-        <div className="grid grid-cols-3 gap-2">
-          {bodyLoading ? (
-            <>
-              <Skeleton className="h-[84px] rounded-2xl" />
-              <Skeleton className="h-[84px] rounded-2xl" />
-              <Skeleton className="h-[84px] rounded-2xl" />
-            </>
-          ) : (
-            <>
-              {weight != null ? (
-                <StatTile
-                  icon={<Scale className="h-4 w-4" />}
-                  label="Poids actuel"
-                  value={String(weight)}
-                  unit="kg"
-                  title={
-                    weightDelta != null
-                      ? `${weightDelta > 0 ? "+" : ""}${weightDelta} kg vs mesure précédente`
-                      : undefined
-                  }
-                />
-              ) : (
-                <ComingSoonTile icon={<Scale className="h-4 w-4" />} label="Poids actuel" />
-              )}
-              {bmi != null ? (
-                <StatTile
-                  icon={<Ruler className="h-4 w-4" />}
-                  label="IMC"
-                  value={String(bmi)}
-                  title={BMI_LABELS[bmiCategory(bmi)]}
-                />
-              ) : (
-                <ComingSoonTile icon={<Ruler className="h-4 w-4" />} label="IMC" />
-              )}
-              <ComingSoonTile icon={<TrendingUp className="h-4 w-4" />} label="Objectif de poids" />
-            </>
-          )}
-        </div>
-        <div className="mt-2 grid grid-cols-3 gap-2">
-          <ComingSoonTile icon={<Gauge className="h-4 w-4" />} label="Masse grasse" />
-          <ComingSoonTile icon={<Gauge className="h-4 w-4" />} label="Masse musculaire" />
-          <ComingSoonTile icon={<Ruler className="h-4 w-4" />} label="Tour de taille" />
-        </div>
-        <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-border bg-card px-4 py-3 shadow-card">
-          <div className="min-w-0">
-            <p className="text-xs font-medium">Historique du poids</p>
-            <p className="text-[11px] text-muted-foreground">
-              {bodyRows && bodyRows.length > 0
-                ? `${bodyRows.length} mesure${bodyRows.length > 1 ? "s" : ""} enregistrée${bodyRows.length > 1 ? "s" : ""}`
-                : "Aucune mesure enregistrée"}
-            </p>
-          </div>
-          <Link
-            to="/corps"
-            className="shrink-0 rounded-full border border-white/8 bg-white/[0.04] px-3 py-1.5 text-[11px] font-semibold text-foreground transition-colors hover:border-primary/30"
-          >
-            Voir tout
-          </Link>
-        </div>
-        <div className="mt-2">
-          <ComingSoonRow icon={<Scan className="h-4 w-4" />} label="Analyse corporelle IA" />
-        </div>
-      </Section>
-
       {/* Objectif physique — Phase 8 */}
       <Section title="Objectif physique">
         {!physicalGoal ? (
@@ -1428,15 +1619,7 @@ function SanteNutritionnellePage() {
               <div className="mt-2 flex items-center gap-1.5 text-[11px]">
                 <span className="text-muted-foreground">Progression</span>
                 <span className="font-semibold text-foreground">
-                  {
-                    {
-                      insufficient_data: "Pas encore assez de données",
-                      on_track: "Conforme",
-                      ahead: "En avance",
-                      behind: "À ajuster",
-                      maintaining: "Stable",
-                    }[physicalGoalProgress.state]
-                  }
+                  {GOAL_PROGRESS_STATE_LABELS[physicalGoalProgress.state]}
                 </span>
               </div>
             )}
@@ -1652,13 +1835,113 @@ function SanteNutritionnellePage() {
         </div>
       </Section>
 
-      {/* Analyse IA */}
+      {/* Analyse IA — Phase 9A. Déclenchée UNIQUEMENT à la demande (§21 du
+          brief) : jamais d'appel automatique au chargement de la page. Les
+          moteurs déterministes ci-dessus restent visibles indépendamment de
+          cette section (§19 : fonctionnement total sans IA). */}
       <Section title="Analyse IA">
-        <ComingSoonCard
-          icon={<Sparkles className="h-5 w-5" />}
-          title="Analyse IA"
-          description="Les analyses intelligentes arriveront prochainement."
-        />
+        {nutritionHealthInsight.data ? (
+          <div className="space-y-3">
+            <div className="rounded-2xl border border-white/5 bg-gradient-to-b from-card/95 to-card/70 p-4 shadow-card">
+              <div className="flex items-center gap-2">
+                <span
+                  className={
+                    "h-2 w-2 shrink-0 rounded-full " +
+                    (nutritionHealthInsight.data.status === "good"
+                      ? "bg-emerald-400"
+                      : nutritionHealthInsight.data.status === "attention"
+                        ? "bg-amber-400"
+                        : "bg-muted-foreground")
+                  }
+                />
+                <p className="text-sm font-bold">{nutritionHealthInsight.data.headline}</p>
+              </div>
+              <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground">
+                {nutritionHealthInsight.data.summary}
+              </p>
+
+              {nutritionHealthInsight.data.insights.length > 0 && (
+                <div className="mt-3 space-y-2 border-t border-border pt-3">
+                  {nutritionHealthInsight.data.insights.map((insight, i) => (
+                    <div key={i} className="flex items-start gap-2">
+                      <span
+                        className={
+                          "mt-1 h-1.5 w-1.5 shrink-0 rounded-full " +
+                          (insight.severity === "attention"
+                            ? "bg-amber-400"
+                            : "bg-muted-foreground/50")
+                        }
+                      />
+                      <div className="min-w-0">
+                        <p className="text-[12px] font-semibold">{insight.title}</p>
+                        <p className="text-[11px] leading-relaxed text-muted-foreground">
+                          {insight.explanation}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {nutritionHealthInsight.data.nextSteps.length > 0 && (
+                <div className="mt-3 border-t border-border pt-3">
+                  <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Pistes
+                  </p>
+                  <ul className="space-y-1">
+                    {nutritionHealthInsight.data.nextSteps.map((step, i) => (
+                      <li key={i} className="text-[11px] leading-relaxed text-muted-foreground">
+                        • {step}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => nutritionHealthInsight.mutate(nutritionHealthContext)}
+              disabled={nutritionHealthInsight.isPending}
+              className="w-full rounded-xl border border-border bg-card py-2.5 text-[12px] font-semibold text-foreground disabled:opacity-60"
+            >
+              {nutritionHealthInsight.isPending ? "Analyse en cours…" : "Réanalyser"}
+            </button>
+          </div>
+        ) : nutritionHealthInsight.isError ? (
+          <div className="rounded-2xl border border-dashed border-white/10 bg-white/[0.02] p-4 text-center">
+            <p className="text-xs font-medium text-muted-foreground">
+              {nutritionHealthInsight.error instanceof Error
+                ? nutritionHealthInsight.error.message
+                : "Analyse indisponible pour le moment."}
+            </p>
+            <button
+              type="button"
+              onClick={() => nutritionHealthInsight.mutate(nutritionHealthContext)}
+              className="mt-3 text-[11px] font-semibold text-primary"
+            >
+              Réessayer
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => nutritionHealthInsight.mutate(nutritionHealthContext)}
+            disabled={nutritionHealthInsight.isPending}
+            className="flex w-full items-center gap-3 rounded-2xl border border-white/5 bg-gradient-to-b from-card/95 to-card/70 p-4 text-left shadow-card disabled:opacity-60"
+          >
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-primary text-primary-foreground">
+              <Sparkles className="h-4 w-4" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold">
+                {nutritionHealthInsight.isPending ? "Analyse en cours…" : "Analyser ma situation"}
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                Cortex explique tes données actuelles — il ne calcule ni ne change rien.
+              </p>
+            </div>
+          </button>
+        )}
       </Section>
 
       {/* Disclaimer */}

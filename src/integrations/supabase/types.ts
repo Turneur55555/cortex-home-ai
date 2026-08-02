@@ -2423,7 +2423,6 @@ export type Database = {
       }
       nutrition_goals: {
         Row: {
-          activity_factor: number | null
           calorie_strategy_mode: string
           calories: number | null
           carbs: number | null
@@ -2431,20 +2430,16 @@ export type Database = {
           created_at: string
           fat_locked: boolean
           fats: number | null
-          fiber_g: number | null
           goal: string | null
           last_auto_adjustment_at: string | null
           macro_strategy_mode: string
-          objective: string | null
           protein_locked: boolean
           proteins: number | null
           target_rate: string | null
           updated_at: string
           user_id: string
-          weight_kg: number | null
         }
         Insert: {
-          activity_factor?: number | null
           calorie_strategy_mode?: string
           calories?: number | null
           carbs?: number | null
@@ -2452,20 +2447,16 @@ export type Database = {
           created_at?: string
           fat_locked?: boolean
           fats?: number | null
-          fiber_g?: number | null
           goal?: string | null
           last_auto_adjustment_at?: string | null
           macro_strategy_mode?: string
-          objective?: string | null
           protein_locked?: boolean
           proteins?: number | null
           target_rate?: string | null
           updated_at?: string
           user_id: string
-          weight_kg?: number | null
         }
         Update: {
-          activity_factor?: number | null
           calorie_strategy_mode?: string
           calories?: number | null
           carbs?: number | null
@@ -2473,17 +2464,14 @@ export type Database = {
           created_at?: string
           fat_locked?: boolean
           fats?: number | null
-          fiber_g?: number | null
           goal?: string | null
           last_auto_adjustment_at?: string | null
           macro_strategy_mode?: string
-          objective?: string | null
           protein_locked?: boolean
           proteins?: number | null
           target_rate?: string | null
           updated_at?: string
           user_id?: string
-          weight_kg?: number | null
         }
         Relationships: []
       }
