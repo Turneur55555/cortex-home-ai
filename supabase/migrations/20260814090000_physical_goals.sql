@@ -38,12 +38,21 @@ CREATE TABLE IF NOT EXISTS public.physical_goals (
 
 -- `goal` reprend EXACTEMENT la taxonomie stable Phase 4 (`nutrition_
 -- goals.goal`) — aucune deuxième taxonomie créée (§2 du brief).
+-- Idempotence : `DROP CONSTRAINT IF EXISTS` puis `ADD CONSTRAINT` — même
+-- convention que le reste du projet (ex. migration 20260809090000) ; un
+-- `ADD CONSTRAINT` nu n'est PAS idempotent en Postgres (pas d'`IF NOT
+-- EXISTS` pour les contraintes), ce qui faisait échouer `supabase db
+-- push` en CI lors d'une réapplication.
+ALTER TABLE public.physical_goals
+  DROP CONSTRAINT IF EXISTS physical_goals_goal_check;
 ALTER TABLE public.physical_goals
   ADD CONSTRAINT physical_goals_goal_check
   CHECK (goal IN ('fat_loss', 'maintenance', 'muscle_gain'));
 
 -- Même contrainte de cohérence rythme/objectif que `nutrition_goals_
 -- target_rate_check` (migration 20260807090000) — maintien sans rythme.
+ALTER TABLE public.physical_goals
+  DROP CONSTRAINT IF EXISTS physical_goals_target_rate_check;
 ALTER TABLE public.physical_goals
   ADD CONSTRAINT physical_goals_target_rate_check
   CHECK (
@@ -53,26 +62,40 @@ ALTER TABLE public.physical_goals
   );
 
 ALTER TABLE public.physical_goals
+  DROP CONSTRAINT IF EXISTS physical_goals_status_check;
+ALTER TABLE public.physical_goals
   ADD CONSTRAINT physical_goals_status_check
   CHECK (status IN ('active', 'completed', 'cancelled'));
 
 -- Mêmes bornes plausibles que `body_tracking` (une seule définition de
 -- "poids/BF plausible" dans la base, jamais une deuxième contradictoire).
 ALTER TABLE public.physical_goals
+  DROP CONSTRAINT IF EXISTS physical_goals_starting_weight_check;
+ALTER TABLE public.physical_goals
   ADD CONSTRAINT physical_goals_starting_weight_check
   CHECK (starting_weight_kg IS NULL OR (starting_weight_kg >= 20 AND starting_weight_kg <= 500));
+ALTER TABLE public.physical_goals
+  DROP CONSTRAINT IF EXISTS physical_goals_target_weight_check;
 ALTER TABLE public.physical_goals
   ADD CONSTRAINT physical_goals_target_weight_check
   CHECK (target_weight_kg IS NULL OR (target_weight_kg >= 20 AND target_weight_kg <= 500));
 ALTER TABLE public.physical_goals
+  DROP CONSTRAINT IF EXISTS physical_goals_starting_body_fat_check;
+ALTER TABLE public.physical_goals
   ADD CONSTRAINT physical_goals_starting_body_fat_check
   CHECK (starting_body_fat_percent IS NULL OR (starting_body_fat_percent >= 1 AND starting_body_fat_percent <= 70));
+ALTER TABLE public.physical_goals
+  DROP CONSTRAINT IF EXISTS physical_goals_target_body_fat_check;
 ALTER TABLE public.physical_goals
   ADD CONSTRAINT physical_goals_target_body_fat_check
   CHECK (target_body_fat_percent IS NULL OR (target_body_fat_percent >= 1 AND target_body_fat_percent <= 70));
 ALTER TABLE public.physical_goals
+  DROP CONSTRAINT IF EXISTS physical_goals_starting_lean_mass_check;
+ALTER TABLE public.physical_goals
   ADD CONSTRAINT physical_goals_starting_lean_mass_check
   CHECK (starting_lean_mass_kg IS NULL OR starting_lean_mass_kg > 0);
+ALTER TABLE public.physical_goals
+  DROP CONSTRAINT IF EXISTS physical_goals_starting_body_fat_method_check;
 ALTER TABLE public.physical_goals
   ADD CONSTRAINT physical_goals_starting_body_fat_method_check
   CHECK (starting_body_fat_method IS NULL OR starting_body_fat_method IN (
