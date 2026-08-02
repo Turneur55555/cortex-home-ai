@@ -72,6 +72,18 @@ import {
   type BodyCompositionCandidate,
 } from "@/lib/fitness/bodyCompositionForNutrition";
 import { BODY_FAT_METHOD_LABELS, CONFIDENCE_LABELS } from "@/lib/fitness/bodyComposition";
+import {
+  computeBodyFatTargetProjection,
+  computeGoalTrajectory,
+} from "@/lib/fitness/goalTrajectory";
+import { evaluateGoalProgress, isWeightGoalLikelyReached } from "@/lib/fitness/goalProgress";
+import {
+  useCancelPhysicalGoal,
+  useCompletePhysicalGoal,
+  usePhysicalGoal,
+  useUpdatePhysicalGoalRate,
+} from "@/hooks/usePhysicalGoal";
+import { PhysicalGoalSheet } from "@/components/fitness/PhysicalGoalSheet";
 import { addDaysYMD, localDateYMD } from "@/lib/dates";
 import { StatTile } from "@/components/fitness/StatTile";
 import { ComingSoonTile } from "@/components/fitness/ComingSoonTile";
@@ -101,12 +113,24 @@ const BMI_LABELS: Record<ReturnType<typeof bmiCategory>, string> = {
   obesite: "Obésité",
 };
 
+/** Libellé du rythme (`CALORIE_STRATEGY_RATES`) pour un objectif physique — `fat_loss`/`muscle_gain` seulement, `maintenance` n'a pas de rythme. */
+function rateLabelFor(goal: CalorieStrategyGoal, rate: FatLossRate | MuscleGainRate): string {
+  if (goal === "fat_loss" && rate in CALORIE_STRATEGY_RATES.fat_loss) {
+    return CALORIE_STRATEGY_RATES.fat_loss[rate as FatLossRate].label;
+  }
+  if (goal === "muscle_gain" && rate in CALORIE_STRATEGY_RATES.muscle_gain) {
+    return CALORIE_STRATEGY_RATES.muscle_gain[rate as MuscleGainRate].label;
+  }
+  return rate;
+}
+
 function SanteNutritionnellePage() {
   const today = localDateYMD();
   const [showMetabolicSheet, setShowMetabolicSheet] = useState(false);
   const [showAnalysisSheet, setShowAnalysisSheet] = useState(false);
   const [showAutoModeConfirm, setShowAutoModeConfirm] = useState(false);
   const [showMacroAutoModeConfirm, setShowMacroAutoModeConfirm] = useState(false);
+  const [showPhysicalGoalSheet, setShowPhysicalGoalSheet] = useState(false);
 
   const { data: bodyRows, isLoading: bodyLoading } = useBodyMeasurements();
   const { data: latestWeight } = useLatestBodyWeight();
@@ -121,6 +145,10 @@ function SanteNutritionnellePage() {
   const updateMacroStrategyPreference = useUpdateMacroStrategyPreference();
   const applyMacroGoal = useApplyMacroGoal();
   const { data: lastMacroAdjustment } = useLastMacroGoalAdjustment();
+  const { data: physicalGoal } = usePhysicalGoal();
+  const cancelPhysicalGoal = useCancelPhysicalGoal();
+  const completePhysicalGoal = useCompletePhysicalGoal();
+  const updatePhysicalGoalRate = useUpdatePhysicalGoalRate();
   const { totals, remaining } = useNutritionTotals(nutritionRows, nutritionGoals ?? null);
 
   const adaptiveWindowStart = addDaysYMD(
@@ -258,6 +286,55 @@ function SanteNutritionnellePage() {
     selectedBodyComposition?.usableForAutomaticAdjustment && rawLeanMassProteinTargetG != null
       ? clampAutomaticProteinTarget(rawLeanMassProteinTargetG, nutritionGoals?.proteins ?? null)
       : null;
+
+  // Phase 8 — objectif physique : ORCHESTRE les moteurs existants
+  // (calorieStrategy pour la définition du rythme, adaptiveTdee pour le
+  // poids lissé/la tendance déjà calculés plus haut) — ne recalcule
+  // JAMAIS un TDEE/une calorie/une macro elle-même (§28/§29/§30/§31 du
+  // brief). Le poids "actuel" utilisé pour la trajectoire préfère le
+  // poids LISSÉ (`adaptiveTdee.weight.endTrendKg`) au poids brut, avec
+  // repli explicite si pas encore assez de données (§41).
+  const goalCurrentWeightKg = adaptiveTdee.weight.endTrendKg ?? weight;
+  const physicalGoalTrajectory = physicalGoal
+    ? computeGoalTrajectory({
+        goal: physicalGoal.goal,
+        targetRate: physicalGoal.targetRate,
+        currentWeightKg: goalCurrentWeightKg,
+        targetWeightKg: physicalGoal.targetWeightKg,
+        todayIso: today,
+      })
+    : null;
+  const physicalGoalBodyFatProjection =
+    physicalGoal && physicalGoal.targetBodyFatPercent != null
+      ? computeBodyFatTargetProjection({
+          currentWeightKg: goalCurrentWeightKg,
+          currentBodyFatPercent: selectedBodyComposition?.bodyFatPercent ?? null,
+          targetBodyFatPercent: physicalGoal.targetBodyFatPercent,
+          confidence: selectedBodyComposition?.confidence ?? null,
+        })
+      : null;
+  const maintenanceToleranceKg = physicalGoalTrajectory?.maintenanceZoneKg
+    ? (physicalGoalTrajectory.maintenanceZoneKg.maxKg -
+        physicalGoalTrajectory.maintenanceZoneKg.minKg) /
+      2
+    : null;
+  const physicalGoalProgress = physicalGoal
+    ? evaluateGoalProgress({
+        goal: physicalGoal.goal,
+        weeklyTargetChangeKg: physicalGoalTrajectory?.weeklyTargetChangeKg ?? null,
+        maintenanceToleranceKg,
+        observedWeeklyTrendKg: adaptiveTdee.weight.weeklyTrendKg,
+        measurementCount: adaptiveTdee.weight.measurementCount,
+        windowCalendarDays: adaptiveTdee.window.calendarDays,
+      })
+    : null;
+  const physicalGoalLikelyReached =
+    physicalGoal != null &&
+    isWeightGoalLikelyReached({
+      targetWeightKg: physicalGoal.targetWeightKg,
+      smoothedCurrentWeightKg: adaptiveTdee.weight.endTrendKg,
+      measurementCount: adaptiveTdee.weight.measurementCount,
+    });
 
   const macroStrategy = computeMacroStrategy({
     calories: calorieGoal,
@@ -1308,6 +1385,150 @@ function SanteNutritionnellePage() {
           <ComingSoonRow icon={<Scan className="h-4 w-4" />} label="Analyse corporelle IA" />
         </div>
       </Section>
+
+      {/* Objectif physique — Phase 8 */}
+      <Section title="Objectif physique">
+        {!physicalGoal ? (
+          <button
+            type="button"
+            onClick={() => setShowPhysicalGoalSheet(true)}
+            className="flex w-full items-center justify-between gap-3 rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-3.5 text-left"
+          >
+            <div>
+              <p className="text-xs font-medium">Aucun objectif physique actif</p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">
+                Définis un objectif de poids/composition corporelle et suis ta progression.
+              </p>
+            </div>
+            <TrendingUp className="h-4 w-4 shrink-0 text-muted-foreground" />
+          </button>
+        ) : (
+          <div className="rounded-2xl border border-white/5 bg-gradient-to-b from-card/95 to-card/70 p-4 shadow-card">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm font-bold">
+                {physicalGoal.goal === "fat_loss"
+                  ? "Perte de gras"
+                  : physicalGoal.goal === "muscle_gain"
+                    ? "Prise de masse"
+                    : "Maintien"}
+              </span>
+              {physicalGoal.targetRate && (
+                <span className="text-[11px] text-muted-foreground">
+                  {rateLabelFor(physicalGoal.goal, physicalGoal.targetRate)}
+                </span>
+              )}
+            </div>
+
+            <p className="mt-1 text-sm font-semibold">
+              {physicalGoal.startingWeightKg != null ? `${physicalGoal.startingWeightKg} kg` : "—"}
+              {physicalGoal.targetWeightKg != null && ` → ${physicalGoal.targetWeightKg} kg`}
+            </p>
+
+            {physicalGoalProgress && (
+              <div className="mt-2 flex items-center gap-1.5 text-[11px]">
+                <span className="text-muted-foreground">Progression</span>
+                <span className="font-semibold text-foreground">
+                  {
+                    {
+                      insufficient_data: "Pas encore assez de données",
+                      on_track: "Conforme",
+                      ahead: "En avance",
+                      behind: "À ajuster",
+                      maintaining: "Stable",
+                    }[physicalGoalProgress.state]
+                  }
+                </span>
+              </div>
+            )}
+
+            {physicalGoalTrajectory?.status === "ok" &&
+              physicalGoalTrajectory.estimatedDurationWeeks != null && (
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  ≈ {physicalGoalTrajectory.estimatedDurationWeeks} semaine
+                  {physicalGoalTrajectory.estimatedDurationWeeks > 1 ? "s" : ""} restantes
+                  (estimation)
+                </p>
+              )}
+            {physicalGoalTrajectory?.maintenanceZoneKg && (
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Zone de maintien ≈ {physicalGoalTrajectory.maintenanceZoneKg.minKg}–
+                {physicalGoalTrajectory.maintenanceZoneKg.maxKg} kg
+              </p>
+            )}
+            {physicalGoalBodyFatProjection?.status === "ok" && (
+              <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                Poids théorique à {physicalGoal.targetBodyFatPercent} % BF ≈{" "}
+                {physicalGoalBodyFatProjection.projectedWeightAtTargetBFKg} kg (projection
+                théorique, masse maigre supposée constante)
+              </p>
+            )}
+
+            {physicalGoal.goal !== "maintenance" && (
+              <div className="mt-3 flex gap-1.5">
+                {Object.entries(CALORIE_STRATEGY_RATES[physicalGoal.goal]).map(([key, rate]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() =>
+                      updatePhysicalGoalRate.mutate({
+                        id: physicalGoal.id,
+                        targetRate: key as FatLossRate | MuscleGainRate,
+                      })
+                    }
+                    disabled={updatePhysicalGoalRate.isPending}
+                    className={
+                      "flex-1 rounded-full border px-2 py-1.5 text-[11px] font-medium transition-colors disabled:opacity-60 " +
+                      (physicalGoal.targetRate === key
+                        ? "border-primary bg-primary/10 text-foreground"
+                        : "border-border bg-surface text-muted-foreground")
+                    }
+                  >
+                    {rate.label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {physicalGoalLikelyReached && (
+              <button
+                type="button"
+                onClick={() => completePhysicalGoal.mutate(physicalGoal.id)}
+                disabled={completePhysicalGoal.isPending}
+                className="mt-3 w-full rounded-xl bg-gradient-primary py-2 text-[11px] font-semibold text-primary-foreground shadow-glow disabled:opacity-60"
+              >
+                Marquer comme atteint
+              </button>
+            )}
+
+            <div className="mt-3 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setShowPhysicalGoalSheet(true)}
+                className="flex-1 rounded-xl border border-border bg-card py-2 text-[11px] font-semibold text-foreground"
+              >
+                Nouvel objectif
+              </button>
+              <button
+                type="button"
+                onClick={() => cancelPhysicalGoal.mutate(physicalGoal.id)}
+                disabled={cancelPhysicalGoal.isPending}
+                className="flex-1 rounded-xl border border-border bg-card py-2 text-[11px] font-semibold text-muted-foreground disabled:opacity-60"
+              >
+                Annuler
+              </button>
+            </div>
+          </div>
+        )}
+      </Section>
+
+      {showPhysicalGoalSheet && (
+        <PhysicalGoalSheet
+          onClose={() => setShowPhysicalGoalSheet(false)}
+          currentWeightKg={goalCurrentWeightKg}
+          selectedBodyComposition={selectedBodyComposition}
+          defaultGoal={strategyGoal}
+        />
+      )}
 
       {/* Nutrition */}
       <Section title="Nutrition">

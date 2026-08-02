@@ -2487,6 +2487,60 @@ export type Database = {
         }
         Relationships: []
       }
+      physical_goals: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          goal: string
+          id: string
+          started_at: string
+          starting_body_fat_method: string | null
+          starting_body_fat_percent: number | null
+          starting_lean_mass_kg: number | null
+          starting_weight_kg: number | null
+          status: string
+          target_body_fat_percent: number | null
+          target_rate: string | null
+          target_weight_kg: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          goal: string
+          id?: string
+          started_at: string
+          starting_body_fat_method?: string | null
+          starting_body_fat_percent?: number | null
+          starting_lean_mass_kg?: number | null
+          starting_weight_kg?: number | null
+          status?: string
+          target_body_fat_percent?: number | null
+          target_rate?: string | null
+          target_weight_kg?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          goal?: string
+          id?: string
+          started_at?: string
+          starting_body_fat_method?: string | null
+          starting_body_fat_percent?: number | null
+          starting_lean_mass_kg?: number | null
+          starting_weight_kg?: number | null
+          status?: string
+          target_body_fat_percent?: number | null
+          target_rate?: string | null
+          target_weight_kg?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
