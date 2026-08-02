@@ -2463,3 +2463,125 @@ rester manuel). Vérification faite sur les vrais workflows CI, pas une supposit
   de `body_tracking`, hors scope de cette phase).
 - **Livrée sur la branche dédiée `claude/phase6c-body-fat-photo-estimation`, NON fusionnée dans `main`**
   conformément à l'instruction explicite du brief.
+
+## Composition corporelle → stratégie protéines/macros — Phase 7 (2026-08-13, même session)
+- **Phase 6C mergée dans `main`** (SHA `b87d961`) avant cette phase — CI intégralement verte (8
+  workflows : Typecheck, Supabase Migrations, Supabase Types Sync, RLS Regression Tests, Audit Git↔
+  Supabase Drift, Supabase project ref, Deploy Edge Functions, Meal Slugs Check), objets DB re-vérifiés
+  en direct (table `body_photo_analyses` 87/87, bucket privé, 4 policies Storage, RLS active, CHECK
+  constraints étendues), aucune alerte sécurité nouvelle.
+- **Audit préalable exhaustif** (macroStrategy.ts, calorieStrategy.ts, bodyComposition.ts, schémas
+  `body_tracking`/`nutrition_goals`, RPC `apply_calorie_goal_adjustment`/`apply_macro_goal_adjustment`,
+  hooks, `sante-nutritionnelle.tsx`, tests existants) réalisé via agent Explore dédié avant toute
+  implémentation, conformément à l'exigence stricte du brief. Constat central confirmé : le moteur
+  protéines actuel (`PROTEIN_G_PER_KG: {fat_loss:2.2, maintenance:1.8, muscle_gain:2.0}` g/kg de POIDS
+  TOTAL plafonné à 120 kg) ne s'appuie JAMAIS sur le Body Fat — garde-fou documenté explicitement dans
+  le code (`macroStrategy.ts`). Confiance déjà centralisée et mature (`BODY_FAT_METHOD_CONFIDENCE`,
+  Phase 6A) : `dexa→high`, `bioimpedance→medium`, `measurements→medium`, `photo_estimate→low`,
+  `manual→low`. `calorie_goal_adjustments` avait déjà une colonne `reason` libre, PAS
+  `macro_goal_adjustments` — lacune comblée cette phase (voir migration ci-dessous).
+- **Décision d'architecture centrale** : Body Fat reste **une donnée d'ENRICHISSEMENT, jamais une
+  dépendance obligatoire**. Sans composition corporelle exploitable, `sante-nutritionnelle.tsx` retombe
+  silencieusement sur le pipeline poids corporel Phase 5, bit pour bit identique (non-régression
+  testée explicitement).
+- **`lib/fitness/bodyCompositionForNutrition.ts`** (nouveau, logique pure, zéro import React/Supabase) :
+  - `selectBodyCompositionForNutrition(candidates, todayIso)` — sélectionne, parmi un historique
+    `body_tracking` trié du plus récent au plus ancien (ordre déjà produit par `useBodyMeasurements`),
+    la première mesure réellement exploitable : méthode connue + BF valide (1-70 %, réutilise
+    `isValidBodyFatPercent` de Phase 6A) + poids ET BF sur la MÊME ligne (jamais un BF ancien combiné à
+    un poids d'aujourd'hui) + dans la fenêtre de récence. **Aucune hiérarchie arbitraire de méthode**
+    (DEXA > mensurations > bioimpédance > photo n'est jamais supposée) : le candidat le PLUS RÉCENT
+    exploitable l'emporte, choix documenté explicitement dans le code.
+  - `BODY_COMPOSITION_MAX_AGE_DAYS = 90` — politique de récence centralisée et documentée comme règle
+    produit PRUDENTE (pas une certitude scientifique) : au-delà, repli silencieux sur le poids corporel.
+  - Résultat `SelectedBodyComposition` expose `usableForAutomaticAdjustment` (= confiance ≠ "low",
+    donc `false` pour `photo_estimate`/`manual`, `true` pour `dexa`/`bioimpedance`/`measurements`) —
+    distinct de l'utilisabilité pour la recommandation MANUELLE (toujours vraie dès qu'une composition
+    est sélectionnée) : une estimation photo peut informer l'utilisateur sans jamais déclencher un
+    ajustement automatique.
+  - `LEAN_MASS_PROTEIN_G_PER_KG: {fat_loss:2.6, maintenance:2.0, muscle_gain:2.4}` g/kg de MASSE MAIGRE
+    — **PAS une conversion naïve** des coefficients poids-total (interdiction explicite du brief) :
+    calibrés pour rester, à un BF "moyen" (~20 %), SOUS l'équivalence naïve (poids×coef / 0.8), donc
+    toujours plus conservateurs que le pipeline poids-total, jamais plus agressifs. Justification
+    littérature concise en commentaire (ISSN position stand, Jäger et al. 2017, fourchette haute
+    jusqu'à ~2.3-3.1 g/kg de masse maigre en déficit) — pas une formule copiée d'un blog fitness.
+  - `computeLeanMassProteinTargetG(goal, leanMassKg)` — réutilise le plafond partagé
+    `MACRO_STRATEGY_COEFFICIENTS.BODYWEIGHT_CAP_KG` (import direct depuis `macroStrategy.ts`, aucune
+    duplication de constante).
+- **`lib/fitness/macroStrategy.ts` étendu (additif, non-régression garantie)** :
+  - `MacroStrategyInput.proteinTargetOverrideG?` — remplace UNIQUEMENT l'étape protéines du pipeline
+    Phase 5 existant (poids×coefficient) quand fourni et valide ; tout le reste (lipides, glucides,
+    arrondi, enveloppe, tolérance) reste strictement identique — **aucun second moteur macros créé**
+    (§16 du brief). `undefined`/`null`/négatif/non fini → ignoré, comportement Phase 5 inchangé (testé
+    explicitement, `toEqual` bit-à-bit).
+  - `MacroStrategyResult.proteinBasis: "body_weight" | "lean_mass"` — nouveau champ additif exposant la
+    provenance retenue, jamais utilisé pour changer le comportement du pipeline lui-même.
+  - Un verrou protéines actif reste **TOUJOURS prioritaire** sur l'override (le verrou n'appelle même
+    pas ce chemin de calcul) — testé explicitement.
+  - `MAX_AUTO_PROTEIN_ADJUSTMENT_STEP_G = 30` + `clampAutomaticProteinTarget(rawTarget, current)` —
+    garde-fou CENTRALISÉ (jamais caché dans un composant React, §24 du brief) : un seul ajustement
+    AUTOMATIQUE des protéines ne peut jamais s'écarter de plus de 30 g de la valeur active. Ne
+    s'applique JAMAIS à une application manuelle (clic explicite = pas de saut « caché »). Scénario
+    extrême du brief testé tel quel : 120 g actif + recommandation brute 190 g → clampé à 150 g.
+- **Migration `20260813090000_macro_goal_adjustments_reason.sql`** : ajoute `macro_goal_adjustments.
+  reason text` (nullable, sans CHECK — même pattern que `calorie_goal_adjustments.reason` déjà
+  existant) ; étend `apply_macro_goal_adjustment` (+`_reason`) et `apply_calorie_goal_adjustment`
+  (+`_macro_reason`, chemin combiné calories+macros auto) avec un paramètre trailing optionnel
+  `DEFAULT NULL` — appels existants inchangés.
+  - **Incident réel rencontré et corrigé pendant l'application** : `CREATE OR REPLACE FUNCTION` avec un
+    paramètre trailing supplémentaire change la SIGNATURE (nombre d'arguments) — Postgres a donc créé
+    un NOUVEL objet fonction surchargé au lieu de remplacer l'existant, laissant temporairement DEUX
+    versions de chaque RPC coexister (ancienne + nouvelle arité), avec un risque d'appel ambigu côté
+    client. Corrigé par `DROP FUNCTION` explicite des anciennes signatures avant recréation — un seul
+    objet par nom vérifié après coup (`pronargs` unique).
+  - **Deuxième incident détecté et corrigé dans la foulée** : les nouveaux objets fonction (signature
+    différente = nouvel objet Postgres) ne portaient PAS les `REVOKE`/`GRANT` explicites de la
+    migration d'origine — `anon` avait retrouvé un accès EXECUTE par défaut (régression de sécurité
+    réelle, confirmée via `has_function_privilege('anon', ...)`  = `true`). Corrigé par `REVOKE ALL ...
+    FROM PUBLIC, anon` + `GRANT EXECUTE ... TO authenticated` explicites sur les nouvelles signatures,
+    revérifié (`anon_can_exec = false`) avant de committer la migration. Le fichier de migration commité
+    documente les deux incidents et inclut les correctifs pour que toute réapplication future (CI)
+    reproduise l'état final sûr directement, sans repasser par l'état intermédiaire vulnérable.
+  - Vérifié post-migration : `reason` présente sur `macro_goal_adjustments`, une seule fonction par nom
+    (`apply_macro_goal_adjustment` arity 13, `apply_calorie_goal_adjustment` arity 19), grants corrects.
+    `types.ts` régénéré, diff purement additif (+5 lignes). `get_advisors(security)` : aucune nouvelle
+    alerte imputable à cette phase (uniquement les WARN pré-existants `authenticated_security_definer_
+    function_executable`, déjà présents avant Phase 7 sur ces mêmes fonctions).
+- **Intégration `sante-nutritionnelle.tsx`** :
+  - `bodyCompositionCandidates` construits depuis `bodyRows` (déjà chargé par `useBodyMeasurements`,
+    aucune nouvelle requête) → `selectedBodyComposition` via `selectBodyCompositionForNutrition`.
+  - `macroStrategy` (affichage + application MANUELLE) reçoit `proteinTargetOverrideG` **brut, non
+    clampé** — même une estimation photo peut enrichir la recommandation manuelle, l'utilisateur reste
+    seul décisionnaire (§6 du brief : « il peut être exclu de la prescription automatique »).
+  - Deux calculs SÉPARÉS pour l'éligibilité AUTOMATIQUE (`macroStrategyForAutoAtCurrentCalories` et
+    `macroStrategyAtProposedCalories`) reçoivent `autoLeanMassProteinTargetG` — `null` sauf si
+    `selectedBodyComposition.usableForAutomaticAdjustment` ET après passage par
+    `clampAutomaticProteinTarget` — jamais le même override brut que le chemin manuel.
+  - `reason: "lean_mass"` transmis à `useApplyMacroGoal`/`useApplyCalorieGoal` (manuel ET automatique)
+    uniquement quand la composition corporelle a réellement influencé la valeur appliquée.
+- **UI** : bloc "Base de calcul des protéines" (masse maigre en kg, méthode + confiance via
+  `BODY_FAT_METHOD_LABELS`/`CONFIDENCE_LABELS` de Phase 6A, jamais dupliqués) affiché uniquement quand
+  `proteinBasis === "lean_mass"` ; note sobre "Estimation photo disponible — utilisée à titre indicatif"
+  quand le mode est automatique mais la composition sélectionnée n'est pas assez fiable pour l'auto ;
+  explication courte adaptée selon la base retenue. **Aucune demande de Body Fat obligatoire** —
+  l'intégralité de l'écran reste utilisable sans aucune mesure de composition corporelle (§30).
+- **Scope strictement respecté** : aucune modification de `calorieStrategy.ts`/BMR/NEAT/EAT/TEF/TDEE ;
+  pas d'objectif BF/poids cible/prédiction de date ; pas de reconnaissance faciale/diagnostic médical ;
+  pas de nouvelle méthode BF ; pas de nouvelle analyse photo ; pas de LLM dans la décision (moteur
+  entièrement déterministe) — vérifié via `git diff --stat` (fichiers hors scope : vide).
+- **Tests** : 33 nouveaux tests (`bodyCompositionForNutrition.test.ts` : sélection/récence/snapshot/
+  confiance/coefficients masse maigre ; `macroStrategy.test.ts` : non-régression bit-à-bit sans
+  override, override valide/invalide/verrouillé/cas extrême, `clampAutomaticProteinTarget` avec le
+  scénario extrême exact du brief 120g→190g brut→150g clampé). 935 tests au total (902+33), tous verts.
+- `npx tsc --noEmit` / `npx eslint` (fichiers modifiés) / `npx vitest run` (935 passed) / `npm run
+  build` : tous verts. `node scripts/validate-supabase.mjs` : migrations idempotentes OK. Aucun
+  `as any` introduit.
+- **Vérification visuelle mobile NON effectuée** — même limite sandbox `EAFNOSUPPORT` que toutes les
+  phases précédentes de cette session.
+- **Limites connues** : les coefficients `LEAN_MASS_PROTEIN_G_PER_KG` sont une décision produit
+  raisonnée (documentée, conservative par construction) mais n'ont jamais été validés empiriquement
+  contre des données réelles ; le seuil de récence (90 jours) et le pas maximal d'ajustement automatique
+  (30 g) sont des règles produit prudentes explicitement documentées comme telles, pas des certitudes
+  scientifiques — ajustables sans casser l'architecture si besoin.
+- **Livrée sur la branche dédiée `claude/phase7-body-composition-nutrition`, NON fusionnée dans
+  `main`** conformément à l'instruction explicite du brief.

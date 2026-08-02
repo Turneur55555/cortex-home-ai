@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  clampAutomaticProteinTarget,
   compareMacros,
   computeMacroStrategy,
   evaluateAutoMacroAdjustment,
@@ -593,5 +594,111 @@ describe("evaluateAutoMacroAdjustment", () => {
   it("§44 — indépendance des modes : ce module ne lit jamais calorie_strategy_mode (aucune référence dans l'input)", () => {
     const input = autoInput({});
     expect(Object.keys(input)).not.toContain("calorieStrategyMode");
+  });
+});
+
+// ---------------------------------------------------------------------
+// Phase 7 — `proteinTargetOverrideG` (composition corporelle → protéines)
+// ---------------------------------------------------------------------
+
+describe("computeMacroStrategy — proteinTargetOverrideG (Phase 7)", () => {
+  it("§31 — non-régression : override absent → résultat identique à Phase 5/6 (chemin non verrouillé)", () => {
+    const withoutOverride = computeMacroStrategy(base({}));
+    const withUndefined = computeMacroStrategy(base({ proteinTargetOverrideG: undefined }));
+    const withNull = computeMacroStrategy(base({ proteinTargetOverrideG: null }));
+    expect(withUndefined).toEqual(withoutOverride);
+    expect(withNull).toEqual(withoutOverride);
+    expect(withoutOverride.proteinBasis).toBe("body_weight");
+  });
+
+  it("§31 — non-régression : override absent → résultat identique à Phase 5B (chemin verrouillé)", () => {
+    const withoutOverride = computeMacroStrategy(base({ lockedCarbsG: 200 }));
+    const withNull = computeMacroStrategy(
+      base({ lockedCarbsG: 200, proteinTargetOverrideG: null }),
+    );
+    expect(withNull).toEqual(withoutOverride);
+    expect(withoutOverride.proteinBasis).toBe("body_weight");
+  });
+
+  it("override valide et protéines non verrouillées → utilisé à la place de poids×coefficient, proteinBasis = lean_mass", () => {
+    const withOverride = computeMacroStrategy(base({ proteinTargetOverrideG: 180 }));
+    expect(withOverride.proteinsG).toBe(180);
+    expect(withOverride.proteinBasis).toBe("lean_mass");
+    expect(withOverride.proteinTargetGPerKg).toBeNull();
+  });
+
+  it("override + protéines verrouillées → le verrou gagne, override totalement ignoré, proteinBasis reste body_weight", () => {
+    const withOverride = computeMacroStrategy(
+      base({ lockedProteinsG: 150, proteinTargetOverrideG: 999 }),
+    );
+    expect(withOverride.proteinsG).toBe(150);
+    expect(withOverride.proteinBasis).toBe("body_weight");
+  });
+
+  it("override + un AUTRE verrou actif (carbs) → override toujours appliqué à l'étape protéines non verrouillée", () => {
+    const result = computeMacroStrategy(base({ lockedCarbsG: 150, proteinTargetOverrideG: 170 }));
+    expect(result.proteinsG).toBe(170);
+    expect(result.carbsG).toBe(150);
+    expect(result.proteinBasis).toBe("lean_mass");
+  });
+
+  it("override respecte le reste du pipeline : lipides/glucides recalculés cohérence énergétique conservée", () => {
+    const result = computeMacroStrategy(base({ calories: 2500, proteinTargetOverrideG: 175 }));
+    expect(result.proteinsG).toBe(175);
+    const totalCalories = macroCaloriesOf(result.proteinsG!, result.carbsG!, result.fatsG!);
+    expect(Math.abs(totalCalories - 2500)).toBeLessThanOrEqual(
+      MACRO_STRATEGY_COEFFICIENTS.CALORIE_TOLERANCE_KCAL,
+    );
+  });
+
+  it("override négatif/NaN/Infinity → ignoré, repli silencieux sur le poids corporel (comportement Phase 5 inchangé)", () => {
+    const baseline = computeMacroStrategy(base({}));
+    for (const invalid of [-10, NaN, Infinity, -Infinity]) {
+      const result = computeMacroStrategy(base({ proteinTargetOverrideG: invalid }));
+      expect(result.proteinsG).toBe(baseline.proteinsG);
+      expect(result.proteinBasis).toBe("body_weight");
+    }
+  });
+
+  it("override = 0 est une valeur valide (masse maigre nulle en théorie) → utilisée telle quelle", () => {
+    const result = computeMacroStrategy(base({ proteinTargetOverrideG: 0 }));
+    expect(result.proteinsG).toBe(0);
+    expect(result.proteinBasis).toBe("lean_mass");
+  });
+
+  it("§9/§41 — cas extrême : override dépasse l'enveloppe calorique à lui seul → tout part en protéines, comme le chemin poids total", () => {
+    const result = computeMacroStrategy(base({ calories: 800, proteinTargetOverrideG: 400 }));
+    expect(result.proteinsG).toBe(200); // 800 kcal / 4 kcal/g
+    expect(result.fatsG).toBe(0);
+    expect(result.carbsG).toBe(0);
+    expect(result.limited).toBe(true);
+  });
+});
+
+describe("clampAutomaticProteinTarget — garde-fou automatique (§24/§41 du brief Phase 7)", () => {
+  it("écart déjà sous le plafond → valeur brute inchangée", () => {
+    expect(clampAutomaticProteinTarget(140, 130)).toBe(140);
+  });
+
+  it("écart au-dessus du plafond (hausse) → plafonné à currentProteinsG + MAX_AUTO_PROTEIN_ADJUSTMENT_STEP_G", () => {
+    // Scénario extrême du brief (§41) : 120 g actif, recommandation brute 190 g.
+    const clamped = clampAutomaticProteinTarget(190, 120);
+    expect(clamped).toBe(120 + MACRO_STRATEGY_COEFFICIENTS.MAX_AUTO_PROTEIN_ADJUSTMENT_STEP_G);
+    expect(clamped).toBe(150);
+  });
+
+  it("écart au-dessus du plafond (baisse) → plafonné à currentProteinsG - MAX_AUTO_PROTEIN_ADJUSTMENT_STEP_G", () => {
+    const clamped = clampAutomaticProteinTarget(50, 120);
+    expect(clamped).toBe(120 - MACRO_STRATEGY_COEFFICIENTS.MAX_AUTO_PROTEIN_ADJUSTMENT_STEP_G);
+    expect(clamped).toBe(90);
+  });
+
+  it("borne basse jamais négative même avec un plafond agressif et une valeur actuelle faible", () => {
+    expect(clampAutomaticProteinTarget(-50, 10)).toBe(0);
+  });
+
+  it("currentProteinsG null/NaN → aucune valeur active à protéger, la cible brute est retournée telle quelle", () => {
+    expect(clampAutomaticProteinTarget(190, null)).toBe(190);
+    expect(clampAutomaticProteinTarget(190, NaN)).toBe(190);
   });
 });

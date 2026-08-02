@@ -2187,6 +2187,7 @@ export type Database = {
           previous_fats: number | null
           previous_proteins: number | null
           protein_locked: boolean | null
+          reason: string | null
           recommended_carbs: number | null
           recommended_fats: number | null
           recommended_proteins: number | null
@@ -2207,6 +2208,7 @@ export type Database = {
           previous_fats?: number | null
           previous_proteins?: number | null
           protein_locked?: boolean | null
+          reason?: string | null
           recommended_carbs?: number | null
           recommended_fats?: number | null
           recommended_proteins?: number | null
@@ -2227,6 +2229,7 @@ export type Database = {
           previous_fats?: number | null
           previous_proteins?: number | null
           protein_locked?: boolean | null
+          reason?: string | null
           recommended_carbs?: number | null
           recommended_fats?: number | null
           recommended_proteins?: number | null
@@ -3994,6 +3997,7 @@ export type Database = {
           _fat_locked?: boolean
           _goal?: string
           _macro_mode?: string
+          _macro_reason?: string
           _mode: string
           _protein_locked?: boolean
           _reason?: string
@@ -4018,6 +4022,7 @@ export type Database = {
           _goal?: string
           _mode: string
           _protein_locked?: boolean
+          _reason?: string
           _recommended_carbs?: number
           _recommended_fats?: number
           _recommended_proteins?: number

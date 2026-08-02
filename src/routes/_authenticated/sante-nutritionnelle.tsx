@@ -61,10 +61,17 @@ import {
   type MuscleGainRate,
 } from "@/lib/fitness/calorieStrategy";
 import {
+  clampAutomaticProteinTarget,
   compareMacros,
   computeMacroStrategy,
   evaluateAutoMacroAdjustment,
 } from "@/lib/fitness/macroStrategy";
+import {
+  computeLeanMassProteinTargetG,
+  selectBodyCompositionForNutrition,
+  type BodyCompositionCandidate,
+} from "@/lib/fitness/bodyCompositionForNutrition";
+import { BODY_FAT_METHOD_LABELS, CONFIDENCE_LABELS } from "@/lib/fitness/bodyComposition";
 import { addDaysYMD, localDateYMD } from "@/lib/dates";
 import { StatTile } from "@/components/fitness/StatTile";
 import { ComingSoonTile } from "@/components/fitness/ComingSoonTile";
@@ -222,6 +229,36 @@ function SanteNutritionnellePage() {
   const carbsLocked = nutritionGoals?.carbsLocked ?? false;
   const fatLocked = nutritionGoals?.fatLocked ?? false;
 
+  // Phase 7 — Body Fat n'est JAMAIS une dépendance obligatoire : sans
+  // composition corporelle exploitable, tout ce qui suit retombe
+  // silencieusement sur le pipeline poids corporel Phase 5 (§30 du brief).
+  // `bodyRows` est déjà trié du plus récent au plus ancien
+  // (`useBodyMeasurements`) — même ordre attendu par
+  // `selectBodyCompositionForNutrition`.
+  const bodyCompositionCandidates: BodyCompositionCandidate[] = (bodyRows ?? []).map((row) => ({
+    date: row.date,
+    weightKg: row.weight,
+    bodyFatPercent: row.body_fat,
+    method: row.body_fat_method,
+  }));
+  const selectedBodyComposition = selectBodyCompositionForNutrition(
+    bodyCompositionCandidates,
+    today,
+  );
+  const rawLeanMassProteinTargetG = selectedBodyComposition
+    ? computeLeanMassProteinTargetG(strategyGoal, selectedBodyComposition.leanMassKg)
+    : null;
+  // Réservé au mode AUTOMATIQUE : `null` tant que la composition
+  // corporelle sélectionnée n'est pas assez fiable pour un déclenchement
+  // automatique (§21/§22 du brief) — une estimation photo reste utilisable
+  // pour la recommandation MANUELLE ci-dessous, jamais pour l'automatique
+  // seule. Plafonné (§24/§41) pour qu'un seul ajustement automatique ne
+  // saute jamais brutalement.
+  const autoLeanMassProteinTargetG =
+    selectedBodyComposition?.usableForAutomaticAdjustment && rawLeanMassProteinTargetG != null
+      ? clampAutomaticProteinTarget(rawLeanMassProteinTargetG, nutritionGoals?.proteins ?? null)
+      : null;
+
   const macroStrategy = computeMacroStrategy({
     calories: calorieGoal,
     bodyWeightKg: weight,
@@ -229,6 +266,7 @@ function SanteNutritionnellePage() {
     lockedProteinsG: proteinLocked ? (nutritionGoals?.proteins ?? null) : null,
     lockedCarbsG: carbsLocked ? (nutritionGoals?.carbs ?? null) : null,
     lockedFatsG: fatLocked ? (nutritionGoals?.fats ?? null) : null,
+    proteinTargetOverrideG: rawLeanMassProteinTargetG,
   });
   const macroComparison = compareMacros(
     {
@@ -255,7 +293,8 @@ function SanteNutritionnellePage() {
   // Recommandation macros À LA calorie PROPOSÉE par l'ajustement
   // automatique calorique (utile uniquement si les deux modes sont
   // automatiques ensemble — §21/§22 du brief Phase 5B, atomicité
-  // calories+macros dans la même RPC).
+  // calories+macros dans la même RPC). Override AUTOMATIQUE (clampé/
+  // conditionné), jamais le brut réservé au manuel.
   const macroStrategyAtProposedCalories = computeMacroStrategy({
     calories: calorieAutoEligible ? autoAdjustment.proposedCalories : calorieGoal,
     bodyWeightKg: weight,
@@ -263,10 +302,24 @@ function SanteNutritionnellePage() {
     lockedProteinsG: proteinLocked ? (nutritionGoals?.proteins ?? null) : null,
     lockedCarbsG: carbsLocked ? (nutritionGoals?.carbs ?? null) : null,
     lockedFatsG: fatLocked ? (nutritionGoals?.fats ?? null) : null,
+    proteinTargetOverrideG: autoLeanMassProteinTargetG,
+  });
+  // Macros automatique SEUL (calories inchangées) — même override
+  // automatique que ci-dessus, distinct de `macroStrategy` (qui sert
+  // l'affichage/manuel et peut inclure une estimation photo non éligible
+  // à l'automatique).
+  const macroStrategyForAutoAtCurrentCalories = computeMacroStrategy({
+    calories: calorieGoal,
+    bodyWeightKg: weight,
+    goal: strategyGoal,
+    lockedProteinsG: proteinLocked ? (nutritionGoals?.proteins ?? null) : null,
+    lockedCarbsG: carbsLocked ? (nutritionGoals?.carbs ?? null) : null,
+    lockedFatsG: fatLocked ? (nutritionGoals?.fats ?? null) : null,
+    proteinTargetOverrideG: autoLeanMassProteinTargetG,
   });
   const autoMacroAdjustmentAtCurrentCalories = evaluateAutoMacroAdjustment({
     mode: macroStrategyMode,
-    recommended: macroStrategy,
+    recommended: macroStrategyForAutoAtCurrentCalories,
     currentProteinsG: nutritionGoals?.proteins ?? null,
     currentCarbsG: nutritionGoals?.carbs ?? null,
     currentFatsG: nutritionGoals?.fats ?? null,
@@ -324,6 +377,7 @@ function SanteNutritionnellePage() {
               proteinLocked,
               carbsLocked,
               fatLocked,
+              macroReason: autoLeanMassProteinTargetG != null ? "lean_mass" : undefined,
             }
           : {}),
       });
@@ -353,14 +407,15 @@ function SanteNutritionnellePage() {
         appliedProteins: autoMacroAdjustmentAtCurrentCalories.proposedProteinsG!,
         appliedCarbs: autoMacroAdjustmentAtCurrentCalories.proposedCarbsG!,
         appliedFats: autoMacroAdjustmentAtCurrentCalories.proposedFatsG!,
-        recommendedProteins: macroStrategy.proteinsG,
-        recommendedCarbs: macroStrategy.carbsG,
-        recommendedFats: macroStrategy.fatsG,
+        recommendedProteins: macroStrategyForAutoAtCurrentCalories.proteinsG,
+        recommendedCarbs: macroStrategyForAutoAtCurrentCalories.carbsG,
+        recommendedFats: macroStrategyForAutoAtCurrentCalories.fatsG,
         calorieTarget: calorieGoal,
         goal: strategyGoal,
         proteinLocked,
         carbsLocked,
         fatLocked,
+        reason: autoLeanMassProteinTargetG != null ? "lean_mass" : undefined,
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -441,6 +496,7 @@ function SanteNutritionnellePage() {
       proteinLocked,
       carbsLocked,
       fatLocked,
+      reason: macroStrategy.proteinBasis === "lean_mass" ? "lean_mass" : undefined,
     });
   };
 
@@ -1050,9 +1106,37 @@ function SanteNutritionnellePage() {
               </div>
             ))}
 
+            {macroStrategy.proteinBasis === "lean_mass" && selectedBodyComposition && (
+              <div className="mt-3 rounded-xl bg-white/[0.03] p-3">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Base de calcul des protéines
+                </p>
+                <p className="mt-0.5 text-xs font-semibold text-foreground">Masse maigre</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  Masse maigre utilisée : {selectedBodyComposition.leanMassKg.toFixed(1)} kg
+                </p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  Composition corporelle : {BODY_FAT_METHOD_LABELS[selectedBodyComposition.method]}{" "}
+                  · {CONFIDENCE_LABELS[selectedBodyComposition.confidence]}
+                  {selectedBodyComposition.isRange ? " · estimation indicative" : ""}
+                </p>
+              </div>
+            )}
+
+            {macroStrategyMode === "automatic" &&
+              selectedBodyComposition &&
+              !selectedBodyComposition.usableForAutomaticAdjustment && (
+                <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+                  {selectedBodyComposition.method === "photo_estimate"
+                    ? "Estimation photo disponible — utilisée à titre indicatif, pas encore assez fiable pour ajuster tes protéines automatiquement."
+                    : "Composition corporelle disponible mais pas assez fiable pour ajuster tes protéines automatiquement — reste utilisée à titre indicatif."}
+                </p>
+              )}
+
             <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
-              Protéines basées sur ton poids et ton objectif · Lipides = minimum nutritionnel prévu
-              par la stratégie · Glucides = calories restantes.
+              {macroStrategy.proteinBasis === "lean_mass"
+                ? "Cortex peut utiliser ta composition corporelle lorsqu'elle est suffisamment récente et fiable. Sinon, la recommandation reste basée sur ton poids."
+                : "Protéines basées sur ton poids et ton objectif · Lipides = minimum nutritionnel prévu par la stratégie · Glucides = calories restantes."}
             </p>
 
             {macroStrategyMode === "manual" ? (
