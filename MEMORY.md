@@ -2585,3 +2585,105 @@ rester manuel). Vérification faite sur les vrais workflows CI, pas une supposit
   scientifiques — ajustables sans casser l'architecture si besoin.
 - **Livrée sur la branche dédiée `claude/phase7-body-composition-nutrition`, NON fusionnée dans
   `main`** conformément à l'instruction explicite du brief.
+
+## Objectif physique + trajectoire + suivi adaptatif — Phase 8 (2026-08-14, même session)
+- **Phase 7 mergée dans `main`** (SHA `41caaed`) avant cette phase — CI verte (7 workflows pertinents,
+  `Deploy Supabase Edge Functions` n'a pas déclenché car Phase 7 ne touche aucune edge function),
+  `reason` sur `macro_goal_adjustments` et RPC re-vérifiées en direct après merge.
+- **Audit préalable exhaustif** (agent Explore dédié) : aucune structure équivalente à un objectif
+  physique n'existait déjà (`target_weight` trouvé dans `coach_ia_v2_programs` est un concept
+  totalement différent — charge recommandée sur une série, pas un poids corporel cible ; `objective`
+  sur `nutrition_goals` est un champ legacy vestigial distinct de `goal`). Confirmé : `adaptiveTdee.ts`
+  calcule déjà un poids lissé (moyenne glissante 7 jours + régression linéaire,
+  `weight.weeklyTrendKg`/`endTrendKg`/`measurementCount`) — **réutilisé tel quel**, jamais recalculé.
+  `computeCalorieStrategy` applique déjà le rythme (`CALORIE_STRATEGY_RATES`, % du poids CORPOREL
+  COURANT/semaine) contre le poids courant à chaque appel, jamais une projection figée — la trajectoire
+  Phase 8 suit exactement le même principe.
+- **Décision d'architecture centrale** : Phase 8 **ORCHESTRE** les moteurs existants
+  (`calorieStrategy.ts`, `adaptiveTdee.ts`, `bodyComposition.ts`) — **aucun second moteur
+  TDEE/calorique/macros créé**. Confirmé structurellement : `git diff --stat` sur
+  `calorieStrategy.ts`/`adaptiveTdee.ts`/`adaptiveTdeeCalibration.ts`/`tdee.ts`/`macroStrategy.ts` :
+  vide, ces fichiers ne sont PAS modifiés par cette phase. La seule chaîne d'écriture calorique/macro
+  reste `evaluateAutoCalorieAdjustment`/`evaluateAutoMacroAdjustment` → RPC — Phase 8 ne fait que LIRE
+  ces résultats, jamais les contourner ni créer un second contrôleur.
+- **Table `physical_goals`** (migration `20260814090000_physical_goals.sql`) : `goal` reprend EXACTEMENT
+  la taxonomie stable Phase 4 (`fat_loss`/`maintenance`/`muscle_gain`, CHECK identique) ; `target_rate`
+  avec la même contrainte de cohérence que `nutrition_goals_target_rate_check` (maintenance sans
+  rythme) ; snapshot de départ figé (`starting_weight_kg`/`starting_body_fat_percent`/
+  `starting_body_fat_method`/`starting_lean_mass_kg`, jamais recalculé) ; cibles facultatives
+  (`target_weight_kg`/`target_body_fat_percent`, toutes deux nullable) ; `status` (`active`/
+  `completed`/`cancelled`). **Un seul objectif ACTIF par utilisateur** — index unique PARTIEL
+  `physical_goals_one_active_per_user ON (user_id) WHERE status = 'active'` (pas de contrainte pleine
+  table, permet l'historisation des objectifs terminés/annulés). RLS propriétaire stricte
+  (`auth.uid() = user_id`), trigger `set_updated_at` (fonction déjà existante, réutilisée). Table
+  88/88 (87→88), vérifié en direct. `types.ts` régénéré, diff purement additif (+54 lignes).
+- **`lib/fitness/physicalGoal.ts`** (nouveau, pur) : `validatePhysicalGoalInput` — refuse proprement
+  NaN/Infinity/poids-BF hors bornes/rythme incompatible avec l'objectif, et surtout détecte les
+  **contradictions manifestes** (ex. `fat_loss` avec poids cible ≥ poids de départ) sans jamais les
+  accepter silencieusement. Poids/BF cible restent TOUJOURS facultatifs — `null` des deux côtés est
+  valide.
+- **`lib/fitness/goalTrajectory.ts`** (nouveau, pur) :
+  - `computeGoalTrajectory` — réutilise EXACTEMENT `CALORIE_STRATEGY_RATES` (aucun second système de
+    coefficients). Comme le rythme est un %/semaine du poids COURANT (pas figé), une projection
+    linéaire naïve (poids initial × % × N) sous-estimerait la durée — modélise donc une évolution
+    **composée** (`w(t) = w0·(1+r)^t`, durée = `ln(target/w0)/ln(1+r)`), testée explicitement contre le
+    calcul naïf pour confirmer que le modèle composé annonce toujours une durée ≥ au naïf. Pour
+    `maintenance` : zone de maintien `MAINTENANCE_ZONE_PERCENT = 1.5` (±1.5 % du poids de référence,
+    règle produit prudente documentée) plutôt qu'un delta zéro exact.
+  - `computeBodyFatTargetProjection` — poids théorique à BF cible = `leanMassKg / (1 - targetBF/100)`,
+    réutilise `computeLeanMass` de Phase 6A (jamais dupliqué), **toujours marqué `isTheoretical: true`**
+    (hypothèse masse maigre constante explicitement documentée, jamais garantie réelle), confiance
+    reprise du système Phase 6A existant (`ConfidenceLevel`), jamais un pourcentage inventé. Refuse
+    proprement (`invalid_goal`) toute projection qui produirait un résultat non fini/négatif.
+- **`lib/fitness/goalProgress.ts`** (nouveau, pur) :
+  - `evaluateGoalProgress` — compare la progression RÉELLE au rythme visé en réutilisant
+    **exclusivement** `adaptiveTdee.weight.weeklyTrendKg`/`measurementCount`/`window.calendarDays`
+    (aucun recalcul de lissage, §22 du brief). Fenêtre minimale `GOAL_PROGRESS_MIN_WINDOW_DAYS = 14`
+    jours (documentée : deux fenêtres de lissage TDEE complètes) + `GOAL_PROGRESS_MIN_MEASUREMENTS = 4`
+    pesées minimum → sinon `insufficient_data` (état normal, jamais fabriqué en `on_track`). Tolérance
+    `GOAL_PROGRESS_TOLERANCE_PERCENT = 25` % autour du rythme cible → `on_track` (évite qu'un écart de
+    -0.48 vs -0.50 kg/semaine soit classé `behind`). États : `insufficient_data`/`on_track`/`ahead`/
+    `behind`/`maintaining` (plateau quasi-nul, non culpabilisant, s'applique aussi hors maintenance).
+    Fonction pure, zéro import Supabase — ne peut structurellement pas déclencher une écriture.
+  - `isWeightGoalLikelyReached` — SUGGÈRE seulement qu'un objectif semble atteint (poids LISSÉ proche de
+    la cible + assez de mesures) ; ne marque jamais `status = 'completed'` elle-même, décision
+    utilisateur explicite uniquement via `useCompletePhysicalGoal`.
+- **`hooks/usePhysicalGoal.ts`** (nouveau) : `usePhysicalGoal` (objectif actif), `usePhysicalGoalHistory`
+  (terminés/annulés, pas de grosse UI dédiée), `useCreatePhysicalGoal` (clôture l'objectif actif
+  existant en `cancelled` PUIS insère le nouveau — deux écritures séquentielles non transactionnelles,
+  documenté explicitement : en cas d'échec entre les deux, l'état récupérable est "aucun objectif
+  actif", jamais deux objectifs actifs — la contrainte unique DB l'empêche de toute façon),
+  `useUpdatePhysicalGoalRate` (change UNIQUEMENT le rythme sur l'objectif existant, sans réécrire
+  l'historique), `useCancelPhysicalGoal`, `useCompletePhysicalGoal`.
+- **UI** : nouvelle Section "Objectif physique" dans `sante-nutritionnelle.tsx` (pas de nouvelle page),
+  bloc compact (objectif/rythme/départ→cible/état de progression/durée estimée qualifiée "estimation"/
+  zone de maintien/projection BF théorique), CTA "Marquer comme atteint" affiché uniquement quand
+  `isWeightGoalLikelyReached`, boutons rythme rapide (§45, update en place) et "Nouvel objectif"/
+  "Annuler". Nouveau composant `PhysicalGoalSheet.tsx` (pattern preview-avant-enregistrement identique
+  à `EstimateBodyFatSheet`/`EstimatePhotoBodyFatSheet`) : sélection objectif/rythme + poids/BF cible
+  facultatifs, preview live (trajectoire + projection BF), validation bloquante avant soumission. Jamais
+  de date affichée comme une promesse — toujours qualifiée "estimation"/"≈".
+- **Scope strictement respecté** : aucune modification de `calorieStrategy.ts`/`adaptiveTdee.ts`/
+  `adaptiveTdeeCalibration.ts`/`tdee.ts`/`macroStrategy.ts` (vérifié `git diff --stat`) ; pas de
+  nouvelle méthode BF ; pas de coach IA/génération de texte LLM (moteur entièrement déterministe) ; pas
+  de notifications/gamification ; pas de refonte UI générale.
+- **Tests** : 53 nouveaux tests (`physicalGoal.test.ts`, `goalTrajectory.test.ts` incl. comparaison
+  explicite modèle composé vs. projection linéaire naïve + exemple travaillé 80kg/20%→15% BF,
+  `goalProgress.test.ts` incl. tolérance/plateau/fluctuation isolée/pureté). 988 tests au total
+  (935+53), tous verts au premier passage. Non-régression TDEE vérifiée structurellement (aucun fichier
+  du moteur calorique/TDEE modifié par cette phase, donc comportement bit-à-bit identique par
+  construction — pas seulement testé).
+- `npx tsc --noEmit` / `npx eslint` (fichiers modifiés) / `npx vitest run` (988 passed) / `npm run
+  build` : tous verts. `node scripts/validate-supabase.mjs` : migrations idempotentes OK. Aucun
+  `as any` introduit. `get_advisors(security)` : aucune nouvelle alerte imputable à cette phase.
+- **Vérification visuelle mobile NON effectuée** — même limite sandbox `EAFNOSUPPORT` que toutes les
+  phases précédentes de cette session.
+- **Limites connues** : `useCreatePhysicalGoal` n'est pas transactionnel (deux écritures séquentielles,
+  risque résiduel documenté et accepté — jamais deux objectifs actifs grâce à la contrainte DB) ; les
+  constantes `MAINTENANCE_ZONE_PERCENT`/`GOAL_PROGRESS_MIN_WINDOW_DAYS`/
+  `GOAL_PROGRESS_TOLERANCE_PERCENT`/`GOAL_PROGRESS_MIN_MEASUREMENTS` sont des règles produit prudentes
+  documentées comme telles, pas des certitudes scientifiques ; pas de grosse UI d'historique des
+  objectifs passés (hors scope explicite, hook déjà prêt si besoin futur) ; la projection BF suppose
+  une masse maigre constante, hypothèse explicitement documentée mais jamais garantie réelle.
+- **Livrée sur la branche dédiée `claude/phase8-physical-goals-adaptive-tracking`, NON fusionnée dans
+  `main`** conformément à l'instruction explicite du brief.
