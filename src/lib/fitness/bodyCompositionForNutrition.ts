@@ -1,35 +1,42 @@
-// Pure domain logic — décide si une donnée de composition corporelle
-// (Body Fat / masse maigre) est exploitable pour ENRICHIR la
-// recommandation nutritionnelle (Phase 7), et calcule la cible protéique
-// dérivée de la masse maigre quand c'est le cas. No React, no Supabase.
+// Pure domain logic — décide si le BODY FAT CORTEX (voir `cortexBodyFat.ts`)
+// est exploitable pour ENRICHIR la recommandation nutritionnelle (Phase 7),
+// et calcule la cible protéique dérivée de la masse maigre quand c'est le
+// cas. No React, no Supabase.
 //
-// Doctrine (brief Phase 7, section OBJECTIF) : Body Fat n'est JAMAIS une
-// dépendance obligatoire du moteur nutritionnel — cette fonction ne fait
-// qu'ENRICHIR `macroStrategy.ts` quand une mesure suffisamment récente et
-// fiable existe. En son absence, `selectBodyCompositionForNutrition`
-// renvoie `null` et l'appelant retombe sur le pipeline poids corporel
-// Phase 5 existant, sans erreur ni blocage utilisateur (§30 du brief).
+// Doctrine (brief Phase 7, section OBJECTIF ; correctif "Body Fat Cortex
+// indépendant") : Body Fat n'est JAMAIS une dépendance obligatoire du
+// moteur nutritionnel — cette fonction ne fait qu'ENRICHIR
+// `macroStrategy.ts` quand une estimation Cortex (mensurations et/ou
+// photos UNIQUEMENT — jamais Visbody/manual/dexa/bioimpédance externe,
+// voir `cortexBodyFat.ts`) suffisamment récente existe. En son absence,
+// `selectBodyCompositionForNutrition` renvoie `null` et l'appelant retombe
+// sur le pipeline poids corporel Phase 5 existant, sans erreur ni blocage
+// utilisateur (§30 du brief Phase 7 ; §17 du correctif).
 //
-// Ne duplique jamais `computeLeanMass`/`getBodyFatConfidence` de
-// `bodyComposition.ts` (Phase 6A) — les réutilise strictement.
+// §14 du correctif : la masse grasse/maigre ACTUELLE utilise le poids
+// ACTUEL (`currentWeightKg`, fourni par l'appelant) — jamais le poids
+// historique attaché à la mesure Body Fat elle-même. Ne duplique jamais
+// `computeLeanMass`/`getBodyFatConfidence` (Phase 6A) ni la logique de
+// combinaison measurements/photo (`cortexBodyFat.ts`) — les réutilise
+// strictement.
 
+import { computeLeanMass, type BodyFatMethod, type ConfidenceLevel } from "./bodyComposition";
 import {
-  computeLeanMass,
-  getBodyFatConfidence,
-  isKnownBodyFatMethod,
-  isValidBodyFatPercent,
-  type BodyFatMethod,
-  type ConfidenceLevel,
-} from "./bodyComposition";
+  computeCortexBodyFatEstimate,
+  selectCortexBodyFatInputs,
+  type CortexBodyFatCandidate,
+  type CortexBodyFatMethod,
+} from "./cortexBodyFat";
 import { MACRO_STRATEGY_COEFFICIENTS } from "./macroStrategy";
 import type { CalorieStrategyGoal } from "./calorieStrategy";
 
 // ---------------------------------------------------------------------
-// Politique de récence (§4 du brief Phase 7)
+// Politique de récence (§4 du brief Phase 7) — inchangée, auditée et
+// conservée par le correctif "Body Fat Cortex indépendant" (§13).
 // ---------------------------------------------------------------------
 
 /**
- * Au-delà de ce nombre de jours, une mesure de composition corporelle
+ * Au-delà de ce nombre de jours, une mesure Cortex (mensurations ou photo)
  * n'est plus combinée avec le poids actuel pour en déduire une masse
  * maigre exploitable pour la nutrition — règle produit PRUDENTE (pas une
  * certitude scientifique), centralisée ici pour rester ajustable sans
@@ -40,94 +47,95 @@ import type { CalorieStrategyGoal } from "./calorieStrategy";
  */
 export const BODY_COMPOSITION_MAX_AGE_DAYS = 90;
 
-function daysBetween(isoDateA: string, isoDateB: string): number {
-  const a = new Date(`${isoDateA}T00:00:00Z`).getTime();
-  const b = new Date(`${isoDateB}T00:00:00Z`).getTime();
-  return Math.abs(a - b) / (1000 * 60 * 60 * 24);
-}
-
 // ---------------------------------------------------------------------
 // Sélection de la composition corporelle exploitable
 // ---------------------------------------------------------------------
 
-export interface BodyCompositionCandidate {
-  /** Date ISO (`YYYY-MM-DD`) de la ligne `body_tracking`. */
-  date: string;
-  /** Poids sur la MÊME ligne — jamais combiné à un BF d'une autre date (§5 du brief). */
-  weightKg: number | null;
-  /** Point de référence (midpoint pour une fourchette photo) — jamais min/max séparément ici. */
-  bodyFatPercent: number | null;
-  method: string | null;
-}
+/** Alias conservé pour compatibilité des imports existants — même forme que `CortexBodyFatCandidate`. */
+export type BodyCompositionCandidate = CortexBodyFatCandidate;
 
 export interface SelectedBodyComposition {
+  /** Date la plus récente parmi les méthodes Cortex ayant contribué (mensurations et/ou photo). */
   date: string;
+  /** Poids ACTUEL (§14 du correctif) — jamais le poids historique de la mesure Body Fat. */
   weightKg: number;
   bodyFatPercent: number;
+  bodyFatMinPercent: number;
+  bodyFatMaxPercent: number;
+  /** Calculée avec le poids ACTUEL + le Body Fat Cortex — jamais un poids historique (§14/§18 du correctif). */
   leanMassKg: number;
-  method: BodyFatMethod;
+  /** `null` quand mensurations ET photos contribuent toutes les deux — voir `methodsUsed` pour le détail complet. */
+  method: BodyFatMethod | null;
+  methodsUsed: CortexBodyFatMethod[];
   confidence: ConfidenceLevel;
-  /** `true` si la méthode d'origine est une estimation par fourchette (photo). */
+  /** `true` si `bodyFatMinPercent !== bodyFatMaxPercent` (photo seule, ou désaccord mensurations/photos). */
   isRange: boolean;
+  disagreement: boolean;
   /**
-   * §21/§22 du brief : une donnée peut être assez intéressante pour
-   * INFORMER l'utilisateur sans être assez fiable pour modifier ses
-   * macros automatiquement. `false` pour toute méthode de confiance
-   * "low" (`photo_estimate`, `manual`) — jamais de déclenchement
-   * automatique sur une simple estimation indicative ou une saisie dont
-   * l'origine réelle est inconnue de Cortex.
+   * §21/§22 du brief Phase 7, reconduit par le correctif : une donnée peut
+   * être assez intéressante pour INFORMER l'utilisateur sans être assez
+   * fiable pour modifier ses macros automatiquement. `false` dès que la
+   * confiance Cortex tombe à "low" (photo seule, désaccord mensurations/
+   * photos, ou mesures Cortex trop éloignées dans le temps) — jamais de
+   * déclenchement automatique sur une simple estimation indicative.
    */
   usableForAutomaticAdjustment: boolean;
 }
 
+function isValidPositiveWeight(value: number | null | undefined): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
 /**
- * Sélectionne, parmi un historique `body_tracking` trié du plus récent
- * au plus ancien (ordre déjà produit par `useBodyMeasurements`), la
- * première mesure réellement exploitable pour enrichir la recommandation
- * nutritionnelle — ou `null` si aucune ne l'est (repli poids corporel
- * garanti côté appelant, §13/§30 du brief).
- *
- * Exploitable = méthode connue + BF valide (1-70 %) + poids ET BF sur la
- * MÊME ligne + mesure dans la fenêtre de récence (§4). Parmi les
- * candidats exploitables, le PLUS RÉCENT l'emporte — Cortex ne suppose
- * jamais de hiérarchie arbitraire de méthode du type « DEXA > mensurations
- * > bioimpédance > photo » (§3 du brief) : une DEXA vieille de 89 jours
- * reste préférée à une estimation photo d'hier tant qu'elle est encore
- * dans la fenêtre de récence — choix documenté, pas un oubli.
+ * Construit le BODY FAT CORTEX exploitable pour la nutrition à partir de
+ * l'historique `body_tracking` (trié du plus récent au plus ancien, même
+ * convention que `useBodyMeasurements`) et du poids ACTUEL — ou `null` si
+ * aucune estimation Cortex n'est disponible (repli poids corporel garanti
+ * côté appelant, §13/§30 du brief Phase 7 ; §17 du correctif). Ne
+ * considère QUE `measurements`/`photo_estimate` (voir `cortexBodyFat.ts`)
+ * — Visbody/manual/dexa/bioimpédance externe ont une contribution
+ * STRUCTURELLEMENT nulle à ce résultat, quelle que soit leur valeur ou
+ * leur date.
  */
 export function selectBodyCompositionForNutrition(
   candidates: BodyCompositionCandidate[],
   todayIso: string,
+  currentWeightKg: number | null,
 ): SelectedBodyComposition | null {
-  for (const candidate of candidates) {
-    if (!isKnownBodyFatMethod(candidate.method)) continue;
-    if (!isValidBodyFatPercent(candidate.bodyFatPercent)) continue;
-    if (
-      typeof candidate.weightKg !== "number" ||
-      !Number.isFinite(candidate.weightKg) ||
-      candidate.weightKg <= 0
-    ) {
-      continue;
-    }
-    if (daysBetween(candidate.date, todayIso) > BODY_COMPOSITION_MAX_AGE_DAYS) continue;
+  if (!isValidPositiveWeight(currentWeightKg)) return null;
 
-    const leanMassKg = computeLeanMass(candidate.weightKg, candidate.bodyFatPercent);
-    if (leanMassKg == null) continue;
-
-    const method = candidate.method as BodyFatMethod;
-    const confidence = getBodyFatConfidence(method);
-    return {
-      date: candidate.date,
-      weightKg: candidate.weightKg,
-      bodyFatPercent: candidate.bodyFatPercent,
-      leanMassKg,
-      method,
-      confidence,
-      isRange: method === "photo_estimate",
-      usableForAutomaticAdjustment: confidence !== "low",
-    };
+  const inputs = selectCortexBodyFatInputs(candidates, todayIso, BODY_COMPOSITION_MAX_AGE_DAYS);
+  const estimate = computeCortexBodyFatEstimate(inputs);
+  if (
+    estimate.methodCount === 0 ||
+    estimate.referencePercent == null ||
+    estimate.confidence == null
+  ) {
+    return null;
   }
-  return null;
+
+  const leanMassKg = computeLeanMass(currentWeightKg, estimate.referencePercent);
+  if (leanMassKg == null) return null;
+
+  const dates = [inputs.measurements?.date, inputs.photo?.date].filter(
+    (d): d is string => d != null,
+  );
+  const date = dates.sort().at(-1) as string;
+
+  return {
+    date,
+    weightKg: currentWeightKg,
+    bodyFatPercent: estimate.referencePercent,
+    bodyFatMinPercent: estimate.minPercent as number,
+    bodyFatMaxPercent: estimate.maxPercent as number,
+    leanMassKg,
+    method: estimate.methodsUsed.length === 1 ? estimate.methodsUsed[0] : null,
+    methodsUsed: estimate.methodsUsed,
+    confidence: estimate.confidence,
+    isRange: estimate.minPercent !== estimate.maxPercent,
+    disagreement: estimate.disagreement,
+    usableForAutomaticAdjustment: estimate.usableForAutomaticAdjustment,
+  };
 }
 
 // ---------------------------------------------------------------------

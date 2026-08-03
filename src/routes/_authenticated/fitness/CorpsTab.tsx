@@ -39,12 +39,24 @@ import {
 import {
   BODY_FAT_DIRECT_ENTRY_METHODS,
   BODY_FAT_METHOD_LABELS,
+  BODY_FAT_PROVENANCE_LABELS,
   CONFIDENCE_LABELS,
-  computeBodyCompositionSnapshot,
+  computeFatMass,
+  computeLeanMass,
+  describeBodyFatProvenance,
   isKnownBodyFatMethod,
   resolveBodyFatMethod,
   type BodyFatMethod,
 } from "@/lib/fitness/bodyComposition";
+import { BODY_COMPOSITION_MAX_AGE_DAYS } from "@/lib/fitness/bodyCompositionForNutrition";
+import {
+  computeCortexBodyFatEstimate,
+  describeCortexBodyFatSources,
+  selectCortexBodyFatInputs,
+  type CortexBodyFatCandidate,
+  type CortexBodyFatEstimate,
+} from "@/lib/fitness/cortexBodyFat";
+import { localDateYMD } from "@/lib/dates";
 
 // Re-export so existing code referencing this path still compiles
 export type { MeasurementField };
@@ -144,21 +156,42 @@ export function CorpsTab() {
   const latestMuscle = findLatestValue(data, "muscle_mass");
   const latestBodyFat = findLatestValue(data, "body_fat");
 
-  // Composition corporelle (Phase 6A) — snapshot le plus récent AVEC Body
-  // Fat renseigné, poids/BF pris sur la MÊME ligne (jamais recombinés
-  // entre deux dates différentes, voir bodyComposition.ts).
-  const latestBodyFatRow = data?.find((r) => typeof r.body_fat === "number");
-  const bodyCompositionSnapshot = latestBodyFatRow
-    ? computeBodyCompositionSnapshot({
-        date: latestBodyFatRow.date,
-        weightKg: latestBodyFatRow.weight,
-        bodyFatPercent: latestBodyFatRow.body_fat,
-        bodyFatMinPercent: latestBodyFatRow.body_fat_min_percent,
-        bodyFatMaxPercent: latestBodyFatRow.body_fat_max_percent,
-        method: isKnownBodyFatMethod(latestBodyFatRow.body_fat_method)
-          ? latestBodyFatRow.body_fat_method
-          : null,
-      })
+  // BODY FAT CORTEX (correctif "estimation indépendante") — calculé
+  // UNIQUEMENT à partir de measurements/photo_estimate (voir
+  // cortexBodyFat.ts). Visbody/manual/dexa/bioimpédance externe n'ont
+  // AUCUNE contribution, quelle que soit leur valeur ou leur date — ils
+  // ne sont jamais lus par `selectCortexBodyFatInputs`.
+  const todayIso = localDateYMD();
+  const cortexCandidates: CortexBodyFatCandidate[] = (data ?? []).map((r) => ({
+    date: r.date,
+    method: r.body_fat_method,
+    bodyFatPercent: r.body_fat,
+    bodyFatMinPercent: r.body_fat_min_percent,
+    bodyFatMaxPercent: r.body_fat_max_percent,
+  }));
+  const cortexBodyFatEstimate = computeCortexBodyFatEstimate(
+    selectCortexBodyFatInputs(cortexCandidates, todayIso, BODY_COMPOSITION_MAX_AGE_DAYS),
+  );
+
+  // Dernière mesure EXTERNE (manual/dexa/bioimpedance) — affichée à titre
+  // de comparaison/historique uniquement (§10/§11/§15 du correctif),
+  // jamais fusionnée dans le Body Fat Cortex ci-dessus. Provenance décrite
+  // avec prudence : "Document importé" si liée à un document, jamais une
+  // marque non prouvée (ex. "Visbody") — voir bodyComposition.ts.
+  const EXTERNAL_METHODS: readonly BodyFatMethod[] = ["manual", "dexa", "bioimpedance"];
+  const latestExternalRow = data?.find(
+    (r) =>
+      typeof r.body_fat === "number" &&
+      isKnownBodyFatMethod(r.body_fat_method) &&
+      (EXTERNAL_METHODS as readonly string[]).includes(r.body_fat_method),
+  );
+  const latestExternalMeasurement = latestExternalRow
+    ? {
+        date: latestExternalRow.date,
+        bodyFatPercent: latestExternalRow.body_fat as number,
+        method: latestExternalRow.body_fat_method as BodyFatMethod,
+        provenance: describeBodyFatProvenance(latestExternalRow.source_document_id != null),
+      }
     : null;
 
   return (
@@ -206,8 +239,9 @@ export function CorpsTab() {
       <FormScoreCard score={formScore.score} plateau={plateau} count={data?.length ?? 0} />
 
       <BodyCompositionCard
-        snapshot={bodyCompositionSnapshot}
-        onAddClick={() => setQuickField({ key: "body_fat", label: "Masse grasse %", unit: "%" })}
+        estimate={cortexBodyFatEstimate}
+        currentWeightKg={latestWeight ?? null}
+        externalMeasurement={latestExternalMeasurement}
         onEstimateClick={() => setEstimateSheetOpen(true)}
         onEstimatePhotoClick={() => setEstimatePhotoSheetOpen(true)}
       />
@@ -916,32 +950,76 @@ function QuickMeasurementSheet({
   );
 }
 
+/**
+ * "Composition corporelle" — affiche désormais le BODY FAT CORTEX
+ * (correctif "estimation indépendante") : une estimation calculée
+ * UNIQUEMENT à partir de mensurations/photos, jamais une ancienne mesure
+ * externe (Visbody/manual/dexa/bioimpédance) reprise telle quelle. Ces
+ * dernières restent visibles séparément ci-dessous ("Dernière mesure
+ * externe"), pour comparaison — jamais fusionnées dans l'estimation
+ * Cortex (§10/§15 du correctif).
+ */
 function BodyCompositionCard({
-  snapshot,
-  onAddClick,
+  estimate,
+  currentWeightKg,
+  externalMeasurement,
   onEstimateClick,
   onEstimatePhotoClick,
 }: {
-  snapshot: ReturnType<typeof computeBodyCompositionSnapshot> | null;
-  onAddClick: () => void;
+  estimate: CortexBodyFatEstimate;
+  currentWeightKg: number | null;
+  externalMeasurement: {
+    date: string;
+    bodyFatPercent: number;
+    method: BodyFatMethod;
+    provenance: ReturnType<typeof describeBodyFatProvenance>;
+  } | null;
   onEstimateClick: () => void;
   onEstimatePhotoClick: () => void;
 }) {
-  if (!snapshot || snapshot.bodyFatPercent == null) {
+  const actions = (
+    <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1">
+      <button
+        type="button"
+        onClick={onEstimateClick}
+        className="text-[11px] font-semibold text-primary"
+      >
+        Estimer avec mes mensurations
+      </button>
+      <button
+        type="button"
+        onClick={onEstimatePhotoClick}
+        className="text-[11px] font-semibold text-primary"
+      >
+        Estimer avec des photos
+      </button>
+    </div>
+  );
+
+  const externalBlock = externalMeasurement && (
+    <div className="mt-3 rounded-xl border border-white/5 bg-white/[0.02] p-3">
+      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+        Dernière mesure externe
+      </p>
+      <p className="mt-0.5 text-sm font-semibold">{externalMeasurement.bodyFatPercent} %</p>
+      <p className="mt-0.5 text-[11px] text-muted-foreground">
+        {BODY_FAT_METHOD_LABELS[externalMeasurement.method]} ·{" "}
+        {BODY_FAT_PROVENANCE_LABELS[externalMeasurement.provenance]} — historique/comparaison
+        uniquement, n'entre pas dans l'estimation Cortex.
+      </p>
+    </div>
+  );
+
+  if (estimate.methodCount === 0 || estimate.referencePercent == null) {
     return (
       <div className="rounded-2xl border border-dashed border-border bg-card/40 p-4 text-center">
         <p className="text-xs font-medium text-muted-foreground/70">
-          Composition corporelle non renseignée
+          Body Fat Cortex non disponible
+        </p>
+        <p className="mt-1 text-[11px] text-muted-foreground/60">
+          Estimé uniquement à partir de tes mensurations et/ou de tes photos.
         </p>
         <div className="mt-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5">
-          <button
-            type="button"
-            onClick={onAddClick}
-            className="text-[11px] font-semibold text-primary"
-          >
-            Ajouter une mesure
-          </button>
-          <span className="text-[11px] text-muted-foreground/50">·</span>
           <button
             type="button"
             onClick={onEstimateClick}
@@ -958,13 +1036,16 @@ function BodyCompositionCard({
             Estimer avec des photos
           </button>
         </div>
+        {externalBlock}
       </div>
     );
   }
 
-  const methodLabel = snapshot.method != null ? BODY_FAT_METHOD_LABELS[snapshot.method] : null;
   const confidenceLabel =
-    snapshot.confidence != null ? CONFIDENCE_LABELS[snapshot.confidence] : null;
+    estimate.confidence != null ? CONFIDENCE_LABELS[estimate.confidence] : null;
+  const fatMassKg = computeFatMass(currentWeightKg, estimate.referencePercent);
+  const leanMassKg = computeLeanMass(currentWeightKg, estimate.referencePercent);
+  const isRange = estimate.minPercent !== estimate.maxPercent;
 
   return (
     <div className="rounded-2xl border border-white/5 bg-gradient-to-b from-card/95 to-card/70 p-4 shadow-card">
@@ -972,71 +1053,81 @@ function BodyCompositionCard({
         <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/15 text-primary">
           <Scale className="h-3.5 w-3.5" />
         </span>
-        <h3 className="text-sm font-semibold">Composition corporelle</h3>
+        <h3 className="text-sm font-semibold">Body Fat Cortex</h3>
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        {snapshot.weightKg != null && (
+        {currentWeightKg != null && (
           <div>
-            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Poids</p>
-            <p className="text-sm font-bold">{snapshot.weightKg} kg</p>
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Poids actuel
+            </p>
+            <p className="text-sm font-bold">{currentWeightKg} kg</p>
           </div>
         )}
         <div>
           <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-            {snapshot.isRange ? "Masse grasse (estimation)" : "Masse grasse"}
+            Body Fat estimé
           </p>
-          <p className="text-sm font-bold text-primary">
-            {snapshot.isRange
-              ? `${snapshot.bodyFatMinPercent}–${snapshot.bodyFatMaxPercent} %`
-              : `${snapshot.bodyFatPercent} %`}
-          </p>
+          <p className="text-sm font-bold text-primary">{estimate.referencePercent} %</p>
         </div>
-        {snapshot.fatMassKg != null && (
+        {isRange && (
+          <div>
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Fourchette estimée
+            </p>
+            <p className="text-sm font-bold">
+              {estimate.minPercent}–{estimate.maxPercent} %
+            </p>
+          </div>
+        )}
+        {fatMassKg != null && (
           <div>
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
               Masse grasse estimée
             </p>
-            <p className="text-sm font-bold">{snapshot.fatMassKg} kg</p>
+            <p className="text-sm font-bold">{fatMassKg} kg</p>
           </div>
         )}
-        {snapshot.leanMassKg != null && (
+        {leanMassKg != null && (
           <div>
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
-              Masse maigre
+              Masse maigre estimée
             </p>
-            <p className="text-sm font-bold">{snapshot.leanMassKg} kg</p>
+            <p className="text-sm font-bold">{leanMassKg} kg</p>
           </div>
         )}
       </div>
 
-      {snapshot.weightKg == null && (
+      {currentWeightKg == null && (
         <p className="mt-2 text-[11px] text-muted-foreground">
-          Poids indisponible pour cette mesure — masse grasse/maigre non calculées.
+          Poids actuel indisponible — masse grasse/maigre estimées non calculées.
         </p>
       )}
 
       <div className="mt-3 flex items-center gap-1.5 text-[11px] text-muted-foreground">
-        {methodLabel && <span className="font-medium text-foreground">{methodLabel}</span>}
-        {methodLabel && confidenceLabel && <span>·</span>}
+        <span className="font-medium text-foreground">
+          {describeCortexBodyFatSources(estimate.methodsUsed)}
+        </span>
+        {confidenceLabel && <span>·</span>}
         {confidenceLabel && <span>{confidenceLabel}</span>}
       </div>
-      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
-        <button
-          type="button"
-          onClick={onEstimateClick}
-          className="text-[11px] font-semibold text-primary"
-        >
-          Estimer avec mes mensurations
-        </button>
-        <button
-          type="button"
-          onClick={onEstimatePhotoClick}
-          className="text-[11px] font-semibold text-primary"
-        >
-          Estimer avec des photos
-        </button>
-      </div>
+
+      {estimate.disagreement && (
+        <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+          Les deux estimations diffèrent sensiblement. La fourchette Cortex est élargie.
+        </p>
+      )}
+      {!estimate.disagreement && estimate.methodsUsed.length === 1 && (
+        <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+          {estimate.methodsUsed[0] === "measurements"
+            ? "Ajoute une estimation par photos pour affiner la fourchette Cortex."
+            : "Ajoute une estimation par mensurations pour renforcer l'estimation Cortex."}
+        </p>
+      )}
+
+      {actions}
+      {externalBlock}
     </div>
   );
 }

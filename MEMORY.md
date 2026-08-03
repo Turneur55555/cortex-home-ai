@@ -2951,3 +2951,67 @@ rester manuel). Vérification faite sur les vrais workflows CI, pas une supposit
   rétrocompatible) et `bodyComposition.ts` a reçu un ajout pur (aucune fonction existante modifiée en
   comportement, seule `resolveBodyFatMethod` du Phase 10 initial reste inchangée).
 - **Travaillé directement sur `main`**, comme demandé.
+
+## Body Fat Cortex — estimation indépendante (mensurations + photos uniquement) (2026-08-03, même session)
+
+- **Règle d'architecture définitive** : BODY FAT CORTEX = estimation calculée UNIQUEMENT à partir de
+  `measurements` (mensurations, Navy) et `photo_estimate` (analyse photo). Visbody/bioimpédance
+  externe/DEXA/ancienne saisie `manual` ont une contribution STRUCTURELLEMENT nulle — restent visibles
+  dans l'historique (comparaison/tendance) mais n'entrent jamais dans le calcul, même une DEXA
+  (méthode la plus fiable en littérature). Aucune donnée historique supprimée.
+- **`lib/fitness/cortexBodyFat.ts`** (nouveau, pur) :
+  - `selectCortexBodyFatInputs(candidates, todayIso, maxAgeDays)` — filtre `method === "measurements" |
+    "photo_estimate"` (garantie STRUCTURELLE que les méthodes externes ne peuvent jamais entrer), une
+    seule contribution par méthode = la plus RÉCENTE exploitable dans la fenêtre de récence (réutilise
+    `BODY_COMPOSITION_MAX_AGE_DAYS`, inchangé, audité et conservé).
+  - `computeCortexBodyFatEstimate({measurements, photo})` — combine les deux JAMAIS par une moyenne
+    naïve des midpoints : les mensurations (point déterministe) reçoivent une bande de tolérance
+    (`MEASUREMENTS_CONSENSUS_TOLERANCE_PERCENT = 2.0`, documentée — plus stricte que l'erreur-type
+    publiée de la méthode Navy ~3-4 points) testée pour recouvrement avec la fourchette photo :
+    recouvrement → zone d'intersection (concordance, confiance "medium"), pas de recouvrement →
+    élargissement explicite + médiane des 3 valeurs (désaccord, `disagreement=true`, confiance "low").
+    Écart temporel mensurations/photo > `STALE_CROSS_METHOD_GAP_DAYS` (30j, documenté) → confiance
+    plafonnée à "low" même en concordance. `usableForAutomaticAdjustment = confidence !== "low"` —
+    même prédicat que la doctrine Phase 7 existante, jamais dupliqué. Retourne `referencePercent/
+    minPercent/maxPercent/confidence/methodsUsed/methodCount/disagreement/usableForRecommendation/
+    usableForAutomaticAdjustment/reason` — jamais confidence `"high"` (jamais une certitude médicale).
+  - `describeCortexBodyFatSources(methodsUsed)` — "Mensurations"/"Photos"/"Mensurations + Photos".
+- **`lib/fitness/bodyCompositionForNutrition.ts`** réécrit (même nom de fonction exportée,
+  `selectBodyCompositionForNutrition`, pour minimiser le churn des 2 appelants) : nouveau paramètre
+  obligatoire `currentWeightKg` — **§14 : les masses grasse/maigre actuelles utilisent désormais
+  TOUJOURS le poids ACTUEL, jamais le poids historique attaché à l'ancienne mesure BF** (bug réel
+  corrigé : poids affiché 70,3 kg mais masse maigre calculée avec un poids de mesure à 74,2 kg).
+  `BodyCompositionCandidate` n'a plus de champ `weightKg` par ligne (découplage volontaire). `method`
+  devient `null` quand mensurations ET photos contribuent toutes les deux (voir `methodsUsed` pour le
+  détail) — `PhysicalGoalSheet.tsx` déjà typé `BodyFatMethod | null`, aucun changement nécessaire.
+- **`routes/.../fitness/CorpsTab.tsx`** — carte "Composition corporelle" renommée "Body Fat Cortex",
+  reconstruite entièrement sur `computeCortexBodyFatEstimate` + poids actuel (`latestWeight`). Nouvelle
+  section "Dernière mesure externe" (manual/dexa/bioimpedance) affichée séparément, avec provenance
+  honnête (`describeBodyFatProvenance`/`BODY_FAT_PROVENANCE_LABELS` du correctif de clôture précédent —
+  "Document importé"/"Saisie directe", jamais "Visbody" sans preuve) — jamais fusionnée dans
+  l'estimation Cortex. CTA "Ajouter une mesure" (manuel) retiré de cette carte spécifique (reste
+  disponible via la tuile "MG" en haut de page) — seules les deux actions Cortex ("Estimer avec mes
+  mensurations"/"avec des photos") y figurent désormais, conformément à la doctrine.
+- **`routes/.../sante-nutritionnelle.tsx`** — tuiles "Masse grasse estimée"/"Masse maigre estimée"
+  (renommées, §20) utilisent `selectedBodyComposition` (désormais Cortex-only). Message d'encouragement
+  dynamique si une seule méthode Cortex contribue ("Ajoute une estimation par photos…") ou avertissement
+  si désaccord. `nutritionHealthContext` (analyse IA, Phase 9) reçoit désormais les vraies bornes
+  min/max Cortex (au lieu de `null` en dur) — aucune écriture, l'IA continue d'expliquer sans jamais
+  calculer (architecture Phase 9 intacte).
+- **Terminologie** : "Body Fat Cortex"/"Body Fat estimé", "Fourchette estimée", "Masse grasse/maigre
+  estimée" — jamais "réel"/"exact"/"vrai taux". Masse maigre ≠ masse musculaire, toujours respecté.
+- **Tests** : +45 (`cortexBodyFat.test.ts` : 23, couvrant A-N + F/G/H critiques Visbody-zéro-contribution
+  + Q/R du brief ; `bodyCompositionForNutrition.test.ts` réécrit : 18, dont le test explicite §14 poids
+  historique vs actuel). **1060 tests au total**, tous verts.
+- **Aucune migration** — le Body Fat Cortex est une valeur DÉRIVÉE, calculée à la lecture depuis
+  `body_tracking` existant (§19 du correctif : préférer le calcul au cache, aucune colonne
+  `cortex_body_fat` créée).
+- **Non-régression** : TDEE/adaptiveTdee/calorieStrategy/macroStrategy/locks/objectifs physiques/
+  analyse IA/RLS/Storage — aucun fichier de ces moteurs modifié. `macroStrategy.ts` continue de
+  recevoir un simple `proteinTargetOverrideG` calculé en amont, sans second contrôleur.
+- **Validation** : `tsc --noEmit` / `eslint` / `npx vitest run` (1060 passed) / `npm run build` : tous
+  verts. Zéro `as any`. Vérification visuelle : dev server démarré, `/corps` et `/sante-nutritionnelle`
+  redirigent correctement vers `/login` (garde d'authentification fonctionnel, aucun crash de route) —
+  capture authentifiée non obtenue faute d'identifiants dans ce sandbox (limite documentée, pas
+  contournée).
+- **Travaillé directement sur `main`**, comme demandé.

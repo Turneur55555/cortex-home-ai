@@ -9,13 +9,15 @@ import {
 } from "./bodyCompositionForNutrition";
 
 const TODAY = "2026-08-13";
+const CURRENT_WEIGHT_KG = 70.3;
 
 function candidate(overrides: Partial<BodyCompositionCandidate>): BodyCompositionCandidate {
   return {
     date: TODAY,
-    weightKg: 80,
-    bodyFatPercent: 20,
     method: "measurements",
+    bodyFatPercent: 15,
+    bodyFatMinPercent: null,
+    bodyFatMaxPercent: null,
     ...overrides,
   };
 }
@@ -26,44 +28,148 @@ function daysAgo(n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-describe("selectBodyCompositionForNutrition — sélection (§3/§13/§30 du brief Phase 7)", () => {
-  it("§30 — aucun historique → null (pas d'erreur, pas de blocage)", () => {
-    expect(selectBodyCompositionForNutrition([], TODAY)).toBeNull();
+describe("selectBodyCompositionForNutrition — Body Fat Cortex (mensurations + photos uniquement)", () => {
+  it("aucun historique → null (pas d'erreur, pas de blocage)", () => {
+    expect(selectBodyCompositionForNutrition([], TODAY, CURRENT_WEIGHT_KG)).toBeNull();
   });
 
-  it("§13 — aucun candidat exploitable → null, jamais d'exception", () => {
+  it("poids actuel absent/invalide → null, même avec un candidat par ailleurs exploitable", () => {
+    for (const weight of [null, 0, -5, NaN, Infinity]) {
+      expect(selectBodyCompositionForNutrition([candidate({})], TODAY, weight)).toBeNull();
+    }
+  });
+
+  it("mensurations exploitables → sélectionnées, masse maigre calculée avec le POIDS ACTUEL (§14), pas un poids historique", () => {
     const result = selectBodyCompositionForNutrition(
-      [candidate({ method: null }), candidate({ bodyFatPercent: null })],
+      [candidate({ bodyFatPercent: 15 })],
       TODAY,
+      CURRENT_WEIGHT_KG,
+    );
+    expect(result).not.toBeNull();
+    expect(result!.weightKg).toBe(CURRENT_WEIGHT_KG);
+    expect(result!.leanMassKg).toBeCloseTo(CURRENT_WEIGHT_KG - CURRENT_WEIGHT_KG * 0.15, 1);
+    expect(result!.method).toBe("measurements");
+    expect(result!.methodsUsed).toEqual(["measurements"]);
+    expect(result!.confidence).toBe("medium");
+  });
+
+  it("§14 — un poids historique porté par la ligne d'origine (ex. 74,2 kg) n'affecte JAMAIS la masse maigre actuelle : seul le poids ACTUEL fourni compte", () => {
+    const resultAtCurrentWeight = selectBodyCompositionForNutrition(
+      [candidate({ bodyFatPercent: 15 })],
+      TODAY,
+      70.3,
+    );
+    const resultAtDifferentWeight = selectBodyCompositionForNutrition(
+      [candidate({ bodyFatPercent: 15 })],
+      TODAY,
+      74.2,
+    );
+    expect(resultAtCurrentWeight!.leanMassKg).not.toBeCloseTo(
+      resultAtDifferentWeight!.leanMassKg,
+      1,
+    );
+    expect(resultAtCurrentWeight!.weightKg).toBe(70.3);
+    expect(resultAtDifferentWeight!.weightKg).toBe(74.2);
+  });
+
+  it("photo seule → sélectionnée, fourchette conservée, usableForAutomaticAdjustment=false (confiance low)", () => {
+    const result = selectBodyCompositionForNutrition(
+      [
+        candidate({
+          method: "photo_estimate",
+          bodyFatPercent: 15.5,
+          bodyFatMinPercent: 14,
+          bodyFatMaxPercent: 17,
+        }),
+      ],
+      TODAY,
+      CURRENT_WEIGHT_KG,
+    );
+    expect(result!.isRange).toBe(true);
+    expect(result!.bodyFatMinPercent).toBe(14);
+    expect(result!.bodyFatMaxPercent).toBe(17);
+    expect(result!.usableForAutomaticAdjustment).toBe(false);
+  });
+
+  it("mensurations + photos concordantes → les deux méthodes contribuent, method=null (methodsUsed contient les deux)", () => {
+    const result = selectBodyCompositionForNutrition(
+      [
+        candidate({ date: TODAY, method: "measurements", bodyFatPercent: 15 }),
+        candidate({
+          date: TODAY,
+          method: "photo_estimate",
+          bodyFatPercent: 15.5,
+          bodyFatMinPercent: 14,
+          bodyFatMaxPercent: 17,
+        }),
+      ],
+      TODAY,
+      CURRENT_WEIGHT_KG,
+    );
+    expect(result!.method).toBeNull();
+    expect(result!.methodsUsed).toEqual(["measurements", "photo_estimate"]);
+    expect(result!.disagreement).toBe(false);
+    expect(result!.usableForAutomaticAdjustment).toBe(true);
+  });
+
+  it("mensurations + photos discordantes → disagreement=true, usableForAutomaticAdjustment=false", () => {
+    const result = selectBodyCompositionForNutrition(
+      [
+        candidate({ date: TODAY, method: "measurements", bodyFatPercent: 12 }),
+        candidate({
+          date: TODAY,
+          method: "photo_estimate",
+          bodyFatPercent: 17.5,
+          bodyFatMinPercent: 16,
+          bodyFatMaxPercent: 19,
+        }),
+      ],
+      TODAY,
+      CURRENT_WEIGHT_KG,
+    );
+    expect(result!.disagreement).toBe(true);
+    expect(result!.usableForAutomaticAdjustment).toBe(false);
+  });
+
+  it("RÈGLE ABSOLUE — manual/dexa/bioimpedance (méthodes externes) n'ont AUCUNE contribution, quelle que soit leur valeur ou leur récence", () => {
+    const withoutExternal = selectBodyCompositionForNutrition(
+      [candidate({ method: "measurements", bodyFatPercent: 15 })],
+      TODAY,
+      CURRENT_WEIGHT_KG,
+    );
+    for (const method of ["manual", "dexa", "bioimpedance"] as const) {
+      const withExternal = selectBodyCompositionForNutrition(
+        [
+          candidate({ date: TODAY, method, bodyFatPercent: 8 }),
+          candidate({ date: TODAY, method: "measurements", bodyFatPercent: 15 }),
+        ],
+        TODAY,
+        CURRENT_WEIGHT_KG,
+      );
+      expect(withExternal).toEqual(withoutExternal);
+    }
+  });
+
+  it("uniquement des méthodes externes (manual/dexa/bioimpedance), aucune mensuration/photo → null, jamais de repli sur l'externe", () => {
+    const result = selectBodyCompositionForNutrition(
+      [
+        candidate({ method: "manual", bodyFatPercent: 8 }),
+        candidate({ date: daysAgo(10), method: "dexa", bodyFatPercent: 11 }),
+        candidate({ date: daysAgo(20), method: "bioimpedance", bodyFatPercent: 9 }),
+      ],
+      TODAY,
+      CURRENT_WEIGHT_KG,
     );
     expect(result).toBeNull();
   });
 
-  it("candidat valide et récent → sélectionné avec masse maigre calculée depuis bodyComposition.ts (Phase 6A, pas dupliqué)", () => {
-    const result = selectBodyCompositionForNutrition([candidate({})], TODAY);
-    expect(result).not.toBeNull();
-    expect(result!.leanMassKg).toBeCloseTo(80 - 80 * 0.2, 5);
-    expect(result!.method).toBe("measurements");
-    expect(result!.confidence).toBe("medium");
-  });
-
-  it("§3 — pas de hiérarchie arbitraire de méthode : le plus RÉCENT valide l'emporte, même une méthode moins fiable qu'un candidat plus ancien", () => {
+  it("méthode inconnue/invalide → ignorée comme une méthode externe (aucune contribution)", () => {
     const result = selectBodyCompositionForNutrition(
-      [
-        candidate({ date: TODAY, method: "photo_estimate", bodyFatPercent: 18 }),
-        candidate({ date: daysAgo(5), method: "dexa", bodyFatPercent: 20 }),
-      ],
+      [candidate({ method: "invalid_method" })],
       TODAY,
+      CURRENT_WEIGHT_KG,
     );
-    expect(result!.method).toBe("photo_estimate");
-  });
-
-  it("méthode inconnue/invalide → candidat ignoré, le suivant valide est retenu", () => {
-    const result = selectBodyCompositionForNutrition(
-      [candidate({ method: "invalid_method" }), candidate({ date: daysAgo(1), method: "dexa" })],
-      TODAY,
-    );
-    expect(result!.method).toBe("dexa");
+    expect(result).toBeNull();
   });
 
   it("BF hors bornes 1-70 → candidat ignoré", () => {
@@ -74,69 +180,31 @@ describe("selectBodyCompositionForNutrition — sélection (§3/§13/§30 du bri
         candidate({ bodyFatPercent: NaN }),
       ],
       TODAY,
+      CURRENT_WEIGHT_KG,
     );
     expect(result).toBeNull();
   });
 
-  it("§5 — poids absent sur la MÊME ligne que le BF → candidat ignoré (jamais combiné à un poids d'une autre date)", () => {
-    const result = selectBodyCompositionForNutrition([candidate({ weightKg: null })], TODAY);
-    expect(result).toBeNull();
-  });
-
-  it("poids invalide (négatif/zéro/non fini) sur la ligne → candidat ignoré", () => {
-    for (const weightKg of [0, -10, NaN, Infinity]) {
-      expect(selectBodyCompositionForNutrition([candidate({ weightKg })], TODAY)).toBeNull();
-    }
-  });
-
-  it(`§4 — mesure exactement à la limite de récence (${BODY_COMPOSITION_MAX_AGE_DAYS} jours) → encore exploitable`, () => {
+  it(`mesure exactement à la limite de récence (${BODY_COMPOSITION_MAX_AGE_DAYS} jours) → encore exploitable`, () => {
     const result = selectBodyCompositionForNutrition(
       [candidate({ date: daysAgo(BODY_COMPOSITION_MAX_AGE_DAYS) })],
       TODAY,
+      CURRENT_WEIGHT_KG,
     );
     expect(result).not.toBeNull();
   });
 
-  it("§4/§36 — mesure au-delà de la fenêtre de récence → ignorée, repli poids corporel garanti côté appelant", () => {
+  it("mesure au-delà de la fenêtre de récence → ignorée, repli poids corporel garanti côté appelant", () => {
     const result = selectBodyCompositionForNutrition(
       [candidate({ date: daysAgo(BODY_COMPOSITION_MAX_AGE_DAYS + 1) })],
       TODAY,
+      CURRENT_WEIGHT_KG,
     );
     expect(result).toBeNull();
   });
-
-  it("§21/§22/§35 — photo_estimate : usableForAutomaticAdjustment = false (confiance low)", () => {
-    const result = selectBodyCompositionForNutrition(
-      [candidate({ method: "photo_estimate", bodyFatPercent: 18 })],
-      TODAY,
-    );
-    expect(result!.usableForAutomaticAdjustment).toBe(false);
-    expect(result!.isRange).toBe(true);
-  });
-
-  it("manual : usableForAutomaticAdjustment = false (confiance low, provenance réelle inconnue de Cortex)", () => {
-    const result = selectBodyCompositionForNutrition([candidate({ method: "manual" })], TODAY);
-    expect(result!.usableForAutomaticAdjustment).toBe(false);
-  });
-
-  it("dexa/bioimpedance/measurements : usableForAutomaticAdjustment = true (confiance medium/high)", () => {
-    for (const method of ["dexa", "bioimpedance", "measurements"] as const) {
-      const result = selectBodyCompositionForNutrition([candidate({ method })], TODAY);
-      expect(result!.usableForAutomaticAdjustment).toBe(true);
-      expect(result!.isRange).toBe(false);
-    }
-  });
-
-  it("§34 — bioimpédance ne suppose pas un niveau de confiance arbitraire : reprend exactement le mapping centralisé bodyComposition.ts (medium)", () => {
-    const result = selectBodyCompositionForNutrition(
-      [candidate({ method: "bioimpedance" })],
-      TODAY,
-    );
-    expect(result!.confidence).toBe("medium");
-  });
 });
 
-describe("computeLeanMassProteinTargetG — cible protéique dérivée de la masse maigre (§7/§9/§10/§11 du brief)", () => {
+describe("computeLeanMassProteinTargetG — cible protéique dérivée de la masse maigre (§7/§9/§10/§11 du brief Phase 7)", () => {
   it("§10 — coefficients distincts et NON équivalents à une conversion naïve poids→masse maigre (toujours plus conservateurs)", () => {
     for (const goal of ["fat_loss", "maintenance", "muscle_gain"] as const) {
       const naiveEquivalence = MACRO_STRATEGY_COEFFICIENTS.PROTEIN_G_PER_KG[goal] / 0.8;

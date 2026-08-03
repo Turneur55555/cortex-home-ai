@@ -72,11 +72,8 @@ import {
   selectBodyCompositionForNutrition,
   type BodyCompositionCandidate,
 } from "@/lib/fitness/bodyCompositionForNutrition";
-import {
-  BODY_FAT_METHOD_LABELS,
-  computeFatMass,
-  CONFIDENCE_LABELS,
-} from "@/lib/fitness/bodyComposition";
+import { describeCortexBodyFatSources } from "@/lib/fitness/cortexBodyFat";
+import { computeFatMass, CONFIDENCE_LABELS } from "@/lib/fitness/bodyComposition";
 import {
   computeBodyFatTargetProjection,
   computeGoalTrajectory,
@@ -279,21 +276,25 @@ function SanteNutritionnellePage() {
   const carbsLocked = nutritionGoals?.carbsLocked ?? false;
   const fatLocked = nutritionGoals?.fatLocked ?? false;
 
-  // Phase 7 — Body Fat n'est JAMAIS une dépendance obligatoire : sans
-  // composition corporelle exploitable, tout ce qui suit retombe
-  // silencieusement sur le pipeline poids corporel Phase 5 (§30 du brief).
-  // `bodyRows` est déjà trié du plus récent au plus ancien
-  // (`useBodyMeasurements`) — même ordre attendu par
-  // `selectBodyCompositionForNutrition`.
+  // Body Fat Cortex (correctif "estimation indépendante") — n'est JAMAIS
+  // une dépendance obligatoire : sans mensurations/photos exploitables,
+  // tout ce qui suit retombe silencieusement sur le pipeline poids
+  // corporel Phase 5 (§30 du brief Phase 7 ; §17 du correctif). `bodyRows`
+  // est déjà trié du plus récent au plus ancien (`useBodyMeasurements`) —
+  // même ordre attendu par `selectBodyCompositionForNutrition`. Le poids
+  // ACTUEL (`weight`, jamais un poids historique attaché à une mesure BF
+  // externe) détermine seul les masses grasse/maigre actuelles (§14).
   const bodyCompositionCandidates: BodyCompositionCandidate[] = (bodyRows ?? []).map((row) => ({
     date: row.date,
-    weightKg: row.weight,
     bodyFatPercent: row.body_fat,
+    bodyFatMinPercent: row.body_fat_min_percent,
+    bodyFatMaxPercent: row.body_fat_max_percent,
     method: row.body_fat_method,
   }));
   const selectedBodyComposition = selectBodyCompositionForNutrition(
     bodyCompositionCandidates,
     today,
+    weight,
   );
   const rawLeanMassProteinTargetG = selectedBodyComposition
     ? computeLeanMassProteinTargetG(strategyGoal, selectedBodyComposition.leanMassKg)
@@ -655,8 +656,8 @@ function SanteNutritionnellePage() {
           weightKg: weight,
           weightSmoothedKg: adaptiveTdee.weight.endTrendKg,
           bodyFatPercent: selectedBodyComposition.bodyFatPercent,
-          bodyFatMinPercent: null,
-          bodyFatMaxPercent: null,
+          bodyFatMinPercent: selectedBodyComposition.bodyFatMinPercent,
+          bodyFatMaxPercent: selectedBodyComposition.bodyFatMaxPercent,
           bodyFatMethod: selectedBodyComposition.method,
           bodyFatConfidence: selectedBodyComposition.confidence,
           leanMassKg: selectedBodyComposition.leanMassKg,
@@ -814,18 +815,19 @@ function SanteNutritionnellePage() {
             <>
               <StatTile
                 icon={<Gauge className="h-4 w-4" />}
-                label="Masse grasse"
+                label="Masse grasse estimée"
                 value={
                   weight != null
                     ? String(computeFatMass(weight, selectedBodyComposition.bodyFatPercent) ?? "—")
                     : "—"
                 }
                 unit="kg"
-                title={`${BODY_FAT_METHOD_LABELS[selectedBodyComposition.method]} · ${CONFIDENCE_LABELS[selectedBodyComposition.confidence]}`}
+                caption="Body Fat Cortex"
+                title={`${describeCortexBodyFatSources(selectedBodyComposition.methodsUsed)} · ${CONFIDENCE_LABELS[selectedBodyComposition.confidence]}`}
               />
               <StatTile
                 icon={<Gauge className="h-4 w-4" />}
-                label="Masse maigre"
+                label="Masse maigre estimée"
                 value={String(Math.round(selectedBodyComposition.leanMassKg * 10) / 10)}
                 unit="kg"
                 title="Eau, os, organes et muscle — pas uniquement le muscle"
@@ -835,17 +837,29 @@ function SanteNutritionnellePage() {
             <>
               <InsufficientDataTile
                 icon={<Gauge className="h-4 w-4" />}
-                label="Masse grasse"
-                reason="Aucune donnée saisie"
+                label="Masse grasse estimée"
+                reason="Aucune estimation Cortex"
               />
               <InsufficientDataTile
                 icon={<Gauge className="h-4 w-4" />}
-                label="Masse maigre"
-                reason="Aucune donnée saisie"
+                label="Masse maigre estimée"
+                reason="Aucune estimation Cortex"
               />
             </>
           )}
         </div>
+        {selectedBodyComposition && selectedBodyComposition.methodsUsed.length === 1 && (
+          <p className="mt-2 px-1 text-[11px] leading-relaxed text-muted-foreground">
+            {selectedBodyComposition.methodsUsed[0] === "measurements"
+              ? "Ajoute une estimation par photos pour affiner la fourchette Cortex."
+              : "Ajoute une estimation par mensurations pour renforcer l'estimation Cortex."}
+          </p>
+        )}
+        {selectedBodyComposition?.disagreement && (
+          <p className="mt-2 px-1 text-[11px] leading-relaxed text-muted-foreground">
+            Les deux estimations diffèrent sensiblement. La fourchette Cortex est élargie.
+          </p>
+        )}
         <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-border bg-card px-4 py-3 shadow-card">
           <div className="min-w-0">
             <p className="text-xs font-medium">Historique du poids et composition corporelle</p>
@@ -1453,12 +1467,13 @@ function SanteNutritionnellePage() {
                 </p>
                 <p className="mt-0.5 text-xs font-semibold text-foreground">Masse maigre</p>
                 <p className="mt-1 text-[11px] text-muted-foreground">
-                  Masse maigre utilisée : {selectedBodyComposition.leanMassKg.toFixed(1)} kg
+                  Masse maigre estimée utilisée : {selectedBodyComposition.leanMassKg.toFixed(1)} kg
                 </p>
                 <p className="mt-0.5 text-[11px] text-muted-foreground">
-                  Composition corporelle : {BODY_FAT_METHOD_LABELS[selectedBodyComposition.method]}{" "}
-                  · {CONFIDENCE_LABELS[selectedBodyComposition.confidence]}
-                  {selectedBodyComposition.isRange ? " · estimation indicative" : ""}
+                  Body Fat Cortex :{" "}
+                  {describeCortexBodyFatSources(selectedBodyComposition.methodsUsed)} ·{" "}
+                  {CONFIDENCE_LABELS[selectedBodyComposition.confidence]}
+                  {selectedBodyComposition.isRange ? " · fourchette estimée" : ""}
                 </p>
               </div>
             )}
@@ -1467,9 +1482,12 @@ function SanteNutritionnellePage() {
               selectedBodyComposition &&
               !selectedBodyComposition.usableForAutomaticAdjustment && (
                 <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-                  {selectedBodyComposition.method === "photo_estimate"
-                    ? "Estimation photo disponible — utilisée à titre indicatif, pas encore assez fiable pour ajuster tes protéines automatiquement."
-                    : "Composition corporelle disponible mais pas assez fiable pour ajuster tes protéines automatiquement — reste utilisée à titre indicatif."}
+                  {selectedBodyComposition.disagreement
+                    ? "Les estimations mensurations et photos diffèrent sensiblement — pas encore assez fiable pour ajuster tes protéines automatiquement."
+                    : selectedBodyComposition.methodsUsed.includes("photo_estimate") &&
+                        !selectedBodyComposition.methodsUsed.includes("measurements")
+                      ? "Estimation photo disponible — utilisée à titre indicatif, pas encore assez fiable pour ajuster tes protéines automatiquement."
+                      : "Estimation Cortex disponible mais pas assez fiable pour ajuster tes protéines automatiquement — reste utilisée à titre indicatif."}
                 </p>
               )}
 
