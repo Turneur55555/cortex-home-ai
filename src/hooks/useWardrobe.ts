@@ -36,7 +36,19 @@ export interface WardrobeItemView extends WardrobeItem {
 const CATEGORY_RULES: Array<{ category: WardrobeCategory; tokens: string[] }> = [
   {
     category: "tops",
-    tokens: ["haut", "top", "tshirt", "t-shirt", "tee", "chemise", "pull", "sweat", "hoodie", "debardeur", "polo"],
+    tokens: [
+      "haut",
+      "top",
+      "tshirt",
+      "t-shirt",
+      "tee",
+      "chemise",
+      "pull",
+      "sweat",
+      "hoodie",
+      "debardeur",
+      "polo",
+    ],
   },
   {
     category: "bottoms",
@@ -52,7 +64,18 @@ const CATEGORY_RULES: Array<{ category: WardrobeCategory; tokens: string[] }> = 
   },
   {
     category: "accessories",
-    tokens: ["accessoire", "accessor", "casquette", "bonnet", "ceinture", "montre", "sac", "echarpe", "cap", "bag"],
+    tokens: [
+      "accessoire",
+      "accessor",
+      "casquette",
+      "bonnet",
+      "ceinture",
+      "montre",
+      "sac",
+      "echarpe",
+      "cap",
+      "bag",
+    ],
   },
 ];
 
@@ -81,16 +104,14 @@ export function useWardrobeItems() {
     staleTime: 60_000,
     queryFn: async (): Promise<WardrobeItemView[]> => {
       const { data, error } = await supabase
-        .from("wardrobe_items" as never)
+        .from("wardrobe_items")
         .select("id, user_id, name, brand, category, subcategory, storage_path, created_at")
         .eq("user_id", user!.id)
         .order("created_at", { ascending: false });
       if (error) throw error;
 
-      const items = (data ?? []) as unknown as WardrobeItem[];
-      const paths = items
-        .map((item) => item.storage_path)
-        .filter((path): path is string => !!path);
+      const items = data ?? [];
+      const paths = items.map((item) => item.storage_path).filter((path): path is string => !!path);
 
       const signedByPath = new Map<string, string>();
       if (paths.length > 0) {

@@ -56,9 +56,7 @@ function DressingPage() {
             <h1 className="mt-1 text-2xl font-bold tracking-tight">Mon dressing</h1>
           </div>
           <div className="text-right">
-            <p className="text-3xl font-semibold tabular-nums">
-              {isLoading ? "—" : items.length}
-            </p>
+            <p className="text-3xl font-semibold tabular-nums">{isLoading ? "—" : items.length}</p>
             <p className="text-[11px] text-muted-foreground">
               {items.length > 1 ? "pièces" : "pièce"}
             </p>
@@ -130,9 +128,7 @@ function DressingPage() {
         <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-6 text-center">
           <TriangleAlert className="mx-auto h-7 w-7 text-destructive" />
           <p className="mt-2 text-sm font-medium">Impossible de charger ton dressing</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Vérifie ta connexion puis réessaie.
-          </p>
+          <p className="mt-1 text-xs text-muted-foreground">Vérifie ta connexion puis réessaie.</p>
           <button
             type="button"
             onClick={() => void refetch()}
@@ -164,9 +160,7 @@ function DressingPage() {
                   )}
                 </div>
                 <div className="px-3 py-2.5">
-                  <p className="truncate text-xs font-semibold">
-                    {item.name ?? "Pièce sans nom"}
-                  </p>
+                  <p className="truncate text-xs font-semibold">{item.name ?? "Pièce sans nom"}</p>
                   <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
                     {[item.brand, item.subcategory ?? item.category].filter(Boolean).join(" · ") ||
                       "—"}
