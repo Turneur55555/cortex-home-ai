@@ -27,6 +27,7 @@ import { Route as AuthenticatedDocumentsRouteImport } from './routes/_authentica
 import { Route as AuthenticatedCorpsRouteImport } from './routes/_authenticated/corps'
 import { Route as AuthenticatedRapportsIndexRouteImport } from './routes/_authenticated/rapports/index'
 import { Route as AuthenticatedFitnessIndexRouteImport } from './routes/_authenticated/fitness/index'
+import { Route as AuthenticatedDressingIndexRouteImport } from './routes/_authenticated/dressing/index'
 import { Route as AuthenticatedRapportsIdRouteImport } from './routes/_authenticated/rapports/$id'
 import { Route as AuthenticatedAdminExercisesRouteImport } from './routes/_authenticated/admin/exercises'
 
@@ -125,6 +126,12 @@ const AuthenticatedFitnessIndexRoute =
     path: '/fitness/',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedDressingIndexRoute =
+  AuthenticatedDressingIndexRouteImport.update({
+    id: '/dressing/',
+    path: '/dressing/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedRapportsIdRoute = AuthenticatedRapportsIdRouteImport.update({
   id: '/rapports/$id',
   path: '/rapports/$id',
@@ -155,6 +162,7 @@ export interface FileRoutesByFullPath {
   '/supplements': typeof AuthenticatedSupplementsRoute
   '/admin/exercises': typeof AuthenticatedAdminExercisesRoute
   '/rapports/$id': typeof AuthenticatedRapportsIdRoute
+  '/dressing/': typeof AuthenticatedDressingIndexRoute
   '/fitness/': typeof AuthenticatedFitnessIndexRoute
   '/rapports/': typeof AuthenticatedRapportsIndexRoute
 }
@@ -176,6 +184,7 @@ export interface FileRoutesByTo {
   '/': typeof AuthenticatedIndexRoute
   '/admin/exercises': typeof AuthenticatedAdminExercisesRoute
   '/rapports/$id': typeof AuthenticatedRapportsIdRoute
+  '/dressing': typeof AuthenticatedDressingIndexRoute
   '/fitness': typeof AuthenticatedFitnessIndexRoute
   '/rapports': typeof AuthenticatedRapportsIndexRoute
 }
@@ -199,6 +208,7 @@ export interface FileRoutesById {
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/admin/exercises': typeof AuthenticatedAdminExercisesRoute
   '/_authenticated/rapports/$id': typeof AuthenticatedRapportsIdRoute
+  '/_authenticated/dressing/': typeof AuthenticatedDressingIndexRoute
   '/_authenticated/fitness/': typeof AuthenticatedFitnessIndexRoute
   '/_authenticated/rapports/': typeof AuthenticatedRapportsIndexRoute
 }
@@ -222,6 +232,7 @@ export interface FileRouteTypes {
     | '/supplements'
     | '/admin/exercises'
     | '/rapports/$id'
+    | '/dressing/'
     | '/fitness/'
     | '/rapports/'
   fileRoutesByTo: FileRoutesByTo
@@ -243,6 +254,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin/exercises'
     | '/rapports/$id'
+    | '/dressing'
     | '/fitness'
     | '/rapports'
   id:
@@ -265,6 +277,7 @@ export interface FileRouteTypes {
     | '/_authenticated/'
     | '/_authenticated/admin/exercises'
     | '/_authenticated/rapports/$id'
+    | '/_authenticated/dressing/'
     | '/_authenticated/fitness/'
     | '/_authenticated/rapports/'
   fileRoutesById: FileRoutesById
@@ -405,6 +418,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedFitnessIndexRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/dressing/': {
+      id: '/_authenticated/dressing/'
+      path: '/dressing'
+      fullPath: '/dressing/'
+      preLoaderRoute: typeof AuthenticatedDressingIndexRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/rapports/$id': {
       id: '/_authenticated/rapports/$id'
       path: '/rapports/$id'
@@ -436,6 +456,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedAdminExercisesRoute: typeof AuthenticatedAdminExercisesRoute
   AuthenticatedRapportsIdRoute: typeof AuthenticatedRapportsIdRoute
+  AuthenticatedDressingIndexRoute: typeof AuthenticatedDressingIndexRoute
   AuthenticatedFitnessIndexRoute: typeof AuthenticatedFitnessIndexRoute
   AuthenticatedRapportsIndexRoute: typeof AuthenticatedRapportsIndexRoute
 }
@@ -455,6 +476,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedAdminExercisesRoute: AuthenticatedAdminExercisesRoute,
   AuthenticatedRapportsIdRoute: AuthenticatedRapportsIdRoute,
+  AuthenticatedDressingIndexRoute: AuthenticatedDressingIndexRoute,
   AuthenticatedFitnessIndexRoute: AuthenticatedFitnessIndexRoute,
   AuthenticatedRapportsIndexRoute: AuthenticatedRapportsIndexRoute,
 }
