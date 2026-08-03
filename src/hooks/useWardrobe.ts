@@ -1,4 +1,5 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -93,6 +94,132 @@ export function toUiCategory(raw: string | null | undefined): WardrobeCategory {
     if (rule.tokens.some((token) => value.includes(token))) return rule.category;
   }
   return "other";
+}
+
+export type WardrobeAddCategoryKey = Exclude<WardrobeFilterKey, "all">;
+
+/** Valeurs réelles acceptées par la contrainte `wardrobe_items.category` en base. */
+export const WARDROBE_DB_CATEGORY: Record<WardrobeAddCategoryKey, string> = {
+  tops: "top",
+  bottoms: "bottom",
+  outerwear: "outerwear",
+  shoes: "shoes",
+  accessories: "accessory",
+};
+
+/** Options affichées dans le formulaire d'ajout (label FR + valeur DB associée). */
+export const WARDROBE_ADD_CATEGORIES: Array<{
+  key: WardrobeAddCategoryKey;
+  label: string;
+  dbCategory: string;
+}> = [
+  { key: "tops", label: "Haut", dbCategory: WARDROBE_DB_CATEGORY.tops },
+  { key: "bottoms", label: "Bas", dbCategory: WARDROBE_DB_CATEGORY.bottoms },
+  { key: "outerwear", label: "Veste", dbCategory: WARDROBE_DB_CATEGORY.outerwear },
+  { key: "shoes", label: "Chaussures", dbCategory: WARDROBE_DB_CATEGORY.shoes },
+  { key: "accessories", label: "Accessoire", dbCategory: WARDROBE_DB_CATEGORY.accessories },
+];
+
+/** Formats acceptés par le bucket Storage privé `wardrobe` (cf. migration backfill). */
+export const WARDROBE_ALLOWED_MIME_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+] as const;
+
+/** Taille max acceptée par le bucket Storage privé `wardrobe` (10 Mo). */
+export const WARDROBE_MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
+
+const MIME_EXTENSIONS: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/heic": "heic",
+  "image/heif": "heif",
+};
+
+export function extensionForMimeType(mime: string): string {
+  return MIME_EXTENSIONS[mime] ?? "jpg";
+}
+
+export function validateWardrobePhotoFile(
+  file: File,
+): { ok: true } | { ok: false; message: string } {
+  if (
+    !WARDROBE_ALLOWED_MIME_TYPES.includes(file.type as (typeof WARDROBE_ALLOWED_MIME_TYPES)[number])
+  ) {
+    return {
+      ok: false,
+      message: "Format non supporté. Utilise une photo JPEG, PNG, WebP ou HEIC.",
+    };
+  }
+  if (file.size > WARDROBE_MAX_FILE_SIZE_BYTES) {
+    return { ok: false, message: "Photo trop volumineuse (max 10 Mo)." };
+  }
+  return { ok: true };
+}
+
+export interface CreateWardrobeItemInput {
+  file: File;
+  category: WardrobeAddCategoryKey;
+  name?: string;
+  brand?: string;
+  primaryColor?: string;
+}
+
+export function useCreateWardrobeItem() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: CreateWardrobeItemInput) => {
+      const validation = validateWardrobePhotoFile(input.file);
+      if (!validation.ok) throw new Error(validation.message);
+
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser();
+      if (!authUser) throw new Error("Non authentifié.");
+
+      const itemId = crypto.randomUUID();
+      const extension = extensionForMimeType(input.file.type);
+      const storagePath = `${authUser.id}/${itemId}/original.${extension}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("wardrobe")
+        .upload(storagePath, input.file, {
+          contentType: input.file.type,
+          upsert: false,
+        });
+      if (uploadError) throw uploadError;
+
+      const { error: insertError } = await supabase.from("wardrobe_items").insert({
+        id: itemId,
+        user_id: authUser.id,
+        storage_path: storagePath,
+        category: WARDROBE_DB_CATEGORY[input.category],
+        name: input.name?.trim() || null,
+        brand: input.brand?.trim() || null,
+        primary_color: input.primaryColor?.trim() || null,
+      });
+
+      if (insertError) {
+        await supabase.storage.from("wardrobe").remove([storagePath]);
+        throw insertError;
+      }
+
+      return itemId;
+    },
+    onSuccess: () => {
+      toast.success("Pièce ajoutée à ton dressing.");
+      void queryClient.invalidateQueries({ queryKey: ["wardrobe-items", user?.id] });
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Impossible d'ajouter cette pièce.");
+    },
+  });
 }
 
 export function useWardrobeItems() {
