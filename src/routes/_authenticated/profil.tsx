@@ -72,6 +72,7 @@ function ProfilPage() {
             icon={<BarChart3 className="h-4 w-4" />}
             label="Rapports hebdo"
           />
+          <SpaceLink to="/dressing" icon={<Shirt className="h-4 w-4" />} label="Dressing" />
         </div>
       </Section>
 
