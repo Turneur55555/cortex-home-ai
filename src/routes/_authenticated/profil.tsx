@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Apple, BarChart3, ChevronRight, HeartPulse } from "lucide-react";
+import { Apple, BarChart3, ChevronRight, HeartPulse, Shirt } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useProfile } from "@/hooks/useProfile";
 import { ProfileIdentityStrip } from "@/components/profile/ProfileIdentityStrip";
