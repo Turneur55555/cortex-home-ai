@@ -61,6 +61,14 @@ export interface SystemicRecoveryResult {
   latestDate: string | null;
   baselineRestingHr: number | null;
   baselineSampleCount: number;
+  /**
+   * Nombre de mesures de FC repos ENCORE nécessaires avant de pouvoir
+   * établir une baseline personnelle — `0` dès que le statut n'est plus
+   * `insufficient_data`. Calculé dynamiquement (jamais un texte statique
+   * codé en dur côté UI, Phase 10 — correctif de clôture §4) : `1` mesure
+   * "la plus récente" + `MIN_BASELINE_SAMPLES` mesures antérieures.
+   */
+  remainingBaselineSamples: number;
   deltaBpm: number | null;
   reason: string;
 }
@@ -78,6 +86,11 @@ export function evaluateSystemicRecovery(
     .filter((s) => Number.isFinite(s.restingHr) && s.restingHr > 0)
     .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
 
+  // "la plus récente" + MIN_BASELINE_SAMPLES antérieures — calculé une
+  // seule fois, jamais un chiffre statique dupliqué dans l'UI.
+  const totalNeeded = SYSTEMIC_RECOVERY_THRESHOLDS.MIN_BASELINE_SAMPLES + 1;
+  const remaining = Math.max(0, totalNeeded - sorted.length);
+
   if (sorted.length === 0) {
     return {
       status: "insufficient_data",
@@ -85,8 +98,9 @@ export function evaluateSystemicRecovery(
       latestDate: null,
       baselineRestingHr: null,
       baselineSampleCount: 0,
+      remainingBaselineSamples: remaining,
       deltaBpm: null,
-      reason: "Aucune mesure de fréquence cardiaque de repos enregistrée.",
+      reason: `Encore ${remaining} mesure${remaining > 1 ? "s" : ""} de FC au repos nécessaire${remaining > 1 ? "s" : ""} pour établir ta référence personnelle.`,
     };
   }
 
@@ -100,8 +114,9 @@ export function evaluateSystemicRecovery(
       latestDate: latest.date,
       baselineRestingHr: null,
       baselineSampleCount: baselinePool.length,
+      remainingBaselineSamples: remaining,
       deltaBpm: null,
-      reason: `Pas encore assez de mesures pour établir ta baseline personnelle (${baselinePool.length}, ${SYSTEMIC_RECOVERY_THRESHOLDS.MIN_BASELINE_SAMPLES} minimum).`,
+      reason: `Encore ${remaining} mesure${remaining > 1 ? "s" : ""} de FC au repos nécessaire${remaining > 1 ? "s" : ""} pour établir ta référence personnelle.`,
     };
   }
 
@@ -128,6 +143,7 @@ export function evaluateSystemicRecovery(
     latestDate: latest.date,
     baselineRestingHr,
     baselineSampleCount: baselinePool.length,
+    remainingBaselineSamples: 0,
     deltaBpm,
     reason,
   };

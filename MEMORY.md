@@ -2903,3 +2903,51 @@ rester manuel). Vérification faite sur les vrais workflows CI, pas une supposit
   inter-appareils (volontairement non implémenté, cf. doctrine ci-dessus).
 - **Travaillé directement sur `main`** conformément à l'instruction explicite du brief (pas de branche
   dédiée pour cette phase).
+
+## Correctif de clôture Phase 10 (2026-08-03, même session)
+
+- **Drift CI (`Audit - Git ↔ Supabase Drift Detection`)** : deux versions de migration
+  (`20260803054157`/`20260803054734`) signalées "orphelines" par `supabase migration list --linked`
+  lors du run CI du 03/08 12:54 UTC. Audit : `supabase_migrations.schema_migrations` interrogée en
+  direct juste après montre **exactement 200 lignes = 200 fichiers Git**, sans aucune trace de ces deux
+  versions — confirmé transitoire (probablement une activité concurrente sur ce projet Supabase
+  partagé par de nombreuses branches/produits, cf. tables HR/paie et `outfit_feedback`/`outfits`
+  déjà étrangères à Cortex). Aucun SQL rejoué, aucune migration vide créée. Re-déclenchement manuel du
+  workflow (`workflow_dispatch`) → **repassé au vert** (confirmé, run `30821728587`).
+- **`outfit_feedback`/`outfits`** : audit complet — schéma propre (FK, CHECK, UNIQUE), RLS activée,
+  4 policies CRUD "own" par table, **0 ligne**, **zéro appelant** dans tout le repo Cortex (grep). Ne
+  correspondent à AUCUNE migration Git (même orpheline — absentes aussi de `schema_migrations`,
+  confirmant qu'elles ont été créées hors du système de migration, ex. SQL Editor direct). Domaine
+  conceptuel (garde-robe/tenues) sans rapport avec Cortex fitness/nutrition — même profil que les
+  tables HR/paie déjà présentes dans ce même projet Supabase partagé. **Conclusion : n'appartient pas
+  à l'architecture Cortex actuelle.** Aucune migration Cortex créée pour ces tables (cela leur
+  attribuerait à tort une appartenance à ce produit). **Aucune suppression effectuée** — signalé
+  comme demandé, décision de conservation/suppression laissée à l'utilisateur.
+- **Provenance Body Fat vs méthode** : nouvelle distinction conceptuelle explicite dans
+  `bodyComposition.ts` — `BodyFatMethod` (COMMENT, pilote la confiance, inchangé) vs
+  `BodyFatProvenance` (`"direct_entry" | "imported_document"`, D'OÙ vient la ligne, PURE information
+  de traçabilité, n'affecte JAMAIS la confiance). `describeBodyFatProvenance(hasSourceDocument)` —
+  dérivée de `body_tracking.source_document_id` (colonne déjà existante, déjà remplie pour certaines
+  lignes via l'analyse PDF). **Audit des 22 mesures backfillées** : 4 liées à un document PDF
+  ("Analyse corporelle" avec composition + circonférences + posture — format cohérent avec un scanner
+  3D type Visbody), mais **aucune preuve fiable** (nom de fichier, texte extrait, métadonnée) ne
+  mentionne explicitement une marque — provenance conservée comme "document importé" (fait vérifiable),
+  **jamais "Visbody" inventé**. Les 18 autres restent "saisie directe". Rétrocompatible Phase 6/7 :
+  `BODY_FAT_METHOD_CONFIDENCE`/`getBodyFatConfidence` restent keyed uniquement sur la méthode, aucune
+  logique de confiance modifiée.
+- **Récupération — pas de changement de seuil** : `MIN_BASELINE_SAMPLES` (5) et `BASELINE_WINDOW_SIZE`
+  (14) laissés inchangés — comportement normal, pas un bug. `SystemicRecoveryResult` étendu avec
+  `remainingBaselineSamples` (calculé dynamiquement, jamais un texte statique) ; le message
+  `insufficient_data` explique désormais précisément *"Encore N mesure(s) de FC au repos
+  nécessaire(s) pour établir ta référence personnelle"* — N recalculé à chaque évaluation à partir des
+  données réelles, jamais codé en dur côté UI. Aucun sommeil réintroduit.
+- **Tests** : +6 (`describeBodyFatProvenance` ×3, `remainingBaselineSamples`/reason dynamique ×3) —
+  **1038 tests au total**, tous verts.
+- **Validation** : `tsc --noEmit` / `eslint` / `npx vitest run` (1038 passed) / `npm run build` : tous
+  verts. Aucune migration créée ce round (aucun changement de schéma nécessaire pour les points 1-4).
+  `validate-supabase.mjs` : 0 nouvelle erreur/warning.
+- **Non-régression** : BMR/NEAT/TDEE/TDEE adaptatif/Body Fat/Pas/FC repos/HRV/Récupération/Nutrition/
+  Fitness — aucun moteur touché, seule la sortie `systemicRecovery` a été enrichie (champ ajouté,
+  rétrocompatible) et `bodyComposition.ts` a reçu un ajout pur (aucune fonction existante modifiée en
+  comportement, seule `resolveBodyFatMethod` du Phase 10 initial reste inchangée).
+- **Travaillé directement sur `main`**, comme demandé.

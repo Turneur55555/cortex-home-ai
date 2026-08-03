@@ -1881,7 +1881,7 @@ function SanteNutritionnellePage() {
             <InsufficientDataTile
               icon={<Battery className="h-4 w-4" />}
               label="Récupération"
-              reason="Données insuffisantes"
+              reason={systemicRecovery.reason}
             />
           ) : (
             <StatTile

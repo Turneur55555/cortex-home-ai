@@ -7,6 +7,7 @@ import {
   computeFatMass,
   computeLeanMass,
   getBodyFatConfidence,
+  describeBodyFatProvenance,
   isKnownBodyFatMethod,
   isValidBodyFatPercent,
   resolveBodyFatMethod,
@@ -160,6 +161,22 @@ describe("resolveBodyFatMethod (Phase 10 §1)", () => {
   });
   it("Body Fat saisi SANS méthode choisie → fallback 'manual', jamais null ni une méthode précise inventée", () => {
     expect(resolveBodyFatMethod(null, true)).toBe("manual");
+  });
+});
+
+describe("describeBodyFatProvenance (Phase 10 — correctif de clôture §3)", () => {
+  it("aucun document source lié → provenance 'direct_entry'", () => {
+    expect(describeBodyFatProvenance(false)).toBe("direct_entry");
+  });
+  it("document source lié → provenance 'imported_document', jamais une marque/appareil inventé", () => {
+    expect(describeBodyFatProvenance(true)).toBe("imported_document");
+  });
+  it("la provenance reste indépendante de la méthode/confiance (Phase 6A inchangée)", () => {
+    // Une méthode "manual" peut avoir n'importe quelle provenance sans que
+    // la confiance associée (toujours "low" pour manual) ne change.
+    expect(getBodyFatConfidence("manual")).toBe("low");
+    expect(describeBodyFatProvenance(true)).toBe("imported_document");
+    expect(describeBodyFatProvenance(false)).toBe("direct_entry");
   });
 });
 

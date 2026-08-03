@@ -17,11 +17,29 @@ describe("evaluateSystemicRecovery (Phase 10 §8)", () => {
     expect(r.baselineRestingHr).toBeNull();
   });
 
+  it("aucune mesure → remainingBaselineSamples calculé dynamiquement (correctif de clôture §4), pas un texte statique", () => {
+    const r = evaluateSystemicRecovery([]);
+    expect(r.remainingBaselineSamples).toBe(SYSTEMIC_RECOVERY_THRESHOLDS.MIN_BASELINE_SAMPLES + 1);
+    expect(r.reason).toContain(String(SYSTEMIC_RECOVERY_THRESHOLDS.MIN_BASELINE_SAMPLES + 1));
+  });
+
   it("moins de 5 mesures antérieures → insufficient_data même si une mesure récente existe", () => {
     const r = evaluateSystemicRecovery(series([60, 61, 59, 60, 62]));
     expect(r.status).toBe("insufficient_data");
     expect(r.latestRestingHr).toBe(62);
     expect(r.baselineSampleCount).toBe(4);
+  });
+
+  it("4 pesées antérieures + 1 récente → il en manque exactement 1, reflété dans remainingBaselineSamples et reason", () => {
+    const r = evaluateSystemicRecovery(series([60, 61, 59, 60, 62]));
+    expect(r.remainingBaselineSamples).toBe(1);
+    expect(r.reason).toMatch(/Encore 1 mesure /);
+  });
+
+  it("baseline suffisante → remainingBaselineSamples = 0", () => {
+    const r = evaluateSystemicRecovery(series([60, 61, 59, 60, 61, 60]));
+    expect(r.status).not.toBe("insufficient_data");
+    expect(r.remainingBaselineSamples).toBe(0);
   });
 
   it("baseline suffisante + FC repos proche de la moyenne → normal", () => {

@@ -137,6 +137,49 @@ export function resolveBodyFatMethod(
 }
 
 // ---------------------------------------------------------------------
+// Méthode vs provenance (Phase 10 — correctif de clôture, §3)
+// ---------------------------------------------------------------------
+//
+// Deux notions DISTINCTES, à ne jamais fusionner :
+//
+//  - MÉTHODE (`BodyFatMethod`) : COMMENT le pourcentage a été obtenu —
+//    manual/dexa/bioimpedance/measurements/photo_estimate. C'est le SEUL
+//    axe qui pilote la confiance (`BODY_FAT_METHOD_CONFIDENCE`,
+//    `getBodyFatConfidence`) — inchangé depuis Phase 6A, rétrocompatible.
+//
+//  - PROVENANCE : D'OÙ vient la LIGNE de donnée dans Cortex — saisie
+//    directe par l'utilisateur, ou import/extraction depuis un document
+//    (`body_tracking.source_document_id`, déjà existant, déjà rempli pour
+//    certaines lignes via l'analyse de PDF). Ce n'est PAS un niveau de
+//    confiance supplémentaire, seulement une information de traçabilité :
+//    par ex. une même MÉTHODE "manual" peut avoir deux PROVENANCES
+//    différentes (l'utilisateur a tapé un chiffre lui-même, ou un chiffre a
+//    été extrait automatiquement d'un PDF qu'il a déposé) sans que la
+//    confiance associée change.
+//
+// Audit historique (Phase 10, correctif de clôture) : sur les 22 mesures
+// rétroactivement passées à `method = "manual"`, 4 sont liées à un document
+// PDF (`source_document_id` non nul, rapports "Analyse corporelle" avec
+// composition + circonférences + posture — un format cohérent avec un
+// scanner 3D type Visbody). AUCUNE preuve fiable (nom de fichier, texte
+// extrait, métadonnée) ne mentionne explicitement une marque ou un appareil
+// précis — la provenance de ces 4 lignes reste donc décrite comme
+// "document importé" (fait vérifiable), JAMAIS "Visbody" (qui serait une
+// déduction non confirmée). Les 18 autres lignes n'ont aucun document lié
+// → provenance "saisie directe". Aucune marque n'a été inventée.
+export type BodyFatProvenance = "direct_entry" | "imported_document";
+
+/** `hasSourceDocument` = `body_tracking.source_document_id != null` pour la ligne considérée. */
+export function describeBodyFatProvenance(hasSourceDocument: boolean): BodyFatProvenance {
+  return hasSourceDocument ? "imported_document" : "direct_entry";
+}
+
+export const BODY_FAT_PROVENANCE_LABELS: Record<BodyFatProvenance, string> = {
+  direct_entry: "Saisie directe",
+  imported_document: "Document importé",
+};
+
+// ---------------------------------------------------------------------
 // Masse grasse / masse maigre — fonctions pures, jamais dans un composant.
 // ---------------------------------------------------------------------
 
