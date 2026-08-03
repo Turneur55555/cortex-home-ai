@@ -9,6 +9,7 @@ import {
   getBodyFatConfidence,
   isKnownBodyFatMethod,
   isValidBodyFatPercent,
+  resolveBodyFatMethod,
   BODY_FAT_METHOD_CONFIDENCE,
   BODY_FAT_METHODS,
   type BodyCompositionMeasurement,
@@ -145,6 +146,20 @@ describe("isKnownBodyFatMethod", () => {
     expect(isKnownBodyFatMethod("caliper")).toBe(false);
     expect(isKnownBodyFatMethod(null)).toBe(false);
     expect(isKnownBodyFatMethod(undefined)).toBe(false);
+  });
+});
+
+describe("resolveBodyFatMethod (Phase 10 §1)", () => {
+  it("aucune valeur Body Fat saisie → method reste null", () => {
+    expect(resolveBodyFatMethod(null, false)).toBeNull();
+    expect(resolveBodyFatMethod("dexa", false)).toBeNull();
+  });
+  it("Body Fat saisi + méthode choisie → méthode conservée telle quelle", () => {
+    expect(resolveBodyFatMethod("dexa", true)).toBe("dexa");
+    expect(resolveBodyFatMethod("bioimpedance", true)).toBe("bioimpedance");
+  });
+  it("Body Fat saisi SANS méthode choisie → fallback 'manual', jamais null ni une méthode précise inventée", () => {
+    expect(resolveBodyFatMethod(null, true)).toBe("manual");
   });
 });
 

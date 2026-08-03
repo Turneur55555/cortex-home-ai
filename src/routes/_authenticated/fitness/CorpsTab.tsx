@@ -42,6 +42,7 @@ import {
   CONFIDENCE_LABELS,
   computeBodyCompositionSnapshot,
   isKnownBodyFatMethod,
+  resolveBodyFatMethod,
   type BodyFatMethod,
 } from "@/lib/fitness/bodyComposition";
 
@@ -499,7 +500,7 @@ function BodyMeasurementSheet({
       weight: num(form.weight),
       muscle_mass: num(form.muscle_mass),
       body_fat: num(form.body_fat),
-      body_fat_method: form.body_fat.trim() !== "" ? bodyFatMethod : null,
+      body_fat_method: resolveBodyFatMethod(bodyFatMethod, form.body_fat.trim() !== ""),
       chest: num(form.chest),
       waist: num(form.waist),
       hips: num(form.hips),
@@ -850,7 +851,12 @@ function QuickMeasurementSheet({
     await add.mutateAsync({
       date,
       [field]: num(value),
-      ...(isBodyFat ? { body_fat_method: method, weight: num(weight) } : {}),
+      ...(isBodyFat
+        ? {
+            body_fat_method: resolveBodyFatMethod(method, value.trim() !== ""),
+            weight: num(weight),
+          }
+        : {}),
     });
     onClose();
   };

@@ -2806,3 +2806,100 @@ rester manuel). Vérification faite sur les vrais workflows CI, pas une supposit
   extensions en public) restent hors scope de cette phase de finalisation.
 - **Livrée sur la branche dédiée `claude/phase9-nutrition-health-v1-finalization`, NON fusionnée dans
   `main`** conformément à l'instruction explicite du brief.
+
+## Déblocage Santé nutritionnelle + suppression des placeholders — Phase 10 (2026-08-16, même session)
+
+- **Contexte** : suite au diagnostic de la session précédente (tuiles vides malgré des données
+  réelles en base), Phase 10 corrige les blocages identifiés en réutilisant strictement les moteurs
+  Phases 1-9 (aucun second moteur BMR/NEAT/TDEE/Body Fat créé).
+- **Migration `20260816090000_body_fat_legacy_method_and_manual_activity.sql`** (appliquée en direct,
+  committée) :
+  - `UPDATE body_tracking SET body_fat_method='manual' WHERE body_fat_method IS NULL AND body_fat IS
+    NOT NULL` — 22 lignes historiques corrigées (toutes appartenant au même compte réel). `'manual'`
+    n'est PAS une méthode précise inventée : elle porte déjà la sémantique exacte « provenance
+    inconnue » dans `bodyComposition.ts` (`BODY_FAT_METHOD_CONFIDENCE.manual = "low"`). Zéro valeur
+    perdue (seule la colonne `method` touchée).
+  - `daily_activity` : ajout colonne `hrv_ms` (nullable) + CHECK ; ajout de CHECK jusque-là absents sur
+    `resting_hr`/`avg_hr`/`max_hr`/`steps`/`source` (`source` limité à `apple_health`/`manual`).
+  - Migration idempotente (`DROP CONSTRAINT IF EXISTS` avant chaque `ADD CONSTRAINT`), vérifiée par
+    `validate-supabase.mjs` (0 nouveau warning).
+- **`lib/fitness/bodyComposition.ts`** : nouvelle fonction pure `resolveBodyFatMethod(selectedMethod,
+  hasBodyFatValue)` — retourne `selectedMethod ?? "manual"` dès qu'un BF est saisi, ne renvoie plus
+  jamais `null` silencieusement. Corrige le bug UX réel : `CorpsTab.tsx` (formulaire principal + 
+  `QuickMeasurementSheet`) et `BodyHistorySheet.tsx` (édition) laissaient `body_fat_method = null` si
+  l'utilisateur ne cliquait aucune puce de méthode — désormais toute nouvelle saisie BF a
+  systématiquement une méthode, jamais `null`.
+- **`lib/fitness/adaptiveTdee.ts` — audit + ajustement documenté du seuil de densité (§3 du brief)** :
+  `EARLY.MIN_WEIGHT_DENSITY` abaissé de **0.30 → 0.20**. Audit explicite : 0.30 exigeait en pratique
+  plus d'une pesée tous les 3.3 jours pour obtenir ne serait-ce qu'un statut "précoce" — plus strict
+  que le rythme que Cortex documente lui-même comme attendu ("quelques pesées par semaine, parfois
+  irrégulières"). Un utilisateur pesant EXACTEMENT 2×/semaine (densité ≈0.286, rythme réaliste et
+  documenté) échouait déjà ce seuil. La densité n'est pas le seul garde-fou (MIN_CALENDAR_DAYS/
+  MIN_WEIGHT_MEASUREMENTS/nutrition coverage + `weeklyTrendKg: null` indépendant si la régression ne
+  peut réellement pas être calculée) — 0.20 reste largement au-dessus du cas déjà couvert par le test
+  historique (4 pesées/26j ≈ 0.15, toujours rejeté). `ESTABLISHED.MIN_WEIGHT_DENSITY` (0.4) **inchangé**
+  — seule la barre d'entrée "précoce" est assouplie. Nouveau test explicite reproduisant le cas réel
+  diagnostiqué (6 pesées/24j, densité ≈0.25) confirmant que le statut n'est désormais plus
+  `insufficient_data`.
+- **`lib/fitness/dailyActivity.ts`** (nouveau, pur) : `mergeDailyActivityRows` — fusionne les lignes
+  `daily_activity` d'un même jour (une par `source`, `UNIQUE(user_id,date,source)` déjà existante)
+  champ par champ, le manuel gagnant toujours quand renseigné, provenance conservée par champ
+  (`SourcedValue<T>`). Permet à une future intégration (Garmin/Whoop/Oura...) de coexister avec la
+  saisie manuelle sans modification de ce fichier.
+- **`lib/fitness/systemicRecovery.ts`** (nouveau, pur) — À NE PAS CONFONDRE avec `recovery.ts`
+  (récupération PAR MUSCLE pour le BodyMap, préservée intacte, jamais touchée). `evaluateSystemicRecovery`
+  : statut de récupération globale basé **uniquement** sur la FC repos vs baseline personnelle (moyenne
+  des ≤14 mesures antérieures, ≥5 minimum requis sinon `insufficient_data`). Écart significatif = ±3
+  bpm (règle produit prudente documentée). **HRV et charge d'entraînement volontairement EXCLUES du
+  calcul** — HRV dépend trop de la méthode/l'appareil pour être fusionnée sans risque de faux signal
+  (affichée séparément, jamais combinée) ; charge d'entraînement nécessiterait un modèle plus complexe
+  que ce que la donnée actuelle justifie. Aucun score 0-100 inventé, aucun sommeil dans le calcul.
+- **`hooks/useDailyActivity.ts`** : `useLatestActivity`/`useActivityForDate` réécrits pour fusionner
+  toutes les sources d'un jour via `mergeDailyActivityRows` (au lieu de `.maybeSingle()`, qui aurait
+  planté dès qu'une saisie manuelle ET un import Apple Health coexisteraient). Nouveau
+  `useRestingHrHistory(days)` (historique fusionné par jour, alimente la baseline de récupération).
+  Nouveau `useUpsertManualDailyActivity` — upsert PARTIEL (`source:"manual"`, `onConflict:
+  "user_id,date,source"`) : n'efface jamais un champ déjà saisi un autre jour pour la même date.
+- **`components/fitness/DailyActivityEntrySheet.tsx`** (nouveau) : Sheet unique (pas/FC repos/HRV, tous
+  facultatifs, au moins un requis) — réutilise `Field`/`Sheet`/`SubmitButton` existants, aucun nouveau
+  système de formulaire. Avertissement HRV explicite sur la dépendance méthode/appareil.
+- **`components/fitness/InsufficientDataTile.tsx`** étendu (rétrocompatible) : `reason`/`ctaLabel`+
+  `onAction` optionnels — devient un vrai bouton actionnable quand une action résout le manque
+  ("Compléter mon profil", "Ajouter mes pas"...), sinon reste un simple constat.
+- **`components/fitness/ComingSoonTile.tsx` supprimé** (Phase 10 §4/§10) — plus aucun appelant dans
+  tout le repo après le nettoyage de `sante-nutritionnelle.tsx` (Sommeil/Temps actif/Hydratation/
+  Niveau de stress/Adaptation métabolique supprimés ; Poids actuel/IMC/Masse grasse/Masse maigre/
+  Objectif calorique/Pas quotidiens/FC repos/HRV migrés vers `InsufficientDataTile` avec un `reason`
+  honnête — "Aucune donnée saisie"/"Profil à compléter" — jamais "À venir" pour une fonctionnalité déjà
+  implémentée).
+- **UI `sante-nutritionnelle.tsx`** : BMR/TDEE/NEAT affichent désormais un CTA direct "Compléter mon
+  profil" (ouvre `MetabolicProfileSheet`, réutilisé tel quel) quand la cause est `metabolicProfileIncomplete`/
+  `activityLevelMissing` — les deux bannières redondantes précédemment affichées SOUS la grille de
+  tuiles ont été supprimées (le CTA est maintenant sur la tuile elle-même, jamais dupliqué). Section
+  "Activité" : "Temps actif" supprimée, "Pas quotidiens" actionnable. Section "Santé" : "Sommeil" et
+  "Niveau de stress" supprimés ; "Fréquence cardiaque" renommée "FC au repos" (alignée sur `resting_hr`
+  plutôt que `avg_hr`, cohérent avec la saisie manuelle demandée) ; "Variabilité (HRV)" et "Récupération"
+  désormais réelles (actionnables/calculées) au lieu de ComingSoon.
+- **Tests** : +17 (`resolveBodyFatMethod` ×3, densité réaliste ×1, `mergeDailyActivityRows` ×5,
+  `evaluateSystemicRecovery` ×8) — **1032 tests au total (1015+17)**, tous verts.
+- **Non-régression (§11 du brief)** : aucun fichier des moteurs BMR/EAT/TEF/NEAT/TDEE modélisé/
+  calorieStrategy/macroStrategy/goalTrajectory/goalProgress/nutritionHealthContext n'a été modifié
+  (seul le SEUIL de densité dans `adaptiveTdee.ts` a changé, documenté ci-dessus) ; suite de tests
+  complète (1032) verte au premier passage après chaque édition ; `recovery.ts` (récupération par
+  muscle, BodyMap) intact, jamais touché — nommage `systemicRecovery.ts` choisi précisément pour éviter
+  toute collision/confusion avec ce moteur existant.
+- **Validation finale** : `npx tsc --noEmit` / `npx eslint` (tous fichiers modifiés, quelques erreurs
+  prettier auto-fixées) / `npx vitest run` (1032 passed) / `npm run build` (succès, 1m58) : tous verts.
+  `node scripts/validate-supabase.mjs` : 0 nouvelle erreur/warning. `types.ts` régénéré depuis la base
+  live et vérifié **identique caractère pour caractère**. `get_advisors(security)` : aucune nouvelle
+  alerte imputable à cette phase.
+- **Drift pré-existant hors scope détecté (non corrigé, signalé)** : une table `outfit_feedback`
+  existe sur le projet Supabase live sans aucune migration correspondante dans le repo — drift déjà
+  présent AVANT cette phase (pas causé par Phase 10), origine externe (probablement une édition directe
+  hors Git, ex. Lovable). Non traité ici : hors scope explicite de cette phase de déblocage.
+- **Limites connues** : la tuile Récupération affichera `insufficient_data` pour tous les comptes tant
+  qu'au moins 6 mesures de FC repos (1 récente + 5 de baseline) n'auront pas été saisies — attendu,
+  aucune valeur n'est inventée pour combler ce vide. HRV reste affichée sans comparaison de tendance
+  inter-appareils (volontairement non implémenté, cf. doctrine ci-dessus).
+- **Travaillé directement sur `main`** conformément à l'instruction explicite du brief (pas de branche
+  dédiée pour cette phase).

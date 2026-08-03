@@ -117,6 +117,25 @@ export function isKnownBodyFatMethod(value: string | null | undefined): value is
   return value != null && (BODY_FAT_METHODS as readonly string[]).includes(value);
 }
 
+/**
+ * Détermine la méthode à PERSISTER pour une saisie Body Fat (Phase 10 §1) —
+ * ne renvoie jamais `null` tant qu'un pourcentage Body Fat est fourni.
+ * `selectedMethod` vient de la puce optionnelle choisie par l'utilisateur
+ * dans l'UI (`CorpsTab.tsx`/`BodyHistorySheet.tsx`) : si l'utilisateur n'en
+ * choisit aucune, on retombe sur `'manual'` — PAS `null` — car `'manual'`
+ * porte déjà la sémantique exacte « Cortex ne connaît pas la provenance
+ * réelle du chiffre » (confiance "low" par construction, voir
+ * `BODY_FAT_METHOD_CONFIDENCE`). Ne jamais inventer une méthode précise
+ * (dexa/bioimpedance/measurements/photo_estimate) faute de mieux.
+ */
+export function resolveBodyFatMethod(
+  selectedMethod: BodyFatMethod | null,
+  hasBodyFatValue: boolean,
+): BodyFatMethod | null {
+  if (!hasBodyFatValue) return null;
+  return selectedMethod ?? "manual";
+}
+
 // ---------------------------------------------------------------------
 // Masse grasse / masse maigre — fonctions pures, jamais dans un composant.
 // ---------------------------------------------------------------------

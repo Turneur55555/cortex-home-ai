@@ -4,20 +4,16 @@ import {
   ArrowLeft,
   Battery,
   Beef,
-  Brain,
-  Droplet,
   Flame,
   Footprints,
   Gauge,
   HeartPulse,
   Lock,
-  Moon,
   Ruler,
   Scale,
   Scan,
   Sparkles,
   Timer,
-  TrendingDown,
   TrendingUp,
   Unlock,
   Wheat,
@@ -27,8 +23,13 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useBodyMeasurements, useWorkouts } from "@/hooks/use-fitness";
 import { useLatestBodyWeight } from "@/hooks/useLatestBodyWeight";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
-import { useActivityForDate, useLatestActivity } from "@/hooks/useDailyActivity";
+import {
+  useActivityForDate,
+  useLatestActivity,
+  useRestingHrHistory,
+} from "@/hooks/useDailyActivity";
 import { useMetabolicProfile } from "@/hooks/useMetabolicProfile";
+import { evaluateSystemicRecovery } from "@/lib/fitness/systemicRecovery";
 import { useNutrition, useNutritionRange } from "@/hooks/useNutritionData";
 import {
   useApplyCalorieGoal,
@@ -92,11 +93,11 @@ import {
   useUpdatePhysicalGoalRate,
 } from "@/hooks/usePhysicalGoal";
 import { PhysicalGoalSheet } from "@/components/fitness/PhysicalGoalSheet";
+import { DailyActivityEntrySheet } from "@/components/fitness/DailyActivityEntrySheet";
 import { buildNutritionHealthAnalysisContext } from "@/lib/fitness/nutritionHealthContext";
 import { useNutritionHealthInsight } from "@/hooks/useNutritionHealthInsight";
 import { addDaysYMD, localDateYMD } from "@/lib/dates";
 import { StatTile } from "@/components/fitness/StatTile";
-import { ComingSoonTile } from "@/components/fitness/ComingSoonTile";
 import { InsufficientDataTile } from "@/components/fitness/InsufficientDataTile";
 import { MetabolicProfileSheet } from "@/components/fitness/MetabolicProfileSheet";
 import { MetabolicAnalysisSheet } from "@/components/fitness/MetabolicAnalysisSheet";
@@ -149,6 +150,7 @@ function SanteNutritionnellePage() {
   const [showAutoModeConfirm, setShowAutoModeConfirm] = useState(false);
   const [showMacroAutoModeConfirm, setShowMacroAutoModeConfirm] = useState(false);
   const [showPhysicalGoalSheet, setShowPhysicalGoalSheet] = useState(false);
+  const [showDailyActivitySheet, setShowDailyActivitySheet] = useState(false);
 
   const { data: bodyRows, isLoading: bodyLoading } = useBodyMeasurements();
   const { data: latestWeight } = useLatestBodyWeight();
@@ -181,6 +183,8 @@ function SanteNutritionnellePage() {
   const { data: workouts, isLoading: workoutsLoading } = useWorkouts();
   const { data: activity } = useLatestActivity();
   const { data: todayActivity, isLoading: todayActivityLoading } = useActivityForDate(today);
+  const { data: restingHrHistory } = useRestingHrHistory();
+  const systemicRecovery = evaluateSystemicRecovery(restingHrHistory ?? []);
 
   const weight = findLatestValue(bodyRows, "weight") ?? latestWeight ?? null;
   const previousWeight = findPreviousValue(bodyRows, "weight");
@@ -210,8 +214,8 @@ function SanteNutritionnellePage() {
   const dailyNEAT = computeNEAT({
     bmr,
     activityLevel: metabolicProfile?.activity_level,
-    activeCalories: todayActivity?.active_calories,
-    steps: todayActivity?.steps,
+    activeCalories: todayActivity?.activeCalories?.value ?? null,
+    steps: todayActivity?.steps?.value ?? null,
     weightKg: weight,
     heightCm: prefs.height_cm,
     eatKcal: dailyEAT.kcal,
@@ -776,7 +780,11 @@ function SanteNutritionnellePage() {
                   }
                 />
               ) : (
-                <ComingSoonTile icon={<Scale className="h-4 w-4" />} label="Poids actuel" />
+                <InsufficientDataTile
+                  icon={<Scale className="h-4 w-4" />}
+                  label="Poids actuel"
+                  reason="Aucune donnée saisie"
+                />
               )}
               {bmi != null ? (
                 <StatTile
@@ -786,7 +794,11 @@ function SanteNutritionnellePage() {
                   title={BMI_LABELS[bmiCategory(bmi)]}
                 />
               ) : (
-                <ComingSoonTile icon={<Ruler className="h-4 w-4" />} label="IMC" />
+                <InsufficientDataTile
+                  icon={<Ruler className="h-4 w-4" />}
+                  label="IMC"
+                  reason="Aucune donnée saisie"
+                />
               )}
             </>
           )}
@@ -821,8 +833,16 @@ function SanteNutritionnellePage() {
             </>
           ) : (
             <>
-              <ComingSoonTile icon={<Gauge className="h-4 w-4" />} label="Masse grasse" />
-              <ComingSoonTile icon={<Gauge className="h-4 w-4" />} label="Masse maigre" />
+              <InsufficientDataTile
+                icon={<Gauge className="h-4 w-4" />}
+                label="Masse grasse"
+                reason="Aucune donnée saisie"
+              />
+              <InsufficientDataTile
+                icon={<Gauge className="h-4 w-4" />}
+                label="Masse maigre"
+                reason="Aucune donnée saisie"
+              />
             </>
           )}
         </div>
@@ -869,7 +889,13 @@ function SanteNutritionnellePage() {
               unit="kcal/j"
             />
           ) : (
-            <ComingSoonTile icon={<Flame className="h-4 w-4" />} label="Métabolisme de base" />
+            <InsufficientDataTile
+              icon={<Flame className="h-4 w-4" />}
+              label="Métabolisme de base"
+              reason="Profil à compléter"
+              ctaLabel="Compléter mon profil"
+              onAction={() => setShowMetabolicSheet(true)}
+            />
           )}
           {todayActivityLoading || metabolicProfileLoading || nutritionLoading ? (
             <Skeleton className="h-[84px] rounded-2xl" />
@@ -882,6 +908,14 @@ function SanteNutritionnellePage() {
               caption="Estimation"
               title="Dépense quotidienne totale = BMR + NEAT + EAT + TEF"
             />
+          ) : metabolicProfileIncomplete ? (
+            <InsufficientDataTile
+              icon={<Zap className="h-4 w-4" />}
+              label="TDEE"
+              reason="Profil à compléter"
+              ctaLabel="Compléter mon profil"
+              onAction={() => setShowMetabolicSheet(true)}
+            />
           ) : (
             <InsufficientDataTile icon={<Zap className="h-4 w-4" />} label="TDEE" />
           )}
@@ -893,7 +927,11 @@ function SanteNutritionnellePage() {
               unit="kcal/j"
             />
           ) : (
-            <ComingSoonTile icon={<TrendingUp className="h-4 w-4" />} label="Objectif calorique" />
+            <InsufficientDataTile
+              icon={<TrendingUp className="h-4 w-4" />}
+              label="Objectif calorique"
+              reason="Aucune donnée saisie"
+            />
           )}
           {bodyLoading || nutritionRangeLoading ? (
             <Skeleton className="h-[84px] rounded-2xl" />
@@ -944,6 +982,14 @@ function SanteNutritionnellePage() {
               caption="Estimation"
               title="Non-Exercise Activity Thermogenesis — activité quotidienne non sportive (marche, déplacements, tâches)"
             />
+          ) : metabolicProfileIncomplete || activityLevelMissing ? (
+            <InsufficientDataTile
+              icon={<Footprints className="h-4 w-4" />}
+              label="NEAT"
+              reason="Profil à compléter"
+              ctaLabel="Compléter mon profil"
+              onAction={() => setShowMetabolicSheet(true)}
+            />
           ) : (
             <InsufficientDataTile icon={<Footprints className="h-4 w-4" />} label="NEAT" />
           )}
@@ -983,12 +1029,6 @@ function SanteNutritionnellePage() {
             Voir l'analyse
           </button>
         </div>
-        <div className="mt-2 grid grid-cols-1">
-          <ComingSoonTile
-            icon={<TrendingDown className="h-4 w-4" />}
-            label="Adaptation métabolique"
-          />
-        </div>
         {calorieGoal == null && (
           <p className="mt-2 px-1 text-[11px] leading-relaxed text-muted-foreground">
             Définis tes objectifs caloriques dans{" "}
@@ -1000,40 +1040,6 @@ function SanteNutritionnellePage() {
             </Link>{" "}
             pour voir ton objectif calorique quotidien.
           </p>
-        )}
-        {metabolicProfileIncomplete && (
-          <div className="mt-2 flex items-center justify-between gap-3 rounded-2xl border border-border bg-card px-4 py-3 shadow-card">
-            <div className="min-w-0">
-              <p className="text-xs font-medium">Profil métabolique incomplet</p>
-              <p className="text-[11px] text-muted-foreground">
-                Âge et sexe biologique manquants pour calculer ton BMR.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowMetabolicSheet(true)}
-              className="shrink-0 rounded-full border border-white/8 bg-white/[0.04] px-3 py-1.5 text-[11px] font-semibold text-foreground transition-colors hover:border-primary/30"
-            >
-              Compléter mon profil métabolique
-            </button>
-          </div>
-        )}
-        {activityLevelMissing && (
-          <div className="mt-2 flex items-center justify-between gap-3 rounded-2xl border border-border bg-card px-4 py-3 shadow-card">
-            <div className="min-w-0">
-              <p className="text-xs font-medium">Niveau d'activité non renseigné</p>
-              <p className="text-[11px] text-muted-foreground">
-                Nécessaire pour estimer ton NEAT sans appareil connecté.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowMetabolicSheet(true)}
-              className="shrink-0 rounded-full border border-white/8 bg-white/[0.04] px-3 py-1.5 text-[11px] font-semibold text-foreground transition-colors hover:border-primary/30"
-            >
-              Compléter mon profil métabolique
-            </button>
-          </div>
         )}
       </Section>
 
@@ -1713,6 +1719,17 @@ function SanteNutritionnellePage() {
         />
       )}
 
+      {showDailyActivitySheet && (
+        <DailyActivityEntrySheet
+          current={{
+            steps: activity?.steps?.value ?? null,
+            restingHr: activity?.restingHr?.value ?? null,
+            hrvMs: activity?.hrvMs?.value ?? null,
+          }}
+          onClose={() => setShowDailyActivitySheet(false)}
+        />
+      )}
+
       {/* Nutrition */}
       <Section title="Nutrition">
         <div className="space-y-3 rounded-2xl border border-white/5 bg-gradient-to-b from-card/95 to-card/70 p-4 shadow-card">
@@ -1768,9 +1785,6 @@ function SanteNutritionnellePage() {
             </>
           )}
         </div>
-        <div className="mt-2 grid grid-cols-1">
-          <ComingSoonRow icon={<Droplet className="h-4 w-4" />} label="Hydratation" />
-        </div>
       </Section>
 
       {/* Activité */}
@@ -1800,38 +1814,90 @@ function SanteNutritionnellePage() {
             <StatTile
               icon={<Footprints className="h-4 w-4" />}
               label="Pas (dernier relevé)"
-              value={String(activity.steps)}
+              value={String(activity.steps.value)}
+              caption={activity.steps.source === "manual" ? "Saisie manuelle" : "Importé"}
+              title={activity.date}
             />
           ) : (
-            <ComingSoonTile icon={<Footprints className="h-4 w-4" />} label="Pas quotidiens" />
+            <InsufficientDataTile
+              icon={<Footprints className="h-4 w-4" />}
+              label="Pas quotidiens"
+              reason="Aucune donnée saisie"
+              ctaLabel="Ajouter mes pas"
+              onAction={() => setShowDailyActivitySheet(true)}
+            />
           )}
-          <ComingSoonTile icon={<Timer className="h-4 w-4" />} label="Temps actif" />
         </div>
         <p className="mt-2 px-1 text-[11px] leading-relaxed text-muted-foreground">
-          Les données de montres connectées (pas, fréquence cardiaque en continu, temps actif)
-          arriveront progressivement via l'import santé.
+          Cortex fonctionne sans montre connectée — saisis tes pas manuellement, ou connecte plus
+          tard une source d'import (Apple Health...) qui alimentera la même donnée.
         </p>
       </Section>
 
-      {/* Santé */}
+      {/* Santé — Phase 10 §6/§7/§8 : FC au repos/HRV en saisie manuelle
+          Cortex-native (jamais un import obligatoire), Récupération
+          construite uniquement à partir d'un signal défendable (FC repos
+          vs baseline personnelle) — jamais un score inventé, jamais le
+          sommeil. */}
       <Section title="Santé">
         <div className="grid grid-cols-2 gap-2">
-          <ComingSoonTile icon={<Moon className="h-4 w-4" />} label="Sommeil" />
-          {activity?.avg_hr != null ? (
+          {activity?.restingHr != null ? (
             <StatTile
               icon={<HeartPulse className="h-4 w-4" />}
-              label="Fréquence cardiaque"
-              value={String(activity.avg_hr)}
+              label="FC au repos"
+              value={String(activity.restingHr.value)}
               unit="bpm"
+              caption={activity.restingHr.source === "manual" ? "Saisie manuelle" : "Importé"}
+              title={activity.date}
             />
           ) : (
-            <ComingSoonTile icon={<HeartPulse className="h-4 w-4" />} label="Fréquence cardiaque" />
+            <InsufficientDataTile
+              icon={<HeartPulse className="h-4 w-4" />}
+              label="FC au repos"
+              reason="Aucune donnée saisie"
+              ctaLabel="Ajouter ma FC au repos"
+              onAction={() => setShowDailyActivitySheet(true)}
+            />
           )}
-          <ComingSoonTile icon={<Sparkles className="h-4 w-4" />} label="Variabilité (HRV)" />
-          <ComingSoonTile icon={<Battery className="h-4 w-4" />} label="Récupération" />
-        </div>
-        <div className="mt-2 grid grid-cols-1">
-          <ComingSoonRow icon={<Brain className="h-4 w-4" />} label="Niveau de stress" />
+          {activity?.hrvMs != null ? (
+            <StatTile
+              icon={<Sparkles className="h-4 w-4" />}
+              label="Variabilité (HRV)"
+              value={String(activity.hrvMs.value)}
+              unit="ms"
+              caption={activity.hrvMs.source === "manual" ? "Saisie manuelle" : "Importé"}
+              title={`${activity.date} — comparer uniquement des mesures de même provenance`}
+            />
+          ) : (
+            <InsufficientDataTile
+              icon={<Sparkles className="h-4 w-4" />}
+              label="Variabilité (HRV)"
+              reason="Aucune donnée saisie"
+              ctaLabel="Ajouter ma HRV"
+              onAction={() => setShowDailyActivitySheet(true)}
+            />
+          )}
+          {systemicRecovery.status === "insufficient_data" ? (
+            <InsufficientDataTile
+              icon={<Battery className="h-4 w-4" />}
+              label="Récupération"
+              reason="Données insuffisantes"
+            />
+          ) : (
+            <StatTile
+              icon={<Battery className="h-4 w-4" />}
+              label="Récupération"
+              value={
+                systemicRecovery.status === "reduced"
+                  ? "Réduite"
+                  : systemicRecovery.status === "recovered"
+                    ? "Favorable"
+                    : "Normale"
+              }
+              caption="FC repos vs ta moyenne"
+              title={systemicRecovery.reason}
+            />
+          )}
         </div>
       </Section>
 
@@ -2005,20 +2071,6 @@ function MacroBar({
           animate={{ width: `${pctValue ?? 0}%` }}
           transition={{ duration: 0.9, ease: "easeOut" }}
         />
-      </div>
-    </div>
-  );
-}
-
-function ComingSoonRow({ icon, label }: { icon: ReactNode; label: string }) {
-  return (
-    <div className="flex items-center gap-3 rounded-2xl border border-dashed border-white/10 bg-white/[0.02] px-4 py-3">
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.04] text-muted-foreground/50">
-        {icon}
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="text-xs font-medium text-muted-foreground">{label}</p>
-        <p className="text-[11px] text-muted-foreground/60">Bientôt disponible</p>
       </div>
     </div>
   );

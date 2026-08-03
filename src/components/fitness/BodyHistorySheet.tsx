@@ -13,6 +13,7 @@ import {
   BODY_FAT_DIRECT_ENTRY_METHODS,
   BODY_FAT_METHOD_LABELS,
   isKnownBodyFatMethod,
+  resolveBodyFatMethod,
   type BodyFatMethod,
 } from "@/lib/fitness/bodyComposition";
 import { useBodyPhotoAnalyses, useDeleteBodyPhotoAnalysis } from "@/hooks/useBodyPhotoEstimate";
@@ -253,7 +254,7 @@ function EditMeasurementSheet({ row, onClose }: { row: Row; onClose: () => void 
         weight: num(form.weight),
         muscle_mass: num(form.muscle_mass),
         body_fat: num(form.body_fat),
-        body_fat_method: form.body_fat.trim() !== "" ? bodyFatMethod : null,
+        body_fat_method: resolveBodyFatMethod(bodyFatMethod, form.body_fat.trim() !== ""),
         chest: num(form.chest),
         waist: num(form.waist),
         hips: num(form.hips),

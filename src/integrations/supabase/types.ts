@@ -717,6 +717,7 @@ export type Database = {
           created_at: string
           date: string
           distance_m: number | null
+          hrv_ms: number | null
           id: string
           max_hr: number | null
           resting_hr: number | null
@@ -731,6 +732,7 @@ export type Database = {
           created_at?: string
           date: string
           distance_m?: number | null
+          hrv_ms?: number | null
           id?: string
           max_hr?: number | null
           resting_hr?: number | null
@@ -745,6 +747,7 @@ export type Database = {
           created_at?: string
           date?: string
           distance_m?: number | null
+          hrv_ms?: number | null
           id?: string
           max_hr?: number | null
           resting_hr?: number | null
@@ -2475,6 +2478,134 @@ export type Database = {
         }
         Relationships: []
       }
+      outfit_feedback: {
+        Row: {
+          created_at: string
+          id: string
+          liked: boolean | null
+          notes: string | null
+          outfit_id: string
+          rating: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          liked?: boolean | null
+          notes?: string | null
+          outfit_id: string
+          rating?: number | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          liked?: boolean | null
+          notes?: string | null
+          outfit_id?: string
+          rating?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "outfit_feedback_outfit_id_fkey"
+            columns: ["outfit_id"]
+            isOneToOne: false
+            referencedRelation: "outfits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      outfit_items: {
+        Row: {
+          created_at: string
+          id: string
+          outfit_id: string
+          position: number | null
+          user_id: string
+          wardrobe_item_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          outfit_id: string
+          position?: number | null
+          user_id: string
+          wardrobe_item_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          outfit_id?: string
+          position?: number | null
+          user_id?: string
+          wardrobe_item_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "outfit_items_outfit_id_fkey"
+            columns: ["outfit_id"]
+            isOneToOne: false
+            referencedRelation: "outfits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "outfit_items_wardrobe_item_id_fkey"
+            columns: ["wardrobe_item_id"]
+            isOneToOne: false
+            referencedRelation: "wardrobe_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      outfits: {
+        Row: {
+          ai_explanation: string | null
+          created_at: string
+          id: string
+          is_favorite: boolean
+          name: string | null
+          occasion: string | null
+          score: number | null
+          score_breakdown: Json
+          style: string | null
+          updated_at: string
+          user_id: string
+          worn_at: string | null
+        }
+        Insert: {
+          ai_explanation?: string | null
+          created_at?: string
+          id?: string
+          is_favorite?: boolean
+          name?: string | null
+          occasion?: string | null
+          score?: number | null
+          score_breakdown?: Json
+          style?: string | null
+          updated_at?: string
+          user_id: string
+          worn_at?: string | null
+        }
+        Update: {
+          ai_explanation?: string | null
+          created_at?: string
+          id?: string
+          is_favorite?: boolean
+          name?: string | null
+          occasion?: string | null
+          score?: number | null
+          score_breakdown?: Json
+          style?: string | null
+          updated_at?: string
+          user_id?: string
+          worn_at?: string | null
+        }
+        Relationships: []
+      }
       physical_goals: {
         Row: {
           completed_at: string | null
@@ -3684,6 +3815,108 @@ export type Database = {
           created_at?: string
           display_name?: string | null
           id?: string
+        }
+        Relationships: []
+      }
+      wardrobe_items: {
+        Row: {
+          ai_description: string | null
+          ai_metadata: Json
+          brand: string | null
+          category: string
+          created_at: string
+          fit: string | null
+          formality: string | null
+          id: string
+          is_active: boolean
+          material: string | null
+          name: string | null
+          pattern: string | null
+          primary_color: string | null
+          seasons: string[]
+          secondary_colors: string[]
+          size: string | null
+          storage_path: string
+          subcategory: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ai_description?: string | null
+          ai_metadata?: Json
+          brand?: string | null
+          category: string
+          created_at?: string
+          fit?: string | null
+          formality?: string | null
+          id?: string
+          is_active?: boolean
+          material?: string | null
+          name?: string | null
+          pattern?: string | null
+          primary_color?: string | null
+          seasons?: string[]
+          secondary_colors?: string[]
+          size?: string | null
+          storage_path: string
+          subcategory?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ai_description?: string | null
+          ai_metadata?: Json
+          brand?: string | null
+          category?: string
+          created_at?: string
+          fit?: string | null
+          formality?: string | null
+          id?: string
+          is_active?: boolean
+          material?: string | null
+          name?: string | null
+          pattern?: string | null
+          primary_color?: string | null
+          seasons?: string[]
+          secondary_colors?: string[]
+          size?: string | null
+          storage_path?: string
+          subcategory?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      wardrobe_preferences: {
+        Row: {
+          avoided_colors: string[]
+          avoided_styles: string[]
+          created_at: string
+          preferences: Json
+          preferred_colors: string[]
+          preferred_styles: string[]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avoided_colors?: string[]
+          avoided_styles?: string[]
+          created_at?: string
+          preferences?: Json
+          preferred_colors?: string[]
+          preferred_styles?: string[]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avoided_colors?: string[]
+          avoided_styles?: string[]
+          created_at?: string
+          preferences?: Json
+          preferred_colors?: string[]
+          preferred_styles?: string[]
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }

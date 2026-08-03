@@ -41,8 +41,31 @@ export const ADAPTIVE_TDEE_THRESHOLDS = {
   EARLY: {
     MIN_CALENDAR_DAYS: 7,
     MIN_WEIGHT_MEASUREMENTS: 4,
-    /** mesures / jour de fenêtre — repère la "14j mais 2 pesées". */
-    MIN_WEIGHT_DENSITY: 0.3,
+    /**
+     * mesures / jour de fenêtre — repère la "14j mais 2 pesées". Abaissé de
+     * 0.30 à 0.20 en Phase 10 (§3 du brief), après audit explicite :
+     *  - 0.30 exigeait en pratique > 1 pesée tous les 3.3 jours pour
+     *    seulement obtenir un statut "précoce" — plus strict que le rythme
+     *    de pesée que Cortex documente lui-même comme attendu ("quelques
+     *    pesées par semaine, parfois irrégulières", voir computeWeightTrend
+     *    ci-dessous). Un utilisateur pesant 2×/semaine EXACTEMENT (densité
+     *    ≈ 0.286, un rythme tout à fait raisonnable) échouait déjà ce seuil.
+     *  - Ce n'est PAS le seul garde-fou contre des pesées trop clairsemées :
+     *    `MIN_CALENDAR_DAYS`/`MIN_WEIGHT_MEASUREMENTS` filtrent déjà les cas
+     *    extrêmes, et `computeWeightTrend` retombe indépendamment sur
+     *    `weeklyTrendKg: null` (→ insufficient_data, voir determineStatus)
+     *    si la régression sur points lissés ne peut réellement pas être
+     *    calculée (moins de 2 points exploitables) — la densité n'est donc
+     *    pas le seul rempart contre un signal trop bruité.
+     *  - 0.20 reste strictement AU-DESSUS du cas déjà couvert par le test
+     *    "pesées trop espacées... (densité)" (4 pesées / 26 j ≈ 0.15,
+     *    toujours rejeté) — ce n'est pas un abaissement ad hoc pour un cas
+     *    particulier, la marge reste large sous le nouveau seuil.
+     *  - `ESTABLISHED.MIN_WEIGHT_DENSITY` (0.4, statut de confiance
+     *    supérieure) reste INCHANGÉ — seule la barre d'entrée "précoce" est
+     *    assouplie, jamais le niveau de confiance le plus élevé.
+     */
+    MIN_WEIGHT_DENSITY: 0.2,
     /** jours avec au moins un aliment loggé / jours de fenêtre. */
     MIN_NUTRITION_COVERAGE: 0.4,
   },

@@ -123,6 +123,28 @@ describe("computeAdaptiveTdee — insuffisant", () => {
     });
     expect(result.status).toBe("insufficient_data");
   });
+
+  it("rythme réaliste ~2×/semaine (6 pesées sur 24 j, densité ≈0.25) → exploitable depuis Phase 10 (§3), plus rejeté comme en Phase 3A (seuil 0.30)", () => {
+    // Reproduit le cas réel diagnostiqué en Phase 10 : pesées le 11, 12, 18,
+    // 19, 25 juillet et 1er août — un rythme de pesée tout à fait normal
+    // (2x/semaine environ), pas un cas de données clairsemées comme le test
+    // ci-dessus (4 pesées / 26 j, densité ≈0.15 — celui-ci reste rejeté).
+    const start = addDays(TODAY, -21); // 2026-07-11
+    const weightSamples: WeightSampleInput[] = [0, 1, 7, 8, 14, 21].map((i) => ({
+      date: addDays(start, i),
+      weight: 73 - i * 0.1,
+      created_at: `${addDays(start, i)}T08:00:00Z`,
+    }));
+    const nutritionLogs = genNutritionSeries(start, 22, 1700);
+    const result = computeAdaptiveTdee({
+      weightSamples,
+      nutritionLogs,
+      modeledTdeeKcal: 2200,
+      today: TODAY,
+    });
+    expect(result.status).not.toBe("insufficient_data");
+    expect(result.observedTdeeKcal).not.toBeNull();
+  });
 });
 
 describe("computeAdaptiveTdee — poids stable", () => {
