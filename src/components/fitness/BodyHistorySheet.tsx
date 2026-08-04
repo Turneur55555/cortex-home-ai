@@ -9,6 +9,14 @@ import {
 } from "@/hooks/use-fitness";
 import { Field, FormGroup, Sheet, SubmitButton } from "@/components/shared/FormComponents";
 import { Portal } from "@/components/Portal";
+import {
+  BODY_FAT_DIRECT_ENTRY_METHODS,
+  BODY_FAT_METHOD_LABELS,
+  isKnownBodyFatMethod,
+  resolveBodyFatMethod,
+  type BodyFatMethod,
+} from "@/lib/fitness/bodyComposition";
+import { useBodyPhotoAnalyses, useDeleteBodyPhotoAnalysis } from "@/hooks/useBodyPhotoEstimate";
 
 type Row = NonNullable<ReturnType<typeof useBodyMeasurements>["data"]>[number];
 
@@ -28,6 +36,8 @@ const FIELDS: Array<{ key: keyof Row; label: string; unit: string }> = [
 export function BodyHistorySheet({ onClose }: { onClose: () => void }) {
   const { data, isLoading } = useBodyMeasurements();
   const del = useDeleteBodyMeasurement();
+  const { data: photoAnalyses } = useBodyPhotoAnalyses();
+  const deletePhotoAnalysis = useDeleteBodyPhotoAnalysis();
   const [editing, setEditing] = useState<Row | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
 
@@ -133,6 +143,16 @@ export function BodyHistorySheet({ onClose }: { onClose: () => void }) {
                         </div>
                       )}
 
+                      {isKnownBodyFatMethod(r.body_fat_method) &&
+                        typeof r.body_fat === "number" && (
+                          <p className="mt-2 text-[10px] font-medium text-muted-foreground">
+                            {typeof r.body_fat_min_percent === "number" &&
+                            typeof r.body_fat_max_percent === "number"
+                              ? `MG estimée ${r.body_fat_min_percent}–${r.body_fat_max_percent} % (${BODY_FAT_METHOD_LABELS[r.body_fat_method].toLowerCase()}, indicatif)`
+                              : `MG mesurée via ${BODY_FAT_METHOD_LABELS[r.body_fat_method].toLowerCase()}`}
+                          </p>
+                        )}
+
                       {r.notes && (
                         <p className="mt-2 text-[11px] italic text-muted-foreground">
                           « {r.notes} »
@@ -170,7 +190,23 @@ export function BodyHistorySheet({ onClose }: { onClose: () => void }) {
                   onClick={async () => {
                     const id = confirmId;
                     setConfirmId(null);
-                    await del.mutateAsync(id);
+                    // Une mesure issue d'une analyse photo doit d'abord
+                    // supprimer les fichiers Storage (§37 du brief Phase
+                    // 6C) — jamais d'orphelins. Sinon, suppression simple
+                    // de la ligne (comportement inchangé Phase 6A/6B).
+                    const analysis = photoAnalyses?.find((a) => a.bodyTrackingId === id);
+                    if (analysis) {
+                      await deletePhotoAnalysis.mutateAsync({
+                        bodyTrackingId: id,
+                        paths: [
+                          analysis.frontPath,
+                          analysis.sidePath,
+                          ...(analysis.backPath ? [analysis.backPath] : []),
+                        ],
+                      });
+                    } else {
+                      await del.mutateAsync(id);
+                    }
                   }}
                   className="flex-1 rounded-xl bg-destructive py-2.5 text-sm font-semibold text-white"
                 >
@@ -203,6 +239,9 @@ function EditMeasurementSheet({ row, onClose }: { row: Row; onClose: () => void 
     right_thigh: toStr(row.right_thigh),
     notes: row.notes ?? "",
   });
+  const [bodyFatMethod, setBodyFatMethod] = useState<BodyFatMethod | null>(
+    isKnownBodyFatMethod(row.body_fat_method) ? row.body_fat_method : null,
+  );
 
   const num = (v: string) => (v.trim() === "" ? null : Number(v));
 
@@ -215,6 +254,7 @@ function EditMeasurementSheet({ row, onClose }: { row: Row; onClose: () => void 
         weight: num(form.weight),
         muscle_mass: num(form.muscle_mass),
         body_fat: num(form.body_fat),
+        body_fat_method: resolveBodyFatMethod(bodyFatMethod, form.body_fat.trim() !== ""),
         chest: num(form.chest),
         waist: num(form.waist),
         hips: num(form.hips),
@@ -263,6 +303,30 @@ function EditMeasurementSheet({ row, onClose }: { row: Row; onClose: () => void 
               onChange={(v) => setForm({ ...form, body_fat: v })}
             />
           </div>
+          {form.body_fat.trim() !== "" && (
+            <div className="mt-3">
+              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Méthode de mesure du Body Fat
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {BODY_FAT_DIRECT_ENTRY_METHODS.map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setBodyFatMethod(bodyFatMethod === m ? null : m)}
+                    className={
+                      "rounded-lg px-3 py-1.5 text-[11px] font-semibold transition-colors " +
+                      (bodyFatMethod === m
+                        ? "bg-gradient-primary text-primary-foreground"
+                        : "border border-border bg-card/50 text-muted-foreground hover:text-foreground")
+                    }
+                  >
+                    {BODY_FAT_METHOD_LABELS[m]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </FormGroup>
 
         <FormGroup title="Tronc" subtitle="Tour en cm">

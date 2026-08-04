@@ -1,7 +1,13 @@
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "./types";
+import {
+  SUPABASE_AUTH_STORAGE_KEY,
+  SUPABASE_PROJECT_REF,
+  SUPABASE_PUBLISHABLE_KEY as CANONICAL_SUPABASE_PUBLISHABLE_KEY,
+  SUPABASE_URL as CANONICAL_SUPABASE_URL,
+} from "@/config/supabase-project";
 
-const EXPECTED_PROJECT_ID = "bcwfvpwxzlmkxobvbtzp";
+const EXPECTED_PROJECT_ID = SUPABASE_PROJECT_REF;
 
 const persistentStorage = {
   getItem(key: string) {
@@ -23,7 +29,7 @@ const persistentStorage = {
 // Empêche l'ancien token irbeaqabrrbbpstcvtsw de survivre après migration.
 function purgeStaleSession() {
   if (typeof window === "undefined") return;
-  const storageKey = `sb-${EXPECTED_PROJECT_ID}-auth-token`;
+  const storageKey = SUPABASE_AUTH_STORAGE_KEY;
   for (let i = localStorage.length - 1; i >= 0; i--) {
     const key = localStorage.key(i);
     if (!key) continue;
@@ -43,13 +49,11 @@ function purgeStaleSession() {
 }
 
 // SOURCE DE VÉRITÉ UNIQUE (décision du 31/07/2026) : le projet Supabase
-// autorisé est bcwfvpwxzlmkxobvbtzp. Les variables VITE_SUPABASE_* injectées
-// par l'environnement d'exécution (Lovable Cloud peut pointer vers une autre
-// instance) sont IGNORÉES si elles ne correspondent pas à ce projet, afin que
-// preview, publication et CI parlent tous à la même base.
-const CANONICAL_SUPABASE_URL = `https://${EXPECTED_PROJECT_ID}.supabase.co`;
-const CANONICAL_SUPABASE_PUBLISHABLE_KEY =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJjd2Z2cHd4emxta3hvYnZidHpwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg5MjU5NzgsImV4cCI6MjA5NDUwMTk3OH0.wYsoYUMaYDuEv91TbpFBz3fAGTAXO6eh3vHuWrLbsek";
+// autorisé est bcwfvpwxzlmkxobvbtzp (voir src/config/supabase-project.ts pour
+// le détail et la procédure de suppression). Les variables VITE_SUPABASE_*
+// injectées par l'environnement (Lovable Cloud pointe vers une autre instance)
+// sont IGNORÉES si elles ne correspondent pas à ce projet, afin que preview,
+// publication et CI parlent tous à la même base.
 
 function createSupabaseClient() {
   const envUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
@@ -73,7 +77,7 @@ function createSupabaseClient() {
   return createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
     auth: {
       storage: typeof window !== "undefined" ? persistentStorage : undefined,
-      storageKey: `sb-${EXPECTED_PROJECT_ID}-auth-token`,
+      storageKey: SUPABASE_AUTH_STORAGE_KEY,
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: true,

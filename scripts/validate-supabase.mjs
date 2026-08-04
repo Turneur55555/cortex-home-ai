@@ -224,6 +224,28 @@ try {
 } catch { /* git indisponible */ }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// CHECK 10 — ADD CONSTRAINT sans DROP CONSTRAINT IF EXISTS immédiatement
+// avant (contrairement à CREATE TABLE/INDEX, Postgres n'a pas d'`ADD
+// CONSTRAINT IF NOT EXISTS` — un `ADD CONSTRAINT` nu échoue en CI dès la
+// deuxième application si la contrainte existe déjà, ex. incident réel
+// migration 20260814090000, corrigé manuellement puis ce check ajouté).
+// ─────────────────────────────────────────────────────────────────────────────
+for (const m of migrations) {
+  const sql = readSql(m.name);
+  const re = /ALTER TABLE\s+([\w.]+)\s+ADD CONSTRAINT\s+(\w+)/gi;
+  let match;
+  re.lastIndex = 0;
+  while ((match = re.exec(sql)) !== null) {
+    const [, tableName, constraintName] = match;
+    const pre = sql.slice(Math.max(0, match.index - 200), match.index);
+    if (!new RegExp(`DROP CONSTRAINT IF EXISTS\\s+${constraintName}\\b`, 'i').test(pre)) {
+      issue('warn', 'CONSTRAINT_NO_DROP', m.name,
+        `ADD CONSTRAINT ${constraintName} sur ${tableName} sans DROP CONSTRAINT IF EXISTS`);
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Rapport
 // ─────────────────────────────────────────────────────────────────────────────
 const fixed    = issues.filter(i => i.fixed);

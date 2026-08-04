@@ -11,12 +11,16 @@ export function StatTile({
   value,
   unit,
   title,
+  caption,
 }: {
   icon: ReactNode;
   label: string;
   value: string;
   unit?: string;
   title?: string;
+  /** Précision optionnelle affichée sous le libellé (ex. "Estimation") —
+   *  pour les valeurs calculées plutôt que mesurées (BMR, EAT…). */
+  caption?: string;
 }) {
   return (
     <div
@@ -33,6 +37,9 @@ export function StatTile({
       <span className="line-clamp-2 break-words text-center text-[9px] font-medium uppercase tracking-wider text-muted-foreground/70">
         {label}
       </span>
+      {caption && (
+        <span className="text-[8px] font-medium italic text-muted-foreground/50">{caption}</span>
+      )}
     </div>
   );
 }

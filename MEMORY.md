@@ -1364,3 +1364,1654 @@ rester manuel). Vérification faite sur les vrais workflows CI, pas une supposit
 - **`computeCompleteness`** (nouveau, `useExerciseAdmin.ts`) : score 0-100 + liste des informations
   manquantes (photo/GIF/vidéo/groupe musculaire/muscles secondaires/équipement/instructions/alias/
   variantes), affiché en badge sur chaque ligne de la liste de recherche.
+- **Refonte « Santé nutritionnelle » — Phase 1 (2026-07-31)** : `sante-nutritionnelle.tsx` était
+  100% mock (`SCORE`/`PILLARS`/`MACROS`/`MICRONUTRIENTS`/`INSIGHTS` en constantes statiques, aucun
+  hook) ; accès/route/emplacement dans le menu Profil inchangés. Transformée en tableau de bord réel
+  à 6 sections (Métabolisme, Corps, Nutrition, Activité, Santé, Analyse IA), chaque indicateur non
+  encore disponible affichant un état « À venir » propre plutôt qu'une valeur inventée.
+  - **`src/lib/fitness/metabolism.ts`** (nouveau, pur, + tests) : `computeBMR` (Mifflin-St Jeor),
+    `computeTDEE`, `computeBMI`, `bmiCategory`, `ACTIVITY_LEVELS`, `GOAL_DELTAS` — extrait de la
+    logique jusque-là dupliquée en dur dans `GoalsSheet.tsx` (calculateur TDEE de la sheet Objectifs
+    nutrition). `GoalsSheet.tsx` refactorée pour consommer ces fonctions au lieu de sa propre copie.
+  - **`src/lib/fitness/activitySummary.ts`** (nouveau, pur, + tests) : `computeWeeklyActivitySummary`
+    — nombre de séances + calories brûlées estimées sur les 7 derniers jours, réutilise
+    `workoutTonnage` (`strength.ts`) et `estimateWorkoutCalories` (`calories.ts`, déjà responsable de
+    l'estimation affichée par séance dans `WorkoutCard`) plutôt que de dupliquer le calcul.
+  - **`src/hooks/useDailyActivity.ts`** (nouveau) : `useLatestActivity()` lit le dernier relevé de la
+    table existante `daily_activity` (steps/active_calories/avg_hr/resting_hr, alimentée par l'import
+    Apple Health — `HealthDataPanel`) ; jusqu'ici cette table n'était consommée par aucun hook.
+  - **`src/components/fitness/ComingSoonTile.tsx`** / **`ComingSoonCard.tsx`** (nouveaux) : variantes
+    « à venir » de `StatTile` (tuile, même gabarit, bordure pointillée) et d'une grande carte premium
+    (Analyse IA) — réutilisables partout où un indicateur n'est pas encore implémenté.
+  - **Données réelles reconnectées** : poids/IMC (`useBodyMeasurements` + `computeBMI`, nouveau —
+    aucun IMC n'existait avant dans le code), macros/calories du jour + objectifs
+    (`useNutrition`+`useNutritionGoals`+`useNutritionTotals`, déjà existants), séances/calories
+    brûlées 7j (`useWorkouts` + `computeWeeklyActivitySummary`), pas/FC (`useLatestActivity`).
+  - **TDEE** affiché = `nutrition_goals.calories` (réutilisation directe, pas de nouveau calcul) ;
+    état « à définir » avec lien vers `/nutrition` si absent.
+  - **BMR décision clé** : aucune donnée d'âge/sexe/niveau d'activité n'existe nulle part dans le
+    schéma (poids → `body_tracking`, taille → `user_preferences.height_cm` seulement) ; les stocker
+    demanderait une nouvelle table **consommée** par le frontend, ce que le garde-fou CI
+    `supabase-types.yml` (PR bloquante si `types.ts` dérive de la base, table pas encore appliquée
+    tant que la migration n'est pas mergée sur `main`) empêche de faire en toute sécurité dans une
+    seule PR. Migration `20260805090000_metabolic_profile_foundation.sql` créée (table
+    `metabolic_profile`, RLS propriétaire, trigger `updated_at` réutilisant
+    `set_nutrition_goals_updated_at`) mais **volontairement non consommée** par le frontend dans
+    cette phase — fondation prête pour une phase ultérieure une fois `types.ts` régénéré après
+    merge. BMR affiche donc « À venir » en V1.
+  - **Objectif de poids** : aucune fonctionnalité de ce type n'existait déjà dans Cortex (recherché
+    `target_weight`/`weight_goal` — aucun résultat ; la table `goals` avec `goal_type = 'weight_loss'`
+    existe mais n'est lue par aucun hook, origine/statut incertains) → affiché « à venir » plutôt que
+    de brancher sur une table orpheline non confirmée.
+  - Hydratation, sommeil, HRV, récupération, stress, NEAT/EAT/TEF/dépense adaptative/adaptation
+    métabolique, masse grasse/musculaire, tour de taille, analyse corporelle IA, temps actif :
+    aucune donnée nulle part dans le schéma → « À venir » partout, sections prêtes à accueillir ces
+    données sans reprise de layout.
+- **Phase 2A — Profil métabolique + BMR réel (2026-08-05)** :
+  - **Découverte préalable (étape 0)** : `types.ts` committé ne listait que 42 tables alors que la
+    base en expose 83 — dérive préexistante sans rapport avec cette phase, scénario documenté dans
+    `docs/architecture/supabase-types-source-of-truth.md` (régénération Lovable qui écrase les
+    tables créées par nos migrations, dont `metabolic_profile`). Régénéré depuis la base via le MCP
+    Supabase (jamais édité à la main), `tsc`/tests passent sans régression sur le fichier régénéré,
+    `scripts/check-supabase-types.mjs` confirme la conformité. **Root cause probable de l'auto-heal
+    CI resté silencieux depuis le 23/07** : hypothèse à vérifier par Nathan côté secrets CI
+    (`SUPABASE_ACCESS_TOKEN`/`SUPABASE_PROJECT_REF`), la garantie 4 (tsc doit passer après
+    régénération) n'expliquait pas le blocage ici — tsc passait bien sur le fichier régénéré.
+  - **`src/hooks/useMetabolicProfile.ts`** (nouveau) : `useMetabolicProfile()` (lecture
+    sexe/âge/activity_level, RLS + `.eq("user_id", user.id)` en défense en profondeur) +
+    `useUpsertMetabolicProfile()` (écriture âge+sexe uniquement — `activity_level` non demandé en
+    V1, réservé à une phase TDEE future). Poids/taille jamais dupliqués dans cette table : réutilisés
+    depuis `body_tracking` (`useBodyMeasurements`/`useLatestBodyWeight`) et
+    `user_preferences.height_cm` (`useUserPreferences`).
+  - **`src/components/fitness/MetabolicProfileSheet.tsx`** (nouveau) : sheet cohérente avec le
+    Design System (`Sheet`/`Field`/`SubmitButton` de `FormComponents.tsx`, même famille que
+    `GoalsSheet`), ouverte depuis Santé nutritionnelle — ne demande que âge + sexe biologique,
+    validation `isValidMetabolicAge` (miroir du `CHECK` SQL) avant soumission.
+  - **`isBiologicalSex`/`isValidMetabolicAge`** (nouveau, `lib/fitness/metabolism.ts`) : guards purs
+    réutilisés par le hook (normalisation de la colonne `sex: string | null`) et la sheet
+    (validation avant écriture) — aucune duplication de règle entre les deux.
+  - **Santé nutritionnelle → Métabolisme** : tuile BMR réelle (`computeBMR`, réutilisé tel quel,
+    aucune formule dupliquée dans le composant) dès que sexe+âge+poids+taille sont tous disponibles ;
+    sinon bandeau discret « Profil métabolique incomplet » + action « Compléter mon profil
+    métabolique » ouvrant la sheet. Le BMR se recalcule automatiquement à chaque changement de poids/
+    taille/âge/sexe car dérivé directement des données réactives (React Query), aucun cache propre.
+  - **Hors scope (conforme à la consigne)** : NEAT/EAT/TEF/TDEE réel/TDEE adaptatif/adaptation
+    métabolique/prédictions/coach IA restent « À venir » — aucun de ces éléments touché.
+- **Correctif CI — lockfile désynchronisé (2026-08-01)** : `npm ci` échouait depuis fin juillet sur
+  `typecheck.yml` + `supabase-types.yml` (`package-lock.json` pointait vers
+  `@lovable.dev/vite-tanstack-config@2.7.7`/`vite-plugin-hmr-gate@1.1.4`, `package.json` exigeait déjà
+  `2.8.4`/`^1.3.3`) — **cause racine identifiée** du drift `types.ts` de la Phase 2A (l'étape
+  régénération de `migrate.yml` était `skip`, jamais atteinte, faute d'install réussie). Régénéré via
+  `npm install` (aucune dépendance changée intentionnellement, `package.json` intact, `bun.lock` déjà
+  correct). `typecheck.yml` re-vérifié vert sur `main` après le fix.
+- **Phase 2B — EAT réel (2026-08-01)** :
+  - **`src/lib/fitness/eat.ts`** (nouveau, pur, testé) : `estimateSessionCalories` (par séance, toute
+    discipline confondue) + `computeDailyEAT` (somme du jour donné, `sessionCount`, jamais d'activité
+    inventée — 0 séance ⇒ 0 kcal). Priorité de calcul par séance : (1) estimation déjà produite par le
+    moteur de la discipline si présente dans `workouts.metadata` (`caloriesEstimate`/`calories_estimate`,
+    ex. Guided — jamais recalculée) ; (2) muscu : `estimateWorkoutCalories` + `workoutTonnage` existants,
+    comportement inchangé de `WorkoutCard` ; (3) autres disciplines (cardio/course/HYROX/freeform) : même
+    formule MET × poids × durée mais intensité `"moderate"` explicite — corrige le biais de l'ancien
+    appel direct qui, faute de tonnage, retombait à tort sur l'intensité `"light"` pour un effort
+    cardio/course pourtant significatif.
+  - **`computeWeeklyActivitySummary`** (`activitySummary.ts`, Phase 1) refactorée pour appeler
+    `estimateSessionCalories` au lieu de dupliquer l'appel `workoutTonnage`+`estimateWorkoutCalories` —
+    un seul estimateur par séance pour toute la page (carte "Activité (7j)" et tuile EAT), plus de
+    logique concurrente. Corrige au passage le même biais d'intensité pour la carte 7 jours.
+  - **`StatTile`** (`components/fitness/StatTile.tsx`) : nouvelle prop optionnelle `caption` (texte
+    discret sous le libellé, ex. "Estimation") — non-breaking, réutilisée pour la tuile EAT afin de
+    préparer l'affichage futur d'un niveau de confiance sans construire de scoring maintenant.
+  - **Architecture "sources futures"** (Apple Health/Watch, Garmin, Whoop, Fitbit) : `CalorieEstimate`
+    porte déjà `source: "computed" | "device"` — seul `"computed"` existe aujourd'hui ; aucune
+    intégration développée, juste l'emplacement de type prêt pour qu'un futur moteur de sélection de
+    source (priorité device > computed, anti double-comptage) s'y branche sans casser l'existant.
+  - **Découverte discipline par défaut** : `workouts.discipline` vaut `"muscu"` (pas `"musculation"`) en
+    base — vérifié dans les migrations, aligné sur la convention déjà utilisée par `WorkoutCard.tsx`
+    (`(w.discipline ?? "muscu") === "muscu"`).
+  - **Pas de nouvelle table** : EAT recalculé à la volée depuis `useWorkouts()` (déjà chargé) +
+    poids (`body_tracking`/`useLatestBodyWeight`) — aucune donnée calculable persistée.
+  - **Hors scope (conforme à la consigne)** : NEAT/TEF/TDEE réel/TDEE adaptatif/adaptation
+    métabolique/balance énergétique/prédictions/coach IA — tous inchangés, toujours « À venir ».
+- **Phase 2C — TEF réel estimé (2026-08-01)** :
+  - **`src/lib/fitness/tef.ts`** (nouveau, pur, testé) : `computeTEF({ proteins, carbs, fats })` —
+    grammes réellement consommés (jamais les objectifs) → kcal via Atwater (P×4, G×4, L×9) × un
+    coefficient thermique par macro (`TEF_COEFFICIENTS`, seul point de vérité, doc dans le code) :
+    protéines 25 %, glucides 7.5 %, lipides 2.5 %. Chaque sous-total (`proteinTEF`/`carbsTEF`/
+    `fatTEF`) est arrondi individuellement puis `totalKcal` = somme des sous-totaux déjà arrondis
+    (jamais un arrondi séparé du total) — garantit par construction que le détail correspond
+    toujours exactement au total, sans tolérance de test nécessaire.
+  - **Aucune date interne à la fonction** : `computeTEF` est agnostique du jour — elle opère sur des
+    totaux déjà agrégés pour LA journée demandée par l'appelant (`useNutrition(date)` est déjà
+    filtré côté serveur par date, `useNutritionTotals` réduit ensuite ces lignes) ; fonctionne donc
+    pour n'importe quel jour sans code supplémentaire.
+  - **Distinction "consommation nulle" vs "donnée absente"** : `useNutrition(date)` renvoie `[]`
+    (jamais `null`) dès que la requête a chargé, même sans repas loggé ce jour-là — `totals` (le
+    `reduce` dans `useNutritionTotals`) vaut alors `{0,0,0,0}`, ce qui EST le TEF réel (rien à
+    digérer). Le seul état distinct est le chargement (`nutritionLoading`), géré côté composant par
+    le `Skeleton` déjà utilisé pour le reste de la section Nutrition — pas une préoccupation de la
+    fonction pure.
+  - **Écart calories totales ≠ macros×coefficients (fibres/alcool/arrondis/données incomplètes,
+    §5)** : assumé et documenté dans le code, jamais réattribué artificiellement à un macronutriment
+    — le TEF ne porte que sur les grammes de protéines/glucides/lipides réellement connus.
+  - **Santé nutritionnelle → Métabolisme** : tuile TEF réelle (`caption="Estimation"`, même mécanisme
+    que la tuile EAT de la Phase 2B), gérée par `nutritionLoading` (skeleton pendant le chargement,
+    jamais un flash "0 kcal" trompeur). BMR et EAT non modifiés. Pas de double comptage : TEF reste
+    totalement indépendant de BMR/EAT/NEAT/objectif calorique (le futur TDEE les agrégera).
+  - **Pas de nouvelle table** : calculé à la volée depuis `useNutrition`/`useNutritionTotals` déjà
+    chargés par la page — aucune donnée calculable persistée.
+- **Phase 2D — NEAT réel estimé (2026-08-01)** :
+  - **Audit préalable (`src/lib/health/appleHealth.ts`)** — réponse à la question posée par
+    Nathan : **`daily_activity.active_calories` PEUT inclure les calories des entraînements.** C'est
+    la somme de tous les échantillons HealthKit `HKQuantityTypeIdentifierActiveEnergyBurned` du
+    jour, et Apple ne sépare pas "exercice structuré" du reste de l'activité active dans cette
+    quantité — une séance suivie par l'Apple Watch contribue à `active_calories` au même titre que
+    la marche. `daily_activity.steps` est de la même façon une vraie somme journalière de tous les
+    échantillons `StepCount` (pas un relevé instantané, jamais à re-sommer). `"apple_health"` est
+    aujourd'hui la SEULE source de `daily_activity` (aucune autre intégration existante) — hypothèse
+    documentée dans le code, à réviser si une source future a une sémantique différente.
+  - **`src/lib/fitness/neat.ts`** (nouveau, pur, testé — 23 tests) : `computeNEAT({activeCalories,
+    steps, weightKg, heightCm, eatKcal})`, priorité stricte à une seule méthode :
+    (A) `active_calories` moins l'EAT du même jour (`Math.max(0, activeCalories - eat)` — anti
+    double-comptage EAT/NEAT, jamais négatif) ; (B) sinon `estimateStepsCalories` (pas × poids,
+    modèle MET × poids × durée identique à `calories.ts` — MET marche 3.0, vitesse 4.8 km/h,
+    foulée = taille × 0.0041 si connue sinon 0.75 m par défaut) ; (C) sinon `insufficient_data`
+    (`kcal: null`) — **jamais** de fallback `BMR × coefficient d'activité` dans cette phase.
+  - **`useActivityForDate(date)`** (nouveau, `hooks/useDailyActivity.ts`) : contrairement à
+    `useLatestActivity()` (dernier relevé connu, PAS nécessairement aujourd'hui — piège identifié
+    par l'audit), interroge `daily_activity WHERE date = date demandée`. `useLatestActivity`
+    inchangée (toujours utilisée telle quelle pour "Pas (dernier relevé)"/FC dans les sections
+    Activité/Santé, dont le libellé assume déjà "dernier relevé").
+  - **`InsufficientDataTile`** (nouveau, `components/fitness/InsufficientDataTile.tsx`) : distincte
+    de `ComingSoonTile` — la fonctionnalité existe, seule la donnée manque. Jamais un "0 kcal" qui
+    laisserait croire à une mesure réelle quand aucune donnée objective n'est disponible (Niveau C).
+  - **BMR/EAT/TEF non modifiés** : `computeDailyEAT` réutilisé tel quel (juste appelé, `.kcal` passé
+    en paramètre à `computeNEAT`) — aucun refactor de `eat.ts`/`tef.ts`/`metabolism.ts` nécessaire.
+  - **Pas de nouvelle table** : NEAT calculé à la volée depuis `daily_activity` (déjà existante,
+    Phase 1) + EAT/poids/taille déjà chargés par la page.
+- **Correction Phase 2D — indépendance Cortex (2026-08-01)** : règle produit permanente posée par
+  Nathan — BMR/EAT/TEF/NEAT/futur TDEE doivent fonctionner sans AUCUNE source externe (Apple Health,
+  montres connectées…), qui restent des améliorations facultatives, jamais un prérequis. La V1 du
+  NEAT (ci-dessus) priorisait `daily_activity.active_calories`/`steps`, alimentés uniquement par
+  l'import Apple Health — corrigé.
+  - **Nouvelle méthode principale « Cortex-native »** (`estimateNeatFromActivityLevel`,
+    `lib/fitness/neat.ts`) : `NEAT = BMR × niveau d'activité quotidienne HORS SPORT`. Fonctionne
+    avec le seul profil Cortex (âge/sexe/poids/taille/niveau déclaré), zéro donnée externe.
+  - **`NEAT_ACTIVITY_LEVELS`** (nouveau, 4 niveaux : Très sédentaire 0.15 / Peu actif 0.25 / Actif
+    0.35 / Très actif 0.5) — coefficients volontairement DISTINCTS des multiplicateurs TDEE
+    classiques (`metabolism.ts` ACTIVITY_LEVELS 1.2–1.9, qui incluent déjà l'exercice et compteraient
+    le sport deux fois avec l'EAT). Valeurs inspirées de la littérature NEAT (Levine et al., part du
+    NEAT dans la dépense journalière ~15–50 % selon le niveau d'activité occupationnelle), appliquées
+    au BMR plutôt qu'au TDEE total pour rester conservateur et simple. Réutilise la colonne
+    `metabolic_profile.activity_level` existante (contrainte `CHECK (activity_level > 0)` déjà
+    compatible, aucune migration nécessaire) — sémantique redéfinie proprement (ce n'est plus un
+    multiplicateur TDEE classique) plutôt que réutilisée aveuglément comme demandé.
+  - **Nouvelle priorité `computeNEAT`** : (1) Cortex-native — toujours tenté en premier ; (2) repli
+    optionnel `active_calories − EAT` (wearable) ; (3) repli optionnel pas × poids ; (4) données
+    insuffisantes. L'EAT n'entre JAMAIS dans le calcul Cortex-native (testé explicitement : le NEAT
+    est strictement identique quel que soit le nombre de séances loggées le même jour).
+  - **`MetabolicProfileSheet`** étendue : sélecteur du niveau d'activité hors sport (4 choix,
+    libellés + descriptions reprenant `NEAT_ACTIVITY_LEVELS`), toujours la même sheet réutilisée
+    (aucune nouvelle page). Nouveau bandeau « Niveau d'activité non renseigné » dans Métabolisme,
+    distinct du bandeau BMR existant (évite un message trompeur si âge/sexe sont déjà complets).
+  - **Confirmation indépendance** : un utilisateur peut installer Cortex, renseigner profil/poids/
+    nutrition/séances, sans connecter aucun service externe, et obtenir BMR + EAT + TEF + NEAT.
+    Testé explicitement (`neat.test.ts`, describe "Apple Health independence").
+- **Correctif structurel Phase 2D — catégories métier au lieu de coefficients (2026-08-01)** :
+  `metabolic_profile.activity_level` stockait directement les coefficients numériques (0.15/0.25/
+  0.35/0.50) — trop couplé à l'algorithme (modifier un coefficient aurait exigé de migrer tous les
+  profils). Corrigé.
+  - **Migration `20260806090000_metabolic_profile_activity_level_category.sql`** : convertit la
+    colonne `numeric` → `text`, backfill `CASE` des coefficients existants vers les catégories
+    (`0.15→very_sedentary`, `0.25→lightly_active`, `0.35→active`, `0.50→very_active`, guard
+    idempotent sur `data_type='numeric'`), puis `CHECK (activity_level IN (...))` sur les 4
+    catégories exactes. Table vide au moment de la migration (0 ligne, vérifié) — aucune perte de
+    donnée possible, mais le backfill reste écrit pour être sûr si des lignes existaient. Appliquée
+    directement via Supabase MCP (`execute_sql`, SQL identique au fichier de migration, pas
+    `apply_migration` — évite tout écart de version d'historique avec le fichier git ; `migrate.yml`
+    ré-exécutera cette même SQL au merge, idempotente, et enregistrera proprement la version).
+    `types.ts` régénéré et vérifié conforme (`check-supabase-types.mjs`, 83 tables).
+  - **`lib/fitness/neat.ts`** : `NeatActivityLevel` (type `"very_sedentary"|"lightly_active"|
+    "active"|"very_active"`, seule source de vérité du type) ; `NEAT_ACTIVITY_COEFFICIENTS` (Record
+    catégorie→coefficient, SEUL point de vérité des coefficients, jamais persistés) ;
+    `NEAT_ACTIVITY_LEVEL_OPTIONS` (libellés/descriptions UI, testé synchronisé avec les clés de
+    `NEAT_ACTIVITY_COEFFICIENTS`) ; `isNeatActivityLevel`/`estimateNeatFromActivityLevel` acceptent
+    désormais une chaîne de catégorie, plus un nombre.
+  - **`useMetabolicProfile`/`MetabolicProfileSheet`** mis à jour en conséquence (upsert/lecture de
+    catégories, sélecteur UI inchangé visuellement, valeurs stockées changées) — `BMR`/`EAT`/`TEF`
+    et `sante-nutritionnelle.tsx` **non touchés** (compatibles sans modification, structurellement).
+- **Phase 2E — moteur TDEE (2026-08-01, branche `claude/phase2e-tdee-engine`, NON mergée dans
+  `main`)** : premier TDEE Cortex, formule stricte `TDEE = BMR + NEAT + EAT + TEF`, aucune autre
+  composante (pas d'objectif calorique, pas de déficit/surplus voulu, pas de prédiction, pas
+  d'adaptation métabolique — ce sera un futur "TDEE adaptatif" distinct).
+  - **`lib/fitness/tdee.ts`** (logique pure, zéro React/Supabase) : `computeDailyTDEE(input)` agrège
+    des composantes déjà calculées par l'appelant (ne connaît aucune date, fonctionne pour n'importe
+    quel jour). `TDEEInput.neat` accepte `{ kcal, method }` — le sous-ensemble du résultat de
+    `computeNEAT`. `status: "complete" | "incomplete"` — **complete** seulement si BMR ET NEAT sont
+    tous deux disponibles ; EAT/TEF sont TOUJOURS des nombres réels (0 = vraie valeur — pas de séance
+    /pas de macro consommé aujourd'hui — jamais "inconnu"). Si BMR ou NEAT manque → `totalKcal:
+    null`, jamais un total partiel silencieusement calculé sur les composantes disponibles (testé
+    explicitement sur l'exemple du brief : BMR=1650, EAT=300, TEF=200, NEAT=inconnu ne doit jamais
+    afficher "2150"). `confidence: "high"|"medium"|"low"` dérivée de la méthode NEAT retenue
+    (`wearable_active_calories→high`, `cortex_native→medium` par défaut, `steps_estimate→low`) —
+    documenté comme indicateur RELATIF de qualité des données, jamais un pourcentage scientifique ;
+    `null` uniquement quand `status==="incomplete"`. `safeNonNegative` ramène négatif/NaN/Infinity à
+    `null` (composante manquante) ou borne à 0 pour EAT/TEF — robustesse sans jamais fausser le total.
+  - **`computeCalorieGoalGap(tdeeTotalKcal, calorieGoalKcal)`** : écart cible = objectif − TDEE
+    (`null` si TDEE incomplet ou objectif absent/non fini). Moteur prêt, UI **reportée** (non
+    affichée cette phase, comme autorisé) — si affichée un jour, nommer explicitement "Déficit
+    cible"/"Écart cible", jamais "Déficit réel" (ne pas confondre avec le déficit réellement consommé).
+  - **`sante-nutritionnelle.tsx`** : tuile `TDEE` (section Métabolisme) remplace l'ancien
+    `ComingSoonTile` — affiche la valeur réelle (`StatTile`, caption "Estimation") quand
+    `dailyTDEE.status === "complete"`, sinon `InsufficientDataTile` (données déjà couvertes par les
+    bandeaux BMR/niveau d'activité existants). Aucun nouveau graphique — la tuile TDEE cohabite avec
+    les tuiles BMR/NEAT/EAT/TEF déjà affichées, qui restent la décomposition visible du total.
+  - **Autonomie confirmée** : testé explicitement (`tdee.test.ts`, describe "autonomie Cortex-native")
+    — profil complet + séances/nutrition Cortex, sans Apple Health/Garmin/Whoop/Fitbit, TDEE calculable.
+  - **Tests** (`tdee.test.ts`, 23 tests) : agrégation (exemple du brief, jour sans séance, décimales/
+    arrondi), données manquantes (BMR absent, NEAT absent, EAT=0 réel, TEF=0 réel, plusieurs
+    composantes absentes, non-conversion silencieuse en 0), robustesse (négatif, NaN, Infinity),
+    autonomie, cohérence (`total === bmr+neat+eat+tef`), confiance (les 3 niveaux), `computeCalorieGoalGap`.
+  - `npx tsc --noEmit` / `npx eslint` / `npx vitest run` (623 passed) / `npm run build` : tous verts.
+  - Pas de nouvelle table d'historique : le moteur recalcule à la demande à partir des données
+    existantes, rien n'est persisté. Limite connue : TDEE "modélisé" uniquement (pas d'évolution du
+    poids, pas de régression multi-semaines, pas de correction automatique) — volontairement hors
+    scope de cette phase.
+- **Phase 3A — fondation du TDEE observé/adaptatif (2026-08-01, branche
+  `claude/phase3a-adaptive-tdee-foundation`, NON mergée dans `main`)** : second moteur, distinct du
+  TDEE modélisé (`BMR+NEAT+EAT+TEF`), qui estime statistiquement la dépense compatible avec les
+  calories réellement loggées et l'évolution réelle du poids. Observe et compare uniquement — ne
+  corrige RIEN automatiquement (ni le TDEE modélisé affiché, ni les objectifs, ni les macros) ; la
+  fusion intelligente des deux TDEE est explicitement reportée à une Phase 3B distincte.
+  - **`lib/fitness/adaptiveTdee.ts`** (logique pure) : `computeAdaptiveTdee(input)`.
+    - **Source poids** : `body_tracking` (déjà exposée par `useBodyMeasurements`, `limit(180)`,
+      aucune nouvelle table). Pas de contrainte d'unicité (user, date) en base → dédoublonnage
+      déterministe par jour : dernière pesée du jour par `created_at` (§14, testé explicitement).
+      Bornes physiologiques défensives (20–500 kg, alignées sur le `CHECK` de la table) : seul
+      l'impossible (NaN/Infinity/hors bornes) est ignoré, jamais une valeur réelle mais inhabituelle.
+    - **Source calories** : nouveau hook `useNutritionRange(start, end)` (`hooks/useNutritionData.ts`)
+      sur la table `nutrition` existante — un jour sans AUCUNE ligne n'est jamais traité comme 0 kcal
+      (exclu de la moyenne et du compte de couverture, jamais confondu avec un jeûne).
+    - **Lissage retenu** : moyenne glissante 7 jours (réutilise `movingAverage` de `lib/fitness/body.ts`,
+      déjà utilisée ailleurs dans Cortex) sur une série journalière (jours sans pesée = `null`, jamais
+      interpolés), PUIS régression linéaire sur les points lissés à FENÊTRE PLEINE uniquement (les
+      premiers jours d'une moyenne glissante ont une fenêtre partielle dont le "centre" statistique
+      diffère et biaiserait la pente — détecté via les tests sur données synthétiques 14/21/28j, corrigé
+      en excluant ces points quand assez de points à fenêtre pleine existent). `weeklyTrendKg =
+      pente_jour × 7`. Choix documenté : pas de modèle plus complexe (Kalman, EWMA multi-paramètres) —
+      injustifié vu la densité de données Cortex réelle.
+    - **Fenêtre d'analyse** : `ANALYSIS_WINDOW_DAYS = 28` jours glissants max ; la fenêtre réelle
+      retenue va de la pesée exploitable la plus ancienne (dans ces 28j) jusqu'à aujourd'hui — reflète
+      la couverture réelle plutôt qu'une fenêtre fixe artificielle.
+    - **Seuils centralisés** `ADAPTIVE_TDEE_THRESHOLDS` (calendarDays/measurementCount/densité
+      pesées/couverture nutritionnelle) : `EARLY` (7j, 4 pesées, densité 0.3, couverture 40 %) et
+      `ESTABLISHED` (14j, 8 pesées, densité 0.4, couverture 60 %) → `insufficient_data` /
+      `early_estimate` / `established`. La densité (mesures/jour de fenêtre) attrape le cas "14 jours
+      mais 2 pesées" indépendamment du nombre de jours calendaires.
+    - **Coefficient énergétique** `KCAL_PER_KG = 7700`, centralisé, documenté comme approximation (PAS
+      une constante physiologique exacte) — appliqué UNIQUEMENT à la tendance lissée, jamais à une
+      variation brute 24-48h.
+    - **Formule** : `energyEquivalentKcalPerDay = weeklyTrendKg × 7700 / 7` ;
+      `observedTdeeKcal = averageCalories − energyEquivalentKcalPerDay` (perte de poids → équivalent
+      négatif → TDEE observé > apports ; prise de poids → équivalent positif → TDEE observé <
+      apports). Exemple du brief vérifié par test : 2200 kcal/j, -0,30 kg/semaine → ≈2530 kcal/j.
+    - **Confiance** `low|medium|high` : `low` en `early_estimate` ; `established` → `high` si
+      calendarDays/mesures ≥ 2× seuil établi ET couverture ≥ 80 %, sinon `medium`.
+    - **Comparaison** avec le TDEE modélisé (`deltaKcal`/`deltaPercent`) : purement informative,
+      jamais utilisée pour corriger quoi que ce soit dans cette phase.
+    - **Protection anti-eau explicitement testée** (demande Nathan) : une pesée isolée +1 kg (rétention
+      d'eau) sur une série par ailleurs stable ne fait dévier le TDEE observé que de quelques dizaines
+      de kcal (test dédié, seuil <150 kcal) — jamais des ~1000 kcal qu'une lecture brute donnerait.
+  - **`sante-nutritionnelle.tsx`** : tuile "Dépense adaptative" (ComingSoonTile) remplacée par "TDEE
+    observé" — `InsufficientDataTile` si `insufficient_data`, sinon `StatTile` (valeur préfixée `~` et
+    caption "Estimation précoce" si `early_estimate`, caption "Basé sur tes données" si `established`).
+    Aucune refonte de l'écran, tuile réutilisant le même gabarit que les autres.
+  - **Tests** (`adaptiveTdee.test.ts`, 28 tests) : insuffisance (0 donnée, historique court, trop peu
+    de pesées, densité insuffisante, nutrition trop incomplète), poids stable, perte (-0,30 kg/sem),
+    prise (+0,20 kg/sem), qualité des données (jours non loggés jamais comptés 0, doublons de pesée
+    même jour, dates irrégulières, décimales, outliers physiologiques, NaN/Infinity, calories
+    négatives, protection anti-eau), comparaison au TDEE modélisé (>, <, ≈, absent), 3 jeux de données
+    synthétiques longs (14/21/28j) vérifiant la convergence vers une tendance connue, confiance.
+  - `npx tsc --noEmit` / `npx eslint` / `npx vitest run` (651 passed) / `npm run build` : tous verts.
+  - **Limites scientifiques connues** : `KCAL_PER_KG=7700` est une approximation historique (ignore la
+    composition réelle du tissu perdu/gagné — eau/muscle/gras) ; la régression sur moyenne glissante
+    reste un modèle simple (pas de détection d'outlier statistique, pas de pondération par qualité de
+    mesure) ; aucune fusion avec le TDEE modélisé n'est effectuée (Phase 3B).
+- **Régression `types.ts`/lockfile sur `main` corrigée hors phase (2026-08-01)** : entre la fusion
+  Phase 2E et la reprise du travail Phase 3A, un push direct non-Claude (`Changes`/`Work in progress`/
+  `Corrigé garde-fou Supabase`) a écrasé `src/integrations/supabase/types.ts` (121→42 tables
+  committées) et contourné les erreurs TypeScript résultantes avec des `(supabase as any)` dans
+  `useMetabolicProfile.ts` au lieu de régénérer — violation directe de la règle CLAUDE.md "la base
+  Supabase fait foi, jamais de correctif de contournement". Le même push a aussi bumpé
+  `@lovable.dev/vite-tanstack-config` dans `package.json` (2.8.4→2.8.5) sans régénérer
+  `package-lock.json`, cassant `npm ci` en CI (même classe de bug déjà rencontrée et documentée plus
+  tôt dans le projet). CI était rouge sur `main` (Typecheck + Supabase Types Sync en échec).
+  Corrigé en deux commits directs sur `main` (validés utilisateur avant action) : régénération de
+  `types.ts` depuis la base live via Supabase MCP (vérifié conforme, 83 tables via
+  `check-supabase-types.mjs`) + retrait des `as any` devenus inutiles ; puis `npm install` pour
+  resynchroniser `package-lock.json`, vérifié par un `npm ci` propre depuis `node_modules` vidé. CI
+  repassée au vert avant de reprendre la synchronisation Phase 3A.
+- **Phase 3B — calibration du TDEE adaptatif (2026-08-01, branche
+  `claude/phase3b-adaptive-tdee-calibration`, NON mergée dans `main`)** : troisième niveau de TDEE,
+  combinaison PRUDENTE du TDEE modélisé et du TDEE observé (Phase 3A) — jamais un remplacement brutal
+  de l'un par l'autre, même à confiance maximale.
+  - **`lib/fitness/adaptiveTdeeCalibration.ts`** (logique pure) : `computeAdaptiveTdeeCalibration(input)`.
+    - **Entrées** : `modeledTdeeKcal`, `observedTdeeKcal`, `observedStatus`, `observedConfidence` — ces
+      deux derniers réutilisent directement les types `AdaptiveTdeeStatus`/`AdaptiveTdeeConfidence` de
+      la Phase 3A (aucune deuxième notion de confiance recréée).
+    - **Formule** : `adaptiveTdee = modeled + appliedCorrection`, où
+      `appliedCorrection = clamp(rawDelta × weight, ±maxCorrection)`, `rawDelta = observed − modeled`.
+      Équivalent à `modeled × (1−weight) + observed × weight`.
+    - **Poids centralisés** `ADAPTIVE_TDEE_CALIBRATION_WEIGHTS[status][confidence]`, tous **strictement
+      < 1** : `insufficient_data`→0 ; `early_estimate`→0.15 (toutes confiances) ; `established`→0.3
+      (low, cas défensif)/0.35 (medium)/**0.5 (high)**. Coefficients conservateurs choisis par défaut,
+      pas ceux suggérés à titre d'exemple dans le brief.
+    - **États** : `model_only` (observé indisponible/insuffisant OU modélisé invalide → adaptatif =
+      modélisé, correction = 0) ; `calibrating` (`early_estimate`) ; `adapted` (`established`).
+    - **Garde-fou double** : plafond absolu `MAX_CORRECTION_KCAL=400` ET relatif
+      `MAX_CORRECTION_PERCENT=15 %` (le plus conservateur des deux) — une correction ne peut jamais
+      dépasser ce plafond, quel que soit l'écart brut. Second garde-fou en amont : si
+      `|rawDelta|/modeled > DIVERGENCE_SUSPECT_PERCENT (25 %)`, le poids est amorti (`×
+      DIVERGENCE_DAMPING_FACTOR=0.5`) AVANT même le plafond — un signal très divergent (ex. observé
+      3800 vs modélisé 2500) ne fait donc jamais dériver le résultat près de l'observation brute
+      (testé explicitement, `divergenceSuspected: true` exposé dans le résultat, jamais nommé
+      "adaptation métabolique" — juste "écart important, signal traité avec prudence").
+    - **Aucune correction automatique** de `nutrition_goals.calories`, macros, ni diagnostic
+      d'adaptation métabolique — purement informatif/estimatif.
+    - **Résultat structuré** : `state`, `adaptiveTdeeKcal` (`null` uniquement si `modeledTdeeKcal`
+      indisponible — aucune ancre), `modeledTdeeKcal`, `observedTdeeKcal`, `observedWeight`,
+      `rawDeltaKcal`, `appliedCorrectionKcal`, `divergenceSuspected`, `confidence` (pass-through 3A),
+      `reason` (explicable, ex. "correction de -70 kcal appliquée au modèle (poids observé 50 %)").
+  - **`sante-nutritionnelle.tsx`** : nouvelle tuile "TDEE adaptatif" juste après "TDEE observé"
+    (section Métabolisme — les trois niveaux TDEE modélisé/observé/adaptatif sont désormais côte à
+    côte). Caption "Modèle initial" (`model_only`) / "Calibration en cours" (`calibrating`) / "Basé
+    sur ton historique" (`adapted`). `ComingSoonTile` seulement si le TDEE modélisé lui-même est
+    indisponible (pas d'ancre) — sinon toujours une valeur réelle, jamais 0 fabriqué.
+  - **Tests** (`adaptiveTdeeCalibration.test.ts`, 31 tests) : `model_only` (observé absent, données
+    insuffisantes), `calibrating` (petit delta +/-, confiance faible), `adapted` (medium/high, observé
+    </>/= modélisé), garde-fous (divergence aberrante 2500 vs 3800 — testé conforme à l'exemple du
+    brief, NaN/Infinity/négatif/nul côté observé ET modélisé, correction max toujours respectée, poids
+    toujours < 1 sur toute la matrice status×confidence), cohérence (`adaptive = modeled + correction`,
+    signe de la correction, non-mutation des entrées), 4 scénarios synthétiques (stable, sur/sous-
+    estimé, aberrant), et vérification qu'aucune clé objectif/macro n'apparaît dans le résultat.
+    L'exemple d'explicabilité du brief (modèle 2620, observé 2480 → correction -70, adaptatif 2550)
+    passe exactement avec les coefficients retenus.
+  - `npx tsc --noEmit` / `npx eslint` / `npx vitest run` (682 passed) / `npm run build` : tous verts.
+  - **Limites connues** : les seuils/poids sont des choix conservateurs raisonnés, pas calibrés sur des
+    données réelles d'utilisateurs Cortex ; pas de stabilisation temporelle inter-jours (chaque appel
+    recalcule indépendamment à partir de l'état du jour — aucune persistance de snapshot ajoutée,
+    volontairement reporté plutôt que sur-ingénieré) ; le "signal suspect" n'identifie pas la cause
+    (tracking incomplet / eau / poids erroné) — juste qu'il existe.
+- **Phase 3C — explicabilité du moteur métabolique (2026-08-01, branche
+  `claude/phase3c-metabolic-explainability`, NON mergée dans `main`)** : couche de transparence pour
+  les 3 niveaux de TDEE (modélisé/observé/adaptatif) — aucun algorithme métabolique modifié, uniquement
+  présentation/explication.
+  - **`lib/fitness/metabolicAnalysis.ts`** (logique pure de présentation, zéro React) :
+    `buildMetabolicAnalysis(input)` assemble un `MetabolicAnalysisViewModel` unique à partir des
+    résultats déjà calculés (`DailyTDEE` Phase 2E, `AdaptiveTdeeResult` Phase 3A,
+    `AdaptiveTdeeCalibrationResult` Phase 3B) — aucune formule recalculée, uniquement formatage/
+    libellés/agrégation d'affichage. Un seul objet passé au composant (pas 25 props indépendantes).
+    - Libellés centralisés : `CONFIDENCE_COPY` (Faible/Moyenne/Élevée + description qualitative,
+      jamais un pourcentage — "95 % fiable" explicitement interdit), `CALIBRATION_STATE_COPY`
+      (`model_only`→"Modèle initial", `calibrating`→"Calibration en cours", `adapted`→"Calibré" —
+      réutilise les états 3B, aucun système parallèle), `MODELED_COMPONENT_LABELS` (BMR→"Métabolisme
+      de base", NEAT→"Activité quotidienne", EAT→"Entraînement", TEF→"Digestion", avec l'acronyme en
+      info secondaire).
+    - **Données insuffisantes** (`observed.available === false`) : `buildCalibrationProgress` expose
+      des CRITÈRES de progression (pesées actuel/requis, couverture nutritionnelle %, jours) calqués
+      sur les seuils `ESTABLISHED` de la Phase 3A (8 pesées/60 %/14 j) — jamais un nombre de jours
+      restants fabriqué, uniquement l'écart entre l'état actuel et le seuil visé.
+    - Explication de la correction non-totale (`CALIBRATION_PARTIAL_CORRECTION_EXPLANATION`) vs.
+      explication de divergence suspecte (`DIVERGENCE_SUSPECTED_EXPLANATION`, testée pour ne contenir
+      AUCUN diagnostic de cause — "métabolisme ralenti"/"adaptation métabolique"/"mauvais tracking"/
+      "rétention d'eau" explicitement absents).
+  - **`components/fitness/MetabolicAnalysisSheet.tsx`** : Sheet bottom-sheet (réutilise `Sheet` de
+    `shared/FormComponents.tsx`, même pattern que `MetabolicProfileSheet`, pas de nouvelle page/
+    composant générique créé). Sections : TDEE adaptatif en tête, bloc "Écart inhabituel détecté" si
+    `divergenceSuspected`, calcul détaillé (modélisé → observé → écart brut → correction → adaptatif),
+    composition du TDEE modélisé (4 lignes + total), TDEE observé (période/pesées/couverture/apport
+    moyen/tendance/confiance) ou état d'attente avec critères de progression, objectif calorique
+    affiché séparément avec rappel explicite "distinct de la dépense estimée", et un `<details>`
+    "Comment Cortex calcule ces valeurs ?" pour l'explicabilité (§16) sans surcharger la vue par défaut.
+  - **`sante-nutritionnelle.tsx`** : la fiche principale n'est PAS transformée en tableau — un simple
+    CTA "Voir l'analyse" (même pattern que les bandeaux "Compléter mon profil métabolique" existants)
+    ouvre la nouvelle Sheet ; `metabolicAnalysis` construit une seule fois via `buildMetabolicAnalysis`
+    à partir des résultats déjà en mémoire (`dailyTDEE`, `adaptiveTdee`, `adaptiveTdeeCalibration`,
+    `calorieGoal`).
+  - **Tests** (`metabolicAnalysis.test.ts`, 21 tests) : composition modélisée (complete/incomplete),
+    observé disponible (established) avec toutes les métriques, observé indisponible avec critères de
+    progression réels (pas de date fabriquée), early_estimate partiel, les 3 états de calibration
+    (`model_only`/`calibrating`/`adapted`), correction positive/négative/nulle, explication standard vs.
+    divergence suspecte (vérifie l'absence de mots de diagnostic), séparation objectif calorique/
+    dépense, robustesse (aucune exception sur un input complet).
+  - `npx tsc --noEmit` / `npx eslint` / `npx vitest run` (703 passed) / `npm run build` : tous verts.
+  - **Vérification visuelle mobile NON effectuée** : tentative de lancer `vite dev` (avec/sans
+    `--host`/`HOST` env) échoue systématiquement dans ce sandbox avec
+    `EAFNOSUPPORT: address family not supported :::8080` (le serveur dev tente un bind IPv6 dual-stack
+    non supporté par l'environnement) — limitation d'environnement, pas du code. Non simulée/prétendue.
+  - **Limites connues** : le contenu du `<details>` explicatif est statique (pas encore contextualisé
+    selon les données manquantes précises de l'utilisateur) ; aucun composant de progression visuelle
+    (barre) pour les critères de calibration en attente — affichés en valeurs `actuel / requis` textuelles
+    uniquement, jugé suffisant pour cette phase (pas de sur-ingénierie).
+- **Phase 4A — moteur de stratégie calorique (2026-08-01, branche
+  `claude/phase4a-calorie-strategy`, NON mergée dans `main`)** : première recommandation calorique
+  Cortex-native, déterministe, explicable. Ne modifie JAMAIS `nutrition_goals.calories` — le bouton
+  "Appliquer" reste désactivé (§13/§19 du brief), aucune écriture automatique.
+  - **Audit préalable (ancien système)** : `lib/fitness/metabolism.ts` contient un système LÉGACY
+    distinct, toujours utilisé par `GoalsSheet.tsx` (calculateur repliable "Calculer mes besoins
+    (TDEE)" dans la Sheet "Mes objectifs quotidiens") : `computeTDEE(bmr, activityLevel)` (multiplicateur
+    Harris-Benedict classique 1.2–1.9, PAS le TDEE Cortex-native BMR+NEAT+EAT+TEF), `GOAL_DELTAS`
+    (sèche/maintien/prise à -300/0/+300 kcal FIXES, pas relatifs au poids), `computeCalorieTarget`
+    (`Math.max(1200, tdee+delta)`, floor sans justification documentée). C'est le SEUL écrivain de
+    `nutrition_goals.calories` (`useUpsertNutritionGoals`), via un flux déjà manuel (Calculer → Appliquer
+    → Enregistrer). **Non modifié/supprimé en Phase 4A** (fonctionnel, hors scope strict) — signalé comme
+    doublon candidat pour une consolidation future (Phase 4B+ : soit migrer ce calculateur vers le
+    nouveau moteur Cortex-native, soit les garder délibérément distincts). Aucun `goal_type`/rythme/poids
+    cible n'existe dans le schéma `nutrition_goals` actuel (`user_id, calories, proteins, carbs, fats,
+    created_at, updated_at` uniquement) — confirmé par audit direct des migrations.
+  - **`lib/fitness/energyConstants.ts`** (nouveau) : extraction de `KCAL_PER_KG_BODY_MASS = 7700` en
+    point de vérité unique, réutilisé par `adaptiveTdee.ts` (Phase 3A, refactoré pour l'importer au lieu
+    de dupliquer la valeur) ET `calorieStrategy.ts` (Phase 4A) — zéro duplication.
+  - **`lib/fitness/calorieStrategy.ts`** (logique pure) : `computeCalorieStrategy(input)`.
+    - **Source TDEE** : `pickReferenceTdee` — priorité au TDEE ADAPTATIF (Phase 3B,
+      `calibration.state !== "model_only"`), repli sur le TDEE MODÉLISÉ sinon ; `referenceSource:
+      "adaptive"|"modeled"` exposé. Un nouvel utilisateur (aucune donnée observée, `model_only`) reçoit
+      donc une recommandation dès que son profil métabolique est complet, sans attendre le TDEE observé.
+    - **3 objectifs** (chaînes NEUVES, délibérément non mélangées aux legacy `seche/maintien/prise`) :
+      `fat_loss`/`maintenance`/`muscle_gain`. UI FR : "Perte de graisse"/"Maintien"/"Prise de masse".
+    - **Rythmes centralisés** `CALORIE_STRATEGY_RATES`, exprimés en % du poids corporel/semaine (pas en
+      kcal fixes) : perte `slow` 0.25 %, `moderate` 0.5 %, `fast` 0.75 % ; prise `slow` 0.125 %,
+      `moderate` 0.25 % (volontairement ~moitié des rythmes de perte — surplus progressif, pas de bulk
+      agressif par défaut).
+    - **Maintien** : `recommendedCalories = referenceTdeeKcal` exactement (pas d'arrondi au pas de 25 —
+      la valeur est déjà un entier produit en amont), `dailyDeltaKcal = 0` toujours.
+    - **Perte/prise** : `magnitude = poids × %/semaine × KCAL_PER_KG_BODY_MASS / 7` ; signe négatif pour
+      `fat_loss`, positif pour `muscle_gain` ; puis garde-fous puis arrondi au pas de 25 kcal
+      (`CALORIE_STRATEGY_ROUNDING_STEP_KCAL`) pour éviter une pseudo-précision (ex. "2 137 kcal").
+    - **Garde-fous centralisés** `CALORIE_STRATEGY_GUARDRAILS` : `MAX_DEFICIT_KCAL=1000`,
+      `MAX_SURPLUS_KCAL=500` (plafonnent le delta AVANT arrondi), `ABSOLUTE_MIN_FLOOR_KCAL=1200` —
+      **audité** : c'était le floor legacy de `computeCalorieTarget` (`Math.max(1200,...)`), sans
+      justification individuelle (sexe/taille/état de santé) dans le code d'origine. Conservé
+      uniquement comme garde-fou de dernier recours contre une valeur absurde, **toujours accompagné**
+      de `limited:true` + `limitReasons` explicite plutôt que présenté comme un minimum médical
+      personnalisé — jamais un `recommendationLimited` silencieux.
+    - **Convention de signe unique** : `dailyDeltaKcal = recommendedCalories − referenceTdeeKcal`,
+      recalculée APRÈS arrondi/plafonds pour garantir la cohérence `recommendedCalories =
+      referenceTdeeKcal + dailyDeltaKcal` en toute circonstance (testé explicitement).
+    - **Résultat structuré** : `goal`, `referenceTdeeKcal`, `referenceSource`, `recommendedCalories`
+      (`null` si non calculable — jamais fabriqué), `dailyDeltaKcal`, `targetRate` (`null` en
+      maintenance), `estimatedWeeklyWeightChangeKg/Percent` (dérivés du delta RÉELLEMENT appliqué, donc
+      honnêtes même après plafonnement), `limited`, `limitReasons`.
+    - **Données insuffisantes** : poids manquant/invalide pour perte/prise → `recommendedCalories:null`
+      + raison explicite ; aucun TDEE exploitable → idem, quel que soit l'objectif.
+    - `compareCalorieGoal(current, recommended)` : fonction pure séparée, `differenceKcal =
+      recommended − current` (`null` si l'un des deux manque) — prépare le futur bouton "Appliquer" sans
+      jamais écrire en base cette phase.
+    - **Architecture manual/automatic** documentée en tête de fichier (type `CalorieStrategyMode =
+      "manual"|"automatic"`, non consommé en 4A) : emplacement recommandé pour la préférence en 4B —
+      étendre `nutrition_goals` (déjà 1 ligne/utilisateur) avec `goal`, `target_rate`,
+      `calorie_strategy_mode`, `last_auto_adjustment_at` (pour le délai minimal entre ajustements
+      automatiques) — pas de nouvelle table anticipée, aucune migration créée en 4A (mode non actif).
+  - **`sante-nutritionnelle.tsx`** : nouvelle section "Stratégie calorique" (sélecteur d'objectif 3
+    boutons + sélecteur de rythme conditionnel), carte compacte TDEE de référence/apport recommandé/
+    rythme estimé, comparaison objectif actuel vs recommandation, bouton "Appliquer" **visuellement
+    présent mais désactivé** (`disabled`, `cursor-not-allowed`, tooltip explicite "bientôt disponible")
+    — aucune écriture, juste l'emplacement préparé comme autorisé par le brief. Pas de recalcul
+    automatique des macros.
+  - **Tests** (`calorieStrategy.test.ts`, 38 tests) : perte (rythmes croissants, poids/TDEE variés,
+    signe, garde-fou, arrondi), maintien (source modeled/adaptive, delta=0, pas d'arrondi parasite),
+    prise (symétrique), source TDEE (adaptive/modeled/indisponible), comparaison objectif (<, >, =,
+    absent), robustesse (NaN/Infinity/négatif/nul/poids ou rythme manquant/objectif ou rythme inconnu/
+    valeurs extrêmes/jamais négatif/protection contre recommandation extrême), autonomie Cortex-native,
+    cohérence des rythmes centralisés.
+  - `npx tsc --noEmit` / `npx eslint` / `npx vitest run` (741 passed) / `npm run build` : tous verts.
+  - **Vérification visuelle mobile NON effectuée** — même limitation d'environnement que Phase 3C
+    (`EAFNOSUPPORT` sur bind IPv6 `:::8080`), retestée et reconfirmée, non simulée.
+  - **Limites connues** : les seuils de rythme/garde-fous sont des choix conservateurs raisonnés, non
+    calibrés sur des données réelles ; le calculateur legacy de `GoalsSheet.tsx` reste actif en
+    parallèle du nouveau moteur (doublon fonctionnel non résolu, signalé pour 4B) ; aucune persistance
+    de l'objectif/rythme choisi par l'utilisateur (state React local, remis à `maintenance`/`moderate`
+    à chaque ouverture de page — attendu tant que `calorie_strategy_mode`/`goal`/`target_rate` ne sont
+    pas persistés en 4B).
+- **Phase 4B — stratégie calorique manuel/automatique (2026-08-01, branche
+  `claude/phase4b-calorie-strategy-manual-automatic`, NON mergée dans `main`)** : persistance de la
+  stratégie, bouton "Appliquer" devenu fonctionnel, mode automatique contrôlé par garde-fous,
+  historique traçable, suppression du double moteur calorique legacy.
+  - **Audit découverte majeure** : en auditant `nutrition_goals` avant migration, trouvé un
+    **troisième moteur calorique**, entièrement côté base (`compute_nutrition_targets(p_objective)`,
+    migration `20260618102110_nutrition_food_logs_and_goals.sql`) — kcal/kg de poids par objectif
+    (bulk=38/cut=26/recomp=31/maintenance=33), poids par défaut 75 kg si inconnu, écrit directement
+    `nutrition_goals` (`calories, proteins, carbs, fats, fiber_g, objective, weight_kg`). **Confirmé
+    mort côté frontend** (`grep compute_nutrition_targets src/` → 0 résultat) — jamais appelé par
+    l'app. **Non supprimé** (dropper une fonction/des colonnes DB dépasse le scope explicite de cette
+    phase, qui ne nommait que le legacy TS `metabolism.ts`/`GoalsSheet.tsx`) — signalé ici pour
+    nettoyage futur. Les colonnes `objective`/`weight_kg`/`activity_factor`/`fiber_g` restent
+    présentes en base (inertes, non lues/écrites par le frontend).
+  - **Legacy TS supprimé** (audit complet, 0 appelant restant vérifié par grep) : `computeTDEE`,
+    `computeCalorieTarget`, `GOAL_DELTAS`, `ACTIVITY_LEVELS` retirés de `metabolism.ts` ; calculateur
+    "Calculer mes besoins (TDEE)" retiré de `GoalsSheet.tsx` (imports/state/handlers associés
+    supprimés) — `GoalsSheet` reste l'éditeur MANUEL calories/macros, distinct de la recommandation
+    Cortex. Test de non-régression ajouté (`metabolism.test.ts`) : échoue si ces exports étaient
+    réintroduits. `lib/fitness/calorieStrategy.ts` est désormais la SEULE source de vérité pour la
+    recommandation calorique.
+  - **Migration `20260807090000_calorie_strategy_manual_automatic.sql`** : étend `nutrition_goals`
+    (`goal` catégorie stable fat_loss/maintenance/muscle_gain, `target_rate` catégorie stable
+    slow/moderate/fast avec CHECK combiné goal+target_rate empêchant les combinaisons invalides —
+    ex. muscle_gain+fast interdit —, `calorie_strategy_mode` manual/automatic NOT NULL DEFAULT
+    'manual', `last_auto_adjustment_at` timestamptz nullable) ; nouvelle table
+    `calorie_goal_adjustments` (historique append-only, RLS `auth.uid()=user_id`, index sur
+    `(user_id, created_at DESC)`) ; RPC transactionnelle `apply_calorie_goal_adjustment` (SECURITY
+    DEFINER + scoping manuel `auth.uid()`, même convention que `award_reward_event`) qui met à jour
+    `nutrition_goals.calories` ET insère l'historique en une seule opération logique — ne touche
+    JAMAIS proteins/carbs/fats. Aucune perte de données existantes (`ADD COLUMN IF NOT EXISTS`
+    uniquement). Appliquée via Supabase MCP `execute_sql` (évite le mismatch de version d'historique
+    de migration). Types régénérés et vérifiés conformes (`check-supabase-types.mjs`, 84 tables).
+  - **`lib/fitness/calorieStrategy.ts`** (extension) : `evaluateAutoCalorieAdjustment(input)` — pure,
+    déterministe, `now` fourni par l'appelant (jamais `Date.now()` interne). Raisons de refus :
+    `manual_mode`/`recommendation_unavailable`/`current_goal_unavailable`/`within_tolerance`/
+    `cooldown_active`, sinon `eligible`. `MIN_AUTO_ADJUSTMENT_KCAL=50` (2× le pas d'arrondi 25 kcal —
+    nettement au-dessus du bruit d'arrondi). `MAX_AUTO_STEP_KCAL` dépend de l'état de calibration
+    Phase 3B : `model_only=50` (le plus prudent — l'utilisateur a activé l'automatique mais Cortex n'a
+    encore aucune observation), `calibrating=100`, `adapted=150`. `AUTO_ADJUSTMENT_COOLDOWN_DAYS=7`
+    (aligné sur `ADAPTIVE_TDEE_THRESHOLDS.EARLY.MIN_CALENDAR_DAYS` — le plus petit grain temporel que
+    le moteur observé distingue du bruit) — ne s'applique qu'aux ajustements AUTOMATIQUES précédents ;
+    `lastAutoAdjustmentAt=null` (premier ajustement) n'est jamais bloqué par le cooldown, seulement
+    par le plafond d'amplitude. Le proposé se déplace toujours vers la recommandation sans jamais la
+    dépasser (`proposed = current + clamp(diff, -maxStep, +maxStep)`, validé sur les deux exemples
+    exacts du brief : 2000→2300 step100→2100 ; 2200→1900 step100→2100), puis arrondi à 25 kcal (même
+    point de vérité que Phase 4A).
+  - **Hooks** (`useNutritionGoals.ts`, réécrit) : `useNutritionGoals()` retourne désormais aussi
+    `goal/targetRate/calorieStrategyMode/lastAutoAdjustmentAt` (rétrocompatible, champs ajoutés) ;
+    `useUpdateCalorieStrategyPreference` (sauvegarde SEULEMENT la préférence mode/objectif/rythme,
+    jamais de calories — upsert partiel, ne touche pas les colonnes non fournies) ; `useApplyCalorieGoal`
+    (appelle la RPC transactionnelle, invalide `nutrition_goals` + `calorie_goal_adjustments`) ;
+    `useLastCalorieGoalAdjustment` (dernier ajustement, pour l'affichage compact).
+  - **`sante-nutritionnelle.tsx`** : sélecteurs objectif/rythme persistent désormais immédiatement
+    (plus de state local perdu au rechargement) ; nouveau sélecteur "Mode de gestion" (Manuel/
+    Automatique) avec confirmation explicite (§40) à la première activation d'automatique (checklist :
+    Cortex peut modifier l'objectif / ajustements plafonnés / espacés / retour manuel possible /
+    macros jamais touchées) ; bouton "Appliquer" fonctionnel en mode manuel (désactivé + message
+    "déjà aligné" si `differenceKcal===0`) ; bloc "Mode automatique actif" avec message de cooldown
+    si applicable ; bloc compact "Dernier ajustement" (`previous → applied kcal`, mode, date) si un
+    historique existe. Évaluation automatique via `useEffect` déclenché au chargement de la page
+    (jamais un faux scheduler — PWA, voir §32 du brief), protégé contre les écritures répétées par un
+    `useRef` (guard synchrone) + le cooldown lui-même (après un ajustement, `lastAutoAdjustmentAt` se
+    rafraîchit via l'invalidation React Query, ce qui fait naturellement retomber `eligible` à false
+    à la prochaine évaluation).
+  - **Tests** (`calorieStrategy.test.ts` +19, `metabolism.test.ts` +1) : mode manuel/automatique,
+    recommandation/objectif absents, sous/au-dessus du seuil, cooldown actif/terminé/à la limite/premier
+    ajustement (jamais bloqué), amplitude par état de calibration (croissante model_only<calibrating<
+    adapted), hausse/baisse/divergence énorme (jamais un saut direct), jamais au-delà de la
+    recommandation, arrondi 25 kcal, non-réintroduction du legacy (grep des exports).
+  - `npx tsc --noEmit` / `npx eslint` / `npx vitest run` (758 passed) / `npm run build` : tous verts.
+    Migration appliquée et vérifiée ; types.ts conforme (84 tables) ; aucun `as any` introduit ; diff
+    `types.ts` propre (+70 lignes, nouvelle table + nouvelles colonnes + nouvelle fonction RPC
+    uniquement, aucune troncature).
+  - **Vérification visuelle mobile NON effectuée** — même limitation d'environnement que Phases 3C/4A
+    (`EAFNOSUPPORT` sur bind IPv6 `:::8080`), retestée une troisième fois, non simulée.
+  - **Limites connues** : le troisième moteur calorique DB-side (`compute_nutrition_targets`) reste en
+    base, inerte mais non supprimé (hors scope, documenté ci-dessus) ; pas de test d'intégration
+    Supabase réel de la RPC transactionnelle (logique pure `evaluateAutoCalorieAdjustment` testée
+    exhaustivement, mais l'exécution effective de `apply_calorie_goal_adjustment` contre la base n'a
+    été vérifiée que par inspection de schéma/contraintes, pas par un appel RPC réel depuis un test) ;
+    l'auto-ajustement ne s'évalue qu'au chargement de Santé nutritionnelle (pas d'autre point d'entrée
+    pertinent identifié cette phase).
+- **Phase 5A — moteur de stratégie des macronutriments (2026-08-01, mergée dans `main` le 2026-08-01,
+  SHA de merge `73f8f9f`)** : première recommandation macros
+  Cortex-native, déterministe, explicable. Ne modifie JAMAIS `nutrition_goals.proteins/carbs/fats`.
+  - **Audit préalable** : re-confirmé `compute_nutrition_targets` (RPC DB découverte en Phase 4B)
+    toujours 0 appelant frontend — inerte, non supprimé (hors scope). Découverte : le formulaire
+    manuel `GoalsSheet.tsx` a son propre pré-remplissage 35/32/33 % (`computeMacrosFromCalories`) —
+    **volontairement conservé** (documenté/renommé en commentaire, pas remplacé) : c'est un "vite
+    fait" pour un formulaire d'édition manuelle, pas une recommandation Cortex compétitrice —
+    distinction explicite ajoutée en commentaire pour lever toute ambiguïté future, plutôt qu'un
+    rewire risqué (poids/objectif non disponibles dans ce petit composant) pour une phase déjà large.
+  - **`lib/fitness/macroStrategy.ts`** (logique pure) : `computeMacroStrategy(input)`.
+    - **Entrées** : `calories` (objectif ACTIF `nutrition_goals.calories`, jamais une recommandation
+      Cortex pas encore appliquée — §2 du brief), `bodyWeightKg`, `goal`. Simuler une autre enveloppe
+      = rappeler la même fonction avec un autre `calories` (pas de fonction séparée nécessaire).
+    - **Protéines** : g/kg de poids TOTAL par objectif (`fat_loss`=2.2, `muscle_gain`=2.0,
+      `maintenance`=1.8 — `PROTEIN_G_PER_KG`), jamais un % des calories (testé explicitement : même
+      poids/objectif, calories 2000→2500, protéines identiques). Poids plafonné à
+      `BODYWEIGHT_CAP_KG=120` pour ce calcul uniquement (§5 : `body_tracking.body_fat` optionnel/non
+      fiable pour tous → le moteur n'en dépend JAMAIS, garde-fou sur le poids total à la place).
+    - **Lipides** : cible = max(poids×`FAT_G_PER_KG_MIN`(0.8), calories×`FAT_MIN_PERCENT_OF_CALORIES`
+      (20%)/9) — protection à la fois absolue et relative à l'enveloppe.
+    - **Glucides** : calories restantes après protéines+lipides / 4, jamais négatif.
+    - **Enveloppe contrainte** : priorité protéines > lipides > glucides. Si protéines+lipides
+      dépassent l'enveloppe → lipides réduits au maximum compatible, glucides à 0, `limited:true` +
+      raison explicite (jamais silencieux). Cas extrême (protéines seules dépassent déjà) → toute
+      l'enveloppe en protéines, reste à 0. Testé sur l'exemple exact du brief (1200 kcal, ~200g
+      protéines + ~73g lipides visés → jamais de glucides négatifs).
+    - **Arrondi** : pas de 5g (`ROUNDING_STEP_G`) sur les 3 macros.
+    - **Cohérence énergétique** : `macroCalories` recalculé sur les valeurs ARRONDIES via
+      `calculateCaloriesFromMacros` (réutilisé depuis `lib/nutrition/macros.ts` — "seule source de
+      vérité" déjà documentée dans ce fichier pour la règle d'Atwater P×4+C×4+L×9, jamais dupliquée).
+      Tolérance `CALORIE_TOLERANCE_KCAL=50` : au-delà, UN SEUL nudge des glucides (variable la plus
+      flexible) rapproche le total, jamais de boucle, jamais caché (`calorieDifference` toujours
+      exposé).
+    - **Résultat structuré** : `goal`, `calorieTarget`, `bodyWeightKg`, `proteinsG/fatsG/carbsG`
+      (`null` uniquement si non calculable — jamais fabriqué), `proteinTargetGPerKg`/`fatTargetGPerKg`
+      (coefficients réellement utilisés, pour l'explicabilité), `macroCalories`, `calorieDifference`,
+      `limited`, `limitReasons`.
+    - **Préparation des futurs verrous** (§21, PAS implémenté) : pipeline séquentiel
+      protéines→lipides→glucides documenté comme conçu pour qu'un futur paramètre `locks` remplace une
+      étape calculée par une valeur imposée, sans réécrire la logique.
+    - `compareMacros(current, recommended)` : fonction pure séparée, `differenceG = recommended −
+      current` par macro (`null` si l'un des deux manque) — prépare un futur bouton "Appliquer" sans
+      jamais écrire en base cette phase (aucun mode manual/automatic touché, règle absolue Phase 5A).
+  - **`sante-nutritionnelle.tsx`** : nouvelle section "Répartition recommandée" (carte compacte
+    calories actives → P/G/L, comparaison actuel→recommandé par macro, explication courte, raisons de
+    contrainte si `limited`) — read-only, aucun bouton "Appliquer" fonctionnel pour les macros (hors
+    scope 5A). Se recalcule automatiquement si l'objectif calorique actif change (dépend directement
+    de `nutritionGoals.calories`), sans écriture automatique des macros.
+  - **Tests** (`macroStrategy.test.ts`, 37 tests) : protéines (par objectif, par poids, stabilité vs
+    calories, plafond poids élevé, poids faible, invalide), lipides (plancher, poids/objectifs variés,
+    enveloppe confortable/contrainte), glucides (calcul du restant, jamais négatif, enveloppes
+    extrêmes, arrondi), enveloppe impossible (exemple exact du brief + cas extrême), cohérence
+    calorique + tolérance, changement de calories à poids/objectif fixes, comparaison (4 cas),
+    robustesse (NaN/Infinity/négatif/nul/objectif invalide/enveloppes extrêmes), autonomie
+    Cortex-native, simulation d'une autre enveloppe.
+  - `npx tsc --noEmit` / `npx eslint` / `npx vitest run` (795 passed) / `npm run build` : tous verts.
+  - **Vérification visuelle mobile NON effectuée** — même limitation d'environnement que les phases
+    précédentes (`EAFNOSUPPORT` sur bind IPv6 `:::8080`), retestée une 4e fois, non simulée.
+  - **Limites connues** : coefficients g/kg raisonnés mais non individualisés (pas de body fat/masse
+    maigre par design, §5) ; le pré-remplissage 35/32/33 % de `GoalsSheet` reste un doublon fonctionnel
+    mineur assumé (documenté, pas un moteur de recommandation) ; pas encore de verrous macros ni
+    d'écriture automatique (Phase 5B).
+- **Phase 5B — application des macros, automatisation et verrous individuels (2026-08-01, branche
+  `claude/phase5b-macro-application-locks`, NON mergée dans `main`)** : rend la recommandation Phase 5A
+  réellement applicable (bouton "Appliquer" + mode automatique), avec verrous individuels par macro et
+  atomicité calories+macros.
+  - **Audit préalable** : `nutrition_goals`/`calorie_strategy_mode`/`apply_calorie_goal_adjustment`/
+    `calorie_goal_adjustments`/`macroStrategy.ts`/`GoalsSheet`/`useNutritionGoals` relus ; confirmé
+    `compute_nutrition_targets` (RPC DB legacy) toujours DROP (migration 20260619080840), jamais
+    réactivé ; `computeMacrosFromCalories` (pré-remplissage 35/32/33 % de `GoalsSheet`) laissé tel
+    quel — rôle distinct déjà documenté en Phase 5A, toujours pas une recommandation concurrente.
+  - **Migration `20260808090000_macro_strategy_locks_and_history.sql`** : étend `nutrition_goals`
+    avec `macro_strategy_mode` (manual/automatic, NOT NULL DEFAULT 'manual' — préférence INDÉPENDANTE
+    de `calorie_strategy_mode`, jamais activée automatiquement par la migration), `protein_locked`/
+    `carbs_locked`/`fat_locked` (boolean NOT NULL DEFAULT false — un verrou ne stocke PAS de valeur
+    dédiée, c'est la valeur ACTIVE `nutrition_goals.proteins/carbs/fats` au moment de l'activation qui
+    fait foi). Nouvelle table `macro_goal_adjustments` (historique dédié — sens temporel distinct de
+    `calorie_goal_adjustments`, RLS `auth.uid() = user_id`, index `(user_id, created_at DESC)`).
+    Nouvelle RPC `apply_macro_goal_adjustment` (macros SEULES, ne touche jamais `calories`).
+    `apply_calorie_goal_adjustment` (Phase 4B) étendue avec 10 paramètres macros optionnels (tous
+    `DEFAULT NULL`, rétrocompatibles) : lorsque les trois `_applied_proteins/carbs/fats` sont fournis,
+    met AUSSI à jour les macros et journalise `macro_goal_adjustments` dans la MÊME transaction — seul
+    moyen d'éviter l'état durable "calories mises à jour, macros encore alignées sur l'ancien objectif"
+    quand Calories automatique ET Macros automatique se déclenchent ensemble (§22 du brief). Comme
+    `CREATE OR REPLACE FUNCTION` ne remplace réellement une fonction que si la liste de TYPES de
+    paramètres est identique, l'ancienne signature à 8 paramètres a été explicitement `DROP FUNCTION`
+    avant recréation (sinon un second overload ambigu aurait coexisté). Appliquée via `execute_sql`
+    MCP (même méthode que Phases 3C/4A/4B). Vérifié post-migration : 86 tables (85 + `macro_goal_
+    adjustments`), un seul overload `apply_calorie_goal_adjustment` à 18 paramètres (pas d'ambiguïté),
+    toutes les colonnes attendues présentes sur `nutrition_goals`. `types.ts` régénéré — diff propre
+    (+102 lignes, additions uniquement, `git diff --stat` sans suppression).
+  - **`lib/fitness/macroStrategy.ts`** — verrous ajoutés à `computeMacroStrategy` (Phase 5A conservée
+    intacte : le chemin SANS verrou reste le code original inchangé, `computeMacroStrategyLocked`
+    n'est appelé que si ≥1 verrou actif — garantit zéro régression, vérifié par un test qui compare
+    bit-à-bit un appel sans verrou vs avec `locked*: null`).
+    - Pipeline verrous : calories réservées par les macros verrouillées (`lockedCalories`) ; si les
+      trois sont verrouillées → `allMacrosLocked:true`, valeurs retournées telles quelles, jamais
+      recalculées (juste signalé si incohérent avec l'enveloppe) ; si `lockedCalories > calorieTarget`
+      → `locksIncompatible:true`, verrous JAMAIS réduits, macros non verrouillées à 0, `limited:true`
+      + raison explicite ; sinon pipeline protéines→lipides→glucides Phase 5A généralisé sur le budget
+      restant (`calorieTarget - lockedCalories`), chaque étape verrouillée consommant 0 budget
+      supplémentaire (déjà réservée). Nudge de tolérance final n'ajuste jamais des glucides verrouillés
+      (signale l'impossibilité plutôt que de casser le verrou).
+    - Nouveaux champs `MacroStrategyResult.allMacrosLocked`/`locksIncompatible` (booléens structurés,
+      pas de string-matching côté appelant).
+    - `evaluateAutoMacroAdjustment` (mode automatique) : **aucun cooldown** (décision volontaire,
+      §26 — le cooldown calorique de 7 jours protège une DÉCISION, les macros n'en sont qu'une
+      CONSÉQUENCE ; si les calories changent aujourd'hui, les macros se réalignent aujourd'hui).
+      Éligibilité bloquée si `all_macros_locked`/`locks_incompatible`/déjà aligné (comparaison
+      arrondie au gramme, §27 — aucune écriture pour un écart nul) ; sinon `eligible:true` avec les
+      valeurs recommandées (déjà verrou-conscientes) à proposer.
+  - **Migration & atomicité calories+macros côté page** (`sante-nutritionnelle.tsx`) : deux `useEffect`
+    séparés + deux `useRef` (`autoAppliedRef` existant, nouveau `autoMacroAppliedRef`) implémentent les
+    4 combinaisons indépendantes manuel/automatique × calories/macros :
+    - **Calories auto + Macros auto** : UN SEUL appel `applyCalorieGoal.mutate` avec les 10 champs
+      macros optionnels renseignés (calculés à la calorie PROPOSÉE, pas l'actuelle) → une seule RPC
+      transactionnelle, jamais de fenêtre intermédiaire "calories neuves, macros anciennes". Le second
+      `useEffect` (macros seules) est explicitement empêché de se redéclencher (`autoMacroAppliedRef`
+      posé dans le premier effet dans ce cas).
+    - **Calories auto + Macros manuel** : uniquement l'effet calories se déclenche (macroAuto=false car
+      `macroStrategyMode!=='automatic'`) — macros jamais touchées automatiquement, UI affiche l'écart.
+    - **Calories manuel + Macros auto** : uniquement l'effet macros (RPC `apply_macro_goal_adjustment`,
+      ne touche jamais `calories`) — se déclenche indépendamment du mode calorique.
+    - **Calories manuel + Macros manuel** : aucun effet ne se déclenche, boutons "Appliquer" manuels
+      des deux sections gouvernent tout.
+  - **UI** : section "Répartition recommandée" étendue avec sélecteur Manuel/Automatique dédié aux
+    macros (dialogue de confirmation à la première activation, texte explicite sur les verrous jamais
+    cassés et l'absence de délai artificiel), icône verrou/déverrou par macro (bascule
+    `useUpdateMacroStrategyPreference`, verrouille la valeur ACTIVE affichée), bouton "Appliquer"
+    manuel (masqué si déjà aligné ou si `allMacrosLocked`), message dédié si `locksIncompatible`,
+    bloc "Dernier ajustement macros" compact (P/G/L avant→après, mode, date).
+  - **Tests** (`macroStrategy.test.ts`, +27 → 64 tests au total) : non-régression stricte (0 verrou ≡
+    Phase 5A via `toEqual`), verrou unique ×3, verrous combinés ×3 (P+G, P+L, G+L), 3 verrous (aligné
+    et incohérent), locks compatibles/incompatibles (exemples exacts §14/§15 du brief : 1800/1500 kcal,
+    P🔒200g+L🔒100g), valeur verrouillée à 0g, valeur verrouillée invalide (négatif/NaN/Infinity →
+    traitée comme non verrouillée), exemples exacts §11/§38 (protéines verrouillées stables après
+    hausse calorique 2000→2200), jamais négatif, cohérence énergétique. `evaluateAutoMacroAdjustment` :
+    mode manuel, recommandation indisponible, tous verrous, locks incompatibles, déjà aligné, écart
+    réel éligible, verrous individuels + hausse calorique (protéines/glucides+lipides strictement
+    stables dans la proposition), indépendance vis-à-vis de `calorie_strategy_mode` (absent de l'input
+    par construction).
+  - `npx tsc --noEmit` / `npx eslint` (fichiers modifiés) / `npx vitest run` (822 passed) / `npm run
+    build` : tous verts. `node scripts/validate-supabase.mjs` : migrations idempotentes, aucun
+    problème. Aucun `as any` introduit (grep vérifié sur tous les fichiers modifiés).
+  - **Vérification visuelle mobile PARTIELLE** — fait exceptionnel cette phase : `vite dev --host
+    127.0.0.1 --port 8080` a démarré avec succès dans ce sandbox (contrairement aux 4 phases
+    précédentes, `EAFNOSUPPORT` non reproduit cette fois). Playwright (Chromium pré-installé) a pu
+    charger l'app sans crash JS lié à cette phase, mais la route `/sante-nutritionnelle` étant protégée
+    par authentification, la navigation redirige vers `/login` sans session Supabase disponible dans ce
+    sandbox — l'écran réel avec la nouvelle UI verrous/mode macros n'a **pas** pu être capturé
+    visuellement. Un warning d'hydratation React est apparu sur `/login`, mais il concerne
+    exclusivement `AppShell`/`loading-screen.tsx` (pré-existant, sans rapport avec les fichiers touchés
+    cette phase).
+  - **Limites connues** : pas de test d'intégration Supabase réel de bout en bout de la RPC
+    transactionnelle combinée calories+macros (logique pure testée exhaustivement côté
+    `macroStrategy.ts`, mais l'exécution effective d'`apply_calorie_goal_adjustment` avec les 10
+    paramètres macros optionnels n'a été vérifiée que par inspection de schéma après application, pas
+    par un appel RPC réel depuis un test) ; les verrous s'évaluent seulement au chargement/re-render de
+    Santé nutritionnelle (mêmes points d'entrée que Phase 4B, pas de nouveau déclencheur ajouté) ;
+    UI verrous/mode macros non vérifiée visuellement (authentification requise, voir ci-dessus).
+  - Phase 5B mergée dans `main` le 2026-08-01, SHA de merge `65e1e58`. CI complète verte (Typecheck,
+    Supabase Migrations, Supabase Types Sync, RLS Regression Tests, Audit Git↔Supabase Drift, Meal
+    Slugs Sync Check, Supabase project ref). Test authentifié de la RPC combinée
+    `apply_calorie_goal_adjustment` (Calories Auto + Macros Auto) tenté en toute sécurité via une
+    transaction SQL `BEGIN...ROLLBACK` (jamais commit) avant Phase 6A : **bloqué par un bug
+    pré-existant, sans rapport avec cette phase** — le trigger `on_auth_user_created_home_categories`
+    sur `auth.users` référence encore `public.home_categories`, une table supprimée (migration
+    `20260619080840_drop_health_data_imports.sql`-adjacente ou postérieure) — toute insertion de test
+    dans `auth.users` échoue avec `relation "public.home_categories" does not exist`, et le rôle
+    utilisé par le MCP Supabase n'a pas les droits pour désactiver ce trigger (`must be owner of table
+    users`). **⚠️ Ce bug casserait potentiellement TOUT nouveau signup utilisateur réel en
+    production** — hors scope Phase 5B/6A (élargissement de scope non autorisé), signalé explicitement
+    ici pour action séparée. Le reste de la vérification RPC (schéma, contraintes, `DROP FUNCTION`
+    propre de l'ancienne signature à 8 paramètres, absence d'overload ambigu) a été fait par inspection
+    statique — logique jugée correcte mais jamais exécutée par un appel authentifié réel.
+- **Correctif critique — signup cassé (2026-08-01, branche `claude/fix-signup-home-categories-trigger`,
+  migration `20260810090000_fix_signup_broken_home_categories_trigger.sql`, mergé dans `main` SHA
+  `ef54adf`)** : tout nouveau signup échouait en production.
+  - **Cause exacte** : le trigger `on_auth_user_created_home_categories` sur `auth.users` (AFTER
+    INSERT) appelle `public.seed_default_home_categories()`, qui appelle
+    `public._seed_home_categories_for_user(uuid)`, laquelle `INSERT INTO public.home_categories` —
+    table supprimée par `20260714145745_ae103805-61da-4ed3-8d66-58d07c94cdf4.sql` (nettoyage de
+    l'ancienne fonctionnalité "Home" : `items`, `home_subcategories`, `home_categories`). Cette
+    migration a supprimé les tables + `ensure_home_categories_for_me()` mais a OUBLIÉ le trigger et ses
+    deux fonctions — laissées orphelines, cassant tout `INSERT INTO auth.users` avec
+    `relation "public.home_categories" does not exist`.
+  - **Audit** : `home_categories`/`home_subcategories`/`items` confirmés absents en base (`information_
+    schema.tables`). `_seed_home_categories_for_user` n'a qu'un seul appelant
+    (`seed_default_home_categories`), lui-même appelé uniquement par ce trigger — chaîne isolée, aucune
+    autre fonction/trigger/frontend n'y fait référence (grep `src/` : uniquement l'artefact généré dans
+    `types.ts`, pas un appelant réel). **Classification : A — totalement obsolète**, aucune architecture
+    de remplacement. Les DEUX triggers de `auth.users` ont été audités : `on_auth_user_created` (→
+    `handle_new_user`, écrit dans `public.profiles`, table existante et saine) laissé strictement
+    intact — aucun autre bug de ce type détecté sur `auth.users`.
+  - **Correction** : `DROP TRIGGER on_auth_user_created_home_categories` + `DROP FUNCTION
+    seed_default_home_categories()` + `DROP FUNCTION _seed_home_categories_for_user(uuid)` — solution
+    minimale, aucune donnée perdue (aucune table de données touchée, uniquement du code mort).
+  - **Test signup réel (transaction `BEGIN...ROLLBACK`, jamais commit)** : `INSERT INTO auth.users`
+    isolé → `handle_new_user` se déclenche correctement, `public.profiles` reçoit la ligne attendue
+    (id/email/full_name/role par défaut) — confirmé par `SELECT` avant tout changement de rôle simulé.
+    (Une vérification ultérieure sous rôle `authenticated` simulé montrait `profile_created: 0` — pas
+    un nouveau bug, juste RLS sur `profiles` bloquant ce rôle simulé pour ce SELECT diagnostique,
+    sans rapport avec la création réelle déjà prouvée en amont.)
+  - **Retest RPC combinée Phase 5B** (`apply_calorie_goal_adjustment`, Calories Auto + Macros Auto,
+    transaction rollbackée) : **succès complet** — `nutrition_goals` (calories 2000→2100,
+    proteins/carbs/fats 150/200/65→160/220/65, `last_auto_adjustment_at` renseigné),
+    `calorie_goal_adjustments` (previous_calories=2000, applied_calories=2100),
+    `macro_goal_adjustments` (previous/applied cohérents) — tout écrit atomiquement dans le même appel
+    RPC, confirmé par `ROLLBACK` sans effet persistant. La limitation documentée en Phase 5B est levée.
+  - `npx tsc`/`eslint`/`vitest` (822 passed, baseline pré-6A)/`build` : tous verts.
+    `validate-supabase.mjs` : idempotent OK. CI complète verte sur `main` (7/7 : Typecheck, Supabase
+    Migrations, Supabase Types Sync, RLS Regression Tests, Audit Git↔Supabase Drift, Meal Slugs Sync
+    Check, Supabase project ref). **Note technique** : entre ce merge et celui de Phase 6A, un job CI
+    (`ci: auto-corrige la dérive types.ts après migration`) a détecté et rattaché à `main` les colonnes
+    `body_fat_method`/`body_fat_min_percent`/`body_fat_max_percent` en avance sur leur migration —
+    conséquence de la restauration temporaire de ces colonnes en base avant de fusionner Phase 6A juste
+    après (même migration, donc résolu par ce merge lui-même, jamais une incohérence durable).
+- **Phase 6A — fondation composition corporelle (2026-08-01, branche `claude/phase6a-body-fat-foundation`,
+  NON mergée dans `main`)** : Body Fat avec provenance/confiance + masse grasse/masse maigre dérivées.
+  - **Déviation consciente vs. le brief reçu** : le brief supposait une section "Corps" DANS
+    `sante-nutritionnelle.tsx` ("Profil → Santé nutritionnelle → section Corps"). Audit : ce n'est plus
+    la structure réelle depuis la refonte nav de juin 2026 — `/corps` est un onglet top-level séparé
+    (`CorpsTab.tsx`), sibling de `/sante-nutritionnelle` et `/nutrition`, pas une sous-section de
+    celle-ci. Décision : intégrer dans le VRAI emplacement existant (`/corps`) plutôt que de forcer un
+    emplacement obsolète — respecte l'intention explicite ("pas de nouvelle entrée de navigation",
+    "réutiliser l'existant") mieux qu'une correspondance littérale avec un texte de brief écrit avant
+    la refonte nav. Pas un "conflit fonctionnel ambigu" bloquant : l'intention était claire, seul le
+    chemin précis était stale.
+  - **Audit préalable (déterminant)** : `body_tracking` est DÉJÀ la table "mesure corporelle datée"
+    (weight/body_fat/muscle_mass/mensurations sur la MÊME ligne, RLS `auth.uid()=user_id` déjà
+    correcte, hooks CRUD déjà génériques `useAddBodyMeasurement`/`useUpdateBodyMeasurement`/
+    `useDeleteBodyMeasurement` via `TablesInsert`/`TablesUpdate` — aucun changement de hook nécessaire,
+    les nouvelles colonnes nullable traversent automatiquement). `body_fat`/`muscle_mass` ne sont PAS
+    des colonnes mortes : déjà lues/écrites par `CorpsTab.tsx` (`BodyMeasurementSheet`,
+    `QuickMeasurementSheet`), `BodyHistorySheet.tsx` (édition), `lib/fitness/body.ts#computeFormScore`,
+    `lib/fitness/analysis/profile.ts` (inférence d'objectif), et le pipeline de dépôt de documents
+    (`20260723160000_document_deposit_pipeline.sql`). `compute_nutrition_targets` reste inerte
+    (hors scope, déjà documenté). **Décision : ÉTENDRE `body_tracking`, PAS de nouvelle table** (§2 du
+    brief) — le "snapshot poids↔BF" (§12/§13) est déjà résolu structurellement puisque `weight` et
+    `body_fat` sont sur la MÊME ligne : aucune colonne `weight_kg_at_measurement` nécessaire, une ligne
+    avec `body_fat` renseigné mais `weight` NULL donne simplement des masses indisponibles (§33),
+    jamais un poids fabriqué depuis une autre date.
+  - **Migration `20260809090000_body_composition_foundation.sql`** : `body_tracking` +
+    `body_fat_method` (text nullable, CHECK IN manual/dexa/bioimpedance/measurements/photo_estimate),
+    `body_fat_min_percent`/`body_fat_max_percent` (double precision nullable, mêmes bornes 1-70 que le
+    CHECK existant `body_tracking_body_fat_check`, CHECK min≤max). **La CONFIANCE n'est PAS stockée**
+    — mapping centralisé côté TS (`BODY_FAT_METHOD_CONFIDENCE`), jamais figée en base pour rester
+    ajustable sans migration (§8 du brief). RLS déjà correcte, s'applique automatiquement aux nouvelles
+    colonnes. Appliquée via `execute_sql` MCP. Vérifié : 86 tables (inchangé, confirmant qu'aucune
+    nouvelle table n'a été créée), colonnes présentes. `types.ts` régénéré, diff propre (+9 lignes,
+    additions uniquement).
+  - **`lib/fitness/bodyComposition.ts`** (nouveau, logique pure) :
+    - `BODY_FAT_METHODS` (5 méthodes) / `BODY_FAT_DIRECT_ENTRY_METHODS` (3 saisissables en 6A :
+      manual/dexa/bioimpedance — measurements/photo_estimate préparées dans le schéma et le mapping,
+      sans moteur actif ni UI, §4 du brief).
+    - `BODY_FAT_METHOD_CONFIDENCE` : mapping centralisé dexa→high, bioimpedance/measurements→medium,
+      photo_estimate/manual→low. `manual` délibérément bas (Cortex ignore la vraie provenance du
+      chiffre saisi, §8 — jamais une confiance élevée par défaut). `getBodyFatConfidence(method)`
+      gère `method:null` (mesure historique) → `low`, jamais devinée à la hausse.
+    - `computeFatMass(weightKg, bodyFatPercent)` = weight×BF/100 ; `computeLeanMass` = weight−fatMass.
+      **`leanMassKg` explicitement documenté comme n'étant PAS `muscleMassKg`** (§11) — jamais
+      labellisé "Masse musculaire" côté UI à partir de ce calcul.
+    - `computeBodyCompositionSnapshot(measurement)` : enrichit une mesure brute (poids/BF/méthode)
+      avec confiance + masses dérivées, à LA LECTURE (rien stocké, §14). `null` honnête partout si
+      donnée insuffisante — jamais 0 fabriqué.
+    - `areBodyFatMethodsComparable(a,b)` : `true` UNIQUEMENT si méthodes identiques ET connues (deux
+      `null` ⇒ non comparable — provenance inconnue des deux côtés n'implique pas une comparaison
+      fiable). `computeBodyCompositionTrend(rows)` : compare les deux mesures les plus RÉCENTES avec
+      BF renseigné ; si méthodes différentes → `comparable:false` + raison explicite, jamais une
+      tendance présentée comme fiable entre DEXA et impédancemètre (§18/§19). Historique brut
+      uniquement — aucun lissage (§20, volontairement reporté).
+    - `bodyFatRangeMidpoint` préparé pour les estimations par intervalle (Phases 6B/6C), non utilisé
+      dans l'UI 6A (§5/§34 : ne pas complexifier si non nécessaire, mais ne pas bloquer l'évolution).
+  - **UI (`CorpsTab.tsx`)** : nouvelle carte "Composition corporelle" (poids, MG %, masse grasse
+    estimée en kg, masse maigre en kg, méthode + confiance affichées sous la valeur) insérée après le
+    Score forme existant. État vide explicite ("Composition corporelle non renseignée" + CTA), jamais
+    un `0 %` fabriqué (§32). Sélecteur de méthode (pills Manuel/DEXA/Impédancemètre) ajouté au
+    formulaire complet ET au `QuickMeasurementSheet` dédié au Body Fat, avec préremplissage du poids
+    depuis la dernière pesée connue (visible, éditable — §27, jamais une resaisie forcée ni une valeur
+    cachée). `BodyHistorySheet.tsx` : méthode affichée par entrée dans l'historique + éditable dans le
+    formulaire de modification. Modification/suppression déjà supportées nativement (hooks génériques
+    existants, §30 satisfait sans changement).
+  - **Confirmation §37/§38/§39** : `macroStrategy.ts`/`calorieStrategy.ts`/`tdee.ts`/`neat.ts`/
+    `metabolism.ts` non touchés cette phase (seule référence à `body_fat` dans ces fichiers = le
+    commentaire Phase 5A pré-existant expliquant pourquoi `macroStrategy.ts` l'ignore délibérément).
+    Aucune écriture automatique de `nutrition_goals.calories/proteins/carbs/fats` déclenchée par une
+    mesure Body Fat.
+  - **Préparation 6B/6C** : `body_fat_min_percent`/`body_fat_max_percent` + méthodes
+    `measurements`/`photo_estimate` déjà dans le modèle (schéma + mapping confiance + labels) sans
+    formule ni analyse implémentée — les futures phases n'auront qu'à brancher un moteur, jamais de
+    migration supplémentaire pour la provenance elle-même.
+  - **Tests** (`bodyComposition.test.ts`, 36 tests) : calculs de base (80kg/20%→16kg/64kg, décimales,
+    poids/BF faibles/élevés, invalides/NaN/Infinity/négatifs), bornes 1-70, midpoint d'intervalle,
+    mapping confiance (aucun pourcentage inventé, toutes méthodes couvertes), validation méthode,
+    snapshot (BF+poids, BF sans poids → masses indisponibles, sans BF, intervalle, méthode inconnue),
+    comparabilité (même méthode/méthodes différentes/inconnues), tendance (aucune mesure, une seule,
+    plusieurs même méthode, méthodes différentes signalées, ordre chronologique avec lignes sans BF
+    ignorées, poids manquant sur une mesure). 858 tests au total (858 = 822 + 36).
+  - `npx tsc --noEmit` / `npx eslint` (fichiers modifiés) / `npx vitest run` (858 passed) / `npm run
+    build` : tous verts. `node scripts/validate-supabase.mjs` : migrations idempotentes OK. Aucun
+    `as any` introduit.
+  - **Vérification visuelle mobile NON effectuée** — `vite dev` a de nouveau démarré avec succès dans
+    ce sandbox, mais `/corps` étant protégée par authentification, la navigation redirige vers
+    `/login` sans session Supabase disponible ; l'écran réel avec la nouvelle carte "Composition
+    corporelle" n'a pas pu être capturé. Même warning d'hydratation pré-existant sur `/login`
+    (`AppShell`/`loading-screen.tsx`), sans rapport avec les fichiers de cette phase.
+  - **Limites connues** : le bug pré-existant `on_auth_user_created_home_categories` (voir note Phase
+    5B ci-dessus) casse toute création d'utilisateur de test — signalé, non corrigé (hors scope) ;
+    "Masse gr." dans les Stat cards existantes de `CorpsTab.tsx` affiche en réalité `muscle_mass` avec
+    un libellé trompeur ("Masse grasse" au clic) — bug PRÉ-EXISTANT, non lié à cette phase, non corrigé
+    (scope creep évité), signalé ici pour visibilité ; UI composition corporelle non vérifiée
+    visuellement (authentification requise) ; pas de lissage/estimation robuste du Body Fat (assumé,
+    §20) ; pas de normalisation inter-méthodes (assumé, §18/§19, préparé architecturalement).
+  - Fusionnée dans `main` le 2026-08-01, SHA de merge `4232871`, après synchronisation avec le
+    correctif signup (`ef54adf`) via un merge de `origin/main` dans la branche (conflit `MEMORY.md`
+    résolu manuellement — sections concaténées dans l'ordre chronologique, `types.ts` auto-mergé
+    proprement par git). CI complète verte (Typecheck, Supabase Migrations, RLS Regression Tests,
+    Audit Git↔Supabase Drift, Supabase project ref, Meal Slugs Sync Check — Types Sync non re-déclenché
+    sur ce commit précis, déjà validé sur le commit parent identique en contenu).
+- **Phase 6B — estimation Body Fat par mensurations (2026-08-01, branche
+  `claude/phase6b-body-fat-measurements`, NON mergée dans `main`)** : première méthode indirecte
+  (`measurements`) rendue réellement utilisable, au-dessus de la fondation Phase 6A.
+  - **Audit préalable** : `body_tracking` a déjà `waist`/`hips` (pré-6A) et `body_fat`/`body_fat_
+    method`/`body_fat_min_percent`/`body_fat_max_percent` (Phase 6A) — il manquait uniquement `neck`
+    (obligatoire pour la méthode Navy) et de quoi conserver la provenance EXACTE d'une estimation
+    (formule + snapshot taille/sexe). `metabolic_profile.sex` (`"homme"|"femme"`, `lib/fitness/
+    metabolism.ts#BiologicalSex`) et `user_preferences.height_cm` déjà disponibles et réutilisés tels
+    quels (`useMetabolicProfile()`/`useUserPreferences()`) — aucune resaisie demandée à l'utilisateur.
+    Aucune contrainte `UNIQUE(user_id, date)` sur `body_tracking` (seule la PK sur `id`) : plusieurs
+    mesures/jour déjà supportées structurellement, donc une estimation par mensurations crée
+    naturellement sa PROPRE ligne sans jamais écraser une mesure DEXA/bio-impédance du même jour (§15
+    du brief) — aucun mécanisme supplémentaire nécessaire, `useAddBodyMeasurement` (INSERT simple,
+    jamais un upsert par date) suffisait déjà.
+  - **Formule retenue et documentée** : U.S. Navy Circumference Method (Hodgdon, J.A., & Beckett, M.B.,
+    1984, Naval Health Research Center — rapports 84-11 hommes / 84-29 femmes, codifiée depuis dans les
+    standards de composition corporelle de l'armée américaine, AR 600-9). Formule EXACTE (calibrée en
+    POUCES — conversion cm→inches explicite en interne, jamais les coefficients appliqués directement
+    à des centimètres, §3 du brief) :
+    - Homme : `495 / (1.0324 − 0.19077·log10(waist_in − neck_in) + 0.15456·log10(height_in)) − 450`
+    - Femme : `495 / (1.29579 − 0.35004·log10(waist_in + hip_in − neck_in) + 0.221·log10(height_in)) − 450`
+    - Mensurations requises : taille + tour de taille + tour de cou (homme) ; + tour de hanches
+      (femme) — jamais une donnée demandée sans nécessité pour le calcul (§4/§18 du brief).
+  - **Migration `20260811090000_body_fat_measurements_formula.sql`** : `body_tracking` + `neck`
+    (double precision, CHECK 15-60 cm), `body_fat_formula` (text, CHECK IN `('navy_v1')` — identifiant
+    STABLE distinct de `body_fat_method='measurements'`, §8 du brief : jamais perdre la formule exacte
+    derrière la seule catégorie), `body_fat_height_cm`/`body_fat_sex` (snapshot de la taille/sexe
+    RÉELLEMENT utilisés pour CETTE estimation — jamais recalculés avec un profil futur modifié, §7/§28
+    du brief). RLS déjà correcte, s'applique automatiquement. Appliquée via `execute_sql` MCP. Vérifié
+    post-migration : 86 tables (inchangé, aucune nouvelle table). `types.ts` régénéré, diff propre
+    (+12 lignes, additions uniquement).
+  - **`lib/fitness/bodyFatMeasurements.ts`** (nouveau, logique pure) : `estimateBodyFatFromMeasurements`
+    — validation en 2 temps (données manquantes → `missing_data` ; géométrie invalide `waist ≤ neck`
+    (homme) ou `waist+hip ≤ neck` (femme) → `invalid_measurements`, JAMAIS un NaN silencieux, §10 du
+    brief) puis calcul + arrondi centralisé à 1 décimale (§12) + vérification finale que le résultat
+    reste dans la plage plausible existante (`isValidBodyFatPercent`, 1-70 %, réutilisée depuis Phase
+    6A — pas une seconde définition). `confidence` réutilise EXCLUSIVEMENT `getBodyFatConfidence(
+    "measurements")` du mapping centralisé Phase 6A (`medium`) — aucun second système créé (§13).
+    `computeFatMass`/`computeLeanMass` de Phase 6A réutilisées telles quelles pour la prévisualisation
+    (§23) — masse maigre toujours distincte de masse musculaire (§24, règle inchangée).
+  - **UI** : nouveau composant `EstimateBodyFatSheet.tsx`, déclenché depuis la carte "Composition
+    corporelle" existante de `/corps` (état vide ET état rempli, §17 du brief) — pas de nouvelle page.
+    Affiche taille/sexe "déjà connus" en lecture seule ; si l'un des deux manque, bloque avec un
+    message explicite renvoyant au profil métabolique (pas de mini-formulaire dupliqué). Champs
+    dynamiques selon le sexe (§18 : tour de hanches affiché uniquement pour "femme"), instructions de
+    mesure courtes et spécifiques à la méthode Navy pour chaque tour (§21), poids préremplis depuis la
+    dernière pesée connue (visible/éditable, même pattern que Phase 6A). Preview live avant
+    enregistrement (Body Fat ≈ X %, méthode, confiance, masse grasse/maigre si poids disponible, §19),
+    explication courte sans jargon (§20). Bouton "Enregistrer" désactivé tant que `status !== "ok"`.
+  - **Confirmation §32** : aucune écriture automatique de `nutrition_goals`/aucune modification de
+    `macroStrategy.ts`/`calorieStrategy.ts`/`tdee.ts`/`neat.ts`/`metabolism.ts` cette phase (`git diff
+    --stat origin/main` sur ces fichiers : vide, confirmé).
+  - **Tests** (`bodyFatMeasurements.test.ts`, 25 tests) : formule homme (cas nominal calculé et
+    vérifié à la main avec `toBeCloseTo`, décimales, conversion d'unités croisée cm↔inches explicite,
+    waist proche de neck, waist≤neck invalide, NaN/Infinity/négatif/zéro), formule femme (cas nominal,
+    décimales, hanches manquantes, géométrie invalide, valeurs invalides), invariants (§27 : hausse
+    taille→BF↑, hausse cou→BF↓, hausse taille corporelle→BF↓, hausse hanches (femme)→BF↑), données
+    manquantes (sexe/taille/taille-tour/cou absents), précision (toujours 1 décimale), méthode/
+    confiance (reprend le mapping centralisé, jamais un second système). 883 tests au total (858+25).
+  - `npx tsc --noEmit` / `npx eslint` (fichiers modifiés) / `npx vitest run` (883 passed) / `npm run
+    build` : tous verts. `node scripts/validate-supabase.mjs` : migrations idempotentes OK. Aucun
+    `as any` introduit.
+  - **Vérification visuelle mobile NON effectuée** — `vite dev` a redémarré avec succès, mais `/corps`
+    étant protégée par authentification, la navigation redirige vers `/login` sans session Supabase
+    disponible dans ce sandbox ; aucune erreur JS liée à cette phase détectée (hors le warning
+    d'hydratation pré-existant sur `/login`, sans rapport).
+  - **Limites connues** : le tour de cou n'est saisissable QUE via la nouvelle sheet d'estimation, pas
+    via le formulaire de mensurations principal ni `BodyHistorySheet` (hors scope explicite de ce
+    brief, qui ne demandait que le flux d'estimation — pourrait être ajouté en historique/édition dans
+    une phase future si souhaité) ; pas de normalisation entre `measurements` et les autres méthodes
+    (assumé, hérité de Phase 6A) ; aucune donnée de test réelle (mensurations physiques) disponible
+    pour valider empiriquement la formule contre une DEXA réelle — seule la cohérence mathématique de
+    l'implémentation vs. la formule publiée a été vérifiée.
+
+## Estimation Body Fat par photos — Phase 6C (2026-08-12, même session)
+- **Phase 6B mergée dans `main`** avant ce travail (merge + CI vérifiée verte : migration appliquée,
+  colonnes/types conformes, RLS intacte, aucun `as any`) — condition préalable du brief remplie avant
+  toute ouverture de Phase 6C.
+- **Audit préalable obligatoire (§14 du brief, condition d'arrêt spéciale)** : avant d'écrire la moindre
+  ligne d'estimation, audit dédié de l'architecture photo existante ET du moteur de vision disponible.
+  Résultat : Gemini 2.5 Flash (+ GPT-4o `OPENAI_API_KEY` en fallback) est DÉJÀ en production pour
+  l'analyse d'image via `scan-meal`/`analyze-pdf` (endpoint OpenAI-compatible
+  `https://generativelanguage.googleapis.com/v1beta/openai/chat/completions`, `GEMINI_API_KEY`, image
+  passée en `data:{mime};base64,{b64}`, `tool_choice` forcé pour un JSON strict). Décision : RÉUTILISER
+  ce pattern exact (même provider, même modèle, même style d'appel) — aucun nouveau fournisseur externe
+  ajouté, donc aucune décision d'architecture/confidentialité nouvelle à faire valider. Si ce moteur
+  n'avait pas existé, la phase se serait arrêtée à l'architecture seule (upload/modèle/UI/contrat/tests)
+  sans jamais brancher un fournisseur non approuvé — conformément à l'instruction explicite du brief.
+- **Bucket Storage dédié `body-composition-photos`** (migration `20260812090000_body_fat_photo_
+  estimation.sql`) : **privé** (`public = false`), limite 10 Mo, `allowed_mime_types = ARRAY['image/
+  jpeg']` uniquement. 4 policies RLS Storage (`select`/`insert`/`update`/`delete`, `TO authenticated`),
+  prédicat `bucket_id = 'body-composition-photos' AND auth.uid()::text = (storage.foldername(name))[1]`
+  — convention de chemin `{user_id}/{analysis_id}/{vue}.jpg`, segment[1] = propriétaire, vérifié
+  manuellement pour éviter le bug historique connu de `exercise-images` (segment décalé → 403 silencieux
+  après coup). Aucune URL publique, aucun chemin prévisible permettant de contourner la RLS.
+- **Table `body_photo_analyses`** (nouvelle) : `id`, `user_id` (FK CASCADE), `body_tracking_id` (FK
+  CASCADE, NOT NULL — une analyse photo est toujours rattachée à UNE mesure `body_tracking`), `status`
+  (CHECK `'success'`), `front_path`/`side_path` (NOT NULL), `back_path` (nullable, vue optionnelle),
+  `min_percent`/`max_percent`/`reference_percent` (double precision, CHECK 1-70, `min ≤ reference ≤
+  max`), `engine_version` (CHECK IN `('photo_body_fat_v1')` — identifiant STABLE distinct de
+  `body_fat_method`, même discipline que Phase 6B `body_fat_formula`), `warnings` (text[]). RLS `FOR ALL
+  USING/WITH CHECK (auth.uid() = user_id)`. Extension `body_tracking_body_fat_formula_check` (+
+  `'photo_body_fat_v1'`) et `rate_limits_action_check` (+ `'estimate_body_fat_photo'`). Table 87/87
+  (86→87, vérifié). Aucune image stockée en base — uniquement les chemins Storage (§ jamais l'image
+  elle-même dans Postgres).
+- **Edge function `estimate-body-fat-photo`** (déployée, ACTIVE) : adaptée directement de `scan-meal`
+  (même squelette CORS/auth/rate-limit/fallback Gemini→OpenAI). `checkRateLimit(..., "estimate_body_
+  fat_photo", 6)` — 6 appels/fenêtre, plus restrictif que `scan-meal` car l'analyse corporelle est plus
+  sensible. Schéma JSON forcé (`tool_choice` obligatoire) : uniquement `status` (`success` |
+  `insufficient_quality` | `failed`), `minPercent`/`maxPercent` (jamais un point unique), `warnings`.
+  Prompt système avec 5 règles absolues : TOUJOURS une fourchette (jamais un nombre précis), largeur
+  minimale de 3 points imposée dans le prompt ET re-vérifiée côté domaine (double garde-fou), aucun
+  langage de diagnostic médical, aucune tentative d'identification/reconnaissance faciale, chemin
+  explicite `insufficient_quality` si les photos ne permettent pas une analyse fiable. Toujours HTTP 200
+  même en échec (`{error}` dans le corps), convention identique à toutes les autres fonctions IA du
+  projet. `front`/`side` obligatoires (validation taille/longueur), `back` optionnel.
+- **`lib/fitness/bodyFatPhotoEstimate.ts`** (logique pure, zéro import React/Supabase) :
+  `PHOTO_BODY_FAT_ENGINE_VERSION = "photo_body_fat_v1"`, `PHOTO_ESTIMATE_MIN_RANGE_WIDTH_PERCENT = 3`
+  (règle produit prudente documentée — PAS une certitude scientifique — élargie symétriquement autour
+  du point milieu si le modèle renvoie une fourchette trop étroite), `normalizePhotoEstimateResponse`
+  (adaptateur unique : le JSON brut du provider `RawPhotoEstimateResponse` n'est JAMAIS vu par l'UI/les
+  hooks, uniquement le type domaine `PhotoBodyFatEstimate` normalisé) — `referencePercent` est TOUJOURS
+  le point milieu déterministe recalculé, jamais une valeur indépendante fournie par le modèle.
+  `confidence` réutilise EXCLUSIVEMENT `getBodyFatConfidence("photo_estimate")` du mapping centralisé
+  Phase 6A (`low`) — aucun second système de confiance, jamais un pourcentage de confiance affiché
+  (l'UI affiche "Estimation indicative", jamais un chiffre). `computeFatMassRange`/
+  `computeLeanMassRange` (nouvelles, fourchette kg à partir de la fourchette % + poids, avec vérification
+  explicite d'inversion des bornes) — distinctes des fonctions point-unique de Phase 6A, pas de
+  duplication car le contrat d'entrée diffère (plage vs. valeur).
+- **UI `EstimatePhotoBodyFatSheet.tsx`** : déclenchée depuis une 3e action "Estimer avec des photos" sur
+  la carte "Composition corporelle" de `/corps` (état vide ET rempli). Flux : sélection face+profil
+  obligatoires / dos optionnel (upload `<input type="file" accept="image/*">` + `capture="environment"`
+  pour la caméra, 100 % PWA-compatible, aucune dépendance native) → **consentement explicite** via le
+  bouton "Analyser mes photos" (jamais d'analyse automatique dès qu'une photo est choisie) → preview de
+  la fourchette (+ masse grasse/maigre en kg si poids renseigné) AVANT tout enregistrement → "Enregistrer"
+  (upload Storage + création `body_tracking`/`body_photo_analyses`) ou "Recommencer" (efface tout,
+  aucun appel serveur). Compression réutilisée via `fileToBase64Compressed` (`lib/nutrition/utils.ts`,
+  déjà existante — pas de nouvelle dépendance) : le passage systématique par `<canvas>.toDataURL(
+  "image/jpeg")` produit un JPEG neuf sans aucun bloc EXIF (donc sans GPS) — strip EXIF "gratuit" par
+  ré-encodage, sauf repli exotique HEIC non-canvas (rare, documenté comme limite connue). Aucune donnée
+  biométrique/identité stockée, aucun langage de diagnostic médical dans l'UI.
+- **Persistance (`useBodyPhotoEstimate.ts`)** : architecture "analyse éphémère puis persistance sur
+  confirmation" — les photos ne transitent qu'en base64 vers l'edge function tant que l'utilisateur n'a
+  pas cliqué "Enregistrer" après avoir vu un résultat `success` ; c'est seulement à ce moment qu'elles
+  sont uploadées dans Storage. `useSaveBodyPhotoAnalysis` : 1) crée `body_tracking` (méthode
+  `photo_estimate`, `body_fat_min_percent`/`body_fat_max_percent` repris du système de fourchette
+  Phase 6B/6A, jamais un écrasement silencieux d'une mesure d'une autre méthode le même jour — un
+  nouveau row est toujours créé) ; 2) upload Storage ; 3) crée `body_photo_analyses`. Rollback best-
+  effort à chaque étape : en cas d'échec après l'étape 1, suppression des fichiers déjà uploadés PUIS
+  suppression de la ligne `body_tracking` orpheline — évite délibérément la lacune connue de
+  `use-documents.ts` (`useDeposeDocument`) qui ne nettoie pas les objets Storage en cas d'échec.
+  `useDeleteBodyPhotoAnalysis` : suppression Storage D'ABORD puis suppression `body_tracking` (cascade
+  automatique vers `body_photo_analyses` via FK) — jamais d'orphelins Storage. `BodyHistorySheet.tsx`
+  affiche la fourchette (`"MG estimée {min}–{max} % (photo_estimate, indicatif)"`) quand elle existe, et
+  route la suppression vers le flux photo-aware (Storage + DB) plutôt que le flux point-unique.
+- **Scope strictement respecté** (§35/§36 du brief) : aucune modification de `macroStrategy.ts`/
+  `calorieStrategy.ts`/`tdee.ts`/`bmr.ts`/`neat.ts`/`nutrition_goals` (`git diff --stat` sur ces
+  fichiers : vide, confirmé) ; aucune automatisation déclenchée (aucun changement de calories/macros/
+  objectif, aucune notification) ; aucun objectif BF/poids cible/prédiction de date ; aucune
+  reconnaissance faciale ; aucun coach IA additionnel ; aucune intégration wearable.
+- **Sécurité — 3 tests SQL en transaction `BEGIN...ROLLBACK`** (jamais rien committé) simulant deux
+  utilisateurs authentifiés distincts via `set_config('request.jwt.claim.sub', ...)` +
+  `set_config('role', 'authenticated', true)` : (1) isolation RLS table `body_photo_analyses` dans les
+  deux sens (propriétaire voit ses données, autre utilisateur ne voit rien, DELETE d'un autre
+  utilisateur sans effet) ; (2) isolation RLS `storage.objects` du nouveau bucket dans les deux sens ;
+  (3) tentative d'écriture malveillante simulée dans le dossier d'un autre utilisateur
+  (`INSERT INTO storage.objects ... name = '{autre_user}/...'`) — **bloquée avec succès**
+  (`malicious_object_exists = 0` après tentative). `get_advisors(type:"security")` : aucune nouvelle
+  alerte imputable à cette phase.
+- **Tests** (`bodyFatPhotoEstimate.test.ts`, 19 tests) : validité de fourchette/point milieu,
+  élargissement à la largeur minimale, entrées invalides (`min > max`, négatif, NaN/Infinity, hors
+  bornes BF), calcul masse grasse (exemple du brief vérifié : 80 kg / 14-16 % → 11.2-12.8 kg) et masse
+  maigre (exemple du brief vérifié : 80 kg / 14-16 % → 67.2-68.8 kg, avec vérification explicite
+  d'inversion des bornes), cas sans poids connu. 902 tests au total (883+19), tous verts au premier
+  passage.
+- `npx tsc --noEmit` / `npx vitest run` (902 passed) / `npm run build` : tous verts. Aucun `as any`
+  introduit. `node scripts/validate-supabase.mjs` : migrations idempotentes OK.
+- **Vérification visuelle mobile NON effectuée** — même limite que toutes les phases précédentes de
+  cette session : `/corps` étant protégée par authentification, aucune session Supabase réelle n'est
+  disponible dans ce sandbox pour naviguer au-delà de `/login`.
+- **Limites connues** : le moteur Gemini/GPT-4o n'a jamais été validé empiriquement contre une mesure
+  DEXA réelle (aucune donnée de test disponible) — l'estimation reste, comme documenté dans l'UI, une
+  approximation indicative et non une mesure clinique ; le repli HEIC non-canvas de
+  `fileToBase64Compressed` ne garantit pas le strip EXIF (cas rare) ; pas de limite explicite sur le
+  nombre total d'analyses historisées par utilisateur (mêmes règles de rétention que les autres méthodes
+  de `body_tracking`, hors scope de cette phase).
+- **Livrée sur la branche dédiée `claude/phase6c-body-fat-photo-estimation`, NON fusionnée dans `main`**
+  conformément à l'instruction explicite du brief.
+
+## Composition corporelle → stratégie protéines/macros — Phase 7 (2026-08-13, même session)
+- **Phase 6C mergée dans `main`** (SHA `b87d961`) avant cette phase — CI intégralement verte (8
+  workflows : Typecheck, Supabase Migrations, Supabase Types Sync, RLS Regression Tests, Audit Git↔
+  Supabase Drift, Supabase project ref, Deploy Edge Functions, Meal Slugs Check), objets DB re-vérifiés
+  en direct (table `body_photo_analyses` 87/87, bucket privé, 4 policies Storage, RLS active, CHECK
+  constraints étendues), aucune alerte sécurité nouvelle.
+- **Audit préalable exhaustif** (macroStrategy.ts, calorieStrategy.ts, bodyComposition.ts, schémas
+  `body_tracking`/`nutrition_goals`, RPC `apply_calorie_goal_adjustment`/`apply_macro_goal_adjustment`,
+  hooks, `sante-nutritionnelle.tsx`, tests existants) réalisé via agent Explore dédié avant toute
+  implémentation, conformément à l'exigence stricte du brief. Constat central confirmé : le moteur
+  protéines actuel (`PROTEIN_G_PER_KG: {fat_loss:2.2, maintenance:1.8, muscle_gain:2.0}` g/kg de POIDS
+  TOTAL plafonné à 120 kg) ne s'appuie JAMAIS sur le Body Fat — garde-fou documenté explicitement dans
+  le code (`macroStrategy.ts`). Confiance déjà centralisée et mature (`BODY_FAT_METHOD_CONFIDENCE`,
+  Phase 6A) : `dexa→high`, `bioimpedance→medium`, `measurements→medium`, `photo_estimate→low`,
+  `manual→low`. `calorie_goal_adjustments` avait déjà une colonne `reason` libre, PAS
+  `macro_goal_adjustments` — lacune comblée cette phase (voir migration ci-dessous).
+- **Décision d'architecture centrale** : Body Fat reste **une donnée d'ENRICHISSEMENT, jamais une
+  dépendance obligatoire**. Sans composition corporelle exploitable, `sante-nutritionnelle.tsx` retombe
+  silencieusement sur le pipeline poids corporel Phase 5, bit pour bit identique (non-régression
+  testée explicitement).
+- **`lib/fitness/bodyCompositionForNutrition.ts`** (nouveau, logique pure, zéro import React/Supabase) :
+  - `selectBodyCompositionForNutrition(candidates, todayIso)` — sélectionne, parmi un historique
+    `body_tracking` trié du plus récent au plus ancien (ordre déjà produit par `useBodyMeasurements`),
+    la première mesure réellement exploitable : méthode connue + BF valide (1-70 %, réutilise
+    `isValidBodyFatPercent` de Phase 6A) + poids ET BF sur la MÊME ligne (jamais un BF ancien combiné à
+    un poids d'aujourd'hui) + dans la fenêtre de récence. **Aucune hiérarchie arbitraire de méthode**
+    (DEXA > mensurations > bioimpédance > photo n'est jamais supposée) : le candidat le PLUS RÉCENT
+    exploitable l'emporte, choix documenté explicitement dans le code.
+  - `BODY_COMPOSITION_MAX_AGE_DAYS = 90` — politique de récence centralisée et documentée comme règle
+    produit PRUDENTE (pas une certitude scientifique) : au-delà, repli silencieux sur le poids corporel.
+  - Résultat `SelectedBodyComposition` expose `usableForAutomaticAdjustment` (= confiance ≠ "low",
+    donc `false` pour `photo_estimate`/`manual`, `true` pour `dexa`/`bioimpedance`/`measurements`) —
+    distinct de l'utilisabilité pour la recommandation MANUELLE (toujours vraie dès qu'une composition
+    est sélectionnée) : une estimation photo peut informer l'utilisateur sans jamais déclencher un
+    ajustement automatique.
+  - `LEAN_MASS_PROTEIN_G_PER_KG: {fat_loss:2.6, maintenance:2.0, muscle_gain:2.4}` g/kg de MASSE MAIGRE
+    — **PAS une conversion naïve** des coefficients poids-total (interdiction explicite du brief) :
+    calibrés pour rester, à un BF "moyen" (~20 %), SOUS l'équivalence naïve (poids×coef / 0.8), donc
+    toujours plus conservateurs que le pipeline poids-total, jamais plus agressifs. Justification
+    littérature concise en commentaire (ISSN position stand, Jäger et al. 2017, fourchette haute
+    jusqu'à ~2.3-3.1 g/kg de masse maigre en déficit) — pas une formule copiée d'un blog fitness.
+  - `computeLeanMassProteinTargetG(goal, leanMassKg)` — réutilise le plafond partagé
+    `MACRO_STRATEGY_COEFFICIENTS.BODYWEIGHT_CAP_KG` (import direct depuis `macroStrategy.ts`, aucune
+    duplication de constante).
+- **`lib/fitness/macroStrategy.ts` étendu (additif, non-régression garantie)** :
+  - `MacroStrategyInput.proteinTargetOverrideG?` — remplace UNIQUEMENT l'étape protéines du pipeline
+    Phase 5 existant (poids×coefficient) quand fourni et valide ; tout le reste (lipides, glucides,
+    arrondi, enveloppe, tolérance) reste strictement identique — **aucun second moteur macros créé**
+    (§16 du brief). `undefined`/`null`/négatif/non fini → ignoré, comportement Phase 5 inchangé (testé
+    explicitement, `toEqual` bit-à-bit).
+  - `MacroStrategyResult.proteinBasis: "body_weight" | "lean_mass"` — nouveau champ additif exposant la
+    provenance retenue, jamais utilisé pour changer le comportement du pipeline lui-même.
+  - Un verrou protéines actif reste **TOUJOURS prioritaire** sur l'override (le verrou n'appelle même
+    pas ce chemin de calcul) — testé explicitement.
+  - `MAX_AUTO_PROTEIN_ADJUSTMENT_STEP_G = 30` + `clampAutomaticProteinTarget(rawTarget, current)` —
+    garde-fou CENTRALISÉ (jamais caché dans un composant React, §24 du brief) : un seul ajustement
+    AUTOMATIQUE des protéines ne peut jamais s'écarter de plus de 30 g de la valeur active. Ne
+    s'applique JAMAIS à une application manuelle (clic explicite = pas de saut « caché »). Scénario
+    extrême du brief testé tel quel : 120 g actif + recommandation brute 190 g → clampé à 150 g.
+- **Migration `20260813090000_macro_goal_adjustments_reason.sql`** : ajoute `macro_goal_adjustments.
+  reason text` (nullable, sans CHECK — même pattern que `calorie_goal_adjustments.reason` déjà
+  existant) ; étend `apply_macro_goal_adjustment` (+`_reason`) et `apply_calorie_goal_adjustment`
+  (+`_macro_reason`, chemin combiné calories+macros auto) avec un paramètre trailing optionnel
+  `DEFAULT NULL` — appels existants inchangés.
+  - **Incident réel rencontré et corrigé pendant l'application** : `CREATE OR REPLACE FUNCTION` avec un
+    paramètre trailing supplémentaire change la SIGNATURE (nombre d'arguments) — Postgres a donc créé
+    un NOUVEL objet fonction surchargé au lieu de remplacer l'existant, laissant temporairement DEUX
+    versions de chaque RPC coexister (ancienne + nouvelle arité), avec un risque d'appel ambigu côté
+    client. Corrigé par `DROP FUNCTION` explicite des anciennes signatures avant recréation — un seul
+    objet par nom vérifié après coup (`pronargs` unique).
+  - **Deuxième incident détecté et corrigé dans la foulée** : les nouveaux objets fonction (signature
+    différente = nouvel objet Postgres) ne portaient PAS les `REVOKE`/`GRANT` explicites de la
+    migration d'origine — `anon` avait retrouvé un accès EXECUTE par défaut (régression de sécurité
+    réelle, confirmée via `has_function_privilege('anon', ...)`  = `true`). Corrigé par `REVOKE ALL ...
+    FROM PUBLIC, anon` + `GRANT EXECUTE ... TO authenticated` explicites sur les nouvelles signatures,
+    revérifié (`anon_can_exec = false`) avant de committer la migration. Le fichier de migration commité
+    documente les deux incidents et inclut les correctifs pour que toute réapplication future (CI)
+    reproduise l'état final sûr directement, sans repasser par l'état intermédiaire vulnérable.
+  - Vérifié post-migration : `reason` présente sur `macro_goal_adjustments`, une seule fonction par nom
+    (`apply_macro_goal_adjustment` arity 13, `apply_calorie_goal_adjustment` arity 19), grants corrects.
+    `types.ts` régénéré, diff purement additif (+5 lignes). `get_advisors(security)` : aucune nouvelle
+    alerte imputable à cette phase (uniquement les WARN pré-existants `authenticated_security_definer_
+    function_executable`, déjà présents avant Phase 7 sur ces mêmes fonctions).
+- **Intégration `sante-nutritionnelle.tsx`** :
+  - `bodyCompositionCandidates` construits depuis `bodyRows` (déjà chargé par `useBodyMeasurements`,
+    aucune nouvelle requête) → `selectedBodyComposition` via `selectBodyCompositionForNutrition`.
+  - `macroStrategy` (affichage + application MANUELLE) reçoit `proteinTargetOverrideG` **brut, non
+    clampé** — même une estimation photo peut enrichir la recommandation manuelle, l'utilisateur reste
+    seul décisionnaire (§6 du brief : « il peut être exclu de la prescription automatique »).
+  - Deux calculs SÉPARÉS pour l'éligibilité AUTOMATIQUE (`macroStrategyForAutoAtCurrentCalories` et
+    `macroStrategyAtProposedCalories`) reçoivent `autoLeanMassProteinTargetG` — `null` sauf si
+    `selectedBodyComposition.usableForAutomaticAdjustment` ET après passage par
+    `clampAutomaticProteinTarget` — jamais le même override brut que le chemin manuel.
+  - `reason: "lean_mass"` transmis à `useApplyMacroGoal`/`useApplyCalorieGoal` (manuel ET automatique)
+    uniquement quand la composition corporelle a réellement influencé la valeur appliquée.
+- **UI** : bloc "Base de calcul des protéines" (masse maigre en kg, méthode + confiance via
+  `BODY_FAT_METHOD_LABELS`/`CONFIDENCE_LABELS` de Phase 6A, jamais dupliqués) affiché uniquement quand
+  `proteinBasis === "lean_mass"` ; note sobre "Estimation photo disponible — utilisée à titre indicatif"
+  quand le mode est automatique mais la composition sélectionnée n'est pas assez fiable pour l'auto ;
+  explication courte adaptée selon la base retenue. **Aucune demande de Body Fat obligatoire** —
+  l'intégralité de l'écran reste utilisable sans aucune mesure de composition corporelle (§30).
+- **Scope strictement respecté** : aucune modification de `calorieStrategy.ts`/BMR/NEAT/EAT/TEF/TDEE ;
+  pas d'objectif BF/poids cible/prédiction de date ; pas de reconnaissance faciale/diagnostic médical ;
+  pas de nouvelle méthode BF ; pas de nouvelle analyse photo ; pas de LLM dans la décision (moteur
+  entièrement déterministe) — vérifié via `git diff --stat` (fichiers hors scope : vide).
+- **Tests** : 33 nouveaux tests (`bodyCompositionForNutrition.test.ts` : sélection/récence/snapshot/
+  confiance/coefficients masse maigre ; `macroStrategy.test.ts` : non-régression bit-à-bit sans
+  override, override valide/invalide/verrouillé/cas extrême, `clampAutomaticProteinTarget` avec le
+  scénario extrême exact du brief 120g→190g brut→150g clampé). 935 tests au total (902+33), tous verts.
+- `npx tsc --noEmit` / `npx eslint` (fichiers modifiés) / `npx vitest run` (935 passed) / `npm run
+  build` : tous verts. `node scripts/validate-supabase.mjs` : migrations idempotentes OK. Aucun
+  `as any` introduit.
+- **Vérification visuelle mobile NON effectuée** — même limite sandbox `EAFNOSUPPORT` que toutes les
+  phases précédentes de cette session.
+- **Limites connues** : les coefficients `LEAN_MASS_PROTEIN_G_PER_KG` sont une décision produit
+  raisonnée (documentée, conservative par construction) mais n'ont jamais été validés empiriquement
+  contre des données réelles ; le seuil de récence (90 jours) et le pas maximal d'ajustement automatique
+  (30 g) sont des règles produit prudentes explicitement documentées comme telles, pas des certitudes
+  scientifiques — ajustables sans casser l'architecture si besoin.
+- **Livrée sur la branche dédiée `claude/phase7-body-composition-nutrition`, NON fusionnée dans
+  `main`** conformément à l'instruction explicite du brief.
+
+## Objectif physique + trajectoire + suivi adaptatif — Phase 8 (2026-08-14, même session)
+- **Phase 7 mergée dans `main`** (SHA `41caaed`) avant cette phase — CI verte (7 workflows pertinents,
+  `Deploy Supabase Edge Functions` n'a pas déclenché car Phase 7 ne touche aucune edge function),
+  `reason` sur `macro_goal_adjustments` et RPC re-vérifiées en direct après merge.
+- **Audit préalable exhaustif** (agent Explore dédié) : aucune structure équivalente à un objectif
+  physique n'existait déjà (`target_weight` trouvé dans `coach_ia_v2_programs` est un concept
+  totalement différent — charge recommandée sur une série, pas un poids corporel cible ; `objective`
+  sur `nutrition_goals` est un champ legacy vestigial distinct de `goal`). Confirmé : `adaptiveTdee.ts`
+  calcule déjà un poids lissé (moyenne glissante 7 jours + régression linéaire,
+  `weight.weeklyTrendKg`/`endTrendKg`/`measurementCount`) — **réutilisé tel quel**, jamais recalculé.
+  `computeCalorieStrategy` applique déjà le rythme (`CALORIE_STRATEGY_RATES`, % du poids CORPOREL
+  COURANT/semaine) contre le poids courant à chaque appel, jamais une projection figée — la trajectoire
+  Phase 8 suit exactement le même principe.
+- **Décision d'architecture centrale** : Phase 8 **ORCHESTRE** les moteurs existants
+  (`calorieStrategy.ts`, `adaptiveTdee.ts`, `bodyComposition.ts`) — **aucun second moteur
+  TDEE/calorique/macros créé**. Confirmé structurellement : `git diff --stat` sur
+  `calorieStrategy.ts`/`adaptiveTdee.ts`/`adaptiveTdeeCalibration.ts`/`tdee.ts`/`macroStrategy.ts` :
+  vide, ces fichiers ne sont PAS modifiés par cette phase. La seule chaîne d'écriture calorique/macro
+  reste `evaluateAutoCalorieAdjustment`/`evaluateAutoMacroAdjustment` → RPC — Phase 8 ne fait que LIRE
+  ces résultats, jamais les contourner ni créer un second contrôleur.
+- **Table `physical_goals`** (migration `20260814090000_physical_goals.sql`) : `goal` reprend EXACTEMENT
+  la taxonomie stable Phase 4 (`fat_loss`/`maintenance`/`muscle_gain`, CHECK identique) ; `target_rate`
+  avec la même contrainte de cohérence que `nutrition_goals_target_rate_check` (maintenance sans
+  rythme) ; snapshot de départ figé (`starting_weight_kg`/`starting_body_fat_percent`/
+  `starting_body_fat_method`/`starting_lean_mass_kg`, jamais recalculé) ; cibles facultatives
+  (`target_weight_kg`/`target_body_fat_percent`, toutes deux nullable) ; `status` (`active`/
+  `completed`/`cancelled`). **Un seul objectif ACTIF par utilisateur** — index unique PARTIEL
+  `physical_goals_one_active_per_user ON (user_id) WHERE status = 'active'` (pas de contrainte pleine
+  table, permet l'historisation des objectifs terminés/annulés). RLS propriétaire stricte
+  (`auth.uid() = user_id`), trigger `set_updated_at` (fonction déjà existante, réutilisée). Table
+  88/88 (87→88), vérifié en direct. `types.ts` régénéré, diff purement additif (+54 lignes).
+- **`lib/fitness/physicalGoal.ts`** (nouveau, pur) : `validatePhysicalGoalInput` — refuse proprement
+  NaN/Infinity/poids-BF hors bornes/rythme incompatible avec l'objectif, et surtout détecte les
+  **contradictions manifestes** (ex. `fat_loss` avec poids cible ≥ poids de départ) sans jamais les
+  accepter silencieusement. Poids/BF cible restent TOUJOURS facultatifs — `null` des deux côtés est
+  valide.
+- **`lib/fitness/goalTrajectory.ts`** (nouveau, pur) :
+  - `computeGoalTrajectory` — réutilise EXACTEMENT `CALORIE_STRATEGY_RATES` (aucun second système de
+    coefficients). Comme le rythme est un %/semaine du poids COURANT (pas figé), une projection
+    linéaire naïve (poids initial × % × N) sous-estimerait la durée — modélise donc une évolution
+    **composée** (`w(t) = w0·(1+r)^t`, durée = `ln(target/w0)/ln(1+r)`), testée explicitement contre le
+    calcul naïf pour confirmer que le modèle composé annonce toujours une durée ≥ au naïf. Pour
+    `maintenance` : zone de maintien `MAINTENANCE_ZONE_PERCENT = 1.5` (±1.5 % du poids de référence,
+    règle produit prudente documentée) plutôt qu'un delta zéro exact.
+  - `computeBodyFatTargetProjection` — poids théorique à BF cible = `leanMassKg / (1 - targetBF/100)`,
+    réutilise `computeLeanMass` de Phase 6A (jamais dupliqué), **toujours marqué `isTheoretical: true`**
+    (hypothèse masse maigre constante explicitement documentée, jamais garantie réelle), confiance
+    reprise du système Phase 6A existant (`ConfidenceLevel`), jamais un pourcentage inventé. Refuse
+    proprement (`invalid_goal`) toute projection qui produirait un résultat non fini/négatif.
+- **`lib/fitness/goalProgress.ts`** (nouveau, pur) :
+  - `evaluateGoalProgress` — compare la progression RÉELLE au rythme visé en réutilisant
+    **exclusivement** `adaptiveTdee.weight.weeklyTrendKg`/`measurementCount`/`window.calendarDays`
+    (aucun recalcul de lissage, §22 du brief). Fenêtre minimale `GOAL_PROGRESS_MIN_WINDOW_DAYS = 14`
+    jours (documentée : deux fenêtres de lissage TDEE complètes) + `GOAL_PROGRESS_MIN_MEASUREMENTS = 4`
+    pesées minimum → sinon `insufficient_data` (état normal, jamais fabriqué en `on_track`). Tolérance
+    `GOAL_PROGRESS_TOLERANCE_PERCENT = 25` % autour du rythme cible → `on_track` (évite qu'un écart de
+    -0.48 vs -0.50 kg/semaine soit classé `behind`). États : `insufficient_data`/`on_track`/`ahead`/
+    `behind`/`maintaining` (plateau quasi-nul, non culpabilisant, s'applique aussi hors maintenance).
+    Fonction pure, zéro import Supabase — ne peut structurellement pas déclencher une écriture.
+  - `isWeightGoalLikelyReached` — SUGGÈRE seulement qu'un objectif semble atteint (poids LISSÉ proche de
+    la cible + assez de mesures) ; ne marque jamais `status = 'completed'` elle-même, décision
+    utilisateur explicite uniquement via `useCompletePhysicalGoal`.
+- **`hooks/usePhysicalGoal.ts`** (nouveau) : `usePhysicalGoal` (objectif actif), `usePhysicalGoalHistory`
+  (terminés/annulés, pas de grosse UI dédiée), `useCreatePhysicalGoal` (clôture l'objectif actif
+  existant en `cancelled` PUIS insère le nouveau — deux écritures séquentielles non transactionnelles,
+  documenté explicitement : en cas d'échec entre les deux, l'état récupérable est "aucun objectif
+  actif", jamais deux objectifs actifs — la contrainte unique DB l'empêche de toute façon),
+  `useUpdatePhysicalGoalRate` (change UNIQUEMENT le rythme sur l'objectif existant, sans réécrire
+  l'historique), `useCancelPhysicalGoal`, `useCompletePhysicalGoal`.
+- **UI** : nouvelle Section "Objectif physique" dans `sante-nutritionnelle.tsx` (pas de nouvelle page),
+  bloc compact (objectif/rythme/départ→cible/état de progression/durée estimée qualifiée "estimation"/
+  zone de maintien/projection BF théorique), CTA "Marquer comme atteint" affiché uniquement quand
+  `isWeightGoalLikelyReached`, boutons rythme rapide (§45, update en place) et "Nouvel objectif"/
+  "Annuler". Nouveau composant `PhysicalGoalSheet.tsx` (pattern preview-avant-enregistrement identique
+  à `EstimateBodyFatSheet`/`EstimatePhotoBodyFatSheet`) : sélection objectif/rythme + poids/BF cible
+  facultatifs, preview live (trajectoire + projection BF), validation bloquante avant soumission. Jamais
+  de date affichée comme une promesse — toujours qualifiée "estimation"/"≈".
+- **Scope strictement respecté** : aucune modification de `calorieStrategy.ts`/`adaptiveTdee.ts`/
+  `adaptiveTdeeCalibration.ts`/`tdee.ts`/`macroStrategy.ts` (vérifié `git diff --stat`) ; pas de
+  nouvelle méthode BF ; pas de coach IA/génération de texte LLM (moteur entièrement déterministe) ; pas
+  de notifications/gamification ; pas de refonte UI générale.
+- **Tests** : 53 nouveaux tests (`physicalGoal.test.ts`, `goalTrajectory.test.ts` incl. comparaison
+  explicite modèle composé vs. projection linéaire naïve + exemple travaillé 80kg/20%→15% BF,
+  `goalProgress.test.ts` incl. tolérance/plateau/fluctuation isolée/pureté). 988 tests au total
+  (935+53), tous verts au premier passage. Non-régression TDEE vérifiée structurellement (aucun fichier
+  du moteur calorique/TDEE modifié par cette phase, donc comportement bit-à-bit identique par
+  construction — pas seulement testé).
+- `npx tsc --noEmit` / `npx eslint` (fichiers modifiés) / `npx vitest run` (988 passed) / `npm run
+  build` : tous verts. `node scripts/validate-supabase.mjs` : migrations idempotentes OK. Aucun
+  `as any` introduit. `get_advisors(security)` : aucune nouvelle alerte imputable à cette phase.
+- **Vérification visuelle mobile NON effectuée** — même limite sandbox `EAFNOSUPPORT` que toutes les
+  phases précédentes de cette session.
+- **Limites connues** : `useCreatePhysicalGoal` n'est pas transactionnel (deux écritures séquentielles,
+  risque résiduel documenté et accepté — jamais deux objectifs actifs grâce à la contrainte DB) ; les
+  constantes `MAINTENANCE_ZONE_PERCENT`/`GOAL_PROGRESS_MIN_WINDOW_DAYS`/
+  `GOAL_PROGRESS_TOLERANCE_PERCENT`/`GOAL_PROGRESS_MIN_MEASUREMENTS` sont des règles produit prudentes
+  documentées comme telles, pas des certitudes scientifiques ; pas de grosse UI d'historique des
+  objectifs passés (hors scope explicite, hook déjà prêt si besoin futur) ; la projection BF suppose
+  une masse maigre constante, hypothèse explicitement documentée mais jamais garantie réelle.
+- **Livrée sur la branche dédiée `claude/phase8-physical-goals-adaptive-tracking`, NON fusionnée dans
+  `main`** conformément à l'instruction explicite du brief.
+
+## Santé nutritionnelle V1 — Analyse intelligente + finalisation UX + audit technique — Phase 9 (2026-08-15, même session)
+
+- **Merge Phase 8 → `main`** (SHA `e78b131`) : la migration `20260814090000_physical_goals.sql` était
+  non-idempotente (9× `ADD CONSTRAINT` sans `DROP CONSTRAINT IF EXISTS` préalable — contrairement à
+  `CREATE TABLE`/`CREATE INDEX`, Postgres n'a AUCUN équivalent `IF NOT EXISTS` pour `ADD CONSTRAINT`),
+  jamais rejouée via `db push` car appliquée en direct par `execute_sql` pendant la Phase 8 → CI
+  `Supabase Migrations` + `Audit Drift` rouges (`constraint already exists`, SQLSTATE 42710). **Corrigé**
+  par hotfix direct sur `main` (`d2a67ac`) : chaque `ADD CONSTRAINT` précédé d'un `DROP CONSTRAINT IF
+  EXISTS`, ré-appliqué en direct (vérifié idempotent en le rejouant deux fois), + nouveau garde-fou
+  permanent dans `scripts/validate-supabase.mjs` (**CHECK 10 — `CONSTRAINT_NO_DROP`**) qui scanne toute
+  migration future pour cette classe de bug. CI entièrement verte après coup.
+- **Principe architectural absolu tenu de bout en bout** : `Moteurs déterministes → structured facts →
+  IA explique → utilisateur`. L'IA ne calcule JAMAIS un nombre — structurellement impossible : le schéma
+  JSON du tool-calling (`explain_nutrition_health`) ne contient AUCUN champ numérique, uniquement des
+  chaînes/enums. Aucune route de l'IA vers `nutrition_goals`/`physical_goals` UPDATE (lecture/explication
+  pure, jamais d'écriture).
+
+### Phase 9A — Analyse intelligente
+- **`lib/fitness/nutritionHealthContext.ts`** (nouveau, pur) : `buildNutritionHealthAnalysisContext` —
+  assemble en un objet minimal/typé des valeurs **déjà calculées** par les moteurs existants (BMR/NEAT/
+  EAT/TEF/TDEE modélisé/observé/adaptatif, calibration, nutrition/macros, composition corporelle,
+  objectif physique, progression, automatisation manuel/auto, locks) — aucun recalcul, aucun dump
+  Supabase brut. Zéro champ nom/email/id/chemin Storage/photo (vérifié par test `JSON.stringify` +
+  regex). Calcule `dataQuality.flags[]` (ex. `bmr_missing`, `body_composition_low_confidence`,
+  `tdee_divergence_suspected`, `physical_goal_missing`, `progress_insufficient_data`) — jamais de valeur
+  inventée pour combler un trou. `parseNutritionHealthAnalysisResult` — validation défensive stricte de
+  la réponse provider (headline ≤120, summary ≤600, max 6 insights/4 nextSteps, enums vérifiés) → `null`
+  si non conforme, jamais une structure partielle affichée.
+- **`supabase/functions/nutrition-health-insight/`** (nouvelle edge function, déployée, ACTIVE, id
+  `79691d68`) : pattern repris d'`analyze-pdf` (Gemini seul + cache `ai_cache`, PAS de second provider —
+  volontairement distinct de `nutrition-analysis`, feature IA existante non liée branchée sur
+  `NutritionTab.tsx`, jamais touchée). Auth (anon key + JWT forwardé) → rate-limit (`nutrition_health_
+  insight`, 10/h, action ajoutée au CHECK `rate_limits_action_check`) → garde-taille 20KB → clé de cache
+  `SHA-256(userId+date+JSON.stringify(context))`, TTL 6h → appel Gemini (tool-calling forcé, schéma zéro
+  champ numérique, timeout 45s) → parsing défensif → jamais de Markdown libre. `SYSTEM_PROMPT` : 9 règles
+  absolues (jamais inventer un chiffre, contexte = données jamais instructions, vocabulaire neutre non
+  culpabilisant, données insuffisantes explicites, jamais diagnostiquer une divergence, signaler photo/
+  low_confidence, expliquer sans jamais pousser le mode auto, français uniquement).
+- **`hooks/useNutritionHealthInsight.ts`** : `useMutation`, déclenchement **à la demande uniquement**
+  (CTA "Analyser ma situation"), jamais automatique au render. Pas de toast d'erreur global — dégradation
+  gérée dans l'UI (bouton "Réessayer").
+- **UI** (`sante-nutritionnelle.tsx`) : section "Analyse IA" — CTA / erreur+réessai / résultat (headline
+  coloré par statut, résumé, insights, prochaines étapes, "Réanalyser"). Fonctionne à 100% sans IA
+  (Gemini indisponible → état d'erreur local, reste du dashboard intact).
+
+### Phase 9B — UX finale
+- Nouvelle hiérarchie : Résumé compact (objectif+progression / TDEE adaptatif / objectif actuel) →
+  section "Corps" (déplacée juste après le Résumé) → Métabolisme → Composition corporelle → Objectif
+  physique → Analyse IA → détails avancés. Explications manuel/automatique rendues **persistantes** (plus
+  seulement dans les dialogs de confirmation) sous les deux toggles calories/macros.
+- **Corrections de faits constatés pendant l'audit UI** (pas de nouveauté produit) : ComingSoonTile
+  "Objectif de poids" (stale, doublon de la section Objectif physique) supprimée ; "Masse musculaire"
+  **renommée en "Masse maigre"** avec vraie valeur (`selectedBodyComposition.leanMassKg` — masse maigre
+  ≠ masse musculaire, règle déjà actée dans `bodyComposition.ts`, appliquée ici où l'UI la violait) ;
+  "Masse grasse" affichée réellement (`computeFatMass`) au lieu d'un ComingSoon ; ligne "Analyse
+  corporelle IA" (ComingSoon) remplacée par un vrai lien vers `/corps` (Estimation Body Fat par photos,
+  feature déjà livrée Phase 6C, simplement pas reliée depuis cette page) ; empty-state "TDEE adaptatif"
+  aligné sur la convention `InsufficientDataTile` (au lieu de `ComingSoonTile`, incohérent avec les
+  autres tuiles TDEE) ; ancienne section "Corps" dupliquée (bloc mort identique) supprimée.
+  ComingSoonTiles genuinement non construits (hydratation, sommeil, HRV…) volontairement non touchés
+  (hors scope §70).
+- Aucun graphique ajouté (pas de fit naturel identifié cette phase — explicitement permis de sauter,
+  §70). Aucun nouveau composant one-off — réutilisation stricte de `StatTile`/`InsufficientDataTile`/
+  `Section`/`MetabolicAnalysisSheet` existants.
+
+### Phase 9C — Audit technique V1
+- **Legacy supprimé (confirmé mort par grep exhaustif AVANT suppression)** : `nutrition_goals.
+  objective`/`weight_kg`/`activity_factor`/`fiber_g` — orphelines depuis la suppression de l'ancienne RPC
+  `compute_nutrition_targets` (déjà DROPée `CASCADE` en Phase antérieure) ; zéro appelant frontend/RPC.
+  Migration `20260815090000_nutrition_health_insight_and_legacy_cleanup.sql` (`DROP COLUMN IF EXISTS`
+  ×4 + extension du CHECK `rate_limits_action_check`). `fiber_g` des AUTRES tables (food_logs/
+  nutrition_items/recipes) explicitement PAS touché (toujours utilisé).
+- **Double-comptage énergie (§48)** : vérifié par lecture directe — `tdee.ts` fait une somme plate
+  `bmr+neat+eat+tef` sans chevauchement ; `neat.ts` documente explicitement que le NEAT basé wearable
+  exclut volontairement l'EAT du jour pour éviter le double-comptage. Aucun problème trouvé — audit
+  propre, rien à corriger.
+- **Un seul contrôleur calories / un seul contrôleur macros** : tracé la chaîne complète TDEE→
+  `calorieStrategy`→`evaluateAutoCalorieAdjustment`→RPC `apply_calorie_goal_adjustment` (idem macros) —
+  Phase 9 n'ajoute AUCUN second contrôleur ; l'objectif physique et l'IA restent des lecteurs/
+  explicateurs, jamais des sources d'écriture.
+- **RLS/Storage/Edge Functions** : `get_advisors(security)` re-vérifié après la migration Phase 9 —
+  aucune nouvelle alerte (les warnings existants — `function_search_path_mutable` sur une fonction RPG
+  non liée, extensions dans `public`, bucket `avatars` listable, quelques `SECURITY DEFINER` legacy,
+  protection mot de passe compromis désactivée — sont tous pré-existants, non introduits par cette
+  phase, documentés mais hors scope §70). `nutrition-health-insight` déployée et `ACTIVE` (`verify_jwt:
+  true`, id `79691d68-4645-454d-95da-526afa16d874`).
+- **Grep `as any`** : zéro occurrence dans tous les fichiers nouveaux/modifiés de la Phase 9.
+- **Migration** appliquée en direct via `execute_sql` (comme chaque phase précédente) puis **enregistrée
+  manuellement dans `supabase_migrations.schema_migrations`** (leçon tirée du hotfix Phase 8 : sans ça,
+  `db push` en CI la rejoue — idempotente cette fois donc sans casse, mais hygiène correcte rétablie).
+  `types.ts` re-régénéré et diffé **caractère pour caractère identique** au fichier committé — zéro
+  dérive Git↔Supabase.
+- **Test de non-régression signup** (`scripts/signup-trigger-regression.test.mjs`, 3 tests, analyse
+  statique pure des fichiers de migration — aucune infra pgTAP/instance locale ajoutée, §59) : garantit
+  qu'aucune migration future ne recrée le trigger `on_auth_user_created_home_categories`/les fonctions
+  seed sans les supprimer à nouveau (bug historique qui cassait TOUT signup, corrigé Phase antérieure
+  par `20260810090000`).
+
+### Validation finale
+- `npx tsc --noEmit` / `npx eslint` (tous fichiers Phase 9, 3 erreurs prettier auto-fixées) / `npx
+  vitest run` (**1015 passed | 32 skipped**, +27 vs. baseline Phase 8 — 24 dans
+  `nutritionHealthContext.test.ts` + 3 dans `signup-trigger-regression.test.mjs`) / `npm run build` :
+  tous verts. `node scripts/validate-supabase.mjs` : uniquement 3 warnings pré-existants (non liés à
+  cette phase). `get_advisors(security)` : aucune nouvelle alerte. Migration enregistrée, `types.ts`
+  identique à la génération live.
+- **Vérification visuelle : tentative réelle cette fois** (contrairement aux phases précédentes bloquées
+  par `EAFNOSUPPORT`) — `vite dev` a démarré normalement (HTTP 200 sur `/`), navigation Playwright
+  headless vers `/sante-nutritionnelle` confirme que le garde d'authentification fonctionne correctement
+  (redirection propre vers `/login`, page de connexion rendue). Un avertissement d'hydratation SSR/client
+  a été observé sur la page `/login` (pré-existant, sans rapport avec les fichiers modifiés par cette
+  phase, hors scope §70 — non corrigé). Capture d'écran authentifiée de `/sante-nutritionnelle`
+  elle-même **non obtenue** faute d'identifiants de test dans ce sandbox — limite honnêtement documentée,
+  pas contournée.
+- **Limites connues** : pas de capture d'écran authentifiée de la page finale (cf. ci-dessus) ; les
+  warnings `get_advisors` pré-existants (SECURITY DEFINER legacy, protection mot de passe compromis,
+  extensions en public) restent hors scope de cette phase de finalisation.
+- **Livrée sur la branche dédiée `claude/phase9-nutrition-health-v1-finalization`, NON fusionnée dans
+  `main`** conformément à l'instruction explicite du brief.
+
+## Déblocage Santé nutritionnelle + suppression des placeholders — Phase 10 (2026-08-16, même session)
+
+- **Contexte** : suite au diagnostic de la session précédente (tuiles vides malgré des données
+  réelles en base), Phase 10 corrige les blocages identifiés en réutilisant strictement les moteurs
+  Phases 1-9 (aucun second moteur BMR/NEAT/TDEE/Body Fat créé).
+- **Migration `20260816090000_body_fat_legacy_method_and_manual_activity.sql`** (appliquée en direct,
+  committée) :
+  - `UPDATE body_tracking SET body_fat_method='manual' WHERE body_fat_method IS NULL AND body_fat IS
+    NOT NULL` — 22 lignes historiques corrigées (toutes appartenant au même compte réel). `'manual'`
+    n'est PAS une méthode précise inventée : elle porte déjà la sémantique exacte « provenance
+    inconnue » dans `bodyComposition.ts` (`BODY_FAT_METHOD_CONFIDENCE.manual = "low"`). Zéro valeur
+    perdue (seule la colonne `method` touchée).
+  - `daily_activity` : ajout colonne `hrv_ms` (nullable) + CHECK ; ajout de CHECK jusque-là absents sur
+    `resting_hr`/`avg_hr`/`max_hr`/`steps`/`source` (`source` limité à `apple_health`/`manual`).
+  - Migration idempotente (`DROP CONSTRAINT IF EXISTS` avant chaque `ADD CONSTRAINT`), vérifiée par
+    `validate-supabase.mjs` (0 nouveau warning).
+- **`lib/fitness/bodyComposition.ts`** : nouvelle fonction pure `resolveBodyFatMethod(selectedMethod,
+  hasBodyFatValue)` — retourne `selectedMethod ?? "manual"` dès qu'un BF est saisi, ne renvoie plus
+  jamais `null` silencieusement. Corrige le bug UX réel : `CorpsTab.tsx` (formulaire principal + 
+  `QuickMeasurementSheet`) et `BodyHistorySheet.tsx` (édition) laissaient `body_fat_method = null` si
+  l'utilisateur ne cliquait aucune puce de méthode — désormais toute nouvelle saisie BF a
+  systématiquement une méthode, jamais `null`.
+- **`lib/fitness/adaptiveTdee.ts` — audit + ajustement documenté du seuil de densité (§3 du brief)** :
+  `EARLY.MIN_WEIGHT_DENSITY` abaissé de **0.30 → 0.20**. Audit explicite : 0.30 exigeait en pratique
+  plus d'une pesée tous les 3.3 jours pour obtenir ne serait-ce qu'un statut "précoce" — plus strict
+  que le rythme que Cortex documente lui-même comme attendu ("quelques pesées par semaine, parfois
+  irrégulières"). Un utilisateur pesant EXACTEMENT 2×/semaine (densité ≈0.286, rythme réaliste et
+  documenté) échouait déjà ce seuil. La densité n'est pas le seul garde-fou (MIN_CALENDAR_DAYS/
+  MIN_WEIGHT_MEASUREMENTS/nutrition coverage + `weeklyTrendKg: null` indépendant si la régression ne
+  peut réellement pas être calculée) — 0.20 reste largement au-dessus du cas déjà couvert par le test
+  historique (4 pesées/26j ≈ 0.15, toujours rejeté). `ESTABLISHED.MIN_WEIGHT_DENSITY` (0.4) **inchangé**
+  — seule la barre d'entrée "précoce" est assouplie. Nouveau test explicite reproduisant le cas réel
+  diagnostiqué (6 pesées/24j, densité ≈0.25) confirmant que le statut n'est désormais plus
+  `insufficient_data`.
+- **`lib/fitness/dailyActivity.ts`** (nouveau, pur) : `mergeDailyActivityRows` — fusionne les lignes
+  `daily_activity` d'un même jour (une par `source`, `UNIQUE(user_id,date,source)` déjà existante)
+  champ par champ, le manuel gagnant toujours quand renseigné, provenance conservée par champ
+  (`SourcedValue<T>`). Permet à une future intégration (Garmin/Whoop/Oura...) de coexister avec la
+  saisie manuelle sans modification de ce fichier.
+- **`lib/fitness/systemicRecovery.ts`** (nouveau, pur) — À NE PAS CONFONDRE avec `recovery.ts`
+  (récupération PAR MUSCLE pour le BodyMap, préservée intacte, jamais touchée). `evaluateSystemicRecovery`
+  : statut de récupération globale basé **uniquement** sur la FC repos vs baseline personnelle (moyenne
+  des ≤14 mesures antérieures, ≥5 minimum requis sinon `insufficient_data`). Écart significatif = ±3
+  bpm (règle produit prudente documentée). **HRV et charge d'entraînement volontairement EXCLUES du
+  calcul** — HRV dépend trop de la méthode/l'appareil pour être fusionnée sans risque de faux signal
+  (affichée séparément, jamais combinée) ; charge d'entraînement nécessiterait un modèle plus complexe
+  que ce que la donnée actuelle justifie. Aucun score 0-100 inventé, aucun sommeil dans le calcul.
+- **`hooks/useDailyActivity.ts`** : `useLatestActivity`/`useActivityForDate` réécrits pour fusionner
+  toutes les sources d'un jour via `mergeDailyActivityRows` (au lieu de `.maybeSingle()`, qui aurait
+  planté dès qu'une saisie manuelle ET un import Apple Health coexisteraient). Nouveau
+  `useRestingHrHistory(days)` (historique fusionné par jour, alimente la baseline de récupération).
+  Nouveau `useUpsertManualDailyActivity` — upsert PARTIEL (`source:"manual"`, `onConflict:
+  "user_id,date,source"`) : n'efface jamais un champ déjà saisi un autre jour pour la même date.
+- **`components/fitness/DailyActivityEntrySheet.tsx`** (nouveau) : Sheet unique (pas/FC repos/HRV, tous
+  facultatifs, au moins un requis) — réutilise `Field`/`Sheet`/`SubmitButton` existants, aucun nouveau
+  système de formulaire. Avertissement HRV explicite sur la dépendance méthode/appareil.
+- **`components/fitness/InsufficientDataTile.tsx`** étendu (rétrocompatible) : `reason`/`ctaLabel`+
+  `onAction` optionnels — devient un vrai bouton actionnable quand une action résout le manque
+  ("Compléter mon profil", "Ajouter mes pas"...), sinon reste un simple constat.
+- **`components/fitness/ComingSoonTile.tsx` supprimé** (Phase 10 §4/§10) — plus aucun appelant dans
+  tout le repo après le nettoyage de `sante-nutritionnelle.tsx` (Sommeil/Temps actif/Hydratation/
+  Niveau de stress/Adaptation métabolique supprimés ; Poids actuel/IMC/Masse grasse/Masse maigre/
+  Objectif calorique/Pas quotidiens/FC repos/HRV migrés vers `InsufficientDataTile` avec un `reason`
+  honnête — "Aucune donnée saisie"/"Profil à compléter" — jamais "À venir" pour une fonctionnalité déjà
+  implémentée).
+- **UI `sante-nutritionnelle.tsx`** : BMR/TDEE/NEAT affichent désormais un CTA direct "Compléter mon
+  profil" (ouvre `MetabolicProfileSheet`, réutilisé tel quel) quand la cause est `metabolicProfileIncomplete`/
+  `activityLevelMissing` — les deux bannières redondantes précédemment affichées SOUS la grille de
+  tuiles ont été supprimées (le CTA est maintenant sur la tuile elle-même, jamais dupliqué). Section
+  "Activité" : "Temps actif" supprimée, "Pas quotidiens" actionnable. Section "Santé" : "Sommeil" et
+  "Niveau de stress" supprimés ; "Fréquence cardiaque" renommée "FC au repos" (alignée sur `resting_hr`
+  plutôt que `avg_hr`, cohérent avec la saisie manuelle demandée) ; "Variabilité (HRV)" et "Récupération"
+  désormais réelles (actionnables/calculées) au lieu de ComingSoon.
+- **Tests** : +17 (`resolveBodyFatMethod` ×3, densité réaliste ×1, `mergeDailyActivityRows` ×5,
+  `evaluateSystemicRecovery` ×8) — **1032 tests au total (1015+17)**, tous verts.
+- **Non-régression (§11 du brief)** : aucun fichier des moteurs BMR/EAT/TEF/NEAT/TDEE modélisé/
+  calorieStrategy/macroStrategy/goalTrajectory/goalProgress/nutritionHealthContext n'a été modifié
+  (seul le SEUIL de densité dans `adaptiveTdee.ts` a changé, documenté ci-dessus) ; suite de tests
+  complète (1032) verte au premier passage après chaque édition ; `recovery.ts` (récupération par
+  muscle, BodyMap) intact, jamais touché — nommage `systemicRecovery.ts` choisi précisément pour éviter
+  toute collision/confusion avec ce moteur existant.
+- **Validation finale** : `npx tsc --noEmit` / `npx eslint` (tous fichiers modifiés, quelques erreurs
+  prettier auto-fixées) / `npx vitest run` (1032 passed) / `npm run build` (succès, 1m58) : tous verts.
+  `node scripts/validate-supabase.mjs` : 0 nouvelle erreur/warning. `types.ts` régénéré depuis la base
+  live et vérifié **identique caractère pour caractère**. `get_advisors(security)` : aucune nouvelle
+  alerte imputable à cette phase.
+- **Drift pré-existant hors scope détecté (non corrigé, signalé)** : une table `outfit_feedback`
+  existe sur le projet Supabase live sans aucune migration correspondante dans le repo — drift déjà
+  présent AVANT cette phase (pas causé par Phase 10), origine externe (probablement une édition directe
+  hors Git, ex. Lovable). Non traité ici : hors scope explicite de cette phase de déblocage.
+- **Limites connues** : la tuile Récupération affichera `insufficient_data` pour tous les comptes tant
+  qu'au moins 6 mesures de FC repos (1 récente + 5 de baseline) n'auront pas été saisies — attendu,
+  aucune valeur n'est inventée pour combler ce vide. HRV reste affichée sans comparaison de tendance
+  inter-appareils (volontairement non implémenté, cf. doctrine ci-dessus).
+- **Travaillé directement sur `main`** conformément à l'instruction explicite du brief (pas de branche
+  dédiée pour cette phase).
+
+## Correctif de clôture Phase 10 (2026-08-03, même session)
+
+- **Drift CI (`Audit - Git ↔ Supabase Drift Detection`)** : deux versions de migration
+  (`20260803054157`/`20260803054734`) signalées "orphelines" par `supabase migration list --linked`
+  lors du run CI du 03/08 12:54 UTC. Audit : `supabase_migrations.schema_migrations` interrogée en
+  direct juste après montre **exactement 200 lignes = 200 fichiers Git**, sans aucune trace de ces deux
+  versions — confirmé transitoire (probablement une activité concurrente sur ce projet Supabase
+  partagé par de nombreuses branches/produits, cf. tables HR/paie et `outfit_feedback`/`outfits`
+  déjà étrangères à Cortex). Aucun SQL rejoué, aucune migration vide créée. Re-déclenchement manuel du
+  workflow (`workflow_dispatch`) → **repassé au vert** (confirmé, run `30821728587`).
+- **`outfit_feedback`/`outfits`** : audit complet — schéma propre (FK, CHECK, UNIQUE), RLS activée,
+  4 policies CRUD "own" par table, **0 ligne**, **zéro appelant** dans tout le repo Cortex (grep). Ne
+  correspondent à AUCUNE migration Git (même orpheline — absentes aussi de `schema_migrations`,
+  confirmant qu'elles ont été créées hors du système de migration, ex. SQL Editor direct). Domaine
+  conceptuel (garde-robe/tenues) sans rapport avec Cortex fitness/nutrition — même profil que les
+  tables HR/paie déjà présentes dans ce même projet Supabase partagé. **Conclusion : n'appartient pas
+  à l'architecture Cortex actuelle.** Aucune migration Cortex créée pour ces tables (cela leur
+  attribuerait à tort une appartenance à ce produit). **Aucune suppression effectuée** — signalé
+  comme demandé, décision de conservation/suppression laissée à l'utilisateur.
+- **Provenance Body Fat vs méthode** : nouvelle distinction conceptuelle explicite dans
+  `bodyComposition.ts` — `BodyFatMethod` (COMMENT, pilote la confiance, inchangé) vs
+  `BodyFatProvenance` (`"direct_entry" | "imported_document"`, D'OÙ vient la ligne, PURE information
+  de traçabilité, n'affecte JAMAIS la confiance). `describeBodyFatProvenance(hasSourceDocument)` —
+  dérivée de `body_tracking.source_document_id` (colonne déjà existante, déjà remplie pour certaines
+  lignes via l'analyse PDF). **Audit des 22 mesures backfillées** : 4 liées à un document PDF
+  ("Analyse corporelle" avec composition + circonférences + posture — format cohérent avec un scanner
+  3D type Visbody), mais **aucune preuve fiable** (nom de fichier, texte extrait, métadonnée) ne
+  mentionne explicitement une marque — provenance conservée comme "document importé" (fait vérifiable),
+  **jamais "Visbody" inventé**. Les 18 autres restent "saisie directe". Rétrocompatible Phase 6/7 :
+  `BODY_FAT_METHOD_CONFIDENCE`/`getBodyFatConfidence` restent keyed uniquement sur la méthode, aucune
+  logique de confiance modifiée.
+- **Récupération — pas de changement de seuil** : `MIN_BASELINE_SAMPLES` (5) et `BASELINE_WINDOW_SIZE`
+  (14) laissés inchangés — comportement normal, pas un bug. `SystemicRecoveryResult` étendu avec
+  `remainingBaselineSamples` (calculé dynamiquement, jamais un texte statique) ; le message
+  `insufficient_data` explique désormais précisément *"Encore N mesure(s) de FC au repos
+  nécessaire(s) pour établir ta référence personnelle"* — N recalculé à chaque évaluation à partir des
+  données réelles, jamais codé en dur côté UI. Aucun sommeil réintroduit.
+- **Tests** : +6 (`describeBodyFatProvenance` ×3, `remainingBaselineSamples`/reason dynamique ×3) —
+  **1038 tests au total**, tous verts.
+- **Validation** : `tsc --noEmit` / `eslint` / `npx vitest run` (1038 passed) / `npm run build` : tous
+  verts. Aucune migration créée ce round (aucun changement de schéma nécessaire pour les points 1-4).
+  `validate-supabase.mjs` : 0 nouvelle erreur/warning.
+- **Non-régression** : BMR/NEAT/TDEE/TDEE adaptatif/Body Fat/Pas/FC repos/HRV/Récupération/Nutrition/
+  Fitness — aucun moteur touché, seule la sortie `systemicRecovery` a été enrichie (champ ajouté,
+  rétrocompatible) et `bodyComposition.ts` a reçu un ajout pur (aucune fonction existante modifiée en
+  comportement, seule `resolveBodyFatMethod` du Phase 10 initial reste inchangée).
+- **Travaillé directement sur `main`**, comme demandé.
+
+## Body Fat Cortex — estimation indépendante (mensurations + photos uniquement) (2026-08-03, même session)
+
+- **Règle d'architecture définitive** : BODY FAT CORTEX = estimation calculée UNIQUEMENT à partir de
+  `measurements` (mensurations, Navy) et `photo_estimate` (analyse photo). Visbody/bioimpédance
+  externe/DEXA/ancienne saisie `manual` ont une contribution STRUCTURELLEMENT nulle — restent visibles
+  dans l'historique (comparaison/tendance) mais n'entrent jamais dans le calcul, même une DEXA
+  (méthode la plus fiable en littérature). Aucune donnée historique supprimée.
+- **`lib/fitness/cortexBodyFat.ts`** (nouveau, pur) :
+  - `selectCortexBodyFatInputs(candidates, todayIso, maxAgeDays)` — filtre `method === "measurements" |
+    "photo_estimate"` (garantie STRUCTURELLE que les méthodes externes ne peuvent jamais entrer), une
+    seule contribution par méthode = la plus RÉCENTE exploitable dans la fenêtre de récence (réutilise
+    `BODY_COMPOSITION_MAX_AGE_DAYS`, inchangé, audité et conservé).
+  - `computeCortexBodyFatEstimate({measurements, photo})` — combine les deux JAMAIS par une moyenne
+    naïve des midpoints : les mensurations (point déterministe) reçoivent une bande de tolérance
+    (`MEASUREMENTS_CONSENSUS_TOLERANCE_PERCENT = 2.0`, documentée — plus stricte que l'erreur-type
+    publiée de la méthode Navy ~3-4 points) testée pour recouvrement avec la fourchette photo :
+    recouvrement → zone d'intersection (concordance, confiance "medium"), pas de recouvrement →
+    élargissement explicite + médiane des 3 valeurs (désaccord, `disagreement=true`, confiance "low").
+    Écart temporel mensurations/photo > `STALE_CROSS_METHOD_GAP_DAYS` (30j, documenté) → confiance
+    plafonnée à "low" même en concordance. `usableForAutomaticAdjustment = confidence !== "low"` —
+    même prédicat que la doctrine Phase 7 existante, jamais dupliqué. Retourne `referencePercent/
+    minPercent/maxPercent/confidence/methodsUsed/methodCount/disagreement/usableForRecommendation/
+    usableForAutomaticAdjustment/reason` — jamais confidence `"high"` (jamais une certitude médicale).
+  - `describeCortexBodyFatSources(methodsUsed)` — "Mensurations"/"Photos"/"Mensurations + Photos".
+- **`lib/fitness/bodyCompositionForNutrition.ts`** réécrit (même nom de fonction exportée,
+  `selectBodyCompositionForNutrition`, pour minimiser le churn des 2 appelants) : nouveau paramètre
+  obligatoire `currentWeightKg` — **§14 : les masses grasse/maigre actuelles utilisent désormais
+  TOUJOURS le poids ACTUEL, jamais le poids historique attaché à l'ancienne mesure BF** (bug réel
+  corrigé : poids affiché 70,3 kg mais masse maigre calculée avec un poids de mesure à 74,2 kg).
+  `BodyCompositionCandidate` n'a plus de champ `weightKg` par ligne (découplage volontaire). `method`
+  devient `null` quand mensurations ET photos contribuent toutes les deux (voir `methodsUsed` pour le
+  détail) — `PhysicalGoalSheet.tsx` déjà typé `BodyFatMethod | null`, aucun changement nécessaire.
+- **`routes/.../fitness/CorpsTab.tsx`** — carte "Composition corporelle" renommée "Body Fat Cortex",
+  reconstruite entièrement sur `computeCortexBodyFatEstimate` + poids actuel (`latestWeight`). Nouvelle
+  section "Dernière mesure externe" (manual/dexa/bioimpedance) affichée séparément, avec provenance
+  honnête (`describeBodyFatProvenance`/`BODY_FAT_PROVENANCE_LABELS` du correctif de clôture précédent —
+  "Document importé"/"Saisie directe", jamais "Visbody" sans preuve) — jamais fusionnée dans
+  l'estimation Cortex. CTA "Ajouter une mesure" (manuel) retiré de cette carte spécifique (reste
+  disponible via la tuile "MG" en haut de page) — seules les deux actions Cortex ("Estimer avec mes
+  mensurations"/"avec des photos") y figurent désormais, conformément à la doctrine.
+- **`routes/.../sante-nutritionnelle.tsx`** — tuiles "Masse grasse estimée"/"Masse maigre estimée"
+  (renommées, §20) utilisent `selectedBodyComposition` (désormais Cortex-only). Message d'encouragement
+  dynamique si une seule méthode Cortex contribue ("Ajoute une estimation par photos…") ou avertissement
+  si désaccord. `nutritionHealthContext` (analyse IA, Phase 9) reçoit désormais les vraies bornes
+  min/max Cortex (au lieu de `null` en dur) — aucune écriture, l'IA continue d'expliquer sans jamais
+  calculer (architecture Phase 9 intacte).
+- **Terminologie** : "Body Fat Cortex"/"Body Fat estimé", "Fourchette estimée", "Masse grasse/maigre
+  estimée" — jamais "réel"/"exact"/"vrai taux". Masse maigre ≠ masse musculaire, toujours respecté.
+- **Tests** : +45 (`cortexBodyFat.test.ts` : 23, couvrant A-N + F/G/H critiques Visbody-zéro-contribution
+  + Q/R du brief ; `bodyCompositionForNutrition.test.ts` réécrit : 18, dont le test explicite §14 poids
+  historique vs actuel). **1060 tests au total**, tous verts.
+- **Aucune migration** — le Body Fat Cortex est une valeur DÉRIVÉE, calculée à la lecture depuis
+  `body_tracking` existant (§19 du correctif : préférer le calcul au cache, aucune colonne
+  `cortex_body_fat` créée).
+- **Non-régression** : TDEE/adaptiveTdee/calorieStrategy/macroStrategy/locks/objectifs physiques/
+  analyse IA/RLS/Storage — aucun fichier de ces moteurs modifié. `macroStrategy.ts` continue de
+  recevoir un simple `proteinTargetOverrideG` calculé en amont, sans second contrôleur.
+- **Validation** : `tsc --noEmit` / `eslint` / `npx vitest run` (1060 passed) / `npm run build` : tous
+  verts. Zéro `as any`. Vérification visuelle : dev server démarré, `/corps` et `/sante-nutritionnelle`
+  redirigent correctement vers `/login` (garde d'authentification fonctionnel, aucun crash de route) —
+  capture authentifiée non obtenue faute d'identifiants dans ce sandbox (limite documentée, pas
+  contournée).
+- **Travaillé directement sur `main`**, comme demandé.

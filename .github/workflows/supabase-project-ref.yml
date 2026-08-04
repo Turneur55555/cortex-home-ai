@@ -1,0 +1,33 @@
+name: Supabase project ref
+
+# Garde-fou anti-réintroduction : la seule base autorisée est
+# bcwfvpwxzlmkxobvbtzp (voir src/config/supabase-project.ts).
+# Ce job échoue si SUPABASE_PROJECT_REF, VITE_SUPABASE_URL, la config épinglée
+# ou un fichier du dépôt référencent un autre projet Supabase.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check-project-ref:
+    name: Base unique (bcwfvpwxzlmkxobvbtzp)
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+      VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Vérifie la source de vérité Supabase
+        run: node scripts/check-supabase-project.mjs
