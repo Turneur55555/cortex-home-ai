@@ -125,6 +125,15 @@ type GenericCardProps = {
    *  groupe — les positions sont globales à la séance. */
   nextPosition: number;
   onOpenStats: (rawLabel: string) => void;
+  /** Musculation hybride (2026-08-04) — clé de cache React Query à cibler
+   *  pour les mutations de segment (voir HYBRID_BLOCKS_KEY dans
+   *  useGenericActiveSession.ts). Défaut absent : comportement 100%
+   *  inchangé pour ActiveGenericSessionView (GENERIC_ACTIVE_KEY implicite
+   *  dans chaque mutation). ActiveWorkoutView (blocs d'une séance muscu)
+   *  passe HYBRID_BLOCKS_KEY pour ne jamais faire fuiter un faux "workout
+   *  générique actif" dans le cache que SeancesTab utilise pour router
+   *  entre ActiveWorkoutView et ActiveGenericSessionView. */
+  cacheKey?: readonly unknown[];
 };
 
 export function ActiveExerciseCard(props: MuscuCardProps | GenericCardProps) {
@@ -538,6 +547,7 @@ function GenericExerciseCard({
   discipline,
   nextPosition,
   onOpenStats,
+  cacheKey,
 }: Omit<GenericCardProps, "kind">) {
   const updateSegment = useUpdateGenericSegment();
   const deleteSegment = useDeleteGenericSegment();
@@ -668,6 +678,7 @@ function GenericExerciseCard({
       metricKey: group.instances[0]?.metricKey ?? undefined,
       position: nextPosition,
       discipline,
+      cacheKey,
     });
   };
 
@@ -680,7 +691,7 @@ function GenericExerciseCard({
     group.instances.forEach((segment, i) => {
       const ref = refs[i];
       if (!ref) return;
-      updateSegment.mutate({ id: segment.id, metrics: { ...ref.metrics } });
+      updateSegment.mutate({ id: segment.id, metrics: { ...ref.metrics }, cacheKey });
     });
     for (let i = group.instances.length; i < refs.length; i++) {
       await addSegment.mutateAsync({
@@ -690,6 +701,7 @@ function GenericExerciseCard({
         metricKey: group.instances[0]?.metricKey ?? undefined,
         position: nextPosition + (i - group.instances.length),
         discipline,
+        cacheKey,
       });
     }
   };
@@ -706,7 +718,7 @@ function GenericExerciseCard({
       completed?: boolean;
     },
   ) => {
-    updateSegment.mutate({ id: segment.id, ...fields });
+    updateSegment.mutate({ id: segment.id, ...fields, cacheKey });
     if (fields.completed) {
       // Pas de minuteur de repos entre deux kilomètres (lot V5) : la
       // marche/le tapis/le vélo est un effort CONTINU — un repos
@@ -725,7 +737,7 @@ function GenericExerciseCard({
   };
 
   const handleDeleteExercise = () => {
-    for (const segment of group.instances) deleteSegment.mutate(segment.id);
+    for (const segment of group.instances) deleteSegment.mutate({ id: segment.id, cacheKey });
   };
 
   const recordBadge = isRecord && (
@@ -843,12 +855,13 @@ function GenericExerciseCard({
               knownKeys={knownKeys}
               flavor={kmJourneyFlavor}
               onUpdateRep={handleUpdateRep}
-              onDeleteRep={(segment) => deleteSegment.mutate(segment.id)}
+              onDeleteRep={(segment) => deleteSegment.mutate({ id: segment.id, cacheKey })}
               onMoveUp={(segment) =>
                 reorderSegment.mutate({
                   segments: group.instances,
                   id: segment.id,
                   direction: "up",
+                  cacheKey,
                 })
               }
               onMoveDown={(segment) =>
@@ -856,6 +869,7 @@ function GenericExerciseCard({
                   segments: group.instances,
                   id: segment.id,
                   direction: "down",
+                  cacheKey,
                 })
               }
               onAddKm={handleAddRep}
@@ -874,12 +888,13 @@ function GenericExerciseCard({
                     isFirst={i === 0}
                     isLast={i === group.instances.length - 1}
                     onUpdate={(fields) => handleUpdateRep(segment, fields)}
-                    onDelete={() => deleteSegment.mutate(segment.id)}
+                    onDelete={() => deleteSegment.mutate({ id: segment.id, cacheKey })}
                     onMoveUp={() =>
                       reorderSegment.mutate({
                         segments: group.instances,
                         id: segment.id,
                         direction: "up",
+                        cacheKey,
                       })
                     }
                     onMoveDown={() =>
@@ -887,6 +902,7 @@ function GenericExerciseCard({
                         segments: group.instances,
                         id: segment.id,
                         direction: "down",
+                        cacheKey,
                       })
                     }
                   />

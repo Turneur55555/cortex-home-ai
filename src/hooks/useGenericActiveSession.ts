@@ -78,6 +78,13 @@ export type ActiveGenericSegment = {
    *  useFinishGenericActiveWorkout) — contrat du moteur (LiveSegmentRow /
    *  formatLiveSegment) inchangé (RA-1), le spread se fait après l'appel. */
   exerciseId: string | null;
+  /** Musculation hybride (2026-08-04) — additif : discipline PROPRE à ce
+   *  bloc (ex. "course"/"hyrox"), distincte de `ActiveGenericWorkout.discipline`
+   *  (qui reste "muscu" pour une séance hôte hybride, voir
+   *  useActiveWorkoutSegments ci-dessous). Absente/null pour tout segment
+   *  d'une séance générique classique — un seul discipline vaut alors pour
+   *  toute la séance, comportement 100% inchangé. */
+  discipline: DisciplineId | null;
 };
 
 export type ActiveGenericWorkout = {
@@ -89,6 +96,18 @@ export type ActiveGenericWorkout = {
 };
 
 const GENERIC_ACTIVE_KEY = ["fitness", "active_generic_workout"] as const;
+/** Musculation hybride (2026-08-04) — clé de cache DÉDIÉE des blocs d'une
+ *  séance muscu (voir useActiveWorkoutSegments), volontairement DISTINCTE
+ *  de `GENERIC_ACTIVE_KEY` : `SeancesTab.tsx` monte `useActiveGenericWorkout()`
+ *  (clé `GENERIC_ACTIVE_KEY`) EN PERMANENCE pour décider quelle vue de
+ *  séance active afficher — un cache partagé y ferait fuiter un faux
+ *  "workout générique actif" et basculerait l'écran par erreur pendant une
+ *  séance muscu. Les mutations de segment acceptent un `cacheKey` optionnel
+ *  (défaut `GENERIC_ACTIVE_KEY`, comportement 100% inchangé pour
+ *  ActiveGenericSessionView) pour cibler celle-ci à la place quand elles
+ *  sont invoquées pour un bloc muscu (voir ActiveWorkoutView.tsx /
+ *  ActiveExerciseCard.tsx `cacheKey` prop). */
+export const HYBRID_BLOCKS_KEY = ["fitness", "active_workout_segments"] as const;
 
 type SegmentRowDb = Tables<"workout_segments">;
 
@@ -101,6 +120,7 @@ function toActiveSegment(row: SegmentRowDb): ActiveGenericSegment {
     completed: row.completed,
     position: row.position,
     exerciseId: row.exercise_id ?? null,
+    discipline: (row.discipline as DisciplineId | null) ?? null,
   };
 }
 
@@ -144,6 +164,46 @@ export function useActiveGenericWorkout() {
         segments: (segments ?? []).map(toActiveSegment),
       };
     },
+  });
+}
+
+/** Musculation hybride (2026-08-04) — blocs métriques (course/cardio/HYROX/
+ *  autre) ajoutés à L'INTÉRIEUR d'une séance active Musculation. Mêmes
+ *  lignes `workout_segments` que toute discipline générique, mais rattachées
+ *  à un `workout_id` dont `discipline='muscu'` (voir ActiveWorkoutView.tsx) —
+ *  ce n'est PAS un troisième système de persistance, seulement une lecture
+ *  ciblée par id plutôt que par discipline (cf. useActiveGenericWorkout, qui
+ *  exclut explicitement muscu). Utilise sa propre clé de cache
+ *  (`HYBRID_BLOCKS_KEY`, voir plus bas) plutôt que `GENERIC_ACTIVE_KEY` :
+ *  `SeancesTab.tsx` monte `useActiveGenericWorkout()` EN PERMANENCE pour
+ *  décider quelle vue de séance active afficher — partager la clé y
+ *  ferait fuiter un faux "workout générique actif" pendant une séance
+ *  muscu et basculerait l'écran par erreur. Les mutations génériques
+ *  (`useAddGenericSegment` etc.) reçoivent explicitement `cacheKey:
+ *  HYBRID_BLOCKS_KEY` au point d'appel (ActiveWorkoutView.tsx,
+ *  ActiveExerciseCard.tsx) pour cibler la bonne entrée de cache. */
+export function useActiveWorkoutSegments(
+  workout: { id: string; discipline: DisciplineId } | null | undefined,
+) {
+  return useQuery({
+    queryKey: HYBRID_BLOCKS_KEY,
+    queryFn: async (): Promise<ActiveGenericWorkout | null> => {
+      if (!workout) return null;
+      const { data: segments, error } = await supabase
+        .from("workout_segments")
+        .select("*")
+        .eq("workout_id", workout.id)
+        .order("position", { ascending: true });
+      if (error) throw error;
+      return {
+        id: workout.id,
+        name: "",
+        discipline: workout.discipline,
+        created_at: new Date().toISOString(),
+        segments: (segments ?? []).map(toActiveSegment),
+      };
+    },
+    enabled: !!workout,
   });
 }
 
@@ -239,14 +299,16 @@ export function useStartGenericActiveWorkout() {
   });
 }
 
-/** Patch optimiste du cache de la séance active générique. */
+/** Patch optimiste du cache de la séance active générique (ou, musculation
+ *  hybride, du cache dédié `HYBRID_BLOCKS_KEY` — voir `cacheKey` ci-dessous). */
 function patchGenericActiveCache(
   qc: ReturnType<typeof useQueryClient>,
   updater: (w: ActiveGenericWorkout) => ActiveGenericWorkout,
+  cacheKey: readonly unknown[] = GENERIC_ACTIVE_KEY,
 ) {
-  const prev = qc.getQueryData<ActiveGenericWorkout | null>(GENERIC_ACTIVE_KEY);
+  const prev = qc.getQueryData<ActiveGenericWorkout | null>(cacheKey);
   if (!prev) return prev;
-  qc.setQueryData<ActiveGenericWorkout | null>(GENERIC_ACTIVE_KEY, updater(prev));
+  qc.setQueryData<ActiveGenericWorkout | null>(cacheKey, updater(prev));
   return prev;
 }
 
@@ -268,6 +330,8 @@ export function useAddGenericSegment() {
       metricKey?: string | null;
       position: number;
       discipline: DisciplineId;
+      /** Défaut GENERIC_ACTIVE_KEY — voir HYBRID_BLOCKS_KEY ci-dessus. */
+      cacheKey?: readonly unknown[];
     }) => {
       const {
         data: { user },
@@ -288,8 +352,8 @@ export function useAddGenericSegment() {
       if (error) throw error;
     },
     onError: (e: Error) => toast.error(e.message),
-    onSettled: () => {
-      qc.invalidateQueries({ queryKey: GENERIC_ACTIVE_KEY });
+    onSettled: (_d, _e, variables) => {
+      qc.invalidateQueries({ queryKey: variables?.cacheKey ?? GENERIC_ACTIVE_KEY });
     },
   });
 }
@@ -300,12 +364,15 @@ export function useUpdateGenericSegment() {
   return useMutation({
     mutationFn: async ({
       id,
+      cacheKey: _cacheKey,
       ...fields
     }: {
       id: string;
       label?: string;
       metrics?: Record<string, number | string>;
       completed?: boolean;
+      /** Défaut GENERIC_ACTIVE_KEY — voir HYBRID_BLOCKS_KEY ci-dessus. */
+      cacheKey?: readonly unknown[];
     }) => {
       if (Object.keys(fields).length === 0) return;
       const { error } = await supabase
@@ -318,24 +385,28 @@ export function useUpdateGenericSegment() {
         .eq("id", id);
       if (error) throw error;
     },
-    onMutate: async ({ id, ...fields }) => {
-      await qc.cancelQueries({ queryKey: GENERIC_ACTIVE_KEY });
-      const prev = patchGenericActiveCache(qc, (w) => ({
-        ...w,
-        segments: w.segments.map((seg) =>
-          seg.id === id
-            ? { ...seg, ...fields, metrics: { ...seg.metrics, ...(fields.metrics ?? {}) } }
-            : seg,
-        ),
-      }));
-      return { prev };
+    onMutate: async ({ id, cacheKey = GENERIC_ACTIVE_KEY, ...fields }) => {
+      await qc.cancelQueries({ queryKey: cacheKey });
+      const prev = patchGenericActiveCache(
+        qc,
+        (w) => ({
+          ...w,
+          segments: w.segments.map((seg) =>
+            seg.id === id
+              ? { ...seg, ...fields, metrics: { ...seg.metrics, ...(fields.metrics ?? {}) } }
+              : seg,
+          ),
+        }),
+        cacheKey,
+      );
+      return { prev, cacheKey };
     },
     onError: (e: Error, _v, ctx) => {
-      if (ctx?.prev) qc.setQueryData(GENERIC_ACTIVE_KEY, ctx.prev);
+      if (ctx?.prev) qc.setQueryData(ctx.cacheKey ?? GENERIC_ACTIVE_KEY, ctx.prev);
       toast.error(e.message);
     },
-    onSettled: () => {
-      qc.invalidateQueries({ queryKey: GENERIC_ACTIVE_KEY });
+    onSettled: (_d, _e, variables) => {
+      qc.invalidateQueries({ queryKey: variables?.cacheKey ?? GENERIC_ACTIVE_KEY });
     },
   });
 }
@@ -344,24 +415,34 @@ export function useUpdateGenericSegment() {
 export function useDeleteGenericSegment() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async (input: string | { id: string; cacheKey?: readonly unknown[] }) => {
+      const id = typeof input === "string" ? input : input.id;
       const { error } = await supabase.from("workout_segments").delete().eq("id", id);
       if (error) throw error;
     },
-    onMutate: async (id: string) => {
-      await qc.cancelQueries({ queryKey: GENERIC_ACTIVE_KEY });
-      const prev = patchGenericActiveCache(qc, (w) => ({
-        ...w,
-        segments: w.segments.filter((seg) => seg.id !== id),
-      }));
-      return { prev };
+    onMutate: async (input: string | { id: string; cacheKey?: readonly unknown[] }) => {
+      const id = typeof input === "string" ? input : input.id;
+      const cacheKey =
+        typeof input === "string" ? GENERIC_ACTIVE_KEY : (input.cacheKey ?? GENERIC_ACTIVE_KEY);
+      await qc.cancelQueries({ queryKey: cacheKey });
+      const prev = patchGenericActiveCache(
+        qc,
+        (w) => ({
+          ...w,
+          segments: w.segments.filter((seg) => seg.id !== id),
+        }),
+        cacheKey,
+      );
+      return { prev, cacheKey };
     },
     onError: (e: Error, _v, ctx) => {
-      if (ctx?.prev) qc.setQueryData(GENERIC_ACTIVE_KEY, ctx.prev);
+      if (ctx?.prev) qc.setQueryData(ctx.cacheKey ?? GENERIC_ACTIVE_KEY, ctx.prev);
       toast.error(e.message);
     },
-    onSettled: () => {
-      qc.invalidateQueries({ queryKey: GENERIC_ACTIVE_KEY });
+    onSettled: (_d, _e, input) => {
+      const cacheKey =
+        typeof input === "string" ? GENERIC_ACTIVE_KEY : (input?.cacheKey ?? GENERIC_ACTIVE_KEY);
+      qc.invalidateQueries({ queryKey: cacheKey });
     },
   });
 }
@@ -380,6 +461,8 @@ export function useReorderGenericSegment() {
       segments: ActiveGenericSegment[];
       id: string;
       direction: "up" | "down";
+      /** Défaut GENERIC_ACTIVE_KEY — voir HYBRID_BLOCKS_KEY ci-dessus. */
+      cacheKey?: readonly unknown[];
     }) => {
       const sorted = [...segments].sort((a, b) => a.position - b.position);
       const idx = sorted.findIndex((s) => s.id === id);
@@ -398,32 +481,36 @@ export function useReorderGenericSegment() {
         .eq("id", b.id);
       if (e2) throw e2;
     },
-    onMutate: async ({ segments, id, direction }) => {
-      await qc.cancelQueries({ queryKey: GENERIC_ACTIVE_KEY });
+    onMutate: async ({ segments, id, direction, cacheKey = GENERIC_ACTIVE_KEY }) => {
+      await qc.cancelQueries({ queryKey: cacheKey });
       const sorted = [...segments].sort((a, b) => a.position - b.position);
       const idx = sorted.findIndex((s) => s.id === id);
       const swapIdx = direction === "up" ? idx - 1 : idx + 1;
-      const prev = patchGenericActiveCache(qc, (w) => {
-        if (idx === -1 || swapIdx < 0 || swapIdx >= sorted.length) return w;
-        const a = sorted[idx];
-        const b = sorted[swapIdx];
-        return {
-          ...w,
-          segments: w.segments.map((seg) => {
-            if (seg.id === a.id) return { ...seg, position: b.position };
-            if (seg.id === b.id) return { ...seg, position: a.position };
-            return seg;
-          }),
-        };
-      });
-      return { prev };
+      const prev = patchGenericActiveCache(
+        qc,
+        (w) => {
+          if (idx === -1 || swapIdx < 0 || swapIdx >= sorted.length) return w;
+          const a = sorted[idx];
+          const b = sorted[swapIdx];
+          return {
+            ...w,
+            segments: w.segments.map((seg) => {
+              if (seg.id === a.id) return { ...seg, position: b.position };
+              if (seg.id === b.id) return { ...seg, position: a.position };
+              return seg;
+            }),
+          };
+        },
+        cacheKey,
+      );
+      return { prev, cacheKey };
     },
     onError: (e: Error, _v, ctx) => {
-      if (ctx?.prev) qc.setQueryData(GENERIC_ACTIVE_KEY, ctx.prev);
+      if (ctx?.prev) qc.setQueryData(ctx.cacheKey ?? GENERIC_ACTIVE_KEY, ctx.prev);
       toast.error(e.message);
     },
-    onSettled: () => {
-      qc.invalidateQueries({ queryKey: GENERIC_ACTIVE_KEY });
+    onSettled: (_d, _e, variables) => {
+      qc.invalidateQueries({ queryKey: variables?.cacheKey ?? GENERIC_ACTIVE_KEY });
     },
   });
 }

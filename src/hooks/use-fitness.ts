@@ -4,9 +4,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { logActivity } from "@/lib/activity";
 import { localDateYMD } from "@/lib/dates";
 import type { DisciplineId, SessionSegment } from "@/lib/fitness/engines/types";
+import { isReadyEngine } from "@/lib/fitness/engines/types";
+import { ENGINE_REGISTRY } from "@/lib/fitness/engines/registry";
 import { resolveExerciseId, resolveExerciseIdsByLabel } from "@/services/exerciseResolution";
 import { identityKey } from "@/lib/fitness/recentExercises";
 import { verifyExerciseRanksForSession } from "@/hooks/useVerifyExerciseRanksForSession";
+import type { ActiveGenericSegment } from "@/hooks/useGenericActiveSession";
 import {
   ACTIVE_WORKOUT_CONFLICT_MESSAGE,
   isActiveWorkoutConflict,
@@ -659,16 +662,69 @@ export function useStartWorkout() {
   });
 }
 
-/** Termine la séance active : calcule la durée et la sauvegarde. */
+/** Termine la séance active : calcule la durée et la sauvegarde.
+ *
+ *  Musculation hybride (2026-08-04) : `segments` (optionnel, blocs
+ *  course/cardio/HYROX/autre ajoutés à cette séance muscu — voir
+ *  useActiveWorkoutSegments) est resynchronisé dans `workouts.metadata`
+ *  exactement comme `useFinishGenericActiveWorkout` le fait pour une séance
+ *  générique — même pattern, chaque bloc reformaté via
+ *  `ENGINE_REGISTRY[bloc.discipline].formatLiveSegment()` (la discipline du
+ *  BLOC, pas celle de la séance hôte qui reste "muscu"). `metadata.sessionType`
+ *  ("hybrid" | absent) est une classification d'affichage pure — jamais lue
+ *  par le moteur de Rang, qui continue de ne lire que `exercises`/
+ *  `exercise_sets` (inchangé ci-dessous). */
 export function useFinishWorkout() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (workout: ActiveWorkout) => {
+    mutationFn: async (workout: ActiveWorkout & { segments?: ActiveGenericSegment[] }) => {
       const durationMs = Date.now() - new Date(workout.created_at).getTime();
       const durationMin = Math.min(600, Math.max(1, Math.round(durationMs / 60_000)));
+
+      const segments = workout.segments ?? [];
+      let metadataUpdate: Record<string, unknown> | undefined;
+      if (segments.length > 0) {
+        const { data: current, error: readErr } = await supabase
+          .from("workouts")
+          .select("metadata")
+          .eq("id", workout.id)
+          .single();
+        if (readErr) throw readErr;
+        const existingMetadata = (current?.metadata ?? {}) as Record<string, unknown>;
+
+        const formattedSegments = [...segments]
+          .sort((a, b) => a.position - b.position)
+          .map((seg) => {
+            const disciplineId = seg.discipline ?? "autre";
+            const entry = ENGINE_REGISTRY[disciplineId];
+            const engine = entry && isReadyEngine(entry) ? entry : null;
+            const formatted = engine?.formatLiveSegment
+              ? engine.formatLiveSegment({
+                  id: seg.id,
+                  label: seg.label,
+                  metrics: seg.metrics,
+                  metricKey: seg.metricKey,
+                  completed: seg.completed,
+                  position: seg.position,
+                })
+              : { label: seg.label, stats: [], metrics: seg.metrics };
+            return { ...formatted, exerciseId: seg.exerciseId };
+          });
+
+        metadataUpdate = {
+          ...existingMetadata,
+          segments: formattedSegments,
+          sessionType: "hybrid",
+        };
+      }
+
       const { error } = await supabase
         .from("workouts")
-        .update({ duration_minutes: durationMin, status: "completed" })
+        .update({
+          duration_minutes: durationMin,
+          status: "completed",
+          ...(metadataUpdate ? { metadata: metadataUpdate as never } : {}),
+        })
         .eq("id", workout.id);
       if (error) throw error;
 

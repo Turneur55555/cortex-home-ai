@@ -291,28 +291,34 @@ export function CoachSheet({
 
         {step === "discipline" && (
           <div className="grid grid-cols-2 gap-2">
-            {listEngines().map((e) => (
-              <button
-                key={e.id}
-                type="button"
-                disabled={e.comingSoon}
-                onClick={() => selectDiscipline(e.id)}
-                className={
-                  "flex flex-col items-center gap-2 rounded-xl border px-3 py-4 text-sm font-semibold transition-colors " +
-                  (e.comingSoon
-                    ? "cursor-not-allowed border-border bg-surface/50 text-muted-foreground/50"
-                    : `border-border bg-card text-foreground hover:border-primary/40 ${e.accentClassName}`)
-                }
-              >
-                <DisciplineIcon icon={e.icon} className="h-5 w-5" />
-                {e.label}
-                {e.comingSoon && (
-                  <span className="text-[10px] font-normal uppercase tracking-wider text-muted-foreground/70">
-                    Bientôt disponible
-                  </span>
-                )}
-              </button>
-            ))}
+            {/* Musculation hybride (2026-08-04) : HYROX n'est plus un point
+                d'entrée de création de séance (même règle que
+                NewSessionSheet) — son moteur reste lisible en historique,
+                ses postes s'ajoutent comme blocs dans une séance Musculation. */}
+            {listEngines()
+              .filter((e) => e.availableForNewSession !== false)
+              .map((e) => (
+                <button
+                  key={e.id}
+                  type="button"
+                  disabled={e.comingSoon}
+                  onClick={() => selectDiscipline(e.id)}
+                  className={
+                    "flex flex-col items-center gap-2 rounded-xl border px-3 py-4 text-sm font-semibold transition-colors " +
+                    (e.comingSoon
+                      ? "cursor-not-allowed border-border bg-surface/50 text-muted-foreground/50"
+                      : `border-border bg-card text-foreground hover:border-primary/40 ${e.accentClassName}`)
+                  }
+                >
+                  <DisciplineIcon icon={e.icon} className="h-5 w-5" />
+                  {e.label}
+                  {e.comingSoon && (
+                    <span className="text-[10px] font-normal uppercase tracking-wider text-muted-foreground/70">
+                      Bientôt disponible
+                    </span>
+                  )}
+                </button>
+              ))}
           </div>
         )}
 

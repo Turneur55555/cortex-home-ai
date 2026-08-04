@@ -81,9 +81,12 @@ export function NewSessionSheet({
   const [discipline, setDiscipline] = useState<DisciplineId | null>(null);
   const startBlankGeneric = useStartGenericActiveWorkout();
 
-  // Toute discipline non-comingSoon du registre — homogène, aucune liste
-  // codée en dur (A.2). Aujourd'hui les 6 existantes sont toutes prêtes.
-  const engines = listEngines().filter((e) => !e.comingSoon);
+  // Toute discipline non-comingSoon ET disponible comme point d'entrée du
+  // registre — homogène, aucune liste codée en dur (A.2). HYROX (2026-08-04)
+  // est le premier cas de `availableForNewSession: false` : son moteur reste
+  // prêt (historique inchangé), mais il ne se choisit plus ici — ses postes
+  // s'ajoutent comme blocs à l'intérieur d'une séance Musculation.
+  const engines = listEngines().filter((e) => !e.comingSoon && e.availableForNewSession !== false);
 
   const handleStartBlankGeneric = (id: DisciplineId) => {
     if (startBlankGeneric.isPending) return;

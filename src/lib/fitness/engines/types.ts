@@ -289,6 +289,17 @@ export interface EngineDescriptor {
    *  supportsLiveTracking=true DOIT fournir buildLiveSegments() et
    *  formatLiveSegment() (voir WorkoutEngine ci-dessous). */
   supportsLiveTracking?: boolean;
+  /** Musculation hybride (2026-08-04) — capacité déclarative plutôt qu'un
+   *  filtre codé en dur : par défaut absent/true, une discipline reste
+   *  proposée comme point d'entrée de "Nouvelle séance"/Sensei. HYROX passe
+   *  à false : son moteur, son historique et ses anciennes séances
+   *  (discipline: "hyrox") restent intacts et pleinement fonctionnels — seul
+   *  le CHOIX explicite "HYROX" disparaît des écrans de création, ses 9
+   *  postes étant désormais accessibles en tant que blocs à l'intérieur
+   *  d'une séance Musculation (voir StrengthWorkoutEngine). N'importe quel
+   *  autre moteur futur peut adopter false pour la même raison, sans
+   *  modification de ce contrat. */
+  availableForNewSession?: boolean;
 }
 
 export interface WorkoutEngine extends EngineDescriptor {

@@ -128,6 +128,21 @@ export function WorkoutCard({
   const modifyExIdRef = useRef<string>("");
 
   const groups = useMemo(() => buildGroups(w.exercises ?? []), [w.exercises]);
+  // Musculation hybride (2026-08-04) : blocs métriques (course/cardio/HYROX/
+  // autre) resynchronisés dans metadata.segments à la clôture (voir
+  // useFinishWorkout) — lecture seule ici, même format déjà utilisé par les
+  // autres disciplines (SessionSegment.stats déjà formaté texte). N'affiche
+  // rien pour toute séance muscu classique (metadata.segments absent).
+  const hybridSegments = useMemo(() => {
+    const metadata = w.metadata as { segments?: unknown } | null | undefined;
+    return Array.isArray(metadata?.segments)
+      ? (metadata!.segments as Array<{
+          label: string;
+          stats?: Array<{ label: string; value: string }>;
+        }>)
+      : [];
+  }, [w.metadata]);
+  const isHybrid = hybridSegments.length > 0;
   const gymLocation =
     ((w as unknown as { gym_location?: string | null }).gym_location ?? "Salle inconnue") ||
     "Salle inconnue";
@@ -313,6 +328,13 @@ export function WorkoutCard({
                 label={ENGINE_REGISTRY.muscu.label}
                 accentClassName={ENGINE_REGISTRY.muscu.accentClassName}
               />
+              {/* Musculation hybride (2026-08-04) — indication discrète,
+                  aucun changement de discipline persistée ("muscu" reste). */}
+              {isHybrid && (
+                <span className="inline-flex items-center rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[10px] font-semibold tracking-normal text-amber-400">
+                  Hybride
+                </span>
+              )}
             </p>
             <EditableText
               value={w.name}
@@ -642,6 +664,32 @@ export function WorkoutCard({
             })}
           </ul>
         </CollapsibleExercises>
+      )}
+
+      {/* Blocs hybrides (course/cardio/HYROX/autre) — lecture seule, même
+          principe que l'accordéon d'exercices ci-dessus mais sans édition
+          rétroactive (hors périmètre de cette itération). */}
+      {isHybrid && (
+        <div className="px-4 pb-4">
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/80">
+            Blocs
+          </p>
+          <ul className="space-y-2">
+            {hybridSegments.map((seg, i) => (
+              <li
+                key={`${seg.label}-${i}`}
+                className="rounded-2xl border border-white/5 bg-white/[0.03] p-3"
+              >
+                <p className="text-sm font-semibold">{seg.label}</p>
+                {(seg.stats ?? []).length > 0 && (
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {(seg.stats ?? []).map((s) => `${s.label} : ${s.value}`).join(" · ")}
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       {/* Ajouter un exercice */}

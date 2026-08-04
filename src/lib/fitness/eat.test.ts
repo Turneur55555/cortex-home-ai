@@ -225,6 +225,60 @@ describe("estimateSessionCalories — musculation : moteur basé sur les séries
   });
 });
 
+describe("estimateSessionCalories — musculation hybride (blocs course/cardio/HYROX ajoutés à une séance muscu)", () => {
+  it("ajoute la dépense des blocs à celle des séries, sans double comptage", () => {
+    const strengthOnly: WorkoutForEAT = {
+      date: TODAY,
+      discipline: "muscu",
+      duration_minutes: 60,
+      exercises: [{ exercise_sets: [{ reps: 10, weight: 50, completed: true }] }],
+    };
+    const hybrid: WorkoutForEAT = {
+      ...strengthOnly,
+      metadata: {
+        segments: [{ label: "Course", stats: [], metrics: { duration_s: 600 } }],
+      },
+    };
+    const strengthEstimate = estimateSessionCalories(strengthOnly, 70)!;
+    const hybridEstimate = estimateSessionCalories(hybrid, 70)!;
+    // Le bloc ajoute strictement sa propre dépense au-dessus de la part
+    // musculation — jamais moins (pas de remplacement), jamais le double
+    // (pas de recomptage de la durée totale de la séance).
+    expect(hybridEstimate.kcal).toBeGreaterThan(strengthEstimate.kcal);
+  });
+
+  it("ignore les blocs sans durée déclarée — jamais de chiffre inventé", () => {
+    const workout: WorkoutForEAT = {
+      date: TODAY,
+      discipline: "muscu",
+      duration_minutes: 60,
+      exercises: [{ exercise_sets: [{ reps: 10, weight: 50, completed: true }] }],
+      metadata: {
+        segments: [{ label: "Sled Push", stats: [], metrics: { charge_kg: 80, distance_m: 50 } }],
+      },
+    };
+    const withoutSegments: WorkoutForEAT = { ...workout, metadata: undefined };
+    expect(estimateSessionCalories(workout, 70)!.kcal).toBe(
+      estimateSessionCalories(withoutSegments, 70)!.kcal,
+    );
+  });
+
+  it("compte les blocs même sans aucune série musculation validée", () => {
+    const blocksOnly: WorkoutForEAT = {
+      date: TODAY,
+      discipline: "muscu",
+      duration_minutes: 30,
+      exercises: [],
+      metadata: {
+        segments: [{ label: "Course", stats: [], metrics: { duration_s: 900 } }],
+      },
+    };
+    const estimate = estimateSessionCalories(blocksOnly, 70);
+    expect(estimate).not.toBeNull();
+    expect(estimate!.kcal).toBeGreaterThan(0);
+  });
+});
+
 describe("computeDailyEAT", () => {
   it("returns 0 kcal when there is no session — never invents activity", () => {
     expect(computeDailyEAT(undefined, 70, TODAY)).toEqual({

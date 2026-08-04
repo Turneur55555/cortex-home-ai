@@ -310,6 +310,13 @@ export const HyroxWorkoutEngine: WorkoutEngine = {
   // Phase A (15/07/2026) : extension du live-tracking générique
   // (pilote Course, 09/07/2026) — voir sessionViewHelpers.ts.
   supportsLiveTracking: true,
+  // Musculation hybride (2026-08-04) : HYROX disparaît des écrans de
+  // création de nouvelle séance (NewSessionSheet, CoachSheet) — ses 9
+  // postes s'ajoutent désormais comme blocs à l'intérieur d'une séance
+  // Musculation. Le moteur reste intact : anciennes séances
+  // discipline="hyrox" toujours lisibles (historique/stats/détail
+  // inchangés), rien d'autre ne change ici.
+  availableForNewSession: false,
   questions: QUESTIONS,
 
   async generate(answers: SenseiAnswers, _context?: SenseiContext): Promise<WorkoutTemplate> {

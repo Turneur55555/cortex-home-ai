@@ -201,9 +201,15 @@ export function ExerciseCardPillButton({
 export function AddExerciseButton({
   onClick,
   disabled,
+  label = "Ajouter un exercice",
 }: {
   onClick: () => void;
   disabled?: boolean;
+  /** Additif (musculation hybride, 2026-08-04) : libellé personnalisable
+   *  pour les appelants qui ajoutent autre chose qu'un "exercice" (ex. un
+   *  bloc course/HYROX à l'intérieur d'une séance Musculation). Défaut
+   *  inchangé pour tout appelant existant. */
+  label?: string;
 }) {
   return (
     <button
@@ -213,7 +219,7 @@ export function AddExerciseButton({
       className="flex flex-1 items-center justify-center gap-2 rounded-2xl border border-dashed border-white/10 bg-white/[0.02] py-4 text-sm font-semibold text-primary transition-all active:scale-[0.99] hover:border-primary/40 hover:bg-primary/5 disabled:opacity-50"
     >
       {disabled ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-      Ajouter un exercice
+      {label}
     </button>
   );
 }

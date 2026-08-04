@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { BookOpen, CheckCircle2, Loader2, MoreVertical, XCircle } from "lucide-react";
+import { BookOpen, CheckCircle2, Layers, Loader2, MoreVertical, XCircle } from "lucide-react";
 import type { ActiveWorkout } from "@/hooks/use-fitness";
 import {
   useAddExerciseToActiveWorkout,
@@ -24,6 +24,22 @@ import { Portal } from "@/components/Portal";
 import { useUserExercisePhotos, resolveCustomExerciseMuscles } from "@/hooks/useUserExercisePhotos";
 import { useExerciseCatalogMedia } from "@/hooks/useExerciseCatalogEntry";
 import { useBodyMeasurements } from "@/hooks/useBodyTracking";
+// Musculation hybride (2026-08-04) — blocs métriques (course/cardio/HYROX/
+// autre) ajoutés à l'intérieur de la séance active Musculation. Réutilise
+// intégralement l'architecture de la séance active générique (workout_segments,
+// ActiveExerciseCard kind="generic", ExercisePickerSheet) — voir
+// useActiveWorkoutSegments (useGenericActiveSession.ts) pour le contrat de
+// partage de cache qui rend ceci possible sans dupliquer les mutations.
+import {
+  HYBRID_BLOCKS_KEY,
+  useActiveWorkoutSegments,
+  useAddGenericSegment,
+} from "@/hooks/useGenericActiveSession";
+import { groupByExerciseLabel } from "@/lib/fitness/segmentStats";
+import { listEngines } from "@/lib/fitness/engines/registry";
+import type { DisciplineId } from "@/lib/fitness/engines/types";
+import { DisciplineIcon } from "./session/DisciplineIcon";
+import { SegmentAnalysisSheet } from "./session/SegmentAnalysisSheet";
 
 const DEFAULT_BODYWEIGHT_KG = 75;
 
@@ -48,6 +64,46 @@ export function ActiveWorkoutView({
   const cancel = useCancelWorkout();
   const addExercise = useAddExerciseToActiveWorkout();
   const { data: allWorkouts } = useWorkouts();
+
+  // ── Musculation hybride : blocs métriques de CETTE séance ──────────────
+  const { data: hybridWorkout } = useActiveWorkoutSegments(
+    workout.id ? { id: workout.id, discipline: "muscu" } : null,
+  );
+  const addBlock = useAddGenericSegment();
+  const sortedBlocks = useMemo(
+    () => [...(hybridWorkout?.segments ?? [])].sort((a, b) => a.position - b.position),
+    [hybridWorkout],
+  );
+  const blockGroups = useMemo(() => groupByExerciseLabel(sortedBlocks), [sortedBlocks]);
+  // Postes/activités disponibles pour un bloc — TOUT moteur non-muscu prêt,
+  // HYROX inclus (availableForNewSession=false le retire seulement des
+  // écrans de CRÉATION de nouvelle séance, pas de cette liste : ses 9
+  // postes restent la façon officielle de composer un bloc HYROX ici).
+  const blockEngines = useMemo(
+    () => listEngines().filter((e) => !e.comingSoon && e.id !== "muscu"),
+    [],
+  );
+  const [blockDiscipline, setBlockDiscipline] = useState<DisciplineId>(
+    () => blockEngines[0]?.id ?? "autre",
+  );
+  const [blockPickerOpen, setBlockPickerOpen] = useState(false);
+  const [blockStats, setBlockStats] = useState<{ label: string; discipline: DisciplineId } | null>(
+    null,
+  );
+
+  const handlePickBlock = async (picked: PickedExercise) => {
+    setBlockPickerOpen(false);
+    const label = picked.name.trim();
+    if (!label) return;
+    await addBlock.mutateAsync({
+      workoutId: workout.id,
+      label,
+      metrics: {},
+      position: sortedBlocks.length,
+      discipline: blockDiscipline,
+      cacheKey: HYBRID_BLOCKS_KEY,
+    });
+  };
 
   const { data: userPhotos } = useUserExercisePhotos();
 
@@ -131,7 +187,7 @@ export function ActiveWorkoutView({
   const handleFinish = async () => {
     // Capture snapshot before invalidation
     const snapshot = workout;
-    await finish.mutateAsync(workout);
+    await finish.mutateAsync({ ...workout, segments: hybridWorkout?.segments ?? [] });
     // Analyse muscles des exercices personnalisés en arrière-plan (silent)
     const toResolve = (snapshot.exercises ?? []).map((ex) => ({
       id: ex.id,
@@ -306,6 +362,85 @@ export function ActiveWorkoutView({
           </button>
         )}
       </div>
+
+      {/* ── Blocs hybrides (course/cardio/HYROX/autre) ──────────────────────
+          Séance Musculation nativement hybride (2026-08-04) : force et
+          blocs métriques cohabitent dans la même séance, sans écran de
+          choix "Musculation / HYROX / Hybride" — l'utilisateur ajoute
+          simplement ce dont il a besoin. `discipline` reste "muscu" en
+          base (voir useFinishWorkout) ; chaque bloc porte SA propre
+          discipline (workout_segments.discipline), jamais lu par le
+          moteur de Rang (feedsRankEngine réservé à "muscu"/exercises). ── */}
+      {blockGroups.length > 0 && (
+        <div className="flex flex-col gap-3">
+          <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/80">
+            <Layers className="h-3.5 w-3.5" />
+            Blocs
+          </p>
+          {blockGroups.map((g) => {
+            const groupDiscipline: DisciplineId = g.instances[0]?.discipline ?? "autre";
+            return (
+              <ActiveExerciseCard
+                kind="generic"
+                key={g.key}
+                group={g}
+                workoutId={workout.id}
+                discipline={groupDiscipline}
+                nextPosition={sortedBlocks.length}
+                cacheKey={HYBRID_BLOCKS_KEY}
+                onOpenStats={(rawLabel) =>
+                  setBlockStats({ label: rawLabel, discipline: groupDiscipline })
+                }
+              />
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── Ajouter un bloc — même picker que la séance active générique,
+          discipline du bloc choisie juste avant (course/cardio/HYROX/autre). ── */}
+      <div className="flex flex-col gap-2">
+        <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+          {blockEngines.map((e) => (
+            <button
+              key={e.id}
+              type="button"
+              onClick={() => setBlockDiscipline(e.id)}
+              className={
+                "flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-semibold transition-colors " +
+                (blockDiscipline === e.id
+                  ? `border-primary/40 bg-primary/15 ${e.accentClassName}`
+                  : "border-border bg-surface text-muted-foreground hover:border-primary/30")
+              }
+            >
+              <DisciplineIcon icon={e.icon} className="h-3.5 w-3.5" />
+              {e.label}
+            </button>
+          ))}
+        </div>
+        <AddExerciseButton
+          label={`Ajouter un bloc ${blockEngines.find((e) => e.id === blockDiscipline)?.label ?? ""}`}
+          onClick={() => setBlockPickerOpen(true)}
+          disabled={addBlock.isPending}
+        />
+      </div>
+
+      {blockPickerOpen && (
+        <ExercisePickerSheet
+          discipline={blockDiscipline}
+          recentExercises={[]}
+          onSelect={handlePickBlock}
+          onClose={() => setBlockPickerOpen(false)}
+        />
+      )}
+
+      {blockStats && (
+        <SegmentAnalysisSheet
+          rawLabel={blockStats.label}
+          discipline={blockStats.discipline}
+          onClose={() => setBlockStats(null)}
+        />
+      )}
 
       {/* Exercise picker */}
       {pickerOpen && (

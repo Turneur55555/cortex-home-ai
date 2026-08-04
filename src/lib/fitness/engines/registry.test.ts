@@ -53,6 +53,21 @@ describe("ENGINE_REGISTRY", () => {
     }
   });
 
+  it("Musculation hybride (2026-08-04) : HYROX seul retiré des points d'entrée de nouvelle séance, son moteur reste intact", () => {
+    expect(ENGINE_REGISTRY.hyrox.availableForNewSession).toBe(false);
+    // Tout le reste du moteur HYROX est inchangé — historique/stats/détail
+    // des anciennes séances discipline="hyrox" continuent de fonctionner.
+    expect(ENGINE_REGISTRY.hyrox.comingSoon).toBe(false);
+    expect(typeof ENGINE_REGISTRY.hyrox.generate).toBe("function");
+    expect(typeof ENGINE_REGISTRY.hyrox.toWorkoutRecord).toBe("function");
+    expect(typeof ENGINE_REGISTRY.hyrox.toSessionView).toBe("function");
+    for (const entry of listEngines()) {
+      if (entry.id !== "hyrox") {
+        expect(entry.availableForNewSession).not.toBe(false);
+      }
+    }
+  });
+
   it("chaque moteur porte sa propre identité visuelle (icône + couleur d'accent) — Phase 7", () => {
     for (const entry of listEngines()) {
       expect(typeof entry.icon).toBe("string");
