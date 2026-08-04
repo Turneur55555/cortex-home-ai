@@ -248,28 +248,35 @@ const LOG_QUERIES = {
   // erreurs Postgres réelles existaient dans la fenêtre 24h (voir l'audit du
   // 04/08/2026). event_message reste sélectionné pour le filet de sécurité
   // texte de classifyPostgres(), au cas où ce schéma bouge encore.
-  postgres: `select id, timestamp, event_message,
+  // `limit 100` (pas 300/500) et `timestamp` qualifié par la table (pas
+  // bare) : alignés sur le format des requêtes par défaut du Log Explorer
+  // Supabase — constaté en conditions réelles le 04/08/2026 que des requêtes
+  // avec une limite plus haute échouaient systématiquement en "Backend
+  // error! Retry your query" côté ClickHouse, alors qu'une requête simple
+  // avec limit 100 (celle utilisée en interne par l'outil MCP get_logs)
+  // réussit de façon fiable sur le même projet, au même moment.
+  postgres: `select id, postgres_logs.timestamp, event_message,
   (metadata[1]).parsed[1].error_severity as error_severity
-from postgres_logs order by timestamp desc limit 300`,
-  api: `select id, timestamp, event_message,
+from postgres_logs order by timestamp desc limit 100`,
+  api: `select id, edge_logs.timestamp, event_message,
   (metadata[1]).request[1].path as path,
   (metadata[1]).response[1].status_code as status_code
-from edge_logs order by timestamp desc limit 500`,
-  'edge-function': `select id, timestamp, event_message,
+from edge_logs order by timestamp desc limit 100`,
+  'edge-function': `select id, function_edge_logs.timestamp, event_message,
   (metadata[1]).function_id as function_id,
   (metadata[1]).response[1].status_code as status_code
-from function_edge_logs order by timestamp desc limit 300`,
-  'edge-function-runtime': `select id, timestamp, event_message,
+from function_edge_logs order by timestamp desc limit 100`,
+  'edge-function-runtime': `select id, function_logs.timestamp, event_message,
   (metadata[1]).level as level,
   (metadata[1]).function_id as function_id
-from function_logs order by timestamp desc limit 300`,
-  auth: `select id, timestamp, event_message,
+from function_logs order by timestamp desc limit 100`,
+  auth: `select id, auth_logs.timestamp, event_message,
   (metadata[1]).level as level,
   (metadata[1]).status as status,
   (metadata[1]).error as error
-from auth_logs order by timestamp desc limit 300`,
-  storage: `select id, timestamp, event_message from storage_logs order by timestamp desc limit 300`,
-  realtime: `select id, timestamp, event_message from realtime_logs order by timestamp desc limit 300`,
+from auth_logs order by timestamp desc limit 100`,
+  storage: `select id, storage_logs.timestamp, event_message from storage_logs order by timestamp desc limit 100`,
+  realtime: `select id, realtime_logs.timestamp, event_message from realtime_logs order by timestamp desc limit 100`,
 };
 
 function extractRows(data) {
