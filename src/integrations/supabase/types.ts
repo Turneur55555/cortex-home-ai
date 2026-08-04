@@ -3836,9 +3836,11 @@ export type Database = {
           seasons: string[]
           secondary_colors: string[]
           size: string | null
+          sleeve_length: string | null
           storage_path: string
           subcategory: string | null
           updated_at: string
+          usage: string[]
           user_id: string
         }
         Insert: {
@@ -3858,9 +3860,11 @@ export type Database = {
           seasons?: string[]
           secondary_colors?: string[]
           size?: string | null
+          sleeve_length?: string | null
           storage_path: string
           subcategory?: string | null
           updated_at?: string
+          usage?: string[]
           user_id: string
         }
         Update: {
@@ -3880,9 +3884,11 @@ export type Database = {
           seasons?: string[]
           secondary_colors?: string[]
           size?: string | null
+          sleeve_length?: string | null
           storage_path?: string
           subcategory?: string | null
           updated_at?: string
+          usage?: string[]
           user_id?: string
         }
         Relationships: []
