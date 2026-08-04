@@ -329,6 +329,7 @@ export function SeancesTab({ initialChroniques }: SeancesTabProps = {}) {
           workout={activeGeneric}
           onFinished={(w) => {
             setAnalysisRequested(false);
+            setRecapOpen(false);
             setFinishedGenericSnapshot(w);
           }}
         />
@@ -348,6 +349,7 @@ export function SeancesTab({ initialChroniques }: SeancesTabProps = {}) {
           recoveryMap={recoveryMap}
           onFinished={(w) => {
             setAnalysisRequested(false);
+            setRecapOpen(false);
             setFinishedSnapshot(w);
           }}
           onOpenCatalog={() => setCatalogOpen(true)}
