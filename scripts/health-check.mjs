@@ -398,14 +398,21 @@ const MSG_ERROR_PATTERN =
   /\berror\b|denied|refused|violat|timeout|unauthoriz|forbidden|does not exist|no such|duplicate key|undefined column/i;
 
 // Postgres : `severity_text` (colonne de base ClickHouse, présente sur
-// toutes les sources) est la source principale ; le filet de sécurité texte
-// sur `event_message` reste en secours si ce champ venait à ne plus être
-// peuplé pour une raison quelconque, pour ne jamais reproduire le faux
-// négatif silencieux détecté le 04/08/2026 (ancienne syntaxe BigQuery
-// dépréciée renvoyant systématiquement une erreur backend générique).
+// toutes les sources) est la source de vérité — quand elle est peuplée, elle
+// seule décide, texte du message ou non (une instruction LOG qui *cite* "does
+// not exist" dans un commentaire de migration, par ex., ne doit jamais être
+// prise pour une vraie erreur : faux positif constaté le 04/08/2026). Le
+// filet de sécurité texte sur `event_message` n'intervient QUE si
+// severity_text est absent/vide pour cette ligne — jamais en plus d'une
+// sévérité déjà connue — pour ne pas reproduire le faux négatif silencieux
+// détecté plus tôt le 04/08/2026 (ancienne syntaxe BigQuery dépréciée
+// renvoyant systématiquement une erreur backend générique, sans que
+// severity_text soit alors peuplé du tout).
 function classifyPostgres(rows) {
-  const errors = rows.filter(
-    (r) => ['ERROR', 'FATAL', 'PANIC'].includes(r.severity_text) || MSG_ERROR_PATTERN.test(r.event_message || '')
+  const errors = rows.filter((r) =>
+    r.severity_text
+      ? ['ERROR', 'FATAL', 'PANIC'].includes(r.severity_text)
+      : MSG_ERROR_PATTERN.test(r.event_message || '')
   );
   if (!errors.length) return { ok: true };
 
@@ -428,7 +435,7 @@ function classifyPostgres(rows) {
 function classifyGenericErrorLog(rows, label) {
   const errors = rows.filter((r) => {
     const level = (r.severity_text || '').toString().toLowerCase();
-    if (level === 'error' || level === 'fatal') return true;
+    if (level) return level === 'error' || level === 'fatal';
     return MSG_ERROR_PATTERN.test(r.event_message || '');
   });
   if (!errors.length) return { ok: true };
