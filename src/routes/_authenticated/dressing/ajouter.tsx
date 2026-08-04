@@ -1,13 +1,18 @@
 import { useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { Camera, ChevronLeft, ImagePlus, X } from "lucide-react";
+import { Camera, ChevronLeft, ImagePlus, Loader2, Sparkles, TriangleAlert, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   WARDROBE_ADD_CATEGORIES,
+  buildWardrobePrefill,
+  useAnalyzeWardrobePhoto,
   useCreateWardrobeItem,
   validateWardrobePhotoFile,
   type WardrobeAddCategoryKey,
+  type WardrobeAnalysisResult,
 } from "@/hooks/useWardrobe";
+import { fileToBase64Compressed } from "@/lib/nutrition/utils";
+import type { Json } from "@/integrations/supabase/types";
 
 export const Route = createFileRoute("/_authenticated/dressing/ajouter")({
   head: () => ({
@@ -29,9 +34,12 @@ export const Route = createFileRoute("/_authenticated/dressing/ajouter")({
   component: AddWardrobeItemPage,
 });
 
+type AnalysisStatus = "idle" | "loading" | "done" | "error";
+
 function AddWardrobeItemPage() {
   const navigate = useNavigate();
   const createItem = useCreateWardrobeItem();
+  const analyzePhoto = useAnalyzeWardrobePhoto();
 
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -43,7 +51,47 @@ function AddWardrobeItemPage() {
   const [brand, setBrand] = useState("");
   const [color, setColor] = useState("");
 
+  const [analysisStatus, setAnalysisStatus] = useState<AnalysisStatus>("idle");
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [analysisResult, setAnalysisResult] = useState<WardrobeAnalysisResult | null>(null);
+  const [nameSuggested, setNameSuggested] = useState(false);
+  const [colorSuggested, setColorSuggested] = useState(false);
+
   const canSubmit = !!file && !!category && !createItem.isPending;
+
+  function resetAnalysisState() {
+    setAnalysisStatus("idle");
+    setAnalysisError(null);
+    setAnalysisResult(null);
+    setNameSuggested(false);
+    setColorSuggested(false);
+  }
+
+  async function runAnalysis(selected: File) {
+    setAnalysisStatus("loading");
+    setAnalysisError(null);
+    try {
+      const { b64, mime } = await fileToBase64Compressed(selected);
+      const analysis = await analyzePhoto.mutateAsync({ base64: b64, mime });
+      const prefill = buildWardrobePrefill(analysis);
+
+      if (prefill.category.value) setCategory(prefill.category.value);
+      if (prefill.name.value) {
+        setName(prefill.name.value);
+        setNameSuggested(prefill.name.suggested);
+      }
+      if (prefill.primaryColor.value) {
+        setColor(prefill.primaryColor.value);
+        setColorSuggested(prefill.primaryColor.suggested);
+      }
+
+      setAnalysisResult(analysis);
+      setAnalysisStatus("done");
+    } catch (err) {
+      setAnalysisStatus("error");
+      setAnalysisError(err instanceof Error ? err.message : "Analyse impossible.");
+    }
+  }
 
   function handlePick(selected: File | undefined) {
     if (!selected) return;
@@ -55,18 +103,36 @@ function AddWardrobeItemPage() {
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     setFile(selected);
     setPreviewUrl(URL.createObjectURL(selected));
+    resetAnalysisState();
+    void runAnalysis(selected);
   }
 
   function clearPhoto() {
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     setFile(null);
     setPreviewUrl(null);
+    resetAnalysisState();
   }
 
   function handleSubmit() {
     if (!file || !category) return;
     createItem.mutate(
-      { file, category, name, brand, primaryColor: color },
+      {
+        file,
+        category,
+        name,
+        brand,
+        primaryColor: color,
+        subcategory: analysisResult?.subcategory ?? null,
+        secondaryColors: analysisResult?.secondary_colors ?? [],
+        pattern: analysisResult?.pattern ?? null,
+        material: analysisResult?.material ?? null,
+        fit: analysisResult?.fit ?? null,
+        formality: analysisResult?.formality ?? null,
+        seasons: analysisResult?.seasons ?? [],
+        aiDescription: analysisResult?.description ?? null,
+        aiMetadata: analysisResult ? (JSON.parse(JSON.stringify(analysisResult)) as Json) : null,
+      },
       {
         onSuccess: () => {
           void navigate({ to: "/dressing" });
@@ -95,20 +161,55 @@ function AddWardrobeItemPage() {
             Photo
           </p>
           {previewUrl ? (
-            <div className="relative w-32">
-              <img
-                src={previewUrl}
-                alt="Aperçu de la pièce"
-                className="h-40 w-32 rounded-2xl border border-border object-cover"
-              />
-              <button
-                type="button"
-                onClick={clearPhoto}
-                aria-label="Retirer la photo"
-                className="absolute -right-2 -top-2 flex h-7 w-7 items-center justify-center rounded-full bg-destructive text-white shadow"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
+            <div className="flex items-start gap-3">
+              <div className="relative w-32 shrink-0">
+                <img
+                  src={previewUrl}
+                  alt="Aperçu de la pièce"
+                  className="h-40 w-32 rounded-2xl border border-border object-cover"
+                />
+                <button
+                  type="button"
+                  onClick={clearPhoto}
+                  aria-label="Retirer la photo"
+                  className="absolute -right-2 -top-2 flex h-7 w-7 items-center justify-center rounded-full bg-destructive text-white shadow"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+
+              <div className="flex-1 pt-1">
+                {analysisStatus === "loading" && (
+                  <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Cortex analyse ta pièce…
+                  </div>
+                )}
+                {analysisStatus === "error" && (
+                  <div className="space-y-2">
+                    <div className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                      <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
+                      <span>
+                        {analysisError ?? "Analyse impossible."} Tu peux compléter les informations
+                        manuellement.
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void runAnalysis(file!)}
+                      className="text-xs font-semibold text-primary"
+                    >
+                      Réessayer l'analyse
+                    </button>
+                  </div>
+                )}
+                {analysisStatus === "done" && analysisResult && (
+                  <div className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                    <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                    <span>Cortex propose : {analysisResult.description}</span>
+                  </div>
+                )}
+              </div>
             </div>
           ) : (
             <div className="flex gap-2">
@@ -173,13 +274,19 @@ function AddWardrobeItemPage() {
 
         {/* Champs facultatifs */}
         <div>
-          <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
             Nom
+            {nameSuggested && (
+              <span className="normal-case text-primary/80">· proposé par Cortex</span>
+            )}
           </label>
           <input
             type="text"
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(e) => {
+              setName(e.target.value);
+              setNameSuggested(false);
+            }}
             placeholder="T-shirt noir"
             className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-sm font-medium outline-none placeholder:text-muted-foreground/50 focus:border-primary"
           />
@@ -199,13 +306,19 @@ function AddWardrobeItemPage() {
         </div>
 
         <div>
-          <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
             Couleur
+            {colorSuggested && (
+              <span className="normal-case text-primary/80">· proposé par Cortex</span>
+            )}
           </label>
           <input
             type="text"
             value={color}
-            onChange={(e) => setColor(e.target.value)}
+            onChange={(e) => {
+              setColor(e.target.value);
+              setColorSuggested(false);
+            }}
             placeholder="Facultatif"
             className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-sm font-medium outline-none placeholder:text-muted-foreground/50 focus:border-primary"
           />

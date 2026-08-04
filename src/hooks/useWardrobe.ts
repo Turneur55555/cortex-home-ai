@@ -2,6 +2,7 @@ import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
+import type { Json } from "@/integrations/supabase/types";
 
 /** Catégories affichées dans l'UI du Dressing (aucun impact DB). */
 export const WARDROBE_FILTERS = [
@@ -167,6 +168,19 @@ export interface CreateWardrobeItemInput {
   name?: string;
   brand?: string;
   primaryColor?: string;
+  /** Métadonnées Phase 4 (Cortex Vision) — toujours facultatives, jamais requises. */
+  subcategory?: string | null;
+  secondaryColors?: string[];
+  pattern?: string | null;
+  material?: string | null;
+  fit?: string | null;
+  formality?: string | null;
+  seasons?: string[];
+  aiDescription?: string | null;
+  /** Réponse brute validée de l'analyse IA, conservée à titre de métadonnée
+   *  — jamais utilisée comme vérité fonctionnelle : ce sont les valeurs
+   *  ci-dessus (potentiellement corrigées par l'utilisateur) qui font foi. */
+  aiMetadata?: Json | null;
 }
 
 export function useCreateWardrobeItem() {
@@ -203,6 +217,15 @@ export function useCreateWardrobeItem() {
         name: input.name?.trim() || null,
         brand: input.brand?.trim() || null,
         primary_color: input.primaryColor?.trim() || null,
+        subcategory: input.subcategory ?? null,
+        secondary_colors: input.secondaryColors ?? [],
+        pattern: input.pattern ?? null,
+        material: input.material ?? null,
+        fit: input.fit ?? null,
+        formality: input.formality ?? null,
+        seasons: input.seasons ?? [],
+        ai_description: input.aiDescription ?? null,
+        ai_metadata: input.aiMetadata ?? {},
       });
 
       if (insertError) {
@@ -218,6 +241,138 @@ export function useCreateWardrobeItem() {
     },
     onError: (error: Error) => {
       toast.error(error.message || "Impossible d'ajouter cette pièce.");
+    },
+  });
+}
+
+// ─── Phase 4 — Analyse Cortex Vision (assistée, jamais obligatoire) ─────────
+
+/** Sous-ensemble de WardrobeAddCategoryKey correspondant aux valeurs DB retournées par l'IA. */
+const DB_TO_UI_CATEGORY: Record<string, WardrobeAddCategoryKey> = {
+  top: "tops",
+  bottom: "bottoms",
+  outerwear: "outerwear",
+  shoes: "shoes",
+  accessory: "accessories",
+};
+
+export interface WardrobeAnalysisResult {
+  category: string;
+  category_confidence: number;
+  subcategory: string | null;
+  subcategory_confidence: number;
+  primary_color: string | null;
+  primary_color_confidence: number;
+  secondary_colors: string[];
+  pattern: string | null;
+  pattern_confidence: number;
+  material: string | null;
+  material_confidence: number;
+  fit: string | null;
+  fit_confidence: number;
+  formality: string | null;
+  formality_confidence: number;
+  seasons: string[];
+  description: string;
+}
+
+/** Seuils de confiance (cf. Phase 4 §6) — jamais de préremplissage agressif sur une valeur incertaine. */
+export const WARDROBE_CONFIDENCE_HIGH = 0.75;
+export const WARDROBE_CONFIDENCE_MEDIUM = 0.4;
+
+export interface WardrobePrefillField<T> {
+  value: T | null;
+  /** true si la valeur vient de Cortex avec une confiance seulement moyenne — à signaler discrètement. */
+  suggested: boolean;
+}
+
+export interface WardrobePrefill {
+  category: WardrobePrefillField<WardrobeAddCategoryKey>;
+  name: WardrobePrefillField<string>;
+  primaryColor: WardrobePrefillField<string>;
+  description: string | null;
+}
+
+function capitalize(s: string): string {
+  return s.length > 0 ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+}
+
+/**
+ * Applique le seuillage de confiance à une analyse Cortex Vision validée pour
+ * en tirer une proposition de préremplissage du formulaire d'ajout.
+ * - confiance haute → préremplit normalement
+ * - confiance moyenne → préremplit mais marqué `suggested` (affichage discret)
+ * - confiance faible → laissé vide (`value: null`)
+ * Ne préremplit jamais `category` avec une valeur hors des clés UI connues.
+ */
+export function buildWardrobePrefill(analysis: WardrobeAnalysisResult): WardrobePrefill {
+  const field = <T>(value: T | null | undefined, confidence: number): WardrobePrefillField<T> => {
+    if (!value || confidence < WARDROBE_CONFIDENCE_MEDIUM) return { value: null, suggested: false };
+    return { value, suggested: confidence < WARDROBE_CONFIDENCE_HIGH };
+  };
+
+  const uiCategory = DB_TO_UI_CATEGORY[analysis.category];
+  const categoryField = field(uiCategory, analysis.category_confidence);
+  const colorField = field(
+    analysis.primary_color ? analysis.primary_color.toLowerCase() : null,
+    analysis.primary_color_confidence,
+  );
+  const subcategoryField = field(analysis.subcategory, analysis.subcategory_confidence);
+
+  const nameSuggestion =
+    subcategoryField.value && colorField.value
+      ? capitalize(`${subcategoryField.value} ${colorField.value}`)
+      : subcategoryField.value
+        ? capitalize(subcategoryField.value)
+        : null;
+
+  return {
+    category: categoryField,
+    name: nameSuggestion
+      ? { value: nameSuggestion, suggested: subcategoryField.suggested || colorField.suggested }
+      : { value: null, suggested: false },
+    primaryColor: colorField,
+    description: analysis.description?.trim() || null,
+  };
+}
+
+/**
+ * Extrait et valide côté client la réponse de l'Edge Function d'analyse.
+ * Lève une erreur explicite (jamais de crash silencieux) si le backend a
+ * renvoyé une erreur métier ou une charge utile invalide/incomplète — dans
+ * ce cas, l'appelant bascule sur le fallback manuel (cf. useAnalyzeWardrobePhoto).
+ */
+export function parseWardrobeAnalysisResponse(
+  data: unknown,
+  invokeError?: { message?: string } | null,
+): WardrobeAnalysisResult {
+  if (invokeError) throw new Error(invokeError.message || "Analyse impossible.");
+  const payload = data as
+    | { error?: string; analysis?: Partial<WardrobeAnalysisResult> }
+    | null
+    | undefined;
+  if (payload?.error) throw new Error(payload.error);
+  const analysis = payload?.analysis;
+  if (
+    !analysis ||
+    typeof analysis.category !== "string" ||
+    typeof analysis.description !== "string"
+  ) {
+    throw new Error("Analyse impossible.");
+  }
+  return analysis as WardrobeAnalysisResult;
+}
+
+export function useAnalyzeWardrobePhoto() {
+  return useMutation({
+    mutationFn: async (input: {
+      base64: string;
+      mime: string;
+    }): Promise<WardrobeAnalysisResult> => {
+      const { data, error } = await supabase.functions.invoke("analyze-wardrobe-item", {
+        body: { image_base64: input.base64, mime_type: input.mime },
+      });
+      return parseWardrobeAnalysisResponse(data, error);
     },
   });
 }
