@@ -1,6 +1,15 @@
 import { useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { Camera, ChevronLeft, ImagePlus, Loader2, Sparkles, TriangleAlert, X } from "lucide-react";
+import {
+  Camera,
+  ChevronDown,
+  ChevronLeft,
+  ImagePlus,
+  Loader2,
+  Sparkles,
+  TriangleAlert,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 import {
   WARDROBE_ADD_CATEGORIES,
@@ -11,6 +20,21 @@ import {
   type WardrobeAddCategoryKey,
   type WardrobeAnalysisResult,
 } from "@/hooks/useWardrobe";
+import {
+  WARDROBE_FIT_OPTIONS,
+  WARDROBE_PATTERN_OPTIONS,
+  WARDROBE_SLEEVE_LENGTH_OPTIONS,
+  WARDROBE_USAGE_OPTIONS,
+  findSubcategory,
+  getCharacteristicsConfig,
+  getSizeConfig,
+  getSubcategoriesForCategory,
+  hasAnyCharacteristic,
+  type WardrobeFit,
+  type WardrobePattern,
+  type WardrobeSleeveLength,
+  type WardrobeUsage,
+} from "@/lib/wardrobe/taxonomy";
 import { fileToBase64Compressed } from "@/lib/nutrition/utils";
 import type { Json } from "@/integrations/supabase/types";
 
@@ -35,6 +59,17 @@ export const Route = createFileRoute("/_authenticated/dressing/ajouter")({
 });
 
 type AnalysisStatus = "idle" | "loading" | "done" | "error";
+type SuggestedKey =
+  | "name"
+  | "color"
+  | "subcategory"
+  | "sleeveLength"
+  | "fit"
+  | "material"
+  | "pattern"
+  | "usage";
+
+const CUSTOM_SIZE_VALUE = "__custom__";
 
 function AddWardrobeItemPage() {
   const navigate = useNavigate();
@@ -46,25 +81,68 @@ function AddWardrobeItemPage() {
 
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  // Toujours visibles
   const [category, setCategory] = useState<WardrobeAddCategoryKey | null>(null);
+  const [subcategory, setSubcategory] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [brand, setBrand] = useState("");
+  const [size, setSize] = useState("");
+  const [isCustomSize, setIsCustomSize] = useState(false);
   const [color, setColor] = useState("");
+
+  // Caractéristiques (dépliant, dépend de la catégorie)
+  const [charOpen, setCharOpen] = useState(false);
+  const [sleeveLength, setSleeveLength] = useState<WardrobeSleeveLength | null>(null);
+  const [fit, setFit] = useState<WardrobeFit | null>(null);
+  const [material, setMaterial] = useState("");
+  const [pattern, setPattern] = useState<WardrobePattern | null>(null);
+  const [usage, setUsage] = useState<WardrobeUsage[]>([]);
+
+  // Champs conservés en arrière-plan pour le futur Outfit Engine, jamais affichés.
+  const [analysisResult, setAnalysisResult] = useState<WardrobeAnalysisResult | null>(null);
 
   const [analysisStatus, setAnalysisStatus] = useState<AnalysisStatus>("idle");
   const [analysisError, setAnalysisError] = useState<string | null>(null);
-  const [analysisResult, setAnalysisResult] = useState<WardrobeAnalysisResult | null>(null);
-  const [nameSuggested, setNameSuggested] = useState(false);
-  const [colorSuggested, setColorSuggested] = useState(false);
+  const [suggested, setSuggested] = useState<Partial<Record<SuggestedKey, boolean>>>({});
 
   const canSubmit = !!file && !!category && !createItem.isPending;
+  const characteristicsConfig = category ? getCharacteristicsConfig(category) : null;
+  const showCharacteristics =
+    !!characteristicsConfig && hasAnyCharacteristic(characteristicsConfig);
+  const sizeConfig = category ? getSizeConfig(category) : null;
+  const subcategoryOptions = category ? getSubcategoriesForCategory(category) : [];
+
+  function clearSuggested(key: SuggestedKey) {
+    setSuggested((prev) => ({ ...prev, [key]: false }));
+  }
 
   function resetAnalysisState() {
     setAnalysisStatus("idle");
     setAnalysisError(null);
     setAnalysisResult(null);
-    setNameSuggested(false);
-    setColorSuggested(false);
+    setSuggested({});
+  }
+
+  function handleCategoryChange(next: WardrobeAddCategoryKey) {
+    setCategory(next);
+    // Le type précis, la taille et les manches sont spécifiques à la catégorie.
+    setSubcategory(null);
+    setSize("");
+    setIsCustomSize(false);
+    setSleeveLength(null);
+    clearSuggested("subcategory");
+    clearSuggested("sleeveLength");
+  }
+
+  function handleSubcategoryChange(value: string) {
+    const next = value || null;
+    setSubcategory(next);
+    clearSuggested("subcategory");
+    const def = findSubcategory(next);
+    if (def?.defaultUsage?.length && usage.length === 0) {
+      setUsage(def.defaultUsage);
+    }
   }
 
   async function runAnalysis(selected: File) {
@@ -74,19 +152,61 @@ function AddWardrobeItemPage() {
       const { b64, mime } = await fileToBase64Compressed(selected);
       const analysis = await analyzePhoto.mutateAsync({ base64: b64, mime });
       const prefill = buildWardrobePrefill(analysis);
+      const nextSuggested: Partial<Record<SuggestedKey, boolean>> = {};
 
       if (prefill.category.value) setCategory(prefill.category.value);
+      if (prefill.subcategory.value) {
+        setSubcategory(prefill.subcategory.value);
+        nextSuggested.subcategory = prefill.subcategory.suggested;
+      }
       if (prefill.name.value) {
         setName(prefill.name.value);
-        setNameSuggested(prefill.name.suggested);
+        nextSuggested.name = prefill.name.suggested;
       }
       if (prefill.primaryColor.value) {
         setColor(prefill.primaryColor.value);
-        setColorSuggested(prefill.primaryColor.suggested);
+        nextSuggested.color = prefill.primaryColor.suggested;
+      }
+      if (prefill.sleeveLength.value) {
+        setSleeveLength(prefill.sleeveLength.value);
+        nextSuggested.sleeveLength = prefill.sleeveLength.suggested;
+      }
+      if (prefill.fit.value) {
+        setFit(prefill.fit.value);
+        nextSuggested.fit = prefill.fit.suggested;
+      }
+      if (prefill.material.value) {
+        setMaterial(prefill.material.value);
+        nextSuggested.material = prefill.material.suggested;
+      }
+      if (prefill.pattern.value) {
+        setPattern(prefill.pattern.value);
+        nextSuggested.pattern = prefill.pattern.suggested;
       }
 
+      let usageValue = prefill.usage.value;
+      if (usageValue) {
+        nextSuggested.usage = prefill.usage.suggested;
+      } else {
+        // Pas d'usage détecté par Cortex : on retombe sur la suggestion de
+        // la taxonomie si le type précis identifié est un maillot de bain.
+        const def = findSubcategory(prefill.subcategory.value);
+        if (def?.defaultUsage?.length) usageValue = def.defaultUsage;
+      }
+      if (usageValue) setUsage(usageValue);
+
+      setSuggested(nextSuggested);
       setAnalysisResult(analysis);
       setAnalysisStatus("done");
+      if (
+        prefill.sleeveLength.value ||
+        prefill.fit.value ||
+        prefill.material.value ||
+        prefill.pattern.value ||
+        usageValue
+      ) {
+        setCharOpen(true);
+      }
     } catch (err) {
       setAnalysisStatus("error");
       setAnalysisError(err instanceof Error ? err.message : "Analyse impossible.");
@@ -114,8 +234,14 @@ function AddWardrobeItemPage() {
     resetAnalysisState();
   }
 
+  function toggleUsage(value: WardrobeUsage) {
+    clearSuggested("usage");
+    setUsage((prev) => (prev.includes(value) ? prev.filter((u) => u !== value) : [...prev, value]));
+  }
+
   function handleSubmit() {
     if (!file || !category) return;
+    const config = getCharacteristicsConfig(category);
     createItem.mutate(
       {
         file,
@@ -123,11 +249,16 @@ function AddWardrobeItemPage() {
         name,
         brand,
         primaryColor: color,
-        subcategory: analysisResult?.subcategory ?? null,
+        subcategory,
+        size: size.trim() || undefined,
         secondaryColors: analysisResult?.secondary_colors ?? [],
-        pattern: analysisResult?.pattern ?? null,
-        material: analysisResult?.material ?? null,
-        fit: analysisResult?.fit ?? null,
+        sleeveLength: config.sleeveLength ? sleeveLength : null,
+        fit: config.fit ? fit : null,
+        material: config.material ? material.trim() || null : null,
+        pattern: config.pattern ? pattern : null,
+        usage: config.usage ? usage : [],
+        // Champs conservés en arrière-plan pour le futur Outfit Engine —
+        // jamais exposés dans ce formulaire.
         formality: analysisResult?.formality ?? null,
         seasons: analysisResult?.seasons ?? [],
         aiDescription: analysisResult?.description ?? null,
@@ -258,7 +389,7 @@ function AddWardrobeItemPage() {
                 <button
                   key={c.key}
                   type="button"
-                  onClick={() => setCategory(c.key)}
+                  onClick={() => handleCategoryChange(c.key)}
                   className={`rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors ${
                     active
                       ? "border-primary/40 bg-primary/15 text-primary"
@@ -272,11 +403,35 @@ function AddWardrobeItemPage() {
           </div>
         </div>
 
-        {/* Champs facultatifs */}
+        {/* Type précis */}
+        {category && (
+          <div>
+            <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Type précis
+              {suggested.subcategory && (
+                <span className="normal-case text-primary/80">· proposé par Cortex</span>
+              )}
+            </label>
+            <select
+              value={subcategory ?? ""}
+              onChange={(e) => handleSubcategoryChange(e.target.value)}
+              className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-sm font-medium outline-none focus:border-primary"
+            >
+              <option value="">Choisir…</option>
+              {subcategoryOptions.map((s) => (
+                <option key={s.value} value={s.value}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Nom */}
         <div>
           <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
             Nom
-            {nameSuggested && (
+            {suggested.name && (
               <span className="normal-case text-primary/80">· proposé par Cortex</span>
             )}
           </label>
@@ -285,13 +440,14 @@ function AddWardrobeItemPage() {
             value={name}
             onChange={(e) => {
               setName(e.target.value);
-              setNameSuggested(false);
+              clearSuggested("name");
             }}
             placeholder="T-shirt noir"
             className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-sm font-medium outline-none placeholder:text-muted-foreground/50 focus:border-primary"
           />
         </div>
 
+        {/* Marque */}
         <div>
           <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
             Marque
@@ -305,10 +461,50 @@ function AddWardrobeItemPage() {
           />
         </div>
 
+        {/* Taille — adaptative selon la catégorie */}
+        {category && sizeConfig && (
+          <div>
+            <label className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Taille
+            </label>
+            <select
+              value={isCustomSize ? CUSTOM_SIZE_VALUE : size}
+              onChange={(e) => {
+                if (e.target.value === CUSTOM_SIZE_VALUE) {
+                  setIsCustomSize(true);
+                  setSize("");
+                } else {
+                  setIsCustomSize(false);
+                  setSize(e.target.value);
+                }
+              }}
+              className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-sm font-medium outline-none focus:border-primary"
+            >
+              <option value="">Facultatif</option>
+              {sizeConfig.options.map((o) => (
+                <option key={o} value={o}>
+                  {o}
+                </option>
+              ))}
+              <option value={CUSTOM_SIZE_VALUE}>Personnalisée…</option>
+            </select>
+            {isCustomSize && (
+              <input
+                type="text"
+                value={size}
+                onChange={(e) => setSize(e.target.value)}
+                placeholder="Ex: 44 long"
+                className="mt-2 w-full rounded-xl border border-border bg-surface px-4 py-3 text-sm font-medium outline-none placeholder:text-muted-foreground/50 focus:border-primary"
+              />
+            )}
+          </div>
+        )}
+
+        {/* Couleur principale */}
         <div>
           <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
             Couleur
-            {colorSuggested && (
+            {suggested.color && (
               <span className="normal-case text-primary/80">· proposé par Cortex</span>
             )}
           </label>
@@ -317,12 +513,182 @@ function AddWardrobeItemPage() {
             value={color}
             onChange={(e) => {
               setColor(e.target.value);
-              setColorSuggested(false);
+              clearSuggested("color");
             }}
             placeholder="Facultatif"
             className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-sm font-medium outline-none placeholder:text-muted-foreground/50 focus:border-primary"
           />
         </div>
+
+        {/* Caractéristiques — dépliant, champs pilotés par la taxonomie */}
+        {showCharacteristics && characteristicsConfig && (
+          <div className="rounded-2xl border border-border bg-card/40">
+            <button
+              type="button"
+              onClick={() => setCharOpen((v) => !v)}
+              className="flex w-full items-center justify-between px-4 py-3.5 text-sm font-semibold"
+            >
+              Caractéristiques
+              <ChevronDown
+                className={`h-4 w-4 text-muted-foreground transition-transform ${charOpen ? "rotate-180" : ""}`}
+              />
+            </button>
+
+            {charOpen && (
+              <div className="space-y-4 border-t border-border px-4 py-4">
+                {characteristicsConfig.sleeveLength && (
+                  <div>
+                    <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Manches
+                      {suggested.sleeveLength && (
+                        <span className="normal-case text-primary/80">· proposé par Cortex</span>
+                      )}
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {WARDROBE_SLEEVE_LENGTH_OPTIONS.map((o) => {
+                        const active = sleeveLength === o.value;
+                        return (
+                          <button
+                            key={o.value}
+                            type="button"
+                            onClick={() => {
+                              setSleeveLength(o.value);
+                              clearSuggested("sleeveLength");
+                            }}
+                            className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                              active
+                                ? "border-primary/40 bg-primary/15 text-primary"
+                                : "border-border bg-card text-muted-foreground"
+                            }`}
+                          >
+                            {o.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {characteristicsConfig.fit && (
+                  <div>
+                    <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Coupe
+                      {suggested.fit && (
+                        <span className="normal-case text-primary/80">· proposé par Cortex</span>
+                      )}
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {WARDROBE_FIT_OPTIONS.map((o) => {
+                        const active = fit === o.value;
+                        return (
+                          <button
+                            key={o.value}
+                            type="button"
+                            onClick={() => {
+                              setFit(o.value);
+                              clearSuggested("fit");
+                            }}
+                            className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                              active
+                                ? "border-primary/40 bg-primary/15 text-primary"
+                                : "border-border bg-card text-muted-foreground"
+                            }`}
+                          >
+                            {o.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {characteristicsConfig.material && (
+                  <div>
+                    <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Matière
+                      {suggested.material && (
+                        <span className="normal-case text-primary/80">· estimation Cortex</span>
+                      )}
+                    </label>
+                    <input
+                      type="text"
+                      value={material}
+                      onChange={(e) => {
+                        setMaterial(e.target.value);
+                        clearSuggested("material");
+                      }}
+                      placeholder="Coton, laine, denim…"
+                      className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-sm font-medium outline-none placeholder:text-muted-foreground/50 focus:border-primary"
+                    />
+                  </div>
+                )}
+
+                {characteristicsConfig.pattern && (
+                  <div>
+                    <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Motif
+                      {suggested.pattern && (
+                        <span className="normal-case text-primary/80">· proposé par Cortex</span>
+                      )}
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {WARDROBE_PATTERN_OPTIONS.map((o) => {
+                        const active = pattern === o.value;
+                        return (
+                          <button
+                            key={o.value}
+                            type="button"
+                            onClick={() => {
+                              setPattern(o.value);
+                              clearSuggested("pattern");
+                            }}
+                            className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                              active
+                                ? "border-primary/40 bg-primary/15 text-primary"
+                                : "border-border bg-card text-muted-foreground"
+                            }`}
+                          >
+                            {o.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {characteristicsConfig.usage && (
+                  <div>
+                    <label className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Usage
+                      {suggested.usage && (
+                        <span className="normal-case text-primary/80">· proposé par Cortex</span>
+                      )}
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {WARDROBE_USAGE_OPTIONS.map((o) => {
+                        const active = usage.includes(o.value);
+                        return (
+                          <button
+                            key={o.value}
+                            type="button"
+                            onClick={() => toggleUsage(o.value)}
+                            className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                              active
+                                ? "border-primary/40 bg-primary/15 text-primary"
+                                : "border-border bg-card text-muted-foreground"
+                            }`}
+                          >
+                            {o.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </section>
 
       <button

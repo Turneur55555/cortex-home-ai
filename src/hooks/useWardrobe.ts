@@ -3,6 +3,18 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import type { Json } from "@/integrations/supabase/types";
+import {
+  WARDROBE_DB_CATEGORY_BY_UI,
+  WARDROBE_FIT_OPTIONS,
+  WARDROBE_PATTERN_OPTIONS,
+  WARDROBE_UI_CATEGORY_BY_DB,
+  WARDROBE_USAGE_OPTIONS,
+  findSubcategory,
+  type WardrobeFit,
+  type WardrobePattern,
+  type WardrobeSleeveLength,
+  type WardrobeUsage,
+} from "@/lib/wardrobe/taxonomy";
 
 /** Catégories affichées dans l'UI du Dressing (aucun impact DB). */
 export const WARDROBE_FILTERS = [
@@ -99,14 +111,10 @@ export function toUiCategory(raw: string | null | undefined): WardrobeCategory {
 
 export type WardrobeAddCategoryKey = Exclude<WardrobeFilterKey, "all">;
 
-/** Valeurs réelles acceptées par la contrainte `wardrobe_items.category` en base. */
-export const WARDROBE_DB_CATEGORY: Record<WardrobeAddCategoryKey, string> = {
-  tops: "top",
-  bottoms: "bottom",
-  outerwear: "outerwear",
-  shoes: "shoes",
-  accessories: "accessory",
-};
+/** Valeurs réelles acceptées par la contrainte `wardrobe_items.category` en base.
+ *  Source de vérité : src/lib/wardrobe/taxonomy.ts. */
+export const WARDROBE_DB_CATEGORY: Record<WardrobeAddCategoryKey, string> =
+  WARDROBE_DB_CATEGORY_BY_UI;
 
 /** Options affichées dans le formulaire d'ajout (label FR + valeur DB associée). */
 export const WARDROBE_ADD_CATEGORIES: Array<{
@@ -168,6 +176,8 @@ export interface CreateWardrobeItemInput {
   name?: string;
   brand?: string;
   primaryColor?: string;
+  /** Taille — jamais proposée par Cortex Vision, toujours saisie par l'utilisateur. */
+  size?: string;
   /** Métadonnées Phase 4 (Cortex Vision) — toujours facultatives, jamais requises. */
   subcategory?: string | null;
   secondaryColors?: string[];
@@ -176,6 +186,8 @@ export interface CreateWardrobeItemInput {
   fit?: string | null;
   formality?: string | null;
   seasons?: string[];
+  sleeveLength?: string | null;
+  usage?: string[];
   aiDescription?: string | null;
   /** Réponse brute validée de l'analyse IA, conservée à titre de métadonnée
    *  — jamais utilisée comme vérité fonctionnelle : ce sont les valeurs
@@ -217,6 +229,7 @@ export function useCreateWardrobeItem() {
         name: input.name?.trim() || null,
         brand: input.brand?.trim() || null,
         primary_color: input.primaryColor?.trim() || null,
+        size: input.size?.trim() || null,
         subcategory: input.subcategory ?? null,
         secondary_colors: input.secondaryColors ?? [],
         pattern: input.pattern ?? null,
@@ -224,6 +237,8 @@ export function useCreateWardrobeItem() {
         fit: input.fit ?? null,
         formality: input.formality ?? null,
         seasons: input.seasons ?? [],
+        sleeve_length: input.sleeveLength ?? null,
+        usage: input.usage ?? [],
         ai_description: input.aiDescription ?? null,
         ai_metadata: input.aiMetadata ?? {},
       });
@@ -247,15 +262,6 @@ export function useCreateWardrobeItem() {
 
 // ─── Phase 4 — Analyse Cortex Vision (assistée, jamais obligatoire) ─────────
 
-/** Sous-ensemble de WardrobeAddCategoryKey correspondant aux valeurs DB retournées par l'IA. */
-const DB_TO_UI_CATEGORY: Record<string, WardrobeAddCategoryKey> = {
-  top: "tops",
-  bottom: "bottoms",
-  outerwear: "outerwear",
-  shoes: "shoes",
-  accessory: "accessories",
-};
-
 export interface WardrobeAnalysisResult {
   category: string;
   category_confidence: number;
@@ -273,7 +279,62 @@ export interface WardrobeAnalysisResult {
   formality: string | null;
   formality_confidence: number;
   seasons: string[];
+  sleeve_length: string | null;
+  sleeve_length_confidence: number;
+  usage: string[];
+  usage_confidence: number;
   description: string;
+}
+
+/**
+ * Vocabulaire couleur canonique — partagé entre `primary_color` et la
+ * détection dans `description`, entrées multi-mots en premier pour que la
+ * recherche par sous-chaîne matche la variante la plus spécifique
+ * (ex: "gris foncé" avant "gris").
+ */
+const COLOR_ENUM = [
+  "gris foncé",
+  "gris clair",
+  "bleu marine",
+  "bleu clair",
+  "noir",
+  "blanc",
+  "gris",
+  "bleu",
+  "beige",
+  "marron",
+  "vert",
+  "rouge",
+  "jaune",
+  "orange",
+  "rose",
+  "violet",
+  "bordeaux",
+] as const;
+
+/**
+ * Corrige l'incohérence observée en test réel : l'IA peut renvoyer un
+ * `description` textuel ("Short gris foncé uni.") qui ne correspond pas au
+ * champ structuré `primary_color` ("noir") — les deux sont générés dans le
+ * même appel mais rien ne garantit leur cohérence lexicale. On fait
+ * confiance à la couleur explicitement mentionnée dans la description
+ * (c'est elle que l'utilisateur lit) et on baisse la confiance associée
+ * puisqu'une correction a été nécessaire.
+ */
+export function reconcileWardrobeColor(analysis: WardrobeAnalysisResult): WardrobeAnalysisResult {
+  if (!analysis.description) return analysis;
+  const normalizedDescription = normalize(analysis.description);
+  const mentioned = COLOR_ENUM.find((c) => normalizedDescription.includes(normalize(c)));
+  if (!mentioned) return analysis;
+
+  const currentColor = analysis.primary_color ? normalize(analysis.primary_color) : null;
+  if (currentColor === normalize(mentioned)) return analysis;
+
+  return {
+    ...analysis,
+    primary_color: mentioned,
+    primary_color_confidence: Math.min(analysis.primary_color_confidence, 0.6),
+  };
 }
 
 /** Seuils de confiance (cf. Phase 4 §6) — jamais de préremplissage agressif sur une valeur incertaine. */
@@ -288,8 +349,14 @@ export interface WardrobePrefillField<T> {
 
 export interface WardrobePrefill {
   category: WardrobePrefillField<WardrobeAddCategoryKey>;
+  subcategory: WardrobePrefillField<string>;
   name: WardrobePrefillField<string>;
   primaryColor: WardrobePrefillField<string>;
+  sleeveLength: WardrobePrefillField<WardrobeSleeveLength>;
+  fit: WardrobePrefillField<WardrobeFit>;
+  material: WardrobePrefillField<string>;
+  pattern: WardrobePrefillField<WardrobePattern>;
+  usage: WardrobePrefillField<WardrobeUsage[]>;
   description: string | null;
 }
 
@@ -305,33 +372,75 @@ function capitalize(s: string): string {
  * - confiance faible → laissé vide (`value: null`)
  * Ne préremplit jamais `category` avec une valeur hors des clés UI connues.
  */
-export function buildWardrobePrefill(analysis: WardrobeAnalysisResult): WardrobePrefill {
+export function buildWardrobePrefill(rawAnalysis: WardrobeAnalysisResult): WardrobePrefill {
+  const analysis = reconcileWardrobeColor(rawAnalysis);
+
   const field = <T>(value: T | null | undefined, confidence: number): WardrobePrefillField<T> => {
     if (!value || confidence < WARDROBE_CONFIDENCE_MEDIUM) return { value: null, suggested: false };
     return { value, suggested: confidence < WARDROBE_CONFIDENCE_HIGH };
   };
 
-  const uiCategory = DB_TO_UI_CATEGORY[analysis.category];
+  const uiCategory = WARDROBE_UI_CATEGORY_BY_DB[analysis.category];
   const categoryField = field(uiCategory, analysis.category_confidence);
   const colorField = field(
     analysis.primary_color ? analysis.primary_color.toLowerCase() : null,
     analysis.primary_color_confidence,
   );
-  const subcategoryField = field(analysis.subcategory, analysis.subcategory_confidence);
+  const subcategoryDef = findSubcategory(analysis.subcategory);
+  const subcategoryField = field(
+    subcategoryDef ? subcategoryDef.value : null,
+    analysis.subcategory_confidence,
+  );
 
-  const nameSuggestion =
-    subcategoryField.value && colorField.value
-      ? capitalize(`${subcategoryField.value} ${colorField.value}`)
-      : subcategoryField.value
-        ? capitalize(subcategoryField.value)
-        : null;
+  const validEnum = <T extends string>(
+    value: string | null,
+    options: Array<{ value: T }>,
+  ): T | null => (value && options.some((o) => o.value === value) ? (value as T) : null);
+
+  const sleeveLengthField = field(
+    validEnum<WardrobeSleeveLength>(analysis.sleeve_length, [
+      { value: "sans_manches" },
+      { value: "courtes" },
+      { value: "longues" },
+    ]),
+    analysis.sleeve_length_confidence,
+  );
+  const fitField = field(
+    validEnum<WardrobeFit>(analysis.fit, WARDROBE_FIT_OPTIONS),
+    analysis.fit_confidence,
+  );
+  const materialField = field(analysis.material, analysis.material_confidence);
+  const patternField = field(
+    validEnum<WardrobePattern>(analysis.pattern, WARDROBE_PATTERN_OPTIONS),
+    analysis.pattern_confidence,
+  );
+
+  const validUsage = analysis.usage.filter((u): u is WardrobeUsage =>
+    WARDROBE_USAGE_OPTIONS.some((o) => o.value === u),
+  );
+  const usageField: WardrobePrefillField<WardrobeUsage[]> =
+    validUsage.length > 0 && analysis.usage_confidence >= WARDROBE_CONFIDENCE_MEDIUM
+      ? { value: validUsage, suggested: analysis.usage_confidence < WARDROBE_CONFIDENCE_HIGH }
+      : { value: null, suggested: false };
+
+  const nameSuggestion = subcategoryDef
+    ? colorField.value
+      ? capitalize(`${subcategoryDef.label} ${colorField.value}`)
+      : capitalize(subcategoryDef.label)
+    : null;
 
   return {
     category: categoryField,
+    subcategory: subcategoryField,
     name: nameSuggestion
       ? { value: nameSuggestion, suggested: subcategoryField.suggested || colorField.suggested }
       : { value: null, suggested: false },
     primaryColor: colorField,
+    sleeveLength: sleeveLengthField,
+    fit: fitField,
+    material: materialField,
+    pattern: patternField,
+    usage: usageField,
     description: analysis.description?.trim() || null,
   };
 }
@@ -360,7 +469,31 @@ export function parseWardrobeAnalysisResponse(
   ) {
     throw new Error("Analyse impossible.");
   }
-  return analysis as WardrobeAnalysisResult;
+
+  const normalized: WardrobeAnalysisResult = {
+    category: analysis.category,
+    category_confidence: analysis.category_confidence ?? 0,
+    subcategory: analysis.subcategory ?? null,
+    subcategory_confidence: analysis.subcategory_confidence ?? 0,
+    primary_color: analysis.primary_color ?? null,
+    primary_color_confidence: analysis.primary_color_confidence ?? 0,
+    secondary_colors: analysis.secondary_colors ?? [],
+    pattern: analysis.pattern ?? null,
+    pattern_confidence: analysis.pattern_confidence ?? 0,
+    material: analysis.material ?? null,
+    material_confidence: analysis.material_confidence ?? 0,
+    fit: analysis.fit ?? null,
+    fit_confidence: analysis.fit_confidence ?? 0,
+    formality: analysis.formality ?? null,
+    formality_confidence: analysis.formality_confidence ?? 0,
+    seasons: analysis.seasons ?? [],
+    sleeve_length: analysis.sleeve_length ?? null,
+    sleeve_length_confidence: analysis.sleeve_length_confidence ?? 0,
+    usage: analysis.usage ?? [],
+    usage_confidence: analysis.usage_confidence ?? 0,
+    description: analysis.description,
+  };
+  return reconcileWardrobeColor(normalized);
 }
 
 export function useAnalyzeWardrobePhoto() {
