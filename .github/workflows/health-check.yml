@@ -1,0 +1,106 @@
+name: Health Check quotidien
+
+# Surveillance automatique et en lecture seule du projet (build, TypeScript,
+# migrations) et du backend Supabase (statut, Edge Functions, base de
+# données, advisors sécurité/performance, logs des dernières 24h).
+#
+# Ce workflow ne modifie JAMAIS le projet : aucun `db push`, aucun déploiement,
+# aucune migration, aucun commit, aucune PR. Uniquement du diagnostic. Toute
+# la logique de rapport et de sévérité vit dans `scripts/health-check.mjs`
+# (source de vérité unique) ; ce fichier ne fait qu'exécuter les checks
+# "projet" (build/typecheck/lint) puis appeler ce script pour le reste.
+#
+# GitHub Actions ne supporte pas les fuseaux horaires dans `cron` : deux
+# horaires UTC couvrent CEST (été, UTC+2) et CET (hiver, UTC+1), et l'étape
+# "Vérifier l'heure Paris" ignore le run qui ne correspond pas à 08:00 réel
+# heure de Paris (le déclenchement manuel n'est jamais filtré).
+
+on:
+  schedule:
+    - cron: '0 6 * * *' # 08:00 Europe/Paris en heure d'été (CEST, UTC+2)
+    - cron: '0 7 * * *' # 08:00 Europe/Paris en heure d'hiver (CET, UTC+1)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  health-check:
+    name: Health Check
+    runs-on: ubuntu-latest
+
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+
+    steps:
+      - name: Vérifier l'heure Paris (ignore le cron hors 08:00 réel)
+        id: gate
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          HOUR=$(TZ=Europe/Paris date +%H)
+          if [ "$HOUR" = "08" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "Hors créneau 08:00 Europe/Paris (il est ${HOUR}h) — run ignoré, l'autre cron prendra le relais."
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.run == 'true'
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.run == 'true'
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Installer les dépendances
+        if: steps.gate.outputs.run == 'true'
+        run: npm ci
+
+      # ── Vérifications "Projet" ──────────────────────────────────────────
+      - name: Build
+        if: steps.gate.outputs.run == 'true'
+        id: build
+        continue-on-error: true
+        run: npm run build
+
+      - name: TypeScript
+        if: steps.gate.outputs.run == 'true'
+        id: typecheck
+        continue-on-error: true
+        run: npm run typecheck
+
+      - name: Lint
+        if: steps.gate.outputs.run == 'true'
+        id: lint
+        continue-on-error: true
+        run: npm run lint
+
+      # ── Vérifications "Supabase" ────────────────────────────────────────
+      - uses: supabase/setup-cli@v1
+        if: steps.gate.outputs.run == 'true'
+        with:
+          # Épinglé (au lieu de "latest") — même correctif que les autres
+          # workflows Supabase du dépôt : la résolution de "latest" appelle
+          # l'API GitHub (rate-limitable), une version fixe télécharge
+          # directement l'asset.
+          version: '2.109.1'
+
+      - name: Link Supabase project
+        if: steps.gate.outputs.run == 'true'
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Health Check complet (Supabase + rapport final)
+        if: steps.gate.outputs.run == 'true'
+        env:
+          BUILD_STATUS: ${{ steps.build.outcome }}
+          TYPECHECK_STATUS: ${{ steps.typecheck.outcome }}
+          LINT_STATUS: ${{ steps.lint.outcome }}
+        run: node scripts/health-check.mjs
