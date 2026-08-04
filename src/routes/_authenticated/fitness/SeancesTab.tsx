@@ -238,49 +238,73 @@ export function SeancesTab({ initialChroniques }: SeancesTabProps = {}) {
     );
   }
 
-  // ── Post-clôture (R2) : écran de récompense premium, puis bilan IA opt-in ──
-  // Un seul écran à la clôture (SessionRewardScreen) ; le bilan IA détaillé
-  // n'apparaît QUE si l'utilisateur tape « Voir le bilan », jamais empilé
-  // automatiquement. Rendu identique en séance active et en vue historique
-  // (survit à la transition active → historique — un seul des deux montages
-  // est actif à la fois car les branches sont des early-returns).
+  // ── Post-clôture (R2) : écran de récompense premium, puis carte récap ──
+  // Flow : clôture → SessionRewardScreen (XP/progression, inchangé) →
+  // « Continuer » → SessionRecapScreen (carte partageable) → « Terminer ».
+  // Le bilan IA détaillé n'apparaît QUE si l'utilisateur tape « Voir le
+  // bilan » depuis l'écran de récompense, jamais empilé automatiquement.
+  const closeMuscu = () => {
+    setFinishedSnapshot(null);
+    setRecapOpen(false);
+    setAnalysisRequested(false);
+  };
+  const closeGeneric = () => {
+    setFinishedGenericSnapshot(null);
+    setRecapOpen(false);
+    setAnalysisRequested(false);
+  };
+
   const muscuPostClose = finishedSnapshot ? (
     !analysisRequested ? (
-      <SessionRewardScreen
-        workoutId={finishedSnapshot.id}
-        title={finishedSnapshot.name}
-        onContinue={() => setFinishedSnapshot(null)}
-        onViewAnalysis={() => setAnalysisRequested(true)}
-      />
+      recapOpen ? (
+        <SessionRecapScreen
+          recap={buildSessionRecap(finishedSnapshot.exercises ?? [])}
+          date={finishedSnapshot.created_at ? new Date(finishedSnapshot.created_at) : undefined}
+          onFinish={closeMuscu}
+        />
+      ) : (
+        <SessionRewardScreen
+          workoutId={finishedSnapshot.id}
+          title={finishedSnapshot.name}
+          onContinue={() => setRecapOpen(true)}
+          onViewAnalysis={() => setAnalysisRequested(true)}
+        />
+      )
     ) : (
       <PostWorkoutAnalysisSheet
         workout={finishedSnapshot}
         workoutId={finishedSnapshot.id}
         previousWorkouts={data ?? []}
         recoveryMap={recoveryMap}
-        onClose={() => {
-          setFinishedSnapshot(null);
-          setAnalysisRequested(false);
-        }}
+        onClose={closeMuscu}
       />
     )
   ) : null;
 
   const genericPostClose = finishedGenericSnapshot ? (
     !analysisRequested ? (
-      <SessionRewardScreen
-        workoutId={finishedGenericSnapshot.id}
-        title={finishedGenericSnapshot.name}
-        onContinue={() => setFinishedGenericSnapshot(null)}
-        onViewAnalysis={() => setAnalysisRequested(true)}
-      />
+      recapOpen ? (
+        <SessionRecapScreen
+          recap={buildGenericSessionRecap(finishedGenericSnapshot.segments ?? [])}
+          date={
+            finishedGenericSnapshot.created_at
+              ? new Date(finishedGenericSnapshot.created_at)
+              : undefined
+          }
+          onFinish={closeGeneric}
+        />
+      ) : (
+        <SessionRewardScreen
+          workoutId={finishedGenericSnapshot.id}
+          title={finishedGenericSnapshot.name}
+          onContinue={() => setRecapOpen(true)}
+          onViewAnalysis={() => setAnalysisRequested(true)}
+        />
+      )
     ) : (
       <GenericPostWorkoutAnalysisSheet
         workout={finishedGenericSnapshot}
-        onClose={() => {
-          setFinishedGenericSnapshot(null);
-          setAnalysisRequested(false);
-        }}
+        onClose={closeGeneric}
       />
     )
   ) : null;
