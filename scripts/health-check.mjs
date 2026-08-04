@@ -223,6 +223,67 @@ async function checkDatabase() {
   }
 }
 
+// ─── 5b. Erreurs runtime réellement rencontrées par les utilisateurs ───────
+// Le frontend a déjà son propre système de capture d'erreurs (voir
+// src/lib/error-logger.ts : window.onerror, unhandledrejection,
+// console.error, et src/components/global-error-boundary.tsx pour les
+// erreurs de rendu React), monté dans src/routes/__root.tsx et persistant
+// dans la table applicative `public.error_logs` (filtrage du bruit et
+// déduplication déjà en place côté client). C'est la SEULE source fiable
+// pour les erreurs réellement vécues par un utilisateur (crash JS, promesse
+// non gérée, erreur React, erreur Supabase déclenchée côté client) — aucune
+// des vérifications précédentes (logs serveur Supabase) ne peut les voir si
+// elles ne déclenchent pas aussi une erreur côté backend. Requête via le
+// même endpoint `database/query` déjà utilisé et validé par checkDatabase()
+// (SQL Postgres ordinaire, pas l'API Analytics/Logs Explorer) : fiable par
+// construction, aucune dépendance nouvelle.
+async function checkFrontendRuntimeErrors() {
+  try {
+    const result = await mgmt(`/v1/projects/${PROJECT_REF}/database/query`, {
+      method: 'POST',
+      body: JSON.stringify({
+        query: `select support_id, level, message, route, created_at
+from public.error_logs
+where created_at > now() - interval '24 hours'
+order by created_at desc
+limit 200;`,
+        read_only: true,
+      }),
+    });
+    const rows = Array.isArray(result) ? result : result?.result;
+    if (!Array.isArray(rows)) throw new Error('réponse inattendue');
+
+    const bySeverity = { critical: [], error: [] };
+    for (const r of rows) {
+      if (r.level === 'critical') bySeverity.critical.push(r);
+      else if (r.level === 'error') bySeverity.error.push(r);
+    }
+    const warnCount = rows.filter((r) => r.level === 'warn').length;
+
+    const ok = bySeverity.critical.length === 0 && bySeverity.error.length === 0;
+    addSection('Erreurs runtime (utilisateurs)', ok);
+
+    if (bySeverity.critical.length) {
+      critical(`${bySeverity.critical.length} erreur(s) frontend CRITIQUE(S) remontée(s) par des utilisateurs (24h)`);
+      bySeverity.critical
+        .slice(0, 5)
+        .forEach((r) => warn(`  ↳ [${r.support_id}] ${r.route ?? '?'} — ${(r.message || '').slice(0, 200)}`));
+    }
+    if (bySeverity.error.length) {
+      critical(`${bySeverity.error.length} erreur(s) frontend remontée(s) par des utilisateurs (24h)`);
+      bySeverity.error
+        .slice(0, 5)
+        .forEach((r) => warn(`  ↳ [${r.support_id}] ${r.route ?? '?'} — ${(r.message || '').slice(0, 200)}`));
+    }
+    if (warnCount) {
+      warn(`${warnCount} avertissement(s) frontend remonté(s) par des utilisateurs (24h)`);
+    }
+  } catch (e) {
+    addSection('Erreurs runtime (utilisateurs)', false);
+    warn(`Erreurs runtime utilisateurs indisponibles : ${e.message}`);
+  }
+}
+
 // ─── 6. Advisors sécurité / performance ────────────────────────────────────
 async function checkAdvisors() {
   for (const type of ['security', 'performance']) {
@@ -535,6 +596,7 @@ async function main() {
   await checkProjectStatus();
   await checkEdgeFunctions();
   await checkDatabase();
+  await checkFrontendRuntimeErrors();
   await checkAdvisors();
   await checkLogs();
 
