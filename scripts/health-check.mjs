@@ -246,42 +246,40 @@ async function checkAdvisors() {
 }
 
 // ─── 7. Logs des dernières 24h ──────────────────────────────────────────────
+// Cause réelle des échecs "Backend error! Retry your query" (identifiée le
+// 04/08/2026 via search_docs, PAS un problème de PAT/GitHub Actions/rate
+// limit) : Supabase a remplacé le moteur du Log Explorer par ClickHouse en
+// juin 2026. L'ancienne syntaxe BigQuery utilisée ici (`from postgres_logs`,
+// `(metadata[1]).champ`) est dépréciée et rejetée par le nouveau backend — le
+// message d'erreur générique ne le laissait pas deviner. Nouvelle syntaxe
+// officielle (doc "Logging" / section Querying with the Logs Explorer) :
+// une table unique `logs`, filtrée par `source = '<x>_logs'`, avec les
+// champs structurés dans une map `log_attributes['clé.pointée']` (accès par
+// clé, jamais d'erreur si absente — retourne juste une chaîne vide) plutôt
+// que dans un struct imbriqué. `severity_text` est une colonne de base
+// présente sur toutes les sources (id, timestamp, event_message,
+// severity_text, source) : on s'appuie dessus pour la sévérité plutôt que de
+// deviner une clé `log_attributes` par source, plus fiable.
 const LOG_QUERIES = {
-  // postgres_logs imbrique deux niveaux (metadata[1].parsed[1].error_severity,
-  // pas metadata[1].error_severity) — vérifié après un run réel où la 1ère
-  // version (nesting simple) ne remontait aucune ligne ERROR alors que des
-  // erreurs Postgres réelles existaient dans la fenêtre 24h (voir l'audit du
-  // 04/08/2026). event_message reste sélectionné pour le filet de sécurité
-  // texte de classifyPostgres(), au cas où ce schéma bouge encore.
-  // `limit 100` (pas 300/500) et `timestamp` qualifié par la table (pas
-  // bare) : alignés sur le format des requêtes par défaut du Log Explorer
-  // Supabase — constaté en conditions réelles le 04/08/2026 que des requêtes
-  // avec une limite plus haute échouaient systématiquement en "Backend
-  // error! Retry your query" côté ClickHouse, alors qu'une requête simple
-  // avec limit 100 (celle utilisée en interne par l'outil MCP get_logs)
-  // réussit de façon fiable sur le même projet, au même moment.
-  postgres: `select id, postgres_logs.timestamp, event_message,
-  (metadata[1]).parsed[1].error_severity as error_severity
-from postgres_logs order by timestamp desc limit 100`,
-  api: `select id, edge_logs.timestamp, event_message,
-  (metadata[1]).request[1].path as path,
-  (metadata[1]).response[1].status_code as status_code
-from edge_logs order by timestamp desc limit 100`,
-  'edge-function': `select id, function_edge_logs.timestamp, event_message,
-  (metadata[1]).function_id as function_id,
-  (metadata[1]).response[1].status_code as status_code
-from function_edge_logs order by timestamp desc limit 100`,
-  'edge-function-runtime': `select id, function_logs.timestamp, event_message,
-  (metadata[1]).level as level,
-  (metadata[1]).function_id as function_id
-from function_logs order by timestamp desc limit 100`,
-  auth: `select id, auth_logs.timestamp, event_message,
-  (metadata[1]).level as level,
-  (metadata[1]).status as status,
-  (metadata[1]).error as error
-from auth_logs order by timestamp desc limit 100`,
-  storage: `select id, storage_logs.timestamp, event_message from storage_logs order by timestamp desc limit 100`,
-  realtime: `select id, realtime_logs.timestamp, event_message from realtime_logs order by timestamp desc limit 100`,
+  postgres: `select id, timestamp, event_message, severity_text
+from logs where source = 'postgres_logs' order by timestamp desc limit 100`,
+  api: `select id, timestamp, event_message, severity_text,
+  log_attributes['request.path'] as path,
+  toInt32OrZero(log_attributes['response.status_code']) as status_code
+from logs where source = 'edge_logs' order by timestamp desc limit 100`,
+  'edge-function': `select id, timestamp, event_message, severity_text,
+  log_attributes['function_id'] as function_id,
+  toInt32OrZero(log_attributes['response.status_code']) as status_code
+from logs where source = 'function_edge_logs' order by timestamp desc limit 100`,
+  'edge-function-runtime': `select id, timestamp, event_message, severity_text,
+  log_attributes['function_id'] as function_id
+from logs where source = 'function_logs' order by timestamp desc limit 100`,
+  auth: `select id, timestamp, event_message, severity_text
+from logs where source = 'auth_logs' order by timestamp desc limit 100`,
+  storage: `select id, timestamp, event_message, severity_text
+from logs where source = 'storage_logs' order by timestamp desc limit 100`,
+  realtime: `select id, timestamp, event_message, severity_text
+from logs where source = 'realtime_logs' order by timestamp desc limit 100`,
 };
 
 function extractRows(data) {
@@ -338,15 +336,15 @@ async function fetchLogs(key) {
 const MSG_ERROR_PATTERN =
   /\berror\b|denied|refused|violat|timeout|unauthoriz|forbidden|does not exist|no such|duplicate key|undefined column/i;
 
-// Postgres : `error_severity` (metadata[1].parsed[1].error_severity) est la
-// source principale, mais un filet de sécurité texte sur `event_message` est
-// conservé en secours — si le schéma de logs Supabase change à nouveau et que
-// l'extraction structurée casse silencieusement, un vrai message d'erreur
-// Postgres reste détecté au lieu de disparaître en faux négatif (cf. audit du
-// 04/08/2026 où ce cas précis s'est produit avec metadata[1].error_severity).
+// Postgres : `severity_text` (colonne de base ClickHouse, présente sur
+// toutes les sources) est la source principale ; le filet de sécurité texte
+// sur `event_message` reste en secours si ce champ venait à ne plus être
+// peuplé pour une raison quelconque, pour ne jamais reproduire le faux
+// négatif silencieux détecté le 04/08/2026 (ancienne syntaxe BigQuery
+// dépréciée renvoyant systématiquement une erreur backend générique).
 function classifyPostgres(rows) {
   const errors = rows.filter(
-    (r) => ['ERROR', 'FATAL', 'PANIC'].includes(r.error_severity) || MSG_ERROR_PATTERN.test(r.event_message || '')
+    (r) => ['ERROR', 'FATAL', 'PANIC'].includes(r.severity_text) || MSG_ERROR_PATTERN.test(r.event_message || '')
   );
   if (!errors.length) return { ok: true };
 
@@ -368,7 +366,7 @@ function classifyPostgres(rows) {
 
 function classifyGenericErrorLog(rows, label) {
   const errors = rows.filter((r) => {
-    const level = (r.level || r.status || '').toString().toLowerCase();
+    const level = (r.severity_text || '').toString().toLowerCase();
     if (level === 'error' || level === 'fatal') return true;
     return MSG_ERROR_PATTERN.test(r.event_message || '');
   });
