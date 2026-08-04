@@ -4,7 +4,6 @@ import { toPng } from "html-to-image";
 import { Loader2, Share2 } from "lucide-react";
 import { Portal } from "@/components/Portal";
 import { SessionRecapCard } from "@/components/fitness/session/SessionRecapCard";
-import { useExerciseImageUrls } from "@/hooks/use-fitness";
 import { useUserStats } from "@/hooks/useUserStats";
 import { titleProgressForXp } from "@/lib/fitness/rpg/titleProgress";
 import { formatRecapDate, type SessionRecap } from "@/lib/fitness/rpg/sessionRecap";
@@ -27,11 +26,15 @@ const EASE = [0.22, 1, 0.36, 1] as const;
 export function SessionRecapScreen({
   recap,
   date,
+  prCount,
   onFinish,
 }: {
   recap: SessionRecap;
   /** Date de la séance (défaut : aujourd'hui). */
   date?: Date;
+  /** Nombre de records personnels battus pendant CETTE séance (système
+   *  existant `computeRecordsBySession`, cf. SeancesTab.tsx). */
+  prCount: number;
   onFinish: () => void;
 }) {
   const exportRef = useRef<HTMLDivElement>(null);
@@ -39,17 +42,12 @@ export function SessionRecapScreen({
   const { data: stats } = useUserStats();
   const progress = titleProgressForXp(stats?.xp ?? 0);
 
-  const paths = useMemo(
-    () => recap.exercises.map((e) => e.imagePath).filter(Boolean),
-    [recap.exercises],
-  );
-  const { data: imageUrls } = useExerciseImageUrls(paths);
   const dateLabel = useMemo(() => formatRecapDate(date ?? new Date()), [date]);
 
   const cardProps = {
     recap,
     dateLabel,
-    imageUrls,
+    prCount,
     rankKey: progress.title.key,
     rankLabel: progress.title.label,
     grade: progress.grade,
@@ -113,11 +111,7 @@ export function SessionRecapScreen({
               disabled={busy}
               className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/[0.06] py-3 text-sm font-semibold text-white disabled:opacity-60"
             >
-              {busy ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Share2 className="h-4 w-4" />
-              )}
+              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />}
               Partager
             </button>
             <button

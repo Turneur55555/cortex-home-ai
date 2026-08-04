@@ -78,14 +78,19 @@ export function buildSessionRecap(exercises: ReadonlyArray<RecapSourceExercise>)
 export function buildGenericSessionRecap(
   segments: ReadonlyArray<{ id: string; label: string; completed?: boolean }>,
 ): SessionRecap {
-  const exercises = segments.map((s) => ({ id: s.id, name: s.label || "Segment", imagePath: null, sets: 1 }));
+  const exercises = segments.map((s) => ({
+    id: s.id,
+    name: s.label || "Segment",
+    imagePath: null,
+    sets: 1,
+  }));
   return { totalSets: exercises.length, totalVolumeKg: 0, exercises };
 }
 
-/** Date lisible et courte pour la carte ("mar. 4 août 2026"). */
+/** Date lisible pour la carte ("mardi 4 août 2026" — affichée en majuscules par la carte). */
 export function formatRecapDate(date: Date = new Date()): string {
   return date.toLocaleDateString("fr-FR", {
-    weekday: "short",
+    weekday: "long",
     day: "numeric",
     month: "long",
     year: "numeric",

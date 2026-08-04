@@ -45,10 +45,8 @@ import {
   type WorkoutRecordDraft,
 } from "@/lib/fitness/engines/types";
 import { workoutToTemplateSeed, type TemplateSeedExercise } from "@/lib/fitness/workoutTemplates";
-import {
-  buildGenericSessionRecap,
-  buildSessionRecap,
-} from "@/lib/fitness/rpg/sessionRecap";
+import { buildGenericSessionRecap, buildSessionRecap } from "@/lib/fitness/rpg/sessionRecap";
+import { computeRecordsBySession } from "@/lib/fitness/chronicles";
 
 // ── Composant principal ─────────────────────────────────────────────────────────
 
@@ -69,6 +67,13 @@ export function SeancesTab({ initialChroniques }: SeancesTabProps = {}) {
   const { data: activeGeneric, isLoading: activeGenericLoading } = useActiveGenericWorkout();
   const startGenericActive = useStartGenericActiveWorkout();
   const recoveryMap = useRecoveryMap(data);
+  // RECORDS de la carte récap : réutilise le système existant (Hall of Fame,
+  // ChroniquePage) — jamais de nouvelle logique de détection de PR.
+  const muscuWorkouts = useMemo(
+    () => (data ?? []).filter((w) => ((w.discipline as string | undefined) ?? "muscu") === "muscu"),
+    [data],
+  );
+  const recordsBySession = useMemo(() => computeRecordsBySession(muscuWorkouts), [muscuWorkouts]);
 
   const [startOpen, setStartOpen] = useState(false);
   // Phase A (15/07/2026) — porte d'entrée unique "Nouvelle séance" :
@@ -268,6 +273,7 @@ export function SeancesTab({ initialChroniques }: SeancesTabProps = {}) {
         <SessionRecapScreen
           recap={buildSessionRecap(finishedSnapshot.exercises ?? [])}
           date={finishedSnapshot.created_at ? new Date(finishedSnapshot.created_at) : undefined}
+          prCount={(recordsBySession.get(finishedSnapshot.id) ?? []).filter((r) => !r.isNew).length}
           onFinish={closeMuscu}
         />
       ) : (
@@ -299,6 +305,7 @@ export function SeancesTab({ initialChroniques }: SeancesTabProps = {}) {
               ? new Date(finishedGenericSnapshot.created_at)
               : undefined
           }
+          prCount={0}
           onFinish={closeGeneric}
         />
       ) : (
@@ -310,10 +317,7 @@ export function SeancesTab({ initialChroniques }: SeancesTabProps = {}) {
         />
       )
     ) : (
-      <GenericPostWorkoutAnalysisSheet
-        workout={finishedGenericSnapshot}
-        onClose={closeGeneric}
-      />
+      <GenericPostWorkoutAnalysisSheet workout={finishedGenericSnapshot} onClose={closeGeneric} />
     )
   ) : null;
 
