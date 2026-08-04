@@ -279,14 +279,17 @@ function extractRows(data) {
   return [];
 }
 
-// L'endpoint /analytics/endpoints/logs répond parfois HTTP 200 avec
-// {"result":null,"error":"Backend error! Retry your query. ..."} — un vrai
-// échec côté backend ClickHouse de Supabase, mais qui NE PASSE PAS par un
-// statut HTTP non-2xx : mgmt() ne le détecte pas seul, il faut vérifier le
-// champ `error` du corps explicitement. Le message invite lui-même à
-// retenter, d'où les 3 tentatives avant d'abandonner (constaté en conditions
-// réelles le 04/08/2026 : les 7 requêtes de logs échouaient silencieusement
-// de cette façon, chaque source finissant classée "0 ligne / OK" à tort).
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// L'endpoint /analytics/endpoints/logs est sensible aux rafales : constaté en
+// conditions réelles le 04/08/2026, enchaîner les 7 requêtes de logs sans
+// délai déclenche soit un HTTP 429 ("ThrottlerException: Too Many Requests"),
+// soit — pire — un HTTP 200 avec {"result":null,"error":"Backend error! Retry
+// your query..."} qui NE PASSE PAS par un statut HTTP non-2xx : mgmt() seul
+// ne le détecte pas, il faut vérifier le champ `error` du corps explicitement
+// (sinon extractRows() retourne silencieusement [] et la source est classée
+// "0 ligne / OK" à tort, quel que soit l'état réel des erreurs). D'où : un
+// backoff progressif (2s/4s) sur les deux types d'échec avant d'abandonner.
 async function fetchLogs(key) {
   const now = new Date();
   const start = new Date(now.getTime() - 24 * 60 * 60 * 1000);
@@ -298,13 +301,14 @@ async function fetchLogs(key) {
 
   let lastError;
   for (let attempt = 1; attempt <= 3; attempt++) {
-    const data = await mgmt(`/v1/projects/${PROJECT_REF}/analytics/endpoints/logs?${params}`);
-    if (data?.error) {
-      lastError = new Error(`backend logs error : ${data.error}`);
-      if (attempt < 3) continue;
-      throw lastError;
+    try {
+      const data = await mgmt(`/v1/projects/${PROJECT_REF}/analytics/endpoints/logs?${params}`);
+      if (data?.error) throw new Error(`backend logs error : ${data.error}`);
+      return extractRows(data);
+    } catch (e) {
+      lastError = e;
+      if (attempt < 3) await sleep(attempt * 2000);
     }
-    return extractRows(data);
   }
   throw lastError;
 }
@@ -376,13 +380,17 @@ function classifyApiGateway(rows) {
 async function checkLogs() {
   const results = {};
 
-  for (const key of ['postgres', 'auth', 'edge-function', 'edge-function-runtime', 'storage', 'realtime', 'api']) {
+  const sources = ['postgres', 'auth', 'edge-function', 'edge-function-runtime', 'storage', 'realtime', 'api'];
+  for (const key of sources) {
     try {
       results[key] = await fetchLogs(key);
     } catch (e) {
       warn(`Logs "${key}" indisponibles : ${e.message}`);
       results[key] = null;
     }
+    // Étale les 7 requêtes dans le temps pour ne pas déclencher le rate-limit
+    // de l'endpoint analytics (voir commentaire de fetchLogs).
+    if (key !== sources[sources.length - 1]) await sleep(1500);
   }
 
   // Database (postgres_logs)
