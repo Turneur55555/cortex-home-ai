@@ -17,6 +17,7 @@ import { ExerciseCatalogSheet } from "@/components/fitness/ExerciseCatalogSheet"
 import { PostWorkoutAnalysisSheet } from "@/components/fitness/PostWorkoutAnalysisSheet";
 import { GenericPostWorkoutAnalysisSheet } from "@/components/fitness/session/GenericPostWorkoutAnalysisSheet";
 import { SessionRewardScreen } from "@/components/fitness/session/SessionRewardScreen";
+import { SessionRecapScreen } from "@/components/fitness/session/SessionRecapScreen";
 import { ChroniquePage } from "@/components/fitness/chronique/ChroniquePage";
 import { ChroniquesEntryCard } from "@/components/fitness/chronique/ChroniquesEntryCard";
 import { ChroniquesPage } from "@/components/fitness/chronique/ChroniquesPage";
@@ -44,6 +45,10 @@ import {
   type WorkoutRecordDraft,
 } from "@/lib/fitness/engines/types";
 import { workoutToTemplateSeed, type TemplateSeedExercise } from "@/lib/fitness/workoutTemplates";
+import {
+  buildGenericSessionRecap,
+  buildSessionRecap,
+} from "@/lib/fitness/rpg/sessionRecap";
 
 // ── Composant principal ─────────────────────────────────────────────────────────
 
@@ -86,6 +91,9 @@ export function SeancesTab({ initialChroniques }: SeancesTabProps = {}) {
   // d'abord ; le bilan IA détaillé n'apparaît que si l'utilisateur le demande
   // (jamais empilé automatiquement — « un seul écran »).
   const [analysisRequested, setAnalysisRequested] = useState(false);
+  // 2e écran du flow de clôture : carte récap partageable, affichée après
+  // « Continuer » sur l'écran de récompense (inchangé).
+  const [recapOpen, setRecapOpen] = useState(false);
   const [template, setTemplate] = useState<WorkoutTemplate | null>(null);
   // "Enregistrer comme séance sauvegardée" (menu ⋮) : ouvre l'éditeur de
   // modèle déjà développé (Module 2) en mode CRÉATION, pré-rempli depuis la
