@@ -72,7 +72,12 @@ async function mgmt(path, init = {}) {
     ...init,
     headers: {
       Authorization: `Bearer ${ACCESS_TOKEN}`,
-      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      // Content-Type uniquement si on envoie un corps (GET sans body avec
+      // Content-Type: application/json est atypique et a été identifié comme
+      // suspect lors du diagnostic du 04/08/2026 des échecs de l'endpoint
+      // /analytics/endpoints/logs).
+      ...(init.body ? { 'Content-Type': 'application/json' } : {}),
       ...(init.headers || {}),
     },
   });
