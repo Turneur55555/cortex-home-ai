@@ -277,6 +277,63 @@ export function useUpdateWorkoutName() {
   });
 }
 
+/** Validation partagée hook/UI : durée entière strictement positive (minutes). */
+export function isValidWorkoutDurationMinutes(value: number): boolean {
+  return Number.isInteger(value) && value > 0;
+}
+
+/**
+ * Corrige la date et/ou la durée d'une séance déjà terminée — cas d'usage :
+ * séance validée en oubliant de la clôturer, `duration_minutes` alors
+ * incohérent (ex. 187 min au lieu de 62). Met à jour la ligne EN PLACE
+ * (même id, mêmes exercices/séries/performances) — ne duplique jamais.
+ *
+ * IMPORTANT (musculation) : changer `duration_minutes` ne modifie JAMAIS les
+ * calories affichées — le moteur calorique musculation (voir
+ * src/lib/fitness/eat.ts → estimateSessionCalories) ne dépend que des séries
+ * validées, jamais de la durée. La durée reste ici une information purement
+ * descriptive/statistique.
+ */
+export function useUpdateWorkoutSchedule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      id,
+      date,
+      durationMinutes,
+    }: {
+      id: string;
+      date: string;
+      durationMinutes: number;
+    }) => {
+      if (!isValidWorkoutDurationMinutes(durationMinutes)) {
+        throw new Error("La durée doit être un nombre entier de minutes strictement positif.");
+      }
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Non authentifié");
+      const { error } = await supabase
+        .from("workouts")
+        .update({ date, duration_minutes: durationMinutes })
+        .eq("id", id)
+        .eq("user_id", user.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Séance mise à jour");
+      // Une correction de date/durée impacte l'historique, le calendrier,
+      // l'activité du jour/de la semaine, l'EAT et la Santé nutritionnelle —
+      // même périmètre d'invalidation que la clôture d'une séance
+      // (useFinishWorkout) : tout le domaine fitness + activité/streaks.
+      qc.invalidateQueries({ queryKey: ["fitness"] });
+      qc.invalidateQueries({ queryKey: ["user_activity"] });
+      qc.invalidateQueries({ queryKey: ["activity_streak"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+}
+
 // Type alias pour le cache `workouts` (incluant les exercices imbriqués).
 type WorkoutsCache = Array<{
   id: string;

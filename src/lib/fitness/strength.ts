@@ -85,3 +85,65 @@ export function formatTonnage(kg: number): string {
   if (kg >= 1000) return `${(kg / 1000).toFixed(1)} t`;
   return `${Math.round(kg)} kg`;
 }
+
+/** Une série détaillée, vue sous l'angle du temps actif (plutôt que du tonnage). */
+type ActiveTimeSet = {
+  reps?: number | string | null;
+  completed?: boolean | null;
+  /** Certains exercices sont enregistrés en durée plutôt qu'en répétitions
+   *  (ex. gainage). Si présente et positive, utilisée telle quelle — jamais
+   *  de reps inventées pour un exercice chronométré. */
+  duration_seconds?: number | null;
+};
+
+/**
+ * Temps actif estimé d'UNE série (secondes), à partir des répétitions
+ * réellement effectuées — jamais du temps de repos. Une série non validée
+ * (`completed === false`) ne compte pour aucun temps actif.
+ */
+export function setActiveSeconds(s: ActiveTimeSet, secondsPerRep: number): number {
+  if (s.completed === false) return 0;
+  const explicitDuration = Number(s.duration_seconds);
+  if (Number.isFinite(explicitDuration) && explicitDuration > 0) return explicitDuration;
+  const reps = Number(s.reps);
+  if (!Number.isFinite(reps) || reps <= 0) return 0;
+  return reps * secondsPerRep;
+}
+
+/**
+ * Temps actif cumulé d'un exercice. Si des séries détaillées existent, on
+ * les utilise (source de vérité) ; sinon repli sur les colonnes agrégées
+ * legacy (sets × reps), toutes comptées faute de flag `completed` sur ces
+ * anciennes lignes.
+ */
+export function exerciseActiveSeconds(
+  ex: {
+    sets?: number | null;
+    reps?: number | null;
+    exercise_sets?: ActiveTimeSet[] | null;
+  },
+  secondsPerRep: number,
+): number {
+  const detailed = ex.exercise_sets ?? [];
+  if (detailed.length > 0) {
+    return detailed.reduce((acc, s) => acc + setActiveSeconds(s, secondsPerRep), 0);
+  }
+  if (!ex.sets || !ex.reps || ex.sets <= 0 || ex.reps <= 0) return 0;
+  return ex.sets * ex.reps * secondsPerRep;
+}
+
+/**
+ * Temps actif cumulé d'une séance de musculation (secondes) — somme des
+ * séries réellement validées, aucun temps de repos ni durée totale de
+ * séance. Base du nouveau moteur calorique (voir calories.ts).
+ */
+export function workoutActiveSeconds(
+  exercises: Array<{
+    sets?: number | null;
+    reps?: number | null;
+    exercise_sets?: ActiveTimeSet[] | null;
+  }>,
+  secondsPerRep: number,
+): number {
+  return exercises.reduce((acc, ex) => acc + exerciseActiveSeconds(ex, secondsPerRep), 0);
+}

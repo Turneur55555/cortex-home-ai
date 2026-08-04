@@ -12,6 +12,7 @@ import {
   Layers,
   Loader2,
   MoreVertical,
+  Pencil,
   Plus,
   Repeat,
   Sparkles,
@@ -39,7 +40,8 @@ import { StatTileRow, type StatTileSpec } from "./StatTileRow";
 import { AddExerciseModal } from "./AddExerciseModal";
 import { buildGroups, type ExerciseGroup } from "@/lib/fitness/workoutGrouping";
 import { formatTonnage, workoutTonnage } from "@/lib/fitness/strength";
-import { estimateWorkoutCalories } from "@/lib/fitness/calories";
+import { formatEstimatedKcal } from "@/lib/fitness/calories";
+import { estimateSessionCalories } from "@/lib/fitness/eat";
 import { useLatestBodyWeight } from "@/hooks/useLatestBodyWeight";
 import { ENGINE_REGISTRY } from "@/lib/fitness/engines/registry";
 import { DisciplineBadge } from "./session/DisciplineIcon";
@@ -49,6 +51,7 @@ import type { SessionRecord } from "@/lib/fitness/chronicles";
 import { SessionHighlights, type HighlightSpec } from "./session/SessionHighlights";
 import { SessionRecordsBlock, type SessionRecordEntry } from "./session/SessionRecordsBlock";
 import { CollapsibleExercises } from "./session/CollapsibleExercises";
+import { EditWorkoutScheduleModal } from "./EditWorkoutScheduleModal";
 
 export type WorkoutRow = NonNullable<ReturnType<typeof useWorkouts>["data"]>[number];
 
@@ -101,6 +104,7 @@ export function WorkoutCard({
   const { data: bodyWeightKg } = useLatestBodyWeight();
 
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [editScheduleOpen, setEditScheduleOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   // Phase C, lot V2 : "Revoir le bilan" — le bilan IA de clôture est
   // persisté (workout_analyses) depuis le 29/06 mais n'était jamais relu.
@@ -162,13 +166,11 @@ export function WorkoutCard({
     const safeVolume = volumeMismatch ? rawVolume : volume;
 
     const duration = w.duration_minutes ?? 0;
-    // Estimation calorique réaliste basée sur la formule MET × poids × durée
-    // (cf. src/lib/fitness/calories.ts). Conserve null si la durée est nulle.
-    const calories = estimateWorkoutCalories({
-      durationMinutes: duration,
-      volumeKg: safeVolume,
-      bodyWeightKg: bodyWeightKg ?? null,
-    });
+    // Estimation calorique conservatrice basée sur le temps actif des séries
+    // validées (cf. src/lib/fitness/eat.ts → estimateSessionCalories) —
+    // indépendante de la durée totale de la séance. Conserve null si la
+    // durée est nulle (séance non close).
+    const calories = estimateSessionCalories(w, bodyWeightKg ?? null)?.kcal ?? null;
     return {
       volume: Math.round(safeVolume),
       volumeMismatch,
@@ -403,6 +405,17 @@ export function WorkoutCard({
                   type="button"
                   onClick={() => {
                     setMenuOpen(false);
+                    setEditScheduleOpen(true);
+                  }}
+                  className="flex w-full items-center gap-3 border-t border-border px-4 py-3 text-sm font-medium transition-colors hover:bg-white/5"
+                >
+                  <Pencil className="h-4 w-4 text-muted-foreground" />
+                  Modifier date / durée
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
                     setConfirmDelete(true);
                   }}
                   className="flex w-full items-center gap-3 border-t border-border px-4 py-3 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10"
@@ -444,7 +457,7 @@ export function WorkoutCard({
                   key: "calories",
                   icon: <Flame className="h-3.5 w-3.5" />,
                   label: "Calories",
-                  value: stats.calories != null ? `${stats.calories}` : "—",
+                  value: stats.calories != null ? formatEstimatedKcal(stats.calories) : "—",
                   unit: stats.calories != null ? "kcal" : undefined,
                 },
                 {
@@ -684,6 +697,15 @@ export function WorkoutCard({
           volumeHistory={volByName.get(statsTarget.key) ?? []}
           pr={prByName.get(statsTarget.key)}
           onClose={() => setStatsTarget(null)}
+        />
+      )}
+
+      {editScheduleOpen && (
+        <EditWorkoutScheduleModal
+          workoutId={w.id}
+          currentDate={w.date}
+          currentDurationMinutes={w.duration_minutes}
+          onClose={() => setEditScheduleOpen(false)}
         />
       )}
 
