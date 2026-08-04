@@ -103,4 +103,5 @@ jobs:
           BUILD_STATUS: ${{ steps.build.outcome }}
           TYPECHECK_STATUS: ${{ steps.typecheck.outcome }}
           LINT_STATUS: ${{ steps.lint.outcome }}
+          HEALTH_CHECK_DEBUG_LOGS: '1'
         run: node scripts/health-check.mjs

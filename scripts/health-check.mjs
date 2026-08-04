@@ -288,7 +288,11 @@ async function fetchLogs(key) {
     iso_timestamp_end: now.toISOString(),
   });
   const data = await mgmt(`/v1/projects/${PROJECT_REF}/analytics/endpoints/logs?${params}`);
-  return extractRows(data);
+  const rows = extractRows(data);
+  if (process.env.HEALTH_CHECK_DEBUG_LOGS === '1') {
+    console.log(`[debug] logs "${key}" : ${rows.length} ligne(s) — enveloppe brute (500 car.) : ${JSON.stringify(data).slice(0, 500)}`);
+  }
+  return rows;
 }
 
 // "constraint" seul est volontairement exclu : Postgres logue en LOG (pas en
