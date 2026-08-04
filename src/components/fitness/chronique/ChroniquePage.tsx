@@ -48,7 +48,8 @@ import { buildGroups, sessionMuscleActivation } from "@/lib/fitness/workoutGroup
 // Chroniques (LOT C2) — déplacée dans chronicles.ts, comportement identique.
 import { computeRecordsBySession } from "@/lib/fitness/chronicles";
 import { formatTonnage, workoutTonnage } from "@/lib/fitness/strength";
-import { estimateWorkoutCalories, deriveIntensity } from "@/lib/fitness/calories";
+import { deriveIntensity, formatEstimatedKcal } from "@/lib/fitness/calories";
+import { estimateSessionCalories } from "@/lib/fitness/eat";
 import { MUSCLE_META, type MuscleId } from "@/lib/fitness/muscleMapping";
 import type { MuscleRecovery } from "@/lib/fitness/recovery";
 import { useLatestBodyWeight } from "@/hooks/useLatestBodyWeight";
@@ -66,11 +67,11 @@ const INTENSITY_LABEL: Record<string, string> = {
 function metricOf(w: WorkoutRow, bodyWeightKg: number | null) {
   const volume = Math.round(workoutTonnage(w.exercises ?? []));
   const duration = w.duration_minutes ?? 0;
-  const calories = estimateWorkoutCalories({
-    durationMinutes: duration,
-    volumeKg: volume,
-    bodyWeightKg,
-  });
+  // Calories : temps actif des séries validées, indépendant de la durée
+  // totale (voir eat.ts → estimateSessionCalories). L'indicateur "intensité"
+  // ci-dessous reste dérivé du tonnage/minute — c'est une stat de
+  // comparaison distincte, pas une entrée du calcul calorique.
+  const calories = estimateSessionCalories(w, bodyWeightKg)?.kcal ?? null;
   const intensity = deriveIntensity(volume, duration);
   return { volume, duration, calories, intensity };
 }
@@ -284,7 +285,7 @@ export function ChroniquePage({
       key: "calories",
       icon: <Flame className="h-3.5 w-3.5" />,
       label: "Calories",
-      value: agg.calories != null ? `${agg.calories}` : "—",
+      value: agg.calories != null ? formatEstimatedKcal(agg.calories) : "—",
       unit: agg.calories != null ? "kcal" : undefined,
     },
     {
@@ -626,11 +627,12 @@ export function ChroniquePage({
                 },
                 {
                   label: "Calories",
-                  today: agg.calories != null ? `${agg.calories}` : "—",
-                  avg: comparison.avg.calories > 0 ? `${comparison.avg.calories}` : "—",
+                  today: agg.calories != null ? formatEstimatedKcal(agg.calories) : "—",
+                  avg:
+                    comparison.avg.calories > 0 ? formatEstimatedKcal(comparison.avg.calories) : "—",
                   best:
                     comparison.bestMetric?.calories != null
-                      ? `${comparison.bestMetric.calories}`
+                      ? formatEstimatedKcal(comparison.bestMetric.calories)
                       : "—",
                 },
                 {

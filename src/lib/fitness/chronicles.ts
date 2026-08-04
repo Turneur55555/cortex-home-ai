@@ -15,7 +15,7 @@
 
 import { buildGroups, sessionMuscleActivation } from "./workoutGrouping";
 import type { ExerciseLike } from "./workoutGrouping";
-import { estimateWorkoutCalories } from "./calories";
+import { estimateSessionCalories } from "./eat";
 import { formatTonnage } from "./strength";
 import { MUSCLE_META, type MuscleId } from "./muscleMapping";
 
@@ -29,6 +29,9 @@ export type WorkoutLike = {
   duration_minutes?: number | null;
   discipline?: string | null;
   exercises?: ExerciseLike[] | null;
+  /** Estimation déjà produite par le moteur d'une discipline (Guided…) —
+   *  transmise à `estimateSessionCalories`, jamais lue directement ici. */
+  metadata?: unknown;
 };
 
 function isMuscu(w: WorkoutLike): boolean {
@@ -166,13 +169,12 @@ export function computeHallOfFame(
       bestTonnage = { value: Math.round(volume), date: w.date, workoutName: name };
     }
     const minutes = w.duration_minutes ?? 0;
-    const kcal = estimateWorkoutCalories({
-      durationMinutes: minutes,
-      volumeKg: volume,
+    const estimate = estimateSessionCalories(
+      { ...w, duration_minutes: w.duration_minutes ?? null },
       bodyWeightKg,
-    });
-    if (kcal != null && (bestCalories == null || kcal > bestCalories.value)) {
-      bestCalories = { value: kcal, date: w.date, workoutName: name };
+    );
+    if (estimate != null && (bestCalories == null || estimate.kcal > bestCalories.value)) {
+      bestCalories = { value: estimate.kcal, date: w.date, workoutName: name };
     }
     if (minutes > 0 && volume > 0) {
       const kgPerMin = volume / minutes;

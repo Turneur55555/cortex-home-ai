@@ -3,8 +3,8 @@
 // pendant les activités sportives enregistrées (jamais le NEAT/TEF/TDEE).
 // No React, no Supabase, no UI tokens.
 
-import { estimateWorkoutCalories } from "./calories";
-import { workoutTonnage } from "./strength";
+import { CONSERVATIVE_SECONDS_PER_REP, estimateStrengthCalories, estimateWorkoutCalories } from "./calories";
+import { workoutActiveSeconds } from "./strength";
 
 type SetForEAT = {
   reps?: number | string | null;
@@ -40,7 +40,7 @@ const STRENGTH_DISCIPLINE = "muscu";
 export type CalorieEstimateSource = "computed" | "device";
 
 /** Méthode ayant produit l'estimation — utile pour l'audit/debug, jamais affiché tel quel à l'utilisateur. */
-export type CalorieEstimateMethod = "met_volume" | "met_duration";
+export type CalorieEstimateMethod = "reps_active_time" | "met_duration";
 
 export interface CalorieEstimate {
   kcal: number;
@@ -66,14 +66,20 @@ function readMetadataCalories(metadata: unknown): number | null {
  * Priorité :
  *  1) estimation déjà produite par le moteur de la discipline (ex. Guided :
  *     kcalPerMinute × durée, voir engines/guidedEngine.ts) — jamais recalculée ;
- *  2) musculation : tonnage réel disponible → estimateWorkoutCalories avec
- *     intensité dérivée du volume (comportement inchangé de WorkoutCard) ;
+ *  2) musculation : UNIQUEMENT le temps actif des séries validées (répétitions
+ *     × durée conservatrice/répétition) — jamais la durée totale de la séance
+ *     ni le tonnage/minute. Voir `estimateStrengthCalories`/`workoutActiveSeconds`.
+ *     Corriger `duration_minutes` d'une séance musculation ne change donc
+ *     jamais ses calories : seules les séries comptent ;
  *  3) autres disciplines (cardio/course/HYROX/freeform) : pas de tonnage
  *     pertinent (0 kg de charge ne veut pas dire un effort léger pour une
- *     course ou un HYROX) → même formule MET × poids × durée, intensité
+ *     course ou un HYROX) → formule MET × poids × durée totale, intensité
  *     "modérée" explicite plutôt que la dérivation volume/durée qui
- *     retomberait à tort sur "light".
- * Retourne null si la durée est absente/nulle (séance non terminée).
+ *     retomberait à tort sur "light". Pour ces disciplines, la durée reste
+ *     un facteur légitime de la dépense — comportement inchangé.
+ * Retourne null si la durée est absente/nulle (séance non terminée) — ce
+ * garde-fou sert uniquement à détecter une séance non close, pas à alimenter
+ * le calcul musculation.
  */
 export function estimateSessionCalories(
   workout: WorkoutForEAT,
@@ -94,14 +100,10 @@ export function estimateSessionCalories(
 
   const isStrength = (workout.discipline ?? STRENGTH_DISCIPLINE) === STRENGTH_DISCIPLINE;
   if (isStrength) {
-    const volume = workoutTonnage(workout.exercises ?? []);
-    const kcal = estimateWorkoutCalories({
-      durationMinutes: duration,
-      volumeKg: volume,
-      bodyWeightKg: bodyWeightKg ?? null,
-    });
+    const activeSeconds = workoutActiveSeconds(workout.exercises ?? [], CONSERVATIVE_SECONDS_PER_REP);
+    const kcal = estimateStrengthCalories({ activeSeconds, bodyWeightKg: bodyWeightKg ?? null });
     if (kcal == null) return null;
-    return { kcal, source: "computed", method: "met_volume", confidence: "estimate" };
+    return { kcal, source: "computed", method: "reps_active_time", confidence: "estimate" };
   }
 
   const kcal = estimateWorkoutCalories({
