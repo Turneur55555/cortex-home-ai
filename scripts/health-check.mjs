@@ -242,7 +242,14 @@ async function checkAdvisors() {
 
 // ─── 7. Logs des dernières 24h ──────────────────────────────────────────────
 const LOG_QUERIES = {
-  postgres: `select id, timestamp, event_message, (metadata[1]).error_severity as error_severity
+  // postgres_logs imbrique deux niveaux (metadata[1].parsed[1].error_severity,
+  // pas metadata[1].error_severity) — vérifié après un run réel où la 1ère
+  // version (nesting simple) ne remontait aucune ligne ERROR alors que des
+  // erreurs Postgres réelles existaient dans la fenêtre 24h (voir l'audit du
+  // 04/08/2026). event_message reste sélectionné pour le filet de sécurité
+  // texte de classifyPostgres(), au cas où ce schéma bouge encore.
+  postgres: `select id, timestamp, event_message,
+  (metadata[1]).parsed[1].error_severity as error_severity
 from postgres_logs order by timestamp desc limit 300`,
   api: `select id, timestamp, event_message,
   (metadata[1]).request[1].path as path,
@@ -284,11 +291,24 @@ async function fetchLogs(key) {
   return extractRows(data);
 }
 
-const MSG_ERROR_PATTERN = /\berror\b|denied|refused|violat|timeout|unauthoriz|forbidden/i;
+// "constraint" seul est volontairement exclu : Postgres logue en LOG (pas en
+// ERROR) le texte brut des instructions DDL des migrations, qui contiennent
+// presque toutes le mot "constraint" (ADD CONSTRAINT, CHECK CONSTRAINT...) —
+// un match sur ce seul mot déclencherait un faux positif à chaque migration.
+// "violat" (violates .* constraint / is violated by) reste assez spécifique.
+const MSG_ERROR_PATTERN =
+  /\berror\b|denied|refused|violat|timeout|unauthoriz|forbidden|does not exist|no such|duplicate key|undefined column/i;
 
-// Postgres : niveaux confirmés en conditions réelles (error_severity).
+// Postgres : `error_severity` (metadata[1].parsed[1].error_severity) est la
+// source principale, mais un filet de sécurité texte sur `event_message` est
+// conservé en secours — si le schéma de logs Supabase change à nouveau et que
+// l'extraction structurée casse silencieusement, un vrai message d'erreur
+// Postgres reste détecté au lieu de disparaître en faux négatif (cf. audit du
+// 04/08/2026 où ce cas précis s'est produit avec metadata[1].error_severity).
 function classifyPostgres(rows) {
-  const errors = rows.filter((r) => ['ERROR', 'FATAL', 'PANIC'].includes(r.error_severity));
+  const errors = rows.filter(
+    (r) => ['ERROR', 'FATAL', 'PANIC'].includes(r.error_severity) || MSG_ERROR_PATTERN.test(r.event_message || '')
+  );
   if (!errors.length) return { ok: true };
 
   const rls = errors.filter((r) => /row-level security|permission denied for/i.test(r.event_message));
