@@ -279,6 +279,14 @@ function extractRows(data) {
   return [];
 }
 
+// L'endpoint /analytics/endpoints/logs répond parfois HTTP 200 avec
+// {"result":null,"error":"Backend error! Retry your query. ..."} — un vrai
+// échec côté backend ClickHouse de Supabase, mais qui NE PASSE PAS par un
+// statut HTTP non-2xx : mgmt() ne le détecte pas seul, il faut vérifier le
+// champ `error` du corps explicitement. Le message invite lui-même à
+// retenter, d'où les 3 tentatives avant d'abandonner (constaté en conditions
+// réelles le 04/08/2026 : les 7 requêtes de logs échouaient silencieusement
+// de cette façon, chaque source finissant classée "0 ligne / OK" à tort).
 async function fetchLogs(key) {
   const now = new Date();
   const start = new Date(now.getTime() - 24 * 60 * 60 * 1000);
@@ -287,12 +295,18 @@ async function fetchLogs(key) {
     iso_timestamp_start: start.toISOString(),
     iso_timestamp_end: now.toISOString(),
   });
-  const data = await mgmt(`/v1/projects/${PROJECT_REF}/analytics/endpoints/logs?${params}`);
-  const rows = extractRows(data);
-  if (process.env.HEALTH_CHECK_DEBUG_LOGS === '1') {
-    console.log(`[debug] logs "${key}" : ${rows.length} ligne(s) — enveloppe brute (500 car.) : ${JSON.stringify(data).slice(0, 500)}`);
+
+  let lastError;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const data = await mgmt(`/v1/projects/${PROJECT_REF}/analytics/endpoints/logs?${params}`);
+    if (data?.error) {
+      lastError = new Error(`backend logs error : ${data.error}`);
+      if (attempt < 3) continue;
+      throw lastError;
+    }
+    return extractRows(data);
   }
-  return rows;
+  throw lastError;
 }
 
 // "constraint" seul est volontairement exclu : Postgres logue en LOG (pas en
