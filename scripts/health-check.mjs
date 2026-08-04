@@ -307,7 +307,12 @@ async function fetchLogs(key) {
       return extractRows(data);
     } catch (e) {
       lastError = e;
-      if (attempt < 3) await sleep(attempt * 2000);
+      // Backoff plus généreux (5s/10s) : en conditions réelles, un stagger de
+      // 1.5s entre sources + backoff 2s/4s restait insuffisant (429 persistant
+      // sur plusieurs runs successifs) — le rate-limit de cet endpoint semble
+      // se compter sur une fenêtre glissante plus large qu'une poignée de
+      // secondes.
+      if (attempt < 3) await sleep(attempt * 5000);
     }
   }
   throw lastError;
@@ -390,7 +395,7 @@ async function checkLogs() {
     }
     // Étale les 7 requêtes dans le temps pour ne pas déclencher le rate-limit
     // de l'endpoint analytics (voir commentaire de fetchLogs).
-    if (key !== sources[sources.length - 1]) await sleep(1500);
+    if (key !== sources[sources.length - 1]) await sleep(5000);
   }
 
   // Database (postgres_logs)
