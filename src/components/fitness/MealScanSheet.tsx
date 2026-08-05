@@ -44,6 +44,7 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
   const [items, setItems] = useState<ScanItem[]>([]);
   const [meal, setMeal] = useState<MealSlug>("dejeuner");
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
+  const [context, setContext] = useState("");
   const addBatch = useAddNutritionBatch();
 
   const scan = useMutation({
@@ -51,8 +52,13 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
       const { b64, mime } = await fileToBase64Compressed(file);
       setPreview(`data:${mime};base64,${b64}`);
       if (!b64 || b64.length < 100) throw new Error("Image vide ou illisible. Réessaie.");
+      const trimmedContext = context.trim();
       const { data, error } = await supabase.functions.invoke("scan-meal", {
-        body: { image_base64: b64, mime_type: mime },
+        body: {
+          image_base64: b64,
+          mime_type: mime,
+          ...(trimmedContext ? { user_context: trimmedContext } : {}),
+        },
       });
       if (error) {
         let detail = "";
@@ -416,6 +422,25 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
           className="hidden"
           onChange={(e) => onPick(e.target.files?.[0])}
         />
+
+        {/* Contexte facultatif — prioritaire sur la détection visuelle */}
+        <div>
+          <label
+            htmlFor="meal-scan-context"
+            className="mb-1 block text-xs font-semibold text-muted-foreground"
+          >
+            Décris ton plat (facultatif)
+          </label>
+          <textarea
+            id="meal-scan-context"
+            value={context}
+            onChange={(e) => setContext(e.target.value)}
+            disabled={scan.isPending || editingIdx != null}
+            placeholder="Ex : Curry vert au cabillaud, restaurant thaï"
+            rows={2}
+            className="w-full resize-none rounded-xl border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-60"
+          />
+        </div>
 
         {/* Photo / Gallery buttons */}
         <div className="flex gap-2">
