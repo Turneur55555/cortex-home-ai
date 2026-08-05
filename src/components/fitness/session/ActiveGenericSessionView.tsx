@@ -45,7 +45,6 @@ import {
   type LabelGroup,
 } from "@/lib/fitness/segmentStats";
 import { WorkoutTimer } from "../WorkoutTimer";
-import { RestTimerBar } from "../RestTimerBar";
 import {
   ActiveExerciseCard,
   KmHeroCard,
@@ -365,12 +364,6 @@ export function ActiveGenericSessionView({
           onClose={() => setCatalogOpen(false)}
         />
       )}
-
-      {/* Lot V3 : minuteur de repos — même barre que la séance musculation
-          (ActiveWorkoutView), déclenchée à la validation d'une répétition
-          d'un exercice à répétitions multiples (fractionné/circuit), voir
-          exerciseCard/ActiveExerciseCard.tsx (kind="generic"). */}
-      <RestTimerBar />
 
       {statsLabel && (
         // Phase C, lot V1 (P0-1) : sans `discipline`, la fiche retombait sur
