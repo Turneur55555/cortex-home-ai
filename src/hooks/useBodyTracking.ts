@@ -3,7 +3,27 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { db } from "@/integrations/supabase/db";
 import { logActivity } from "@/lib/activity";
-import type { TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
+import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
+
+/**
+ * Colonnes de `body_tracking` présentes en base mais pas encore dans les types
+ * générés (voir src/integrations/supabase/db.ts).
+ */
+export type BodyMeasurementDriftColumns = {
+  body_fat_method: string | null;
+  body_fat_formula: string | null;
+  body_fat_min_percent: number | null;
+  body_fat_max_percent: number | null;
+  body_fat_height_cm: number | null;
+  body_fat_sex: string | null;
+  neck: number | null;
+};
+
+export type BodyMeasurementRow = Tables<"body_tracking"> & BodyMeasurementDriftColumns;
+export type BodyMeasurementInsert = TablesInsert<"body_tracking"> &
+  Partial<BodyMeasurementDriftColumns>;
+export type BodyMeasurementUpdate = TablesUpdate<"body_tracking"> &
+  Partial<BodyMeasurementDriftColumns>;
 
 export function useBodyMeasurements() {
   return useQuery({
@@ -18,7 +38,7 @@ export function useBodyMeasurements() {
         .order("date", { ascending: false })
         .limit(180);
       if (error) throw error;
-      return data;
+      return (data ?? []) as BodyMeasurementRow[];
     },
   });
 }
@@ -26,7 +46,7 @@ export function useBodyMeasurements() {
 export function useAddBodyMeasurement() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: Omit<TablesInsert<"body_tracking">, "user_id">) => {
+    mutationFn: async (input: Omit<BodyMeasurementInsert, "user_id">) => {
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -71,7 +91,7 @@ export function useDeleteBodyMeasurement() {
 export function useUpdateBodyMeasurement() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, patch }: { id: string; patch: TablesUpdate<"body_tracking"> }) => {
+    mutationFn: async ({ id, patch }: { id: string; patch: BodyMeasurementUpdate }) => {
       const {
         data: { user },
       } = await supabase.auth.getUser();
