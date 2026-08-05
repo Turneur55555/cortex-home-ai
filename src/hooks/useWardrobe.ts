@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { db } from "@/integrations/supabase/db";
 import { useAuth } from "@/hooks/use-auth";
 import type { Json } from "@/integrations/supabase/types";
 import {
@@ -254,7 +255,7 @@ export function useCreateWardrobeItem() {
         }
       }
 
-      const { error: insertError } = await supabase.from("wardrobe_items").insert({
+      const { error: insertError } = await db.from("wardrobe_items").insert({
         id: itemId,
         user_id: authUser.id,
         storage_path: storagePath,
@@ -553,7 +554,9 @@ export function useWardrobeItems() {
     enabled: !!user,
     staleTime: 60_000,
     queryFn: async (): Promise<WardrobeItemView[]> => {
-      const { data, error } = await supabase
+      // `db` : `wardrobe_items` existe en base (bcwfvpwxzlmkxobvbtzp) mais pas
+      // encore dans types.ts (généré, jamais édité à la main).
+      const { data, error } = await db
         .from("wardrobe_items")
         .select(
           "id, user_id, name, brand, category, subcategory, storage_path, processed_storage_path, created_at",
@@ -562,7 +565,7 @@ export function useWardrobeItems() {
         .order("created_at", { ascending: false });
       if (error) throw error;
 
-      const items = data ?? [];
+      const items = (data ?? []) as WardrobeItemQueryRow[];
       const paths = Array.from(
         new Set(
           items
