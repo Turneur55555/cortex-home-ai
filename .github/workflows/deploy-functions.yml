@@ -42,6 +42,7 @@ jobs:
             restore-exercises-dataset-import \
             detect-exercise-similarities \
             admin-exercise-actions \
+            nutrition-health-insight \
             --project-ref ${{ secrets.SUPABASE_PROJECT_REF }}
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
