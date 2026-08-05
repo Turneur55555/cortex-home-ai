@@ -56,6 +56,7 @@ import {
 } from "@/hooks/use-fitness";
 import { useUpsertExercisePhoto } from "@/hooks/useUserExercisePhotos";
 import { restTimer } from "@/hooks/useRestTimer";
+import { RestTimerInline } from "../RestTimerInline";
 import type { LastSession, LastSessionSet } from "@/hooks/useLastExerciseSession";
 import type { MuscleId } from "@/lib/fitness/muscleMapping";
 import type { MuscleRecovery } from "@/lib/fitness/recovery";
@@ -526,6 +527,7 @@ function MuscuExerciseCard({
           </div>
         </div>
       )}
+      <RestTimerInline exerciseId={exercise.id} />
     </ExerciseCardContainer>
   );
 }
@@ -902,6 +904,7 @@ function GenericExerciseCard({
           )}
         </div>
       )}
+      <RestTimerInline exerciseId={group.key} />
     </ExerciseCardContainer>
   );
 }
