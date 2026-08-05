@@ -113,6 +113,10 @@ Deno.serve(async (req) => {
     const supa = createClient(SUPABASE_URL, SUPABASE_ANON, {
       global: { headers: { Authorization: auth } },
     });
+    // ai_cache n'autorise l'INSERT/UPDATE qu'au rôle service_role (RLS) — un
+    // client anon+JWT utilisateur ne peut qu'y lire ses propres lignes. Client
+    // dédié pour l'écriture cache uniquement, même pattern que food-lookup.
+    const admin = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
     const { data: userData, error: userErr } = await supa.auth.getUser();
     if (userErr || !userData.user) return fail("Non authentifié");
@@ -223,7 +227,7 @@ Deno.serve(async (req) => {
       nextSteps: Array.isArray(parsed.nextSteps) ? parsed.nextSteps : [],
     };
 
-    await setCachedResult(supa, cacheKey, "nutrition-health-insight", responsePayload, userData.user.id, 6);
+    await setCachedResult(admin, cacheKey, "nutrition-health-insight", responsePayload, userData.user.id, 6);
 
     return json200(responsePayload);
   } catch (e) {
