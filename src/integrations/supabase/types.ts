@@ -4076,6 +4076,7 @@ export type Database = {
           default_reps: number | null
           default_sets: number | null
           default_weight: number | null
+          exercise_reference_id: string | null
           id: string
           name: string
           notes: string | null
@@ -4089,6 +4090,7 @@ export type Database = {
           default_reps?: number | null
           default_sets?: number | null
           default_weight?: number | null
+          exercise_reference_id?: string | null
           id?: string
           name: string
           notes?: string | null
@@ -4102,6 +4104,7 @@ export type Database = {
           default_reps?: number | null
           default_sets?: number | null
           default_weight?: number | null
+          exercise_reference_id?: string | null
           id?: string
           name?: string
           notes?: string | null
@@ -4112,7 +4115,75 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "workout_template_exercises_exercise_reference_id_fkey"
+            columns: ["exercise_reference_id"]
+            isOneToOne: false
+            referencedRelation: "exercise_reference"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "workout_template_exercises_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "workout_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workout_template_segments: {
+        Row: {
+          created_at: string
+          discipline: string | null
+          exercise_reference_id: string | null
+          id: string
+          label: string
+          metric_key: string | null
+          metrics: Json
+          position: number
+          template_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          discipline?: string | null
+          exercise_reference_id?: string | null
+          id?: string
+          label: string
+          metric_key?: string | null
+          metrics?: Json
+          position?: number
+          template_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          discipline?: string | null
+          exercise_reference_id?: string | null
+          id?: string
+          label?: string
+          metric_key?: string | null
+          metrics?: Json
+          position?: number
+          template_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workout_template_segments_discipline_fkey"
+            columns: ["discipline"]
+            isOneToOne: false
+            referencedRelation: "disciplines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workout_template_segments_exercise_reference_id_fkey"
+            columns: ["exercise_reference_id"]
+            isOneToOne: false
+            referencedRelation: "exercise_reference"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workout_template_segments_template_id_fkey"
             columns: ["template_id"]
             isOneToOne: false
             referencedRelation: "workout_templates"

@@ -27,6 +27,7 @@ import {
   useWorkouts,
   useActiveWorkout,
   useStartWorkoutFromTemplate,
+  useStartHybridStrengthWorkout,
   type ActiveWorkout,
 } from "@/hooks/use-fitness";
 import {
@@ -66,6 +67,9 @@ export function SeancesTab({ initialChroniques }: SeancesTabProps = {}) {
   // générique ne sont jamais actives simultanément (garde côté hook).
   const { data: activeGeneric, isLoading: activeGenericLoading } = useActiveGenericWorkout();
   const startGenericActive = useStartGenericActiveWorkout();
+  // Musculation hybride générée par le Sensei (2026-08-05) — voir
+  // handleCoachResult.
+  const startHybridStrength = useStartHybridStrengthWorkout();
   const recoveryMap = useRecoveryMap(data);
   // RECORDS de la carte récap : réutilise le système existant (Hall of Fame,
   // ChroniquePage) — jamais de nouvelle logique de détection de PR.
@@ -220,7 +224,24 @@ export function SeancesTab({ initialChroniques }: SeancesTabProps = {}) {
       const isStrength =
         entry && isReadyEngine(entry) && entry.historyPresentation.cardVariant === "strength";
       const isLiveTrackable = entry && isReadyEngine(entry) && entry.supportsLiveTracking === true;
-      if (isStrength) {
+      // Musculation hybride (2026-08-05) : quand le Sensei a composé des
+      // blocs métriques (course/HYROX) en plus de la force — voir
+      // StrengthWorkoutEngine.toWorkoutRecord, `metadata.blockDiscipline` —
+      // démarre directement une séance active hybride (mêmes cartes/mêmes
+      // mutations qu'un bloc ajouté à la main) au lieu du chemin classique
+      // "relire dans WorkoutSheet puis enregistrer" réservé à la force pure.
+      const hybridBlockDiscipline = (
+        draft.metadata as { blockDiscipline?: DisciplineId } | undefined
+      )?.blockDiscipline;
+      if (isStrength && hybridBlockDiscipline && tpl.segments && tpl.segments.length > 0) {
+        startHybridStrength.mutate({
+          name: tpl.name,
+          gym_location: typeof draft.gym_location === "string" ? draft.gym_location : undefined,
+          exercises: tpl.exercises,
+          segments: tpl.segments,
+          blockDiscipline: hybridBlockDiscipline,
+        });
+      } else if (isStrength) {
         setTemplate(tpl);
         setOpen(true);
       } else if (isLiveTrackable && entry.buildLiveSegments) {
@@ -230,7 +251,7 @@ export function SeancesTab({ initialChroniques }: SeancesTabProps = {}) {
         setGenericDraft(draft);
       }
     },
-    [startGenericActive],
+    [startGenericActive, startHybridStrength],
   );
 
   // Phase A (15/07/2026) : ouvre CoachSheet directement sur la discipline

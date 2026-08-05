@@ -54,6 +54,11 @@ import type {
 } from "./types";
 
 type Level = "débutant" | "intermédiaire" | "avancé";
+/** Musculation hybride (2026-08-05) — même union que `AutoLevel`
+ *  (senseiAutoProfile.ts), exportée pour que StrengthWorkoutEngine puisse
+ *  composer avec les standards HYROX (stationSegment) sans redéfinir de
+ *  charges/distances par niveau — voir buildHyroxPrepSegments ci-dessous. */
+export type HyroxLevel = Level;
 
 export const STATION_IDS = [
   "Running",
@@ -206,6 +211,30 @@ const OBJECTIVE_OPTIONS = [
 const OBJECTIVE_LABEL: Record<string, string> = Object.fromEntries(
   OBJECTIVE_OPTIONS.map((o) => [o.value, o.label]),
 );
+
+/** Musculation hybride (2026-08-05) — poste(s) HYROX à ajouter à une séance
+ *  Musculation générée par le Sensei ("+ Préparation HYROX"). Composition,
+ *  pas fusion : réutilise `stationSegment` (standards de charge/distance par
+ *  niveau, déjà validés pour HYROX) au lieu de dupliquer ces valeurs dans
+ *  StrengthWorkoutEngine. Toujours course + 2 postes représentatifs
+ *  (`competition_prep`, déjà la sélection "aperçu compétition" du moteur
+ *  HYROX) — volontairement modeste : c'est un complément à une séance de
+ *  force, pas une simulation complète. */
+export function buildHyroxPrepSegments(level: HyroxLevel): SessionSegment[] {
+  const stations = FOCUS_STATIONS.competition_prep.slice(0, 2);
+  return [
+    stationSegment("Running", level, { volumeOverride: 500 }),
+    ...stations.map((s) => stationSegment(s, level)),
+  ];
+}
+
+/** Musculation hybride (2026-08-05) — bloc course simple ajouté à une séance
+ *  Musculation ("+ Cardio / course"). Même réutilisation : `stationSegment`
+ *  couvre déjà "Running" (poste HYROX partagé), aucune nouvelle logique de
+ *  distance/allure à écrire. */
+export function buildCardioRunSegment(level: HyroxLevel, distanceM = 1000): SessionSegment[] {
+  return [stationSegment("Running", level, { volumeOverride: distanceM })];
+}
 
 const QUESTIONS: SenseiQuestionSpec[] = [
   {

@@ -59,6 +59,24 @@ CORTEX vise à être **le plus beau RPG de progression du fitness**, pas une app
 - Après modification locale, l'utilisateur doit faire `git add + git commit + git push` pour que Lovable voie les changements
 - Remote : `https://github.com/Turneur55555/cortex-home-ai.git` (branch `main`)
 
+## Workflow Git et publication (règle permanente, validée par Nathan, 05/08/2026)
+Pour le projet Cortex :
+- Travaille directement sur `main` par défaut.
+- Avant toute modification : synchronise-toi avec le `main` distant (`git fetch`/`git pull`) et vérifie `git status`.
+- Implémente les changements directement sur `main`.
+- Une fois les validations réussies (typecheck/lint/tests/build), commit et push sur `main`.
+- Ne crée pas de branche de travail ni de Pull Request, sauf si une contrainte technique de la
+  plateforme l'impose réellement.
+- Si l'environnement force l'utilisation d'une branche (politique plateforme, pas une préférence),
+  ne considère pas la tâche comme totalement livrée : indique clairement que la fusion vers `main`
+  reste nécessaire.
+- Après le push sur `main`, vérifie que la version correspondante est publiée/déployée sur Lovable
+  lorsque le projet est configuré pour cette publication.
+- Une tâche Cortex n'est considérée comme complètement livrée qu'après : code validé → commit →
+  `main` → push → publication Lovable vérifiée.
+- Ne prétends jamais avoir poussé, fusionné ou publié si l'action correspondante n'a pas réellement
+  été effectuée et vérifiée.
+
 ## À la fin de chaque session, mettre à jour :
 - MEMORY.md → ajouter tout nouveau composant, hook, migration, feature, décision d'archi découvert pendant la session
 

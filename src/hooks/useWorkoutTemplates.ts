@@ -4,6 +4,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { localDateYMD } from "@/lib/dates";
 import type { TablesInsert } from "@/integrations/supabase/types";
 import { resolveExerciseIdsByLabel } from "@/services/exerciseResolution";
+import type { DisciplineId } from "@/lib/fitness/engines/types";
+import { HYBRID_BLOCKS_KEY } from "@/hooks/useGenericActiveSession";
+import { orderedTemplateItems as orderedTemplateItemsPure } from "@/lib/fitness/workoutTemplates";
 import {
   ACTIVE_WORKOUT_CONFLICT_MESSAGE,
   isActiveWorkoutConflict,
@@ -44,6 +47,27 @@ export interface WorkoutTemplateExerciseRow {
   default_reps: number | null;
   default_weight: number | null;
   notes: string | null;
+  /** Musculation hybride (2026-08-19) — identité Exercise-Central, absente
+   *  jusqu'ici de cette table (résolution par nom seul). Nullable/additif :
+   *  `null` pour tout exercice de modèle créé avant cette migration. */
+  exercise_reference_id: string | null;
+}
+
+/** Musculation hybride (2026-08-19) — bloc métrique (course/HYROX/cardio)
+ *  d'un modèle, pendant de `WorkoutTemplateExerciseRow` pour les blocs.
+ *  `position` partage le même espace de valeurs que celui des exercices du
+ *  même modèle (voir migration `20260819090000_hybrid_workout_templates.sql`)
+ *  — c'est ce qui permet de reconstruire l'ordre RÉEL (force + blocs
+ *  entremêlés) en fusionnant les deux listes, voir `orderedTemplateItems`
+ *  (lib/fitness/workoutTemplates.ts). */
+export interface WorkoutTemplateSegmentRow {
+  id: string;
+  position: number;
+  label: string;
+  discipline: DisciplineId | null;
+  metric_key: string | null;
+  metrics: Record<string, number | string>;
+  exercise_reference_id: string | null;
 }
 
 export interface WorkoutTemplateRow {
@@ -54,6 +78,9 @@ export interface WorkoutTemplateRow {
   created_at: string;
   updated_at: string;
   exercises: WorkoutTemplateExerciseRow[];
+  /** Vide pour tout modèle force-only classique — comportement 100%
+   *  inchangé pour les templates existants (aucune ligne en base). */
+  segments: WorkoutTemplateSegmentRow[];
 }
 
 /** Entrée éditable d'un exercice de modèle — utilisée pour créer/mettre à
@@ -67,6 +94,56 @@ export interface TemplateExerciseInput {
   notes?: string | null;
 }
 
+/** Musculation hybride (2026-08-19) — entrée éditable d'un bloc métrique de
+ *  modèle (voir WorkoutTemplateSegmentRow). */
+export interface TemplateSegmentInput {
+  label: string;
+  discipline: DisciplineId;
+  metricKey?: string | null;
+  metrics?: Record<string, number | string>;
+}
+
+/** Musculation hybride (2026-08-19) — un modèle est désormais une liste
+ *  ORDONNÉE d'items hétérogènes (force ou bloc), discriminée par `kind` —
+ *  c'est cet ordre unique qui porte la position réelle "Bench Press, Course
+ *  1000m, Sled Push, Pull-ups, Row 1000m" au lieu de deux listes séparées
+ *  sans relation d'ordre. `useCreateWorkoutTemplate`/`useUpdateWorkoutTemplate`
+ *  éclatent ce tableau vers les deux tables, `position` = index dans CE
+ *  tableau (voir replaceTemplateItems). Un modèle force-only classique n'a
+ *  que des items `kind: "exercise"` — strictement le même appel qu'avant
+ *  l'ajout des blocs (TemplateEditorSheet ne change rien à ce chemin). */
+export type TemplateItemInput =
+  | ({ kind: "exercise" } & TemplateExerciseInput)
+  | ({ kind: "segment" } & TemplateSegmentInput);
+
+/** Reconstruit la liste ordonnée `TemplateItemInput[]` d'un modèle déjà
+ *  chargé — utilisée pour dupliquer un modèle (position réelle préservée)
+ *  et par TemplateEditorSheet pour initialiser l'éditeur en mode édition.
+ *  Fine couche d'adaptation au-dessus de `orderedTemplateItems` (domaine
+ *  pur, lib/fitness/workoutTemplates.ts) vers la forme attendue par
+ *  replaceTemplateItems. */
+export function orderedTemplateItems(template: WorkoutTemplateRow): TemplateItemInput[] {
+  return orderedTemplateItemsPure(template).map((item) =>
+    item.kind === "exercise"
+      ? {
+          kind: "exercise",
+          name: item.name,
+          superset_group: item.superset_group,
+          default_sets: item.default_sets,
+          default_reps: item.default_reps,
+          default_weight: item.default_weight,
+          notes: item.notes,
+        }
+      : {
+          kind: "segment",
+          label: item.label,
+          discipline: item.discipline as DisciplineId,
+          metricKey: item.metric_key,
+          metrics: item.metrics,
+        },
+  );
+}
+
 export function useWorkoutTemplates() {
   return useQuery({
     queryKey: TEMPLATES_KEY,
@@ -74,7 +151,7 @@ export function useWorkoutTemplates() {
       const { data, error } = await supabase
         .from("workout_templates")
         .select(
-          "id, name, icon, color, created_at, updated_at, workout_template_exercises(id, name, position, superset_group, default_sets, default_reps, default_weight, notes)",
+          "id, name, icon, color, created_at, updated_at, workout_template_exercises(id, name, position, superset_group, default_sets, default_reps, default_weight, notes, exercise_reference_id), workout_template_segments(id, position, label, discipline, metric_key, metrics, exercise_reference_id)",
         )
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -88,36 +165,112 @@ export function useWorkoutTemplates() {
         exercises: [...(t.workout_template_exercises ?? [])].sort(
           (a, b) => a.position - b.position,
         ),
+        segments: [...(t.workout_template_segments ?? [])]
+          .sort((a, b) => a.position - b.position)
+          .map((s) => ({
+            id: s.id,
+            position: s.position,
+            label: s.label,
+            discipline: (s.discipline as DisciplineId | null) ?? null,
+            metric_key: s.metric_key,
+            metrics: (s.metrics ?? {}) as Record<string, number | string>,
+            exercise_reference_id: s.exercise_reference_id,
+          })),
       }));
     },
   });
 }
 
-async function replaceTemplateExercises(
+/** Musculation hybride (2026-08-19) — remplace intégralement le contenu
+ *  (exercices + blocs) d'un modèle depuis une liste ORDONNÉE unique, en
+ *  éclatant vers les deux tables tout en préservant `position` = index dans
+ *  `items` (voir TemplateItemInput). Un template force-only (aucun item
+ *  `kind: "segment"`) produit exactement les mêmes lignes qu'avant cette
+ *  évolution — `workout_template_segments` reste vide, comportement
+ *  identique. Résolution Exercise-Central non bloquante (même pattern que
+ *  tout autre chemin d'écriture, voir services/exerciseResolution.ts). */
+async function replaceTemplateItems(
   templateId: string,
   userId: string,
-  exercises: TemplateExerciseInput[],
+  items: TemplateItemInput[],
 ) {
-  const { error: delErr } = await supabase
+  const { error: delExErr } = await supabase
     .from("workout_template_exercises")
     .delete()
     .eq("template_id", templateId);
-  if (delErr) throw delErr;
+  if (delExErr) throw delExErr;
+  const { error: delSegErr } = await supabase
+    .from("workout_template_segments")
+    .delete()
+    .eq("template_id", templateId);
+  if (delSegErr) throw delSegErr;
 
-  if (exercises.length === 0) return;
-  const rows: TablesInsert<"workout_template_exercises">[] = exercises.map((e, i) => ({
-    template_id: templateId,
-    user_id: userId,
-    name: e.name,
-    position: i,
-    superset_group: e.superset_group ?? null,
-    default_sets: e.default_sets ?? null,
-    default_reps: e.default_reps ?? null,
-    default_weight: e.default_weight ?? null,
-    notes: e.notes ?? null,
-  }));
-  const { error: insErr } = await supabase.from("workout_template_exercises").insert(rows);
-  if (insErr) throw insErr;
+  if (items.length === 0) return;
+
+  const exerciseItems = items
+    .map((item, position) => ({ item, position }))
+    .filter(
+      (x): x is { item: TemplateExerciseInput & { kind: "exercise" }; position: number } =>
+        x.item.kind === "exercise",
+    );
+  const segmentItems = items
+    .map((item, position) => ({ item, position }))
+    .filter(
+      (x): x is { item: TemplateSegmentInput & { kind: "segment" }; position: number } =>
+        x.item.kind === "segment",
+    );
+
+  if (exerciseItems.length > 0) {
+    const idsByName = await resolveExerciseIdsByLabel(
+      "muscu",
+      exerciseItems.map((x) => x.item.name),
+    );
+    const rows: TablesInsert<"workout_template_exercises">[] = exerciseItems.map(
+      ({ item, position }) => ({
+        template_id: templateId,
+        user_id: userId,
+        name: item.name,
+        position,
+        superset_group: item.superset_group ?? null,
+        default_sets: item.default_sets ?? null,
+        default_reps: item.default_reps ?? null,
+        default_weight: item.default_weight ?? null,
+        notes: item.notes ?? null,
+        exercise_reference_id: idsByName.get(item.name) ?? null,
+      }),
+    );
+    const { error: insExErr } = await supabase.from("workout_template_exercises").insert(rows);
+    if (insExErr) throw insExErr;
+  }
+
+  if (segmentItems.length > 0) {
+    // Résolution groupée par discipline (un item = une seule discipline,
+    // mais un modèle peut mélanger plusieurs disciplines de bloc).
+    const byDiscipline = new Map<DisciplineId, string[]>();
+    for (const { item } of segmentItems) {
+      const list = byDiscipline.get(item.discipline) ?? [];
+      list.push(item.label);
+      byDiscipline.set(item.discipline, list);
+    }
+    const idsByDiscipline = new Map<DisciplineId, Map<string, string | null>>();
+    for (const [discipline, labels] of byDiscipline) {
+      idsByDiscipline.set(discipline, await resolveExerciseIdsByLabel(discipline, labels));
+    }
+    const rows: TablesInsert<"workout_template_segments">[] = segmentItems.map(
+      ({ item, position }) => ({
+        template_id: templateId,
+        user_id: userId,
+        position,
+        label: item.label,
+        discipline: item.discipline,
+        metric_key: item.metricKey ?? null,
+        metrics: (item.metrics ?? {}) as never,
+        exercise_reference_id: idsByDiscipline.get(item.discipline)?.get(item.label) ?? null,
+      }),
+    );
+    const { error: insSegErr } = await supabase.from("workout_template_segments").insert(rows);
+    if (insSegErr) throw insSegErr;
+  }
 }
 
 export function useCreateWorkoutTemplate() {
@@ -127,7 +280,7 @@ export function useCreateWorkoutTemplate() {
       name: string;
       icon: string;
       color: string;
-      exercises: TemplateExerciseInput[];
+      items: TemplateItemInput[];
     }) => {
       const {
         data: { user },
@@ -142,7 +295,7 @@ export function useCreateWorkoutTemplate() {
         .single();
       if (error) throw error;
 
-      await replaceTemplateExercises(template.id, user.id, input.exercises);
+      await replaceTemplateItems(template.id, user.id, input.items);
       return template.id;
     },
     onSuccess: () => {
@@ -161,7 +314,7 @@ export function useUpdateWorkoutTemplate() {
       name: string;
       icon: string;
       color: string;
-      exercises: TemplateExerciseInput[];
+      items: TemplateItemInput[];
     }) => {
       const {
         data: { user },
@@ -180,7 +333,7 @@ export function useUpdateWorkoutTemplate() {
         .eq("id", input.id);
       if (error) throw error;
 
-      await replaceTemplateExercises(input.id, user.id, input.exercises);
+      await replaceTemplateItems(input.id, user.id, input.items);
     },
     onSuccess: () => {
       toast.success("Modèle mis à jour");
@@ -227,18 +380,7 @@ export function useDuplicateWorkoutTemplate() {
         .single();
       if (error) throw error;
 
-      await replaceTemplateExercises(
-        copy.id,
-        user.id,
-        source.exercises.map((e) => ({
-          name: e.name,
-          superset_group: e.superset_group,
-          default_sets: e.default_sets,
-          default_reps: e.default_reps,
-          default_weight: e.default_weight,
-          notes: e.notes,
-        })),
-      );
+      await replaceTemplateItems(copy.id, user.id, orderedTemplateItems(source));
       return copy.id;
     },
     onSuccess: () => {
@@ -296,50 +438,91 @@ export function useStartWorkoutFromSavedTemplate() {
       }
 
       const orderedExercises = [...template.exercises].sort((a, b) => a.position - b.position);
-      if (orderedExercises.length === 0) return workout.id;
+      if (orderedExercises.length > 0) {
+        const exerciseIdsByName = await resolveExerciseIdsByLabel(
+          "muscu",
+          orderedExercises.map((e) => e.name),
+        );
+        const { data: insertedExs, error: exErr } = await supabase
+          .from("exercises")
+          .insert(
+            orderedExercises.map((e) => ({
+              user_id: user.id,
+              workout_id: workout.id,
+              name: e.name,
+              notes: e.notes,
+              superset_group: e.superset_group,
+              sets: null,
+              reps: null,
+              weight: null,
+              exercise_reference_id: exerciseIdsByName.get(e.name) ?? null,
+            })),
+          )
+          .select("id");
+        if (exErr) throw exErr;
 
-      const exerciseIdsByName = await resolveExerciseIdsByLabel(
-        "muscu",
-        orderedExercises.map((e) => e.name),
-      );
-      const { data: insertedExs, error: exErr } = await supabase
-        .from("exercises")
-        .insert(
-          orderedExercises.map((e) => ({
+        // Séries non validées, pré-remplies avec les valeurs par défaut du
+        // modèle (placeholders) — l'utilisateur les ajuste, et la suggestion
+        // intelligente (basée sur l'historique réel de l'exercice) reste
+        // affichée à côté exactement comme pour un ajout manuel.
+        const setRows = orderedExercises.flatMap((e, i) => {
+          const exerciseId = insertedExs?.[i]?.id;
+          if (!exerciseId) return [];
+          const count = Math.max(1, e.default_sets ?? 1);
+          return Array.from({ length: count }, (_, j) => ({
+            exercise_id: exerciseId,
             user_id: user.id,
-            workout_id: workout.id,
-            name: e.name,
-            notes: e.notes,
-            superset_group: e.superset_group,
-            sets: null,
-            reps: null,
-            weight: null,
-            exercise_reference_id: exerciseIdsByName.get(e.name) ?? null,
-          })),
-        )
-        .select("id");
-      if (exErr) throw exErr;
+            set_number: j + 1,
+            reps: e.default_reps,
+            weight: e.default_weight,
+            completed: false,
+          }));
+        });
+        if (setRows.length > 0) {
+          const { error: setErr } = await supabase.from("exercise_sets").insert(setRows);
+          if (setErr) throw setErr;
+        }
+      }
 
-      // Séries non validées, pré-remplies avec les valeurs par défaut du
-      // modèle (placeholders) — l'utilisateur les ajuste, et la suggestion
-      // intelligente (basée sur l'historique réel de l'exercice) reste
-      // affichée à côté exactement comme pour un ajout manuel.
-      const setRows = orderedExercises.flatMap((e, i) => {
-        const exerciseId = insertedExs?.[i]?.id;
-        if (!exerciseId) return [];
-        const count = Math.max(1, e.default_sets ?? 1);
-        return Array.from({ length: count }, (_, j) => ({
-          exercise_id: exerciseId,
-          user_id: user.id,
-          set_number: j + 1,
-          reps: e.default_reps,
-          weight: e.default_weight,
-          completed: false,
-        }));
-      });
-      if (setRows.length > 0) {
-        const { error: setErr } = await supabase.from("exercise_sets").insert(setRows);
-        if (setErr) throw setErr;
+      // Musculation hybride (2026-08-19) — blocs métriques du modèle,
+      // seedés en workout_segments SOUS LEUR PROPRE discipline (jamais
+      // "muscu", jamais exercises/exercise_sets) — même mécanisme que
+      // useStartHybridStrengthWorkout (use-fitness.ts) et l'ajout manuel de
+      // bloc en séance active (ActiveWorkoutView). Un template force-only
+      // (segments vides) ne change rien ici.
+      const orderedSegments = [...template.segments].sort((a, b) => a.position - b.position);
+      if (orderedSegments.length > 0) {
+        const byDiscipline = new Map<DisciplineId, string[]>();
+        for (const s of orderedSegments) {
+          const discipline = s.discipline ?? "autre";
+          const list = byDiscipline.get(discipline) ?? [];
+          list.push(s.label);
+          byDiscipline.set(discipline, list);
+        }
+        const idsByDisciplineAndLabel = new Map<DisciplineId, Map<string, string | null>>();
+        for (const [discipline, labels] of byDiscipline) {
+          idsByDisciplineAndLabel.set(
+            discipline,
+            await resolveExerciseIdsByLabel(discipline, labels),
+          );
+        }
+        const { error: segErr } = await supabase.from("workout_segments").insert(
+          orderedSegments.map((s, i) => {
+            const discipline = s.discipline ?? "autre";
+            return {
+              workout_id: workout.id,
+              user_id: user.id,
+              position: i,
+              label: s.label,
+              metric_key: s.metric_key,
+              metrics: s.metrics as never,
+              completed: false,
+              discipline,
+              exercise_id: idsByDisciplineAndLabel.get(discipline)?.get(s.label) ?? null,
+            };
+          }),
+        );
+        if (segErr) throw segErr;
       }
 
       return workout.id;
@@ -347,6 +530,10 @@ export function useStartWorkoutFromSavedTemplate() {
     onSuccess: () => {
       toast.success("Séance démarrée depuis le modèle 💪");
       qc.invalidateQueries({ queryKey: ACTIVE_KEY });
+      // Blocs lus par ActiveWorkoutView via useActiveWorkoutSegments
+      // (HYBRID_BLOCKS_KEY, Part 1) — invalider pour ne jamais afficher un
+      // état périmé d'une précédente séance hybride.
+      qc.invalidateQueries({ queryKey: HYBRID_BLOCKS_KEY });
     },
     onError: (e: Error) => toast.error(e.message),
   });

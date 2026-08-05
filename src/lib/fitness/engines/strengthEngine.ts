@@ -17,15 +17,39 @@
 import { supabase } from "@/integrations/supabase/client";
 import { durationQuestion, gymLocationQuestion } from "./sharedQuestions";
 import { buildSenseiExplanation, type SenseiAutoProfile } from "./senseiAutoProfile";
+import { buildCardioRunSegment, buildHyroxPrepSegments } from "./hyroxEngine";
+import { segmentsFromMetadata } from "./sessionViewHelpers";
 import type {
+  DisciplineId,
   SenseiAnswers,
   SenseiContext,
   SenseiQuestionSpec,
+  SessionSegment,
   SessionView,
   WorkoutEngine,
   WorkoutRecordDraft,
   WorkoutTemplate,
 } from "./types";
+
+// Musculation hybride (2026-08-05) — Coach IA. Musculation reste la SEULE
+// discipline choisie par l'utilisateur ; ce champ décide seulement si des
+// blocs métriques (course/HYROX) accompagnent la séance de force, jamais
+// affiché comme un mode "Hybride" séparé (une seule question de plus,
+// questionnaire volontairement court). Composition, pas fusion : les blocs
+// sont construits par le moteur HYROX lui-même (buildHyroxPrepSegments/
+// buildCardioRunSegment, réutilisent ses standards de charge/distance par
+// niveau) — StrengthWorkoutEngine ne réimplémente aucune connaissance HYROX.
+export type TrainingMode = "force" | "force_cardio" | "hyrox_prep";
+
+/** Discipline à laquelle rattacher les blocs générés pour ce training_mode
+ *  (workout_segments.discipline — voir useStartHybridStrengthWorkout,
+ *  use-fitness.ts). undefined pour "force" : aucun bloc, comportement
+ *  100% inchangé. */
+export function blockDisciplineForTrainingMode(mode: TrainingMode): DisciplineId | undefined {
+  if (mode === "hyrox_prep") return "hyrox";
+  if (mode === "force_cardio") return "course";
+  return undefined;
+}
 
 // Niveau et objectif ne sont plus demandés : SenseiAutoProfile construit un
 // véritable profil d'entraînement depuis l'historique (voir
@@ -76,6 +100,17 @@ const QUESTIONS: SenseiQuestionSpec[] = [
       { value: "salle complète", label: "💪 Salle complète" },
     ],
     defaultValue: "salle complète",
+  },
+  {
+    id: "training_mode",
+    prompt: "Envie d'ajouter autre chose à ta séance ?",
+    type: "single-choice",
+    options: [
+      { value: "force", label: "Uniquement musculation" },
+      { value: "force_cardio", label: "🏃 + Cardio / course" },
+      { value: "hyrox_prep", label: "🔥 + Préparation HYROX" },
+    ],
+    defaultValue: "force",
   },
 ];
 
@@ -171,10 +206,26 @@ export const StrengthWorkoutEngine: WorkoutEngine = {
       autoProfile,
       template.exercises.map((e) => e.name),
     );
+
+    // Musculation hybride — blocs métriques COMPOSÉS depuis le moteur HYROX
+    // (jamais réimplémentés ici), ajoutés au template SANS toucher au
+    // payload/à la génération de force ci-dessus (chemin "force" identique
+    // à avant, template.segments reste undefined). autoProfile.level est la
+    // même union que HyroxLevel (AutoLevel, senseiAutoProfile.ts).
+    const trainingMode = (String(answers.training_mode ?? "force") as TrainingMode) || "force";
+    if (trainingMode === "force_cardio") {
+      template.segments = buildCardioRunSegment(autoProfile.level);
+    } else if (trainingMode === "hyrox_prep") {
+      template.segments = buildHyroxPrepSegments(autoProfile.level);
+    }
+
     return template;
   },
 
   toWorkoutRecord(template: WorkoutTemplate, answers: SenseiAnswers): WorkoutRecordDraft {
+    const trainingMode = (String(answers.training_mode ?? "force") as TrainingMode) || "force";
+    const blockDiscipline = blockDisciplineForTrainingMode(trainingMode);
+    const hasSegments = (template.segments?.length ?? 0) > 0;
     return {
       discipline: "muscu",
       name: template.name,
@@ -188,28 +239,44 @@ export const StrengthWorkoutEngine: WorkoutEngine = {
         weight: e.weight ? Number(e.weight) : null,
         image_path: e.image_path,
       })),
+      // Additif : absent pour toute génération "force" (comportement 100%
+      // inchangé). `blockDiscipline` n'est pas un champ formel du contrat
+      // WorkoutRecordDraft — lu par SeancesTab.handleCoachResult pour
+      // savoir sous quelle discipline résoudre l'identité des blocs
+      // (workout_segments.discipline) au démarrage de la séance active
+      // hybride. Jamais lu par le moteur de Rang.
+      metadata: hasSegments
+        ? { segments: template.segments, sessionType: "hybrid", blockDiscipline }
+        : undefined,
     };
   },
 
   toSessionView(record: WorkoutRecordDraft): SessionView {
     const rows = record.exerciseRows ?? [];
+    const blockSegments: SessionSegment[] = segmentsFromMetadata(record);
     return {
       title: record.name,
       summaryStats: [
         { label: "Durée", value: `${record.duration_minutes} min` },
         { label: "Exercices", value: String(rows.length) },
       ],
-      segments: rows.map((e) => ({
-        label: e.name,
-        stats: [
-          { label: "Séries", value: e.sets != null ? String(e.sets) : "—" },
-          { label: "Répétitions", value: e.reps != null ? String(e.reps) : "—" },
-          {
-            label: "Charge",
-            value: e.weight != null && e.weight > 0 ? `${e.weight} kg` : "poids du corps",
-          },
-        ],
-      })),
+      segments: [
+        ...rows.map((e) => ({
+          label: e.name,
+          stats: [
+            { label: "Séries", value: e.sets != null ? String(e.sets) : "—" },
+            { label: "Répétitions", value: e.reps != null ? String(e.reps) : "—" },
+            {
+              label: "Charge",
+              value: e.weight != null && e.weight > 0 ? `${e.weight} kg` : "poids du corps",
+            },
+          ],
+        })),
+        // Musculation hybride : les blocs métriques (course/HYROX) suivent
+        // les exercices de force, même ordre que la séance active — jamais
+        // lus par le moteur de Rang (voir metadata.segments, additif).
+        ...blockSegments,
+      ],
       notes: record.notes,
     };
   },

@@ -94,6 +94,9 @@ export function SavedTemplatesSheet({
                 <span className="block text-sm font-semibold text-foreground">{template.name}</span>
                 <span className="block text-xs text-muted-foreground">
                   {template.exercises.length} exercice(s)
+                  {/* Musculation hybride (2026-08-19) : indication discrète,
+                      aucune discipline "Hybride" séparée n'est introduite. */}
+                  {template.segments.length > 0 && ` · ${template.segments.length} bloc(s)`}
                 </span>
               </span>
               {start.isPending && (

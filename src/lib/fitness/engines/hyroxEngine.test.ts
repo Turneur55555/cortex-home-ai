@@ -1,6 +1,40 @@
 import { describe, expect, it } from "vitest";
-import { HyroxWorkoutEngine } from "./hyroxEngine";
+import { buildCardioRunSegment, buildHyroxPrepSegments, HyroxWorkoutEngine } from "./hyroxEngine";
 import type { SenseiAnswers } from "./types";
+
+describe("buildCardioRunSegment / buildHyroxPrepSegments — composition pour Musculation hybride", () => {
+  it("buildCardioRunSegment produit un seul bloc Running, standards de niveau réutilisés", () => {
+    const segs = buildCardioRunSegment("intermédiaire");
+    expect(segs).toHaveLength(1);
+    expect(segs[0].label).toBe("Running");
+    expect(segs[0].metrics?.distance_m).toBe(1000);
+  });
+
+  it("buildCardioRunSegment accepte une distance explicite", () => {
+    const segs = buildCardioRunSegment("débutant", 500);
+    expect(segs[0].metrics?.distance_m).toBe(500);
+  });
+
+  it("buildHyroxPrepSegments : course + 2 postes représentatifs, jamais 'sets'/'poids du corps'", () => {
+    const segs = buildHyroxPrepSegments("intermédiaire");
+    expect(segs).toHaveLength(3);
+    expect(segs[0].label).toBe("Running");
+    const otherLabels = segs.slice(1).map((s) => s.label);
+    expect(otherLabels.every((l) => l !== "Running")).toBe(true);
+    const allStatLabels = segs.flatMap((s) => s.stats.map((st) => st.label));
+    expect(allStatLabels).not.toContain("Séries");
+    expect(allStatLabels).not.toContain("poids du corps");
+  });
+
+  it("réutilise les standards HYROX par niveau (débutant < avancé en charge)", () => {
+    const beginner = buildHyroxPrepSegments("débutant");
+    const advanced = buildHyroxPrepSegments("avancé");
+    // Même structure (3 blocs), valeurs différentes par niveau — preuve que
+    // strengthEngine ne réimplémente aucun standard, il compose HYROX tel quel.
+    expect(beginner).toHaveLength(advanced.length);
+    expect(JSON.stringify(beginner)).not.toEqual(JSON.stringify(advanced));
+  });
+});
 
 function visibleQuestionIds(answers: SenseiAnswers): string[] {
   return HyroxWorkoutEngine.questions.filter((q) => !q.when || q.when(answers)).map((q) => q.id);

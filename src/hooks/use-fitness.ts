@@ -10,6 +10,7 @@ import { resolveExerciseId, resolveExerciseIdsByLabel } from "@/services/exercis
 import { identityKey } from "@/lib/fitness/recentExercises";
 import { verifyExerciseRanksForSession } from "@/hooks/useVerifyExerciseRanksForSession";
 import type { ActiveGenericSegment } from "@/hooks/useGenericActiveSession";
+import { HYBRID_BLOCKS_KEY } from "@/hooks/useGenericActiveSession";
 import {
   ACTIVE_WORKOUT_CONFLICT_MESSAGE,
   isActiveWorkoutConflict,
@@ -657,6 +658,154 @@ export function useStartWorkout() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ACTIVE_KEY });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+}
+
+/** Musculation hybride générée par le Sensei (2026-08-05) — démarre une
+ *  séance active "muscu" directement seedée avec force ET blocs métriques,
+ *  au lieu du chemin classique CoachSheet -> WorkoutSheet (enregistrement
+ *  direct, réservé aux générations "force" pure — inchangé, voir
+ *  SeancesTab.handleCoachResult). Réutilise l'architecture hybride posée
+ *  pour l'ajout manuel de blocs (ActiveWorkoutView) : les exercices vont
+ *  dans `exercises`/`exercise_sets` (résolution ExerciseResolutionService,
+ *  jamais bloquante) exactement comme useAddWorkout/useStartWorkoutFromTemplate,
+ *  les blocs vont dans `workout_segments` sous LEUR PROPRE discipline
+ *  (jamais "muscu") — jamais lus par le moteur de Rang, qui ne lit que
+ *  exercises/exercise_sets (inchangé). La séance reste `discipline: "muscu"`.
+ *  L'utilisateur retrouve ensuite exactement la même séance active hybride
+ *  que s'il avait tout ajouté à la main (mêmes cartes, mêmes mutations). */
+export function useStartHybridStrengthWorkout() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      name,
+      gym_location,
+      exercises,
+      segments,
+      blockDiscipline,
+    }: {
+      name: string;
+      gym_location?: string;
+      exercises: Array<{ name: string; sets: string; reps: string; weight: string }>;
+      segments: SessionSegment[];
+      blockDiscipline: DisciplineId;
+    }) => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Non authentifié");
+
+      const { data: existing, error: existingErr } = await supabase
+        .from("workouts")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("status", "active")
+        .limit(1)
+        .maybeSingle();
+      if (existingErr) throw existingErr;
+      if (existing) throw new Error(ACTIVE_WORKOUT_CONFLICT_MESSAGE);
+
+      const today = localDateYMD();
+      const { data: workout, error } = await supabase
+        .from("workouts")
+        .insert({
+          user_id: user.id,
+          name,
+          date: today,
+          gym_location: gym_location ?? "Salle inconnue",
+          discipline: "muscu",
+          status: "active",
+        })
+        .select("id")
+        .single();
+      if (error) {
+        if (isActiveWorkoutConflict(error)) throw new Error(ACTIVE_WORKOUT_CONFLICT_MESSAGE);
+        throw error;
+      }
+
+      // Exercices de force — mêmes colonnes/résolution que useAddWorkout,
+      // séries détaillées expansées depuis sets×{reps,weight} (même
+      // convention que useStartWorkoutFromTemplate), non validées par
+      // défaut : l'utilisateur les confirme en séance active, comme pour
+      // toute séance démarrée depuis un modèle.
+      const validExercises = exercises.filter((e) => e.name.trim());
+      if (validExercises.length > 0) {
+        const exerciseIdsByName = await resolveExerciseIdsByLabel(
+          "muscu",
+          validExercises.map((e) => e.name),
+        );
+        const { data: inserted, error: exErr } = await supabase
+          .from("exercises")
+          .insert(
+            validExercises.map((e) => ({
+              user_id: user.id,
+              workout_id: workout.id,
+              name: e.name,
+              sets: e.sets ? Number(e.sets) : null,
+              reps: e.reps ? Number(e.reps) : null,
+              weight: e.weight ? Number(e.weight) : null,
+              image_path: null,
+              exercise_reference_id: exerciseIdsByName.get(e.name) ?? null,
+            })),
+          )
+          .select("id");
+        if (exErr) throw exErr;
+
+        if (inserted) {
+          const setRows = validExercises.flatMap((e, i) => {
+            const exerciseId = inserted[i]?.id;
+            const n = e.sets ? Math.max(1, Math.round(Number(e.sets))) : 0;
+            if (!exerciseId || n === 0) return [];
+            return Array.from({ length: n }, (_, j) => ({
+              exercise_id: exerciseId,
+              user_id: user.id,
+              set_number: j + 1,
+              reps: e.reps ? Number(e.reps) : null,
+              weight: e.weight ? Number(e.weight) : null,
+              completed: false,
+            }));
+          });
+          if (setRows.length > 0) {
+            const { error: setErr } = await supabase.from("exercise_sets").insert(setRows);
+            if (setErr) throw setErr;
+          }
+        }
+      }
+
+      // Blocs métriques — workout_segments, même mécanisme que
+      // useStartGenericActiveWorkout (Part 1) : SOUS la discipline du bloc
+      // (course/hyrox...), jamais "muscu", jamais exercises/exercise_sets.
+      if (segments.length > 0) {
+        const idsByLabel = await resolveExerciseIdsByLabel(
+          blockDiscipline,
+          segments.map((s) => s.label),
+        );
+        const { error: segErr } = await supabase.from("workout_segments").insert(
+          segments.map((s, i) => ({
+            workout_id: workout.id,
+            user_id: user.id,
+            position: i,
+            label: s.label,
+            metric_key: null,
+            metrics: (s.metrics ?? {}) as never,
+            completed: false,
+            discipline: blockDiscipline,
+            exercise_id: idsByLabel.get(s.label) ?? null,
+          })),
+        );
+        if (segErr) throw segErr;
+      }
+
+      return workout.id;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ACTIVE_KEY });
+      // Les blocs sont lus par ActiveWorkoutView via useActiveWorkoutSegments
+      // (HYBRID_BLOCKS_KEY, Part 1) — invalider pour ne jamais afficher un
+      // état vide/périmé d'une précédente séance hybride.
+      qc.invalidateQueries({ queryKey: HYBRID_BLOCKS_KEY });
     },
     onError: (e: Error) => toast.error(e.message),
   });

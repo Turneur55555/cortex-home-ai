@@ -1,5 +1,75 @@
 import { describe, expect, it } from "vitest";
-import { computeSupersetGroups, workoutToTemplateSeed } from "./workoutTemplates";
+import {
+  computeSupersetGroups,
+  orderedTemplateItems,
+  workoutToTemplateSeed,
+} from "./workoutTemplates";
+
+const exercise = (position: number, name: string) => ({
+  position,
+  name,
+  superset_group: null,
+  default_sets: 4,
+  default_reps: 8,
+  default_weight: 60,
+  notes: null,
+});
+
+const segment = (position: number, label: string, discipline = "course") => ({
+  position,
+  label,
+  discipline,
+  metric_key: null,
+  metrics: {},
+});
+
+describe("orderedTemplateItems — musculation hybride (2026-08-19)", () => {
+  it("un template force-only (segments vides) ne retourne que des items 'exercise', ordre inchangé", () => {
+    const items = orderedTemplateItems({
+      exercises: [exercise(0, "Développé couché"), exercise(1, "Pompes")],
+      segments: [],
+    });
+    expect(items.map((i) => i.kind)).toEqual(["exercise", "exercise"]);
+    expect(items.map((i) => (i.kind === "exercise" ? i.name : null))).toEqual([
+      "Développé couché",
+      "Pompes",
+    ]);
+  });
+
+  it("reconstruit l'ordre RÉEL entremêlé (Bench Press, Course, Sled Push, Pull-ups, Row) depuis les deux tables", () => {
+    const items = orderedTemplateItems({
+      exercises: [exercise(0, "Bench Press"), exercise(3, "Pull-ups")],
+      segments: [
+        segment(1, "Course 1000 m", "course"),
+        segment(2, "Sled Push", "hyrox"),
+        segment(4, "Row 1000 m", "hyrox"),
+      ],
+    });
+    expect(items.map((i) => (i.kind === "exercise" ? i.name : i.label))).toEqual([
+      "Bench Press",
+      "Course 1000 m",
+      "Sled Push",
+      "Pull-ups",
+      "Row 1000 m",
+    ]);
+    expect(items.map((i) => i.kind)).toEqual([
+      "exercise",
+      "segment",
+      "segment",
+      "exercise",
+      "segment",
+    ]);
+  });
+
+  it("un bloc sans discipline connue retombe sur 'autre', jamais une valeur inventée pour l'utilisateur", () => {
+    const items = orderedTemplateItems({
+      exercises: [],
+      segments: [{ ...segment(0, "Bloc"), discipline: null }],
+    });
+    expect(items[0].kind).toBe("segment");
+    expect((items[0] as { discipline: string }).discipline).toBe("autre");
+  });
+});
 
 describe("computeSupersetGroups", () => {
   it("retourne null pour toutes les lignes sans superset", () => {
