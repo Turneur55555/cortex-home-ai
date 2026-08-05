@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { db } from "@/integrations/supabase/db";
 import { isBiologicalSex, type BiologicalSex } from "@/lib/fitness/metabolism";
 import { isNeatActivityLevel, type NeatActivityLevel } from "@/lib/fitness/neat";
 
@@ -25,7 +26,7 @@ export function useMetabolicProfile() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return null;
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("metabolic_profile")
         .select("sex, age, activity_level")
         .eq("user_id", user.id)
@@ -56,7 +57,7 @@ export function useUpsertMetabolicProfile() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      const { error } = await supabase.from("metabolic_profile").upsert(
+      const { error } = await db.from("metabolic_profile").upsert(
         {
           user_id: user.id,
           sex: input.sex,

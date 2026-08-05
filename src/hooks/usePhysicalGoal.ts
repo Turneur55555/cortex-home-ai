@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { db } from "@/integrations/supabase/db";
 import type {
   CalorieStrategyGoal,
   FatLossRate,
@@ -83,7 +84,7 @@ export function usePhysicalGoal() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return null;
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("physical_goals")
         .select(SELECT_COLUMNS)
         .eq("user_id", user.id)
@@ -105,7 +106,7 @@ export function usePhysicalGoalHistory() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return [];
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("physical_goals")
         .select(SELECT_COLUMNS)
         .eq("user_id", user.id)
@@ -150,7 +151,7 @@ export function useCreatePhysicalGoal() {
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
 
-      const { data: existingActive, error: existingError } = await supabase
+      const { data: existingActive, error: existingError } = await db
         .from("physical_goals")
         .select("id")
         .eq("user_id", user.id)
@@ -158,7 +159,7 @@ export function useCreatePhysicalGoal() {
         .maybeSingle();
       if (existingError) throw existingError;
       if (existingActive) {
-        const { error: cancelError } = await supabase
+        const { error: cancelError } = await db
           .from("physical_goals")
           .update({ status: "cancelled" })
           .eq("id", existingActive.id)
@@ -166,7 +167,7 @@ export function useCreatePhysicalGoal() {
         if (cancelError) throw cancelError;
       }
 
-      const { error } = await supabase.from("physical_goals").insert({
+      const { error } = await db.from("physical_goals").insert({
         user_id: user.id,
         goal: input.goal,
         target_rate: input.targetRate,
@@ -198,7 +199,7 @@ export function useUpdatePhysicalGoalRate() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      const { error } = await supabase
+      const { error } = await db
         .from("physical_goals")
         .update({ target_rate: input.targetRate })
         .eq("id", input.id)
@@ -222,7 +223,7 @@ export function useCancelPhysicalGoal() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      const { error } = await supabase
+      const { error } = await db
         .from("physical_goals")
         .update({ status: "cancelled" })
         .eq("id", id)
@@ -246,7 +247,7 @@ export function useCompletePhysicalGoal() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      const { error } = await supabase
+      const { error } = await db
         .from("physical_goals")
         .update({ status: "completed", completed_at: new Date().toISOString() })
         .eq("id", id)

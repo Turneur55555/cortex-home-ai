@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { db } from "@/integrations/supabase/db";
 import { logActivity } from "@/lib/activity";
 import type { TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 
@@ -8,7 +9,7 @@ export function useBodyMeasurements() {
   return useQuery({
     queryKey: ["body_tracking"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("body_tracking")
         .select("*")
         .or(
@@ -30,7 +31,7 @@ export function useAddBodyMeasurement() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      const { error } = await supabase.from("body_tracking").insert({ ...input, user_id: user.id });
+      const { error } = await db.from("body_tracking").insert({ ...input, user_id: user.id });
       if (error) throw error;
     },
     onSuccess: (_d, vars) => {
@@ -52,7 +53,7 @@ export function useDeleteBodyMeasurement() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      const { error } = await supabase
+      const { error } = await db
         .from("body_tracking")
         .delete()
         .eq("id", id)
@@ -75,7 +76,7 @@ export function useUpdateBodyMeasurement() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      const { error } = await supabase
+      const { error } = await db
         .from("body_tracking")
         .update(patch)
         .eq("id", id)
