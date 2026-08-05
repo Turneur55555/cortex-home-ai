@@ -3836,6 +3836,7 @@ export type Database = {
           name: string | null
           pattern: string | null
           primary_color: string | null
+          processed_storage_path: string | null
           seasons: string[]
           secondary_colors: string[]
           size: string | null
@@ -3860,6 +3861,7 @@ export type Database = {
           name?: string | null
           pattern?: string | null
           primary_color?: string | null
+          processed_storage_path?: string | null
           seasons?: string[]
           secondary_colors?: string[]
           size?: string | null
@@ -3884,6 +3886,7 @@ export type Database = {
           name?: string | null
           pattern?: string | null
           primary_color?: string | null
+          processed_storage_path?: string | null
           seasons?: string[]
           secondary_colors?: string[]
           size?: string | null
