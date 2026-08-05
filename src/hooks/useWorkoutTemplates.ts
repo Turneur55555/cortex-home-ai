@@ -288,7 +288,7 @@ async function replaceTemplateItems(
         exercise_reference_id: idsByName.get(item.name) ?? null,
       }),
     );
-    const { error: insExErr } = await supabase.from("workout_template_exercises").insert(rows);
+    const { error: insExErr } = await db.from("workout_template_exercises").insert(rows);
     if (insExErr) throw insExErr;
   }
 
