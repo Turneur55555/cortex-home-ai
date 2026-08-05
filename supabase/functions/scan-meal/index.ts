@@ -78,6 +78,12 @@ Méthode par aliment :
 Si un aliment est ambigu, prends la valeur moyenne et baisse confidence.
 Retourne STRICTEMENT du JSON via tool calling. Tout le texte en FRANÇAIS.`;
 
+const CONTEXT_INSTRUCTIONS = `L'utilisateur a décrit son plat avant l'analyse. Ce texte est PRIORITAIRE sur ce que tu crois voir sur
+la photo : si l'utilisateur nomme explicitement un aliment ou un ingrédient (ex. « cabillaud »), utilise
+CET aliment même s'il ressemble visuellement à autre chose (ex. ne jamais l'identifier comme du poulet).
+Utilise la photo pour repérer les AUTRES aliments non mentionnés et pour estimer les portions/macros.
+N'invente pas d'ingrédient qui n'est ni visible sur la photo ni mentionné dans la description.`;
+
 // ─── Parser robuste ───────────────────────────────────────────────────────────
 
 function extractFromAiResponse(aiJson: unknown): MealAnalysisResult | null {
@@ -143,8 +149,12 @@ function extractFromAiResponse(aiJson: unknown): MealAnalysisResult | null {
 
 // ─── Appels IA ────────────────────────────────────────────────────────────────
 
-async function callGemini(apiKey: string, b64: string, mt: string): Promise<unknown> {
-  console.log("[scan-meal] → Gemini 2.5 Flash, b64 length:", b64.length);
+async function callGemini(apiKey: string, b64: string, mt: string, userContext?: string): Promise<unknown> {
+  console.log("[scan-meal] → Gemini 2.5 Flash, b64 length:", b64.length, "context:", !!userContext);
+  const systemPrompt = userContext ? `${SYSTEM_PROMPT}\n\n${CONTEXT_INSTRUCTIONS}` : SYSTEM_PROMPT;
+  const userText = userContext
+    ? `Description du plat par l'utilisateur : « ${userContext} »\nIdentifie chaque aliment séparément (en priorisant cette description) et donne sa masse estimée (grammes) avec ses macros.`
+    : "Identifie chaque aliment séparément et donne sa masse estimée (grammes) avec ses macros.";
   const res = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
     method: "POST",
     headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -152,11 +162,11 @@ async function callGemini(apiKey: string, b64: string, mt: string): Promise<unkn
     body: JSON.stringify({
       model: "gemini-2.5-flash",
       messages: [
-        { role: "system", content: SYSTEM_PROMPT },
+        { role: "system", content: systemPrompt },
         {
           role: "user",
           content: [
-            { type: "text", text: "Identifie chaque aliment séparément et donne sa masse estimée (grammes) avec ses macros." },
+            { type: "text", text: userText },
             { type: "image_url", image_url: { url: `data:${mt};base64,${b64}` } },
           ],
         },
@@ -181,8 +191,12 @@ async function callGemini(apiKey: string, b64: string, mt: string): Promise<unkn
   return json;
 }
 
-async function callOpenAI(apiKey: string, b64: string, mt: string): Promise<unknown> {
-  console.log("[scan-meal] → OpenAI GPT-4o, b64 length:", b64.length);
+async function callOpenAI(apiKey: string, b64: string, mt: string, userContext?: string): Promise<unknown> {
+  console.log("[scan-meal] → OpenAI GPT-4o, b64 length:", b64.length, "context:", !!userContext);
+  const systemPrompt = userContext ? `${SYSTEM_PROMPT}\n\n${CONTEXT_INSTRUCTIONS}` : SYSTEM_PROMPT;
+  const userText = userContext
+    ? `Description du plat par l'utilisateur : « ${userContext} »\nIdentifie chaque aliment séparément (en priorisant cette description) et donne sa masse estimée (grammes) avec ses macros.`
+    : "Identifie chaque aliment séparément et donne sa masse estimée (grammes) avec ses macros.";
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -190,11 +204,11 @@ async function callOpenAI(apiKey: string, b64: string, mt: string): Promise<unkn
     body: JSON.stringify({
       model: "gpt-4o",
       messages: [
-        { role: "system", content: SYSTEM_PROMPT },
+        { role: "system", content: systemPrompt },
         {
           role: "user",
           content: [
-            { type: "text", text: "Identifie chaque aliment séparément et donne sa masse estimée (grammes) avec ses macros." },
+            { type: "text", text: userText },
             { type: "image_url", image_url: { url: `data:${mt};base64,${b64}`, detail: "auto" } },
           ],
         },
@@ -265,13 +279,17 @@ Deno.serve(async (req) => {
     try { body = await req.json(); }
     catch (e) { return fail("Corps invalide (JSON attendu).", e instanceof Error ? e.message : String(e)); }
 
-    const { image_base64, mime_type } = body;
+    const { image_base64, mime_type, user_context } = body;
     if (!image_base64 || typeof image_base64 !== "string") return fail("Champ image_base64 manquant.");
     if (image_base64.length < 100) return fail("Image vide ou corrompue.");
     if (image_base64.length > 12_000_000) return fail("Image trop volumineuse (max ~9 Mo).");
 
     const mt = typeof mime_type === "string" && mime_type.startsWith("image/") ? mime_type : "image/jpeg";
-    console.log("[scan-meal] mime:", mt, "b64 chars:", image_base64.length);
+    const userContext =
+      typeof user_context === "string" && user_context.trim().length > 0
+        ? user_context.trim().slice(0, 300)
+        : undefined;
+    console.log("[scan-meal] mime:", mt, "b64 chars:", image_base64.length, "context:", !!userContext);
 
     let aiJson: unknown = null;
     const aiErrors: string[] = [];
@@ -279,7 +297,7 @@ Deno.serve(async (req) => {
     if (GEMINI_API_KEY) {
       try {
         const t0 = Date.now();
-        aiJson = await callGemini(GEMINI_API_KEY, image_base64, mt);
+        aiJson = await callGemini(GEMINI_API_KEY, image_base64, mt, userContext);
         console.log("[scan-meal] Gemini ok, ms:", Date.now() - t0);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -292,7 +310,7 @@ Deno.serve(async (req) => {
     if (!aiJson && OPENAI_API_KEY) {
       try {
         const t0 = Date.now();
-        aiJson = await callOpenAI(OPENAI_API_KEY, image_base64, mt);
+        aiJson = await callOpenAI(OPENAI_API_KEY, image_base64, mt, userContext);
         console.log("[scan-meal] OpenAI ok, ms:", Date.now() - t0);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
