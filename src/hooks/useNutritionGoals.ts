@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { db } from "@/integrations/supabase/db";
 import type {
   CalorieStrategyGoal,
   CalorieStrategyMode,
@@ -59,7 +60,7 @@ export function useNutritionGoals() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return null;
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("nutrition_goals")
         .select(
           "calories, proteins, carbs, fats, goal, target_rate, calorie_strategy_mode, last_auto_adjustment_at, macro_strategy_mode, protein_locked, carbs_locked, fat_locked",
@@ -95,7 +96,7 @@ export function useUpsertNutritionGoals() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      const { error } = await supabase
+      const { error } = await db
         .from("nutrition_goals")
         .upsert({ user_id: user.id, ...input }, { onConflict: "user_id" });
       if (error) throw error;
@@ -125,7 +126,7 @@ export function useUpdateCalorieStrategyPreference() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      const { error } = await supabase.from("nutrition_goals").upsert(
+      const { error } = await db.from("nutrition_goals").upsert(
         {
           user_id: user.id,
           calorie_strategy_mode: input.mode,
@@ -184,7 +185,7 @@ export function useApplyCalorieGoal() {
       /** Phase 7 — raison de l'ajustement MACROS combiné (ex. `"lean_mass"`), voir migration 20260813090000. N'affecte jamais `calorie_goal_adjustments.reason` (paramètre `reason` ci-dessus, inchangé). */
       macroReason?: string | null;
     }) => {
-      const { error } = await supabase.rpc("apply_calorie_goal_adjustment", {
+      const { error } = await db.rpc("apply_calorie_goal_adjustment", {
         _mode: input.mode,
         _applied_calories: Math.round(input.appliedCalories),
         _recommended_calories:
@@ -248,7 +249,7 @@ export function useUpdateMacroStrategyPreference() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      const { error } = await supabase.from("nutrition_goals").upsert(
+      const { error } = await db.from("nutrition_goals").upsert(
         {
           user_id: user.id,
           ...(input.mode !== undefined ? { macro_strategy_mode: input.mode } : {}),
@@ -295,7 +296,7 @@ export function useApplyMacroGoal() {
       /** Phase 7 — raison de l'ajustement (ex. `"lean_mass"` quand une composition corporelle exploitable a influencé la cible protéique), voir migration 20260813090000. */
       reason?: string | null;
     }) => {
-      const { error } = await supabase.rpc("apply_macro_goal_adjustment", {
+      const { error } = await db.rpc("apply_macro_goal_adjustment", {
         _mode: input.mode,
         _applied_proteins: Math.round(input.appliedProteins),
         _applied_carbs: Math.round(input.appliedCarbs),
@@ -343,7 +344,7 @@ export function useLastCalorieGoalAdjustment() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return null;
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("calorie_goal_adjustments")
         .select("created_at, mode, previous_calories, applied_calories")
         .eq("user_id", user.id)
@@ -385,7 +386,7 @@ export function useLastMacroGoalAdjustment() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return null;
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("macro_goal_adjustments")
         .select(
           "created_at, mode, previous_proteins, previous_carbs, previous_fats, applied_proteins, applied_carbs, applied_fats, reason",

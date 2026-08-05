@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { db } from "@/integrations/supabase/db";
 import { useAuth } from "@/hooks/use-auth";
 import type { Json } from "@/integrations/supabase/types";
 import {
@@ -221,7 +222,7 @@ export function useCreateWardrobeItem() {
         });
       if (uploadError) throw uploadError;
 
-      const { error: insertError } = await supabase.from("wardrobe_items").insert({
+      const { error: insertError } = await db.from("wardrobe_items").insert({
         id: itemId,
         user_id: authUser.id,
         storage_path: storagePath,
@@ -518,7 +519,7 @@ export function useWardrobeItems() {
     enabled: !!user,
     staleTime: 60_000,
     queryFn: async (): Promise<WardrobeItemView[]> => {
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("wardrobe_items")
         .select("id, user_id, name, brand, category, subcategory, storage_path, created_at")
         .eq("user_id", user!.id)

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { db } from "@/integrations/supabase/db";
 import {
   mergeDailyActivityRows,
   type DailyActivityRow,
@@ -29,7 +30,7 @@ export function useLatestActivity() {
       if (!user) return null;
       // Au plus 2 sources par date aujourd'hui (apple_health/manual) — 6
       // lignes couvrent large les 3 dates les plus récentes sans sur-fetcher.
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("daily_activity")
         .select(SELECT_COLUMNS)
         .eq("user_id", user.id)
@@ -61,7 +62,7 @@ export function useActivityForDate(dateYMD: string) {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return null;
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("daily_activity")
         .select(SELECT_COLUMNS)
         .eq("user_id", user.id)
@@ -95,7 +96,7 @@ export function useRestingHrHistory(days = 60) {
       if (!user) return [];
       const since = new Date();
       since.setUTCDate(since.getUTCDate() - days);
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("daily_activity")
         .select(SELECT_COLUMNS)
         .eq("user_id", user.id)
@@ -152,7 +153,7 @@ export function useUpsertManualDailyActivity() {
         ...(input.restingHr !== undefined ? { resting_hr: input.restingHr } : {}),
         ...(input.hrvMs !== undefined ? { hrv_ms: input.hrvMs } : {}),
       };
-      const { error } = await supabase
+      const { error } = await db
         .from("daily_activity")
         .upsert(patch, { onConflict: "user_id,date,source" });
       if (error) throw error;

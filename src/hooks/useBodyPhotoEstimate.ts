@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { db } from "@/integrations/supabase/db";
 import {
   normalizePhotoEstimateResponse,
   PHOTO_BODY_FAT_ENGINE_VERSION,
@@ -94,7 +95,7 @@ export function useSaveBodyPhotoAnalysis() {
       }
       const { minPercent, maxPercent, referencePercent } = input.estimate;
 
-      const { data: trackingRow, error: trackingError } = await supabase
+      const { data: trackingRow, error: trackingError } = await db
         .from("body_tracking")
         .insert({
           date: input.date,
@@ -112,7 +113,7 @@ export function useSaveBodyPhotoAnalysis() {
         throw trackingError ?? new Error("Échec de l'enregistrement.");
 
       const rollbackTracking = async () => {
-        await supabase
+        await db
           .from("body_tracking")
           .delete()
           .eq("id", trackingRow.id)
@@ -161,7 +162,7 @@ export function useSaveBodyPhotoAnalysis() {
         throw e;
       }
 
-      const { error: analysisError } = await supabase.from("body_photo_analyses").insert({
+      const { error: analysisError } = await db.from("body_photo_analyses").insert({
         user_id: user.id,
         body_tracking_id: trackingRow.id,
         status: "success",
@@ -209,7 +210,7 @@ export function useBodyPhotoAnalyses() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) return [];
-      const { data, error } = await supabase
+      const { data, error } = await db
         .from("body_photo_analyses")
         .select("id, body_tracking_id, front_path, side_path, back_path")
         .eq("user_id", user.id);
@@ -245,7 +246,7 @@ export function useDeleteBodyPhotoAnalysis() {
           .remove(input.paths);
         if (storageError) throw storageError;
       }
-      const { error } = await supabase
+      const { error } = await db
         .from("body_tracking")
         .delete()
         .eq("id", input.bodyTrackingId)
