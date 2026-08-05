@@ -113,6 +113,13 @@ type MuscuCardProps = {
   pr: number | null;
   recoveryMap?: Map<MuscleId, MuscleRecovery>;
   onOpenStats?: () => void;
+  /** Réordonnancement manuel (flèches ↑ ↓) — voir useReorderActiveExercises.
+   *  Position/désactivation calculées par ActiveWorkoutView (seul détenteur
+   *  de la liste complète triée), jamais recalculées ici. */
+  isFirst: boolean;
+  isLast: boolean;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
 };
 
 type GenericCardProps = {
@@ -313,6 +320,10 @@ function MuscuExerciseCard({
   lastSession,
   pr,
   onOpenStats,
+  isFirst,
+  isLast,
+  onMoveUp,
+  onMoveDown,
 }: Omit<MuscuCardProps, "kind">) {
   const addSet = useAddExerciseSet();
   const updateSet = useUpdateExerciseSet();
@@ -420,14 +431,22 @@ function MuscuExerciseCard({
   // stricte sous le nom : Fanion de rang, seul sur sa ligne, parfaitement
   // centré — plus jamais de texte coloré, le fanion est l'unique
   // représentation du rang ici. Carte fermée (V6, 2026-07-30, retour de
-  // Nathan) : SEULS la miniature, le nom et le fanion restent visibles —
-  // record et compteur de séries ne s'affichent qu'une fois la carte
-  // dépliée par l'utilisateur (voir plus bas). Le reste (groupe musculaire,
-  // équipement, type, historique...) n'existe que dans la fiche détaillée
-  // (bouton statistiques → ExerciseSheet).
-  const badges = rank && (
-    <div className="mt-0.5 flex w-full justify-center">
-      <RankFlag rankKey={rank.rank.key} label={rank.rank.label} />
+  // Nathan) : SEULS la miniature, le nom et le fanion restent visibles.
+  // Record ne s'affiche qu'une fois la carte dépliée (voir plus bas). Le
+  // nombre de séries, lui, reste visible même carte fermée (2026-08-05,
+  // retour de Nathan) — juste sous le fanion, texte secondaire discret ;
+  // dérivé de `exercise.exercise_sets`, aucune colonne supplémentaire. Le
+  // reste (groupe musculaire, équipement, type, historique...) n'existe
+  // que dans la fiche détaillée (bouton statistiques → ExerciseSheet).
+  const setsCount = sortedSets.length;
+  const badges = (rank || setsCount > 0) && (
+    <div className="mt-0.5 flex w-full flex-col items-center gap-0.5">
+      {rank && <RankFlag rankKey={rank.rank.key} label={rank.rank.label} />}
+      {setsCount > 0 && (
+        <span className="text-[10px] font-medium leading-none text-muted-foreground/60">
+          {setsCount} série{setsCount > 1 ? "s" : ""}
+        </span>
+      )}
     </div>
   );
 
@@ -461,6 +480,18 @@ function MuscuExerciseCard({
               onClick={() => setConfirmDeleteEx(true)}
               label="Supprimer l'exercice"
               variant="destructive"
+            />
+            <ExerciseCardIconButton
+              icon={ChevronUp}
+              onClick={onMoveUp}
+              label="Monter l'exercice"
+              disabled={isFirst}
+            />
+            <ExerciseCardIconButton
+              icon={ChevronDown}
+              onClick={onMoveDown}
+              label="Descendre l'exercice"
+              disabled={isLast}
             />
           </>
         }

@@ -6,6 +6,7 @@ import {
   useCancelWorkout,
   useExerciseImageUrls,
   useFinishWorkout,
+  useReorderActiveExercises,
   useWorkouts,
 } from "@/hooks/use-fitness";
 import type { MuscleId } from "@/lib/fitness/muscleMapping";
@@ -62,6 +63,7 @@ export function ActiveWorkoutView({
   const finish = useFinishWorkout();
   const cancel = useCancelWorkout();
   const addExercise = useAddExerciseToActiveWorkout();
+  const reorderExercises = useReorderActiveExercises();
   const { data: allWorkouts } = useWorkouts();
 
   // ── Musculation hybride : blocs métriques de CETTE séance ──────────────
@@ -181,6 +183,18 @@ export function ActiveWorkoutView({
       workoutId: workout.id,
       name: picked.name,
     });
+  };
+
+  /** Réordonnancement par flèches ↑ ↓ — remplace le drag-and-drop (retiré,
+   *  peu fiable au tactile). Échange simplement deux positions adjacentes
+   *  et réutilise useReorderActiveExercises (même mutation, même colonne
+   *  `position`) : aucune nouvelle logique de réordonnancement. */
+  const moveExercise = (from: number, to: number) => {
+    const list = workout.exercises ?? [];
+    if (to < 0 || to >= list.length) return;
+    const orderedIds = list.map((ex) => ex.id);
+    [orderedIds[from], orderedIds[to]] = [orderedIds[to], orderedIds[from]];
+    reorderExercises.mutate(orderedIds);
   };
 
   const handleFinish = async () => {
@@ -314,7 +328,7 @@ export function ActiveWorkoutView({
         </div>
       ) : (
         <div className="flex flex-col gap-3">
-          {(workout.exercises ?? []).map((ex) => {
+          {(workout.exercises ?? []).map((ex, i) => {
             const exImage =
               (ex.image_path ? imageUrls?.get(ex.image_path) : null) ??
               userPhotos?.get(identityKey(ex)) ??
@@ -334,6 +348,10 @@ export function ActiveWorkoutView({
                 lastSession={lastSessions.get(identityKey(ex)) ?? null}
                 pr={prByName.get(identityKey(ex)) ?? null}
                 recoveryMap={recoveryMap}
+                isFirst={i === 0}
+                isLast={i === (workout.exercises ?? []).length - 1}
+                onMoveUp={() => moveExercise(i, i - 1)}
+                onMoveDown={() => moveExercise(i, i + 1)}
                 onOpenStats={() =>
                   setStatsTarget({
                     key: identityKey(ex),

@@ -544,6 +544,9 @@ export type ActiveExercise = {
    *  Additif : peut être `null` pour un exercice créé avant le câblage de
    *  la résolution, ou si la résolution a échoué sans bloquer l'écriture. */
   exercise_reference_id: string | null;
+  /** Réordonnancement manuel (drag-and-drop) — voir useReorderActiveExercises.
+   *  Migration `20260819090000_exercises_manual_reorder_position.sql`. */
+  position: number;
   exercise_sets: ActiveSet[];
 };
 
@@ -580,7 +583,7 @@ export function useActiveWorkout() {
       const { data, error } = await supabase
         .from("workouts")
         .select(
-          "id, name, gym_location, created_at, exercises(id, name, image_path, sets, reps, weight, exercise_reference_id, exercise_sets(id, set_number, reps, weight, completed))",
+          "id, name, gym_location, created_at, exercises(id, name, image_path, sets, reps, weight, exercise_reference_id, position, exercise_sets(id, set_number, reps, weight, completed))",
         )
         .eq("user_id", user.id)
         .eq("status", "active")
@@ -597,22 +600,30 @@ export function useActiveWorkout() {
         name: raw.name,
         gym_location: raw.gym_location,
         created_at: raw.created_at,
-        exercises: (raw.exercises ?? []).map((ex: any) => ({
-          id: ex.id,
-          name: ex.name,
-          image_path: ex.image_path ?? null,
-          sets: ex.sets ?? null,
-          reps: ex.reps ?? null,
-          weight: ex.weight ?? null,
-          exercise_reference_id: ex.exercise_reference_id ?? null,
-          exercise_sets: (ex.exercise_sets ?? []).map((s: any) => ({
-            id: s.id,
-            set_number: s.set_number,
-            reps: s.reps ?? null,
-            weight: s.weight ?? null,
-            completed: s.completed ?? false,
-          })),
-        })),
+        // Tri explicite par `position` — la relation imbriquée Supabase ne
+        // garantit pas d'ordre. Départage stable par id pour les rares lignes
+        // à position égale (ne devrait pas arriver après le backfill).
+        exercises: (raw.exercises ?? [])
+          .map((ex: any) => ({
+            id: ex.id,
+            name: ex.name,
+            image_path: ex.image_path ?? null,
+            sets: ex.sets ?? null,
+            reps: ex.reps ?? null,
+            weight: ex.weight ?? null,
+            exercise_reference_id: ex.exercise_reference_id ?? null,
+            position: ex.position ?? 0,
+            exercise_sets: (ex.exercise_sets ?? []).map((s: any) => ({
+              id: s.id,
+              set_number: s.set_number,
+              reps: s.reps ?? null,
+              weight: s.weight ?? null,
+              completed: s.completed ?? false,
+            })),
+          }))
+          .sort((a: ActiveExercise, b: ActiveExercise) =>
+            a.position !== b.position ? a.position - b.position : a.id.localeCompare(b.id),
+          ),
       };
     },
   });
@@ -1084,6 +1095,7 @@ export function useStartWorkoutFromTemplate() {
               weight: null,
               image_path: g.image_path,
               exercise_reference_id: groupReferenceIds[i],
+              position: i,
             })),
           )
           .select("id");
@@ -1125,6 +1137,12 @@ export function useAddExerciseToActiveWorkout() {
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
       const exerciseReferenceId = await resolveMuscuExerciseReferenceId(name);
+      // Nouvel exercice = toujours en dernière position de la séance.
+      const cached = qc.getQueryData<ActiveWorkout | null>(ACTIVE_KEY);
+      const nextPosition =
+        cached && cached.id === workoutId
+          ? Math.max(-1, ...cached.exercises.map((e) => e.position)) + 1
+          : 0;
       const { error } = await supabase.from("exercises").insert({
         user_id: user.id,
         workout_id: workoutId,
@@ -1134,6 +1152,7 @@ export function useAddExerciseToActiveWorkout() {
         weight: null,
         image_path: null,
         exercise_reference_id: exerciseReferenceId,
+        position: nextPosition,
       });
       if (error) throw error;
     },
@@ -1155,6 +1174,53 @@ function patchActiveCache(
   if (!prev) return prev;
   qc.setQueryData<ActiveWorkout | null>(ACTIVE_KEY, updater(prev));
   return prev;
+}
+
+/** Réordonnancement manuel (drag-and-drop) des exercices de la séance active.
+ *  `orderedIds` = tous les ids de `workout.exercises` dans le nouvel ordre
+ *  voulu ; chaque exercice reçoit `position` = son index. Optimiste (l'ordre
+ *  est appliqué immédiatement au relâcher du doigt) — ne touche à aucune
+ *  série/rep/charge, uniquement la colonne `position`. */
+export function useReorderActiveExercises() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (orderedIds: string[]) => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) throw new Error("Non authentifié");
+      const results = await Promise.all(
+        orderedIds.map((id, position) =>
+          supabase.from("exercises").update({ position }).eq("id", id).eq("user_id", user.id),
+        ),
+      );
+      const failed = results.find((r) => r.error);
+      if (failed?.error) throw failed.error;
+    },
+    onMutate: async (orderedIds) => {
+      await qc.cancelQueries({ queryKey: ACTIVE_KEY });
+      const prev = patchActiveCache(qc, (w) => {
+        const byId = new Map(w.exercises.map((ex) => [ex.id, ex]));
+        return {
+          ...w,
+          exercises: orderedIds
+            .map((id, position) => {
+              const ex = byId.get(id);
+              return ex ? { ...ex, position } : null;
+            })
+            .filter((ex): ex is ActiveExercise => ex !== null),
+        };
+      });
+      return { prev };
+    },
+    onError: (e: Error, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(ACTIVE_KEY, ctx.prev);
+      toast.error(e.message);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ACTIVE_KEY });
+    },
+  });
 }
 
 /** Ajoute une série à un exercice de la séance active. */

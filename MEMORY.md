@@ -3015,3 +3015,83 @@ rester manuel). Vérification faite sur les vrais workflows CI, pas une supposit
   capture authentifiée non obtenue faute d'identifiants dans ce sandbox (limite documentée, pas
   contournée).
 - **Travaillé directement sur `main`**, comme demandé.
+
+## Réordonnancement manuel des exercices en séance active — drag-and-drop (2026-08-05)
+- **Objectif** : pouvoir glisser une carte exercice pour la replacer exactement à l'endroit où elle a
+  été réellement effectuée en séance (ex. remonter "Rotation interne" en 2e position).
+- **Schéma** — migration `20260819090000_exercises_manual_reorder_position.sql` : colonne
+  `exercises.position` (integer NOT NULL DEFAULT 0), backfillée par `row_number() over (partition by
+  workout_id order by ctid)` pour matérialiser l'ordre implicite déjà utilisé par l'app (voir note
+  historique ligne ~505 — "pas de colonne position, décision délibérée" : cette décision est
+  maintenant révisée à la demande explicite de Nathan). Index `(workout_id, position)`. Appliquée en
+  prod via MCP Supabase puis `types.ts` régénéré (`npm run gen:types` équivalent via MCP) — aucune
+  édition manuelle des types.
+- **`hooks/use-fitness.ts`** : `ActiveExercise.position` ajouté ; `useActiveWorkout()` sélectionne
+  `position` et trie explicitement les exercices (`position` asc, id en repli) — la relation imbriquée
+  Supabase ne garantit pas d'ordre. `useAddExerciseToActiveWorkout` calcule `position` = max+1 (nouvel
+  exercice toujours en dernier). `useStartWorkoutFromTemplate` ("Refaire en live") passe désormais
+  `position: i` sur l'insert batché pour préserver l'ordre de la séance source. Nouveau
+  `useReorderActiveExercises(orderedIds: string[])` : update `position` par id (Promise.all), optimiste
+  via `patchActiveCache` (même convention que les autres mutations séance active), rollback on error,
+  invalidate on settle. Ne touche jamais `exercise_sets`/reps/charge/rang.
+- **`components/fitness/exerciseCard/ReorderableList.tsx`** (nouveau, générique) : implémentation
+  drag-and-drop maison — **dnd-kit reste banni** (retiré le 2026-07-05, ne pas réintroduire), utilise
+  uniquement `framer-motion` (déjà une dépendance) pour l'animation de tassement des cartes non
+  actives (`motion.div layout`) + pointer events natifs pour la carte activement déplacée (transform
+  imperatif, hors React re-render, pour un suivi 1:1 du doigt). Activation par appui long (380ms,
+  annulé si mouvement > 10px avant l'échéance → laisse le scroll natif intact). Exclut les cibles
+  interactives (`button, input, textarea, select, a, [role="button"]`) — toutes les zones cliquables
+  des cartes (`ExerciseCardPrimitives.tsx`) sont déjà des `<button>`, donc chevron/sets/suppression/
+  photo/graph ne déclenchent jamais le drag. `touch-action` bascule `none` uniquement pendant le drag
+  actif de la carte concernée (iOS friendly), `pan-y` sinon. Relâcher = commit immédiat de l'ordre
+  (`onReorder`) + petite animation de "settle" (220ms) si l'ordre a changé, no-op sinon. Aucune
+  numérotation 1/2/3 ajoutée, design des cartes 100% inchangé (le composant les enveloppe, ne les
+  modifie pas).
+- **`ActiveWorkoutView.tsx`** : la liste `.map(...)` d'exercices est remplacée par
+  `<ReorderableList items={workout.exercises} getId={ex => ex.id} onReorder={...} renderItem={...} />`
+  — même `className="flex flex-col gap-3"` qu'avant, `ActiveExerciseCard` inchangé.
+- **Non-régression** : `superset_group` n'est utilisé que côté `TemplateEditorSheet` (modèles), jamais
+  en séance active — aucune interaction avec le réordonnancement. Séances existantes sans `position`
+  explicite conservent leur ordre exact (backfill = ordre physique déjà observé). Aucune série/rep/
+  charge/rang/stat touchée par cette fonctionnalité.
+- **Validation** : `tsc --noEmit` / `eslint` (0 erreur, warnings pré-existants uniquement) /
+  `npx vitest run` (1147 passed) / `npm run build` : tous verts. Vérification visuelle en navigateur
+  **non obtenue** — ce sandbox ne supporte pas le bind IPv6 (`EAFNOSUPPORT` sur `::`) requis par le
+  serveur dev Lovable, même avec `--host`/`--port` explicites ; limite d'environnement documentée, pas
+  contournée.
+
+## Réordonnancement séance active : remplacement du drag-and-drop par des flèches ↑ ↓ (2026-08-05, session suivante)
+- **Retour de Nathan** : le drag-and-drop par appui long (`ReorderableList.tsx`, session précédente)
+  n'était pas fiable au tactile (sélection de texte du nom d'exercice, manipulation imprécise).
+  Remplacé par deux boutons ↑/↓ discrets, sans toucher au schéma ni à la mutation existants.
+- **Supprimé** : `src/components/fitness/exerciseCard/ReorderableList.tsx` (plus aucun appelant) —
+  appui long 380ms, pointer events de drag, blocage du scroll (`touch-action`), tout le geste tactile.
+  `dnd-kit` toujours banni, non réintroduit (aucun changement de dépendances).
+- **Réutilisé tel quel** : `exercises.position` (migration `20260819090000...`, session précédente) et
+  `useReorderActiveExercises()` (hooks/use-fitness.ts) — aucune nouvelle logique de réordonnancement,
+  aucune nouvelle migration.
+- **`ActiveWorkoutView.tsx`** : la liste redevient un `.map()` simple (comme avant le drag-and-drop) ;
+  nouveau `moveExercise(from, to)` qui échange deux ids adjacents dans `workout.exercises` et appelle
+  `reorderExercises.mutate(orderedIds)` — même mutation optimiste qu'avant, juste déclenchée par un
+  clic au lieu d'un geste. `ActiveExerciseCard` reçoit désormais `isFirst`/`isLast`/`onMoveUp`/
+  `onMoveDown` calculés ici (seul détenteur de la liste triée complète).
+- **`ActiveExerciseCard.tsx` (MuscuExerciseCard)** : deux `ExerciseCardIconButton` (déjà le composant
+  bouton icône standard de la carte, 36×36, feedback `active:scale-90` et `disabled:opacity-30`
+  intégrés nativement — aucun nouveau composant créé) avec `ChevronUp`/`ChevronDown` (lucide-react,
+  déjà importés dans ce fichier), ajoutés dans la colonne d'actions existante (stats, suppression),
+  désactivés respectivement sur le premier/dernier exercice.
+- **Timer de repos** : `restTimer` (useRestTimer.ts) est indexé uniquement par `exerciseId`, jamais par
+  position/index — un déplacement ne peut donc jamais décrocher un timer actif de son exercice.
+  Vérifié, aucun changement nécessaire.
+- **Nombre de séries dans l'en-tête** (même session) : ajouté sous le fanion de rang, toujours visible
+  (carte ouverte ou fermée) — contrairement au bloc "record / X sur Y séries" existant qui, lui, reste
+  conditionné à la carte dépliée (comportement inchangé). `{sortedSets.length} série(s)`, dérivé de
+  `exercise.exercise_sets` déjà chargé, aucune donnée supplémentaire, texte `text-[10px]` discret sous
+  le `RankFlag`.
+- **Validation** : `tsc --noEmit` / `npx vitest run` (1185 passed) / `npm run build` verts. `eslint`
+  ciblé sur les 3 fichiers touchés : 0 erreur (3 warnings pré-existants, non liés à ce changement) — le
+  lint pleine base (`eslint .`) remonte des centaines d'erreurs pré-existantes dans des fichiers jamais
+  touchés (edge functions, vite.config.ts), non introduites par cette session.
+- **`src/routeTree.gen.ts`** : régénéré localement par les outils (tsc/build) avec 10 lignes en plus
+  qu'une modification amont avait délibérément retirées — reverté avant commit pour ne pas écraser ce
+  changement upstream (non lié à cette feature).
