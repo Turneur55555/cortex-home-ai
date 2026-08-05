@@ -148,14 +148,17 @@ export function useWorkoutTemplates() {
   return useQuery({
     queryKey: TEMPLATES_KEY,
     queryFn: async (): Promise<WorkoutTemplateRow[]> => {
-      const { data, error } = await supabase
+      // `db` : `workout_template_segments` / colonne `exercise_reference_id`
+      // existent en base (bcwfvpwxzlmkxobvbtzp) mais pas encore dans types.ts.
+      const { data, error } = await db
         .from("workout_templates")
         .select(
           "id, name, icon, color, created_at, updated_at, workout_template_exercises(id, name, position, superset_group, default_sets, default_reps, default_weight, notes, exercise_reference_id), workout_template_segments(id, position, label, discipline, metric_key, metrics, exercise_reference_id)",
         )
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []).map((t) => ({
+      const templates = (data ?? []) as TemplateQueryRow[];
+      return templates.map((t) => ({
         id: t.id,
         name: t.name,
         icon: t.icon,
@@ -177,6 +180,7 @@ export function useWorkoutTemplates() {
             exercise_reference_id: s.exercise_reference_id,
           })),
       }));
+
     },
   });
 }
