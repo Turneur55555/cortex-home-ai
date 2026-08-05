@@ -84,6 +84,50 @@ export interface WorkoutTemplateRow {
   segments: WorkoutTemplateSegmentRow[];
 }
 
+/** Formes de lignes locales : `workout_template_segments` et la colonne
+ *  `exercise_reference_id` existent en base (projet bcwfvpwxzlmkxobvbtzp) mais
+ *  pas encore dans `types.ts` (généré, jamais édité à la main). Ces types
+ *  restaurent la vérification statique en attendant `npm run gen:types`. */
+interface TemplateQueryRow {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+  created_at: string;
+  updated_at: string;
+  workout_template_exercises: WorkoutTemplateExerciseRow[] | null;
+  workout_template_segments:
+    | (Omit<WorkoutTemplateSegmentRow, "metrics" | "discipline"> & {
+        discipline: string | null;
+        metrics: Record<string, number | string> | null;
+      })[]
+    | null;
+}
+
+interface TemplateExerciseInsert {
+  template_id: string;
+  user_id: string;
+  name: string;
+  position: number;
+  superset_group: number | null;
+  default_sets: number | null;
+  default_reps: number | null;
+  default_weight: number | null;
+  notes: string | null;
+  exercise_reference_id: string | null;
+}
+
+interface TemplateSegmentInsert {
+  template_id: string;
+  user_id: string;
+  position: number;
+  label: string;
+  discipline: DisciplineId;
+  metric_key: string | null;
+  metrics: Record<string, number | string>;
+  exercise_reference_id: string | null;
+}
+
 /** Entrée éditable d'un exercice de modèle — utilisée pour créer/mettre à
  *  jour un modèle depuis l'éditeur (position dérivée de l'ordre du tableau). */
 export interface TemplateExerciseInput {
@@ -204,7 +248,7 @@ async function replaceTemplateItems(
     .delete()
     .eq("template_id", templateId);
   if (delExErr) throw delExErr;
-  const { error: delSegErr } = await supabase
+  const { error: delSegErr } = await db
     .from("workout_template_segments")
     .delete()
     .eq("template_id", templateId);
@@ -230,7 +274,7 @@ async function replaceTemplateItems(
       "muscu",
       exerciseItems.map((x) => x.item.name),
     );
-    const rows: TablesInsert<"workout_template_exercises">[] = exerciseItems.map(
+    const rows: TemplateExerciseInsert[] = exerciseItems.map(
       ({ item, position }) => ({
         template_id: templateId,
         user_id: userId,
@@ -261,7 +305,7 @@ async function replaceTemplateItems(
     for (const [discipline, labels] of byDiscipline) {
       idsByDiscipline.set(discipline, await resolveExerciseIdsByLabel(discipline, labels));
     }
-    const rows: TablesInsert<"workout_template_segments">[] = segmentItems.map(
+    const rows: TemplateSegmentInsert[] = segmentItems.map(
       ({ item, position }) => ({
         template_id: templateId,
         user_id: userId,
@@ -269,11 +313,11 @@ async function replaceTemplateItems(
         label: item.label,
         discipline: item.discipline,
         metric_key: item.metricKey ?? null,
-        metrics: (item.metrics ?? {}) as never,
+        metrics: item.metrics ?? {},
         exercise_reference_id: idsByDiscipline.get(item.discipline)?.get(item.label) ?? null,
       }),
     );
-    const { error: insSegErr } = await supabase.from("workout_template_segments").insert(rows);
+    const { error: insSegErr } = await db.from("workout_template_segments").insert(rows);
     if (insSegErr) throw insSegErr;
   }
 }
