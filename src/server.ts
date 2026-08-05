@@ -1,7 +1,3 @@
-// SOURCE DE VÉRITÉ UNIQUE : force les variables Supabase du runtime serveur
-// vers le projet officiel bcwfvpwxzlmkxobvbtzp AVANT tout autre import.
-import "./config/supabase-runtime-env";
-
 import "./lib/error-capture";
 
 
