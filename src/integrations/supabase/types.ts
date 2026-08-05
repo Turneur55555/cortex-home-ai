@@ -1568,6 +1568,7 @@ export type Database = {
           muscle_groups: string[] | null
           name: string
           notes: string | null
+          position: number
           reps: number | null
           sets: number | null
           superset_group: number | null
@@ -1582,6 +1583,7 @@ export type Database = {
           muscle_groups?: string[] | null
           name: string
           notes?: string | null
+          position?: number
           reps?: number | null
           sets?: number | null
           superset_group?: number | null
@@ -1596,6 +1598,7 @@ export type Database = {
           muscle_groups?: string[] | null
           name?: string
           notes?: string | null
+          position?: number
           reps?: number | null
           sets?: number | null
           superset_group?: number | null
