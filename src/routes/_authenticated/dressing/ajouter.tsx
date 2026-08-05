@@ -36,6 +36,7 @@ import {
   type WardrobeUsage,
 } from "@/lib/wardrobe/taxonomy";
 import { fileToBase64Compressed } from "@/lib/nutrition/utils";
+import { processWardrobePhoto } from "@/lib/wardrobe/backgroundRemoval";
 import type { Json } from "@/integrations/supabase/types";
 
 export const Route = createFileRoute("/_authenticated/dressing/ajouter")({
@@ -59,6 +60,7 @@ export const Route = createFileRoute("/_authenticated/dressing/ajouter")({
 });
 
 type AnalysisStatus = "idle" | "loading" | "done" | "error";
+type CutoutStatus = "idle" | "processing" | "done" | "error";
 type SuggestedKey =
   | "name"
   | "color"
@@ -106,6 +108,12 @@ function AddWardrobeItemPage() {
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   const [suggested, setSuggested] = useState<Partial<Record<SuggestedKey, boolean>>>({});
 
+  // Détourage / normalisation (Phase 5) — jamais bloquant, jamais obligatoire.
+  const [cutoutStatus, setCutoutStatus] = useState<CutoutStatus>("idle");
+  const [cutoutBlob, setCutoutBlob] = useState<Blob | null>(null);
+  const [cutoutPreviewUrl, setCutoutPreviewUrl] = useState<string | null>(null);
+  const [useProcessedPhoto, setUseProcessedPhoto] = useState(true);
+
   const canSubmit = !!file && !!category && !createItem.isPending;
   const characteristicsConfig = category ? getCharacteristicsConfig(category) : null;
   const showCharacteristics =
@@ -122,6 +130,14 @@ function AddWardrobeItemPage() {
     setAnalysisError(null);
     setAnalysisResult(null);
     setSuggested({});
+  }
+
+  function resetCutoutState() {
+    if (cutoutPreviewUrl) URL.revokeObjectURL(cutoutPreviewUrl);
+    setCutoutStatus("idle");
+    setCutoutBlob(null);
+    setCutoutPreviewUrl(null);
+    setUseProcessedPhoto(true);
   }
 
   function handleCategoryChange(next: WardrobeAddCategoryKey) {
@@ -213,6 +229,21 @@ function AddWardrobeItemPage() {
     }
   }
 
+  async function runCutout(selected: File) {
+    setCutoutStatus("processing");
+    try {
+      const processed = await processWardrobePhoto(selected);
+      setCutoutBlob(processed);
+      setCutoutPreviewUrl(URL.createObjectURL(processed));
+      setUseProcessedPhoto(true);
+      setCutoutStatus("done");
+    } catch (err) {
+      // Ne bloque jamais l'ajout : l'original reste utilisable tel quel (§2).
+      console.error("[dressing] détourage impossible, original conservé :", err);
+      setCutoutStatus("error");
+    }
+  }
+
   function handlePick(selected: File | undefined) {
     if (!selected) return;
     const validation = validateWardrobePhotoFile(selected);
@@ -224,7 +255,9 @@ function AddWardrobeItemPage() {
     setFile(selected);
     setPreviewUrl(URL.createObjectURL(selected));
     resetAnalysisState();
+    resetCutoutState();
     void runAnalysis(selected);
+    void runCutout(selected);
   }
 
   function clearPhoto() {
@@ -232,6 +265,7 @@ function AddWardrobeItemPage() {
     setFile(null);
     setPreviewUrl(null);
     resetAnalysisState();
+    resetCutoutState();
   }
 
   function toggleUsage(value: WardrobeUsage) {
@@ -263,6 +297,7 @@ function AddWardrobeItemPage() {
         seasons: analysisResult?.seasons ?? [],
         aiDescription: analysisResult?.description ?? null,
         aiMetadata: analysisResult ? (JSON.parse(JSON.stringify(analysisResult)) as Json) : null,
+        processedFile: useProcessedPhoto && cutoutStatus === "done" ? cutoutBlob : null,
       },
       {
         onSuccess: () => {
@@ -292,56 +327,103 @@ function AddWardrobeItemPage() {
             Photo
           </p>
           {previewUrl ? (
-            <div className="flex items-start gap-3">
-              <div className="relative w-32 shrink-0">
-                <img
-                  src={previewUrl}
-                  alt="Aperçu de la pièce"
-                  className="h-40 w-32 rounded-2xl border border-border object-cover"
-                />
-                <button
-                  type="button"
-                  onClick={clearPhoto}
-                  aria-label="Retirer la photo"
-                  className="absolute -right-2 -top-2 flex h-7 w-7 items-center justify-center rounded-full bg-destructive text-white shadow"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
+            <>
+              <div className="flex items-start gap-3">
+                <div className="relative w-32 shrink-0">
+                  <img
+                    src={previewUrl}
+                    alt="Aperçu de la pièce"
+                    className="h-40 w-32 rounded-2xl border border-border object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={clearPhoto}
+                    aria-label="Retirer la photo"
+                    className="absolute -right-2 -top-2 flex h-7 w-7 items-center justify-center rounded-full bg-destructive text-white shadow"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+
+                <div className="flex-1 pt-1">
+                  {analysisStatus === "loading" && (
+                    <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Cortex analyse ta pièce…
+                    </div>
+                  )}
+                  {analysisStatus === "error" && (
+                    <div className="space-y-2">
+                      <div className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                        <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
+                        <span>
+                          {analysisError ?? "Analyse impossible."} Tu peux compléter les
+                          informations manuellement.
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void runAnalysis(file!)}
+                        className="text-xs font-semibold text-primary"
+                      >
+                        Réessayer l'analyse
+                      </button>
+                    </div>
+                  )}
+                  {analysisStatus === "done" && analysisResult && (
+                    <div className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                      <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                      <span>Cortex propose : {analysisResult.description}</span>
+                    </div>
+                  )}
+                  {cutoutStatus === "processing" && (
+                    <div className="mt-2 flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Cortex détoure ta pièce…
+                    </div>
+                  )}
+                </div>
               </div>
 
-              <div className="flex-1 pt-1">
-                {analysisStatus === "loading" && (
-                  <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    Cortex analyse ta pièce…
-                  </div>
-                )}
-                {analysisStatus === "error" && (
-                  <div className="space-y-2">
-                    <div className="flex items-start gap-1.5 text-xs text-muted-foreground">
-                      <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" />
-                      <span>
-                        {analysisError ?? "Analyse impossible."} Tu peux compléter les informations
-                        manuellement.
-                      </span>
+              {cutoutStatus === "done" && cutoutPreviewUrl && (
+                <div className="mt-3 rounded-2xl border border-border bg-card/40 p-3">
+                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Détourage
+                  </p>
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={cutoutPreviewUrl}
+                      alt="Aperçu détouré"
+                      className="h-24 w-24 shrink-0 rounded-xl border border-border bg-muted/30 object-contain"
+                    />
+                    <div className="flex flex-1 flex-col gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setUseProcessedPhoto(true)}
+                        className={`rounded-xl border px-3 py-2 text-left text-xs font-semibold transition-colors ${
+                          useProcessedPhoto
+                            ? "border-primary/40 bg-primary/15 text-primary"
+                            : "border-border bg-card text-muted-foreground"
+                        }`}
+                      >
+                        Utiliser cette image
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setUseProcessedPhoto(false)}
+                        className={`rounded-xl border px-3 py-2 text-left text-xs font-semibold transition-colors ${
+                          !useProcessedPhoto
+                            ? "border-primary/40 bg-primary/15 text-primary"
+                            : "border-border bg-card text-muted-foreground"
+                        }`}
+                      >
+                        Utiliser l'original
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => void runAnalysis(file!)}
-                      className="text-xs font-semibold text-primary"
-                    >
-                      Réessayer l'analyse
-                    </button>
                   </div>
-                )}
-                {analysisStatus === "done" && analysisResult && (
-                  <div className="flex items-start gap-1.5 text-xs text-muted-foreground">
-                    <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-                    <span>Cortex propose : {analysisResult.description}</span>
-                  </div>
-                )}
-              </div>
-            </div>
+                </div>
+              )}
+            </>
           ) : (
             <div className="flex gap-2">
               <button

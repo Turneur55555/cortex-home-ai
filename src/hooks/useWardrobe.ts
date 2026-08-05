@@ -1,7 +1,6 @@
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { db } from "@/integrations/supabase/db";
 import { useAuth } from "@/hooks/use-auth";
 import type { Json } from "@/integrations/supabase/types";
 import {
@@ -16,6 +15,7 @@ import {
   type WardrobeSleeveLength,
   type WardrobeUsage,
 } from "@/lib/wardrobe/taxonomy";
+import { pickDisplayStoragePath } from "@/lib/wardrobe/imageProcessing";
 
 /** Catégories affichées dans l'UI du Dressing (aucun impact DB). */
 export const WARDROBE_FILTERS = [
@@ -38,14 +38,19 @@ export interface WardrobeItem {
   category: string | null;
   subcategory: string | null;
   storage_path: string | null;
+  /** Version détourée/normalisée (Phase 5) — null si non générée/échouée. */
+  processed_storage_path: string | null;
   created_at: string;
 }
 
 export interface WardrobeItemView extends WardrobeItem {
   /** Catégorie normalisée pour les filtres UI. */
   uiCategory: WardrobeCategory;
-  /** URL signée du bucket privé `wardrobe` (jamais publique). */
+  /** URL signée de l'image affichée dans la grille : détourée si
+   *  disponible, sinon l'original (fallback automatique, cf. Phase 5 §7). */
   imageUrl: string | null;
+  /** URL signée de l'original — toujours conservée, jamais remplacée. */
+  originalImageUrl: string | null;
 }
 
 const CATEGORY_RULES: Array<{ category: WardrobeCategory; tokens: string[] }> = [
@@ -194,6 +199,11 @@ export interface CreateWardrobeItemInput {
    *  — jamais utilisée comme vérité fonctionnelle : ce sont les valeurs
    *  ci-dessus (potentiellement corrigées par l'utilisateur) qui font foi. */
   aiMetadata?: Json | null;
+  /** Version détourée/normalisée (Phase 5), déjà générée côté client.
+   *  Facultative : son upload ne bloque jamais la création de la pièce
+   *  (cf. §2 — si le détourage échoue ou n'est pas fourni, seul l'original
+   *  est conservé, ce qui reste un ajout parfaitement valide). */
+  processedFile?: Blob | null;
 }
 
 export function useCreateWardrobeItem() {
@@ -222,10 +232,33 @@ export function useCreateWardrobeItem() {
         });
       if (uploadError) throw uploadError;
 
-      const { error: insertError } = await db.from("wardrobe_items").insert({
+      // Détourage/normalisation (Phase 5) : upload additif, jamais bloquant.
+      // L'original ci-dessus est toujours conservé tel quel, que ce second
+      // upload réussisse ou non (cf. §1/§2).
+      let processedStoragePath: string | null = null;
+      if (input.processedFile) {
+        const processedPath = `${authUser.id}/${itemId}/processed.webp`;
+        const { error: processedUploadError } = await supabase.storage
+          .from("wardrobe")
+          .upload(processedPath, input.processedFile, {
+            contentType: "image/webp",
+            upsert: false,
+          });
+        if (!processedUploadError) {
+          processedStoragePath = processedPath;
+        } else {
+          console.error(
+            "[wardrobe] upload image détourée échoué, original conservé :",
+            processedUploadError,
+          );
+        }
+      }
+
+      const { error: insertError } = await supabase.from("wardrobe_items").insert({
         id: itemId,
         user_id: authUser.id,
         storage_path: storagePath,
+        processed_storage_path: processedStoragePath,
         category: WARDROBE_DB_CATEGORY[input.category],
         name: input.name?.trim() || null,
         brand: input.brand?.trim() || null,
@@ -245,7 +278,8 @@ export function useCreateWardrobeItem() {
       });
 
       if (insertError) {
-        await supabase.storage.from("wardrobe").remove([storagePath]);
+        const pathsToClean = [storagePath, ...(processedStoragePath ? [processedStoragePath] : [])];
+        await supabase.storage.from("wardrobe").remove(pathsToClean);
         throw insertError;
       }
 
@@ -519,15 +553,23 @@ export function useWardrobeItems() {
     enabled: !!user,
     staleTime: 60_000,
     queryFn: async (): Promise<WardrobeItemView[]> => {
-      const { data, error } = await db
+      const { data, error } = await supabase
         .from("wardrobe_items")
-        .select("id, user_id, name, brand, category, subcategory, storage_path, created_at")
+        .select(
+          "id, user_id, name, brand, category, subcategory, storage_path, processed_storage_path, created_at",
+        )
         .eq("user_id", user!.id)
         .order("created_at", { ascending: false });
       if (error) throw error;
 
       const items = data ?? [];
-      const paths = items.map((item) => item.storage_path).filter((path): path is string => !!path);
+      const paths = Array.from(
+        new Set(
+          items
+            .flatMap((item) => [item.storage_path, item.processed_storage_path])
+            .filter((p): p is string => !!p),
+        ),
+      );
 
       const signedByPath = new Map<string, string>();
       if (paths.length > 0) {
@@ -539,11 +581,17 @@ export function useWardrobeItems() {
         }
       }
 
-      return items.map((item) => ({
-        ...item,
-        uiCategory: toUiCategory(item.category ?? item.subcategory),
-        imageUrl: item.storage_path ? (signedByPath.get(item.storage_path) ?? null) : null,
-      }));
+      return items.map((item) => {
+        const displayPath = pickDisplayStoragePath(item);
+        return {
+          ...item,
+          uiCategory: toUiCategory(item.category ?? item.subcategory),
+          imageUrl: displayPath ? (signedByPath.get(displayPath) ?? null) : null,
+          originalImageUrl: item.storage_path
+            ? (signedByPath.get(item.storage_path) ?? null)
+            : null,
+        };
+      });
     },
   });
 }
