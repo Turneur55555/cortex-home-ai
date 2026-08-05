@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { db } from "@/integrations/supabase/db";
 import { localDateYMD } from "@/lib/dates";
-import type { TablesInsert } from "@/integrations/supabase/types";
+
 import { resolveExerciseIdsByLabel } from "@/services/exerciseResolution";
 import type { DisciplineId } from "@/lib/fitness/engines/types";
 import { HYBRID_BLOCKS_KEY } from "@/hooks/useGenericActiveSession";
