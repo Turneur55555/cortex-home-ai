@@ -565,7 +565,7 @@ export function useWardrobeItems() {
         .order("created_at", { ascending: false });
       if (error) throw error;
 
-      const items = (data ?? []) as WardrobeItemQueryRow[];
+      const items = (data ?? []) as WardrobeItem[];
       const paths = Array.from(
         new Set(
           items
