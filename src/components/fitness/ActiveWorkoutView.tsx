@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { BookOpen, CheckCircle2, Layers, Loader2, MoreVertical, XCircle } from "lucide-react";
+import { Sheet } from "@/components/shared/FormComponents";
 import type { ActiveWorkout } from "@/hooks/use-fitness";
 import {
   useAddExerciseToActiveWorkout,
@@ -87,6 +88,11 @@ export function ActiveWorkoutView({
   const [blockDiscipline, setBlockDiscipline] = useState<DisciplineId>(
     () => blockEngines[0]?.id ?? "autre",
   );
+  // Simplification UX (2026-08-06) : plus de barre de pastilles permanente
+  // "Cardio | HYROX | Course | Activité accompagnée | Autre" — un seul
+  // bouton "Ajouter un bloc" ouvre ce choix compact, puis enchaîne sur le
+  // même ExercisePickerSheet qu'avant (pipeline hybride inchangé).
+  const [blockTypePickerOpen, setBlockTypePickerOpen] = useState(false);
   const [blockPickerOpen, setBlockPickerOpen] = useState(false);
   const [blockStats, setBlockStats] = useState<{ label: string; discipline: DisciplineId } | null>(
     null,
@@ -414,33 +420,45 @@ export function ActiveWorkoutView({
         </div>
       )}
 
-      {/* ── Ajouter un bloc — même picker que la séance active générique,
-          discipline du bloc choisie juste avant (course/cardio/HYROX/autre). ── */}
-      <div className="flex flex-col gap-2">
-        <div className="flex gap-1.5 overflow-x-auto pb-0.5">
-          {blockEngines.map((e) => (
-            <button
-              key={e.id}
-              type="button"
-              onClick={() => setBlockDiscipline(e.id)}
-              className={
-                "flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-semibold transition-colors " +
-                (blockDiscipline === e.id
-                  ? `border-primary/40 bg-primary/15 ${e.accentClassName}`
-                  : "border-border bg-surface text-muted-foreground hover:border-primary/30")
-              }
-            >
-              <DisciplineIcon icon={e.icon} className="h-3.5 w-3.5" />
-              {e.label}
-            </button>
-          ))}
-        </div>
-        <AddExerciseButton
-          label={`Ajouter un bloc ${blockEngines.find((e) => e.id === blockDiscipline)?.label ?? ""}`}
-          onClick={() => setBlockPickerOpen(true)}
-          disabled={addBlock.isPending}
-        />
-      </div>
+      {/* ── Ajouter un bloc — un seul bouton, le choix du type (course/
+          cardio/HYROX/activité accompagnée/autre) se fait dans un sheet
+          compact au clic, puis enchaîne sur le même ExercisePickerSheet
+          qu'avant (pipeline hybride inchangé : workout_segments,
+          HYBRID_BLOCKS_KEY, Exercise-Central, mutations génériques). ── */}
+      <AddExerciseButton
+        label="Ajouter un bloc"
+        onClick={() => setBlockTypePickerOpen(true)}
+        disabled={addBlock.isPending}
+      />
+
+      {blockTypePickerOpen && (
+        <Sheet title="Type de bloc" onClose={() => setBlockTypePickerOpen(false)}>
+          <div className="grid grid-cols-2 gap-3">
+            {blockEngines.map((e) => (
+              <button
+                key={e.id}
+                type="button"
+                onClick={() => {
+                  setBlockDiscipline(e.id);
+                  setBlockTypePickerOpen(false);
+                  setBlockPickerOpen(true);
+                }}
+                className="flex flex-col items-center gap-2 rounded-2xl border border-border bg-surface p-4 text-center transition-colors hover:border-primary/40"
+              >
+                <span
+                  className={
+                    "flex h-11 w-11 items-center justify-center rounded-xl bg-white/5 " +
+                    e.accentClassName
+                  }
+                >
+                  <DisciplineIcon icon={e.icon} className="h-5 w-5" />
+                </span>
+                <span className="text-xs font-semibold text-foreground">{e.label}</span>
+              </button>
+            ))}
+          </div>
+        </Sheet>
+      )}
 
       {blockPickerOpen && (
         <ExercisePickerSheet

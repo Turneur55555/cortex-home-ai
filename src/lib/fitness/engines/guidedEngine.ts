@@ -135,6 +135,13 @@ export const GuidedActivityEngine: WorkoutEngine = {
   // Phase A (15/07/2026) : extension du live-tracking générique
   // (pilote Course, 09/07/2026) — voir sessionViewHelpers.ts.
   supportsLiveTracking: true,
+  // Musculation devient l'unique point d'entrée Fitness (2026-08-06) :
+  // Activité accompagnée disparaît des écrans de création de nouvelle
+  // séance (NewSessionSheet) — s'ajoute désormais comme bloc à l'intérieur
+  // d'une séance Musculation (voir ActiveWorkoutView "Ajouter un bloc"). Le
+  // moteur reste intact : anciennes séances discipline="guided" toujours
+  // lisibles (historique/stats/détail inchangés).
+  availableForNewSession: false,
   questions: QUESTIONS,
 
   async generate(answers: SenseiAnswers, _context?: SenseiContext): Promise<WorkoutTemplate> {

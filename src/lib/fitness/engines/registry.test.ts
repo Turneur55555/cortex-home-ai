@@ -61,9 +61,20 @@ describe("ENGINE_REGISTRY", () => {
     expect(typeof ENGINE_REGISTRY.hyrox.generate).toBe("function");
     expect(typeof ENGINE_REGISTRY.hyrox.toWorkoutRecord).toBe("function");
     expect(typeof ENGINE_REGISTRY.hyrox.toSessionView).toBe("function");
+  });
+
+  it("Musculation, unique point d'entrée Fitness (2026-08-06) : seule 'muscu' reste disponible en nouvelle séance, tous les moteurs restent intacts", () => {
     for (const entry of listEngines()) {
-      if (entry.id !== "hyrox") {
+      if (entry.id === "muscu") {
         expect(entry.availableForNewSession).not.toBe(false);
+      } else {
+        expect(entry.availableForNewSession).toBe(false);
+        // Les moteurs retirés des points d'entrée restent des moteurs prêts —
+        // rétrocompatibilité totale de l'historique/stats/détail existants.
+        expect(entry.comingSoon).toBe(false);
+        expect(typeof entry.generate).toBe("function");
+        expect(typeof entry.toWorkoutRecord).toBe("function");
+        expect(typeof entry.toSessionView).toBe("function");
       }
     }
   });

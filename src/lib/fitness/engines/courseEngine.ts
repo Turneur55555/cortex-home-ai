@@ -826,6 +826,13 @@ export const CourseWorkoutEngine: WorkoutEngine = {
   // segments pendant la séance (voir buildLiveSegments/formatLiveSegment
   // ci-dessous et supportsLiveTracking sur EngineDescriptor).
   supportsLiveTracking: true,
+  // Musculation devient l'unique point d'entrée Fitness (2026-08-06) :
+  // Course disparaît des écrans de création de nouvelle séance
+  // (NewSessionSheet) — s'ajoute désormais comme bloc à l'intérieur d'une
+  // séance Musculation (voir ActiveWorkoutView "Ajouter un bloc"). Le
+  // moteur reste intact : anciennes séances discipline="course" toujours
+  // lisibles (historique/stats/détail inchangés).
+  availableForNewSession: false,
   questions: QUESTIONS,
 
   async generate(answers: SenseiAnswers, context?: SenseiContext): Promise<WorkoutTemplate> {

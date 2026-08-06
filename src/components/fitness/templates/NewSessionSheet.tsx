@@ -78,15 +78,21 @@ export function NewSessionSheet({
   /** Ouvre CoachSheet avec la discipline déjà choisie ici. */
   onChooseCoach: (discipline: DisciplineId) => void;
 }) {
-  const [discipline, setDiscipline] = useState<DisciplineId | null>(null);
-  const startBlankGeneric = useStartGenericActiveWorkout();
-
   // Toute discipline non-comingSoon ET disponible comme point d'entrée du
-  // registre — homogène, aucune liste codée en dur (A.2). HYROX (2026-08-04)
-  // est le premier cas de `availableForNewSession: false` : son moteur reste
-  // prêt (historique inchangé), mais il ne se choisit plus ici — ses postes
-  // s'ajoutent comme blocs à l'intérieur d'une séance Musculation.
+  // registre — homogène, aucune liste codée en dur (A.2). Musculation
+  // devient l'unique point d'entrée Fitness (2026-08-06) : Cardio, HYROX,
+  // Course, Activité accompagnée et Autre activité portent désormais tous
+  // `availableForNewSession: false` — leurs moteurs restent prêts
+  // (historique inchangé), mais ils ne se choisissent plus ici ; leurs
+  // postes s'ajoutent comme blocs à l'intérieur d'une séance Musculation
+  // (voir ActiveWorkoutView "Ajouter un bloc").
   const engines = listEngines().filter((e) => !e.comingSoon && e.availableForNewSession !== false);
+  const [discipline, setDiscipline] = useState<DisciplineId | null>(
+    // Une seule discipline restante (Musculation) : saute directement
+    // l'étape de choix, jamais une grille à un seul bouton.
+    engines.length === 1 ? engines[0].id : null,
+  );
+  const startBlankGeneric = useStartGenericActiveWorkout();
 
   const handleStartBlankGeneric = (id: DisciplineId) => {
     if (startBlankGeneric.isPending) return;
