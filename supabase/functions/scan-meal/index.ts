@@ -50,7 +50,10 @@ const MEAL_TOOL = {
         },
         items: {
           type: "array",
-          description: "Liste de chaque aliment ou groupe identifié séparément. Un aliment = une entrée.",
+          description:
+            "Liste de CHAQUE ingrédient identifié séparément — jamais un plat ou une préparation composée " +
+            "regroupés en une seule entrée. Un ingrédient = une entrée (ex. le poulet, la panure, la sauce " +
+            "soja et le riz d'un poulet karaage sont 4 entrées distinctes, jamais une seule).",
           items: MEAL_ITEM_SCHEMA,
           minItems: 1,
         },
@@ -62,27 +65,62 @@ const MEAL_TOOL = {
 };
 
 const SYSTEM_PROMPT = `Tu es un nutritionniste expert en analyse visuelle de repas.
-Identifie CHAQUE aliment ou groupe d'aliments séparément : ne les regroupe jamais en un seul total.
 
-Exemples corrects :
+RÈGLE PRINCIPALE — DÉCOMPOSITION MAXIMALE PAR INGRÉDIENT :
+Il est INTERDIT de retourner un plat ou une préparation composée comme un seul élément. Chaque ingrédient
+identifiable ou raisonnablement estimable doit être une entrée séparée, avec son propre nom, sa propre
+masse estimée (grammes) et ses propres macros (kcal, protéines, glucides, lipides). Tu dois privilégier une
+granularité PAR INGRÉDIENT, jamais par plat ni par préparation.
+
+Interdit (élément unique représentant tout un plat) :
+- "Poulet karaage avec sauce soja"
+- "Curry vert au cabillaud"
+- "Burger avec frites"
+
+Attendu (décomposition en ingrédients) :
+- Poulet karaage → ["Poulet", "Panure / farine / fécule", "Huile de cuisson absorbée", "Sauce soja",
+  "Sauce sucrée", "Riz", "Chou", "Carotte", "Mayonnaise / sauce de salade"] selon ce qui est réellement
+  visible, indiqué par l'utilisateur ou raisonnablement déductible de la préparation.
+- Curry vert → ["Cabillaud", "Lait de coco", "Pâte / sauce curry vert", "Pousses de bambou", "Poivron",
+  "Courgette", "Basilic / herbes", "Riz"] selon ce qui est présent.
 - Assiette de sushis → ["5 sushis saumon", "3 maki concombre", "wasabi"]
 - Repas équilibré → ["Poulet grillé 150 g", "Riz blanc cuit 180 g", "Haricots verts 80 g"]
 - Petit-déjeuner → ["Flocons d'avoine 60 g", "Lait demi-écrémé 150 ml", "Banane 120 g"]
 
-Méthode par aliment :
+Sauces : sépare TOUJOURS les sauces identifiables (ex. "Sauce soja", "Mayonnaise", "Sauce teriyaki") en
+entrées propres, avec leur propre masse et macros estimées séparément — ne les fusionne jamais dans
+l'aliment principal.
+
+Ingrédients non visibles directement (huile de cuisson, panure, fécule, etc.) : ajoute-les comme entrées
+séparées lorsqu'ils sont raisonnablement nécessaires à la préparation et nutritionnellement significatifs
+(ex. friture, panure). Reste conservateur sur leur quantité et n'invente pas d'ingrédient précis sans indice
+suffisant (visuel ou textuel).
+
+Cohérence globale : la somme des masses/macros de tous les ingrédients doit rester cohérente avec la
+portion globale observée sur la photo (ne double pas la taille du plat en multipliant les entrées).
+
+Méthode par ingrédient :
 1. Estime la masse en grammes (repères : assiette ~25 cm, fourchette ~20 cm).
 2. Applique les valeurs /100 g de la table CIQUAL.
 3. Calcule kcal + protéines + glucides + lipides pour cette masse estimée.
 4. Renvoie aussi cette masse (grams) : c'est elle qui sera enregistrée comme poids de référence.
 
-Si un aliment est ambigu, prends la valeur moyenne et baisse confidence.
+Si un ingrédient est ambigu, prends la valeur moyenne et baisse confidence.
 Retourne STRICTEMENT du JSON via tool calling. Tout le texte en FRANÇAIS.`;
 
-const CONTEXT_INSTRUCTIONS = `L'utilisateur a décrit son plat avant l'analyse. Ce texte est PRIORITAIRE sur ce que tu crois voir sur
-la photo : si l'utilisateur nomme explicitement un aliment ou un ingrédient (ex. « cabillaud »), utilise
-CET aliment même s'il ressemble visuellement à autre chose (ex. ne jamais l'identifier comme du poulet).
-Utilise la photo pour repérer les AUTRES aliments non mentionnés et pour estimer les portions/macros.
-N'invente pas d'ingrédient qui n'est ni visible sur la photo ni mentionné dans la description.`;
+const CONTEXT_INSTRUCTIONS = `L'utilisateur a décrit son plat avant l'analyse. Ce texte sert à t'aider à comprendre le plat et à
+identifier CORRECTEMENT ses ingrédients — il est PRIORITAIRE sur ce que tu crois voir sur la photo : si
+l'utilisateur nomme explicitement un aliment ou un ingrédient (ex. « curry vert au cabillaud »), utilise CET
+ingrédient (le cabillaud) même s'il ressemble visuellement à autre chose (ex. ne jamais l'identifier comme
+du poulet).
+
+Le contexte utilisateur ne doit JAMAIS devenir le nom d'un élément unique représentant tout le repas
+(ex. ne retourne jamais "Curry vert au cabillaud" comme une seule entrée) : utilise-le pour nommer/corriger
+les ingrédients individuels (le poisson, la sauce curry, le lait de coco, etc.), puis décompose le reste du
+plat normalement en ingrédients séparés à partir de la photo.
+Utilise la photo pour repérer les AUTRES ingrédients non mentionnés et pour estimer les portions/macros.
+N'invente pas d'ingrédient qui n'est ni visible sur la photo ni mentionné dans la description, ni
+raisonnablement déductible de la préparation décrite.`;
 
 // ─── Parser robuste ───────────────────────────────────────────────────────────
 
@@ -153,8 +191,8 @@ async function callGemini(apiKey: string, b64: string, mt: string, userContext?:
   console.log("[scan-meal] → Gemini 2.5 Flash, b64 length:", b64.length, "context:", !!userContext);
   const systemPrompt = userContext ? `${SYSTEM_PROMPT}\n\n${CONTEXT_INSTRUCTIONS}` : SYSTEM_PROMPT;
   const userText = userContext
-    ? `Description du plat par l'utilisateur : « ${userContext} »\nIdentifie chaque aliment séparément (en priorisant cette description) et donne sa masse estimée (grammes) avec ses macros.`
-    : "Identifie chaque aliment séparément et donne sa masse estimée (grammes) avec ses macros.";
+    ? `Description du plat par l'utilisateur : « ${userContext} »\nDécompose ce plat en CHAQUE ingrédient distinct (en priorisant cette description pour les identifier correctement, sans jamais nommer un seul élément pour tout le plat) et donne pour chacun sa masse estimée (grammes) avec ses macros.`
+    : "Décompose ce plat en CHAQUE ingrédient distinct (jamais un seul élément par plat) et donne pour chacun sa masse estimée (grammes) avec ses macros.";
   const res = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
     method: "POST",
     headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -195,8 +233,8 @@ async function callOpenAI(apiKey: string, b64: string, mt: string, userContext?:
   console.log("[scan-meal] → OpenAI GPT-4o, b64 length:", b64.length, "context:", !!userContext);
   const systemPrompt = userContext ? `${SYSTEM_PROMPT}\n\n${CONTEXT_INSTRUCTIONS}` : SYSTEM_PROMPT;
   const userText = userContext
-    ? `Description du plat par l'utilisateur : « ${userContext} »\nIdentifie chaque aliment séparément (en priorisant cette description) et donne sa masse estimée (grammes) avec ses macros.`
-    : "Identifie chaque aliment séparément et donne sa masse estimée (grammes) avec ses macros.";
+    ? `Description du plat par l'utilisateur : « ${userContext} »\nDécompose ce plat en CHAQUE ingrédient distinct (en priorisant cette description pour les identifier correctement, sans jamais nommer un seul élément pour tout le plat) et donne pour chacun sa masse estimée (grammes) avec ses macros.`
+    : "Décompose ce plat en CHAQUE ingrédient distinct (jamais un seul élément par plat) et donne pour chacun sa masse estimée (grammes) avec ses macros.";
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
