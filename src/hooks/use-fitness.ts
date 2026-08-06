@@ -1145,7 +1145,7 @@ export function useAddExerciseToActiveWorkout() {
         cached && cached.id === workoutId
           ? Math.max(-1, ...cached.exercises.map((e) => e.position)) + 1
           : 0;
-      const { error } = await supabase.from("exercises").insert({
+      const { error } = await db.from("exercises").insert({
         user_id: user.id,
         workout_id: workoutId,
         name,
