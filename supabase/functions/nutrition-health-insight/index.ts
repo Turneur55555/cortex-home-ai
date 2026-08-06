@@ -18,8 +18,8 @@
 // aucun nom/email/id Supabase/chemin Storage/photo — uniquement des
 // faits numériques/enum déjà agrégés côté client.
 import { createClient } from "@supabase/supabase-js";
-import { checkRateLimit, recordRateLimit } from "../_shared/rate-limit.ts";
-import { getCachedResult, setCachedResult } from "../_shared/ai-cache.ts";
+import { checkRateLimit, recordRateLimit } from "./_shared/rate-limit.ts";
+import { getCachedResult, setCachedResult } from "./_shared/ai-cache.ts";
 
 function buildCors(req: Request) {
   const origin = req.headers.get("origin") ?? "";
