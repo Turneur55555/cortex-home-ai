@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+// `position` sur `exercises` absent des types générés (dérive de schéma) : client d'échappement.
+import { db } from "@/integrations/supabase/db";
 import { logActivity } from "@/lib/activity";
 import { localDateYMD } from "@/lib/dates";
 import type { DisciplineId, SessionSegment } from "@/lib/fitness/engines/types";
@@ -473,7 +475,7 @@ export function useAddExerciseToWorkout() {
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
       const exerciseReferenceId = await resolveMuscuExerciseReferenceId(exercise.name);
-      const { error } = await supabase.from("exercises").insert({
+      const { error } = await db.from("exercises").insert({
         user_id: user.id,
         workout_id: workoutId,
         name: exercise.name,
@@ -1083,7 +1085,7 @@ export function useStartWorkoutFromTemplate() {
               : resolveMuscuExerciseReferenceId(g.name),
           ),
         );
-        const { data: insertedExs, error: exErr } = await supabase
+        const { data: insertedExs, error: exErr } = await db
           .from("exercises")
           .insert(
             groupList.map((g, i) => ({
@@ -1143,7 +1145,7 @@ export function useAddExerciseToActiveWorkout() {
         cached && cached.id === workoutId
           ? Math.max(-1, ...cached.exercises.map((e) => e.position)) + 1
           : 0;
-      const { error } = await supabase.from("exercises").insert({
+      const { error } = await db.from("exercises").insert({
         user_id: user.id,
         workout_id: workoutId,
         name,
@@ -1191,7 +1193,7 @@ export function useReorderActiveExercises() {
       if (!user) throw new Error("Non authentifié");
       const results = await Promise.all(
         orderedIds.map((id, position) =>
-          supabase.from("exercises").update({ position }).eq("id", id).eq("user_id", user.id),
+          db.from("exercises").update({ position }).eq("id", id).eq("user_id", user.id),
         ),
       );
       const failed = results.find((r) => r.error);

@@ -41,6 +41,9 @@ export default defineConfig({
           ],
         },
         workbox: {
+          // Les binaires WASM (onnxruntime du détourage) dépassent la limite de
+          // précache Workbox : chargés à la demande, jamais précachés.
+          globIgnores: ["**/*.wasm", "**/ort*.js"],
           // NetworkFirst pour les requêtes Supabase
           runtimeCaching: [
             {
