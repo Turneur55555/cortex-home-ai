@@ -74,9 +74,13 @@ export function RecipeImportSheet({ date, onClose }: { date: string; onClose: ()
       setRecipe(result);
       setServingsToLog(1);
       setPhase("result");
-    } catch {
+    } catch (e) {
       if (cancelled.current) return;
-      setError("L'analyse a échoué. Réessaie dans un instant.");
+      setError(
+        e instanceof Error && e.message
+          ? e.message
+          : "L'analyse a échoué. Réessaie dans un instant.",
+      );
       setPhase("input");
     }
   }
@@ -109,6 +113,7 @@ export function RecipeImportSheet({ date, onClose }: { date: string; onClose: ()
         base_fats: Math.round(p.fats * 10) / 10,
         serving_count: s,
         percentage_consumed: 100,
+        recipe_id: recipe.recipeId,
       },
       { onSuccess: onClose },
     );

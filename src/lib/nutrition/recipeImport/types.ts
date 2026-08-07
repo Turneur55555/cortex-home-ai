@@ -54,11 +54,16 @@ export interface ImportedRecipe {
   sourceUrl: string | null;
   /** Note libre issue de l'analyse (approximations, hypothèses). */
   notes?: string;
+  /**
+   * Id de la recette persistée côté serveur (`recipes`), quand le pipeline
+   * l'a créée — `null` pour les sources encore simulées côté client. Permet
+   * de réutiliser la recette déjà créée lors de l'ajout au journal, sans la
+   * dupliquer.
+   */
+  recipeId: string | null;
 }
 
-export type ImportInput =
-  | { kind: "url"; value: string }
-  | { kind: "file"; value: File };
+export type ImportInput = { kind: "url"; value: string } | { kind: "file"; value: File };
 
 export interface RecipeImporter {
   kind: RecipeSourceKind;

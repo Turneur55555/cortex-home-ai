@@ -5,7 +5,12 @@ export default defineConfig({
   test: {
     environment: "node",
     globals: true,
-    include: ["src/**/*.test.{ts,tsx}", "src/**/*.spec.{ts,tsx}", "scripts/**/*.test.mjs"],
+    include: [
+      "src/**/*.test.{ts,tsx}",
+      "src/**/*.spec.{ts,tsx}",
+      "scripts/**/*.test.mjs",
+      "supabase/functions/**/*.test.ts",
+    ],
   },
   resolve: {
     alias: {

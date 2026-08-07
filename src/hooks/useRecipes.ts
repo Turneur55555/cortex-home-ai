@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase as supabaseTyped } from "@/integrations/supabase/client";
 const supabase = supabaseTyped as any;
-import { recipeMacros, perServing, type MacroTotals } from "@/lib/nutrition/recipes";
+import { recipeMacros, perServing, scaleServings, type MacroTotals } from "@/lib/nutrition/recipes";
 
 /**
  * CRUD typé des recettes Nutrition V2 (react-query).
@@ -22,6 +22,14 @@ export interface Recipe {
   tags: string[] | null;
   created_at: string;
   updated_at: string;
+  /** Recette importée par IA (recipeImport V2) — non-null seulement pour ces recettes. */
+  source_kind: string | null;
+  source_image_url: string | null;
+  per_serving_calories: number | null;
+  per_serving_proteins: number | null;
+  per_serving_carbs: number | null;
+  per_serving_fats: number | null;
+  per_serving_fiber: number | null;
 }
 
 interface RecipeIngredient {
@@ -93,15 +101,37 @@ export function useRecipe(id: string | null | undefined) {
         .order("sort_order", { ascending: true });
       if (ingErr) throw ingErr;
       const ingredients = (ings ?? []) as unknown as RecipeIngredient[];
-      const total = recipeMacros(ingredients.map(toMacroInput));
+      const r = recipe as Recipe;
       const totalGrams = ingredients.every((ing) => ing.grams != null && ing.grams > 0)
         ? ingredients.reduce((sum, ing) => sum + (ing.grams ?? 0), 0)
         : null;
+
+      // Recette importée (V2 recipeImport) : ses ingrédients ont des noms
+      // libres sans item_id fiable vers le catalogue `items` — recipeMacros()
+      // renverrait 0. Ses macros/portion ont été figées à l'import
+      // (recipes.per_serving_*) : c'est cette valeur qui fait foi.
+      if (r.per_serving_calories != null) {
+        const perS = {
+          calories: r.per_serving_calories,
+          protein: r.per_serving_proteins ?? 0,
+          carbs: r.per_serving_carbs ?? 0,
+          fat: r.per_serving_fats ?? 0,
+        };
+        return {
+          ...r,
+          ingredients,
+          totalMacros: scaleServings(perS, r.servings),
+          perServingMacros: perS,
+          totalGrams,
+        };
+      }
+
+      const total = recipeMacros(ingredients.map(toMacroInput));
       return {
-        ...(recipe as Recipe),
+        ...r,
         ingredients,
         totalMacros: total,
-        perServingMacros: perServing(total, (recipe as Recipe).servings),
+        perServingMacros: perServing(total, r.servings),
         totalGrams,
       };
     },

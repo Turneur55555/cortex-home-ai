@@ -861,6 +861,7 @@ export type Database = {
           name: string
           percentage_consumed: number | null
           proteins: number | null
+          recipe_id: string | null
           serving_count: number | null
           source_document_id: string | null
           user_id: string
@@ -883,6 +884,7 @@ export type Database = {
           name: string
           percentage_consumed?: number | null
           proteins?: number | null
+          recipe_id?: string | null
           serving_count?: number | null
           source_document_id?: string | null
           user_id: string
@@ -905,6 +907,7 @@ export type Database = {
           name?: string
           percentage_consumed?: number | null
           proteins?: number | null
+          recipe_id?: string | null
           serving_count?: number | null
           source_document_id?: string | null
           user_id?: string
