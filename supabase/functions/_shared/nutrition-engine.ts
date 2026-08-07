@@ -4,6 +4,7 @@
 // numériques, valeurs par défaut, et score de confiance final. Aucun appel
 // réseau ici : logique pure, testable indépendamment du provider/parser.
 import {
+  RECIPE_TAGS,
   safeConfidence,
   safeNum,
   type RecipeExtraction,
@@ -17,6 +18,12 @@ export interface SignalQuality {
   hasImage: boolean;
 }
 
+/** Contenu propre au provider, non issu de l'IA — recopié tel quel dans la fiche finale. */
+export interface PassthroughContent {
+  originalCaption: string | null;
+  authorHandle: string | null;
+}
+
 /** Pénalité de confiance cumulée selon les signaux manquants. */
 function confidencePenalty(signals: SignalQuality): number {
   let penalty = 0;
@@ -26,12 +33,31 @@ function confidencePenalty(signals: SignalQuality): number {
   return penalty;
 }
 
+/** Minutes bornées 0..600, `null` si absent/non détectable (0 ou invalide côté IA). */
+function safeMinutes(v: unknown): number | null {
+  const n = safeNum(v, 0);
+  return n > 0 && n <= 600 ? Math.round(n) : null;
+}
+
+/** Ne garde que les tags de la liste fermée, dédupliqués, max 5. */
+function sanitizeTags(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  const allowed = new Set<string>(RECIPE_TAGS);
+  const seen = new Set<string>();
+  for (const t of v) {
+    if (typeof t !== "string") continue;
+    if (allowed.has(t) && !seen.has(t)) seen.add(t);
+    if (seen.size >= 5) break;
+  }
+  return [...seen];
+}
+
 /** Nettoie la sortie brute de l'IA vers le contrat `RecipeExtraction` (bornes + typage). */
 export function computeRecipeExtraction(
   raw: Record<string, unknown>,
   fallbackImageUrl: string | null,
   signals: SignalQuality,
-  originalCaption: string | null,
+  passthrough: PassthroughContent,
 ): RecipeExtraction {
   const rawIngredients = Array.isArray(raw.ingredients) ? raw.ingredients : [];
   const ingredients: RecipeIngredientExtraction[] = rawIngredients.slice(0, 40).map((it) => {
@@ -58,6 +84,8 @@ export function computeRecipeExtraction(
   const penalty = confidencePenalty(signals);
   const confidence = safeConfidence(safeConfidence(raw.confidence, 0.6) * Math.max(0, Math.min(1, 1 - penalty)));
 
+  const { originalCaption, authorHandle } = passthrough;
+
   return {
     title: typeof raw.title === "string" && raw.title.trim() ? raw.title.trim().slice(0, 120) : "Recette importée",
     imageUrl: fallbackImageUrl,
@@ -67,5 +95,10 @@ export function computeRecipeExtraction(
     ingredients: ingredients.length > 0 ? ingredients : [{ name: "Ingrédient", quantity: 1, unit: "pièce", grams: null }],
     notes: typeof raw.notes === "string" ? raw.notes.trim().slice(0, 400) : "",
     originalCaption: originalCaption && originalCaption.trim() ? originalCaption.trim().slice(0, 2200) : null,
+    aiSummary: typeof raw.ai_summary === "string" && raw.ai_summary.trim() ? raw.ai_summary.trim().slice(0, 1200) : null,
+    authorHandle: authorHandle && authorHandle.trim() ? authorHandle.trim().slice(0, 60) : null,
+    prepMinutes: safeMinutes(raw.prep_minutes),
+    cookMinutes: safeMinutes(raw.cook_minutes),
+    tags: sanitizeTags(raw.tags),
   };
 }

@@ -20,7 +20,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { checkRateLimit, recordRateLimit } from "./rate-limit.ts";
 import { RecipeImportError, type RecipeExtraction, type RecipeSourceKind, type SourceHandler } from "./recipe-import.ts";
 import { instagramSourceHandler } from "./recipe-import-instagram.ts";
-import { createUserRecipeFromExtraction, findCachedRecipe, findUserRecipe, saveCachedRecipe } from "./recipe-db.ts";
+import {
+  bumpReanalysisHistory,
+  createUserRecipeFromExtraction,
+  findCachedRecipe,
+  findUserRecipe,
+  refreshCachedRecipe,
+  saveCachedRecipe,
+} from "./recipe-db.ts";
 
 export const SOURCE_HANDLERS: Record<RecipeSourceKind, SourceHandler | null> = {
   instagram: instagramSourceHandler,
@@ -141,5 +148,74 @@ export async function handleRecipeImport(rawBody: unknown, deps: RecipeImportDep
   return {
     recipe: { ...extraction, sourceKind: source, sourceUrl: normalizedUrl, recipeId },
     cached: fromGlobalCache,
+  };
+}
+
+/**
+ * "Réanalyser la recette" — repart du lien source enregistré et relance TOUT
+ * le pipeline (jamais de lecture cache/association existante, contrairement
+ * à `handleRecipeImport`), pour que l'utilisateur puisse comparer l'ancienne
+ * et la nouvelle analyse avant de choisir de mettre à jour sa recette. Ne
+ * touche JAMAIS `recipes`/`recipe_ingredients` ici — la fiche retournée est
+ * appliquée par le frontend via `useUpdateRecipe` (même mutation que pour une
+ * modification manuelle) uniquement si l'utilisateur valide. Rafraîchit tout
+ * de même le cache global (bénéficie aux futurs imports du même lien) et
+ * l'historique de réanalyse (compte à chaque tentative, appliquée ou non).
+ */
+export async function handleRecipeReanalyze(
+  rawBody: unknown,
+  deps: RecipeImportDeps,
+): Promise<Record<string, unknown>> {
+  if (!deps.geminiApiKey) return errorBody("Service IA indisponible (aucune clé API configurée).");
+
+  const { source, input, recipeId } = (rawBody ?? {}) as {
+    source?: unknown;
+    input?: { kind?: unknown; value?: unknown };
+    recipeId?: unknown;
+  };
+  if (!isRecipeSourceKind(source)) return errorBody("Source inconnue.");
+  if (!input || input.kind !== "url" || typeof input.value !== "string" || !input.value.trim()) {
+    return errorBody("Entrée invalide (lien attendu).");
+  }
+
+  const handler = SOURCE_HANDLERS[source];
+  if (!handler) {
+    return errorBody(`${SOURCE_LABELS[source]} arrive bientôt. Pour l'instant, seul Instagram est disponible.`);
+  }
+
+  let normalizedUrl: string;
+  try {
+    normalizedUrl = handler.validate(input.value);
+  } catch (e) {
+    return errorFromException(e);
+  }
+
+  const { userSupa, admin, userId } = deps;
+
+  const rl = await checkRateLimit(userSupa, userId, "recipe_import", 10);
+  if (!rl.ok) return errorBody(`Limite atteinte (${rl.count}/10 imports par heure). Réessaie plus tard.`);
+
+  let extraction: RecipeExtraction;
+  try {
+    extraction = await handler.run(normalizedUrl, {
+      geminiApiKey: deps.geminiApiKey,
+      openaiApiKey: deps.openaiApiKey,
+    });
+  } catch (e) {
+    return errorFromException(e);
+  }
+
+  if (admin) {
+    extraction = await refreshCachedRecipe(admin, source, normalizedUrl, extraction);
+  }
+  await recordRateLimit(userSupa, userId, "recipe_import");
+
+  const ownedRecipeId = typeof recipeId === "string" && recipeId ? recipeId : null;
+  if (ownedRecipeId) {
+    await bumpReanalysisHistory(userSupa, ownedRecipeId);
+  }
+
+  return {
+    recipe: { ...extraction, sourceKind: source, sourceUrl: normalizedUrl, recipeId: ownedRecipeId },
   };
 }

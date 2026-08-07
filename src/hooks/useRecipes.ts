@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { supabase as supabaseTyped } from "@/integrations/supabase/client";
 const supabase = supabaseTyped as any;
 import { recipeMacros, perServing, scaleServings, type MacroTotals } from "@/lib/nutrition/recipes";
+import type { ImportedRecipe, RecipeSourceKind } from "@/lib/nutrition/recipeImport";
 
 /**
  * CRUD typé des recettes Nutrition V2 (react-query).
@@ -29,6 +30,13 @@ export interface Recipe {
   source_image_url: string | null;
   /** Légende/description ORIGINALE du post source — distincte de `notes` (hypothèses de l'IA). */
   source_description: string | null;
+  /** Résumé structuré généré par l'IA (principe, ingrédients clés, cuisson, points importants). */
+  ai_summary: string | null;
+  /** @handle Instagram de l'auteur — best-effort, peut être `null`. */
+  source_author: string | null;
+  cook_minutes: number | null;
+  last_reanalyzed_at: string | null;
+  reanalysis_count: number;
   confidence: number | null;
   notes: string | null;
   is_favorite: boolean;
@@ -163,6 +171,10 @@ export interface RecipeUpdatePatch {
   per_serving_carbs?: number;
   per_serving_fats?: number;
   per_serving_fiber?: number;
+  tags?: string[];
+  ai_summary?: string | null;
+  prep_minutes?: number | null;
+  cook_minutes?: number | null;
   /** Si fourni, remplace intégralement les ingrédients existants (delete + insert). */
   ingredients?: RecipeIngredientPatch[];
 }
@@ -259,12 +271,15 @@ export function useDuplicateRecipe() {
           name: `${original.name} (copie)`,
           servings: original.servings,
           prep_minutes: original.prep_minutes,
+          cook_minutes: original.cook_minutes,
           instructions: original.instructions,
           tags: original.tags,
           source_kind: null,
           source_url: null,
           source_image_url: original.source_image_url,
           source_description: original.source_description,
+          ai_summary: original.ai_summary,
+          source_author: original.source_author,
           confidence: original.confidence,
           notes: original.notes,
           per_serving_calories: original.per_serving_calories,
@@ -297,6 +312,58 @@ export function useDuplicateRecipe() {
     onSuccess: () => {
       toast.success("Recette dupliquée");
       qc.invalidateQueries({ queryKey: RECIPES_KEY });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+}
+
+interface ReanalyzeArgs {
+  recipeId: string;
+  sourceKind: RecipeSourceKind;
+  sourceUrl: string;
+}
+
+interface RecipeReanalyzeEdgeResponse {
+  recipe?: ImportedRecipe;
+  error?: string;
+}
+
+/**
+ * "Réanalyser la recette" — repart du lien Instagram enregistré et relance
+ * tout le pipeline (edge function `recipe-import`, `reanalyze: true` :
+ * ignore le cache/l'association existante, voir recipe-import-handler.ts).
+ * Ne modifie PAS `recipes` — retourne la fiche fraîche pour que l'appelant
+ * (RecipeDetailSheet) l'affiche en comparaison et laisse l'utilisateur
+ * décider via `useUpdateRecipe` de l'appliquer ou non. L'historique de
+ * réanalyse (compteur + date), lui, est mis à jour côté serveur à chaque
+ * appel, qu'elle soit appliquée ou non — d'où l'invalidation de la recette.
+ */
+export function useReanalyzeRecipe() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      recipeId,
+      sourceKind,
+      sourceUrl,
+    }: ReanalyzeArgs): Promise<ImportedRecipe> => {
+      const { data, error } = await supabaseTyped.functions.invoke<RecipeReanalyzeEdgeResponse>(
+        "recipe-import",
+        {
+          body: {
+            source: sourceKind,
+            input: { kind: "url", value: sourceUrl },
+            reanalyze: true,
+            recipeId,
+          },
+        },
+      );
+      if (error) throw new Error(error.message);
+      if (!data || data.error || !data.recipe)
+        throw new Error(data?.error ?? "La réanalyse a échoué.");
+      return data.recipe;
+    },
+    onSuccess: (_result, { recipeId }) => {
+      qc.invalidateQueries({ queryKey: recipeKey(recipeId) });
     },
     onError: (e: Error) => toast.error(e.message),
   });

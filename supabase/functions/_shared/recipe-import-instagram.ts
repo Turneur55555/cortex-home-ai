@@ -52,7 +52,7 @@ function makeInstagramHandler(provider: InstagramProvider): SourceHandler {
           hasCaption: !!content.caption,
           hasImage: !!content.imageB64,
         },
-        content.caption,
+        { originalCaption: content.caption, authorHandle: content.authorHandle },
       );
     },
   };

@@ -15,6 +15,23 @@ export type RecipeSourceKind =
   | "photo"
   | "recipe-url";
 
+/** Tags produit — liste fermée, miroir de RECIPE_TAGS (supabase/functions/_shared/recipe-import.ts). */
+export const RECIPE_TAGS = [
+  "High Protein",
+  "Healthy",
+  "Meal Prep",
+  "Low Carb",
+  "Vegetarian",
+  "Vegan",
+  "Dessert",
+  "Breakfast",
+  "Lunch",
+  "Dinner",
+  "Snack",
+  "Spicy",
+  "Quick Recipe",
+] as const;
+
 /** Étape affichée pendant l'analyse. Les durées servent à la simulation V1. */
 export interface ImportStage {
   key: string;
@@ -63,6 +80,14 @@ export interface ImportedRecipe {
   recipeId: string | null;
   /** Légende/description ORIGINALE du post source — distincte de `notes` (hypothèses de l'IA). */
   originalCaption: string | null;
+  /** Résumé structuré généré par l'IA (principe, ingrédients clés, cuisson, points importants) — ne remplace jamais `originalCaption`. */
+  aiSummary: string | null;
+  /** @handle Instagram de l'auteur — best-effort, `null` si non détectable. */
+  authorHandle: string | null;
+  prepMinutes: number | null;
+  cookMinutes: number | null;
+  /** Sous-ensemble de RECIPE_TAGS, généré par l'IA — reste modifiable côté utilisateur. */
+  tags: string[];
 }
 
 export type ImportInput = { kind: "url"; value: string } | { kind: "file"; value: File };

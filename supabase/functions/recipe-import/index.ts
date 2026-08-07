@@ -1,6 +1,8 @@
 // Point d'entrée unique de l'import de recettes — POST /recipe-import.
 // Le frontend ne connaît jamais l'implémentation propre à une source : il
 // envoie { source, input } et reçoit toujours la même forme de réponse.
+// Corps { ..., reanalyze: true } bascule vers `handleRecipeReanalyze`
+// ("Réanalyser la recette" — repart du lien enregistré, ignore le cache).
 //
 // Ce fichier ne fait que : CORS, auth Supabase, lecture des secrets d'env,
 // parsing du corps HTTP. Toute la logique métier (dédoublonnage, cache
@@ -8,7 +10,7 @@
 // ../_shared/recipe-import-handler.ts — testable sans `Deno.serve`/`Deno.env`
 // (voir recipe-import.e2e.test.ts).
 import { createClient } from "@supabase/supabase-js";
-import { handleRecipeImport } from "../_shared/recipe-import-handler.ts";
+import { handleRecipeImport, handleRecipeReanalyze } from "../_shared/recipe-import-handler.ts";
 
 function buildCors(req: Request) {
   const origin = req.headers.get("origin") ?? "";
@@ -65,13 +67,17 @@ Deno.serve(async (req) => {
       return json200({ error: "Corps invalide (JSON attendu).", code: "server_error" });
     }
 
-    const responseBody = await handleRecipeImport(rawBody, {
+    const deps = {
       userSupa,
       admin,
       userId: userData.user.id,
       geminiApiKey: GEMINI_API_KEY,
       openaiApiKey: OPENAI_API_KEY,
-    });
+    };
+    const isReanalyze = !!rawBody && typeof rawBody === "object" && (rawBody as { reanalyze?: unknown }).reanalyze === true;
+    const responseBody = isReanalyze
+      ? await handleRecipeReanalyze(rawBody, deps)
+      : await handleRecipeImport(rawBody, deps);
     return json200(responseBody);
   } catch (e) {
     console.error("[recipe-import] unhandled exception:", e);

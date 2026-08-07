@@ -3382,3 +3382,86 @@ rester manuel). Vérification faite sur les vrais workflows CI, pas une supposit
   `npm run build` / `scripts/validate-supabase.mjs` (0 erreur, avertissements pré-existants non liés)
   tous verts. Vérification visuelle en navigateur non obtenue (même limite d'environnement que les
   sessions précédentes).
+
+## Import de recettes — fiche premium : résumé IA, auteur, temps, tags, réanalyse (2026-08-07, session suivante)
+- **Demande de Nathan** : transformer chaque recette importée en véritable fiche premium façon « livre
+  de recettes personnel enrichi par IA » — en-tête complet (miniature/titre/@auteur/lien/date/
+  confiance), description originale ET résumé IA (jamais fusionnés), infos recette (macros + temps
+  prépa/cuisson), ingrédients éditables avec recalcul macros, tags auto (modifiables), + action
+  « Réanalyser » avec comparaison ancienne/nouvelle. Architecture existante réutilisée telle quelle
+  (aucun flux cassé), schéma étendu uniquement là où la valeur est réelle (temps historisé, résumé,
+  auteur, tags) — `recipes.tags`/`recipes.prep_minutes` existaient déjà depuis la V2 initiale et sont
+  simplement enfin renseignés par le pipeline, pas redéfinis.
+- **Migration `20260824090000_recipe_premium_fiche.sql`** (additive) : `recipes` gagne `ai_summary`,
+  `source_author`, `cook_minutes`, `last_reanalyzed_at`, `reanalysis_count` (défaut 0) ;
+  `recipe_import_cache` gagne les mêmes champs partageables (`ai_summary`, `source_author`,
+  `prep_minutes` — absent du cache jusqu'ici —, `cook_minutes`, `tags`) pour qu'une copie sur cache hit
+  transporte la fiche complète sans re-analyse IA.
+- **Pipeline backend — nouveaux champs threadés de bout en bout** :
+  - `_shared/recipe-import.ts` : `RECIPE_TAGS` (liste fermée, 13 tags : High Protein/Healthy/Meal Prep/
+    Low Carb/Vegetarian/Vegan/Dessert/Breakfast/Lunch/Dinner/Snack/Spicy/Quick Recipe) + `RecipeExtraction`
+    enrichi (`aiSummary`, `authorHandle`, `prepMinutes`, `cookMinutes`, `tags`).
+  - `recipe-parser.ts` : `RECIPE_TOOL` gagne `ai_summary`/`prep_minutes`/`cook_minutes`/`tags` (enum
+    `RECIPE_TAGS`, max 5) — générés par Gemini dans le MÊME appel tool-calling qu'avant (zéro coût IA
+    supplémentaire). `prep_minutes`/`cook_minutes` en `number` (0 = non détectable), pas `["number","null"]`
+    — même convention que `grams` (meal-items.ts) pour rester dans le sous-ensemble JSON Schema le plus
+    sûr pour le tool-calling Gemini.
+  - `instagram-provider.ts` : `extractAuthorHandle()` — best-effort, regex sur `og:title`/`og:description`
+    (formats `"Nom (@handle) • ..."` et `"... - handle on Instagram: ..."`) — Instagram n'expose pas
+    l'auteur via une balise dédiée sur une page publique non authentifiée, `null` si aucun pattern ne
+    matche, jamais bloquant.
+  - `nutrition-engine.ts` : `computeRecipeExtraction()` prend un `PassthroughContent` (`originalCaption`
+    + `authorHandle`, remplace l'ancien paramètre `originalCaption` seul) + sanitise `ai_summary`
+    (cap 1200c), `prep_minutes`/`cook_minutes` (0..600 ou `null`), `tags` (filtre sur `RECIPE_TAGS`,
+    dédupliqué, max 5).
+  - `recipe-db.ts` : les deux mappers (`userRowToExtraction`/`cacheRowToExtraction`) + les deux inserts
+    (`createUserRecipeFromExtraction`/`saveCachedRecipe`) portent maintenant TOUS les champs de
+    `RecipeExtraction` — factorisés via `extractionToRecipeRow()`/`extractionToCacheRow()` (évite la
+    duplication de 15 champs à 2 endroits). Nouveau `refreshCachedRecipe()` (upsert `onConflict:
+    "source_kind,source_url"` — contrairement à `saveCachedRecipe`, on VEUT ici écraser une entrée
+    existante, c'est le sens de la réanalyse) et `bumpReanalysisHistory()` (lecture-puis-écriture de
+    `reanalysis_count`/`last_reanalyzed_at`, non-atomique mais acceptable — usage mono-utilisateur).
+- **« Réanalyser la recette » — nouveau chemin dédié, pas une branche de l'import normal** :
+  `recipe-import-handler.ts` gagne `handleRecipeReanalyze()` (fonction séparée de `handleRecipeImport`,
+  délibérément — ne touche JAMAIS `findUserRecipe`/`findCachedRecipe`, relance TOUJOURS le pipeline
+  complet). Rafraîchit le cache global (bénéfice futur) et bump l'historique de réanalyse
+  (`bumpReanalysisHistory`, compte à chaque tentative — appliquée ou non) mais **ne modifie jamais
+  `recipes`/`recipe_ingredients`** : retourne juste la fiche fraîche, c'est le frontend qui décide de
+  l'appliquer via `useUpdateRecipe` (même mutation que pour une édition manuelle — aucune nouvelle
+  route de persistance créée). `recipe-import/index.ts` route vers `handleRecipeReanalyze` quand le
+  corps contient `reanalyze: true` (sinon `handleRecipeImport` inchangé) — toujours UNE SEULE edge
+  function, comme demandé.
+- **Frontend — `useRecipes.ts`** : `Recipe` gagne `ai_summary`/`source_author`/`cook_minutes`/
+  `last_reanalyzed_at`/`reanalysis_count`. `RecipeUpdatePatch` gagne `tags`/`ai_summary`/
+  `prep_minutes`/`cook_minutes` (appliqués par la nouvelle logique de réanalyse ET par l'édition
+  manuelle des tags). Nouveau `useReanalyzeRecipe()` — appelle `recipe-import` avec `reanalyze: true`,
+  invalide `["recipe", id]` en toute circonstance (l'historique change côté serveur que le résultat
+  soit appliqué ou non).
+- **`RecipeDetailSheet.tsx` — réécriture complète (fiche premium)** :
+  - En-tête : miniature + @auteur + date d'import + confiance + bouton dédié « Voir le Reel Instagram »
+    (`ExternalLink`, plein largeur, pas juste un lien texte comme avant).
+  - Description originale (`source_description`) ET résumé IA (`ai_summary`, encadré `primary/5`,
+    icône Sparkles) — deux blocs toujours distincts, jamais fusionnés/remplacés.
+  - Chips prep/cook time affichées uniquement si détectées (`recipe.prep_minutes`/`cook_minutes`
+    non-null) — jamais un « 0 min » trompeur.
+  - Ingrédients éditables avec un **second champ grammes** en mode édition (en plus de la quantité
+    existante) — `rescaleAfterGramsChange()` recalcule proportionnellement calories/protéines/glucides/
+    lipides/fibres selon le ratio masse-totale-après/masse-totale-avant. Ce n'est pas un recalcul
+    nutritionnellement exact (pas de macros par ingrédient dans ce schéma, décision V2 assumée) mais une
+    estimation proportionnelle honnête, cohérente avec la contrainte « pas de nouveau schéma sauf valeur
+    réelle » — pas de nouvel appel IA, pas de colonnes macro par ingrédient.
+  - Tags : chips avec suppression (×) + `<details>` natif listant les tags `RECIPE_TAGS` restants — clic
+    = `useUpdateRecipe({tags})` immédiat (pas gaté par le mode « Modifier », comme le favori).
+  - Nouveau bouton « Réanalyser la recette » (visible seulement si `source_url`+`source_kind` présents,
+    donc jamais sur une recette manuelle/dupliquée) → `ReanalysisComparison` (carte ancienne vs
+    nouvelle : kcal/confiance/nb ingrédients côte à côte, badge « plus fiable » si confiance
+    nouvelle > ancienne + 0.02) → « Mettre à jour la recette » (applique via `useUpdateRecipe`) ou
+    « Garder l'actuelle » (ignore, ferme la comparaison) — jamais d'écrasement automatique/silencieux.
+  - Footer historique : date d'import + date de dernière réanalyse + compteur, texte discret.
+- **Validation** : `tsc --noEmit` / `eslint` (0 erreur, warnings `no-console`/`no-explicit-any`
+  pré-existants sur ce type de fichier) / `npx vitest run` (1199 passed, +1 vs avant — nouveau
+  « Cas 8 — Réanalyser » dans `recipe-import.e2e.test.ts`, assertions étendues sur le Cas 1 pour
+  couvrir résumé IA/auteur/temps/tags) / `npm run build` / `scripts/validate-supabase.mjs` tous verts.
+  Fake client Supabase du test E2E étendu avec `.upsert()`/`.update()` (manquants jusqu'ici, nécessaires
+  pour tester `refreshCachedRecipe`/`bumpReanalysisHistory`). Vérification visuelle en navigateur non
+  obtenue (même limite d'environnement que les sessions précédentes).

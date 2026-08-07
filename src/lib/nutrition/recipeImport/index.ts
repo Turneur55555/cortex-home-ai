@@ -32,7 +32,18 @@ const INSTAGRAM_RE = /^https?:\/\/(www\.)?instagram\.com\/(reel|reels|p|tv)\/[\w
 
 /** Jeu de fiches simulées — la fiche renvoyée dépend de l'URL (déterministe). */
 const MOCK_RECIPES: Array<
-  Omit<ImportedRecipe, "sourceKind" | "sourceUrl" | "recipeId" | "originalCaption">
+  Omit<
+    ImportedRecipe,
+    | "sourceKind"
+    | "sourceUrl"
+    | "recipeId"
+    | "originalCaption"
+    | "aiSummary"
+    | "authorHandle"
+    | "prepMinutes"
+    | "cookMinutes"
+    | "tags"
+  >
 > = [
   {
     title: "Poulet crémeux au parmesan & épinards",
@@ -88,7 +99,18 @@ const MOCK_RECIPES: Array<
 
 function pickMock(
   seed: string,
-): Omit<ImportedRecipe, "sourceKind" | "sourceUrl" | "recipeId" | "originalCaption"> {
+): Omit<
+  ImportedRecipe,
+  | "sourceKind"
+  | "sourceUrl"
+  | "recipeId"
+  | "originalCaption"
+  | "aiSummary"
+  | "authorHandle"
+  | "prepMinutes"
+  | "cookMinutes"
+  | "tags"
+> {
   let h = 0;
   for (let i = 0; i < seed.length; i += 1) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
   return MOCK_RECIPES[h % MOCK_RECIPES.length];
@@ -119,6 +141,11 @@ function createMockImporter(config: {
         sourceUrl: input.kind === "url" ? input.value : null,
         recipeId: null,
         originalCaption: null,
+        aiSummary: null,
+        authorHandle: null,
+        prepMinutes: null,
+        cookMinutes: null,
+        tags: [],
       };
     },
   };

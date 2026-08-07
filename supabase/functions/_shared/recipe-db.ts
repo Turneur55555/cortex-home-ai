@@ -8,14 +8,17 @@
 // 2. Association PAR UTILISATEUR (`recipes`/`recipe_ingredients`, RLS
 //    user_id = auth.uid(), inchangé depuis la V2) — chaque utilisateur garde
 //    sa propre ligne `recipes` (consommée telle quelle par useRecipes.ts,
-//    RecipeLogSheet, MealPlanSheet). Quand la recette est déjà en cache
-//    global, cette association est une copie DB pure depuis le cache : aucun
-//    appel IA, aucun recalcul de macros, aucune recréation d'ingrédients par
-//    l'IA (seulement des lignes `recipe_ingredients` propres à l'utilisateur,
-//    copiées depuis le cache — nécessaires pour que ses propres écrans
-//    fonctionnent sans changement).
+//    RecipesListSheet, RecipeDetailSheet). Quand la recette est déjà en
+//    cache global, cette association est une copie DB pure depuis le cache :
+//    aucun appel IA, aucun recalcul de macros, aucune recréation
+//    d'ingrédients par l'IA (seulement des lignes `recipe_ingredients`
+//    propres à l'utilisateur, copiées depuis le cache — nécessaires pour que
+//    ses propres écrans fonctionnent sans changement).
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { RecipeImportError, type RecipeExtraction, type RecipeSourceKind } from "./recipe-import.ts";
+
+const RECIPE_COLUMNS =
+  "id, name, servings, source_image_url, source_description, ai_summary, source_author, prep_minutes, cook_minutes, tags, confidence, notes, per_serving_calories, per_serving_proteins, per_serving_carbs, per_serving_fats, per_serving_fiber";
 
 // ─── Association par utilisateur (recipes / recipe_ingredients) ──────────────
 
@@ -27,6 +30,11 @@ interface RecipeRow {
   notes: string | null;
   source_image_url: string | null;
   source_description: string | null;
+  ai_summary: string | null;
+  source_author: string | null;
+  prep_minutes: number | null;
+  cook_minutes: number | null;
+  tags: string[] | null;
   per_serving_calories: number | null;
   per_serving_proteins: number | null;
   per_serving_carbs: number | null;
@@ -62,6 +70,11 @@ function userRowToExtraction(row: RecipeRow, ingredients: RecipeIngredientRow[])
     })),
     notes: row.notes ?? "",
     originalCaption: row.source_description,
+    aiSummary: row.ai_summary,
+    authorHandle: row.source_author,
+    prepMinutes: row.prep_minutes,
+    cookMinutes: row.cook_minutes,
+    tags: row.tags ?? [],
   };
 }
 
@@ -73,9 +86,7 @@ export async function findUserRecipe(
 ): Promise<{ id: string; extraction: RecipeExtraction } | null> {
   const { data: recipe, error } = await supa
     .from("recipes")
-    .select(
-      "id, name, servings, source_image_url, source_description, confidence, notes, per_serving_calories, per_serving_proteins, per_serving_carbs, per_serving_fats, per_serving_fiber",
-    )
+    .select(RECIPE_COLUMNS)
     .eq("user_id", userId)
     .eq("source_url", sourceUrl)
     .maybeSingle();
@@ -90,6 +101,27 @@ export async function findUserRecipe(
   return {
     id: (recipe as RecipeRow).id,
     extraction: userRowToExtraction(recipe as RecipeRow, (ingredients ?? []) as RecipeIngredientRow[]),
+  };
+}
+
+function extractionToRecipeRow(extraction: RecipeExtraction) {
+  return {
+    name: extraction.title,
+    servings: extraction.servings,
+    source_image_url: extraction.imageUrl,
+    source_description: extraction.originalCaption,
+    ai_summary: extraction.aiSummary,
+    source_author: extraction.authorHandle,
+    prep_minutes: extraction.prepMinutes,
+    cook_minutes: extraction.cookMinutes,
+    tags: extraction.tags.length > 0 ? extraction.tags : null,
+    confidence: extraction.confidence,
+    notes: extraction.notes || null,
+    per_serving_calories: extraction.perServing.calories,
+    per_serving_proteins: extraction.perServing.proteins,
+    per_serving_carbs: extraction.perServing.carbs,
+    per_serving_fats: extraction.perServing.fats,
+    per_serving_fiber: extraction.perServing.fiber,
   };
 }
 
@@ -111,19 +143,9 @@ export async function createUserRecipeFromExtraction(
     .from("recipes")
     .insert({
       user_id: userId,
-      name: extraction.title,
-      servings: extraction.servings,
       source_kind: source,
       source_url: sourceUrl,
-      source_image_url: extraction.imageUrl,
-      source_description: extraction.originalCaption,
-      confidence: extraction.confidence,
-      notes: extraction.notes || null,
-      per_serving_calories: extraction.perServing.calories,
-      per_serving_proteins: extraction.perServing.proteins,
-      per_serving_carbs: extraction.perServing.carbs,
-      per_serving_fats: extraction.perServing.fats,
-      per_serving_fiber: extraction.perServing.fiber,
+      ...extractionToRecipeRow(extraction),
     })
     .select("id")
     .single();
@@ -165,6 +187,23 @@ export async function createUserRecipeFromExtraction(
   return recipeId;
 }
 
+/**
+ * Historique de réanalyse — incrémenté à CHAQUE relance du pipeline pour une
+ * recette existante (indépendamment du fait que l'utilisateur applique ou
+ * non le résultat ensuite). Lecture-puis-écriture (pas d'atomicité forte :
+ * usage mono-utilisateur, clic manuel — un compteur légèrement sous-estimé
+ * en cas de double-clic simultané est un risque acceptable).
+ */
+export async function bumpReanalysisHistory(supa: SupabaseClient, recipeId: string): Promise<void> {
+  const { data } = await supa.from("recipes").select("reanalysis_count").eq("id", recipeId).maybeSingle();
+  const count = (data as { reanalysis_count?: number } | null)?.reanalysis_count ?? 0;
+  const { error } = await supa
+    .from("recipes")
+    .update({ reanalysis_count: count + 1, last_reanalyzed_at: new Date().toISOString() })
+    .eq("id", recipeId);
+  if (error) console.error("[recipe-db] bumpReanalysisHistory failed (non-fatal):", error);
+}
+
 // ─── Cache global (service_role, tous utilisateurs) ───────────────────────────
 
 interface CacheRow {
@@ -174,6 +213,11 @@ interface CacheRow {
   notes: string | null;
   source_image_url: string | null;
   source_description: string | null;
+  ai_summary: string | null;
+  source_author: string | null;
+  prep_minutes: number | null;
+  cook_minutes: number | null;
+  tags: string[] | null;
   per_serving_calories: number;
   per_serving_proteins: number;
   per_serving_carbs: number;
@@ -183,7 +227,7 @@ interface CacheRow {
 }
 
 const CACHE_SELECT =
-  "title, servings, confidence, notes, source_image_url, source_description, per_serving_calories, per_serving_proteins, per_serving_carbs, per_serving_fats, per_serving_fiber, ingredients";
+  "title, servings, confidence, notes, source_image_url, source_description, ai_summary, source_author, prep_minutes, cook_minutes, tags, per_serving_calories, per_serving_proteins, per_serving_carbs, per_serving_fats, per_serving_fiber, ingredients";
 
 function cacheRowToExtraction(row: CacheRow): RecipeExtraction {
   const ingredients = Array.isArray(row.ingredients) ? (row.ingredients as RecipeExtraction["ingredients"]) : [];
@@ -202,6 +246,11 @@ function cacheRowToExtraction(row: CacheRow): RecipeExtraction {
     ingredients,
     notes: row.notes ?? "",
     originalCaption: row.source_description,
+    aiSummary: row.ai_summary,
+    authorHandle: row.source_author,
+    prepMinutes: row.prep_minutes,
+    cookMinutes: row.cook_minutes,
+    tags: row.tags ?? [],
   };
 }
 
@@ -221,6 +270,30 @@ export async function findCachedRecipe(
   return cacheRowToExtraction(data as CacheRow);
 }
 
+function extractionToCacheRow(source: RecipeSourceKind, sourceUrl: string, extraction: RecipeExtraction) {
+  return {
+    source_kind: source,
+    source_url: sourceUrl,
+    title: extraction.title,
+    servings: extraction.servings,
+    confidence: extraction.confidence,
+    notes: extraction.notes || null,
+    source_image_url: extraction.imageUrl,
+    source_description: extraction.originalCaption,
+    ai_summary: extraction.aiSummary,
+    source_author: extraction.authorHandle,
+    prep_minutes: extraction.prepMinutes,
+    cook_minutes: extraction.cookMinutes,
+    tags: extraction.tags.length > 0 ? extraction.tags : null,
+    per_serving_calories: extraction.perServing.calories,
+    per_serving_proteins: extraction.perServing.proteins,
+    per_serving_carbs: extraction.perServing.carbs,
+    per_serving_fats: extraction.perServing.fats,
+    per_serving_fiber: extraction.perServing.fiber,
+    ingredients: extraction.ingredients,
+  };
+}
+
 /**
  * Écrit le résultat d'une analyse fraîche dans le cache global. Non-fatal :
  * si l'écriture échoue pour une raison autre qu'une course (23505), on
@@ -234,22 +307,7 @@ export async function saveCachedRecipe(
   sourceUrl: string,
   extraction: RecipeExtraction,
 ): Promise<RecipeExtraction> {
-  const { error } = await admin.from("recipe_import_cache").insert({
-    source_kind: source,
-    source_url: sourceUrl,
-    title: extraction.title,
-    servings: extraction.servings,
-    confidence: extraction.confidence,
-    notes: extraction.notes || null,
-    source_image_url: extraction.imageUrl,
-    source_description: extraction.originalCaption,
-    per_serving_calories: extraction.perServing.calories,
-    per_serving_proteins: extraction.perServing.proteins,
-    per_serving_carbs: extraction.perServing.carbs,
-    per_serving_fats: extraction.perServing.fats,
-    per_serving_fiber: extraction.perServing.fiber,
-    ingredients: extraction.ingredients,
-  });
+  const { error } = await admin.from("recipe_import_cache").insert(extractionToCacheRow(source, sourceUrl, extraction));
   if (error) {
     if ((error as { code?: string }).code === "23505") {
       const existing = await findCachedRecipe(admin, source, sourceUrl);
@@ -257,5 +315,25 @@ export async function saveCachedRecipe(
     }
     console.error("[recipe-db] cache insert failed (non-fatal):", error);
   }
+  return extraction;
+}
+
+/**
+ * Réanalyse ("Réanalyser la recette") : remplace l'entrée de cache existante
+ * par l'analyse fraîche — contrairement à `saveCachedRecipe`, on VEUT ici
+ * écraser une entrée déjà présente (c'est tout le sens de la réanalyse).
+ * Non-fatal comme `saveCachedRecipe` : un échec d'écriture cache ne doit
+ * jamais faire échouer la réanalyse elle-même.
+ */
+export async function refreshCachedRecipe(
+  admin: SupabaseClient,
+  source: RecipeSourceKind,
+  sourceUrl: string,
+  extraction: RecipeExtraction,
+): Promise<RecipeExtraction> {
+  const { error } = await admin
+    .from("recipe_import_cache")
+    .upsert(extractionToCacheRow(source, sourceUrl, extraction), { onConflict: "source_kind,source_url" });
+  if (error) console.error("[recipe-db] cache refresh failed (non-fatal):", error);
   return extraction;
 }
