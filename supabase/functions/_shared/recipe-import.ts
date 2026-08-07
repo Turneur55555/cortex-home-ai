@@ -44,6 +44,8 @@ export interface RecipeExtraction {
   perServing: RecipeMacrosExtraction;
   ingredients: RecipeIngredientExtraction[];
   notes: string;
+  /** Légende/description ORIGINALE du post source (og:description) — distincte de `notes` (hypothèses de l'IA). */
+  originalCaption: string | null;
 }
 
 export interface SourceHandler {

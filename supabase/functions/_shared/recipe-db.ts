@@ -26,6 +26,7 @@ interface RecipeRow {
   confidence: number | null;
   notes: string | null;
   source_image_url: string | null;
+  source_description: string | null;
   per_serving_calories: number | null;
   per_serving_proteins: number | null;
   per_serving_carbs: number | null;
@@ -60,6 +61,7 @@ function userRowToExtraction(row: RecipeRow, ingredients: RecipeIngredientRow[])
       grams: i.grams,
     })),
     notes: row.notes ?? "",
+    originalCaption: row.source_description,
   };
 }
 
@@ -72,7 +74,7 @@ export async function findUserRecipe(
   const { data: recipe, error } = await supa
     .from("recipes")
     .select(
-      "id, name, servings, source_image_url, confidence, notes, per_serving_calories, per_serving_proteins, per_serving_carbs, per_serving_fats, per_serving_fiber",
+      "id, name, servings, source_image_url, source_description, confidence, notes, per_serving_calories, per_serving_proteins, per_serving_carbs, per_serving_fats, per_serving_fiber",
     )
     .eq("user_id", userId)
     .eq("source_url", sourceUrl)
@@ -114,6 +116,7 @@ export async function createUserRecipeFromExtraction(
       source_kind: source,
       source_url: sourceUrl,
       source_image_url: extraction.imageUrl,
+      source_description: extraction.originalCaption,
       confidence: extraction.confidence,
       notes: extraction.notes || null,
       per_serving_calories: extraction.perServing.calories,
@@ -170,6 +173,7 @@ interface CacheRow {
   confidence: number | null;
   notes: string | null;
   source_image_url: string | null;
+  source_description: string | null;
   per_serving_calories: number;
   per_serving_proteins: number;
   per_serving_carbs: number;
@@ -179,7 +183,7 @@ interface CacheRow {
 }
 
 const CACHE_SELECT =
-  "title, servings, confidence, notes, source_image_url, per_serving_calories, per_serving_proteins, per_serving_carbs, per_serving_fats, per_serving_fiber, ingredients";
+  "title, servings, confidence, notes, source_image_url, source_description, per_serving_calories, per_serving_proteins, per_serving_carbs, per_serving_fats, per_serving_fiber, ingredients";
 
 function cacheRowToExtraction(row: CacheRow): RecipeExtraction {
   const ingredients = Array.isArray(row.ingredients) ? (row.ingredients as RecipeExtraction["ingredients"]) : [];
@@ -197,6 +201,7 @@ function cacheRowToExtraction(row: CacheRow): RecipeExtraction {
     },
     ingredients,
     notes: row.notes ?? "",
+    originalCaption: row.source_description,
   };
 }
 
@@ -237,6 +242,7 @@ export async function saveCachedRecipe(
     confidence: extraction.confidence,
     notes: extraction.notes || null,
     source_image_url: extraction.imageUrl,
+    source_description: extraction.originalCaption,
     per_serving_calories: extraction.perServing.calories,
     per_serving_proteins: extraction.perServing.proteins,
     per_serving_carbs: extraction.perServing.carbs,

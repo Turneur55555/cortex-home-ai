@@ -3327,3 +3327,58 @@ rester manuel). Vérification faite sur les vrais workflows CI, pas une supposit
   verts. Pas de `deno check` disponible dans ce sandbox (même limite documentée dans les sessions
   précédentes) — contournée cette fois par l'extraction `recipe-import-handler.ts`, qui permet un test
   Vitest réel du code de production plutôt qu'une simple vérification de syntaxe.
+
+## Import de recettes — module "Recettes" : la fiche importée n'est plus un raccourci journal (2026-08-07, session suivante)
+- **Demande de Nathan** : l'écran d'import Instagram ne doit plus être un « Ajouter au journal » —
+  c'est un créateur de fiche recette. Créer un vrai module « Recettes » dans Nutrition, accessible
+  après coup, avec 5 actions par fiche : Ajouter au journal / Modifier / Dupliquer / Favori / Supprimer.
+- **Découverte en auditant l'existant** : `RecipeLogSheet.tsx` (V1 Lovable, sélection d'une recette
+  dans un `<select>` + log direct) n'était câblé nulle part dans `NutritionTab.tsx` — code mort,
+  seulement référencé dans une liste statique de `mealSelectCoverage.test.ts`. Supprimé (pas une
+  suppression de feature vivante : personne n'y accédait) et remplacé par le nouveau module, entrée
+  mise à jour dans le test de couverture (`RecipeDetailSheet.tsx` à la place).
+- **Backend — `originalCaption` ajouté au pipeline** (nouveau champ demandé : « conserver la
+  description originale du post », distinct de `notes` qui sont les hypothèses de l'IA) :
+  `RecipeExtraction.originalCaption` (`_shared/recipe-import.ts`) ; `computeRecipeExtraction()`
+  (`nutrition-engine.ts`) prend désormais un 4e paramètre `originalCaption` et le recopie tel quel
+  (pas généré par l'IA, vient directement du provider) ; `recipe-import-instagram.ts` passe
+  `content.caption` (déjà récupéré par le provider, seulement utilisé comme signal pour Gemini avant
+  cette session) ; `recipe-db.ts` persiste/relit `source_description` sur `recipes` ET
+  `recipe_import_cache` (le cache global doit porter la même donnée que ce qu'il alimente).
+- **Migration `20260823090000_recipe_module_description_favorite.sql`** (additive) : `recipes` gagne
+  `source_description` (text) + `is_favorite` (boolean, défaut false, index partiel sur les favoris) ;
+  `recipe_import_cache` gagne `source_description`.
+- **`src/hooks/useRecipes.ts`** : `Recipe` s'enrichit de `source_url`/`source_description`/`confidence`/
+  `notes`/`is_favorite` (déjà en base côté V2, jamais exposés côté hook avant). 4 nouvelles mutations
+  (toutes avec toast + invalidation `["recipes"]`/`["recipe", id]`) : `useUpdateRecipe` (patch
+  recipes + remplacement optionnel intégral de `recipe_ingredients`, delete+insert) ;
+  `useToggleRecipeFavorite` ; `useDeleteRecipe` (cascade `recipe_ingredients` déjà en place depuis la
+  migration V2 initiale) ; `useDuplicateRecipe` (copie recipes+ingredients, `source_url: null` — sans
+  ça la copie violerait l'unicité `(user_id, source_url)` et serait invisible pour l'edge function).
+- **`RecipeImportSheet.tsx`** : bloc « Ajouter à mon journal » (MealSelect, portions, `useAddNutrition`)
+  entièrement retiré. La recette est déjà créée côté serveur au moment où l'écran de résultat
+  s'affiche (comportement V2 inchangé) — le nouveau bouton unique « Enregistrer dans mes recettes »
+  n'a donc qu'à persister d'éventuelles retouches locales (le bloc « Modifier » existant, réutilisé tel
+  quel) via `useUpdateRecipe`, puis fermer. Fiche enrichie : lien « Voir la publication Instagram »
+  (`recipe.sourceUrl`) + bloc description originale (`recipe.originalCaption`) ajoutés à
+  `RecipeResultCard`, entre le titre et les macros. Perd son prop `date` (n'écrit plus dans le journal).
+- **`RecipesListSheet.tsx`** (nouveau) : liste « Mes recettes » — miniature/nom/portions/kcal-portion +
+  étoile favori inline (bouton frère du bouton carte, jamais imbriqué — `<button>` dans `<button>`
+  est invalide en HTML). Tap une carte → `RecipeDetailSheet` monté par-dessus (les deux sheets utilisent
+  le même `Portal`/`z-50` ; le montage plus tardif du détail l'affiche naturellement au-dessus de la
+  liste, sans changement à `FullscreenSheet`).
+- **`RecipeDetailSheet.tsx`** (nouveau) : fiche complète (miniature + confiance + favori, lien source,
+  description originale, macros/ingrédients éditables, notes IA) + les 5 actions demandées — Ajouter au
+  journal (repris de l'ancien `RecipeLogSheet`, `MealSelect` + portions + `useAddNutrition` avec
+  `recipe_id`), Modifier (édition inline titre/portions/macros/quantités, même style que
+  `RecipeImportSheet`, sauvegarde via `useUpdateRecipe`), Dupliquer, Favori (étoile sur la miniature),
+  Supprimer (confirmation inline avant `useDeleteRecipe`).
+- **Navigation** : nouvelle entrée « Mes recettes » dans `NutritionCommandCenter` (section 🧠 Outils,
+  icône `Utensils` déjà importée dans ce fichier) → `RecipesListSheet`. L'entrée existante « Importer
+  une recette » (section 📷 Scanner) est inchangée, toujours vers `RecipeImportSheet`.
+- **Validation** : `tsc --noEmit` / `eslint` (0 erreur, warning `no-explicit-any` pré-existant sur
+  `useRecipes.ts` uniquement) / `npx vitest run` (1198 passed, 0 régression — le test de couverture
+  `mealSelectCoverage.test.ts` valide que `RecipeDetailSheet.tsx` rend bien `<MealSelect>`) /
+  `npm run build` / `scripts/validate-supabase.mjs` (0 erreur, avertissements pré-existants non liés)
+  tous verts. Vérification visuelle en navigateur non obtenue (même limite d'environnement que les
+  sessions précédentes).

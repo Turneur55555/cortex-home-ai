@@ -31,6 +31,7 @@ export function computeRecipeExtraction(
   raw: Record<string, unknown>,
   fallbackImageUrl: string | null,
   signals: SignalQuality,
+  originalCaption: string | null,
 ): RecipeExtraction {
   const rawIngredients = Array.isArray(raw.ingredients) ? raw.ingredients : [];
   const ingredients: RecipeIngredientExtraction[] = rawIngredients.slice(0, 40).map((it) => {
@@ -65,5 +66,6 @@ export function computeRecipeExtraction(
     perServing,
     ingredients: ingredients.length > 0 ? ingredients : [{ name: "Ingrédient", quantity: 1, unit: "pièce", grams: null }],
     notes: typeof raw.notes === "string" ? raw.notes.trim().slice(0, 400) : "",
+    originalCaption: originalCaption && originalCaption.trim() ? originalCaption.trim().slice(0, 2200) : null,
   };
 }

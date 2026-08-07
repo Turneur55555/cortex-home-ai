@@ -61,6 +61,8 @@ export interface ImportedRecipe {
    * dupliquer.
    */
   recipeId: string | null;
+  /** Légende/description ORIGINALE du post source — distincte de `notes` (hypothèses de l'IA). */
+  originalCaption: string | null;
 }
 
 export type ImportInput = { kind: "url"; value: string } | { kind: "file"; value: File };

@@ -2,19 +2,18 @@ import { useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertTriangle,
+  BookmarkPlus,
   Check,
+  ExternalLink,
   Instagram,
   Link2,
   Loader2,
   Pencil,
-  Plus,
   Sparkles,
 } from "lucide-react";
 import { toast } from "sonner";
 import { FullscreenSheet } from "@/components/shared/FormComponents";
-import { MealSelect } from "@/components/fitness/MealSelect";
-import { useAddNutrition } from "@/hooks/useNutritionData";
-import { detectMealFromHour, type MealSlug } from "@/lib/nutrition/meals";
+import { useUpdateRecipe } from "@/hooks/useRecipes";
 import {
   IMPORT_STAGES,
   RECIPE_IMPORTERS,
@@ -28,7 +27,14 @@ type Phase = "input" | "running" | "result";
 
 const PRESS = { scale: 0.97 };
 
-export function RecipeImportSheet({ date, onClose }: { date: string; onClose: () => void }) {
+/**
+ * Import Instagram -> fiche recette. La recette est déjà créée côté serveur
+ * (recipes/recipe_ingredients) au moment où le résultat s'affiche — cet écran
+ * sert à la relire/ajuster puis à la ranger dans le module Recettes, PAS à
+ * journaliser un repas (ça, c'est le rôle de RecipeDetailSheet, accessible
+ * ensuite depuis "Mes recettes").
+ */
+export function RecipeImportSheet({ onClose }: { onClose: () => void }) {
   const [url, setUrl] = useState("");
   const [phase, setPhase] = useState<Phase>("input");
   const [activeStage, setActiveStage] = useState<string | null>(null);
@@ -36,11 +42,9 @@ export function RecipeImportSheet({ date, onClose }: { date: string; onClose: ()
   const [recipe, setRecipe] = useState<ImportedRecipe | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
-  const [meal, setMeal] = useState<MealSlug>(() => detectMealFromHour());
-  const [servingsToLog, setServingsToLog] = useState(1);
   const cancelled = useRef(false);
 
-  const addNutrition = useAddNutrition();
+  const updateRecipe = useUpdateRecipe();
 
   const comingSoon = useMemo(() => RECIPE_IMPORTERS.filter((i) => !i.available), []);
 
@@ -72,7 +76,6 @@ export function RecipeImportSheet({ date, onClose }: { date: string; onClose: ()
       setDoneStages(IMPORT_STAGES.map((s) => s.key));
       setActiveStage(null);
       setRecipe(result);
-      setServingsToLog(1);
       setPhase("result");
     } catch (e) {
       if (cancelled.current) return;
@@ -94,26 +97,36 @@ export function RecipeImportSheet({ date, onClose }: { date: string; onClose: ()
     setDoneStages([]);
   }
 
-  function logToJournal() {
+  /**
+   * La recette a déjà été créée par l'edge function `recipe-import` au
+   * moment où `recipe.recipeId` est reçu — ce bouton n'a besoin que de
+   * persister d'éventuelles retouches locales (bouton "Modifier") avant de
+   * fermer l'écran.
+   */
+  function saveToRecipes() {
     if (!recipe) return;
-    const s = servingsToLog > 0 ? servingsToLog : 1;
-    const p = recipe.perServing;
-    addNutrition.mutate(
+    if (!recipe.recipeId) {
+      // Ne devrait pas arriver pour Instagram (seule source active), mais
+      // évite un blocage silencieux si une future source simulée y arrive.
+      toast.error("Cette source ne peut pas encore être enregistrée dans tes recettes.");
+      return;
+    }
+    updateRecipe.mutate(
       {
-        date,
-        meal,
+        id: recipe.recipeId,
         name: recipe.title,
-        calories: Math.round(p.calories * s),
-        proteins: Math.round(p.proteins * s * 10) / 10,
-        carbs: Math.round(p.carbs * s * 10) / 10,
-        fats: Math.round(p.fats * s * 10) / 10,
-        base_calories: Math.round(p.calories),
-        base_proteins: Math.round(p.proteins * 10) / 10,
-        base_carbs: Math.round(p.carbs * 10) / 10,
-        base_fats: Math.round(p.fats * 10) / 10,
-        serving_count: s,
-        percentage_consumed: 100,
-        recipe_id: recipe.recipeId,
+        servings: recipe.servings,
+        per_serving_calories: recipe.perServing.calories,
+        per_serving_proteins: recipe.perServing.proteins,
+        per_serving_carbs: recipe.perServing.carbs,
+        per_serving_fats: recipe.perServing.fats,
+        per_serving_fiber: recipe.perServing.fiber,
+        ingredients: recipe.ingredients.map((i) => ({
+          name: i.name,
+          quantity: i.quantity,
+          unit: i.unit,
+          grams: i.grams,
+        })),
       },
       { onSuccess: onClose },
     );
@@ -189,8 +202,8 @@ export function RecipeImportSheet({ date, onClose }: { date: string; onClose: ()
               </motion.button>
 
               <p className="mt-3 text-[11px] leading-snug text-muted-foreground">
-                V1 : l'analyse est simulée. Le téléchargement et l'IA réels arriveront ensuite, sans
-                changer cet écran.
+                L'analyse crée automatiquement une recette dans « Mes recettes » — tu pourras
+                l'ajuster, l'ajouter au journal ou la retrouver à tout moment.
               </p>
             </div>
 
@@ -278,69 +291,34 @@ export function RecipeImportSheet({ date, onClose }: { date: string; onClose: ()
               recipe={recipe}
               editing={editing}
               onPatch={patchRecipe}
-              onToggleEdit={() => setEditing((v) => !v)}
+              onToggleEdit={() => {
+                setEditing((v) => !v);
+                if (!editing) toast.info("Ajuste les valeurs puis valide.");
+              }}
             />
 
-            <div className="rounded-2xl border border-border bg-card p-4">
-              <p className="text-sm font-bold">Ajouter à mon journal</p>
-              <div className="mt-3 grid grid-cols-2 gap-3">
-                <MealSelect value={meal} onChange={setMeal} />
-                <label className="block">
-                  <span className="mb-1 block text-xs font-medium text-muted-foreground">
-                    Portions
-                  </span>
-                  <input
-                    type="number"
-                    min={0.25}
-                    step={0.25}
-                    value={servingsToLog}
-                    onChange={(e) => setServingsToLog(Number(e.target.value))}
-                    className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary"
-                  />
-                </label>
-              </div>
-              <p className="mt-2 text-[11px] text-muted-foreground">
-                {Math.round(recipe.perServing.calories * (servingsToLog || 1))} kcal seront
-                enregistrées.
-              </p>
+            <motion.button
+              whileTap={PRESS}
+              type="button"
+              onClick={saveToRecipes}
+              disabled={updateRecipe.isPending}
+              className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-primary text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-50"
+            >
+              {updateRecipe.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <BookmarkPlus className="h-4 w-4" />
+              )}
+              Enregistrer dans mes recettes
+            </motion.button>
 
-              <div className="mt-4 flex gap-2.5">
-                <motion.button
-                  whileTap={PRESS}
-                  type="button"
-                  onClick={() => {
-                    setEditing((v) => !v);
-                    if (!editing) toast.info("Ajuste les valeurs puis valide.");
-                  }}
-                  className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl border border-border text-sm font-semibold"
-                >
-                  <Pencil className="h-4 w-4" />
-                  {editing ? "Terminer" : "Modifier"}
-                </motion.button>
-                <motion.button
-                  whileTap={PRESS}
-                  type="button"
-                  onClick={logToJournal}
-                  disabled={addNutrition.isPending}
-                  className="flex h-12 flex-[1.4] items-center justify-center gap-2 rounded-xl bg-gradient-primary text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-50"
-                >
-                  {addNutrition.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Plus className="h-4 w-4" />
-                  )}
-                  Ajouter à mon journal
-                </motion.button>
-              </div>
-
-              <button
-                type="button"
-                onClick={reset}
-                className="mt-3 w-full py-2 text-xs text-muted-foreground underline-offset-4 hover:underline"
-              >
-                Importer une autre recette
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={reset}
+              className="w-full py-2 text-xs text-muted-foreground underline-offset-4 hover:underline"
+            >
+              Importer une autre recette
+            </button>
           </motion.div>
         )}
       </AnimatePresence>
@@ -406,6 +384,29 @@ function RecipeResultCard({
             <Pencil className="h-4 w-4" />
           </button>
         </div>
+
+        {recipe.sourceUrl && (
+          <a
+            href={recipe.sourceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 text-xs font-medium text-primary"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+            Voir la publication Instagram
+          </a>
+        )}
+
+        {recipe.originalCaption && (
+          <div className="rounded-xl border border-border/60 bg-surface p-3">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+              Description originale
+            </p>
+            <p className="mt-1.5 whitespace-pre-line text-xs leading-relaxed text-muted-foreground">
+              {recipe.originalCaption}
+            </p>
+          </div>
+        )}
 
         {editing && (
           <label className="block">

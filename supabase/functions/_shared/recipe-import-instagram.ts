@@ -44,11 +44,16 @@ function makeInstagramHandler(provider: InstagramProvider): SourceHandler {
     async run(value, env) {
       const content = await provider.fetchContent(value, { openaiApiKey: env.openaiApiKey });
       const raw = await parseRecipeFromContent(env.geminiApiKey, content);
-      return computeRecipeExtraction(raw, content.imageUrl, {
-        hasTranscript: !!content.transcript,
-        hasCaption: !!content.caption,
-        hasImage: !!content.imageB64,
-      });
+      return computeRecipeExtraction(
+        raw,
+        content.imageUrl,
+        {
+          hasTranscript: !!content.transcript,
+          hasCaption: !!content.caption,
+          hasImage: !!content.imageB64,
+        },
+        content.caption,
+      );
     },
   };
 }
