@@ -210,7 +210,15 @@ export async function parseAppleHealthZip(
   onProgress?.("Analyse progressive des données…");
 
   await new Promise<void>((resolve, reject) => {
-    const stream = xmlFile.internalStream("string");
+    // `internalStream` existe à l'exécution (JSZip) mais n'est pas exposé par ses types publics.
+    const stream = (
+      xmlFile as unknown as {
+        internalStream: (type: "string") => {
+          on: (event: string, cb: (...args: never[]) => void) => unknown;
+          resume: () => void;
+        };
+      }
+    ).internalStream("string");
 
     stream.on("data", (chunk: string, metadata: { percent?: number }) => {
       buffer += chunk;
