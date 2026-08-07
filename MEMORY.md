@@ -3140,3 +3140,79 @@ rester manuel). Vérification faite sur les vrais workflows CI, pas une supposit
   sur les fichiers du module (0 erreur après fix) verts. Vérification visuelle en navigateur non
   obtenue (même limite d'environnement que les sessions précédentes — pas de bind IPv6 pour le
   serveur dev Lovable dans ce sandbox).
+
+## Import de recettes — V2 pipeline réel Instagram + persistance (2026-08-07, session suivante)
+- **Demande de Nathan** : garder V1 (UI + contrat `RecipeImporter`) strictement intacte, remplacer la
+  simulation par un pipeline réel pour Instagram, persister la recette (`recipes`/`recipe_ingredients`)
+  au lieu de juste logger les macros, dédoublonner. Une seule edge function `recipe-import` doit servir
+  toutes les sources futures — le frontend ne connaît jamais l'implémentation propre à une source.
+- **`supabase/functions/_shared/recipe-import.ts`** (nouveau) : contrat commun à toutes les sources —
+  `RecipeExtraction`/`SourceHandler` (miroir volontaire de `recipeImport/types.ts` frontend, dupliqué
+  comme `meal-items.ts`/`MealItem` car Deno edge et navigateur ne partagent pas de bundler), schéma
+  tool-calling `RECIPE_TOOL` + `RECIPE_SYSTEM_PROMPT` partagés, `sanitizeRecipeExtraction()` (bornes),
+  `toBase64()` (encodage chunké, évite le stack overflow de `String.fromCharCode(...buf)` sur une image
+  complète).
+- **`supabase/functions/_shared/recipe-import-instagram.ts`** (nouveau) : seule source avec un pipeline
+  réel. 1) scraping des balises `<meta og:*>` de la page publique du post (pas d'API Instagram gratuite
+  pour du contenu grand public — limite connue et documentée, cf. Livrables ci-dessous) → titre/légende/
+  miniature/URL vidéo ; 2) téléchargement de la miniature (cap 8 Mo) ; 3) si `og:video` présent ET
+  `OPENAI_API_KEY` configurée, transcription via Whisper (`audio/transcriptions`, cap 25 Mo, best-effort,
+  jamais bloquant) ; 4) un seul appel Gemini 2.5 Flash multimodal (image + légende + transcription, tool
+  calling `RECIPE_TOOL`) reconstitue titre/portions/ingrédients (nom/quantité/unité/grammes)/macros par
+  portion/notes en une fois ; 5) confiance = confiance IA pondérée par pénalité selon les signaux
+  manquants (pas de transcript -0.15, pas de légende -0.1, pas d'image -0.25). `validate()` fait aussi
+  office de garde anti-SSRF : n'accepte que `https://(www.)instagram.com/(reel|reels|p|tv)/...`, rejette
+  tout le reste avant le moindre `fetch`.
+- **`supabase/functions/recipe-import/index.ts`** (nouveau, POST unique) : auth → `SOURCE_HANDLERS`
+  (`Record<RecipeSourceKind, SourceHandler | null>`, seul `instagram` non-null — ajouter une source
+  future = une entrée ici, rien d'autre) → dédoublonnage AVANT le rate-limit (cache hit sur
+  `(user_id, source_url)` ne consomme pas de quota IA) → pipeline → `persistRecipe()` (insert
+  `recipes` + `recipe_ingredients`, réutilise l'existante sur violation `23505` si une course a créé la
+  même ligne entre-temps) → réponse `{ recipe: RecipeExtraction & { sourceKind, sourceUrl, recipeId } }`.
+  Toujours HTTP 200, erreurs dans `{ error }` (même convention que `scan-meal`). Nouvelle action
+  rate-limit `recipe_import` (10/h).
+- **Migration `20260821090000_recipe_import_v2.sql`** (additive) : `recipes` gagne `source_kind`,
+  `source_url`, `source_image_url`, `confidence`, `notes`, `per_serving_{calories,proteins,carbs,fats,
+  fiber}` — une recette importée a des ingrédients à noms libres sans `item_id` fiable vers `items`, donc
+  `recipeMacros()` (jointure items) renverrait 0 : ses macros/portion sont figées à l'import dans ces
+  colonnes plutôt que recalculées. Index unique partiel `(user_id, source_url) WHERE source_url IS NOT
+  NULL` (dédoublonnage). `nutrition` gagne `recipe_id` (FK `ON DELETE SET NULL`) pour tracer quelle
+  recette a produit une entrée du journal. `rate_limits_action_check` étendu avec `recipe_import`.
+- **`src/hooks/useRecipes.ts`** : `useRecipe()` bascule sur le snapshot `per_serving_*` quand il est
+  renseigné (recette importée) au lieu de `recipeMacros(ingredients)` (qui donnerait 0 sans `item_id`) —
+  sinon `RecipeLogSheet`/`MealPlanSheet` afficheraient 0 kcal pour une recette importée. Recettes créées
+  manuellement : comportement inchangé (toujours dérivé de `items` via `recipeMacros`).
+- **Contrat frontend (nécessité admise par Nathan)** : `ImportedRecipe` (types.ts) gagne
+  `recipeId: string | null` — `null` pour les sources encore simulées, l'id `recipes` réel pour
+  Instagram. `RecipeImportSheet.logToJournal()` ajoute juste `recipe_id: recipe.recipeId` au payload
+  existant (aucun autre changement UI/visuel).
+- **`recipeImport/index.ts`** : `instagramImporter` passe de `createMockImporter` à
+  `createRealImporter` → `runRealImport()` appelle `supabase.functions.invoke("recipe-import", ...)`.
+  `durationMs` de `STAGES` est ignoré comme prévu par le commentaire du type V1 (« ignorée quand le
+  pipeline sera réel ») : `onStage("download")` avant l'appel réseau (seule étape mesurable côté
+  client), puis les 6 autres étapes marquées faites d'un coup à la réception (elles se sont vraiment
+  déroulées côté serveur en un seul appel). Les 5 autres sources gardent `createMockImporter` (inchangé).
+- **`.github/workflows/deploy-functions.yml`** : `recipe-import` ajouté à la liste explicite des
+  fonctions déployées (ce workflow ne déploie PAS tout `supabase/functions/**` automatiquement — liste
+  blanche manuelle, piège découvert en auditant ce fichier ; sans cet ajout la fonction resterait non
+  déployée après merge malgré le dossier présent dans le repo).
+- **`src/integrations/supabase/types.ts`** : `nutrition.recipe_id` ajouté à la main (Row/Insert/Update)
+  — `recipes`/`recipe_ingredients` ne sont PAS dans ce fichier (déjà non typées avant cette session,
+  `useRecipes.ts` les consomme via `as any`), donc pas de bloc à ajouter pour elles. À régénérer via
+  `npm run gen:types` une fois la migration appliquée en prod (conforme à la règle CLAUDE.md).
+- **Limites connues, à traiter en V2.1** : scraping des `<meta og:*>` de la page Instagram publique
+  (pas d'API officielle gratuite pour du contenu grand public) — Meta peut bloquer/rediriger vers une
+  page de connexion pour un fetch non authentifié, cas géré par un message d'erreur clair plutôt qu'un
+  échec silencieux, mais pas de garantie de succès systématique. Transcription audio dépend de
+  `OPENAI_API_KEY` (optionnelle, best-effort) — sans elle, la confiance est simplement pénalisée
+  (-0.15), pas d'échec. Miniature hotlinkée depuis le CDN Instagram (`source_image_url`), pas re-hébergée
+  dans le storage Supabase — peut expirer/disparaître ; un rehébergement serait une amélioration V3.
+- **Validation** : `tsc --noEmit` / `eslint` (0 erreur sur les fichiers touchés, warnings `no-console`
+  sur les edge functions = convention existante déjà présente sur `scan-meal`) / `npx vitest run`
+  (1186 passed / 32 skipped, 0 régression) / `npm run build` (client + SSR + PWA) tous verts. Pas de
+  `deno check` disponible dans ce sandbox pour les edge functions (même limite que les sessions
+  précédentes) — syntaxe vérifiée via `ts.transpileModule` (0 erreur), types Deno non vérifiables
+  localement. Migration validée par `scripts/validate-supabase.mjs` (0 erreur, avertissements
+  pré-existants uniquement, non liés). Aucune application réelle de la migration ni déploiement de la
+  fonction dans cette session (pas d'accès direct au projet Supabase prod depuis ce workflow — conforme
+  à CLAUDE.md : migration → merge → `migrate.yml`/`deploy-functions.yml` appliquent).

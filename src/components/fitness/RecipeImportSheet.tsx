@@ -109,6 +109,7 @@ export function RecipeImportSheet({ date, onClose }: { date: string; onClose: ()
         base_fats: Math.round(p.fats * 10) / 10,
         serving_count: s,
         percentage_consumed: 100,
+        recipe_id: recipe.recipeId,
       },
       { onSuccess: onClose },
     );

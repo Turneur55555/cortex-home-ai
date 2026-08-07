@@ -1,11 +1,13 @@
 /**
  * Registre des importeurs de recettes.
  *
- * V1 : seul Instagram est actif, avec des données simulées. Les autres sources
- * sont déclarées mais indisponibles — elles réutiliseront exactement le même
- * pipeline (`RecipeImporter`) et la même UI le jour où leur backend existera.
+ * V2 : Instagram a un pipeline réel (edge function `recipe-import`, voir
+ * `runRealImport`). Les autres sources restent simulées côté client tant
+ * que leur backend n'existe pas — elles réutiliseront exactement le même
+ * pipeline (`RecipeImporter`) et la même UI le jour où il existera.
  */
 
+import { supabase } from "@/integrations/supabase/client";
 import type {
   ImportInput,
   ImportStage,
@@ -29,7 +31,7 @@ const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 const INSTAGRAM_RE = /^https?:\/\/(www\.)?instagram\.com\/(reel|reels|p|tv)\/[\w-]+/i;
 
 /** Jeu de fiches simulées — la fiche renvoyée dépend de l'URL (déterministe). */
-const MOCK_RECIPES: Array<Omit<ImportedRecipe, "sourceKind" | "sourceUrl">> = [
+const MOCK_RECIPES: Array<Omit<ImportedRecipe, "sourceKind" | "sourceUrl" | "recipeId">> = [
   {
     title: "Poulet crémeux au parmesan & épinards",
     imageUrl:
@@ -82,13 +84,13 @@ const MOCK_RECIPES: Array<Omit<ImportedRecipe, "sourceKind" | "sourceUrl">> = [
   },
 ];
 
-function pickMock(seed: string): Omit<ImportedRecipe, "sourceKind" | "sourceUrl"> {
+function pickMock(seed: string): Omit<ImportedRecipe, "sourceKind" | "sourceUrl" | "recipeId"> {
   let h = 0;
   for (let i = 0; i < seed.length; i += 1) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
   return MOCK_RECIPES[h % MOCK_RECIPES.length];
 }
 
-/** Importeur simulé — utilisé par toutes les sources tant que le backend n'existe pas. */
+/** Importeur simulé — utilisé par les sources dont le backend n'existe pas encore. */
 function createMockImporter(config: {
   kind: RecipeSourceKind;
   label: string;
@@ -111,15 +113,62 @@ function createMockImporter(config: {
         ...pickMock(seed),
         sourceKind: config.kind,
         sourceUrl: input.kind === "url" ? input.value : null,
+        recipeId: null,
       };
     },
   };
 }
 
-export const instagramImporter = createMockImporter({
+interface RecipeImportEdgeResponse {
+  recipe?: ImportedRecipe;
+  error?: string;
+}
+
+/**
+ * Appelle le pipeline réel (edge function `recipe-import`, voir
+ * supabase/functions/recipe-import/index.ts). `durationMs` de `STAGES` est
+ * ignoré ici (le pipeline n'est plus simulé) : seule l'étape "download" est
+ * affichée pendant l'appel réseau, les autres sont marquées faites d'un coup
+ * à la réception — elles se sont réellement déroulées côté serveur en un
+ * seul appel IA multimodal.
+ */
+async function runRealImport(
+  source: RecipeSourceKind,
+  input: ImportInput,
+  onStage: (stageKey: string) => void,
+): Promise<ImportedRecipe> {
+  if (input.kind !== "url") throw new Error("Cette source attend un lien.");
+  onStage(STAGES[0].key);
+  const { data, error } = await supabase.functions.invoke<RecipeImportEdgeResponse>(
+    "recipe-import",
+    {
+      body: { source, input: { kind: "url", value: input.value } },
+    },
+  );
+  if (error) throw new Error(error.message);
+  if (!data || data.error || !data.recipe) throw new Error(data?.error ?? "L'import a échoué.");
+  for (const stage of STAGES.slice(1)) onStage(stage.key);
+  return data.recipe;
+}
+
+function createRealImporter(config: {
+  kind: RecipeSourceKind;
+  label: string;
+  canHandle: (input: ImportInput) => boolean;
+}): RecipeImporter {
+  return {
+    kind: config.kind,
+    label: config.label,
+    available: true,
+    canHandle: config.canHandle,
+    stages: () => STAGES,
+    run: (input, onStage) => runRealImport(config.kind, input, onStage),
+  };
+}
+
+export const instagramImporter = createRealImporter({
   kind: "instagram",
   label: "Instagram",
-  available: true,
   canHandle: (input) => input.kind === "url" && INSTAGRAM_RE.test(input.value.trim()),
 });
 
