@@ -56,6 +56,7 @@ export interface RecipeIngredient {
   quantity: number | null;
   unit: string | null;
   grams: number | null;
+  category: string | null;
   sort_order: number;
   created_at: string;
   /** Macros per_100g héritées de l'item lié (jointure). */
@@ -160,6 +161,7 @@ export interface RecipeIngredientPatch {
   quantity: number | null;
   unit: string | null;
   grams: number | null;
+  category?: string | null;
 }
 
 export interface RecipeUpdatePatch {
@@ -203,6 +205,7 @@ export function useUpdateRecipe() {
             quantity: ing.quantity,
             unit: ing.unit,
             grams: ing.grams,
+            category: ing.category ?? null,
             sort_order: idx,
           }));
           const { error: insErr } = await db.from("recipe_ingredients").insert(rows);
@@ -302,6 +305,7 @@ export function useDuplicateRecipe() {
           quantity: ing.quantity,
           unit: ing.unit,
           grams: ing.grams,
+          category: ing.category,
           sort_order: ing.sort_order,
         }));
         const { error: ingErr } = await db.from("recipe_ingredients").insert(rows);

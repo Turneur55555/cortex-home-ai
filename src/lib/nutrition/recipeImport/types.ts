@@ -40,6 +40,20 @@ export interface ImportStage {
   durationMs: number;
 }
 
+/** Rayons de courses — liste fermée, miroir de INGREDIENT_CATEGORIES (supabase/functions/_shared/recipe-import.ts). */
+export const INGREDIENT_CATEGORIES = [
+  "Fruits et légumes",
+  "Viandes",
+  "Poissons",
+  "Produits laitiers",
+  "Épicerie",
+  "Surgelés",
+  "Boissons",
+  "Divers",
+] as const;
+
+export type IngredientCategory = (typeof INGREDIENT_CATEGORIES)[number];
+
 export interface ImportedIngredient {
   name: string;
   /** Quantité affichée (ex. 2). */
@@ -48,6 +62,8 @@ export interface ImportedIngredient {
   unit: string;
   /** Masse normalisée en grammes quand elle est estimable. */
   grams: number | null;
+  /** Rayon de courses — best-effort IA, `null` si non déterminable (repli côté client, voir ingredientCategory.ts). */
+  category: IngredientCategory | null;
 }
 
 export interface ImportedMacros {

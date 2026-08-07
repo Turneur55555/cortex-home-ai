@@ -4,7 +4,7 @@
 // AVANT sanitation. La sanitation/bornage + score de confiance final sont la
 // responsabilité de la Nutrition Engine (nutrition-engine.ts) — ce module ne
 // fait que parler à l'IA et parser sa réponse.
-import { RECIPE_TAGS, RecipeImportError } from "./recipe-import.ts";
+import { INGREDIENT_CATEGORIES, RECIPE_TAGS, RecipeImportError } from "./recipe-import.ts";
 import type { InstagramContent } from "./instagram-provider.ts";
 
 export const RECIPE_TOOL = {
@@ -51,8 +51,13 @@ export const RECIPE_TOOL = {
               quantity: { type: "number", description: "Quantité dans l'unité affichée" },
               unit: { type: "string", description: "Unité affichée (g, cl, pièce, c. à soupe, ...)" },
               grams: { type: "number", description: "Masse normalisée en grammes (0 si non estimable)" },
+              category: {
+                type: "string",
+                description: "Rayon de courses le plus adapté pour cet ingrédient.",
+                enum: [...INGREDIENT_CATEGORIES],
+              },
             },
-            required: ["name", "quantity", "unit", "grams"],
+            required: ["name", "quantity", "unit", "grams", "category"],
             additionalProperties: false,
           },
           minItems: 1,
@@ -81,7 +86,7 @@ export const RECIPE_SYSTEM_PROMPT = `Tu es un nutritionniste expert qui reconsti
 
 Méthode :
 1. Identifie le plat et son nombre de portions probable.
-2. Liste CHAQUE ingrédient séparément (jamais un plat entier comme une seule entrée), avec sa quantité dans une unité naturelle (g, cl, pièce, c. à soupe...) et sa masse estimée en grammes.
+2. Liste CHAQUE ingrédient séparément (jamais un plat entier comme une seule entrée), avec sa quantité dans une unité naturelle (g, cl, pièce, c. à soupe...), sa masse estimée en grammes, et son rayon de courses ("category", liste fermée).
 3. Calcule les macros (kcal, protéines, glucides, lipides, fibres) pour UNE SEULE portion, cohérentes avec la somme des ingrédients divisée par le nombre de portions.
 4. Si une source d'information manque (pas de transcription audio, légende vague), fais une estimation raisonnable à partir de ce qui est disponible et BAISSE le niveau de confiance en conséquence. N'invente jamais un ingrédient qui ne serait ni visible ni mentionné.
 5. Résume dans "notes" les principales hypothèses ou approximations faites (distinct de "ai_summary" ci-dessous).

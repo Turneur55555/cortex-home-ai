@@ -21,11 +21,27 @@ export type RecipeSourceKind =
   | "photo"
   | "recipe-url";
 
+/** Liste fermée alignée sur les rayons de courses (regroupement de la liste de courses). */
+export const INGREDIENT_CATEGORIES = [
+  "Fruits et légumes",
+  "Viandes",
+  "Poissons",
+  "Produits laitiers",
+  "Épicerie",
+  "Surgelés",
+  "Boissons",
+  "Divers",
+] as const;
+
+export type IngredientCategory = (typeof INGREDIENT_CATEGORIES)[number];
+
 export interface RecipeIngredientExtraction {
   name: string;
   quantity: number;
   unit: string;
   grams: number | null;
+  /** Rayon de courses — best-effort IA, `null` si non déterminable (repli côté client). */
+  category: IngredientCategory | null;
 }
 
 export interface RecipeMacrosExtraction {

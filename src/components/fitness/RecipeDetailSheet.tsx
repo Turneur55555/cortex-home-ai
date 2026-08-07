@@ -14,6 +14,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  ShoppingCart,
   Sparkles,
   Star,
   Trash2,
@@ -22,7 +23,14 @@ import {
 } from "lucide-react";
 import { FullscreenSheet } from "@/components/shared/FormComponents";
 import { MealSelect } from "@/components/fitness/MealSelect";
+import { AddToShoppingListSheet } from "@/components/fitness/AddToShoppingListSheet";
 import { useAddNutrition } from "@/hooks/useNutritionData";
+import {
+  useCollections,
+  useRecipeCollectionIds,
+  useAddRecipeToCollection,
+  useRemoveRecipeFromCollection,
+} from "@/hooks/useCollections";
 import { detectMealFromHour, type MealSlug } from "@/lib/nutrition/meals";
 import { scaleServings } from "@/lib/nutrition/recipes";
 import {
@@ -107,6 +115,10 @@ export function RecipeDetailSheet({
   const toggleFavorite = useToggleRecipeFavorite();
   const reanalyze = useReanalyzeRecipe();
   const addNutrition = useAddNutrition();
+  const { data: collections } = useCollections();
+  const { data: memberCollectionIds } = useRecipeCollectionIds(recipeId);
+  const addToCollection = useAddRecipeToCollection();
+  const removeFromCollection = useRemoveRecipeFromCollection();
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<EditDraft | null>(null);
@@ -114,6 +126,13 @@ export function RecipeDetailSheet({
   const [meal, setMeal] = useState<MealSlug>(() => detectMealFromHour());
   const [servingsToLog, setServingsToLog] = useState(1);
   const [comparison, setComparison] = useState<ImportedRecipe | null>(null);
+  const [shoppingOpen, setShoppingOpen] = useState(false);
+
+  function toggleCollection(collectionId: string) {
+    const isMember = (memberCollectionIds ?? []).includes(collectionId);
+    if (isMember) removeFromCollection.mutate({ collectionId, recipeId });
+    else addToCollection.mutate({ collectionId, recipeId });
+  }
 
   function startEditing() {
     if (!recipe) return;
@@ -130,6 +149,7 @@ export function RecipeDetailSheet({
         quantity: i.quantity ?? 0,
         unit: i.unit ?? "pièce",
         grams: i.grams,
+        category: i.category,
       })),
     });
     setEditing(true);
@@ -211,6 +231,7 @@ export function RecipeDetailSheet({
           quantity: i.quantity,
           unit: i.unit,
           grams: i.grams,
+          category: i.category,
         })),
       },
       { onSuccess: () => setComparison(null) },
@@ -555,6 +576,34 @@ export function RecipeDetailSheet({
               </div>
             </div>
 
+            {/* ─── Collections ──────────────────────────────────────────── */}
+            {!editing && (collections?.length ?? 0) > 0 && (
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  Collections
+                </p>
+                <div className="mt-2.5 flex flex-wrap gap-2">
+                  {(collections ?? []).map((c) => {
+                    const active = (memberCollectionIds ?? []).includes(c.id);
+                    return (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => toggleCollection(c.id)}
+                        className={`rounded-full px-3 py-1 text-xs font-medium ${
+                          active
+                            ? "bg-primary/10 text-primary"
+                            : "border border-dashed border-border text-muted-foreground"
+                        }`}
+                      >
+                        {c.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {recipe.confidence != null && recipe.notes && (
               <div className="rounded-xl border border-border/60 bg-surface p-3">
                 <p className="text-xs font-semibold">Niveau de confiance : {conf}</p>
@@ -616,6 +665,18 @@ export function RecipeDetailSheet({
             Dupliquer
           </motion.button>
         </div>
+
+        {!editing && (
+          <motion.button
+            whileTap={PRESS}
+            type="button"
+            onClick={() => setShoppingOpen(true)}
+            className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-border text-sm font-semibold text-primary"
+          >
+            <ShoppingCart className="h-4 w-4" />
+            Ajouter à la liste de courses
+          </motion.button>
+        )}
 
         {canReanalyze && !editing && (
           <motion.button
@@ -721,6 +782,14 @@ export function RecipeDetailSheet({
           </div>
         )}
       </div>
+
+      {shoppingOpen && (
+        <AddToShoppingListSheet
+          recipeIds={[recipeId]}
+          onClose={() => setShoppingOpen(false)}
+          onDone={() => setShoppingOpen(false)}
+        />
+      )}
     </FullscreenSheet>
   );
 }

@@ -3465,3 +3465,96 @@ rester manuel). Vérification faite sur les vrais workflows CI, pas une supposit
   Fake client Supabase du test E2E étendu avec `.upsert()`/`.update()` (manquants jusqu'ici, nécessaires
   pour tester `refreshCachedRecipe`/`bumpReanalysisHistory`). Vérification visuelle en navigateur non
   obtenue (même limite d'environnement que les sessions précédentes).
+
+## Import de recettes — gestionnaire complet : collections + liste de courses (2026-08-07, session suivante)
+
+**Demande** : transformer "Mes recettes" en gestionnaire complet — (1) Collections : créer/renommer/
+supprimer, ajouter/retirer une recette (many-to-many), collections par défaut (Favoris/Meal Prep/
+Sèche/Prise de masse/Rapide/À tester) + collections personnalisées ; (2) Liste de courses : bouton
+"Ajouter à la liste de courses" depuis une recette (ou plusieurs, sélection multiple), fusion
+automatique des ingrédients identiques + somme des quantités, regroupement par rayon (Fruits et
+légumes/Viandes/Poissons/Produits laitiers/Épicerie/Surgelés/Boissons/Divers), cases à cocher,
+persistance. Contraintes : réutiliser l'architecture existante, ne rien casser, garder la
+compatibilité multi-sources (TikTok/YouTube/photo à venir), fournir les migrations, TypeScript/
+ESLint/Vitest/build verts.
+
+- **Migration** `20260825090000_recipe_collections_and_shopping_categories.sql` (additive) :
+  - `recipe_collections` (id, user_id, name unique par user, is_default, created_at/updated_at) +
+    `recipe_collection_recipes` (collection_id, recipe_id, user_id, added_at — clé primaire composite,
+    many-to-many). RLS `user_id = auth.uid()` sur les deux, mêmes conventions que `recipes`.
+  - `category text` (check sur la liste fermée des 8 rayons) ajouté sur `recipe_ingredients` ET
+    `shopping_list` — permet le regroupement de la liste de courses sans réintroduire un catalogue
+    d'ingrédients (celui-ci — `public.items` avec sa colonne `category` — a été entièrement supprimé
+    en migration `20260714145745` lors du retrait du module "Maison" ; pas de retour en arrière ici).
+- **Décision — "Favoris" reste VIRTUEL** : jamais une ligne `recipe_collections` — dérivé de
+  `recipes.is_favorite` (déjà câblé depuis la session "module Recettes", étoile sur chaque carte/fiche).
+  Le dupliquer en vraie collection aurait créé deux sources de vérité concurrentes pour le même concept.
+  `FAVORITES_COLLECTION_ID = "__favorites__"` (constante frontend, jamais envoyée en base) sert
+  uniquement de clé de filtre côté UI.
+- **Décision — seed des 5 collections par défaut : paresseux côté client**, pas de trigger DB. Le
+  pattern précédent (`home_categories`, seed au signup) a été entièrement retiré du code (module
+  "Maison" supprimé) — aucune référence active à suivre, et un trigger aurait ajouté un mécanisme non
+  testable simplement. `useCollections()` (`src/hooks/useCollections.ts`) : `seedDefaultCollectionsIfEmpty()`
+  insère Meal Prep/Sèche/Prise de masse/Rapide/À tester **seulement si** l'utilisateur n'a encore
+  aucune ligne (`count === 0`), avant chaque fetch de la liste — idempotent, aucun risque de doublon.
+- **Décision — catégorie ingrédient : IA d'abord, repli mot-clé ensuite**. `RECIPE_TOOL`
+  (`recipe-parser.ts`) gagne un champ `category` (enum des 8 rayons, `required`) sur chaque ingrédient
+  — coût IA nul (même appel multimodal qu'avant, un champ de plus dans le schéma tool-calling).
+  `nutrition-engine.ts` : nouvelle `sanitizeCategory()` (garde uniquement les valeurs de la liste
+  fermée, `null` sinon). Pour les recettes existantes/manuelles sans catégorie IA, nouveau module pur
+  `src/lib/nutrition/ingredientCategory.ts` (`guessIngredientCategory()` — règles mot-clé par rayon,
+  `resolveIngredientCategory()` — catégorie stockée sinon repli). Zéro appel réseau, zéro React.
+- **Backend — propagation `category`** : `RecipeIngredientExtraction`/`ImportedIngredient` (types
+  partagés backend + frontend, `INGREDIENT_CATEGORIES` dupliqué dans les deux comme le reste du
+  contrat) gagnent `category: IngredientCategory | null`. `recipe-db.ts` : les deux mappers
+  (`userRowToExtraction`/`RecipeIngredientRow`) et les deux inserts (`createUserRecipeFromExtraction`,
+  colonne `category` sur `recipe_ingredients`) portent le champ ; le cache global
+  (`recipe_import_cache.ingredients`, jsonb) le transporte automatiquement sans migration
+  supplémentaire (blob JSON, pas de colonne dédiée). `useRecipes.ts` (`RecipeIngredient`,
+  `RecipeIngredientPatch`) et `RecipeDetailSheet.tsx` (`startEditing`/`applyReanalysis`) propagent
+  `category` de bout en bout (édition manuelle, réanalyse).
+- **Nouveau `src/hooks/useCollections.ts`** : `useCollections()` (liste + seed paresseux),
+  `useCreateCollection()`/`useRenameCollection()`/`useDeleteCollection()`, `useRecipeCollectionIds(recipeId)`
+  (appartenances d'une recette), `useAddRecipeToCollection()`/`useRemoveRecipeFromCollection()` (upsert/
+  delete sur la table de jointure), `useCollectionRecipeIds(collectionId)` (recettes d'une collection,
+  désactivé si `FAVORITES_COLLECTION_ID` — le virtuel se filtre côté client sur `is_favorite`).
+- **Nouveau `src/components/fitness/CollectionsListSheet.tsx`** : créer (formulaire), renommer (inline,
+  Check/X), supprimer (confirmation inline) — jamais "Favoris" dans cette liste (toujours virtuel).
+- **`RecipesListSheet.tsx`** : chips de filtre horizontal (Toutes / Favoris virtuel / chaque collection
+  réelle) + bouton header "Gérer les collections" (`FolderCog`, ouvre `CollectionsListSheet`) + nouveau
+  **mode sélection multiple** (checkbox par carte, jamais imbriquée dans le `<button>` de la carte —
+  sibling comme l'étoile favori) avec barre d'action flottante "Ajouter N recette(s) à la liste de
+  courses" → `AddToShoppingListSheet`.
+- **`RecipeDetailSheet.tsx`** : nouvelle section "Collections" (chips toggle multi-sélection, exclut
+  volontairement Favoris — déjà géré par l'étoile dédiée, éviter un doublon d'affordance) + nouveau
+  bouton "Ajouter à la liste de courses" (une seule recette) → `AddToShoppingListSheet`.
+- **Nouveau `src/hooks/useShoppingList.ts`** — liste de courses depuis des recettes sélectionnées,
+  distinct de `useMealPlan.ts` (planning hebdo) mais réutilise le **même domaine pur**
+  `buildShoppingList`/`aggregateNeeds` (`src/lib/nutrition/shoppingList.ts`, étendu de façon additive
+  avec `category?` sur `PlannedIngredient`/`NeededIngredient`/`ShoppingLine` — 100% rétro-compatible
+  avec `MealPlanSheet.tsx`, aucune régression). `useRecipesShoppingPreview(recipeIds)` lit
+  `recipe_ingredients` des recettes sélectionnées avec `servings: 1` (les quantités y représentent déjà
+  la recette telle qu'écrite, contrairement au planning qui multiplie par les portions planifiées) et
+  résout la catégorie via `resolveIngredientCategory`. `useSaveRecipesShoppingList()` écrit dans
+  `shopping_list` (table **existante**, réutilisée telle quelle — `done`/persistance par utilisateur
+  déjà présents depuis la V1 planning). `useShoppingList()`/`useToggleShoppingItem()`/
+  `useDeleteShoppingItem()`/`useClearBoughtItems()` pour la lecture/le cochage/le nettoyage.
+- **Nouveau `src/components/fitness/AddToShoppingListSheet.tsx`** : aperçu de la fusion (une ou
+  plusieurs recettes), groupé par rayon, avant confirmation d'écriture — utilisé à la fois depuis
+  `RecipesListSheet` (sélection multiple) et `RecipeDetailSheet` (une recette), même composant.
+- **Nouveau `src/components/fitness/ShoppingListSheet.tsx`** : liste persistée groupée par rayon,
+  cases à cocher (achat), section "Achetés" séparée (opacité réduite, bouton "Vider"). Nouvelle entrée
+  "Liste de courses" dans `NutritionCommandCenter` (`NutritionTab.tsx`, section "tools", à côté de "Mes
+  recettes").
+- **Validation** : `tsc --noEmit` (0 erreur) / `eslint` sur tous les fichiers touchés (0 erreur, seuls
+  warnings pré-existants `no-explicit-any` sur `supabase as any`, même convention que `useMealPlan.ts`/
+  `useRecipes.ts`) / `npx vitest run` (1199 passed, 32 skipped — suite E2E `recipe-import` inchangée à
+  13 tests, `category` ajoutée au payload mock Gemini par défaut sans casser d'assertion existante) /
+  `npm run build` vert. `src/routeTree.gen.ts` (drift de build habituel) revert avant commit.
+  Vérification visuelle en navigateur non obtenue (même limite d'environnement que les sessions
+  précédentes — pas de serveur dev lancé/testé manuellement).
+- **Migration non appliquée à la base distante dans cette session** (comme les migrations des sessions
+  précédentes sur cette branche) — écrite et committée, sera appliquée par `migrate.yml` au merge vers
+  `main`, qui régénère aussi `src/integrations/supabase/types.ts` ensuite. Les hooks utilisent le
+  client `as any` (convention déjà en place pour toutes les tables Nutrition V2), donc aucune dépendance
+  de compilation sur `types.ts` pour ce module.

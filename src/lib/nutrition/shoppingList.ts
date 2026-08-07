@@ -17,6 +17,8 @@ export interface PlannedIngredient {
   quantity?: number | null;
   /** Nombre de portions planifiées de la recette contenant cet ingrédient. */
   servings?: number | null;
+  /** Rayon de courses (regroupement UI) — ignoré par l'agrégation elle-même. */
+  category?: string | null;
 }
 
 export interface StockLevel {
@@ -31,6 +33,7 @@ export interface NeededIngredient {
   name: string;
   unit: string | null;
   needed: number;
+  category?: string | null;
 }
 
 export interface ShoppingLine {
@@ -40,14 +43,20 @@ export interface ShoppingLine {
   needed: number;
   inStock: number;
   toBuy: number;
+  category?: string | null;
 }
 
-const num = (v: number | null | undefined): number => (v != null && Number.isFinite(v) && v > 0 ? v : 0);
+const num = (v: number | null | undefined): number =>
+  v != null && Number.isFinite(v) && v > 0 ? v : 0;
 const norm = (s: string | null | undefined): string => (s ?? "").trim().toLowerCase();
 const r2 = (v: number) => Math.round(v * 100) / 100;
 
 /** Clé d'agrégation : item_id prioritaire, sinon nom+unité normalisés. */
-function keyOf(itemId: string | null | undefined, name: string, unit: string | null | undefined): string {
+function keyOf(
+  itemId: string | null | undefined,
+  name: string,
+  unit: string | null | undefined,
+): string {
   if (itemId) return `id:${itemId}`;
   return `nu:${norm(name)}|${norm(unit)}`;
 }
@@ -56,7 +65,9 @@ function keyOf(itemId: string | null | undefined, name: string, unit: string | n
  * Agrège les ingrédients planifiés en besoins totaux.
  * needed = quantity × servings, sommé par clé.
  */
-export function aggregateNeeds(planned: ReadonlyArray<PlannedIngredient> | null | undefined): NeededIngredient[] {
+export function aggregateNeeds(
+  planned: ReadonlyArray<PlannedIngredient> | null | undefined,
+): NeededIngredient[] {
   const map = new Map<string, NeededIngredient>();
   for (const p of planned ?? []) {
     const qty = num(p.quantity) * (p.servings == null ? 1 : num(p.servings));
@@ -65,8 +76,15 @@ export function aggregateNeeds(planned: ReadonlyArray<PlannedIngredient> | null 
     const existing = map.get(key);
     if (existing) {
       existing.needed = r2(existing.needed + qty);
+      if (!existing.category && p.category) existing.category = p.category;
     } else {
-      map.set(key, { itemId: p.itemId ?? null, name: p.name, unit: p.unit ?? null, needed: r2(qty) });
+      map.set(key, {
+        itemId: p.itemId ?? null,
+        name: p.name,
+        unit: p.unit ?? null,
+        needed: r2(qty),
+        category: p.category ?? null,
+      });
     }
   }
   return Array.from(map.values());
@@ -91,7 +109,15 @@ export function buildShoppingList(
     const key = keyOf(n.itemId, n.name, n.unit);
     const inStock = stockMap.get(key) ?? 0;
     const toBuy = r2(Math.max(0, n.needed - inStock));
-    return { itemId: n.itemId, name: n.name, unit: n.unit, needed: n.needed, inStock, toBuy };
+    return {
+      itemId: n.itemId,
+      name: n.name,
+      unit: n.unit,
+      needed: n.needed,
+      inStock,
+      toBuy,
+      category: n.category ?? null,
+    };
   });
 
   const filtered = options?.includeSatisfied ? lines : lines.filter((l) => l.toBuy > 0);

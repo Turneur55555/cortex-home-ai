@@ -167,9 +167,9 @@ function geminiToolCallResponse(overrides: Record<string, unknown> = {}) {
     cook_minutes: 20,
     tags: ["High Protein", "Dinner"],
     ingredients: [
-      { name: "Filets de poulet", quantity: 600, unit: "g", grams: 600 },
-      { name: "Crème entière", quantity: 20, unit: "cl", grams: 200 },
-      { name: "Parmesan râpé", quantity: 60, unit: "g", grams: 60 },
+      { name: "Filets de poulet", quantity: 600, unit: "g", grams: 600, category: "Viandes" },
+      { name: "Crème entière", quantity: 20, unit: "cl", grams: 200, category: "Produits laitiers" },
+      { name: "Parmesan râpé", quantity: 60, unit: "g", grams: 60, category: "Produits laitiers" },
     ],
     per_serving: { calories: 512, proteins: 46.5, carbs: 9.2, fats: 32.1, fiber: 2.3 },
     ...overrides,

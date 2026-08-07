@@ -47,6 +47,7 @@ interface RecipeIngredientRow {
   quantity: number | null;
   unit: string | null;
   grams: number | null;
+  category: string | null;
 }
 
 function userRowToExtraction(row: RecipeRow, ingredients: RecipeIngredientRow[]): RecipeExtraction {
@@ -67,6 +68,7 @@ function userRowToExtraction(row: RecipeRow, ingredients: RecipeIngredientRow[])
       quantity: i.quantity ?? 0,
       unit: i.unit ?? "pièce",
       grams: i.grams,
+      category: (i.category as RecipeExtraction["ingredients"][number]["category"]) ?? null,
     })),
     notes: row.notes ?? "",
     originalCaption: row.source_description,
@@ -94,7 +96,7 @@ export async function findUserRecipe(
 
   const { data: ingredients } = await supa
     .from("recipe_ingredients")
-    .select("name, quantity, unit, grams")
+    .select("name, quantity, unit, grams, category")
     .eq("recipe_id", (recipe as RecipeRow).id)
     .order("sort_order", { ascending: true });
 
@@ -171,6 +173,7 @@ export async function createUserRecipeFromExtraction(
       quantity: ing.quantity,
       unit: ing.unit,
       grams: ing.grams,
+      category: ing.category,
       sort_order: idx,
     }));
     const { error: ingErr } = await supa.from("recipe_ingredients").insert(rows);

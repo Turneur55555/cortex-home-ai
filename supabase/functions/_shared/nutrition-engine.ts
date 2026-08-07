@@ -4,9 +4,11 @@
 // numériques, valeurs par défaut, et score de confiance final. Aucun appel
 // réseau ici : logique pure, testable indépendamment du provider/parser.
 import {
+  INGREDIENT_CATEGORIES,
   RECIPE_TAGS,
   safeConfidence,
   safeNum,
+  type IngredientCategory,
   type RecipeExtraction,
   type RecipeIngredientExtraction,
   type RecipeMacrosExtraction,
@@ -39,6 +41,13 @@ function safeMinutes(v: unknown): number | null {
   return n > 0 && n <= 600 ? Math.round(n) : null;
 }
 
+/** Rayon de courses IA, s'il fait partie de la liste fermée — `null` sinon (repli client). */
+function sanitizeCategory(v: unknown): IngredientCategory | null {
+  return typeof v === "string" && (INGREDIENT_CATEGORIES as readonly string[]).includes(v)
+    ? (v as IngredientCategory)
+    : null;
+}
+
 /** Ne garde que les tags de la liste fermée, dédupliqués, max 5. */
 function sanitizeTags(v: unknown): string[] {
   if (!Array.isArray(v)) return [];
@@ -68,6 +77,7 @@ export function computeRecipeExtraction(
       quantity: safeNum(i.quantity, 1),
       unit: typeof i.unit === "string" && i.unit.trim() ? i.unit.trim().slice(0, 30) : "pièce",
       grams: grams > 0 ? grams : null,
+      category: sanitizeCategory(i.category),
     };
   });
 
@@ -92,7 +102,10 @@ export function computeRecipeExtraction(
     servings,
     confidence,
     perServing,
-    ingredients: ingredients.length > 0 ? ingredients : [{ name: "Ingrédient", quantity: 1, unit: "pièce", grams: null }],
+    ingredients:
+      ingredients.length > 0
+        ? ingredients
+        : [{ name: "Ingrédient", quantity: 1, unit: "pièce", grams: null, category: null }],
     notes: typeof raw.notes === "string" ? raw.notes.trim().slice(0, 400) : "",
     originalCaption: originalCaption && originalCaption.trim() ? originalCaption.trim().slice(0, 2200) : null,
     aiSummary: typeof raw.ai_summary === "string" && raw.ai_summary.trim() ? raw.ai_summary.trim().slice(0, 1200) : null,
