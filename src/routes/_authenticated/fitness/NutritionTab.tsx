@@ -21,6 +21,7 @@ import {
   Mic,
   Pill,
   Plus,
+  ShoppingCart,
   Sparkles,
   Star,
   Target,
@@ -61,6 +62,8 @@ import { WeightEditModal } from "@/components/fitness/WeightEditModal";
 import { NutritionHistorySheet } from "@/components/fitness/NutritionHistorySheet";
 import { VoiceLogSheet } from "@/components/fitness/VoiceLogSheet";
 import { RecipeImportSheet } from "@/components/fitness/RecipeImportSheet";
+import { RecipesListSheet } from "@/components/fitness/RecipesListSheet";
+import { ShoppingListSheet } from "@/components/fitness/ShoppingListSheet";
 import { SwipeableNutritionItem } from "@/components/fitness/SwipeableNutritionItem";
 import { useCreateSavedMeal } from "@/hooks/use-saved-meals";
 import { getWeightBadge } from "@/lib/nutrition/utils";
@@ -151,6 +154,8 @@ export function NutritionTab() {
   const [analysisOpen, setAnalysisOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [recipeImportOpen, setRecipeImportOpen] = useState(false);
+  const [recipesListOpen, setRecipesListOpen] = useState(false);
+  const [shoppingListOpen, setShoppingListOpen] = useState(false);
   const [commandCenterOpen, setCommandCenterOpen] = useState(false);
   const createSavedMeal = useCreateSavedMeal();
   const [saveGroupKey, setSaveGroupKey] = useState<string | null>(null);
@@ -723,6 +728,8 @@ export function NutritionTab() {
           else if (action === "barcode") setBarcodeOpen(true);
           else if (action === "voice") setVoiceOpen(true);
           else if (action === "import-recipe") setRecipeImportOpen(true);
+          else if (action === "recipes") setRecipesListOpen(true);
+          else if (action === "shopping-list") setShoppingListOpen(true);
           else if (action === "analysis") setAnalysisOpen(true);
           else if (action === "history") setHistoryOpen(true);
           else if (action === "plan") setPlanOpen(true);
@@ -741,9 +748,11 @@ export function NutritionTab() {
       {barcodeOpen && <BarcodeScannerSheet date={date} onClose={() => setBarcodeOpen(false)} />}
       {analysisOpen && <NutritionAnalysisSheet onClose={() => setAnalysisOpen(false)} />}
       {voiceOpen && <VoiceLogSheet date={date} onClose={() => setVoiceOpen(false)} />}
-      {recipeImportOpen && (
-        <RecipeImportSheet date={date} onClose={() => setRecipeImportOpen(false)} />
+      {recipeImportOpen && <RecipeImportSheet onClose={() => setRecipeImportOpen(false)} />}
+      {recipesListOpen && (
+        <RecipesListSheet date={date} onClose={() => setRecipesListOpen(false)} />
       )}
+      {shoppingListOpen && <ShoppingListSheet onClose={() => setShoppingListOpen(false)} />}
       {copyOpen && (
         <Portal>
           <div
@@ -967,6 +976,8 @@ type CommandAction =
   | "barcode"
   | "voice"
   | "import-recipe"
+  | "recipes"
+  | "shopping-list"
   | "analysis"
   | "history"
   | "plan"
@@ -1042,6 +1053,18 @@ const COMMAND_SECTIONS: CommandSection[] = [
     title: "Outils",
     description: "Analyse, historique, planning et objectifs nutritionnels.",
     items: [
+      {
+        action: "recipes",
+        icon: Utensils,
+        title: "Mes recettes",
+        description: "Retrouver, modifier et journaliser tes recettes enregistrées.",
+      },
+      {
+        action: "shopping-list",
+        icon: ShoppingCart,
+        title: "Liste de courses",
+        description: "Voir et cocher ta liste de courses par rayon.",
+      },
       {
         action: "analysis",
         icon: Sparkles,

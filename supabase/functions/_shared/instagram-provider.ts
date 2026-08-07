@@ -15,6 +15,8 @@ export interface InstagramContent {
   imageB64: string | null;
   imageMime: string | null;
   transcript: string | null;
+  /** @handle de l'auteur — best-effort (regex sur og:title/og:description), `null` si non détectable. */
+  authorHandle: string | null;
 }
 
 export interface InstagramProvider {
@@ -47,6 +49,24 @@ interface PageContent {
   caption: string | null;
   imageUrl: string | null;
   videoUrl: string | null;
+  authorHandle: string | null;
+}
+
+/**
+ * Best-effort : Instagram n'expose pas l'auteur via une balise dédiée sur
+ * une page publique non authentifiée. Deux formats og:* courants suffisent
+ * dans la majorité des cas : "Nom (@handle) • Instagram ..." et
+ * "1,234 likes, 56 comments - handle on Instagram: ...". `null` sinon —
+ * jamais bloquant, l'UI masque simplement l'auteur si absent.
+ */
+function extractAuthorHandle(title: string | null, description: string | null): string | null {
+  const fromParens = title?.match(/\(@([\w.]+)\)/);
+  if (fromParens) return fromParens[1];
+  const fromDash = description?.match(/-\s*([\w.]+)\s+on Instagram/i);
+  if (fromDash) return fromDash[1];
+  const fromOn = title?.match(/^([\w.]+)\s+on Instagram/i);
+  if (fromOn) return fromOn[1];
+  return null;
 }
 
 async function fetchInstagramPage(url: string): Promise<PageContent> {
@@ -114,7 +134,7 @@ async function fetchInstagramPage(url: string): Promise<PageContent> {
       "Impossible de lire ce post Instagram (contenu supprimé ou blocage anti-robot). Réessaie avec un autre lien ou plus tard.",
     );
   }
-  return { caption: description ?? title, imageUrl, videoUrl };
+  return { caption: description ?? title, imageUrl, videoUrl, authorHandle: extractAuthorHandle(title, description) };
 }
 
 async function fetchImageAsBase64(imageUrl: string): Promise<{ b64: string; mime: string } | null> {
@@ -173,6 +193,7 @@ class InstagramScraperProviderImpl implements InstagramProvider {
       imageB64: image?.b64 ?? null,
       imageMime: image?.mime ?? null,
       transcript,
+      authorHandle: page.authorHandle,
     };
   }
 }

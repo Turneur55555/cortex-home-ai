@@ -31,7 +31,20 @@ const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 const INSTAGRAM_RE = /^https?:\/\/(www\.)?instagram\.com\/(reel|reels|p|tv)\/[\w-]+/i;
 
 /** Jeu de fiches simulées — la fiche renvoyée dépend de l'URL (déterministe). */
-const MOCK_RECIPES: Array<Omit<ImportedRecipe, "sourceKind" | "sourceUrl" | "recipeId">> = [
+const MOCK_RECIPES: Array<
+  Omit<
+    ImportedRecipe,
+    | "sourceKind"
+    | "sourceUrl"
+    | "recipeId"
+    | "originalCaption"
+    | "aiSummary"
+    | "authorHandle"
+    | "prepMinutes"
+    | "cookMinutes"
+    | "tags"
+  >
+> = [
   {
     title: "Poulet crémeux au parmesan & épinards",
     imageUrl:
@@ -40,12 +53,24 @@ const MOCK_RECIPES: Array<Omit<ImportedRecipe, "sourceKind" | "sourceUrl" | "rec
     confidence: 0.86,
     perServing: { calories: 512, proteins: 46.5, carbs: 9.2, fats: 32.1, fiber: 2.3 },
     ingredients: [
-      { name: "Filets de poulet", quantity: 600, unit: "g", grams: 600 },
-      { name: "Crème entière", quantity: 20, unit: "cl", grams: 200 },
-      { name: "Parmesan râpé", quantity: 60, unit: "g", grams: 60 },
-      { name: "Épinards frais", quantity: 200, unit: "g", grams: 200 },
-      { name: "Ail", quantity: 3, unit: "gousses", grams: 12 },
-      { name: "Huile d'olive", quantity: 2, unit: "c. à soupe", grams: 24 },
+      { name: "Filets de poulet", quantity: 600, unit: "g", grams: 600, category: "Viandes" },
+      {
+        name: "Crème entière",
+        quantity: 20,
+        unit: "cl",
+        grams: 200,
+        category: "Produits laitiers",
+      },
+      { name: "Parmesan râpé", quantity: 60, unit: "g", grams: 60, category: "Produits laitiers" },
+      {
+        name: "Épinards frais",
+        quantity: 200,
+        unit: "g",
+        grams: 200,
+        category: "Fruits et légumes",
+      },
+      { name: "Ail", quantity: 3, unit: "gousses", grams: 12, category: "Fruits et légumes" },
+      { name: "Huile d'olive", quantity: 2, unit: "c. à soupe", grams: 24, category: "Épicerie" },
     ],
     notes: "Quantités estimées depuis la vidéo : la crème et l'huile sont approximatives.",
   },
@@ -57,12 +82,18 @@ const MOCK_RECIPES: Array<Omit<ImportedRecipe, "sourceKind" | "sourceUrl" | "rec
     confidence: 0.74,
     perServing: { calories: 638, proteins: 34.8, carbs: 61.4, fats: 26.9, fiber: 6.1 },
     ingredients: [
-      { name: "Pavé de saumon", quantity: 260, unit: "g", grams: 260 },
-      { name: "Riz sushi cuit", quantity: 300, unit: "g", grams: 300 },
-      { name: "Avocat", quantity: 1, unit: "pièce", grams: 150 },
-      { name: "Concombre", quantity: 0.5, unit: "pièce", grams: 100 },
-      { name: "Sauce soja", quantity: 2, unit: "c. à soupe", grams: 30 },
-      { name: "Graines de sésame", quantity: 1, unit: "c. à café", grams: 8 },
+      { name: "Pavé de saumon", quantity: 260, unit: "g", grams: 260, category: "Poissons" },
+      { name: "Riz sushi cuit", quantity: 300, unit: "g", grams: 300, category: "Épicerie" },
+      { name: "Avocat", quantity: 1, unit: "pièce", grams: 150, category: "Fruits et légumes" },
+      {
+        name: "Concombre",
+        quantity: 0.5,
+        unit: "pièce",
+        grams: 100,
+        category: "Fruits et légumes",
+      },
+      { name: "Sauce soja", quantity: 2, unit: "c. à soupe", grams: 30, category: "Épicerie" },
+      { name: "Graines de sésame", quantity: 1, unit: "c. à café", grams: 8, category: "Épicerie" },
     ],
     notes: "Le saumon est supposé cru ; la portion de riz est estimée au visuel du bol.",
   },
@@ -74,17 +105,42 @@ const MOCK_RECIPES: Array<Omit<ImportedRecipe, "sourceKind" | "sourceUrl" | "rec
     confidence: 0.62,
     perServing: { calories: 371, proteins: 28.4, carbs: 44.2, fats: 8.6, fiber: 5.4 },
     ingredients: [
-      { name: "Flocons d'avoine", quantity: 150, unit: "g", grams: 150 },
-      { name: "Banane mûre", quantity: 2, unit: "pièces", grams: 240 },
-      { name: "Blancs d'œufs", quantity: 4, unit: "pièces", grams: 132 },
-      { name: "Whey vanille", quantity: 30, unit: "g", grams: 30 },
-      { name: "Levure chimique", quantity: 1, unit: "c. à café", grams: 5 },
+      { name: "Flocons d'avoine", quantity: 150, unit: "g", grams: 150, category: "Épicerie" },
+      {
+        name: "Banane mûre",
+        quantity: 2,
+        unit: "pièces",
+        grams: 240,
+        category: "Fruits et légumes",
+      },
+      {
+        name: "Blancs d'œufs",
+        quantity: 4,
+        unit: "pièces",
+        grams: 132,
+        category: "Produits laitiers",
+      },
+      { name: "Whey vanille", quantity: 30, unit: "g", grams: 30, category: "Épicerie" },
+      { name: "Levure chimique", quantity: 1, unit: "c. à café", grams: 5, category: "Épicerie" },
     ],
     notes: "Confiance limitée : la marque de whey n'est pas identifiable dans la vidéo.",
   },
 ];
 
-function pickMock(seed: string): Omit<ImportedRecipe, "sourceKind" | "sourceUrl" | "recipeId"> {
+function pickMock(
+  seed: string,
+): Omit<
+  ImportedRecipe,
+  | "sourceKind"
+  | "sourceUrl"
+  | "recipeId"
+  | "originalCaption"
+  | "aiSummary"
+  | "authorHandle"
+  | "prepMinutes"
+  | "cookMinutes"
+  | "tags"
+> {
   let h = 0;
   for (let i = 0; i < seed.length; i += 1) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
   return MOCK_RECIPES[h % MOCK_RECIPES.length];
@@ -114,6 +170,12 @@ function createMockImporter(config: {
         sourceKind: config.kind,
         sourceUrl: input.kind === "url" ? input.value : null,
         recipeId: null,
+        originalCaption: null,
+        aiSummary: null,
+        authorHandle: null,
+        prepMinutes: null,
+        cookMinutes: null,
+        tags: [],
       };
     },
   };

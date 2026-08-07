@@ -9,7 +9,7 @@
 // (validation -> provider -> parser -> engine -> cache global -> DB
 // par-utilisateur), pas un test contre la vraie API Instagram/Gemini.
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { handleRecipeImport } from "../_shared/recipe-import-handler.ts";
+import { handleRecipeImport, handleRecipeReanalyze } from "../_shared/recipe-import-handler.ts";
 
 // ─── Fake Supabase client (postgrest-like, chainable + thenable) ─────────────
 
@@ -41,6 +41,9 @@ function makeFakeSupabase(seed: Partial<Record<string, Row[]>> = {}) {
     const filters: Array<[string, unknown]> = [];
     let countMode = false;
     let insertRows: Row[] | null = null;
+    let upsertRows: Row[] | null = null;
+    let upsertConflictCols: string[] = [];
+    let updatePatch: Row | null = null;
     let deleteMode = false;
 
     const matches = (r: Row) => filters.every(([c, v]) => r[c] === v);
@@ -63,6 +66,15 @@ function makeFakeSupabase(seed: Partial<Record<string, Row[]>> = {}) {
       },
       insert(rows: Row | Row[]) {
         insertRows = Array.isArray(rows) ? rows : [rows];
+        return builder;
+      },
+      upsert(rows: Row | Row[], opts?: { onConflict?: string }) {
+        upsertRows = Array.isArray(rows) ? rows : [rows];
+        upsertConflictCols = (opts?.onConflict ?? "").split(",").filter(Boolean);
+        return builder;
+      },
+      update(patch: Row) {
+        updatePatch = patch;
         return builder;
       },
       delete() {
@@ -94,6 +106,23 @@ function makeFakeSupabase(seed: Partial<Record<string, Row[]>> = {}) {
             for (const row of insertRows) tables[table].push({ id: `${table}-${idCounter++}`, ...row });
             return resolve({ error: null });
           }
+          if (upsertRows) {
+            for (const row of upsertRows) {
+              const existing =
+                upsertConflictCols.length > 0
+                  ? tables[table].find((r) => upsertConflictCols.every((c) => r[c] === row[c]))
+                  : undefined;
+              if (existing) Object.assign(existing, row);
+              else tables[table].push({ id: `${table}-${idCounter++}`, ...row });
+            }
+            return resolve({ error: null });
+          }
+          if (updatePatch) {
+            for (const row of tables[table]) {
+              if (matches(row)) Object.assign(row, updatePatch);
+            }
+            return resolve({ error: null });
+          }
           if (deleteMode) {
             tables[table] = tables[table].filter((r) => !matches(r));
             return resolve({ error: null });
@@ -119,7 +148,7 @@ function makeFakeSupabase(seed: Partial<Record<string, Row[]>> = {}) {
 const REEL_URL = "https://www.instagram.com/reel/cortex-demo-1/";
 
 const PUBLIC_HTML = `<html><head>
-  <meta property="og:title" content="Poulet crémeux au parmesan" />
+  <meta property="og:title" content="Jane Doe (@jane.cooks) on Instagram: Poulet crémeux au parmesan" />
   <meta property="og:description" content="Recette : poulet, crème, parmesan, épinards. Un régal !" />
   <meta property="og:image" content="https://scontent.cdninstagram.com/thumb.jpg" />
 </head></html>`;
@@ -132,10 +161,15 @@ function geminiToolCallResponse(overrides: Record<string, unknown> = {}) {
     servings: 4,
     confidence: 0.85,
     notes: "Quantités estimées depuis la légende.",
+    ai_summary:
+      "Un poulet mijoté dans une sauce crémeuse au parmesan avec des épinards. Saisir le poulet, déglacer, ajouter crème et parmesan, incorporer les épinards en fin de cuisson.",
+    prep_minutes: 10,
+    cook_minutes: 20,
+    tags: ["High Protein", "Dinner"],
     ingredients: [
-      { name: "Filets de poulet", quantity: 600, unit: "g", grams: 600 },
-      { name: "Crème entière", quantity: 20, unit: "cl", grams: 200 },
-      { name: "Parmesan râpé", quantity: 60, unit: "g", grams: 60 },
+      { name: "Filets de poulet", quantity: 600, unit: "g", grams: 600, category: "Viandes" },
+      { name: "Crème entière", quantity: 20, unit: "cl", grams: 200, category: "Produits laitiers" },
+      { name: "Parmesan râpé", quantity: 60, unit: "g", grams: 60, category: "Produits laitiers" },
     ],
     per_serving: { calories: 512, proteins: 46.5, carbs: 9.2, fats: 32.1, fiber: 2.3 },
     ...overrides,
@@ -209,11 +243,20 @@ describe("recipe-import — Instagram E2E (réseau + DB simulés)", () => {
     expect((recipe.ingredients as unknown[]).length).toBe(3);
     expect(recipe.recipeId).toBeTruthy();
     expect(result.cached).toBe(false);
+    // Fiche premium : résumé IA, auteur, temps, tags — tous conservés.
+    expect(recipe.aiSummary).toMatch(/parmesan/i);
+    expect(recipe.authorHandle).toBe("jane.cooks");
+    expect(recipe.prepMinutes).toBe(10);
+    expect(recipe.cookMinutes).toBe(20);
+    expect(recipe.tags).toEqual(["High Protein", "Dinner"]);
+    expect(recipe.originalCaption).toMatch(/poulet, crème, parmesan/i);
 
     // Persistance réelle : une ligne `recipes` + 3 `recipe_ingredients`.
     expect(supa.tables.recipes).toHaveLength(1);
     expect(supa.tables.recipes[0].user_id).toBe("user-1");
     expect(supa.tables.recipes[0].source_url).toBe(REEL_URL);
+    expect(supa.tables.recipes[0].source_author).toBe("jane.cooks");
+    expect(supa.tables.recipes[0].tags).toEqual(["High Protein", "Dinner"]);
     expect(supa.tables.recipe_ingredients).toHaveLength(3);
     // Cache global écrit pour bénéficier au prochain utilisateur.
     expect(supa.tables.recipe_import_cache).toHaveLength(1);
@@ -398,6 +441,47 @@ describe("recipe-import — Instagram E2E (réseau + DB simulés)", () => {
     expect(result.recipe).toBeUndefined();
     // La recette a été retirée après l'échec des ingrédients — pas de ligne orpheline.
     expect(supa.tables.recipes).toHaveLength(0);
+  });
+
+  // ─── Cas 8 : réanalyse ──────────────────────────────────────────────────
+  it("Cas 8 — Réanalyser : relance tout le pipeline, rafraîchit le cache, n'écrase pas la recette, historique incrémenté", async () => {
+    const { fn: fetchMock } = installFetchMock({ page: () => new Response(PUBLIC_HTML, { status: 200 }) });
+    const supa = makeFakeSupabase();
+
+    const first = await handleRecipeImport(
+      { source: "instagram", input: { kind: "url", value: REEL_URL } },
+      deps(supa, "user-1"),
+    );
+    const recipeId = (first.recipe as Record<string, unknown>).recipeId as string;
+
+    fetchMock.mockClear();
+    const { fn: reanalyzeFetchMock } = installFetchMock({
+      page: () => new Response(PUBLIC_HTML, { status: 200 }),
+      gemini: () => jsonResponse(geminiToolCallResponse({ confidence: 0.95, notes: "Analyse affinée." })),
+    });
+
+    const reanalysis = await handleRecipeReanalyze(
+      { source: "instagram", input: { kind: "url", value: REEL_URL }, reanalyze: true, recipeId },
+      deps(supa, "user-1"),
+    );
+
+    expect(reanalysis.error).toBeUndefined();
+    const freshRecipe = reanalysis.recipe as Record<string, unknown>;
+    expect(freshRecipe.confidence).toBe(0.81); // 0.95 * (1 - pénalité transcript manquant 0.15)
+    expect(freshRecipe.recipeId).toBe(recipeId);
+
+    // Le pipeline a bien été relancé (aucun court-circuit par le cache).
+    expect(reanalyzeFetchMock).toHaveBeenCalled();
+    // Le cache global est rafraîchi (toujours une seule ligne, pas dupliqué).
+    expect(supa.tables.recipe_import_cache).toHaveLength(1);
+    expect(supa.tables.recipe_import_cache[0].confidence).toBe(0.81);
+    // La recette de l'utilisateur n'est PAS modifiée par la réanalyse seule
+    // (c'est `useUpdateRecipe`, côté frontend, qui applique si l'utilisateur valide).
+    expect(supa.tables.recipes).toHaveLength(1);
+    expect(supa.tables.recipes[0].confidence).toBe(0.72); // 0.85 * (1 - pénalité transcript manquant 0.15)
+    // Historique bumpé côté serveur, qu'elle soit appliquée ou non.
+    expect(supa.tables.recipes[0].reanalysis_count).toBe(1);
+    expect(supa.tables.recipes[0].last_reanalyzed_at).toBeTruthy();
   });
 
   it("TikTok (source pas encore disponible) : message explicite, aucun crash", async () => {

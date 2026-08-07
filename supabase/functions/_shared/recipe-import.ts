@@ -21,11 +21,27 @@ export type RecipeSourceKind =
   | "photo"
   | "recipe-url";
 
+/** Liste fermée alignée sur les rayons de courses (regroupement de la liste de courses). */
+export const INGREDIENT_CATEGORIES = [
+  "Fruits et légumes",
+  "Viandes",
+  "Poissons",
+  "Produits laitiers",
+  "Épicerie",
+  "Surgelés",
+  "Boissons",
+  "Divers",
+] as const;
+
+export type IngredientCategory = (typeof INGREDIENT_CATEGORIES)[number];
+
 export interface RecipeIngredientExtraction {
   name: string;
   quantity: number;
   unit: string;
   grams: number | null;
+  /** Rayon de courses — best-effort IA, `null` si non déterminable (repli côté client). */
+  category: IngredientCategory | null;
 }
 
 export interface RecipeMacrosExtraction {
@@ -36,6 +52,25 @@ export interface RecipeMacrosExtraction {
   fiber: number;
 }
 
+/** Tags produit — l'IA choisit parmi cette liste fermée (voir RECIPE_TOOL, recipe-parser.ts). */
+export const RECIPE_TAGS = [
+  "High Protein",
+  "Healthy",
+  "Meal Prep",
+  "Low Carb",
+  "Vegetarian",
+  "Vegan",
+  "Dessert",
+  "Breakfast",
+  "Lunch",
+  "Dinner",
+  "Snack",
+  "Spicy",
+  "Quick Recipe",
+] as const;
+
+export type RecipeTag = (typeof RECIPE_TAGS)[number];
+
 export interface RecipeExtraction {
   title: string;
   imageUrl: string | null;
@@ -44,6 +79,16 @@ export interface RecipeExtraction {
   perServing: RecipeMacrosExtraction;
   ingredients: RecipeIngredientExtraction[];
   notes: string;
+  /** Légende/description ORIGINALE du post source (og:description) — distincte de `notes` (hypothèses de l'IA). */
+  originalCaption: string | null;
+  /** Résumé structuré généré par l'IA (principe, ingrédients clés, cuisson, points importants) — ne remplace jamais `originalCaption`. */
+  aiSummary: string | null;
+  /** @handle Instagram de l'auteur — best-effort (scraping public, pas d'API officielle), `null` si non détectable. */
+  authorHandle: string | null;
+  prepMinutes: number | null;
+  cookMinutes: number | null;
+  /** Sous-ensemble de RECIPE_TAGS, générés par l'IA — reste modifiable côté utilisateur. */
+  tags: string[];
 }
 
 export interface SourceHandler {

@@ -4,7 +4,7 @@
 // AVANT sanitation. La sanitation/bornage + score de confiance final sont la
 // responsabilité de la Nutrition Engine (nutrition-engine.ts) — ce module ne
 // fait que parler à l'IA et parser sa réponse.
-import { RecipeImportError } from "./recipe-import.ts";
+import { INGREDIENT_CATEGORIES, RECIPE_TAGS, RecipeImportError } from "./recipe-import.ts";
 import type { InstagramContent } from "./instagram-provider.ts";
 
 export const RECIPE_TOOL = {
@@ -22,6 +22,25 @@ export const RECIPE_TOOL = {
           type: "string",
           description: "Hypothèses/approximations faites (quantités estimées, ingrédient incertain, etc.)",
         },
+        ai_summary: {
+          type: "string",
+          description:
+            "Résumé clair de la recette en 3-5 phrases : principe du plat, ingrédients principaux, mode de cuisson, points importants (ex. temps de repos, technique clé). Ne répète pas mot pour mot la légende du post.",
+        },
+        prep_minutes: {
+          type: "number",
+          description: "Temps de préparation en minutes, si détectable dans le contenu — 0 si non détectable.",
+        },
+        cook_minutes: {
+          type: "number",
+          description: "Temps de cuisson en minutes, si détectable dans le contenu — 0 si non détectable.",
+        },
+        tags: {
+          type: "array",
+          description: "1 à 5 tags parmi la liste fermée fournie, les plus pertinents pour cette recette.",
+          items: { type: "string", enum: [...RECIPE_TAGS] },
+          maxItems: 5,
+        },
         ingredients: {
           type: "array",
           description: "Chaque ingrédient identifié séparément, avec sa quantité et sa masse estimée.",
@@ -32,8 +51,13 @@ export const RECIPE_TOOL = {
               quantity: { type: "number", description: "Quantité dans l'unité affichée" },
               unit: { type: "string", description: "Unité affichée (g, cl, pièce, c. à soupe, ...)" },
               grams: { type: "number", description: "Masse normalisée en grammes (0 si non estimable)" },
+              category: {
+                type: "string",
+                description: "Rayon de courses le plus adapté pour cet ingrédient.",
+                enum: [...INGREDIENT_CATEGORIES],
+              },
             },
-            required: ["name", "quantity", "unit", "grams"],
+            required: ["name", "quantity", "unit", "grams", "category"],
             additionalProperties: false,
           },
           minItems: 1,
@@ -62,10 +86,13 @@ export const RECIPE_SYSTEM_PROMPT = `Tu es un nutritionniste expert qui reconsti
 
 Méthode :
 1. Identifie le plat et son nombre de portions probable.
-2. Liste CHAQUE ingrédient séparément (jamais un plat entier comme une seule entrée), avec sa quantité dans une unité naturelle (g, cl, pièce, c. à soupe...) et sa masse estimée en grammes.
+2. Liste CHAQUE ingrédient séparément (jamais un plat entier comme une seule entrée), avec sa quantité dans une unité naturelle (g, cl, pièce, c. à soupe...), sa masse estimée en grammes, et son rayon de courses ("category", liste fermée).
 3. Calcule les macros (kcal, protéines, glucides, lipides, fibres) pour UNE SEULE portion, cohérentes avec la somme des ingrédients divisée par le nombre de portions.
 4. Si une source d'information manque (pas de transcription audio, légende vague), fais une estimation raisonnable à partir de ce qui est disponible et BAISSE le niveau de confiance en conséquence. N'invente jamais un ingrédient qui ne serait ni visible ni mentionné.
-5. Résume dans "notes" les principales hypothèses ou approximations faites.
+5. Résume dans "notes" les principales hypothèses ou approximations faites (distinct de "ai_summary" ci-dessous).
+6. Rédige "ai_summary" : un résumé autonome de la recette (principe du plat, ingrédients principaux, mode de cuisson, points importants) — quelqu'un doit pouvoir cuisiner le plat en le lisant, sans jamais avoir besoin de retourner voir le post original.
+7. Estime "prep_minutes"/"cook_minutes" UNIQUEMENT s'ils sont raisonnablement déductibles (légende, transcription, étapes visibles) — 0 sinon, ne devine jamais un chiffre arbitraire.
+8. Choisis "tags" parmi la liste fermée fournie par le schéma — uniquement ceux clairement justifiés par la recette (macros, ingrédients, contexte du repas).
 
 Retourne STRICTEMENT du JSON via tool calling. Tout le texte en FRANÇAIS.`;
 

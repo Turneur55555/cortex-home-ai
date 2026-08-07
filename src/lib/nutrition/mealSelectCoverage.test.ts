@@ -13,7 +13,7 @@ const SCREENS_THAT_MUST_RENDER_MEAL_SELECT = [
   "src/components/BarcodeScannerSheet.tsx", // Scanner un code-barres
   "src/components/fitness/VoiceLogSheet.tsx", // Saisie vocale
   "src/components/fitness/MealScanSheet.tsx", // Scanner un repas (photo)
-  "src/components/fitness/RecipeLogSheet.tsx", // Création / ajout d'une recette
+  "src/components/fitness/RecipeDetailSheet.tsx", // Fiche recette (module Recettes) — ajout au journal
   "src/components/fitness/MealPlanSheet.tsx", // Planning de repas
   "src/components/fitness/FavoritesSheet.tsx", // Favoris
   "src/components/fitness/FoodLibrarySheet.tsx", // Bibliothèque d'aliments (Tous/Mes aliments/Favoris/Repas)

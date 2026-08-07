@@ -3327,3 +3327,234 @@ rester manuel). Vérification faite sur les vrais workflows CI, pas une supposit
   verts. Pas de `deno check` disponible dans ce sandbox (même limite documentée dans les sessions
   précédentes) — contournée cette fois par l'extraction `recipe-import-handler.ts`, qui permet un test
   Vitest réel du code de production plutôt qu'une simple vérification de syntaxe.
+
+## Import de recettes — module "Recettes" : la fiche importée n'est plus un raccourci journal (2026-08-07, session suivante)
+- **Demande de Nathan** : l'écran d'import Instagram ne doit plus être un « Ajouter au journal » —
+  c'est un créateur de fiche recette. Créer un vrai module « Recettes » dans Nutrition, accessible
+  après coup, avec 5 actions par fiche : Ajouter au journal / Modifier / Dupliquer / Favori / Supprimer.
+- **Découverte en auditant l'existant** : `RecipeLogSheet.tsx` (V1 Lovable, sélection d'une recette
+  dans un `<select>` + log direct) n'était câblé nulle part dans `NutritionTab.tsx` — code mort,
+  seulement référencé dans une liste statique de `mealSelectCoverage.test.ts`. Supprimé (pas une
+  suppression de feature vivante : personne n'y accédait) et remplacé par le nouveau module, entrée
+  mise à jour dans le test de couverture (`RecipeDetailSheet.tsx` à la place).
+- **Backend — `originalCaption` ajouté au pipeline** (nouveau champ demandé : « conserver la
+  description originale du post », distinct de `notes` qui sont les hypothèses de l'IA) :
+  `RecipeExtraction.originalCaption` (`_shared/recipe-import.ts`) ; `computeRecipeExtraction()`
+  (`nutrition-engine.ts`) prend désormais un 4e paramètre `originalCaption` et le recopie tel quel
+  (pas généré par l'IA, vient directement du provider) ; `recipe-import-instagram.ts` passe
+  `content.caption` (déjà récupéré par le provider, seulement utilisé comme signal pour Gemini avant
+  cette session) ; `recipe-db.ts` persiste/relit `source_description` sur `recipes` ET
+  `recipe_import_cache` (le cache global doit porter la même donnée que ce qu'il alimente).
+- **Migration `20260823090000_recipe_module_description_favorite.sql`** (additive) : `recipes` gagne
+  `source_description` (text) + `is_favorite` (boolean, défaut false, index partiel sur les favoris) ;
+  `recipe_import_cache` gagne `source_description`.
+- **`src/hooks/useRecipes.ts`** : `Recipe` s'enrichit de `source_url`/`source_description`/`confidence`/
+  `notes`/`is_favorite` (déjà en base côté V2, jamais exposés côté hook avant). 4 nouvelles mutations
+  (toutes avec toast + invalidation `["recipes"]`/`["recipe", id]`) : `useUpdateRecipe` (patch
+  recipes + remplacement optionnel intégral de `recipe_ingredients`, delete+insert) ;
+  `useToggleRecipeFavorite` ; `useDeleteRecipe` (cascade `recipe_ingredients` déjà en place depuis la
+  migration V2 initiale) ; `useDuplicateRecipe` (copie recipes+ingredients, `source_url: null` — sans
+  ça la copie violerait l'unicité `(user_id, source_url)` et serait invisible pour l'edge function).
+- **`RecipeImportSheet.tsx`** : bloc « Ajouter à mon journal » (MealSelect, portions, `useAddNutrition`)
+  entièrement retiré. La recette est déjà créée côté serveur au moment où l'écran de résultat
+  s'affiche (comportement V2 inchangé) — le nouveau bouton unique « Enregistrer dans mes recettes »
+  n'a donc qu'à persister d'éventuelles retouches locales (le bloc « Modifier » existant, réutilisé tel
+  quel) via `useUpdateRecipe`, puis fermer. Fiche enrichie : lien « Voir la publication Instagram »
+  (`recipe.sourceUrl`) + bloc description originale (`recipe.originalCaption`) ajoutés à
+  `RecipeResultCard`, entre le titre et les macros. Perd son prop `date` (n'écrit plus dans le journal).
+- **`RecipesListSheet.tsx`** (nouveau) : liste « Mes recettes » — miniature/nom/portions/kcal-portion +
+  étoile favori inline (bouton frère du bouton carte, jamais imbriqué — `<button>` dans `<button>`
+  est invalide en HTML). Tap une carte → `RecipeDetailSheet` monté par-dessus (les deux sheets utilisent
+  le même `Portal`/`z-50` ; le montage plus tardif du détail l'affiche naturellement au-dessus de la
+  liste, sans changement à `FullscreenSheet`).
+- **`RecipeDetailSheet.tsx`** (nouveau) : fiche complète (miniature + confiance + favori, lien source,
+  description originale, macros/ingrédients éditables, notes IA) + les 5 actions demandées — Ajouter au
+  journal (repris de l'ancien `RecipeLogSheet`, `MealSelect` + portions + `useAddNutrition` avec
+  `recipe_id`), Modifier (édition inline titre/portions/macros/quantités, même style que
+  `RecipeImportSheet`, sauvegarde via `useUpdateRecipe`), Dupliquer, Favori (étoile sur la miniature),
+  Supprimer (confirmation inline avant `useDeleteRecipe`).
+- **Navigation** : nouvelle entrée « Mes recettes » dans `NutritionCommandCenter` (section 🧠 Outils,
+  icône `Utensils` déjà importée dans ce fichier) → `RecipesListSheet`. L'entrée existante « Importer
+  une recette » (section 📷 Scanner) est inchangée, toujours vers `RecipeImportSheet`.
+- **Validation** : `tsc --noEmit` / `eslint` (0 erreur, warning `no-explicit-any` pré-existant sur
+  `useRecipes.ts` uniquement) / `npx vitest run` (1198 passed, 0 régression — le test de couverture
+  `mealSelectCoverage.test.ts` valide que `RecipeDetailSheet.tsx` rend bien `<MealSelect>`) /
+  `npm run build` / `scripts/validate-supabase.mjs` (0 erreur, avertissements pré-existants non liés)
+  tous verts. Vérification visuelle en navigateur non obtenue (même limite d'environnement que les
+  sessions précédentes).
+
+## Import de recettes — fiche premium : résumé IA, auteur, temps, tags, réanalyse (2026-08-07, session suivante)
+- **Demande de Nathan** : transformer chaque recette importée en véritable fiche premium façon « livre
+  de recettes personnel enrichi par IA » — en-tête complet (miniature/titre/@auteur/lien/date/
+  confiance), description originale ET résumé IA (jamais fusionnés), infos recette (macros + temps
+  prépa/cuisson), ingrédients éditables avec recalcul macros, tags auto (modifiables), + action
+  « Réanalyser » avec comparaison ancienne/nouvelle. Architecture existante réutilisée telle quelle
+  (aucun flux cassé), schéma étendu uniquement là où la valeur est réelle (temps historisé, résumé,
+  auteur, tags) — `recipes.tags`/`recipes.prep_minutes` existaient déjà depuis la V2 initiale et sont
+  simplement enfin renseignés par le pipeline, pas redéfinis.
+- **Migration `20260824090000_recipe_premium_fiche.sql`** (additive) : `recipes` gagne `ai_summary`,
+  `source_author`, `cook_minutes`, `last_reanalyzed_at`, `reanalysis_count` (défaut 0) ;
+  `recipe_import_cache` gagne les mêmes champs partageables (`ai_summary`, `source_author`,
+  `prep_minutes` — absent du cache jusqu'ici —, `cook_minutes`, `tags`) pour qu'une copie sur cache hit
+  transporte la fiche complète sans re-analyse IA.
+- **Pipeline backend — nouveaux champs threadés de bout en bout** :
+  - `_shared/recipe-import.ts` : `RECIPE_TAGS` (liste fermée, 13 tags : High Protein/Healthy/Meal Prep/
+    Low Carb/Vegetarian/Vegan/Dessert/Breakfast/Lunch/Dinner/Snack/Spicy/Quick Recipe) + `RecipeExtraction`
+    enrichi (`aiSummary`, `authorHandle`, `prepMinutes`, `cookMinutes`, `tags`).
+  - `recipe-parser.ts` : `RECIPE_TOOL` gagne `ai_summary`/`prep_minutes`/`cook_minutes`/`tags` (enum
+    `RECIPE_TAGS`, max 5) — générés par Gemini dans le MÊME appel tool-calling qu'avant (zéro coût IA
+    supplémentaire). `prep_minutes`/`cook_minutes` en `number` (0 = non détectable), pas `["number","null"]`
+    — même convention que `grams` (meal-items.ts) pour rester dans le sous-ensemble JSON Schema le plus
+    sûr pour le tool-calling Gemini.
+  - `instagram-provider.ts` : `extractAuthorHandle()` — best-effort, regex sur `og:title`/`og:description`
+    (formats `"Nom (@handle) • ..."` et `"... - handle on Instagram: ..."`) — Instagram n'expose pas
+    l'auteur via une balise dédiée sur une page publique non authentifiée, `null` si aucun pattern ne
+    matche, jamais bloquant.
+  - `nutrition-engine.ts` : `computeRecipeExtraction()` prend un `PassthroughContent` (`originalCaption`
+    + `authorHandle`, remplace l'ancien paramètre `originalCaption` seul) + sanitise `ai_summary`
+    (cap 1200c), `prep_minutes`/`cook_minutes` (0..600 ou `null`), `tags` (filtre sur `RECIPE_TAGS`,
+    dédupliqué, max 5).
+  - `recipe-db.ts` : les deux mappers (`userRowToExtraction`/`cacheRowToExtraction`) + les deux inserts
+    (`createUserRecipeFromExtraction`/`saveCachedRecipe`) portent maintenant TOUS les champs de
+    `RecipeExtraction` — factorisés via `extractionToRecipeRow()`/`extractionToCacheRow()` (évite la
+    duplication de 15 champs à 2 endroits). Nouveau `refreshCachedRecipe()` (upsert `onConflict:
+    "source_kind,source_url"` — contrairement à `saveCachedRecipe`, on VEUT ici écraser une entrée
+    existante, c'est le sens de la réanalyse) et `bumpReanalysisHistory()` (lecture-puis-écriture de
+    `reanalysis_count`/`last_reanalyzed_at`, non-atomique mais acceptable — usage mono-utilisateur).
+- **« Réanalyser la recette » — nouveau chemin dédié, pas une branche de l'import normal** :
+  `recipe-import-handler.ts` gagne `handleRecipeReanalyze()` (fonction séparée de `handleRecipeImport`,
+  délibérément — ne touche JAMAIS `findUserRecipe`/`findCachedRecipe`, relance TOUJOURS le pipeline
+  complet). Rafraîchit le cache global (bénéfice futur) et bump l'historique de réanalyse
+  (`bumpReanalysisHistory`, compte à chaque tentative — appliquée ou non) mais **ne modifie jamais
+  `recipes`/`recipe_ingredients`** : retourne juste la fiche fraîche, c'est le frontend qui décide de
+  l'appliquer via `useUpdateRecipe` (même mutation que pour une édition manuelle — aucune nouvelle
+  route de persistance créée). `recipe-import/index.ts` route vers `handleRecipeReanalyze` quand le
+  corps contient `reanalyze: true` (sinon `handleRecipeImport` inchangé) — toujours UNE SEULE edge
+  function, comme demandé.
+- **Frontend — `useRecipes.ts`** : `Recipe` gagne `ai_summary`/`source_author`/`cook_minutes`/
+  `last_reanalyzed_at`/`reanalysis_count`. `RecipeUpdatePatch` gagne `tags`/`ai_summary`/
+  `prep_minutes`/`cook_minutes` (appliqués par la nouvelle logique de réanalyse ET par l'édition
+  manuelle des tags). Nouveau `useReanalyzeRecipe()` — appelle `recipe-import` avec `reanalyze: true`,
+  invalide `["recipe", id]` en toute circonstance (l'historique change côté serveur que le résultat
+  soit appliqué ou non).
+- **`RecipeDetailSheet.tsx` — réécriture complète (fiche premium)** :
+  - En-tête : miniature + @auteur + date d'import + confiance + bouton dédié « Voir le Reel Instagram »
+    (`ExternalLink`, plein largeur, pas juste un lien texte comme avant).
+  - Description originale (`source_description`) ET résumé IA (`ai_summary`, encadré `primary/5`,
+    icône Sparkles) — deux blocs toujours distincts, jamais fusionnés/remplacés.
+  - Chips prep/cook time affichées uniquement si détectées (`recipe.prep_minutes`/`cook_minutes`
+    non-null) — jamais un « 0 min » trompeur.
+  - Ingrédients éditables avec un **second champ grammes** en mode édition (en plus de la quantité
+    existante) — `rescaleAfterGramsChange()` recalcule proportionnellement calories/protéines/glucides/
+    lipides/fibres selon le ratio masse-totale-après/masse-totale-avant. Ce n'est pas un recalcul
+    nutritionnellement exact (pas de macros par ingrédient dans ce schéma, décision V2 assumée) mais une
+    estimation proportionnelle honnête, cohérente avec la contrainte « pas de nouveau schéma sauf valeur
+    réelle » — pas de nouvel appel IA, pas de colonnes macro par ingrédient.
+  - Tags : chips avec suppression (×) + `<details>` natif listant les tags `RECIPE_TAGS` restants — clic
+    = `useUpdateRecipe({tags})` immédiat (pas gaté par le mode « Modifier », comme le favori).
+  - Nouveau bouton « Réanalyser la recette » (visible seulement si `source_url`+`source_kind` présents,
+    donc jamais sur une recette manuelle/dupliquée) → `ReanalysisComparison` (carte ancienne vs
+    nouvelle : kcal/confiance/nb ingrédients côte à côte, badge « plus fiable » si confiance
+    nouvelle > ancienne + 0.02) → « Mettre à jour la recette » (applique via `useUpdateRecipe`) ou
+    « Garder l'actuelle » (ignore, ferme la comparaison) — jamais d'écrasement automatique/silencieux.
+  - Footer historique : date d'import + date de dernière réanalyse + compteur, texte discret.
+- **Validation** : `tsc --noEmit` / `eslint` (0 erreur, warnings `no-console`/`no-explicit-any`
+  pré-existants sur ce type de fichier) / `npx vitest run` (1199 passed, +1 vs avant — nouveau
+  « Cas 8 — Réanalyser » dans `recipe-import.e2e.test.ts`, assertions étendues sur le Cas 1 pour
+  couvrir résumé IA/auteur/temps/tags) / `npm run build` / `scripts/validate-supabase.mjs` tous verts.
+  Fake client Supabase du test E2E étendu avec `.upsert()`/`.update()` (manquants jusqu'ici, nécessaires
+  pour tester `refreshCachedRecipe`/`bumpReanalysisHistory`). Vérification visuelle en navigateur non
+  obtenue (même limite d'environnement que les sessions précédentes).
+
+## Import de recettes — gestionnaire complet : collections + liste de courses (2026-08-07, session suivante)
+
+**Demande** : transformer "Mes recettes" en gestionnaire complet — (1) Collections : créer/renommer/
+supprimer, ajouter/retirer une recette (many-to-many), collections par défaut (Favoris/Meal Prep/
+Sèche/Prise de masse/Rapide/À tester) + collections personnalisées ; (2) Liste de courses : bouton
+"Ajouter à la liste de courses" depuis une recette (ou plusieurs, sélection multiple), fusion
+automatique des ingrédients identiques + somme des quantités, regroupement par rayon (Fruits et
+légumes/Viandes/Poissons/Produits laitiers/Épicerie/Surgelés/Boissons/Divers), cases à cocher,
+persistance. Contraintes : réutiliser l'architecture existante, ne rien casser, garder la
+compatibilité multi-sources (TikTok/YouTube/photo à venir), fournir les migrations, TypeScript/
+ESLint/Vitest/build verts.
+
+- **Migration** `20260825090000_recipe_collections_and_shopping_categories.sql` (additive) :
+  - `recipe_collections` (id, user_id, name unique par user, is_default, created_at/updated_at) +
+    `recipe_collection_recipes` (collection_id, recipe_id, user_id, added_at — clé primaire composite,
+    many-to-many). RLS `user_id = auth.uid()` sur les deux, mêmes conventions que `recipes`.
+  - `category text` (check sur la liste fermée des 8 rayons) ajouté sur `recipe_ingredients` ET
+    `shopping_list` — permet le regroupement de la liste de courses sans réintroduire un catalogue
+    d'ingrédients (celui-ci — `public.items` avec sa colonne `category` — a été entièrement supprimé
+    en migration `20260714145745` lors du retrait du module "Maison" ; pas de retour en arrière ici).
+- **Décision — "Favoris" reste VIRTUEL** : jamais une ligne `recipe_collections` — dérivé de
+  `recipes.is_favorite` (déjà câblé depuis la session "module Recettes", étoile sur chaque carte/fiche).
+  Le dupliquer en vraie collection aurait créé deux sources de vérité concurrentes pour le même concept.
+  `FAVORITES_COLLECTION_ID = "__favorites__"` (constante frontend, jamais envoyée en base) sert
+  uniquement de clé de filtre côté UI.
+- **Décision — seed des 5 collections par défaut : paresseux côté client**, pas de trigger DB. Le
+  pattern précédent (`home_categories`, seed au signup) a été entièrement retiré du code (module
+  "Maison" supprimé) — aucune référence active à suivre, et un trigger aurait ajouté un mécanisme non
+  testable simplement. `useCollections()` (`src/hooks/useCollections.ts`) : `seedDefaultCollectionsIfEmpty()`
+  insère Meal Prep/Sèche/Prise de masse/Rapide/À tester **seulement si** l'utilisateur n'a encore
+  aucune ligne (`count === 0`), avant chaque fetch de la liste — idempotent, aucun risque de doublon.
+- **Décision — catégorie ingrédient : IA d'abord, repli mot-clé ensuite**. `RECIPE_TOOL`
+  (`recipe-parser.ts`) gagne un champ `category` (enum des 8 rayons, `required`) sur chaque ingrédient
+  — coût IA nul (même appel multimodal qu'avant, un champ de plus dans le schéma tool-calling).
+  `nutrition-engine.ts` : nouvelle `sanitizeCategory()` (garde uniquement les valeurs de la liste
+  fermée, `null` sinon). Pour les recettes existantes/manuelles sans catégorie IA, nouveau module pur
+  `src/lib/nutrition/ingredientCategory.ts` (`guessIngredientCategory()` — règles mot-clé par rayon,
+  `resolveIngredientCategory()` — catégorie stockée sinon repli). Zéro appel réseau, zéro React.
+- **Backend — propagation `category`** : `RecipeIngredientExtraction`/`ImportedIngredient` (types
+  partagés backend + frontend, `INGREDIENT_CATEGORIES` dupliqué dans les deux comme le reste du
+  contrat) gagnent `category: IngredientCategory | null`. `recipe-db.ts` : les deux mappers
+  (`userRowToExtraction`/`RecipeIngredientRow`) et les deux inserts (`createUserRecipeFromExtraction`,
+  colonne `category` sur `recipe_ingredients`) portent le champ ; le cache global
+  (`recipe_import_cache.ingredients`, jsonb) le transporte automatiquement sans migration
+  supplémentaire (blob JSON, pas de colonne dédiée). `useRecipes.ts` (`RecipeIngredient`,
+  `RecipeIngredientPatch`) et `RecipeDetailSheet.tsx` (`startEditing`/`applyReanalysis`) propagent
+  `category` de bout en bout (édition manuelle, réanalyse).
+- **Nouveau `src/hooks/useCollections.ts`** : `useCollections()` (liste + seed paresseux),
+  `useCreateCollection()`/`useRenameCollection()`/`useDeleteCollection()`, `useRecipeCollectionIds(recipeId)`
+  (appartenances d'une recette), `useAddRecipeToCollection()`/`useRemoveRecipeFromCollection()` (upsert/
+  delete sur la table de jointure), `useCollectionRecipeIds(collectionId)` (recettes d'une collection,
+  désactivé si `FAVORITES_COLLECTION_ID` — le virtuel se filtre côté client sur `is_favorite`).
+- **Nouveau `src/components/fitness/CollectionsListSheet.tsx`** : créer (formulaire), renommer (inline,
+  Check/X), supprimer (confirmation inline) — jamais "Favoris" dans cette liste (toujours virtuel).
+- **`RecipesListSheet.tsx`** : chips de filtre horizontal (Toutes / Favoris virtuel / chaque collection
+  réelle) + bouton header "Gérer les collections" (`FolderCog`, ouvre `CollectionsListSheet`) + nouveau
+  **mode sélection multiple** (checkbox par carte, jamais imbriquée dans le `<button>` de la carte —
+  sibling comme l'étoile favori) avec barre d'action flottante "Ajouter N recette(s) à la liste de
+  courses" → `AddToShoppingListSheet`.
+- **`RecipeDetailSheet.tsx`** : nouvelle section "Collections" (chips toggle multi-sélection, exclut
+  volontairement Favoris — déjà géré par l'étoile dédiée, éviter un doublon d'affordance) + nouveau
+  bouton "Ajouter à la liste de courses" (une seule recette) → `AddToShoppingListSheet`.
+- **Nouveau `src/hooks/useShoppingList.ts`** — liste de courses depuis des recettes sélectionnées,
+  distinct de `useMealPlan.ts` (planning hebdo) mais réutilise le **même domaine pur**
+  `buildShoppingList`/`aggregateNeeds` (`src/lib/nutrition/shoppingList.ts`, étendu de façon additive
+  avec `category?` sur `PlannedIngredient`/`NeededIngredient`/`ShoppingLine` — 100% rétro-compatible
+  avec `MealPlanSheet.tsx`, aucune régression). `useRecipesShoppingPreview(recipeIds)` lit
+  `recipe_ingredients` des recettes sélectionnées avec `servings: 1` (les quantités y représentent déjà
+  la recette telle qu'écrite, contrairement au planning qui multiplie par les portions planifiées) et
+  résout la catégorie via `resolveIngredientCategory`. `useSaveRecipesShoppingList()` écrit dans
+  `shopping_list` (table **existante**, réutilisée telle quelle — `done`/persistance par utilisateur
+  déjà présents depuis la V1 planning). `useShoppingList()`/`useToggleShoppingItem()`/
+  `useDeleteShoppingItem()`/`useClearBoughtItems()` pour la lecture/le cochage/le nettoyage.
+- **Nouveau `src/components/fitness/AddToShoppingListSheet.tsx`** : aperçu de la fusion (une ou
+  plusieurs recettes), groupé par rayon, avant confirmation d'écriture — utilisé à la fois depuis
+  `RecipesListSheet` (sélection multiple) et `RecipeDetailSheet` (une recette), même composant.
+- **Nouveau `src/components/fitness/ShoppingListSheet.tsx`** : liste persistée groupée par rayon,
+  cases à cocher (achat), section "Achetés" séparée (opacité réduite, bouton "Vider"). Nouvelle entrée
+  "Liste de courses" dans `NutritionCommandCenter` (`NutritionTab.tsx`, section "tools", à côté de "Mes
+  recettes").
+- **Validation** : `tsc --noEmit` (0 erreur) / `eslint` sur tous les fichiers touchés (0 erreur, seuls
+  warnings pré-existants `no-explicit-any` sur `supabase as any`, même convention que `useMealPlan.ts`/
+  `useRecipes.ts`) / `npx vitest run` (1199 passed, 32 skipped — suite E2E `recipe-import` inchangée à
+  13 tests, `category` ajoutée au payload mock Gemini par défaut sans casser d'assertion existante) /
+  `npm run build` vert. `src/routeTree.gen.ts` (drift de build habituel) revert avant commit.
+  Vérification visuelle en navigateur non obtenue (même limite d'environnement que les sessions
+  précédentes — pas de serveur dev lancé/testé manuellement).
+- **Migration non appliquée à la base distante dans cette session** (comme les migrations des sessions
+  précédentes sur cette branche) — écrite et committée, sera appliquée par `migrate.yml` au merge vers
+  `main`, qui régénère aussi `src/integrations/supabase/types.ts` ensuite. Les hooks utilisent le
+  client `as any` (convention déjà en place pour toutes les tables Nutrition V2), donc aucune dépendance
+  de compilation sur `types.ts` pour ce module.
