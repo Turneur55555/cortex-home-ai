@@ -2798,10 +2798,75 @@ export type Database = {
         }
         Relationships: []
       }
+      recipe_collection_recipes: {
+        Row: {
+          added_at: string
+          collection_id: string
+          recipe_id: string
+          user_id: string
+        }
+        Insert: {
+          added_at?: string
+          collection_id: string
+          recipe_id: string
+          user_id: string
+        }
+        Update: {
+          added_at?: string
+          collection_id?: string
+          recipe_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recipe_collection_recipes_collection_id_fkey"
+            columns: ["collection_id"]
+            isOneToOne: false
+            referencedRelation: "recipe_collections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recipe_collection_recipes_recipe_id_fkey"
+            columns: ["recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recipe_collections: {
+        Row: {
+          created_at: string
+          id: string
+          is_default: boolean
+          name: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          name: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_default?: boolean
+          name?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       recipe_import_cache: {
         Row: {
+          ai_summary: string | null
           analyzed_at: string
           confidence: number | null
+          cook_minutes: number | null
           id: string
           ingredients: Json
           notes: string | null
@@ -2810,15 +2875,21 @@ export type Database = {
           per_serving_fats: number
           per_serving_fiber: number
           per_serving_proteins: number
+          prep_minutes: number | null
           servings: number
+          source_author: string | null
+          source_description: string | null
           source_image_url: string | null
           source_kind: string
           source_url: string
+          tags: string[] | null
           title: string
         }
         Insert: {
+          ai_summary?: string | null
           analyzed_at?: string
           confidence?: number | null
+          cook_minutes?: number | null
           id?: string
           ingredients?: Json
           notes?: string | null
@@ -2827,15 +2898,21 @@ export type Database = {
           per_serving_fats?: number
           per_serving_fiber?: number
           per_serving_proteins?: number
+          prep_minutes?: number | null
           servings?: number
+          source_author?: string | null
+          source_description?: string | null
           source_image_url?: string | null
           source_kind: string
           source_url: string
+          tags?: string[] | null
           title: string
         }
         Update: {
+          ai_summary?: string | null
           analyzed_at?: string
           confidence?: number | null
+          cook_minutes?: number | null
           id?: string
           ingredients?: Json
           notes?: string | null
@@ -2844,16 +2921,21 @@ export type Database = {
           per_serving_fats?: number
           per_serving_fiber?: number
           per_serving_proteins?: number
+          prep_minutes?: number | null
           servings?: number
+          source_author?: string | null
+          source_description?: string | null
           source_image_url?: string | null
           source_kind?: string
           source_url?: string
+          tags?: string[] | null
           title?: string
         }
         Relationships: []
       }
       recipe_ingredients: {
         Row: {
+          category: string | null
           created_at: string
           food_id: string | null
           grams: number | null
@@ -2867,6 +2949,7 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          category?: string | null
           created_at?: string
           food_id?: string | null
           grams?: number | null
@@ -2880,6 +2963,7 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          category?: string | null
           created_at?: string
           food_id?: string | null
           grams?: number | null
@@ -2911,10 +2995,12 @@ export type Database = {
       }
       recipes: {
         Row: {
+          ai_summary: string | null
           calories: number | null
           carbs_g: number | null
           category: string | null
           confidence: number | null
+          cook_minutes: number | null
           created_at: string
           description: string | null
           fat_g: number | null
@@ -2922,7 +3008,9 @@ export type Database = {
           id: string
           image_path: string | null
           instructions: string | null
+          is_favorite: boolean
           is_public: boolean
+          last_reanalyzed_at: string | null
           name: string
           notes: string | null
           per_serving_calories: number | null
@@ -2932,9 +3020,12 @@ export type Database = {
           per_serving_proteins: number | null
           prep_minutes: number | null
           protein_g: number | null
+          reanalysis_count: number
           saturated_fat_g: number | null
           servings: number
           source: string
+          source_author: string | null
+          source_description: string | null
           source_image_url: string | null
           source_kind: string | null
           source_url: string | null
@@ -2945,10 +3036,12 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          ai_summary?: string | null
           calories?: number | null
           carbs_g?: number | null
           category?: string | null
           confidence?: number | null
+          cook_minutes?: number | null
           created_at?: string
           description?: string | null
           fat_g?: number | null
@@ -2956,7 +3049,9 @@ export type Database = {
           id?: string
           image_path?: string | null
           instructions?: string | null
+          is_favorite?: boolean
           is_public?: boolean
+          last_reanalyzed_at?: string | null
           name: string
           notes?: string | null
           per_serving_calories?: number | null
@@ -2966,9 +3061,12 @@ export type Database = {
           per_serving_proteins?: number | null
           prep_minutes?: number | null
           protein_g?: number | null
+          reanalysis_count?: number
           saturated_fat_g?: number | null
           servings?: number
           source?: string
+          source_author?: string | null
+          source_description?: string | null
           source_image_url?: string | null
           source_kind?: string | null
           source_url?: string | null
@@ -2979,10 +3077,12 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          ai_summary?: string | null
           calories?: number | null
           carbs_g?: number | null
           category?: string | null
           confidence?: number | null
+          cook_minutes?: number | null
           created_at?: string
           description?: string | null
           fat_g?: number | null
@@ -2990,7 +3090,9 @@ export type Database = {
           id?: string
           image_path?: string | null
           instructions?: string | null
+          is_favorite?: boolean
           is_public?: boolean
+          last_reanalyzed_at?: string | null
           name?: string
           notes?: string | null
           per_serving_calories?: number | null
@@ -3000,9 +3102,12 @@ export type Database = {
           per_serving_proteins?: number | null
           prep_minutes?: number | null
           protein_g?: number | null
+          reanalysis_count?: number
           saturated_fat_g?: number | null
           servings?: number
           source?: string
+          source_author?: string | null
+          source_description?: string | null
           source_image_url?: string | null
           source_kind?: string | null
           source_url?: string | null
@@ -3257,6 +3362,7 @@ export type Database = {
       shopping_list: {
         Row: {
           added_at: string
+          category: string | null
           done: boolean
           id: string
           item_id: string | null
@@ -3267,6 +3373,7 @@ export type Database = {
         }
         Insert: {
           added_at?: string
+          category?: string | null
           done?: boolean
           id?: string
           item_id?: string | null
@@ -3277,6 +3384,7 @@ export type Database = {
         }
         Update: {
           added_at?: string
+          category?: string | null
           done?: boolean
           id?: string
           item_id?: string | null
