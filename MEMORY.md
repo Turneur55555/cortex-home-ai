@@ -3216,3 +3216,114 @@ rester manuel). Vérification faite sur les vrais workflows CI, pas une supposit
   pré-existants uniquement, non liés). Aucune application réelle de la migration ni déploiement de la
   fonction dans cette session (pas d'accès direct au projet Supabase prod depuis ce workflow — conforme
   à CLAUDE.md : migration → merge → `migrate.yml`/`deploy-functions.yml` appliquent).
+
+## Import de recettes — V2.1 cache global + pipeline Provider/Parser/Engine/DB + erreurs typées (2026-08-07, session suivante)
+- **Demande de Nathan** : rendre l'import Instagram « prêt pour la production » — cache GLOBAL (plus
+  seulement par utilisateur), architecture explicite `InstagramProvider -> Content Extraction ->
+  Recipe Parser -> Nutrition Engine -> Database`, erreurs différenciées par cas (URL invalide/privé/
+  supprimé/inaccessible/rate-limit/timeout/IA/serveur), et une vraie campagne de validation E2E sur 7
+  scénarios. UI et contrat `RecipeImporter` intacts (seule la ligne swallowant le message d'erreur dans
+  `RecipeImportSheet.tsx` a été corrigée — nécessité explicite du point 5).
+- **Découpage `supabase/functions/_shared/` (un fichier par étage du pipeline demandé)** :
+  - `recipe-import.ts` — contrats communs (`RecipeExtraction`, `SourceHandler`) + **`RecipeImportError`**
+    (classe avec `code: "invalid_url"|"private_post"|"deleted_post"|"content_unavailable"|
+    "instagram_rate_limited"|"timeout"|"ai_error"|"server_error"`) + helpers numériques.
+  - `instagram-provider.ts` — **Content Extraction**. Interface `InstagramProvider` (`fetchContent()`)
+    + `InstagramScraperProvider` (seule implémentation aujourd'hui, scraping `og:*` + téléchargement
+    miniature + transcription Whisper best-effort). Classification d'erreur au plus près de la source :
+    404→`deleted_post`, 429→`instagram_rate_limited`, redirection/texte de mur de connexion→
+    `private_post` (heuristique best-effort — pas d'API gratuite pour distinguer fiablement privé
+    d'un blocage anti-robot générique, limite documentée), `AbortSignal.timeout`→`timeout`, sinon
+    `content_unavailable`. Changer de fournisseur (API officielle/service payant demain) = implémenter
+    cette interface ailleurs, brancher dans `recipe-import-instagram.ts` — aucune autre étape à toucher.
+  - `recipe-parser.ts` — **Recipe Parser**. Un seul appel Gemini 2.5 Flash multimodal (tool calling,
+    `RECIPE_TOOL`/`RECIPE_SYSTEM_PROMPT` déplacés ici depuis `recipe-import.ts`), retourne le JSON brut
+    (non sanitisé) ou lève `RecipeImportError("ai_error"|"timeout", ...)`.
+  - `nutrition-engine.ts` — **Nutrition Engine**. `computeRecipeExtraction(raw, imageUrl, signals)` :
+    bornes/typage + calcul du score de confiance final (pénalité cumulée selon
+    `hasTranscript`/`hasCaption`/`hasImage`, déplacé ici depuis l'ancien `recipe-import-instagram.ts`).
+    Zéro appel réseau — logique pure, testable isolément.
+  - `recipe-db.ts` — **Database**, deux couches : (1) cache global service_role (`findCachedRecipe`/
+    `saveCachedRecipe` sur `recipe_import_cache`, clé `(source_kind, source_url)`, écriture non-fatale
+    en cas d'échec, réutilise le gagnant sur course `23505`) ; (2) association par utilisateur
+    (`findUserRecipe`/`createUserRecipeFromExtraction` sur `recipes`/`recipe_ingredients`, inchangées
+    depuis la V2) — **rollback** : si l'insert `recipe_ingredients` échoue, la ligne `recipes` tout
+    juste créée est supprimée avant de relancer l'erreur (« aucun enregistrement incomplet »).
+  - `recipe-import-instagram.ts` — devient un simple adaptateur : `makeInstagramHandler(provider)`
+    compose Provider → Parser → Engine et implémente `SourceHandler` (validation d'URL anti-SSRF
+    inchangée, migrée vers `RecipeImportError("invalid_url", ...)`).
+  - `recipe-import-handler.ts` (nouveau) — **`handleRecipeImport(rawBody, deps)`**, toute l'orchestration
+    extraite de `index.ts` (dédoublonnage par utilisateur → cache global → pipeline → persistance),
+    zéro dépendance à `Deno.serve`/`Deno.env` (déps injectées) — extraction volontaire, comportement
+    identique, uniquement pour rendre le tout testable sans session Deno déployée (voir Validation).
+    `recipe-import/index.ts` devient un wrapper HTTP de ~50 lignes (CORS, auth, lecture des secrets,
+    parsing du corps) qui appelle cette fonction et sérialise sa réponse.
+- **Cache global (le cœur de la demande)** — migration `20260822090000_recipe_import_global_cache.sql` :
+  nouvelle table `recipe_import_cache` (SANS `user_id`), clé unique `(source_kind, source_url)`, RLS
+  activée avec UNE SEULE policy `select` (`to authenticated using (true)`) — aucune policy insert/
+  update/delete : seule la clé `SUPABASE_SERVICE_ROLE_KEY` (bypass RLS, précédent déjà établi par
+  `food-lookup/index.ts` pour son cache `foods` partagé) peut y écrire, jamais un utilisateur final.
+  `recipe-import/index.ts` crée un client `admin` avec cette clé (dégrade proprement en `null` — donc
+  pas de cache global, comportement V2 — si le secret n'est pas configuré) ; `recipes`/
+  `recipe_ingredients` restent PAR UTILISATEUR (RLS `user_id = auth.uid()` inchangée) pour ne rien
+  casser côté `useRecipes.ts`/`RecipeLogSheet`/`MealPlanSheet`. Flux : 1) déjà associée à CET
+  utilisateur ? retour immédiat, zéro coût. 2) sinon, déjà en cache global (n'importe quel utilisateur) ?
+  copie DB pure vers une nouvelle ligne `recipes`+`recipe_ingredients` pour l'utilisateur courant, ZÉRO
+  appel Gemini/scraping/transcription, zéro rate-limit consommé. 3) sinon seulement : pipeline complet,
+  écriture cache, `recordRateLimit`.
+- **Erreurs différenciées (point 5)** : `respondError`/`errorFromException` mappent chaque
+  `RecipeImportError` vers `{ error: message, code }` (toujours HTTP 200, convention `scan-meal`).
+  `RecipeImportSheet.tsx` — bug trouvé en implémentant ce point : le `catch { setError("L'analyse a
+  échoué...") }` de V1/V2 ignorait totalement le message réel remonté par l'edge function, TOUJOURS le
+  même texte générique affiché quelle que soit la cause. Corrigé en `catch (e) { setError(e instanceof
+  Error && e.message ? e.message : "...") }` — un seul changement de ligne, aucun autre changement visuel/
+  UI.
+- **Campagne de validation E2E (point 7)** : `supabase/functions/recipe-import/recipe-import.e2e.test.ts`
+  (12 tests), exécutée via Vitest — `vitest.config.ts` étendu avec `supabase/functions/**/*.test.ts`
+  (nouveau glob, aucun test existant déplacé). Fake client Supabase maison (postgrest-like, chainable +
+  thenable, avec simulation de violation de contrainte unique `23505` pour tester les courses) + `fetch`
+  stubbé par scénario (page Instagram / miniature / Gemini). **Important : ce sandbox n'a ni session Deno
+  déployée ni clé IA/Instagram réelle** — ces tests exercent le VRAI code de production
+  (`handleRecipeImport`, extrait exactement pour ça) contre un réseau/DB simulés, pas contre
+  l'infrastructure réelle. Les 7 scénarios demandés + 5 complémentaires, tous verts :
+  - Cas 1 (Reel public) : recette + 3 ingrédients + macros créés, cache global écrit.
+  - Cas 2 (même Reel, 2e utilisateur) : `cached:true`, **zéro appel fetch**, 1 seule ligne cache
+    globale mais 2 lignes `recipes` (une par utilisateur, comportement attendu) — `recipeId` différent
+    entre les deux utilisateurs pour la même publication.
+  - Cas 2bis (même utilisateur réimporte) : association déjà existante réutilisée, zéro appel réseau.
+  - Cas 3 (URL invalide) : `code: "invalid_url"`, rien en base.
+  - Cas 4 (compte privé, heuristique mur de connexion) : `code: "private_post"`, rien en base.
+  - Cas 5 (404) : `code: "deleted_post"`, rien en base.
+  - Cas 6 (Gemini 503) + Cas 6bis (tool_call vide) : `code: "ai_error"`, AUCUNE ligne créée nulle part
+    (recipes/recipe_ingredients/cache tous vides) — pas d'enregistrement partiel.
+  - Cas 7 (timeout `DOMException("TimeoutError")` sur le fetch Instagram) : `code: "timeout"`.
+  - Complémentaires découverts en testant : 429 Instagram → `instagram_rate_limited` (jamais confondu
+    avec un timeout) ; échec d'insert `recipe_ingredients` → la ligne `recipes` orpheline est bien
+    supprimée (rollback vérifié directement, pas juste supposé) ; source pas encore disponible (tiktok)
+    → message explicite, aucun crash.
+- **Temps d'import** : mesuré dans le test Cas 2 (`performance.now()`), mais la preuve solide n'est PAS
+  le chronométrage (bruité par les mocks) — c'est l'assertion `expect(fetchMock).not.toHaveBeenCalled()`
+  sur le 2e import : structurellement, aucun appel réseau (donc aucun Instagram/Whisper/Gemini) n'a lieu
+  sur un cache hit. En production, ça élimine ~10-30s (scraping + transcription + appel Gemini) au
+  profit de 2 requêtes DB.
+- **Fichiers modifiés/créés** : migration `20260822090000_recipe_import_global_cache.sql` (nouvelle
+  table) ; `_shared/{recipe-import.ts (réduit), instagram-provider.ts, recipe-parser.ts,
+  nutrition-engine.ts, recipe-db.ts, recipe-import-handler.ts}` (nouveaux/réécrits) ;
+  `_shared/recipe-import-instagram.ts` (réécrit en adaptateur fin) ; `recipe-import/index.ts` (réduit à
+  un wrapper HTTP) ; `recipe-import/recipe-import.e2e.test.ts` (nouveau) ; `vitest.config.ts` (glob
+  étendu) ; `RecipeImportSheet.tsx` (1 ligne, bug de message d'erreur).
+- **Dépendances externes / limitations restantes** : `GEMINI_API_KEY` obligatoire (déjà en place),
+  `OPENAI_API_KEY` optionnelle (transcription best-effort), **`SUPABASE_SERVICE_ROLE_KEY` désormais
+  nécessaire** pour que le cache global fonctionne (sans elle, `admin` est `null` et le comportement
+  redevient celui de la V2 — dédoublonnage par utilisateur uniquement, un avertissement `console.log`
+  le signale). Scraping Instagram toujours sans garantie (pas d'API officielle gratuite) — la
+  distinction privé/bloqué reste une heuristique. Migration et déploiement de la fonction pas encore
+  effectués dans cette session (même limite que la session précédente : CI applique au merge sur
+  `main`).
+- **Validation** : `tsc --noEmit` (0 erreur) / `eslint` sur tous les fichiers touchés (0 erreur,
+  warnings `no-console`/`no-explicit-any` = conventions déjà établies sur `scan-meal`/tests) /
+  `npx vitest run` (1198 passed / 32 skipped, +12 vs avant, 0 régression) / `npm run build` (client +
+  SSR + PWA) / `scripts/validate-supabase.mjs` (0 erreur, 3 avertissements pré-existants non liés) tous
+  verts. Pas de `deno check` disponible dans ce sandbox (même limite documentée dans les sessions
+  précédentes) — contournée cette fois par l'extraction `recipe-import-handler.ts`, qui permet un test
+  Vitest réel du code de production plutôt qu'une simple vérification de syntaxe.
