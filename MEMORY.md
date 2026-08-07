@@ -3095,3 +3095,48 @@ rester manuel). Vérification faite sur les vrais workflows CI, pas une supposit
 - **`src/routeTree.gen.ts`** : régénéré localement par les outils (tsc/build) avec 10 lignes en plus
   qu'une modification amont avait délibérément retirées — reverté avant commit pour ne pas écraser ce
   changement upstream (non lié à cette feature).
+
+## Import de recettes — audit V1 (déjà livrée par Lovable) (2026-08-07)
+- **Contexte** : demande de « reprendre le développement » de l'import de recettes (Instagram en
+  priorité, architecture prête pour TikTok/YouTube Shorts/vidéo locale/photo/URL). Audit du commit
+  `93088b3` (« Crée la V1 d'import recette », déjà sur `main`) : la V1 complète existait déjà, rien à
+  réécrire — seul un correctif de formatage a été appliqué (voir plus bas).
+- **`src/lib/nutrition/recipeImport/types.ts`** (domaine pur, zéro React/couleur) : contrats partagés
+  par toutes les sources — `RecipeSourceKind` (instagram/tiktok/youtube-shorts/local-video/photo/
+  recipe-url), `ImportStage` (étape de pipeline + durée simulée), `ImportedIngredient`/`ImportedMacros`/
+  `ImportedRecipe` (fiche générée), `ImportInput` (`{kind:"url"}` ou `{kind:"file"}`), interface
+  `RecipeImporter` (`canHandle`/`stages`/`run`). Helpers `confidenceLabel()` et `totalMacros()`.
+- **`src/lib/nutrition/recipeImport/index.ts`** : registre `RECIPE_IMPORTERS` — un seul
+  `createMockImporter()` factory partagé par toutes les sources (V1 = toutes simulées). Seul
+  `instagramImporter` a `available: true` (regex `INSTAGRAM_RE` sur reel/reels/p/tv) ; les 5 autres
+  sont déclarées avec `available: false` et leur propre `canHandle` (déjà correct pour reconnaître
+  leur type d'entrée le jour où elles seront activées), donc **aucun changement de code n'est requis
+  pour activer une nouvelle source** — juste passer `available: true` + brancher un vrai `run()`.
+  Pipeline simulé déterministe : `pickMock(seed)` hash l'URL/nom de fichier pour choisir une des 3
+  fiches mockées (poulet parmesan, bowl saumon, pancakes protéinés) → mêmes résultats pour le même
+  lien, pratique pour tester/démo. 7 étapes (`download → transcribe → vision → ingredients →
+  quantities → nutrition → card`), ~6.5s au total.
+- **`src/components/fitness/RecipeImportSheet.tsx`** (546 l., UI only) : `FullscreenSheet` avec 3
+  phases (`input`/`running`/`result`, `AnimatePresence`) — champ URL avec validation via
+  `resolveImporter()` (message clair si lien non reconnu ou source « bientôt »), liste des étapes en
+  cours avec coche/spinner, fiche résultat éditable (`RecipeResultCard` : titre, portions, macros par
+  portion, ingrédients, jauge de confiance) avec bouton Modifier (inline, pas de sous-écran) et
+  Ajouter au journal (sélection repas via `MealSelect`, portions à logger, appelle
+  `useAddNutrition()` déjà existant — aucune nouvelle mutation Supabase).
+- **Navigation** : intégré à `NutritionTab.tsx` via `NutritionCommandCenter` (le "+"), action
+  `import-recipe` dans la section « Ajouter » — cohérent avec les 13 autres actions du même menu.
+  État `recipeImportOpen` au niveau de la page, sheet monté conditionnellement comme les autres
+  (`analysisOpen`, `voiceOpen`, etc.).
+- **Correctif appliqué cette session** : `types.ts` avait une erreur `prettier/prettier` (union type
+  `ImportInput` sur plusieurs lignes au lieu d'une) — `eslint --fix`, aucun changement fonctionnel.
+- **Restant pour la V2 (backend réel)** : téléchargement effectif du Reel Instagram (edge function,
+  cf. règle `GEMINI_API_KEY`), transcription audio + vision sur les frames, extraction ingrédients/
+  quantités par IA, persistance de la fiche importée (actuellement non sauvegardée en base — la V1
+  ne fait que logger les macros calculées dans `nutrition_entries` via `useAddNutrition`, la recette
+  elle-même n'est pas stockée dans `recipes`/`recipe_ingredients`). Aucun de ces points ne nécessite
+  de changement d'UI ou de contrat `RecipeImporter` : remplacer `run()` d'`instagramImporter` par un
+  appel edge function réel, garder la même signature.
+- **Validation** : `tsc --noEmit` / `npx vitest run src/lib/nutrition` (52 passed) / `eslint` ciblé
+  sur les fichiers du module (0 erreur après fix) verts. Vérification visuelle en navigateur non
+  obtenue (même limite d'environnement que les sessions précédentes — pas de bind IPv6 pour le
+  serveur dev Lovable dans ce sandbox).

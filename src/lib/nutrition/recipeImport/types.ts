@@ -56,9 +56,7 @@ export interface ImportedRecipe {
   notes?: string;
 }
 
-export type ImportInput =
-  | { kind: "url"; value: string }
-  | { kind: "file"; value: File };
+export type ImportInput = { kind: "url"; value: string } | { kind: "file"; value: File };
 
 export interface RecipeImporter {
   kind: RecipeSourceKind;
