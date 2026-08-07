@@ -59,6 +59,7 @@ import { NutritionAnalysisSheet } from "@/components/fitness/NutritionAnalysisSh
 import { WeightEditModal } from "@/components/fitness/WeightEditModal";
 import { NutritionHistorySheet } from "@/components/fitness/NutritionHistorySheet";
 import { VoiceLogSheet } from "@/components/fitness/VoiceLogSheet";
+import { RecipeImportSheet } from "@/components/fitness/RecipeImportSheet";
 import { SwipeableNutritionItem } from "@/components/fitness/SwipeableNutritionItem";
 import { useCreateSavedMeal } from "@/hooks/use-saved-meals";
 import { getWeightBadge } from "@/lib/nutrition/utils";
@@ -148,6 +149,7 @@ export function NutritionTab() {
   const [weightEditItem, setWeightEditItem] = useState<NutritionEntry | null>(null);
   const [analysisOpen, setAnalysisOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
+  const [recipeImportOpen, setRecipeImportOpen] = useState(false);
   const [commandCenterOpen, setCommandCenterOpen] = useState(false);
   const createSavedMeal = useCreateSavedMeal();
   const [saveGroupKey, setSaveGroupKey] = useState<string | null>(null);
@@ -719,6 +721,7 @@ export function NutritionTab() {
           else if (action === "scan") setScanOpen(true);
           else if (action === "barcode") setBarcodeOpen(true);
           else if (action === "voice") setVoiceOpen(true);
+          else if (action === "import-recipe") setRecipeImportOpen(true);
           else if (action === "analysis") setAnalysisOpen(true);
           else if (action === "history") setHistoryOpen(true);
           else if (action === "plan") setPlanOpen(true);
@@ -737,6 +740,9 @@ export function NutritionTab() {
       {barcodeOpen && <BarcodeScannerSheet date={date} onClose={() => setBarcodeOpen(false)} />}
       {analysisOpen && <NutritionAnalysisSheet onClose={() => setAnalysisOpen(false)} />}
       {voiceOpen && <VoiceLogSheet date={date} onClose={() => setVoiceOpen(false)} />}
+      {recipeImportOpen && (
+        <RecipeImportSheet date={date} onClose={() => setRecipeImportOpen(false)} />
+      )}
       {copyOpen && (
         <Portal>
           <div
@@ -959,6 +965,7 @@ type CommandAction =
   | "scan"
   | "barcode"
   | "voice"
+  | "import-recipe"
   | "analysis"
   | "history"
   | "plan"
@@ -1019,6 +1026,12 @@ const COMMAND_SECTIONS: CommandSection[] = [
         icon: Mic,
         title: "Saisie vocale",
         description: "Décrire un repas à voix haute.",
+      },
+      {
+        action: "import-recipe",
+        icon: Link2,
+        title: "Importer une recette",
+        description: "Coller un lien Instagram et générer la fiche nutritionnelle.",
       },
     ],
   },
