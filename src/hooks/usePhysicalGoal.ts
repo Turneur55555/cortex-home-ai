@@ -1,13 +1,45 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { db } from "@/integrations/supabase/db";
+import { useAuth } from "@/hooks/use-auth";
+import { getIsOnline } from "@/lib/offline/networkStatus";
+import { createOfflineRepository, hydrateEntitiesFromServer } from "@/lib/offline/repository";
 import type {
   CalorieStrategyGoal,
   FatLossRate,
   MuscleGainRate,
 } from "@/lib/fitness/calorieStrategy";
 import { isKnownBodyFatMethod, type BodyFatMethod } from "@/lib/fitness/bodyComposition";
+
+/**
+ * Offline-first (cf. src/lib/offline/) — table `physical_goals`, même pattern
+ * que `useRecipes.ts`/`usePhysicalGoal.ts` d'origine : écriture toujours
+ * locale (IndexedDB) d'abord, mise en queue de sync, lecture avec
+ * hydratation en ligne + fallback local hors connexion. La contrainte "au
+ * plus un objectif actif" (migration 20260814090000) est respectée
+ * localement : `useCreatePhysicalGoal` clôture d'abord tout objectif actif
+ * trouvé dans le store local avant de créer le nouveau, sans appel réseau.
+ */
+
+export interface PhysicalGoalRow {
+  id: string;
+  user_id: string;
+  goal: string;
+  target_rate: string | null;
+  started_at: string;
+  starting_weight_kg: number | null;
+  starting_body_fat_percent: number | null;
+  starting_body_fat_method: string | null;
+  starting_lean_mass_kg: number | null;
+  target_weight_kg: number | null;
+  target_body_fat_percent: number | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+}
+
+export const physicalGoalsRepo = createOfflineRepository<PhysicalGoalRow>("physical_goals");
 
 export interface PhysicalGoal {
   id: string;
@@ -37,24 +69,7 @@ function isPhysicalGoalStatus(value: unknown): value is PhysicalGoal["status"] {
   return value === "active" || value === "completed" || value === "cancelled";
 }
 
-const SELECT_COLUMNS =
-  "id, goal, target_rate, started_at, starting_weight_kg, starting_body_fat_percent, starting_body_fat_method, starting_lean_mass_kg, target_weight_kg, target_body_fat_percent, status, created_at, completed_at";
-
-function mapRow(data: {
-  id: string;
-  goal: string;
-  target_rate: string | null;
-  started_at: string;
-  starting_weight_kg: number | null;
-  starting_body_fat_percent: number | null;
-  starting_body_fat_method: string | null;
-  starting_lean_mass_kg: number | null;
-  target_weight_kg: number | null;
-  target_body_fat_percent: number | null;
-  status: string;
-  created_at: string;
-  completed_at: string | null;
-}): PhysicalGoal {
+function mapRow(data: PhysicalGoalRow): PhysicalGoal {
   return {
     id: data.id,
     goal: isCalorieStrategyGoal(data.goal) ? data.goal : "maintenance",
@@ -74,47 +89,53 @@ function mapRow(data: {
   };
 }
 
+async function refreshFromServer(userId: string): Promise<void> {
+  if (!getIsOnline()) return;
+  try {
+    const { data, error } = await supabase.from("physical_goals").select("*").eq("user_id", userId);
+    if (!error && data) {
+      await hydrateEntitiesFromServer("physical_goals", userId, data as PhysicalGoalRow[]);
+    }
+  } catch {
+    // Hors ligne ou erreur réseau : on continue avec le store local.
+  }
+}
+
 /** Objectif physique ACTIF de l'utilisateur — au plus un à la fois (contrainte DB, migration 20260814090000). */
 export function usePhysicalGoal() {
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
   return useQuery({
-    queryKey: ["physical_goals", "active"],
+    queryKey: ["physical_goals", "active", userId],
+    enabled: !!userId,
     staleTime: 60_000,
     queryFn: async (): Promise<PhysicalGoal | null> => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return null;
-      const { data, error } = await db
-        .from("physical_goals")
-        .select(SELECT_COLUMNS)
-        .eq("user_id", user.id)
-        .eq("status", "active")
-        .maybeSingle();
-      if (error) throw error;
-      return data ? mapRow(data) : null;
+      if (!userId) return null;
+      await refreshFromServer(userId);
+      const local = await physicalGoalsRepo.list(userId);
+      const active = local.find((g) => g.status === "active");
+      return active ? mapRow(active) : null;
     },
   });
 }
 
 /** Historique (objectifs terminés/annulés) — pas de grosse UI dédiée (§46 du brief), utilisé pour un affichage compact si besoin. */
 export function usePhysicalGoalHistory() {
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
   return useQuery({
-    queryKey: ["physical_goals", "history"],
+    queryKey: ["physical_goals", "history", userId],
+    enabled: !!userId,
     staleTime: 60_000,
     queryFn: async (): Promise<PhysicalGoal[]> => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return [];
-      const { data, error } = await db
-        .from("physical_goals")
-        .select(SELECT_COLUMNS)
-        .eq("user_id", user.id)
-        .neq("status", "active")
-        .order("started_at", { ascending: false })
-        .limit(20);
-      if (error) throw error;
-      return (data ?? []).map(mapRow);
+      if (!userId) return [];
+      await refreshFromServer(userId);
+      const local = await physicalGoalsRepo.list(userId);
+      return local
+        .filter((g) => g.status !== "active")
+        .sort((a, b) => b.started_at.localeCompare(a.started_at))
+        .slice(0, 20)
+        .map(mapRow);
     },
   });
 }
@@ -135,40 +156,25 @@ export interface CreatePhysicalGoalInput {
  * Crée un nouvel objectif ACTIF avec un snapshot de départ figé (§17 du
  * brief — jamais recalculé ensuite). Si un objectif actif existe déjà, il
  * est d'abord clôturé en `cancelled` (§21 : changer d'objectif clôture
- * l'ancien plutôt que de réécrire son historique) — deux écritures
- * séquentielles, non transactionnelles : en cas d'échec entre les deux,
- * l'état récupérable est "aucun objectif actif" (jamais deux objectifs
- * actifs, la contrainte unique DB l'empêche de toute façon), jamais une
- * perte de données puisque l'ancien objectif reste en base, seulement son
- * statut à corriger manuellement dans ce cas rarissime.
+ * l'ancien plutôt que de réécrire son historique) — deux écritures locales
+ * séquentielles (toujours locales d'abord, cf. offline-first) : en cas de
+ * coupure entre les deux, l'état récupérable est "aucun objectif actif"
+ * (jamais deux objectifs actifs localement, on ne crée le nouveau qu'après
+ * avoir clos l'ancien), jamais une perte de données puisque l'ancien
+ * objectif reste dans le store local avec son statut mis à jour.
  */
 export function useCreatePhysicalGoal() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async (input: CreatePhysicalGoalInput) => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-
-      const { data: existingActive, error: existingError } = await db
-        .from("physical_goals")
-        .select("id")
-        .eq("user_id", user.id)
-        .eq("status", "active")
-        .maybeSingle();
-      if (existingError) throw existingError;
+      const local = await physicalGoalsRepo.list(user.id);
+      const existingActive = local.find((g) => g.status === "active");
       if (existingActive) {
-        const { error: cancelError } = await db
-          .from("physical_goals")
-          .update({ status: "cancelled" })
-          .eq("id", existingActive.id)
-          .eq("user_id", user.id);
-        if (cancelError) throw cancelError;
+        await physicalGoalsRepo.update(existingActive.id, user.id, { status: "cancelled" });
       }
-
-      const { error } = await db.from("physical_goals").insert({
-        user_id: user.id,
+      await physicalGoalsRepo.create(user.id, {
         goal: input.goal,
         target_rate: input.targetRate,
         started_at: input.startedAt,
@@ -179,8 +185,8 @@ export function useCreatePhysicalGoal() {
         target_weight_kg: input.targetWeightKg,
         target_body_fat_percent: input.targetBodyFatPercent,
         status: "active",
+        completed_at: null,
       });
-      if (error) throw error;
     },
     onSuccess: () => {
       toast.success("Objectif physique enregistré");
@@ -193,18 +199,11 @@ export function useCreatePhysicalGoal() {
 /** Change uniquement le rythme de l'objectif actif — la trajectoire future est recalculée à la lecture (jamais persistée), l'historique n'est jamais réécrit (§45 du brief). */
 export function useUpdatePhysicalGoalRate() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async (input: { id: string; targetRate: FatLossRate | MuscleGainRate | null }) => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      const { error } = await db
-        .from("physical_goals")
-        .update({ target_rate: input.targetRate })
-        .eq("id", input.id)
-        .eq("user_id", user.id);
-      if (error) throw error;
+      await physicalGoalsRepo.update(input.id, user.id, { target_rate: input.targetRate });
     },
     onSuccess: () => {
       toast.success("Rythme mis à jour");
@@ -217,18 +216,11 @@ export function useUpdatePhysicalGoalRate() {
 /** Annule l'objectif actif — reste en base, historisé (§46). */
 export function useCancelPhysicalGoal() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async (id: string) => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      const { error } = await db
-        .from("physical_goals")
-        .update({ status: "cancelled" })
-        .eq("id", id)
-        .eq("user_id", user.id);
-      if (error) throw error;
+      await physicalGoalsRepo.update(id, user.id, { status: "cancelled" });
     },
     onSuccess: () => {
       toast.success("Objectif annulé");
@@ -241,18 +233,14 @@ export function useCancelPhysicalGoal() {
 /** Marque l'objectif actif comme atteint — TOUJOURS une action utilisateur explicite (§43 : jamais automatique sur une seule pesée), même quand `isWeightGoalLikelyReached` le suggère. */
 export function useCompletePhysicalGoal() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async (id: string) => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      const { error } = await db
-        .from("physical_goals")
-        .update({ status: "completed", completed_at: new Date().toISOString() })
-        .eq("id", id)
-        .eq("user_id", user.id);
-      if (error) throw error;
+      await physicalGoalsRepo.update(id, user.id, {
+        status: "completed",
+        completed_at: new Date().toISOString(),
+      });
     },
     onSuccess: () => {
       toast.success("Objectif marqué comme atteint");
