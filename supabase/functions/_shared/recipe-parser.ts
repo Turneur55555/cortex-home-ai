@@ -6,6 +6,7 @@
 // fait que parler à l'IA et parser sa réponse.
 import { INGREDIENT_CATEGORIES, RECIPE_TAGS, RecipeImportError } from "./recipe-import.ts";
 import type { InstagramContent } from "./instagram-provider.ts";
+import { buildLanguageDirective, detectLanguage } from "./recipe-language.ts";
 
 export const RECIPE_TOOL = {
   type: "function",
