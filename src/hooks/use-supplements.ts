@@ -1,7 +1,23 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/use-auth";
+import { getIsOnline } from "@/lib/offline/networkStatus";
+import { createOfflineRepository, hydrateEntitiesFromServer } from "@/lib/offline/repository";
 
+/**
+ * `supplements` (catalogue perso, id + updated_at) est offline-first (cf.
+ * src/lib/offline/), même pattern que `useRecipes.ts` : écriture toujours
+ * locale (IndexedDB) d'abord, sync en arrière-plan.
+ *
+ * `supplement_logs` reste ONLINE-ONLY : pas de colonne `updated_at`, et son
+ * upsert est indexé sur la clé composite `(user_id, supplement_id, date)`
+ * plutôt que sur `id` — incompatible avec le repository générique qui
+ * suppose une identité par `id` (même raisonnement que `nutrition_goals`
+ * exclue en vague précédente). Conséquence hors connexion : la liste des
+ * compléments reste consultable (cache local), mais cocher/décocher "pris
+ * aujourd'hui" nécessite une connexion.
+ */
 
 export type Supplement = {
   id: string;
@@ -27,53 +43,75 @@ export type SupplementLog = {
 
 export type SupplementWithLog = Supplement & { taken: boolean };
 
+export const supplementsRepo = createOfflineRepository<Supplement>("supplements");
+
+async function listSupplements(userId: string): Promise<Supplement[]> {
+  if (getIsOnline()) {
+    try {
+      const { data, error } = await supabase.from("supplements").select("*").eq("user_id", userId);
+      if (!error && data) {
+        await hydrateEntitiesFromServer("supplements", userId, data as Supplement[]);
+      }
+    } catch {
+      // Hors ligne ou erreur réseau : on continue avec le store local.
+    }
+  }
+  const local = await supplementsRepo.list(userId);
+  return [...local].sort((a, b) => {
+    if (a.sort_order !== b.sort_order) return a.sort_order - b.sort_order;
+    return a.created_at.localeCompare(b.created_at);
+  });
+}
+
 export function useSupplements(date: string) {
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
   return useQuery({
-    queryKey: ["supplements", date],
+    queryKey: ["supplements", date, userId],
+    enabled: !!userId,
     staleTime: 30_000,
     queryFn: async (): Promise<SupplementWithLog[]> => {
-      const [{ data: sups, error: sErr }, { data: logs, error: lErr }] =
-        await Promise.all([
-          supabase
-            .from("supplements")
-            .select("*")
-            .eq("is_active", true)
-            .order("sort_order", { ascending: true })
-            .order("created_at", { ascending: true }),
-          supabase.from("supplement_logs").select("*").eq("date", date),
-        ]);
-      if (sErr) throw sErr;
-      if (lErr) throw lErr;
-      const takenSet = new Set(
-        ((logs ?? []) as SupplementLog[])
-          .filter((l) => l.taken)
-          .map((l) => l.supplement_id),
-      );
-      return ((sups ?? []) as Supplement[]).map((s) => ({
-        ...s,
-        taken: takenSet.has(s.id),
-      }));
+      if (!userId) return [];
+      const sups = (await listSupplements(userId)).filter((s) => s.is_active);
+
+      let takenSet = new Set<string>();
+      try {
+        const { data: logs, error: lErr } = await supabase
+          .from("supplement_logs")
+          .select("*")
+          .eq("user_id", userId)
+          .eq("date", date);
+        if (!lErr && logs) {
+          takenSet = new Set(
+            ((logs ?? []) as SupplementLog[]).filter((l) => l.taken).map((l) => l.supplement_id),
+          );
+        }
+      } catch {
+        // Hors ligne : impossible de savoir ce qui a été coché aujourd'hui,
+        // on affiche la liste sans état "pris" plutôt que de tout faire échouer.
+      }
+
+      return sups.map((s) => ({ ...s, taken: takenSet.has(s.id) }));
     },
   });
 }
 
 export function useAllSupplements() {
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
   return useQuery({
-    queryKey: ["supplements", "all"],
+    queryKey: ["supplements", "all", userId],
+    enabled: !!userId,
     queryFn: async (): Promise<Supplement[]> => {
-      const { data, error } = await supabase
-        .from("supplements")
-        .select("*")
-        .order("sort_order", { ascending: true })
-        .order("created_at", { ascending: true });
-      if (error) throw error;
-      return (data ?? []) as Supplement[];
+      if (!userId) return [];
+      return listSupplements(userId);
     },
   });
 }
 
 export function useCreateSupplement() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async (input: {
       name: string;
@@ -81,18 +119,15 @@ export function useCreateSupplement() {
       unit?: string | null;
       notes?: string | null;
     }) => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      const { error } = await supabase.from("supplements").insert({
-        user_id: user.id,
+      await supplementsRepo.create(user.id, {
         name: input.name.trim(),
         dosage: input.dosage?.trim() || null,
         unit: input.unit?.trim() || null,
         notes: input.notes?.trim() || null,
+        sort_order: 0,
+        is_active: true,
       });
-      if (error) throw error;
     },
     onSuccess: () => {
       toast.success("Complément ajouté");
@@ -104,24 +139,19 @@ export function useCreateSupplement() {
 
 export function useUpdateSupplement() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async ({
       id,
       patch,
     }: {
       id: string;
-      patch: Partial<Pick<Supplement, "name" | "dosage" | "unit" | "notes" | "is_active" | "sort_order">>;
+      patch: Partial<
+        Pick<Supplement, "name" | "dosage" | "unit" | "notes" | "is_active" | "sort_order">
+      >;
     }) => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      const { error } = await supabase
-        .from("supplements")
-        .update(patch)
-        .eq("id", id)
-        .eq("user_id", user.id);
-      if (error) throw error;
+      await supplementsRepo.update(id, user.id, patch);
     },
     onSuccess: () => {
       toast.success("Complément mis à jour");
@@ -133,18 +163,11 @@ export function useUpdateSupplement() {
 
 export function useDeleteSupplement() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async (id: string) => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      const { error } = await supabase
-        .from("supplements")
-        .delete()
-        .eq("id", id)
-        .eq("user_id", user.id);
-      if (error) throw error;
+      await supplementsRepo.remove(id, user.id);
     },
     onSuccess: () => {
       toast.success("Complément supprimé");
@@ -154,16 +177,11 @@ export function useDeleteSupplement() {
   });
 }
 
+/** Journal de prise (`supplement_logs`) — online-only, cf. note d'en-tête. */
 export function useToggleSupplementLog(date: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({
-      supplement_id,
-      taken,
-    }: {
-      supplement_id: string;
-      taken: boolean;
-    }) => {
+    mutationFn: async ({ supplement_id, taken }: { supplement_id: string; taken: boolean }) => {
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -188,15 +206,12 @@ export function useToggleSupplementLog(date: string) {
           .eq("date", date);
         if (error) throw error;
       }
-
     },
     onMutate: async ({ supplement_id, taken }) => {
       await qc.cancelQueries({ queryKey: ["supplements", date] });
       const prev = qc.getQueryData<SupplementWithLog[]>(["supplements", date]);
       qc.setQueryData<SupplementWithLog[]>(["supplements", date], (old) =>
-        (old ?? []).map((s) =>
-          s.id === supplement_id ? { ...s, taken } : s,
-        ),
+        (old ?? []).map((s) => (s.id === supplement_id ? { ...s, taken } : s)),
       );
       return { prev };
     },
