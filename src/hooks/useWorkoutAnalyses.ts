@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { db } from "@/integrations/supabase/db";
 import { useAuth } from "@/hooks/use-auth";
 import { getIsOnline } from "@/lib/offline/networkStatus";
@@ -33,10 +32,7 @@ export const workoutAnalysesRepo = createOfflineRepository<WorkoutAnalysisRow>("
 async function refreshFromServer(userId: string): Promise<void> {
   if (!getIsOnline()) return;
   try {
-    const { data, error } = await db
-      .from("workout_analyses")
-      .select("*")
-      .eq("user_id", userId);
+    const { data, error } = await db.from("workout_analyses").select("*").eq("user_id", userId);
     if (!error && data) {
       await hydrateEntitiesFromServer(
         "workout_analyses",
