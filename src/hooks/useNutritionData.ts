@@ -1,21 +1,58 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase as supabaseTyped } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/use-auth";
 import { logActivity } from "@/lib/activity";
-import type { TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
+import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
+import { createOfflineRepository, hydrateEntitiesFromServer } from "@/lib/offline/repository";
+import { getIsOnline } from "@/lib/offline/networkStatus";
+
+const supabase = supabaseTyped as any;
+
+/**
+ * CRUD du Journal Nutrition (react-query) — offline-first (cf.
+ * src/lib/offline/), même pattern que `useRecipes.ts`/`use-nutrition-
+ * favorites.ts` : lecture/écriture toujours locales (IndexedDB) d'abord,
+ * synchronisation vers Supabase en arrière-plan via la sync queue. Le champ
+ * `recipe_id` (FK vers `recipes`, elle-même offline) est conservé tel quel
+ * dans le patch/insert sans résolution bloquante côté client — une entrée
+ * journal référençant une recette pas encore synchronisée reste cohérente
+ * localement, la FK réelle se vérifie côté serveur à la synchronisation.
+ */
+
+export type NutritionRow = Tables<"nutrition">;
+
+const nutritionRepo = createOfflineRepository<NutritionRow>("nutrition");
 
 export function useNutrition(date: string) {
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
+
   return useQuery({
     queryKey: ["nutrition", date],
+    enabled: !!userId,
     staleTime: 30_000,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("nutrition")
-        .select("*")
-        .eq("date", date)
-        .order("created_at", { ascending: true });
-      if (error) throw error;
-      return data;
+    queryFn: async (): Promise<NutritionRow[]> => {
+      if (!userId) return [];
+      if (getIsOnline()) {
+        try {
+          const { data, error } = await supabase
+            .from("nutrition")
+            .select("*")
+            .eq("user_id", userId)
+            .eq("date", date)
+            .order("created_at", { ascending: true });
+          if (!error && data) {
+            await hydrateEntitiesFromServer("nutrition", userId, data as NutritionRow[]);
+          }
+        } catch {
+          // Hors ligne ou erreur réseau : on continue avec le store local.
+        }
+      }
+      const local = await nutritionRepo.list(userId);
+      return local
+        .filter((r) => r.date === date)
+        .sort((a, b) => a.created_at.localeCompare(b.created_at));
     },
   });
 }
@@ -23,8 +60,12 @@ export function useNutrition(date: string) {
 /**
  * Journaux nutrition sur une plage de dates (inclusive) — utilisé par le
  * moteur TDEE observé (lib/fitness/adaptiveTdee.ts) pour mesurer la
- * couverture nutritionnelle sur plusieurs semaines. Ne réutilise pas
- * `useNutrition` (une seule date) : une requête par plage évite N
+ * couverture nutritionnelle sur plusieurs semaines. Laissée volontairement
+ * en ligne uniquement (pas de repository offline) : ce moteur analyse des
+ * tendances sur plusieurs semaines et n'a de sens qu'avec les données
+ * effectivement synchronisées côté serveur — un calcul TDEE sur un sous-
+ * ensemble local partiel/pas encore réconcilié serait trompeur. Ne réutilise
+ * pas `useNutrition` (une seule date) : une requête par plage évite N
  * allers-retours. Ne récupère que les colonnes nécessaires au moteur.
  */
 export function useNutritionRange(startDate: string, endDate: string) {
@@ -45,14 +86,14 @@ export function useNutritionRange(startDate: string, endDate: string) {
 
 export function useAddNutrition() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async (input: Omit<TablesInsert<"nutrition">, "user_id">) => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      const { error } = await supabase.from("nutrition").insert({ ...input, user_id: user.id });
-      if (error) throw error;
+      return nutritionRepo.create(
+        user.id,
+        input as unknown as Omit<NutritionRow, "id" | "user_id" | "created_at" | "updated_at">,
+      );
     },
     onSuccess: (_d, vars) => {
       toast.success("Repas ajouté");
@@ -67,17 +108,17 @@ export function useAddNutrition() {
 
 export function useAddNutritionBatch() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async (inputs: Array<Omit<TablesInsert<"nutrition">, "user_id">>) => {
       if (inputs.length === 0) return;
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      const { error } = await supabase
-        .from("nutrition")
-        .insert(inputs.map((input) => ({ ...input, user_id: user.id })));
-      if (error) throw error;
+      for (const input of inputs) {
+        await nutritionRepo.create(
+          user.id,
+          input as unknown as Omit<NutritionRow, "id" | "user_id" | "created_at" | "updated_at">,
+        );
+      }
     },
     onSuccess: (_d, vars) => {
       const n = vars.length;
@@ -91,18 +132,11 @@ export function useAddNutritionBatch() {
 
 export function useDeleteNutrition() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async (id: string) => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      const { error } = await supabase
-        .from("nutrition")
-        .delete()
-        .eq("id", id)
-        .eq("user_id", user.id);
-      if (error) throw error;
+      await nutritionRepo.remove(id, user.id);
     },
     onSuccess: () => {
       // Pas de toast ici : l'appelant affiche le toast avec action « Annuler ».
@@ -114,26 +148,18 @@ export function useDeleteNutrition() {
 
 export function useUpdateNutrition() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async ({
       id,
       patch,
-      date,
     }: {
       id: string;
       patch: TablesUpdate<"nutrition">;
       date: string;
     }) => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      const { error } = await supabase
-        .from("nutrition")
-        .update(patch)
-        .eq("id", id)
-        .eq("user_id", user.id);
-      if (error) throw error;
+      await nutritionRepo.update(id, user.id, patch as Partial<NutritionRow>);
     },
     onSuccess: (_d, vars) => {
       qc.invalidateQueries({ queryKey: ["nutrition", vars.date] });
@@ -144,24 +170,22 @@ export function useUpdateNutrition() {
 
 export function useCopyNutritionDay() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async ({ from, to }: { from: string; to: string }) => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
       if (from === to) throw new Error("Choisis un autre jour à copier");
-      const { data: rows, error } = await supabase.from("nutrition").select("*").eq("date", from);
-      if (error) throw error;
-      if (!rows || rows.length === 0) throw new Error("Aucun repas à copier ce jour-là");
-      const clones = rows.map((r) => {
-        const rec = r as Record<string, unknown>;
-        const { id: _id, created_at: _ca, ...rest } = rec;
-        return { ...rest, date: to, user_id: user.id } as TablesInsert<"nutrition">;
-      });
-      const { error: insErr } = await supabase.from("nutrition").insert(clones);
-      if (insErr) throw insErr;
-      return clones.length;
+      const all = await nutritionRepo.list(user.id);
+      const rows = all.filter((r) => r.date === from);
+      if (rows.length === 0) throw new Error("Aucun repas à copier ce jour-là");
+      for (const r of rows) {
+        const { id: _id, user_id: _uid, created_at: _ca, updated_at: _ua, ...rest } = r;
+        await nutritionRepo.create(user.id, { ...rest, date: to } as Omit<
+          NutritionRow,
+          "id" | "user_id" | "created_at" | "updated_at"
+        >);
+      }
+      return rows.length;
     },
     onSuccess: (n, vars) => {
       toast.success(`${n} repas copiés`);
@@ -174,20 +198,16 @@ export function useCopyNutritionDay() {
 /** Supprime tous les aliments d'un repas (date + slug) d'un coup. */
 export function useDeleteNutritionMeal() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async ({ date, meal }: { date: string; meal: string }) => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      const { error, count } = await supabase
-        .from("nutrition")
-        .delete({ count: "exact" })
-        .eq("user_id", user.id)
-        .eq("date", date)
-        .eq("meal", meal);
-      if (error) throw error;
-      return count ?? 0;
+      const all = await nutritionRepo.list(user.id);
+      const rows = all.filter((r) => r.date === date && r.meal === meal);
+      for (const r of rows) {
+        await nutritionRepo.remove(r.id, user.id);
+      }
+      return rows.length;
     },
     onSuccess: (n, vars) => {
       toast.success(`Repas supprimé (${n} aliment${n > 1 ? "s" : ""})`);
@@ -201,28 +221,21 @@ export function useDeleteNutritionMeal() {
 /** Copie uniquement le repas correspondant (petit-dej, déjeuner…) d'un autre jour. */
 export function useCopyNutritionMeal() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async ({ from, to, meal }: { from: string; to: string; meal: string }) => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      const { data: rows, error } = await supabase
-        .from("nutrition")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("date", from)
-        .eq("meal", meal);
-      if (error) throw error;
-      if (!rows || rows.length === 0) throw new Error("Aucun aliment à copier pour ce repas");
-      const clones = rows.map((r) => {
-        const rec = r as Record<string, unknown>;
-        const { id: _id, created_at: _ca, ...rest } = rec;
-        return { ...rest, date: to, user_id: user.id } as TablesInsert<"nutrition">;
-      });
-      const { error: insErr } = await supabase.from("nutrition").insert(clones);
-      if (insErr) throw insErr;
-      return clones.length;
+      const all = await nutritionRepo.list(user.id);
+      const rows = all.filter((r) => r.date === from && r.meal === meal);
+      if (rows.length === 0) throw new Error("Aucun aliment à copier pour ce repas");
+      for (const r of rows) {
+        const { id: _id, user_id: _uid, created_at: _ca, updated_at: _ua, ...rest } = r;
+        await nutritionRepo.create(user.id, { ...rest, date: to } as Omit<
+          NutritionRow,
+          "id" | "user_id" | "created_at" | "updated_at"
+        >);
+      }
+      return rows.length;
     },
     onSuccess: (n, vars) => {
       toast.success(`${n} aliment${n > 1 ? "s" : ""} copié${n > 1 ? "s" : ""}`);
