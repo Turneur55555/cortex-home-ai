@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-// `position` sur `exercises` absent des types générés (dérive de schéma) : client d'échappement.
-import { db } from "@/integrations/supabase/db";
+import { useAuth } from "@/hooks/use-auth";
+import { getIsOnline } from "@/lib/offline/networkStatus";
+import { createOfflineRepository, hydrateEntitiesFromServer } from "@/lib/offline/repository";
 import { logActivity } from "@/lib/activity";
 import { localDateYMD } from "@/lib/dates";
 import type { DisciplineId, SessionSegment } from "@/lib/fitness/engines/types";
@@ -13,15 +14,35 @@ import { identityKey } from "@/lib/fitness/recentExercises";
 import { verifyExerciseRanksForSession } from "@/hooks/useVerifyExerciseRanksForSession";
 import type { ActiveGenericSegment } from "@/hooks/useGenericActiveSession";
 import { HYBRID_BLOCKS_KEY } from "@/hooks/useGenericActiveSession";
-import {
-  ACTIVE_WORKOUT_CONFLICT_MESSAGE,
-  isActiveWorkoutConflict,
-} from "@/lib/fitness/activeWorkoutGuard";
+import { ACTIVE_WORKOUT_CONFLICT_MESSAGE } from "@/lib/fitness/activeWorkoutGuard";
+
+/**
+ * Offline-first (cf. src/lib/offline/, CLAUDE.md) — Cœur Fitness (vague
+ * finale). Tables `workouts` / `exercises` / `exercise_sets` migrées vers
+ * `createOfflineRepository`, même pattern que `useRecipes.ts`/
+ * `usePhysicalGoal.ts` : toute écriture est TOUJOURS locale d'abord
+ * (IndexedDB, reflétée instantanément), mise en queue de sync, lecture avec
+ * hydratation en ligne + fallback local hors connexion.
+ *
+ * RPG (piliers permanents, CLAUDE.md) — l'attribution d'XP à la clôture
+ * d'une séance (`useFinishWorkout`) est un TRIGGER SQL SERVEUR
+ * (`award_xp_on_workout_complete`) déclenché quand `workouts.status` passe
+ * à `'completed'` EN BASE : cette mutation reste une écriture de donnée pure
+ * (désormais offline-first via `workoutsRepo.update`), la séance peut donc
+ * être terminée hors connexion, et l'XP est versée naturellement dès que la
+ * sync queue pousse cette mise à jour au retour du réseau — aucune logique
+ * de récompense dupliquée côté client. `verifyExerciseRanksForSession`
+ * (montée de Rang par exercice) reste explicitement HORS PÉRIMÈTRE offline
+ * (lecture/RPC arbitrée serveur, cf. brief) : appelée en best-effort
+ * (fire-and-forget, déjà tolérante à l'échec réseau) à la clôture, sans
+ * retry côté client si hors connexion — comportement assumé, documenté ici.
+ */
 
 // Phase 3 (exercice-central) — Étape 2, double écriture : résout/crée
 // exercise_reference_id en plus du libellé existant. Ne doit jamais
 // bloquer l'écriture principale de l'exercice (voir
-// services/exerciseResolution.ts).
+// services/exerciseResolution.ts). Best-effort, sûr hors connexion (la
+// fonction attrape déjà toute erreur réseau et retombe sur `null`).
 async function resolveMuscuExerciseReferenceId(name: string): Promise<string | null> {
   try {
     return await resolveExerciseId("muscu", name);
@@ -34,11 +55,6 @@ async function resolveMuscuExerciseReferenceId(name: string): Promise<string | n
   }
 }
 
-// Phase 3 (exercice-central) — Étape 4.5 : `resolveExerciseIdsByLabel`
-// déplacée dans `src/services/exerciseResolution.ts` (source unique,
-// partagée avec `useStartWorkoutFromSavedTemplate` dans
-// useWorkoutTemplates.ts). Voir ce fichier pour la documentation complète.
-
 // ---------- Domaines extraits (re-exports pour rétro-compat) ----------
 export type { NutritionGoals } from "./useNutritionGoals";
 export { useNutritionGoals, useUpsertNutritionGoals } from "./useNutritionGoals";
@@ -49,26 +65,188 @@ export {
   useUpdateBodyMeasurement,
 } from "./useBodyTracking";
 
+// ---------- Offline repositories (workouts / exercises / exercise_sets) ----------
+
+export interface WorkoutRow {
+  id: string;
+  user_id: string;
+  name: string;
+  date: string;
+  gym_location: string;
+  status: string;
+  discipline: string;
+  duration_minutes: number | null;
+  notes: string | null;
+  metadata: Record<string, unknown>;
+  level_before: number | null;
+  level_after: number | null;
+  xp_before: number | null;
+  xp_after: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ExerciseRow {
+  id: string;
+  user_id: string;
+  workout_id: string;
+  name: string;
+  sets: number | null;
+  reps: number | null;
+  weight: number | null;
+  image_path: string | null;
+  exercise_reference_id: string | null;
+  position: number;
+  notes: string | null;
+  superset_group: number | null;
+  muscle_groups: string[] | null;
+  updated_at: string;
+}
+
+export interface ExerciseSetRow {
+  id: string;
+  user_id: string;
+  exercise_id: string;
+  set_number: number;
+  reps: number | null;
+  weight: number | null;
+  completed: boolean;
+  rest_seconds: number | null;
+  notes: string | null;
+  tempo: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export const workoutsRepo = createOfflineRepository<WorkoutRow>("workouts");
+export const exercisesRepo = createOfflineRepository<ExerciseRow>("exercises");
+export const exerciseSetsRepo = createOfflineRepository<ExerciseSetRow>("exercise_sets");
+
+/** Hydrate le store local depuis le serveur (workouts + exercises +
+ *  exercise_sets de l'utilisateur) — no-op silencieux hors connexion. Les
+ *  200 séances les plus récentes suffisent très largement à couvrir toute
+ *  séance active + l'historique affiché (useWorkouts en garde 60). */
+async function refreshWorkoutsFromServer(userId: string): Promise<void> {
+  if (!getIsOnline()) return;
+  try {
+    const { data: workouts, error } = await supabase
+      .from("workouts")
+      .select("*")
+      .eq("user_id", userId)
+      .order("date", { ascending: false })
+      .limit(200);
+    if (!error && workouts) {
+      await hydrateEntitiesFromServer("workouts", userId, workouts as unknown as WorkoutRow[]);
+    }
+    const { data: exercises, error: exErr } = await supabase
+      .from("exercises")
+      .select("*")
+      .eq("user_id", userId);
+    if (!exErr && exercises) {
+      await hydrateEntitiesFromServer("exercises", userId, exercises as unknown as ExerciseRow[]);
+    }
+    const { data: sets, error: setErr } = await supabase
+      .from("exercise_sets")
+      .select("*")
+      .eq("user_id", userId);
+    if (!setErr && sets) {
+      await hydrateEntitiesFromServer("exercise_sets", userId, sets as unknown as ExerciseSetRow[]);
+    }
+  } catch {
+    // Hors ligne ou erreur réseau : on continue avec le store local.
+  }
+}
+
+/** Regroupe une liste de lignes par une clé de champ — utilitaire local aux
+ *  jointures client (exercises par workout_id, sets par exercise_id). */
+function groupByField<T, K extends keyof T>(rows: T[], key: K): Map<T[K], T[]> {
+  const map = new Map<T[K], T[]>();
+  for (const row of rows) {
+    const list = map.get(row[key]) ?? [];
+    list.push(row);
+    map.set(row[key], list);
+  }
+  return map;
+}
+
+/** Contrainte "une seule séance active" (migration
+ *  20260714150000_workouts_one_active_per_user.sql) respectée EN LOCAL
+ *  avant toute création — même stratégie que `usePhysicalGoal.ts` pour "au
+ *  plus un objectif actif" : vérification locale, sans appel réseau.
+ *  L'index unique reste le garde-fou final côté serveur pour une éventuelle
+ *  course entre deux appareils qui créeraient chacun une séance active hors
+ *  connexion (edge case rare, assumé — cf. limite déjà documentée pour
+ *  physical_goals). */
+async function assertNoActiveWorkout(userId: string): Promise<void> {
+  const local = await workoutsRepo.list(userId);
+  if (local.some((w) => w.status === "active")) {
+    throw new Error(ACTIVE_WORKOUT_CONFLICT_MESSAGE);
+  }
+}
+
+/** Cascade locale des enfants d'une séance (exercises + exercise_sets) —
+ *  le serveur le fait déjà via ON DELETE CASCADE, ici on nettoie juste le
+ *  store local (même pattern que `useRecipes.useDeleteRecipe` pour les
+ *  ingrédients) pour ne pas laisser d'entités orphelines. `repo.remove`
+ *  annule proprement toute création encore en attente (jamais de sync
+ *  orpheline) et enfile un `delete` idempotent sinon. */
+async function cascadeDeleteWorkoutChildren(userId: string, workoutId: string): Promise<void> {
+  const localExercises = (await exercisesRepo.list(userId)).filter(
+    (e) => e.workout_id === workoutId,
+  );
+  const localSets = await exerciseSetsRepo.list(userId);
+  for (const ex of localExercises) {
+    for (const s of localSets.filter((st) => st.exercise_id === ex.id)) {
+      await exerciseSetsRepo.remove(s.id, userId);
+    }
+    await exercisesRepo.remove(ex.id, userId);
+  }
+}
+
 // ---------- Workouts ----------
+const WORKOUTS_KEY = ["fitness", "workouts"] as const;
+const ACTIVE_KEY = ["fitness", "active_workout"] as const;
+
 export function useWorkouts() {
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
   return useQuery({
-    queryKey: ["fitness", "workouts"],
+    queryKey: WORKOUTS_KEY,
+    enabled: !!userId,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("workouts")
-        .select(
-          "*, exercises(*, exercise_sets(id, set_number, reps, weight, completed, rest_seconds))",
-        )
-        .order("date", { ascending: false })
-        .limit(60);
-      if (error) throw error;
-      return data;
+      if (!userId) return [];
+      await refreshWorkoutsFromServer(userId);
+      const [workouts, exercises, sets] = await Promise.all([
+        workoutsRepo.list(userId),
+        exercisesRepo.list(userId),
+        exerciseSetsRepo.list(userId),
+      ]);
+      const setsByExercise = groupByField(sets, "exercise_id");
+      const exercisesByWorkout = groupByField(exercises, "workout_id");
+      return [...workouts]
+        .sort((a, b) => b.date.localeCompare(a.date))
+        .slice(0, 60)
+        .map((w) => ({
+          ...w,
+          exercises: (exercisesByWorkout.get(w.id) ?? []).map((ex) => ({
+            ...ex,
+            exercise_sets: (setsByExercise.get(ex.id) ?? []).map((s) => ({
+              id: s.id,
+              set_number: s.set_number,
+              reps: s.reps,
+              weight: s.weight,
+              completed: s.completed,
+              rest_seconds: s.rest_seconds,
+            })),
+          })),
+        }));
     },
   });
 }
 
 export function useAddWorkout() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async (input: {
       name: string;
@@ -95,20 +273,13 @@ export function useAddWorkout() {
         }> | null;
       }>;
     }) => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-
       const discipline = input.discipline ?? "muscu";
 
       // Phase 3, Étape 4 (centralisation, 2026-07-12) — résolution
-      // exercise_id pour les segments génériques (Cardio/HYROX/Guided/
-      // Autre), AVANT l'insertion, pour que `metadata.segments` porte
-      // l'identité dès l'écriture (voir SessionSegment.exerciseId,
-      // types.ts). Ne concerne que les disciplines qui stockent leur
-      // contenu dans `metadata.segments` — la musculation (exercises[])
-      // est résolue séparément ci-dessous, même mécanisme générique.
+      // exercise_id pour les segments génériques, AVANT l'insertion.
+      // Best-effort (jamais bloquant, y compris hors connexion — voir
+      // resolveExerciseIdsByLabel).
       const rawSegments = Array.isArray(
         (input.metadata as { segments?: unknown } | undefined)?.segments,
       )
@@ -126,88 +297,73 @@ export function useAddWorkout() {
         }));
       }
 
-      const { data: workout, error } = await supabase
-        .from("workouts")
-        .insert({
-          user_id: user.id,
-          name: input.name,
-          date: input.date,
-          duration_minutes: input.duration_minutes ?? null,
-          notes: input.notes ?? null,
-          gym_location: input.gym_location ?? "Salle inconnue",
-          discipline,
-          metadata: {
-            ...(input.metadata ?? {}),
-            ...(enrichedSegments ? { segments: enrichedSegments } : {}),
-          } as never,
-        })
-        .select()
-        .single();
-      if (error) throw error;
+      // `status` n'est jamais passé explicitement ici — colonne DB par
+      // défaut 'completed' (une séance enregistrée directement, pas une
+      // séance active). Offline-first : on doit le fixer nous-mêmes pour
+      // que le store local soit immédiatement cohérent, le repository
+      // n'ayant aucune connaissance des défauts de colonne serveur.
+      const workout = await workoutsRepo.create(user.id, {
+        name: input.name,
+        date: input.date,
+        duration_minutes: input.duration_minutes ?? null,
+        notes: input.notes ?? null,
+        gym_location: input.gym_location ?? "Salle inconnue",
+        status: "completed",
+        discipline,
+        metadata: {
+          ...(input.metadata ?? {}),
+          ...(enrichedSegments ? { segments: enrichedSegments } : {}),
+        },
+        level_before: null,
+        level_after: null,
+        xp_before: null,
+        xp_after: null,
+      });
+
       if (input.exercises.length > 0) {
-        // Même centralisation pour le chemin musculation (WorkoutSheet —
-        // séance générée par Sensei puis relue avant enregistrement) :
-        // gap identifié le 2026-07-12, ce chemin ne résolvait jusqu'ici
-        // aucun `exercise_reference_id`, contrairement aux 4 autres
-        // chemins d'écriture muscu câblés à l'Étape 2b.
         const exerciseIdsByName = await resolveExerciseIdsByLabel(
           "muscu",
           input.exercises.map((e) => e.name),
         );
-        const { data: insertedExercises, error: exErr } = await supabase
-          .from("exercises")
-          .insert(
-            input.exercises.map((e) => {
-              const valid = (e.setDetails ?? []).filter(
-                (d) => d.reps != null && d.weight != null && d.reps > 0 && d.weight > 0,
-              );
-              // Si des séries détaillées existent, on en dérive le résumé stocké
-              // sur la ligne `exercises` (rétro-compat WorkoutCard / tonnage).
-              const top = valid.reduce<{ reps: number; weight: number } | null>(
-                (best, d) =>
-                  best == null ||
-                  (d.weight as number) > best.weight ||
-                  ((d.weight as number) === best.weight && (d.reps as number) > best.reps)
-                    ? { reps: d.reps as number, weight: d.weight as number }
-                    : best,
-                null,
-              );
-              return {
-                user_id: user.id,
-                workout_id: workout.id,
-                name: e.name,
-                sets: valid.length > 0 ? valid.length : (e.sets ?? null),
-                reps: top ? top.reps : (e.reps ?? null),
-                weight: top ? top.weight : (e.weight ?? null),
-                image_path: e.image_path ?? null,
-                exercise_reference_id: exerciseIdsByName.get(e.name) ?? null,
-              };
-            }),
-          )
-          .select("id");
-        if (exErr) throw exErr;
-
-        // Insertion des séries détaillées (set-by-set) pour les exercices
-        // qui en fournissent. L'ordre renvoyé suit l'ordre d'insertion.
-        if (insertedExercises) {
-          const setRows = input.exercises.flatMap((e, i) => {
-            const exerciseId = insertedExercises[i]?.id;
-            if (!exerciseId) return [];
-            const valid = (e.setDetails ?? []).filter(
-              (d) => d.reps != null && d.weight != null && d.reps > 0 && d.weight > 0,
-            );
-            return valid.map((d, j) => ({
-              exercise_id: exerciseId,
-              user_id: user.id,
+        let position = 0;
+        for (const e of input.exercises) {
+          const valid = (e.setDetails ?? []).filter(
+            (d) => d.reps != null && d.weight != null && d.reps > 0 && d.weight > 0,
+          );
+          const top = valid.reduce<{ reps: number; weight: number } | null>(
+            (best, d) =>
+              best == null ||
+              (d.weight as number) > best.weight ||
+              ((d.weight as number) === best.weight && (d.reps as number) > best.reps)
+                ? { reps: d.reps as number, weight: d.weight as number }
+                : best,
+            null,
+          );
+          const createdEx = await exercisesRepo.create(user.id, {
+            workout_id: workout.id,
+            name: e.name,
+            sets: valid.length > 0 ? valid.length : (e.sets ?? null),
+            reps: top ? top.reps : (e.reps ?? null),
+            weight: top ? top.weight : (e.weight ?? null),
+            image_path: e.image_path ?? null,
+            exercise_reference_id: exerciseIdsByName.get(e.name) ?? null,
+            position: position++,
+            notes: null,
+            superset_group: null,
+            muscle_groups: null,
+          });
+          for (let j = 0; j < valid.length; j++) {
+            const d = valid[j];
+            await exerciseSetsRepo.create(user.id, {
+              exercise_id: createdEx.id,
               set_number: j + 1,
               reps: d.reps,
               weight: d.weight,
               completed: true,
-            }));
-          });
-          if (setRows.length > 0) {
-            const { error: setErr } = await supabase.from("exercise_sets").insert(setRows);
-            if (setErr) throw setErr;
+              rest_seconds: null,
+              notes: null,
+              tempo: null,
+            });
           }
         }
       }
@@ -222,21 +378,15 @@ export function useAddWorkout() {
 
 export function useDeleteWorkout() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async (id: string) => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      // Les exercices et leurs séries sont supprimés par cascade FK (ON DELETE CASCADE).
       // L'XP éventuellement versée est retirée côté serveur avant la
-      // suppression (trigger `trg_reverse_xp_before_workout_delete`).
-      const { error } = await supabase
-        .from("workouts")
-        .delete()
-        .eq("id", id)
-        .eq("user_id", user.id);
-      if (error) throw error;
+      // suppression (trigger `trg_reverse_xp_before_workout_delete`) une
+      // fois la suppression synchronisée — inchangé, arbitré serveur.
+      await cascadeDeleteWorkoutChildren(user.id, id);
+      await workoutsRepo.remove(id, user.id);
     },
     onSuccess: () => {
       toast.success("Séance supprimée");
@@ -262,18 +412,11 @@ export {
 // ---------- Workout / exercise mutations ----------
 export function useUpdateWorkoutName() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async ({ id, name }: { id: string; name: string }) => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      const { error } = await supabase
-        .from("workouts")
-        .update({ name })
-        .eq("id", id)
-        .eq("user_id", user.id);
-      if (error) throw error;
+      await workoutsRepo.update(id, user.id, { name });
     },
     onSuccess: () => {
       toast.success("Nom modifié");
@@ -302,6 +445,7 @@ export function isValidWorkoutDurationMinutes(value: number): boolean {
  */
 export function useUpdateWorkoutSchedule() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async ({
       id,
@@ -315,16 +459,8 @@ export function useUpdateWorkoutSchedule() {
       if (!isValidWorkoutDurationMinutes(durationMinutes)) {
         throw new Error("La durée doit être un nombre entier de minutes strictement positif.");
       }
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      const { error } = await supabase
-        .from("workouts")
-        .update({ date, duration_minutes: durationMinutes })
-        .eq("id", id)
-        .eq("user_id", user.id);
-      if (error) throw error;
+      await workoutsRepo.update(id, user.id, { date, duration_minutes: durationMinutes });
     },
     onSuccess: () => {
       toast.success("Séance mise à jour");
@@ -357,9 +493,6 @@ type WorkoutsCache = Array<{
   [k: string]: unknown;
 }>;
 
-const WORKOUTS_KEY = ["fitness", "workouts"] as const;
-const ACTIVE_KEY = ["fitness", "active_workout"] as const;
-
 function patchWorkoutsCache(
   qc: ReturnType<typeof useQueryClient>,
   updater: (rows: WorkoutsCache) => WorkoutsCache,
@@ -372,6 +505,7 @@ function patchWorkoutsCache(
 
 export function useUpdateExercise() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async ({
       id,
@@ -384,16 +518,8 @@ export function useUpdateExercise() {
       reps?: number | null;
       weight?: number | null;
     }) => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      const { error } = await supabase
-        .from("exercises")
-        .update(fields)
-        .eq("id", id)
-        .eq("user_id", user.id);
-      if (error) throw error;
+      await exercisesRepo.update(id, user.id, fields);
     },
     onMutate: async ({ id, ...fields }) => {
       await qc.cancelQueries({ queryKey: WORKOUTS_KEY });
@@ -415,22 +541,21 @@ export function useUpdateExercise() {
   });
 }
 
-// Suppression batchée : une seule requête + une seule invalidation.
+// Suppression batchée : cascade locale des séries + suppressions offline-first.
 export function useDeleteExercises() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async (ids: string[]) => {
       if (ids.length === 0) return;
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      const { error } = await supabase
-        .from("exercises")
-        .delete()
-        .in("id", ids)
-        .eq("user_id", user.id);
-      if (error) throw error;
+      const localSets = await exerciseSetsRepo.list(user.id);
+      for (const id of ids) {
+        for (const s of localSets.filter((st) => st.exercise_id === id)) {
+          await exerciseSetsRepo.remove(s.id, user.id);
+        }
+        await exercisesRepo.remove(id, user.id);
+      }
     },
     onMutate: async (ids) => {
       await qc.cancelQueries({ queryKey: WORKOUTS_KEY });
@@ -457,6 +582,7 @@ export function useDeleteExercises() {
 
 export function useAddExerciseToWorkout() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async ({
       workoutId,
@@ -470,13 +596,14 @@ export function useAddExerciseToWorkout() {
         weight?: number | null;
       };
     }) => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
       const exerciseReferenceId = await resolveMuscuExerciseReferenceId(exercise.name);
-      const { error } = await db.from("exercises").insert({
-        user_id: user.id,
+      const localExercises = (await exercisesRepo.list(user.id)).filter(
+        (e) => e.workout_id === workoutId,
+      );
+      const nextPosition =
+        localExercises.length > 0 ? Math.max(...localExercises.map((e) => e.position)) + 1 : 0;
+      await exercisesRepo.create(user.id, {
         workout_id: workoutId,
         name: exercise.name,
         sets: exercise.sets ?? null,
@@ -484,8 +611,11 @@ export function useAddExerciseToWorkout() {
         weight: exercise.weight ?? null,
         image_path: null,
         exercise_reference_id: exerciseReferenceId,
+        position: nextPosition,
+        notes: null,
+        superset_group: null,
+        muscle_groups: null,
       });
-      if (error) throw error;
     },
     onMutate: async ({ workoutId, exercise }) => {
       await qc.cancelQueries({ queryKey: WORKOUTS_KEY });
@@ -560,70 +690,66 @@ export type ActiveWorkout = {
   exercises: ActiveExercise[];
 };
 
+function toActiveExercise(ex: ExerciseRow, sets: ExerciseSetRow[]): ActiveExercise {
+  return {
+    id: ex.id,
+    name: ex.name,
+    image_path: ex.image_path ?? null,
+    sets: ex.sets ?? null,
+    reps: ex.reps ?? null,
+    weight: ex.weight ?? null,
+    exercise_reference_id: ex.exercise_reference_id ?? null,
+    position: ex.position ?? 0,
+    exercise_sets: [...sets]
+      .sort((a, b) => a.set_number - b.set_number)
+      .map((s) => ({
+        id: s.id,
+        set_number: s.set_number,
+        reps: s.reps ?? null,
+        weight: s.weight ?? null,
+        completed: s.completed ?? false,
+      })),
+  };
+}
+
 // ---------- Active Workout hooks ----------
 
-/** Retourne la séance commencée aujourd'hui non encore terminée, ou null. */
+/** Retourne la séance commencée aujourd'hui non encore terminée, ou null.
+ *  C3 : la séance active est identifiée par status='active' (colonne
+ *  dédiée). Phase pilote Course (2026-07-09) : filtre explicite sur
+ *  discipline 'muscu' — sans ça, une séance active générique (course,
+ *  HYROX... voir useGenericActiveSession.ts) serait AUSSI remontée ici et
+ *  rendue par erreur avec des exercises vides. */
 export function useActiveWorkout() {
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
   return useQuery({
     queryKey: ACTIVE_KEY,
+    enabled: !!userId,
     queryFn: async (): Promise<ActiveWorkout | null> => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return null;
-      // C3 : la séance active est identifiée par status='active' (colonne dédiée),
-      // plus par duration_minutes NULL — une saisie rétro sans durée ne bascule
-      // donc plus l'UI en mode live.
-      //
-      // Phase pilote Course (2026-07-09) : filtre explicite sur discipline
-      // 'muscu' — sans ça, une séance active générique (course, voir
-      // useGenericActiveSession.ts / useStartGenericActiveWorkout) serait
-      // AUSSI remontée ici et rendue par erreur avec des exercises vides.
-      // Sans risque pour l'existant : toute séance déjà en base a
-      // discipline='muscu' par défaut depuis la migration
-      // ..._workout_engine_foundation.sql (comportement 100% inchangé).
-      const { data, error } = await supabase
-        .from("workouts")
-        .select(
-          "id, name, gym_location, created_at, exercises(id, name, image_path, sets, reps, weight, exercise_reference_id, position, exercise_sets(id, set_number, reps, weight, completed))",
-        )
-        .eq("user_id", user.id)
-        .eq("status", "active")
-        .eq("discipline", "muscu")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (error) throw error;
-      if (!data) return null;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const raw = data as any;
+      if (!userId) return null;
+      await refreshWorkoutsFromServer(userId);
+      const workouts = await workoutsRepo.list(userId);
+      const candidates = workouts.filter((w) => w.status === "active" && w.discipline === "muscu");
+      const active = [...candidates].sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+      if (!active) return null;
+
+      const exercises = (await exercisesRepo.list(userId)).filter(
+        (e) => e.workout_id === active.id,
+      );
+      const allSets = await exerciseSetsRepo.list(userId);
+      const setsByExercise = groupByField(allSets, "exercise_id");
+
       return {
-        id: raw.id,
-        name: raw.name,
-        gym_location: raw.gym_location,
-        created_at: raw.created_at,
-        // Tri explicite par `position` — la relation imbriquée Supabase ne
-        // garantit pas d'ordre. Départage stable par id pour les rares lignes
-        // à position égale (ne devrait pas arriver après le backfill).
-        exercises: (raw.exercises ?? [])
-          .map((ex: any) => ({
-            id: ex.id,
-            name: ex.name,
-            image_path: ex.image_path ?? null,
-            sets: ex.sets ?? null,
-            reps: ex.reps ?? null,
-            weight: ex.weight ?? null,
-            exercise_reference_id: ex.exercise_reference_id ?? null,
-            position: ex.position ?? 0,
-            exercise_sets: (ex.exercise_sets ?? []).map((s: any) => ({
-              id: s.id,
-              set_number: s.set_number,
-              reps: s.reps ?? null,
-              weight: s.weight ?? null,
-              completed: s.completed ?? false,
-            })),
-          }))
-          .sort((a: ActiveExercise, b: ActiveExercise) =>
+        id: active.id,
+        name: active.name,
+        gym_location: active.gym_location,
+        created_at: active.created_at,
+        // Tri explicite par `position` — départage stable par id pour les
+        // rares lignes à position égale.
+        exercises: exercises
+          .map((ex) => toActiveExercise(ex, setsByExercise.get(ex.id) ?? []))
+          .sort((a, b) =>
             a.position !== b.position ? a.position - b.position : a.id.localeCompare(b.id),
           ),
       };
@@ -634,40 +760,31 @@ export function useActiveWorkout() {
 /** Crée une nouvelle séance active (sans duration_minutes = non terminée). */
 export function useStartWorkout() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async ({ name, gym_location }: { name: string; gym_location: string }) => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-
-      // Étape 0.1 : garde manquante — seul point de démarrage qui n'en
-      // avait aucune (voir activeWorkoutGuard.ts). Check-then-insert, même
-      // convention que les 3 autres points de démarrage ; l'index unique
-      // `workouts_one_active_per_user` reste le garde-fou final (23505
-      // mappé ci-dessous).
-      const { data: existing, error: existingErr } = await supabase
-        .from("workouts")
-        .select("id")
-        .eq("user_id", user.id)
-        .eq("status", "active")
-        .limit(1)
-        .maybeSingle();
-      if (existingErr) throw existingErr;
-      if (existing) throw new Error(ACTIVE_WORKOUT_CONFLICT_MESSAGE);
+      // Étape 0.1 : garde — même convention que les autres points de
+      // démarrage. L'index unique `workouts_one_active_per_user` reste le
+      // garde-fou final côté serveur (edge case course multi-appareils hors
+      // connexion, assumé — voir assertNoActiveWorkout).
+      await assertNoActiveWorkout(user.id);
 
       const today = localDateYMD();
-      const { error } = await supabase.from("workouts").insert({
-        user_id: user.id,
+      await workoutsRepo.create(user.id, {
         name,
         date: today,
         gym_location,
         status: "active",
+        discipline: "muscu",
+        metadata: {},
+        duration_minutes: null,
+        notes: null,
+        level_before: null,
+        level_after: null,
+        xp_before: null,
+        xp_after: null,
       });
-      if (error) {
-        if (isActiveWorkoutConflict(error)) throw new Error(ACTIVE_WORKOUT_CONFLICT_MESSAGE);
-        throw error;
-      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ACTIVE_KEY });
@@ -677,20 +794,15 @@ export function useStartWorkout() {
 }
 
 /** Musculation hybride générée par le Sensei (2026-08-05) — démarre une
- *  séance active "muscu" directement seedée avec force ET blocs métriques,
- *  au lieu du chemin classique CoachSheet -> WorkoutSheet (enregistrement
- *  direct, réservé aux générations "force" pure — inchangé, voir
- *  SeancesTab.handleCoachResult). Réutilise l'architecture hybride posée
- *  pour l'ajout manuel de blocs (ActiveWorkoutView) : les exercices vont
- *  dans `exercises`/`exercise_sets` (résolution ExerciseResolutionService,
- *  jamais bloquante) exactement comme useAddWorkout/useStartWorkoutFromTemplate,
- *  les blocs vont dans `workout_segments` sous LEUR PROPRE discipline
- *  (jamais "muscu") — jamais lus par le moteur de Rang, qui ne lit que
- *  exercises/exercise_sets (inchangé). La séance reste `discipline: "muscu"`.
- *  L'utilisateur retrouve ensuite exactement la même séance active hybride
- *  que s'il avait tout ajouté à la main (mêmes cartes, mêmes mutations). */
+ *  séance active "muscu" directement seedée avec force ET blocs métriques.
+ *  Partie force (exercises/exercise_sets) offline-first via les repos —
+ *  partie blocs (workout_segments) reste ONLINE-ONLY pour cette vague, au
+ *  même titre que useGenericActiveSession.ts (déféré, voir doc en tête de
+ *  useGenericActiveSession.ts) : non bloquante pour la partie musculation
+ *  (try/catch dédié), seulement best-effort si le réseau est disponible. */
 export function useStartHybridStrengthWorkout() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async ({
       name,
@@ -705,154 +817,125 @@ export function useStartHybridStrengthWorkout() {
       segments: SessionSegment[];
       blockDiscipline: DisciplineId;
     }) => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-
-      const { data: existing, error: existingErr } = await supabase
-        .from("workouts")
-        .select("id")
-        .eq("user_id", user.id)
-        .eq("status", "active")
-        .limit(1)
-        .maybeSingle();
-      if (existingErr) throw existingErr;
-      if (existing) throw new Error(ACTIVE_WORKOUT_CONFLICT_MESSAGE);
+      await assertNoActiveWorkout(user.id);
 
       const today = localDateYMD();
-      const { data: workout, error } = await supabase
-        .from("workouts")
-        .insert({
-          user_id: user.id,
-          name,
-          date: today,
-          gym_location: gym_location ?? "Salle inconnue",
-          discipline: "muscu",
-          status: "active",
-        })
-        .select("id")
-        .single();
-      if (error) {
-        if (isActiveWorkoutConflict(error)) throw new Error(ACTIVE_WORKOUT_CONFLICT_MESSAGE);
-        throw error;
-      }
+      const workout = await workoutsRepo.create(user.id, {
+        name,
+        date: today,
+        gym_location: gym_location ?? "Salle inconnue",
+        discipline: "muscu",
+        status: "active",
+        metadata: {},
+        duration_minutes: null,
+        notes: null,
+        level_before: null,
+        level_after: null,
+        xp_before: null,
+        xp_after: null,
+      });
 
       // Exercices de force — mêmes colonnes/résolution que useAddWorkout,
-      // séries détaillées expansées depuis sets×{reps,weight} (même
-      // convention que useStartWorkoutFromTemplate), non validées par
-      // défaut : l'utilisateur les confirme en séance active, comme pour
-      // toute séance démarrée depuis un modèle.
+      // séries détaillées expansées depuis sets×{reps,weight}, non validées
+      // par défaut.
       const validExercises = exercises.filter((e) => e.name.trim());
       if (validExercises.length > 0) {
         const exerciseIdsByName = await resolveExerciseIdsByLabel(
           "muscu",
           validExercises.map((e) => e.name),
         );
-        const { data: inserted, error: exErr } = await supabase
-          .from("exercises")
-          .insert(
-            validExercises.map((e) => ({
-              user_id: user.id,
-              workout_id: workout.id,
-              name: e.name,
-              sets: e.sets ? Number(e.sets) : null,
-              reps: e.reps ? Number(e.reps) : null,
-              weight: e.weight ? Number(e.weight) : null,
-              image_path: null,
-              exercise_reference_id: exerciseIdsByName.get(e.name) ?? null,
-            })),
-          )
-          .select("id");
-        if (exErr) throw exErr;
-
-        if (inserted) {
-          const setRows = validExercises.flatMap((e, i) => {
-            const exerciseId = inserted[i]?.id;
-            const n = e.sets ? Math.max(1, Math.round(Number(e.sets))) : 0;
-            if (!exerciseId || n === 0) return [];
-            return Array.from({ length: n }, (_, j) => ({
-              exercise_id: exerciseId,
-              user_id: user.id,
+        let position = 0;
+        for (const e of validExercises) {
+          const createdEx = await exercisesRepo.create(user.id, {
+            workout_id: workout.id,
+            name: e.name,
+            sets: e.sets ? Number(e.sets) : null,
+            reps: e.reps ? Number(e.reps) : null,
+            weight: e.weight ? Number(e.weight) : null,
+            image_path: null,
+            exercise_reference_id: exerciseIdsByName.get(e.name) ?? null,
+            position: position++,
+            notes: null,
+            superset_group: null,
+            muscle_groups: null,
+          });
+          const n = e.sets ? Math.max(1, Math.round(Number(e.sets))) : 0;
+          for (let j = 0; j < n; j++) {
+            await exerciseSetsRepo.create(user.id, {
+              exercise_id: createdEx.id,
               set_number: j + 1,
               reps: e.reps ? Number(e.reps) : null,
               weight: e.weight ? Number(e.weight) : null,
               completed: false,
-            }));
-          });
-          if (setRows.length > 0) {
-            const { error: setErr } = await supabase.from("exercise_sets").insert(setRows);
-            if (setErr) throw setErr;
+              rest_seconds: null,
+              notes: null,
+              tempo: null,
+            });
           }
         }
       }
 
-      // Blocs métriques — workout_segments, même mécanisme que
-      // useStartGenericActiveWorkout (Part 1) : SOUS la discipline du bloc
-      // (course/hyrox...), jamais "muscu", jamais exercises/exercise_sets.
+      // Blocs métriques — workout_segments, en ligne uniquement pour cette
+      // vague (voir doc en tête de fonction) : jamais bloquant pour le
+      // reste de la séance.
       if (segments.length > 0) {
-        const idsByLabel = await resolveExerciseIdsByLabel(
-          blockDiscipline,
-          segments.map((s) => s.label),
-        );
-        const { error: segErr } = await supabase.from("workout_segments").insert(
-          segments.map((s, i) => ({
-            workout_id: workout.id,
-            user_id: user.id,
-            position: i,
-            label: s.label,
-            metric_key: null,
-            metrics: (s.metrics ?? {}) as never,
-            completed: false,
-            discipline: blockDiscipline,
-            exercise_id: idsByLabel.get(s.label) ?? null,
-          })),
-        );
-        if (segErr) throw segErr;
+        try {
+          const idsByLabel = await resolveExerciseIdsByLabel(
+            blockDiscipline,
+            segments.map((s) => s.label),
+          );
+          const { error: segErr } = await supabase.from("workout_segments").insert(
+            segments.map((s, i) => ({
+              workout_id: workout.id,
+              user_id: user.id,
+              position: i,
+              label: s.label,
+              metric_key: null,
+              metrics: (s.metrics ?? {}) as never,
+              completed: false,
+              discipline: blockDiscipline,
+              exercise_id: idsByLabel.get(s.label) ?? null,
+            })),
+          );
+          if (segErr) throw segErr;
+        } catch (e) {
+          console.error(
+            "[useStartHybridStrengthWorkout] blocs métriques non enregistrés (workout_segments nécessite une connexion — hors périmètre offline de cette vague, voir useGenericActiveSession.ts)",
+            e,
+          );
+        }
       }
 
       return workout.id;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ACTIVE_KEY });
-      // Les blocs sont lus par ActiveWorkoutView via useActiveWorkoutSegments
-      // (HYBRID_BLOCKS_KEY, Part 1) — invalider pour ne jamais afficher un
-      // état vide/périmé d'une précédente séance hybride.
       qc.invalidateQueries({ queryKey: HYBRID_BLOCKS_KEY });
     },
     onError: (e: Error) => toast.error(e.message),
   });
 }
 
-/** Termine la séance active : calcule la durée et la sauvegarde.
- *
- *  Musculation hybride (2026-08-04) : `segments` (optionnel, blocs
- *  course/cardio/HYROX/autre ajoutés à cette séance muscu — voir
- *  useActiveWorkoutSegments) est resynchronisé dans `workouts.metadata`
- *  exactement comme `useFinishGenericActiveWorkout` le fait pour une séance
- *  générique — même pattern, chaque bloc reformaté via
- *  `ENGINE_REGISTRY[bloc.discipline].formatLiveSegment()` (la discipline du
- *  BLOC, pas celle de la séance hôte qui reste "muscu"). `metadata.sessionType`
- *  ("hybrid" | absent) est une classification d'affichage pure — jamais lue
- *  par le moteur de Rang, qui continue de ne lire que `exercises`/
- *  `exercise_sets` (inchangé ci-dessous). */
+/** Termine la séance active : calcule la durée et la sauvegarde — écriture
+ *  de donnée pure, offline-first (voir doc en tête de fichier pour le
+ *  trigger XP serveur). */
 export function useFinishWorkout() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async (workout: ActiveWorkout & { segments?: ActiveGenericSegment[] }) => {
+      if (!user) throw new Error("Non authentifié");
       const durationMs = Date.now() - new Date(workout.created_at).getTime();
       const durationMin = Math.min(600, Math.max(1, Math.round(durationMs / 60_000)));
 
       const segments = workout.segments ?? [];
       let metadataUpdate: Record<string, unknown> | undefined;
       if (segments.length > 0) {
-        const { data: current, error: readErr } = await supabase
-          .from("workouts")
-          .select("metadata")
-          .eq("id", workout.id)
-          .single();
-        if (readErr) throw readErr;
-        const existingMetadata = (current?.metadata ?? {}) as Record<string, unknown>;
+        // Lecture de metadata existante — locale (offline-first) : le store
+        // local est déjà à jour, pas besoin d'aller en ligne.
+        const localWorkout = await workoutsRepo.get(workout.id);
+        const existingMetadata = (localWorkout?.metadata ?? {}) as Record<string, unknown>;
 
         const formattedSegments = [...segments]
           .sort((a, b) => a.position - b.position)
@@ -880,19 +963,16 @@ export function useFinishWorkout() {
         };
       }
 
-      const { error } = await supabase
-        .from("workouts")
-        .update({
-          duration_minutes: durationMin,
-          status: "completed",
-          ...(metadataUpdate ? { metadata: metadataUpdate as never } : {}),
-        })
-        .eq("id", workout.id);
-      if (error) throw error;
+      await workoutsRepo.update(workout.id, user.id, {
+        duration_minutes: durationMin,
+        status: "completed",
+        ...(metadataUpdate ? { metadata: metadataUpdate } : {}),
+      });
 
-      // H2 : synchronise les colonnes résumé `exercises.sets/reps/weight` depuis
-      // les séries réelles (validées en priorité) pour que « Exercices récents »
-      // et « Refaire » affichent les dernières perfs des séances live.
+      // H2 : synchronise les colonnes résumé `exercises.sets/reps/weight`
+      // depuis les séries réelles — offline-first au même titre que tout
+      // le reste (exercisesRepo.update écrit local + enfile la sync, aucune
+      // dépendance réseau nécessaire ici).
       for (const ex of workout.exercises ?? []) {
         const filled = (ex.exercise_sets ?? []).filter(
           (st) => st.reps != null && st.weight != null && st.reps > 0 && st.weight > 0,
@@ -907,11 +987,15 @@ export function useFinishWorkout() {
             ? st
             : best,
         );
-        const { error: sumErr } = await supabase
-          .from("exercises")
-          .update({ sets: source.length, reps: top.reps, weight: top.weight })
-          .eq("id", ex.id);
-        if (sumErr) console.warn("[finishWorkout] sync résumé échoué", ex.name, sumErr.message);
+        try {
+          await exercisesRepo.update(ex.id, user.id, {
+            sets: source.length,
+            reps: top.reps,
+            weight: top.weight,
+          });
+        } catch (e) {
+          console.error("[finishWorkout] sync résumé échoué", ex.name, e);
+        }
       }
     },
     onSuccess: (_d, workout) => {
@@ -920,19 +1004,18 @@ export function useFinishWorkout() {
       // l'utilisateur — un toast en plus serait redondant.
       logActivity("workout", `Séance terminée : ${workout.name}`, { workout_id: workout.id });
       // Étape 0.2 (INV-4 fraîcheur) : invalidation par préfixe — couvre
-      // tout le domaine fitness (historiques, catalogue, photos...), pas
-      // seulement active/workouts. Sur-invalidation assumée et documentée
-      // (voir cortex-refonte-seances-phase0). Clés transverses hors
-      // domaine (user_activity/activity_streak) invalidées séparément.
+      // tout le domaine fitness (historiques, catalogue, photos...).
       qc.invalidateQueries({ queryKey: ["fitness"] });
       qc.invalidateQueries({ queryKey: ["user_activity"] });
       qc.invalidateQueries({ queryKey: ["activity_streak"] });
       // RPG : la clôture verse de l'XP côté serveur (trigger
-      // `award_xp_on_workout_complete`) — invalider le cache Niveau/Rang
-      // pour ne jamais afficher un XP/niveau périmé.
+      // `award_xp_on_workout_complete`, déclenché dès que la sync queue
+      // pousse cette mise à jour) — invalider le cache Niveau/Rang pour ne
+      // jamais afficher un XP/niveau périmé.
       qc.invalidateQueries({ queryKey: ["user_stats"] });
-      // RPG : montée de Rang par exercice — automatique, jamais besoin
-      // d'ouvrir la fiche d'un exercice (voir useVerifyExerciseRanksForSession).
+      // RPG : montée de Rang par exercice — hors périmètre offline (lecture
+      // arbitrée serveur, cf. doc en tête de fichier), fire-and-forget déjà
+      // tolérant à l'échec réseau.
       verifyExerciseRanksForSession(workout.exercises);
     },
     onError: (e: Error) => toast.error(e.message),
@@ -942,17 +1025,17 @@ export function useFinishWorkout() {
 /** Annule (supprime) la séance active et tout son contenu. */
 export function useCancelWorkout() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async (workoutId: string) => {
-      // Exercices + séries supprimés par cascade FK (ON DELETE CASCADE).
+      if (!user) throw new Error("Non authentifié");
       // L'XP éventuellement versée est retirée côté serveur avant la
       // suppression (trigger `trg_reverse_xp_before_workout_delete`).
-      const { error } = await supabase.from("workouts").delete().eq("id", workoutId);
-      if (error) throw error;
+      await cascadeDeleteWorkoutChildren(user.id, workoutId);
+      await workoutsRepo.remove(workoutId, user.id);
     },
     onSuccess: () => {
       toast.success("Séance annulée");
-      // Étape 0.2 : idem useFinishWorkout — invalidation par préfixe fitness.
       qc.invalidateQueries({ queryKey: ["fitness"] });
       qc.invalidateQueries({ queryKey: ["user_stats"] });
     },
@@ -991,47 +1074,30 @@ export type RepeatSourceWorkout = {
  */
 export function useStartWorkoutFromTemplate() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async (source: RepeatSourceWorkout) => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-
-      // Garde : une seule séance active à la fois.
-      const { data: existing } = await supabase
-        .from("workouts")
-        .select("id")
-        .eq("user_id", user.id)
-        .eq("status", "active")
-        .limit(1)
-        .maybeSingle();
-      if (existing) throw new Error(ACTIVE_WORKOUT_CONFLICT_MESSAGE);
+      await assertNoActiveWorkout(user.id);
 
       const today = localDateYMD();
-      const { data: workout, error } = await supabase
-        .from("workouts")
-        .insert({
-          user_id: user.id,
-          name: source.name || "Séance",
-          date: today,
-          gym_location: source.gym_location ?? "Salle inconnue",
-          status: "active",
-        })
-        .select("id")
-        .single();
-      if (error) {
-        if (isActiveWorkoutConflict(error)) throw new Error(ACTIVE_WORKOUT_CONFLICT_MESSAGE);
-        throw error;
-      }
+      const workout = await workoutsRepo.create(user.id, {
+        name: source.name || "Séance",
+        date: today,
+        gym_location: source.gym_location ?? "Salle inconnue",
+        status: "active",
+        discipline: "muscu",
+        metadata: {},
+        duration_minutes: null,
+        notes: null,
+        level_before: null,
+        level_after: null,
+        xp_before: null,
+        xp_after: null,
+      });
 
       // Etape 4.6c (2026-07-13) : deduplique par identite (identityKey -
-      // exercise_reference_id en priorite, repli nom normalise documente)
-      // au lieu du seul nom brut - deux occurrences du meme exercice a
-      // libelle legerement different (accents/casse/renommage) fusionnent
-      // desormais correctement des que l'id est connu ; le repli nom ne
-      // reste actif que pour des lignes source sans reference resolue
-      // (donnees anterieures au backfill de l'Etape 3).
+      // exercise_reference_id en priorite, repli nom normalise documente).
       const groups = new Map<
         string,
         {
@@ -1063,21 +1129,15 @@ export function useStartWorkoutFromTemplate() {
         if (detailed.length > 0) {
           for (const d of detailed) g.setRows.push({ reps: d.reps, weight: d.weight });
         } else if (ex.weight != null) {
-          // Résumé moderne : sets × (reps, weight)
           const n = Math.max(1, ex.sets ?? 1);
           for (let i = 0; i < n; i++) g.setRows.push({ reps: ex.reps ?? null, weight: ex.weight });
         } else if (ex.sets != null || ex.reps != null) {
-          // Convention legacy : weight NULL → sets = reps, reps = charge.
           g.setRows.push({ reps: ex.sets ?? null, weight: ex.reps ?? null });
         }
       }
 
       const groupList = Array.from(groups.values());
       if (groupList.length > 0) {
-        // Filet de compatibilite : ne resout par nom que les groupes qui
-        // n'ont encore aucune reference connue (lignes source anterieures
-        // au backfill) - un groupe deja identifie par id ne repasse jamais
-        // par une resolution nom -> id supplementaire.
         const groupReferenceIds = await Promise.all(
           groupList.map((g) =>
             g.exerciseReferenceId
@@ -1085,39 +1145,34 @@ export function useStartWorkoutFromTemplate() {
               : resolveMuscuExerciseReferenceId(g.name),
           ),
         );
-        const { data: insertedExs, error: exErr } = await db
-          .from("exercises")
-          .insert(
-            groupList.map((g, i) => ({
-              user_id: user.id,
-              workout_id: workout.id,
-              name: g.name,
-              sets: null,
-              reps: null,
-              weight: null,
-              image_path: g.image_path,
-              exercise_reference_id: groupReferenceIds[i],
-              position: i,
-            })),
-          )
-          .select("id");
-        if (exErr) throw exErr;
-
-        const setRows = groupList.flatMap((g, i) => {
-          const exerciseId = insertedExs?.[i]?.id;
-          if (!exerciseId) return [];
-          return g.setRows.map((r, j) => ({
-            exercise_id: exerciseId,
-            user_id: user.id,
-            set_number: j + 1,
-            reps: r.reps,
-            weight: r.weight,
-            completed: false,
-          }));
-        });
-        if (setRows.length > 0) {
-          const { error: setErr } = await supabase.from("exercise_sets").insert(setRows);
-          if (setErr) throw setErr;
+        for (let i = 0; i < groupList.length; i++) {
+          const g = groupList[i];
+          const createdEx = await exercisesRepo.create(user.id, {
+            workout_id: workout.id,
+            name: g.name,
+            sets: null,
+            reps: null,
+            weight: null,
+            image_path: g.image_path,
+            exercise_reference_id: groupReferenceIds[i],
+            position: i,
+            notes: null,
+            superset_group: null,
+            muscle_groups: null,
+          });
+          for (let j = 0; j < g.setRows.length; j++) {
+            const r = g.setRows[j];
+            await exerciseSetsRepo.create(user.id, {
+              exercise_id: createdEx.id,
+              set_number: j + 1,
+              reps: r.reps,
+              weight: r.weight,
+              completed: false,
+              rest_seconds: null,
+              notes: null,
+              tempo: null,
+            });
+          }
         }
       }
     },
@@ -1132,21 +1187,24 @@ export function useStartWorkoutFromTemplate() {
 /** Ajoute un exercice (vide) à la séance active. */
 export function useAddExerciseToActiveWorkout() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async ({ workoutId, name }: { workoutId: string; name: string }) => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
       const exerciseReferenceId = await resolveMuscuExerciseReferenceId(name);
       // Nouvel exercice = toujours en dernière position de la séance.
       const cached = qc.getQueryData<ActiveWorkout | null>(ACTIVE_KEY);
-      const nextPosition =
-        cached && cached.id === workoutId
-          ? Math.max(-1, ...cached.exercises.map((e) => e.position)) + 1
-          : 0;
-      const { error } = await db.from("exercises").insert({
-        user_id: user.id,
+      let nextPosition: number;
+      if (cached && cached.id === workoutId) {
+        nextPosition = Math.max(-1, ...cached.exercises.map((e) => e.position)) + 1;
+      } else {
+        const localExercises = (await exercisesRepo.list(user.id)).filter(
+          (e) => e.workout_id === workoutId,
+        );
+        nextPosition =
+          localExercises.length > 0 ? Math.max(...localExercises.map((e) => e.position)) + 1 : 0;
+      }
+      await exercisesRepo.create(user.id, {
         workout_id: workoutId,
         name,
         sets: null,
@@ -1155,8 +1213,10 @@ export function useAddExerciseToActiveWorkout() {
         image_path: null,
         exercise_reference_id: exerciseReferenceId,
         position: nextPosition,
+        notes: null,
+        superset_group: null,
+        muscle_groups: null,
       });
-      if (error) throw error;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ACTIVE_KEY });
@@ -1185,19 +1245,13 @@ function patchActiveCache(
  *  série/rep/charge, uniquement la colonne `position`. */
 export function useReorderActiveExercises() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async (orderedIds: string[]) => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      const results = await Promise.all(
-        orderedIds.map((id, position) =>
-          db.from("exercises").update({ position }).eq("id", id).eq("user_id", user.id),
-        ),
-      );
-      const failed = results.find((r) => r.error);
-      if (failed?.error) throw failed.error;
+      for (let position = 0; position < orderedIds.length; position++) {
+        await exercisesRepo.update(orderedIds[position], user.id, { position });
+      }
     },
     onMutate: async (orderedIds) => {
       await qc.cancelQueries({ queryKey: ACTIVE_KEY });
@@ -1225,9 +1279,16 @@ export function useReorderActiveExercises() {
   });
 }
 
-/** Ajoute une série à un exercice de la séance active. */
+/** Ajoute une série à un exercice de la séance active. Offline-first : le
+ *  numéro de série est assigné DÉTERMINISTE à partir du store LOCAL
+ *  (max existant + 1) — plus besoin du retry serveur sur conflit 23505
+ *  (pensé pour des courses entre onglets EN LIGNE) : hors ligne, le store
+ *  local est la seule source de vérité, et l'id client-généré + l'upsert
+ *  `onConflict: id` du sync engine garantissent qu'un retry réseau après
+ *  coupure ne crée jamais deux fois la même série. */
 export function useAddExerciseSet() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async ({
       exerciseId,
@@ -1240,35 +1301,22 @@ export function useAddExerciseSet() {
       reps: number | null;
       weight: number | null;
     }) => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-
-      // Défense en profondeur : si `setNumber` entre en conflit malgré tout
-      // (course entre onglets/appareils), on relit le max côté serveur et on
-      // retente une fois au lieu de faire échouer l'ajout de série.
-      let n = setNumber;
-      for (let attempt = 0; attempt < 2; attempt++) {
-        const { error } = await supabase.from("exercise_sets").insert({
-          user_id: user.id,
-          exercise_id: exerciseId,
-          set_number: n,
-          reps,
-          weight,
-        });
-        if (!error) return;
-        if (error.code !== "23505" || attempt === 1) throw error;
-        const { data: maxRow, error: maxErr } = await supabase
-          .from("exercise_sets")
-          .select("set_number")
-          .eq("exercise_id", exerciseId)
-          .order("set_number", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        if (maxErr) throw maxErr;
-        n = (maxRow?.set_number ?? n) + 1;
-      }
+      const localSets = (await exerciseSetsRepo.list(user.id)).filter(
+        (s) => s.exercise_id === exerciseId,
+      );
+      const n =
+        localSets.length > 0 ? Math.max(...localSets.map((s) => s.set_number)) + 1 : setNumber;
+      await exerciseSetsRepo.create(user.id, {
+        exercise_id: exerciseId,
+        set_number: n,
+        reps,
+        weight,
+        completed: false,
+        rest_seconds: null,
+        notes: null,
+        tempo: null,
+      });
     },
     onMutate: async ({ exerciseId, setNumber, reps, weight }) => {
       await qc.cancelQueries({ queryKey: ACTIVE_KEY });
@@ -1307,6 +1355,7 @@ export function useAddExerciseSet() {
 /** Met à jour reps / weight / completed d'une série. */
 export function useUpdateExerciseSet() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async ({
       id,
@@ -1319,10 +1368,10 @@ export function useUpdateExerciseSet() {
     }) => {
       // #1 : `completed` ne doit PAS être retiré — sinon la validation des séries n'est jamais enregistrée.
       if (Object.keys(fields).length === 0) return;
-      // Garde : série optimiste pas encore confirmée par le serveur.
+      // Garde : série optimiste pas encore confirmée par le repository local.
       if (id.startsWith("tmp-")) return;
-      const { error } = await supabase.from("exercise_sets").update(fields).eq("id", id);
-      if (error) throw error;
+      if (!user) throw new Error("Non authentifié");
+      await exerciseSetsRepo.update(id, user.id, fields);
     },
     onMutate: async ({ id, ...fields }) => {
       await qc.cancelQueries({ queryKey: ACTIVE_KEY });
@@ -1350,11 +1399,12 @@ export function useUpdateExerciseSet() {
 /** Supprime une série par son id. */
 export function useDeleteExerciseSet() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async (id: string) => {
       if (id.startsWith("tmp-")) return;
-      const { error } = await supabase.from("exercise_sets").delete().eq("id", id);
-      if (error) throw error;
+      if (!user) throw new Error("Non authentifié");
+      await exerciseSetsRepo.remove(id, user.id);
     },
     onMutate: async (id: string) => {
       await qc.cancelQueries({ queryKey: ACTIVE_KEY });
@@ -1378,6 +1428,8 @@ export function useDeleteExerciseSet() {
 }
 
 // ---------- Exercise images ----------
+// Stockage Supabase (signed URLs) — reste online-only par nature : une URL
+// signée n'a aucun sens hors connexion et expire de toute façon.
 export function useExerciseImageUrls(paths: Array<string | null | undefined>) {
   const key = paths.filter(Boolean).sort().join("|");
   return useQuery({
