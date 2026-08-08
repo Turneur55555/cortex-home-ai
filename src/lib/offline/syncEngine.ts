@@ -185,11 +185,17 @@ export interface SyncResult {
  * retirée de la queue, une opération `syncing` interrompue redevient
  * `pending`/`failed` au prochain appel (pas d'état bloquant permanent).
  */
-export async function processSyncQueue(userId: string): Promise<SyncResult> {
+export async function processSyncQueue(
+  userId: string,
+  options: { respectBackoff?: boolean } = {},
+): Promise<SyncResult> {
   const result: SyncResult = { succeeded: 0, conflicted: 0, retried: 0 };
   const ops = await listPendingOperations(userId);
   for (const op of ops) {
-    if (!isDueForRetry(op)) continue;
+    // `respectBackoff` sert un futur scheduler périodique automatique — les
+    // déclencheurs actuels (retour réseau, bouton "Réessayer") sont des
+    // événements ponctuels et doivent retenter immédiatement.
+    if (options.respectBackoff && !isDueForRetry(op)) continue;
     await updateOperationStatus(op.id, { status: "syncing" });
     const outcome = await applyOperation(op);
     if (outcome === "done") {
