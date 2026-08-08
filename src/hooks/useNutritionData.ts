@@ -25,7 +25,7 @@ const supabase = supabaseTyped as any;
  * `types.ts` généré (dérive documentée, cf. src/integrations/supabase/db.ts).
  */
 export type NutritionRow = Tables<"nutrition"> & {
-  updated_at?: string | null;
+  updated_at?: string;
   recipe_id?: string | null;
 };
 
