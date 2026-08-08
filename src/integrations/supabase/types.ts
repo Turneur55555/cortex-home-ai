@@ -1476,6 +1476,7 @@ export type Database = {
           rest_seconds: number | null
           set_number: number
           tempo: string | null
+          updated_at: string
           user_id: string
           weight: number | null
         }
@@ -1489,6 +1490,7 @@ export type Database = {
           rest_seconds?: number | null
           set_number: number
           tempo?: string | null
+          updated_at?: string
           user_id: string
           weight?: number | null
         }
@@ -1502,6 +1504,7 @@ export type Database = {
           rest_seconds?: number | null
           set_number?: number
           tempo?: string | null
+          updated_at?: string
           user_id?: string
           weight?: number | null
         }
@@ -1572,6 +1575,7 @@ export type Database = {
           reps: number | null
           sets: number | null
           superset_group: number | null
+          updated_at: string
           user_id: string
           weight: number | null
           workout_id: string
@@ -1587,6 +1591,7 @@ export type Database = {
           reps?: number | null
           sets?: number | null
           superset_group?: number | null
+          updated_at?: string
           user_id: string
           weight?: number | null
           workout_id: string
@@ -1602,6 +1607,7 @@ export type Database = {
           reps?: number | null
           sets?: number | null
           superset_group?: number | null
+          updated_at?: string
           user_id?: string
           weight?: number | null
           workout_id?: string
@@ -4199,6 +4205,7 @@ export type Database = {
           created_at: string
           id: string
           summary: Json
+          updated_at: string
           user_id: string
           workout_id: string
         }
@@ -4206,6 +4213,7 @@ export type Database = {
           created_at?: string
           id?: string
           summary: Json
+          updated_at?: string
           user_id: string
           workout_id: string
         }
@@ -4213,6 +4221,7 @@ export type Database = {
           created_at?: string
           id?: string
           summary?: Json
+          updated_at?: string
           user_id?: string
           workout_id?: string
         }
@@ -4306,6 +4315,7 @@ export type Database = {
           position: number
           superset_group: number | null
           template_id: string
+          updated_at: string
           user_id: string
         }
         Insert: {
@@ -4320,6 +4330,7 @@ export type Database = {
           position?: number
           superset_group?: number | null
           template_id: string
+          updated_at?: string
           user_id: string
         }
         Update: {
@@ -4334,6 +4345,7 @@ export type Database = {
           position?: number
           superset_group?: number | null
           template_id?: string
+          updated_at?: string
           user_id?: string
         }
         Relationships: [
@@ -4364,6 +4376,7 @@ export type Database = {
           metrics: Json
           position: number
           template_id: string
+          updated_at: string
           user_id: string
         }
         Insert: {
@@ -4376,6 +4389,7 @@ export type Database = {
           metrics?: Json
           position?: number
           template_id: string
+          updated_at?: string
           user_id: string
         }
         Update: {
@@ -4388,6 +4402,7 @@ export type Database = {
           metrics?: Json
           position?: number
           template_id?: string
+          updated_at?: string
           user_id?: string
         }
         Relationships: [
@@ -4469,6 +4484,7 @@ export type Database = {
           name: string
           notes: string | null
           status: string
+          updated_at: string
           user_id: string
           xp_after: number | null
           xp_before: number | null
@@ -4486,6 +4502,7 @@ export type Database = {
           name: string
           notes?: string | null
           status?: string
+          updated_at?: string
           user_id: string
           xp_after?: number | null
           xp_before?: number | null
@@ -4503,6 +4520,7 @@ export type Database = {
           name?: string
           notes?: string | null
           status?: string
+          updated_at?: string
           user_id?: string
           xp_after?: number | null
           xp_before?: number | null
