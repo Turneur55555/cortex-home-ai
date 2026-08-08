@@ -1,7 +1,76 @@
 # Mémoire projet — cortex-home-ai
 
 ## Dernière mise à jour
-2026-07-28
+2026-08-08
+
+## Architecture offline-first globale — infra générique + premier module migré (2026-08-08, branche `claude/cortex-offline-first-arch-hhan1x`)
+Demande : construire l'architecture OFFLINE-FIRST globale (UI → Repository → IndexedDB → Sync Queue →
+Supabase), stratégie de conflits = détection + choix utilisateur explicite (jamais d'écrasement
+silencieux), et migrer un premier module (Nutrition/Recettes) dessus.
+- **Nouveau dossier `src/lib/offline/`** (logique pure, zéro dépendance React, `idb` comme wrapper
+  IndexedDB — ~1kb, ajouté en dépendance) :
+  - `db.ts` — base `cortex-offline` (via `idb`), 3 object stores : `entities` (clé composée
+    `${table}::${localId}`, index `by-table-user` sur `[table,userId]`, `by-sync-status`),
+    `syncQueue`, `conflicts`. `purgeUserOfflineData(userId)` scope TOUJOURS par userId — jamais de
+    fuite entre comptes.
+  - `types.ts` — `OfflineEntity`, `SyncOperation` (id local stable = idempotence : un `create` retenté
+    après coupure fait un upsert Supabase par id, jamais de doublon), `ConflictRecord`.
+    `ConflictResolutionStrategy = 'keep-local' | 'keep-server'` avec point d'extension explicite
+    `ExtensibleConflictResolutionStrategy` prêt pour un futur `'merge'` (non implémenté).
+  - `repository.ts` — `createOfflineRepository<T>(table, supabaseTableName?)` : `list/get/create/
+    update/remove` écrivent TOUJOURS IndexedDB d'abord (`syncStatus:'pending'`) puis enfilent une
+    opération dans `syncQueue`. Fusionne un `update`/`remove` dans un `create` encore pending plutôt
+    que d'empiler une opération séparée (évite d'envoyer un update vers une ligne qui n'existe pas
+    encore côté serveur). `hydrateEntitiesFromServer()` fusionne des lignes serveur sans jamais
+    écraser une entité locale non synchronisée.
+  - `syncQueue.ts` — file FIFO par `createdAt`, `findPendingCreateForRecord`/`updateOperationPayload`
+    pour la fusion ci-dessus.
+  - `syncEngine.ts` — `processSyncQueue(userId, { respectBackoff? })` pousse la queue vers Supabase
+    (seul point de l'infra offline qui parle réseau). Backoff exponentiel simple présent mais
+    réservé à un futur scheduler périodique — les déclencheurs actuels (retour réseau, bouton
+    "Réessayer") sont ponctuels et retentent immédiatement (`respectBackoff` par défaut `false`).
+    `resolveConflict(id, strategy)` : `keep-local` ré-enfile un update forcé, `keep-server` applique
+    la version serveur en local sans rien renvoyer.
+  - `conflictDetector.ts` — conflit détecté seulement si LE SERVEUR a changé depuis `baseUpdatedAt`
+    ET la donnée locale aussi (`syncStatus` pending/failed) — sinon c'est un simple refresh, pas un
+    vrai conflit.
+  - `networkStatus.ts` — partie pure (`navigator.onLine` + events) ; hook React `useNetworkStatus()`
+    dans `src/hooks/`.
+- **`src/hooks/useOfflineSync.ts`** — hook central (statut réseau + compteurs queue + conflits, poll
+  léger 4s, auto-sync au retour réseau) consommé par l'UI.
+- **UI** : `src/components/shared/SyncStatusIndicator.tsx` (badge flottant discret, states En
+  ligne/Hors connexion/Synchronisation/Synchronisé/Action en attente/Conflit) + `SyncQueueSheet.tsx`
+  (panneau opérations en attente + cartes de résolution de conflit "Garder ma version"/"Garder la
+  version serveur"), intégrés dans `src/routes/_authenticated.tsx`.
+- **`use-auth.tsx`** : `signOut()` appelle désormais `purgeUserOfflineData(outgoingUserId)` en plus de
+  `queryClient.clear()` — même point d'ancrage pour les deux purges (React Query + IndexedDB).
+- **Migration SQL `20260826090000_offline_first_updated_at.sql`** (appliquée en prod via MCP Supabase,
+  `types.ts` régénéré) : ajoute `updated_at` + trigger `set_updated_at` (réutilise la fonction
+  générique existante, pas de doublon) sur `nutrition`, `nutrition_favorites`, `recipe_ingredients`,
+  `shopping_list`, `meal_plans` — requis par le conflict detector, absent avant sur ces 5 tables.
+- **Module Nutrition/Recettes migré vers le repository offline** (`nutrition_favorites` ET
+  `recipes`/`recipe_ingredients`, fonctionnel offline de bout en bout) :
+  - `use-nutrition-favorites.ts` : list/create/delete passent par `createOfflineRepository`, aucun
+    composant consommateur modifié (`FavoritesSheet`, `FoodLibrarySheet`, `NutritionTab`).
+  - `useRecipes.ts` : list/get/update/toggle-favorite/delete passent par le repository. La jointure
+    macros `items` (per_100g) n'est disponible qu'en ligne — dégradation gracieuse hors connexion
+    (les recettes importées IA restent exactes car `per_serving_*` fait foi, cf. commentaire déjà
+    existant). `useDuplicateRecipe`/`useReanalyzeRecipe` restent STRICTEMENT en ligne (edge function
+    IA / lecture serveur fraîche) avec message d'erreur clair si utilisées hors connexion — hors du
+    périmètre offline par nature, conforme à la consigne "services nécessitant Internet".
+- **Reste à migrer** (hors périmètre de cette itération, colonnes `updated_at` déjà en place par
+  cohérence) : `nutrition` (journal), `shopping_list`, `meal_plans`, `saved_meals` — et tout le module
+  Fitness/Journal, prévu comme second module cible de la même infra générique.
+- **Tests** (`src/lib/offline/offlineSync.test.ts`, `fake-indexeddb` + mock du client Supabase, même
+  pattern que `strengthEngine.test.ts`) : 13 tests couvrant lecture/création/modification/suppression
+  hors connexion, sync au retour réseau, opérations enchaînées avant reconnexion, coupure pendant la
+  synchro + retry, idempotence (pas de doublon), conflit détecté + les deux résolutions, purge par
+  compte (pas de fuite), généricité sur une table arbitraire. Suite complète : 1219 passed/32 skipped,
+  `tsc --noEmit` 0 erreur, `vite build` OK, eslint clean sur tous les fichiers touchés (seuls des
+  warnings `no-explicit-any` déjà tolérés ailleurs dans le repo, aucune erreur).
+- **Branche non mergée** : `claude/cortex-offline-first-arch-hhan1x` poussée sur origin, PAS mergée
+  vers `main` (contrainte d'environnement, cf. CLAUDE.md "Workflow Git et publication") — fusion
+  manuelle restante avant que ce soit livré en prod/Lovable.
 
 ## Scan code-barres — création de produit quand introuvable (2026-07-28, branche `claude/missing-product-creation-6zzm6o`)
 Demande : quand un scan de code-barres ne retourne rien (ni OpenFoodFacts ni USDA ni le catalogue
