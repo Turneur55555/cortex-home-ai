@@ -23,13 +23,86 @@ export interface InstagramProvider {
   fetchContent(url: string, env: { openaiApiKey: string | null }): Promise<InstagramContent>;
 }
 
+const NAMED_HTML_ENTITIES: Record<string, string> = {
+  amp: "&",
+  quot: '"',
+  apos: "'",
+  lt: "<",
+  gt: ">",
+  nbsp: " ",
+};
+
+/**
+ * Décode les entités HTML — nommées (`&amp;`, `&quot;`, `&nbsp;`, ...) ET
+ * numériques décimales/hexadécimales (`&#128531;`, `&#x1f363;`). Ces
+ * dernières sont massivement utilisées par Instagram pour encoder les
+ * emojis des légendes (og:description) — `String.fromCodePoint` gère aussi
+ * les emojis au-delà du BMP (paires suggogates), contrairement à
+ * `String.fromCharCode`.
+ */
 function decodeHtmlEntities(s: string): string {
+  return s.replace(/&(#x[0-9a-fA-F]+|#[0-9]+|[a-zA-Z]+);/g, (match, entity: string) => {
+    if (entity[0] === "#") {
+      const isHex = entity[1] === "x" || entity[1] === "X";
+      const codePoint = isHex ? parseInt(entity.slice(2), 16) : parseInt(entity.slice(1), 10);
+      if (!Number.isFinite(codePoint)) return match;
+      try {
+        return String.fromCodePoint(codePoint);
+      } catch {
+        return match;
+      }
+    }
+    return NAMED_HTML_ENTITIES[entity] ?? match;
+  });
+}
+
+/**
+ * Instagram préfixe l'og:description d'un post avec des métadonnées qui ne
+ * font PAS partie de la légende publiée par le créateur — ex.
+ * "1,066 likes, 46 comments - bouffegains - July 28, 2026: <légende>" ou
+ * "523 Likes, 12 Comments - username (@handle) on Instagram: <légende>".
+ * Ne retire QUE ce préfixe reconnu (compteurs + identité + date/"on
+ * Instagram" + ":") — si le format ne matche pas, le texte est laissé
+ * intact plutôt que de risquer de couper de la vraie légende.
+ */
+const IG_METADATA_PREFIX_RE = new RegExp(
+  "^[\\d][\\d.,\\s]*[KkMm]?\\+?\\s*(?:likes?|views?)" +
+    "(?:\\s*,\\s*[\\d][\\d.,\\s]*[KkMm]?\\+?\\s*comments?)?" +
+    "\\s*-\\s*.+?" +
+    "(?:on Instagram|-\\s*[A-ZÀ-Ý][\\wÀ-ÿ'’]*\\s+\\d{1,2},\\s*\\d{4})" +
+    "\\s*:\\s*",
+  "i",
+);
+
+function stripInstagramMetadata(caption: string): string {
+  return caption.replace(IG_METADATA_PREFIX_RE, "");
+}
+
+/** Espaces insécables → espace normal, fins de ligne uniformisées, lignes vides multiples réduites, trim. */
+function normalizeWhitespace(s: string): string {
   return s
-    .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">");
+    .replace(/\u00a0/g, " ")
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/[ \t]+/g, " ").trimEnd())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/**
+ * Pipeline complet de nettoyage d'une légende Instagram brute : décodage
+ * HTML → retrait des métadonnées Instagram (likes/commentaires/date) →
+ * normalisation des espaces/retours à la ligne. Ne réécrit ni ne traduit
+ * jamais le texte — uniquement du nettoyage de format. Exportée pour être
+ * testée indépendamment du scraping réseau.
+ */
+export function cleanInstagramCaption(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const decoded = decodeHtmlEntities(raw);
+  const stripped = stripInstagramMetadata(decoded);
+  const normalized = normalizeWhitespace(stripped);
+  return normalized || null;
 }
 
 function extractMeta(html: string, property: string): string | null {
@@ -134,7 +207,12 @@ async function fetchInstagramPage(url: string): Promise<PageContent> {
       "Impossible de lire ce post Instagram (contenu supprimé ou blocage anti-robot). Réessaie avec un autre lien ou plus tard.",
     );
   }
-  return { caption: description ?? title, imageUrl, videoUrl, authorHandle: extractAuthorHandle(title, description) };
+  return {
+    caption: cleanInstagramCaption(description ?? title),
+    imageUrl,
+    videoUrl,
+    authorHandle: extractAuthorHandle(title, description),
+  };
 }
 
 async function fetchImageAsBase64(imageUrl: string): Promise<{ b64: string; mime: string } | null> {

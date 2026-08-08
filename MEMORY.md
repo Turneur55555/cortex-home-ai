@@ -3558,3 +3558,55 @@ ESLint/Vitest/build verts.
   `main`, qui régénère aussi `src/integrations/supabase/types.ts` ensuite. Les hooks utilisent le
   client `as any` (convention déjà en place pour toutes les tables Nutrition V2), donc aucune dépendance
   de compilation sur `types.ts` pour ce module.
+- **Mise en prod** : PR #26 mergée sur `main` (squash, SHA `123bb35fc6f6da03d14ed42a1b04c73e5d17b0d6`)
+  après checks CI verts (TypeScript, migrations statiques, RLS isolation, DB constraint parity).
+  `migrate.yml` a appliqué `20260825090000_recipe_collections_and_shopping_categories` (confirmé via
+  `list_migrations`) et régénéré `types.ts` (commit auto `ci: auto-corrige la dérive types.ts après
+  migration`). `deploy-functions.yml` a redéployé `recipe-import` (confirmé `ACTIVE`, version 2 côté
+  Supabase). Module collections + liste de courses en production.
+
+## Import de recettes — correctif nettoyage `source_description` (entités HTML + métadonnées Instagram) (2026-08-08, session suivante)
+
+**Demande** : un test réel d'import montrait deux défauts dans `source_description` — (1) entités HTML
+numériques non décodées (`&#x1f363;`, `&#xa0;`, ...) affichées brutes au lieu des emojis/espaces
+correspondants ; (2) le préfixe de métadonnées Instagram (`"1,066 likes, 46 comments - bou... - July
+28, 2026:"`) inclus dans la légende alors qu'il n'en fait pas partie. Contraintes explicites : ne
+jamais réécrire/traduire la légende avec l'IA, ne rien supprimer arbitrairement (uniquement le
+nettoyage de format + retrait des métadonnées Instagram reconnues), conserver emojis/hashtags/
+quantités/texte original intégralement, ajouter un test de non-régression dédié, ne rien modifier
+d'autre dans le fonctionnement de l'import.
+
+- **Cause racine** : `instagram-provider.ts` → `decodeHtmlEntities()` ne gérait que 5 entités nommées
+  (`&amp;` `&quot;` `&#39;` `&lt;` `&gt;`) — aucun support des références numériques décimales/
+  hexadécimales (`&#NNN;`/`&#xHHHH;`), massivement utilisées par Instagram pour encoder les emojis
+  d'og:description. Le préfixe likes/comments/date d'Instagram n'était par ailleurs jamais retiré —
+  `page.caption = description ?? title` était utilisé tel quel.
+- **Fix — `decodeHtmlEntities()` réécrite** : regex unique `/&(#x[0-9a-fA-F]+|#[0-9]+|[a-zA-Z]+);/g` —
+  branche numérique via `String.fromCodePoint` (gère aussi les emojis hors BMP, paires suggogates,
+  contrairement à `fromCharCode`), branche nommée via une table (`amp`/`quot`/`apos`/`lt`/`gt`/`nbsp`).
+- **Nouveau `stripInstagramMetadata()`** : retire UNIQUEMENT un préfixe reconnu — compteurs
+  (likes/vues + éventuels commentaires) + identité + soit `"- Mois JJ, AAAA"` soit `"on Instagram"` +
+  `":"`. Couvre les deux formats observés (`"1,066 likes, 46 comments - user - July 28, 2026: ..."` ET
+  `"523 Likes, 12 Comments - user (@handle) on Instagram: ..."`). Si le format ne matche pas, le texte
+  est laissé intact — jamais de suppression arbitraire hors de ce préfixe reconnu.
+- **Nouveau `normalizeWhitespace()`** : espaces insécables (` `, issus du décodage de `&#xa0;`) →
+  espace normal, fins de ligne uniformisées, espaces multiples réduits par ligne (`trimEnd`), 3+ lignes
+  vides consécutives réduites à 2, trim global — préserve intentionnellement les sauts de ligne simples
+  et doubles (mise en forme originale de la légende : titres, sections ingrédients, hashtags).
+- **Nouveau `cleanInstagramCaption()` exporté** — compose les trois étapes dans l'ordre demandé
+  (décodage → retrait métadonnées → normalisation), zéro appel IA, zéro réécriture/traduction. Branché
+  dans `fetchInstagramPage()` sur le `caption` retourné UNIQUEMENT (`description ?? title` nettoyé) —
+  `extractAuthorHandle(title, description)` continue de recevoir les champs bruts (juste
+  entity-décodés comme avant), donc l'extraction de l'auteur (@handle) est inchangée.
+- **Nouveau test dédié** `supabase/functions/_shared/instagram-provider.test.ts` (7 cas, exécuté par
+  vitest via le pattern `supabase/functions/**/*.test.ts` déjà configuré) : décodage emojis
+  numériques + nommés, retrait des deux formats de préfixe Instagram, normalisation espaces
+  insécables/lignes vides, cas réel complet (reprend l'exemple du bug — vérifie absence de `&#`, de
+  "likes"/"comments", de la date, ET présence des emojis/quantités/macros/hashtags), non-modification
+  si le format n'est pas reconnu, `null` sur entrée vide.
+- **Validation** : `tsc --noEmit` (0 erreur) / `eslint` sur les fichiers touchés (0 erreur, seuls
+  warnings `no-console` pré-existants sur des lignes non touchées) / `npx vitest run` (1206 passed,
+  +7 vs avant — la suite E2E `recipe-import` à 13 tests reste verte, fixture `PUBLIC_HTML` inchangée
+  donc non affectée) / `npm run build` vert. Aucun autre fichier du pipeline d'import touché
+  (parser/engine/db/handler inchangés) — correctif strictement scopé au nettoyage de légende, comme
+  demandé.
