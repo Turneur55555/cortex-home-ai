@@ -129,6 +129,9 @@ export async function parseRecipeFromContent(
       ? `Transcription audio : « ${content.transcript} »`
       : "Transcription audio indisponible pour ce post.",
     "Reconstitue la fiche recette complète à partir de ces éléments et de la miniature ci-jointe (si présente).",
+    // Règle de langue — même pipeline IA : la traduction éventuelle est faite
+    // par cet appel, jamais par un second passage (voir recipe-language.ts).
+    buildLanguageDirective(detectLanguage(content.caption, content.transcript)),
   ];
   const messageContent: unknown[] = [{ type: "text", text: textLines.join("\n\n") }];
   if (content.imageB64 && content.imageMime) {
