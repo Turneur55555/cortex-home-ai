@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { AppShell } from "@/components/AppShell";
 import { PreferencesEffects } from "@/components/PreferencesEffects";
 import { BottomNav } from "@/components/BottomNav";
+import { SyncStatusIndicator } from "@/components/shared/SyncStatusIndicator";
 import { Loader2 } from "lucide-react";
 import { logAuthEvent, summarizeSession } from "@/lib/authDiagnostics";
 import { restoreAuthSession } from "@/lib/authSession";
@@ -40,6 +41,7 @@ function AuthGate() {
   return (
     <PreferencesEffects>
       <AppShell>
+        <SyncStatusIndicator />
         <div className="flex flex-1 flex-col pb-2">
           <Outlet />
         </div>

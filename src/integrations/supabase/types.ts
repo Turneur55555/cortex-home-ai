@@ -2253,6 +2253,7 @@ export type Database = {
           recipe_id: string | null
           servings: number
           sort_order: number
+          updated_at: string
           user_id: string
         }
         Insert: {
@@ -2264,6 +2265,7 @@ export type Database = {
           recipe_id?: string | null
           servings?: number
           sort_order?: number
+          updated_at?: string
           user_id: string
         }
         Update: {
@@ -2275,6 +2277,7 @@ export type Database = {
           recipe_id?: string | null
           servings?: number
           sort_order?: number
+          updated_at?: string
           user_id?: string
         }
         Relationships: [
@@ -2336,6 +2339,7 @@ export type Database = {
           recipe_id: string | null
           serving_count: number | null
           source_document_id: string | null
+          updated_at: string
           user_id: string
         }
         Insert: {
@@ -2359,6 +2363,7 @@ export type Database = {
           recipe_id?: string | null
           serving_count?: number | null
           source_document_id?: string | null
+          updated_at?: string
           user_id: string
         }
         Update: {
@@ -2382,6 +2387,7 @@ export type Database = {
           recipe_id?: string | null
           serving_count?: number | null
           source_document_id?: string | null
+          updated_at?: string
           user_id?: string
         }
         Relationships: [
@@ -2411,6 +2417,7 @@ export type Database = {
           meal: string | null
           name: string
           proteins: number | null
+          updated_at: string
           user_id: string
         }
         Insert: {
@@ -2422,6 +2429,7 @@ export type Database = {
           meal?: string | null
           name: string
           proteins?: number | null
+          updated_at?: string
           user_id?: string
         }
         Update: {
@@ -2433,6 +2441,7 @@ export type Database = {
           meal?: string | null
           name?: string
           proteins?: number | null
+          updated_at?: string
           user_id?: string
         }
         Relationships: []
@@ -2946,6 +2955,7 @@ export type Database = {
           recipe_id: string
           sort_order: number
           unit: string | null
+          updated_at: string
           user_id: string | null
         }
         Insert: {
@@ -2960,6 +2970,7 @@ export type Database = {
           recipe_id: string
           sort_order?: number
           unit?: string | null
+          updated_at?: string
           user_id?: string | null
         }
         Update: {
@@ -2974,6 +2985,7 @@ export type Database = {
           recipe_id?: string
           sort_order?: number
           unit?: string | null
+          updated_at?: string
           user_id?: string | null
         }
         Relationships: [
@@ -3369,6 +3381,7 @@ export type Database = {
           name: string
           quantity: number | null
           unit: string | null
+          updated_at: string
           user_id: string
         }
         Insert: {
@@ -3380,6 +3393,7 @@ export type Database = {
           name: string
           quantity?: number | null
           unit?: string | null
+          updated_at?: string
           user_id: string
         }
         Update: {
@@ -3391,6 +3405,7 @@ export type Database = {
           name?: string
           quantity?: number | null
           unit?: string | null
+          updated_at?: string
           user_id?: string
         }
         Relationships: []

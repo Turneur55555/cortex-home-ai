@@ -1,15 +1,22 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase as supabaseTyped } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/use-auth";
 const supabase = supabaseTyped as any;
 import { recipeMacros, perServing, scaleServings, type MacroTotals } from "@/lib/nutrition/recipes";
 import type { ImportedRecipe, RecipeSourceKind } from "@/lib/nutrition/recipeImport";
+import { entityKey, getOfflineDb } from "@/lib/offline/db";
+import { getIsOnline } from "@/lib/offline/networkStatus";
+import { createOfflineRepository, hydrateEntitiesFromServer } from "@/lib/offline/repository";
 
 /**
- * CRUD typé des recettes Nutrition V2 (react-query).
- * Tables : recipes, recipe_ingredients. Les macros sont dérivées via le domaine
- * pur (lib/nutrition/recipes), à partir des champs *_per_100g de items.
- * Client typé : ces tables figurent dans supabase/types.ts.
+ * CRUD des recettes Nutrition V2 (react-query) — offline-first (cf.
+ * src/lib/offline/) pour `recipes` + `recipe_ingredients` : lecture/écriture
+ * toujours locales (IndexedDB) d'abord, synchronisation vers Supabase en
+ * arrière-plan via la sync queue. La duplication et la réanalyse IA
+ * (`useDuplicateRecipe`/`useReanalyzeRecipe`) nécessitent Internet (edge
+ * function / lecture serveur fraîche) et restent en ligne uniquement, avec
+ * un message clair si utilisées hors connexion.
  */
 const db = supabase;
 
@@ -47,7 +54,8 @@ export interface Recipe {
   per_serving_fiber: number | null;
 }
 
-export interface RecipeIngredient {
+/** Ligne locale (sans jointure `items` — disponible seulement en ligne). */
+interface RecipeIngredientRow {
   id: string;
   recipe_id: string;
   user_id: string;
@@ -59,7 +67,11 @@ export interface RecipeIngredient {
   category: string | null;
   sort_order: number;
   created_at: string;
-  /** Macros per_100g héritées de l'item lié (jointure). */
+  updated_at: string;
+}
+
+export interface RecipeIngredient extends RecipeIngredientRow {
+  /** Macros per_100g héritées de l'item lié (jointure) — présent seulement quand récupéré en ligne. */
   items?: {
     calories_per_100g: number | null;
     protein_per_100g: number | null;
@@ -87,32 +99,10 @@ const toMacroInput = (ing: RecipeIngredient) => ({
   fatPer100g: ing.items?.fat_per_100g,
 });
 
-export function useRecipes() {
-  return useQuery({
-    queryKey: RECIPES_KEY,
-    queryFn: async (): Promise<Recipe[]> => {
-      const { data, error } = await db
-        .from("recipes")
-        .select("*")
-        .order("is_favorite", { ascending: false })
-        .order("name", { ascending: true });
-      if (error) throw error;
-      return (data ?? []) as unknown as Recipe[];
-    },
-  });
-}
+const recipesRepo = createOfflineRepository<Recipe>("recipes");
+const ingredientsRepo = createOfflineRepository<RecipeIngredientRow>("recipe_ingredients");
 
-async function fetchRecipeWithMacros(id: string): Promise<RecipeWithMacros> {
-  const { data: recipe, error } = await db.from("recipes").select("*").eq("id", id).single();
-  if (error) throw error;
-  const { data: ings, error: ingErr } = await db
-    .from("recipe_ingredients")
-    .select("*, items(calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g)")
-    .eq("recipe_id", id)
-    .order("sort_order", { ascending: true });
-  if (ingErr) throw ingErr;
-  const ingredients = (ings ?? []) as unknown as RecipeIngredient[];
-  const r = recipe as Recipe;
+function computeMacros(r: Recipe, ingredients: RecipeIngredient[]): RecipeWithMacros {
   const totalGrams = ingredients.every((ing) => ing.grams != null && ing.grams > 0)
     ? ingredients.reduce((sum, ing) => sum + (ing.grams ?? 0), 0)
     : null;
@@ -147,12 +137,87 @@ async function fetchRecipeWithMacros(id: string): Promise<RecipeWithMacros> {
   };
 }
 
-/** Recette complète avec ingrédients (jointure macros items) + macros calculées. */
+export function useRecipes() {
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
+
+  return useQuery({
+    queryKey: [...RECIPES_KEY, userId],
+    enabled: !!userId,
+    queryFn: async (): Promise<Recipe[]> => {
+      if (!userId) return [];
+      if (getIsOnline()) {
+        try {
+          const { data, error } = await db
+            .from("recipes")
+            .select("*")
+            .eq("user_id", userId)
+            .order("is_favorite", { ascending: false })
+            .order("name", { ascending: true });
+          if (!error && data) {
+            await hydrateEntitiesFromServer("recipes", userId, data as Recipe[]);
+          }
+        } catch {
+          // Hors ligne ou erreur réseau : on continue avec le store local.
+        }
+      }
+      const local = await recipesRepo.list(userId);
+      return [...local].sort((a, b) => {
+        if (a.is_favorite !== b.is_favorite) return a.is_favorite ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+    },
+  });
+}
+
+async function ingredientsForRecipe(
+  userId: string,
+  recipeId: string,
+): Promise<RecipeIngredientRow[]> {
+  const all = await ingredientsRepo.list(userId);
+  return all
+    .filter((ing) => ing.recipe_id === recipeId)
+    .sort((a, b) => a.sort_order - b.sort_order);
+}
+
+async function fetchRecipeWithMacros(id: string, userId: string): Promise<RecipeWithMacros> {
+  if (getIsOnline()) {
+    try {
+      const { data: recipe, error } = await db.from("recipes").select("*").eq("id", id).single();
+      if (error) throw error;
+      const { data: ings, error: ingErr } = await db
+        .from("recipe_ingredients")
+        .select("*, items(calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g)")
+        .eq("recipe_id", id)
+        .order("sort_order", { ascending: true });
+      if (ingErr) throw ingErr;
+      const ingredients = (ings ?? []) as unknown as RecipeIngredient[];
+      const r = recipe as Recipe;
+      await hydrateEntitiesFromServer("recipes", userId, [r]);
+      await hydrateEntitiesFromServer(
+        "recipe_ingredients",
+        userId,
+        ingredients.map(({ items: _items, ...rest }) => rest) as RecipeIngredientRow[],
+      );
+      return computeMacros(r, ingredients);
+    } catch {
+      // Hors ligne ou erreur réseau : on continue avec le store local.
+    }
+  }
+  const r = await recipesRepo.get(id);
+  if (!r) throw new Error("Recette introuvable (hors connexion et jamais synchronisée)");
+  const ingredients = await ingredientsForRecipe(userId, id);
+  return computeMacros(r, ingredients);
+}
+
+/** Recette complète avec ingrédients (jointure macros items si en ligne) + macros calculées. */
 export function useRecipe(id: string | null | undefined) {
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
   return useQuery({
     queryKey: recipeKey(id ?? "none"),
-    enabled: !!id,
-    queryFn: () => fetchRecipeWithMacros(id as string),
+    enabled: !!id && !!userId,
+    queryFn: () => fetchRecipeWithMacros(id as string, userId as string),
   });
 }
 
@@ -184,32 +249,30 @@ export interface RecipeUpdatePatch {
 /** Modifie une recette (titre/portions/macros/ingrédients) — pour la fiche recette (module Recettes). */
 export function useUpdateRecipe() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async ({ id, ingredients, ...patch }: RecipeUpdatePatch) => {
+      if (!user) throw new Error("Non authentifié");
       if (Object.keys(patch).length > 0) {
-        const { error } = await db.from("recipes").update(patch).eq("id", id);
-        if (error) throw error;
+        await recipesRepo.update(id, user.id, patch as Partial<Recipe>);
       }
       if (ingredients) {
-        const {
-          data: { user },
-        } = await supabaseTyped.auth.getUser();
-        if (!user) throw new Error("Non authentifié");
-        const { error: delErr } = await db.from("recipe_ingredients").delete().eq("recipe_id", id);
-        if (delErr) throw delErr;
-        if (ingredients.length > 0) {
-          const rows = ingredients.map((ing, idx) => ({
+        const existing = await ingredientsForRecipe(user.id, id);
+        for (const ing of existing) {
+          await ingredientsRepo.remove(ing.id, user.id);
+        }
+        for (let idx = 0; idx < ingredients.length; idx += 1) {
+          const ing = ingredients[idx];
+          await ingredientsRepo.create(user.id, {
             recipe_id: id,
-            user_id: user.id,
+            item_id: null,
             name: ing.name,
             quantity: ing.quantity,
             unit: ing.unit,
             grams: ing.grams,
             category: ing.category ?? null,
             sort_order: idx,
-          }));
-          const { error: insErr } = await db.from("recipe_ingredients").insert(rows);
-          if (insErr) throw insErr;
+          });
         }
       }
       return id;
@@ -225,10 +288,11 @@ export function useUpdateRecipe() {
 
 export function useToggleRecipeFavorite() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async ({ id, isFavorite }: { id: string; isFavorite: boolean }) => {
-      const { error } = await db.from("recipes").update({ is_favorite: isFavorite }).eq("id", id);
-      if (error) throw error;
+      if (!user) throw new Error("Non authentifié");
+      await recipesRepo.update(id, user.id, { is_favorite: isFavorite });
       return { id, isFavorite };
     },
     onSuccess: ({ id, isFavorite }) => {
@@ -242,10 +306,20 @@ export function useToggleRecipeFavorite() {
 
 export function useDeleteRecipe() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await db.from("recipes").delete().eq("id", id);
-      if (error) throw error;
+      if (!user) throw new Error("Non authentifié");
+      // Cascade locale des ingrédients : le serveur le fait déjà via
+      // ON DELETE CASCADE, ici on nettoie juste le store local pour ne pas
+      // laisser des entités orphelines (pas d'opération de sync séparée
+      // nécessaire pour elles).
+      const existing = await ingredientsForRecipe(user.id, id);
+      const idbDb = await getOfflineDb();
+      for (const ing of existing) {
+        await idbDb.delete("entities", entityKey("recipe_ingredients", ing.id));
+      }
+      await recipesRepo.remove(id, user.id);
       return id;
     },
     onSuccess: () => {
@@ -256,16 +330,19 @@ export function useDeleteRecipe() {
   });
 }
 
-/** Duplique une recette (nouvelle ligne `recipes` + copie des ingrédients) — jamais de source_url (évite un doublon de dédoublonnage import). */
+/** Duplique une recette (nouvelle ligne `recipes` + copie des ingrédients) — jamais de source_url (évite un doublon de dédoublonnage import). Nécessite une connexion (lecture serveur fraîche + insertion immédiate). */
 export function useDuplicateRecipe() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: string): Promise<string> => {
-      const original = await fetchRecipeWithMacros(id);
+      if (!getIsOnline()) {
+        throw new Error("Dupliquer une recette nécessite une connexion Internet.");
+      }
       const {
         data: { user },
       } = await supabaseTyped.auth.getUser();
       if (!user) throw new Error("Non authentifié");
+      const original = await fetchRecipeWithMacros(id, user.id);
 
       const { data: inserted, error: insErr } = await db
         .from("recipes")
@@ -336,6 +413,7 @@ interface RecipeReanalyzeEdgeResponse {
  * "Réanalyser la recette" — repart du lien Instagram enregistré et relance
  * tout le pipeline (edge function `recipe-import`, `reanalyze: true` :
  * ignore le cache/l'association existante, voir recipe-import-handler.ts).
+ * Nécessite une connexion (appel edge function IA) — message clair sinon.
  * Ne modifie PAS `recipes` — retourne la fiche fraîche pour que l'appelant
  * (RecipeDetailSheet) l'affiche en comparaison et laisse l'utilisateur
  * décider via `useUpdateRecipe` de l'appliquer ou non. L'historique de
@@ -350,6 +428,9 @@ export function useReanalyzeRecipe() {
       sourceKind,
       sourceUrl,
     }: ReanalyzeArgs): Promise<ImportedRecipe> => {
+      if (!getIsOnline()) {
+        throw new Error("Réanalyser une recette nécessite une connexion Internet.");
+      }
       const { data, error } = await supabaseTyped.functions.invoke<RecipeReanalyzeEdgeResponse>(
         "recipe-import",
         {
