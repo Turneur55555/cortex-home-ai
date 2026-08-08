@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { installAuthDiagnostics, logAuthEvent, summarizeSession } from "@/lib/authDiagnostics";
 import { refreshAuthSession, restoreAuthSession } from "@/lib/authSession";
+import { purgeUserOfflineData } from "@/lib/offline/db";
 
 interface AuthContextValue {
   user: User | null;
@@ -68,10 +69,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch {
       // ignore
     }
+    const outgoingUserId = session?.user?.id ?? null;
     await supabase.auth.signOut();
     // Sans ça, le cache react-query (profil, séances, nutrition...) d'un compte
     // reste visible pour le compte suivant qui se connecte dans le même onglet.
     queryClient.clear();
+    // Idem pour le store offline (IndexedDB) : purge par userId pour ne
+    // jamais laisser les données/opérations en attente d'un compte visibles
+    // ou synchronisables pour le compte suivant sur le même appareil.
+    if (outgoingUserId) {
+      purgeUserOfflineData(outgoingUserId).catch(() => undefined);
+    }
   };
 
   return (
