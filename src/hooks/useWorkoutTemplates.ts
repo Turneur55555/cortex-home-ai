@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { db } from "@/integrations/supabase/db";
 import { useAuth } from "@/hooks/use-auth";
 import { getIsOnline } from "@/lib/offline/networkStatus";
 import { createOfflineRepository, hydrateEntitiesFromServer } from "@/lib/offline/repository";
@@ -215,7 +216,7 @@ async function refreshTemplatesFromServer(userId: string): Promise<void> {
         exercises as unknown as WorkoutTemplateExerciseRow[],
       );
     }
-    const { data: segments, error: segErr } = await supabase
+    const { data: segments, error: segErr } = await db
       .from("workout_template_segments")
       .select("*")
       .eq("user_id", userId);

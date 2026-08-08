@@ -20,7 +20,19 @@ const supabase = supabaseTyped as any;
  * localement, la FK réelle se vérifie côté serveur à la synchronisation.
  */
 
-export type NutritionRow = Tables<"nutrition">;
+/**
+ * Colonnes présentes en base (projet bcwfvpwxzlmkxobvbtzp) mais absentes du
+ * `types.ts` généré (dérive documentée, cf. src/integrations/supabase/db.ts).
+ */
+export type NutritionRow = Tables<"nutrition"> & {
+  updated_at?: string;
+  recipe_id?: string | null;
+};
+
+/** Insert journal nutrition — `recipe_id` inclus (voir NutritionRow). */
+export type NutritionInsert = Omit<TablesInsert<"nutrition">, "user_id"> & {
+  recipe_id?: string | null;
+};
 
 const nutritionRepo = createOfflineRepository<NutritionRow>("nutrition");
 
@@ -88,7 +100,7 @@ export function useAddNutrition() {
   const qc = useQueryClient();
   const { user } = useAuth();
   return useMutation({
-    mutationFn: async (input: Omit<TablesInsert<"nutrition">, "user_id">) => {
+    mutationFn: async (input: NutritionInsert) => {
       if (!user) throw new Error("Non authentifié");
       return nutritionRepo.create(
         user.id,
