@@ -70,7 +70,8 @@ export function SavedMealsList({
       {meals.length > 0 && (
         <ul className="space-y-2">
           {meals.map((meal) => {
-            const kcal = meal.saved_meal_items.reduce(
+            const items = meal.saved_meal_items ?? [];
+            const kcal = items.reduce(
               (sum, i) => sum + (i.calories ?? 0) * (i.serving_count ?? 1),
               0,
             );
@@ -89,8 +90,8 @@ export function SavedMealsList({
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">{meal.name}</p>
                       <p className="text-[10px] text-muted-foreground">
-                        {Math.round(kcal)} kcal · {meal.saved_meal_items.length} aliment
-                        {meal.saved_meal_items.length > 1 ? "s" : ""}
+                        {Math.round(kcal)} kcal · {items.length} aliment
+                        {items.length > 1 ? "s" : ""}
                       </p>
                     </div>
                     {expanded ? (
@@ -102,9 +103,9 @@ export function SavedMealsList({
                   <SavedMealActionMenu meal={meal} onEdit={() => setEditorMeal(meal)} />
                 </div>
 
-                {expanded && meal.saved_meal_items.length > 0 && (
+                {expanded && items.length > 0 && (
                   <ul className="mt-2 space-y-1 border-t border-border/50 pt-2">
-                    {meal.saved_meal_items.map((item) => (
+                    {items.map((item) => (
                       <li
                         key={item.id}
                         className="flex items-center justify-between text-xs text-muted-foreground"

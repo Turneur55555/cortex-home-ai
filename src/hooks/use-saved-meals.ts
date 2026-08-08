@@ -1,12 +1,31 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase as supabaseTyped } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/use-auth";
 const supabase = supabaseTyped as any;
 import type { Json } from "@/integrations/supabase/types";
+import { getIsOnline } from "@/lib/offline/networkStatus";
+import { createOfflineRepository, hydrateEntitiesFromServer } from "@/lib/offline/repository";
 
 // Repas enregistrés — modèles multi-aliments réutilisables en 1 tap.
 // Client typé : `saved_meals`/`saved_meal_items` et les RPC figurent dans
 // supabase/types.ts (plus de client « loose »).
+//
+// `useCreateSavedMeal`/`useUpdateSavedMeal`/`useDuplicateSavedMeal`/
+// `useLogSavedMeal` passent par des RPC Supabase (`create_saved_meal`,
+// `update_saved_meal`, `duplicate_saved_meal`, `log_saved_meal`) qui gèrent
+// de façon atomique côté serveur les lignes `saved_meal_items` liées — le
+// sync engine offline générique ne sait rejouer que des `.upsert()`/
+// `.update()`/`.delete()` sur une table, pas un appel RPC. Dupliquer cette
+// logique métier côté client serait de la sur-ingénierie hors périmètre :
+// ces 4 hooks restent donc en ligne uniquement (même raisonnement que
+// `useDuplicateRecipe`/`useReanalyzeRecipe` dans `useRecipes.ts`).
+//
+// En revanche `useSavedMeals()` (lecture simple) et `useDeleteSavedMeal()`
+// (suppression simple) sont offline-first (cf. src/lib/offline/), même
+// pattern que `useRecipes.ts`. La lecture hors ligne n'a pas la jointure
+// `saved_meal_items` (disponible seulement en ligne) — `saved_meal_items`
+// est donc optionnel sur `SavedMeal`.
 
 export type SavedMealItem = {
   id: string;
@@ -31,8 +50,22 @@ export type SavedMeal = {
   id: string;
   name: string;
   meal: string | null;
-  saved_meal_items: SavedMealItem[];
+  /** Jointure `saved_meal_items` — présente seulement quand récupérée en ligne. */
+  saved_meal_items?: SavedMealItem[];
 };
+
+/** Ligne locale brute (sans jointure). */
+interface SavedMealRow {
+  id: string;
+  user_id: string;
+  name: string;
+  meal: string | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+const savedMealsRepo = createOfflineRepository<SavedMealRow>("saved_meals");
 
 export type NewSavedMealItem = {
   food_id?: string | null;
@@ -52,18 +85,39 @@ export type NewSavedMealItem = {
 };
 
 export function useSavedMeals() {
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
+
   return useQuery({
-    queryKey: ["saved_meals"],
+    queryKey: ["saved_meals", userId],
+    enabled: !!userId,
     staleTime: 60_000,
     queryFn: async (): Promise<SavedMeal[]> => {
-      const { data, error } = await supabase
-        .from("saved_meals")
-        .select(
-          "id, name, meal, saved_meal_items(id, food_id, name, calories, proteins, carbs, fats, base_calories, base_proteins, base_carbs, base_fats, serving_count, consumed_quantity, consumed_unit, consumed_grams_per_unit, sort_order)",
-        )
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data ?? [];
+      if (!userId) return [];
+
+      if (getIsOnline()) {
+        try {
+          const { data, error } = await supabase
+            .from("saved_meals")
+            .select(
+              "id, name, meal, saved_meal_items(id, food_id, name, calories, proteins, carbs, fats, base_calories, base_proteins, base_carbs, base_fats, serving_count, consumed_quantity, consumed_unit, consumed_grams_per_unit, sort_order)",
+            )
+            .eq("user_id", userId)
+            .order("created_at", { ascending: false });
+          if (!error && data) {
+            const rows = (data as Array<SavedMeal & { saved_meal_items?: unknown }>).map(
+              ({ saved_meal_items: _items, ...rest }) => rest,
+            );
+            await hydrateEntitiesFromServer("saved_meals", userId, rows as SavedMealRow[]);
+            return data as SavedMeal[];
+          }
+        } catch {
+          // Hors ligne ou erreur réseau : on continue avec le store local.
+        }
+      }
+
+      const local = await savedMealsRepo.list(userId);
+      return [...local].sort((a, b) => b.created_at.localeCompare(a.created_at));
     },
   });
 }
@@ -148,10 +202,11 @@ export function useLogSavedMeal() {
 
 export function useDeleteSavedMeal() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("saved_meals").delete().eq("id", id);
-      if (error) throw error;
+      if (!user) throw new Error("Non authentifié");
+      await savedMealsRepo.remove(id, user.id);
     },
     onSuccess: () => {
       toast.success("Repas supprimé");

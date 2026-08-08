@@ -3,6 +3,7 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { useAddNutrition } from "@/hooks/use-fitness";
 import { supabase } from "@/integrations/supabase/client";
+import { customFoodsRepo } from "@/hooks/useCustomFoods";
 import { Field, Sheet, SubmitButton } from "@/components/shared/FormComponents";
 import { FoodAutocomplete } from "@/components/FoodAutocomplete";
 import type { FoodSuggestion } from "@/services/foodSuggestion";
@@ -34,8 +35,12 @@ const normalizeFoodName = (name: string): string =>
     .replace(/\s+/g, " ")
     .trim();
 
-// Enregistre un aliment perso dans le catalogue `foods` (RLS: user_id = auth.uid()).
-// Best-effort : ne bloque jamais le log du repas.
+// Enregistre un aliment perso dans `food_custom_foods` (RLS: user_id = auth.uid()).
+// Best-effort : ne bloque jamais le log du repas. Offline-first (cf.
+// src/lib/offline/) via le repository générique `food_custom_foods` — comme
+// il n'y a pas d'`id` connu à l'avance (l'upsert Supabase se faisait par
+// contrainte `user_id,name`), on cherche d'abord une correspondance locale
+// par nom normalisé pour décider create vs update.
 async function saveCustomFood(
   name: string,
   per100: {
@@ -52,18 +57,27 @@ async function saveCustomFood(
     if (!user) return;
     const normalized = normalizeFoodName(name);
     if (normalized.length < 2) return;
-    await supabase.from("food_custom_foods").upsert(
-      {
-        user_id: user.id,
-        name,
-        calories: per100.calories ?? 0,
-        proteins: per100.proteins ?? 0,
-        carbs: per100.carbs ?? 0,
-        fats: per100.fats ?? 0,
-      },
-      { onConflict: "user_id,name" },
-    );
 
+    const patch = {
+      name,
+      calories: per100.calories ?? 0,
+      proteins: per100.proteins ?? 0,
+      carbs: per100.carbs ?? 0,
+      fats: per100.fats ?? 0,
+    };
+
+    const existing = await customFoodsRepo.list(user.id);
+    const match = existing.find((r) => normalizeFoodName(r.name) === normalized);
+    if (match) {
+      await customFoodsRepo.update(match.id, user.id, patch);
+    } else {
+      await customFoodsRepo.create(user.id, {
+        food_id: null,
+        brand: null,
+        default_serving_grams: null,
+        ...patch,
+      });
+    }
   } catch {
     /* best-effort */
   }
