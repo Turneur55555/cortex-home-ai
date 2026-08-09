@@ -5,6 +5,7 @@ import { normalize } from "@/lib/fitness/exerciseCatalog";
 import { exerciseToMuscles } from "@/lib/fitness/muscleMapping";
 import { resolveExerciseId } from "@/services/exerciseResolution";
 import { identityKey } from "@/lib/fitness/recentExercises";
+import { exercisesRepo } from "@/hooks/use-fitness";
 
 const PHOTOS_KEY = ["fitness", "user-exercise-photos"] as const;
 
@@ -160,6 +161,11 @@ export async function resolveCustomExerciseMuscles(
   if (toAnalyze.length === 0) return;
 
   try {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return;
+
     const { data, error } = await supabase.functions.invoke("analyze-exercise-muscles", {
       body: { exercises: toAnalyze.map((e) => e.name) },
     });
@@ -178,7 +184,10 @@ export async function resolveCustomExerciseMuscles(
       const match = toAnalyze.find((ex) => ex.name.toLowerCase() === result.name.toLowerCase());
       if (!match) continue;
 
-      await supabase.from("exercises").update({ muscle_groups: muscles }).eq("id", match.id);
+      // Passe par le repository offline (exercisesRepo, même instance que
+      // use-fitness.ts) : écrit d'abord en local, enfile la sync — jamais
+      // d'appel Supabase direct pour cette table déjà migrée.
+      await exercisesRepo.update(match.id, user.id, { muscle_groups: muscles });
     }
   } catch (err) {
     console.warn("[resolveCustomExerciseMuscles] failed silently:", err);
