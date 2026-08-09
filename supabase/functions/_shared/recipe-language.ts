@@ -67,9 +67,12 @@ export function detectLanguage(...texts: Array<string | null | undefined>): Dete
 
   scores.sort((a, b) => b.score - a.score);
   const [best, second] = scores;
-  if (!best || best.score === 0) return "unknown";
+  // Seuil : un seul mot commun (ex. "con"/"des") ne suffit pas à trancher — on
+  // préfère "unknown" et on laisse l'IA détecter la langue elle-même.
+  if (!best || best.score < 2) return "unknown";
   if (second && best.score === second.score) return "unknown";
   return best.lang;
+
 }
 
 /** `true` si le contenu ne nécessite aucune traduction. */
