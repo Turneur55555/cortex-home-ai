@@ -246,6 +246,30 @@ export interface RecipeUpdatePatch {
   ingredients?: RecipeIngredientPatch[];
 }
 
+/**
+ * Garantit qu'une recette existe en local (IndexedDB) avant tout `update()`
+ * offline-first. Nécessaire pour les recettes créées CÔTÉ SERVEUR (edge
+ * function `recipe-import`, import Instagram) : leur `id` n'est jamais passé
+ * par `recipesRepo.create()` ni par une lecture (`useRecipe`/`useRecipes`)
+ * qui hydraterait le store local — sans ce garde-fou, le premier
+ * `recipesRepo.update()` sur une telle recette échoue avec "entité
+ * introuvable" alors que la donnée existe bel et bien côté serveur et que
+ * l'appareil est en ligne (bug diagnostiqué : RecipeImportSheet.saveToRecipes
+ * appelle updateRecipe.mutate() juste après la création serveur, sans
+ * hydratation préalable). Ne fait RIEN si déjà hydratée localement (cas
+ * normal, immense majorité des appels) ; ne fait RIEN non plus hors
+ * connexion — `recipesRepo.update()` échoue alors avec son message clair
+ * existant, comportement inchangé et voulu (jamais vue localement +
+ * vraiment hors ligne = échec légitime, pas un bug).
+ */
+export async function ensureRecipeHydrated(id: string, userId: string): Promise<void> {
+  const local = await recipesRepo.get(id);
+  if (local || !getIsOnline()) return;
+  const { data, error } = await db.from("recipes").select("*").eq("id", id).single();
+  if (error || !data) return;
+  await hydrateEntitiesFromServer("recipes", userId, [data as Recipe]);
+}
+
 /** Modifie une recette (titre/portions/macros/ingrédients) — pour la fiche recette (module Recettes). */
 export function useUpdateRecipe() {
   const qc = useQueryClient();
@@ -253,6 +277,7 @@ export function useUpdateRecipe() {
   return useMutation({
     mutationFn: async ({ id, ingredients, ...patch }: RecipeUpdatePatch) => {
       if (!user) throw new Error("Non authentifié");
+      await ensureRecipeHydrated(id, user.id);
       if (Object.keys(patch).length > 0) {
         await recipesRepo.update(id, user.id, patch as Partial<Recipe>);
       }
