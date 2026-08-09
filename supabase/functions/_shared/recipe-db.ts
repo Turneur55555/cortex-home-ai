@@ -16,6 +16,7 @@
 //    ses propres écrans fonctionnent sans changement).
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { RecipeImportError, type RecipeExtraction, type RecipeSourceKind } from "./recipe-import.ts";
+import { LANGUAGE_RULE_VERSION } from "./recipe-language.ts";
 
 const RECIPE_COLUMNS =
   "id, name, servings, source_image_url, source_description, ai_summary, source_author, prep_minutes, cook_minutes, tags, confidence, notes, per_serving_calories, per_serving_proteins, per_serving_carbs, per_serving_fats, per_serving_fiber";
