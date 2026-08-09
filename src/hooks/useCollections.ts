@@ -1,6 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { supabase as supabaseTyped } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/use-auth";
+import { getIsOnline } from "@/lib/offline/networkStatus";
+import { createOfflineRepository, hydrateEntitiesFromServer } from "@/lib/offline/repository";
 const supabase = supabaseTyped as any;
 
 /**
@@ -13,11 +16,27 @@ const supabase = supabaseTyped as any;
  * dans useRecipes.ts). La dupliquer en vraie collection créerait deux
  * sources de vérité concurrentes pour le même concept.
  *
+ * `recipe_collections` (id + updated_at) est offline-first (cf.
+ * src/lib/offline/), même pattern que `useRecipes.ts` : écriture toujours
+ * locale (IndexedDB) d'abord, sync en arrière-plan via la sync queue.
+ *
+ * `recipe_collection_recipes` reste ONLINE-ONLY : table de jointure sans
+ * colonne `id` propre (clé composite `collection_id, recipe_id`, voir
+ * migration `20260825090000_recipe_collections_and_shopping_categories.sql`)
+ * — incompatible avec le repository générique qui suppose une identité par
+ * `id` (`syncEngine.ts` fait `.upsert(payload, { onConflict: "id" })` et
+ * `.eq("id", ...)` pour update/delete), même raisonnement que
+ * `nutrition_goals`/`supplement_logs` exclues en vagues précédentes.
+ * Conséquence hors connexion : la liste des collections reste consultable
+ * et modifiable (créer/renommer/supprimer), mais ajouter/retirer une recette
+ * d'une collection nécessite une connexion.
+ *
  * Les 5 autres collections par défaut (Meal Prep, Sèche, Prise de masse,
  * Rapide, À tester) sont semées paresseusement côté client au premier fetch
- * si l'utilisateur n'a encore aucune collection — pas de trigger DB (pattern
- * précédent `home_categories` entièrement retiré, pas de référence active à
- * suivre).
+ * si l'utilisateur n'a encore aucune collection LOCALE (pas seulement
+ * serveur, pour rester idempotent hors connexion) — pas de trigger DB
+ * (pattern précédent `home_categories` entièrement retiré, pas de référence
+ * active à suivre).
  */
 const db = supabase;
 
@@ -44,57 +63,66 @@ export interface RecipeCollection {
 const COLLECTIONS_KEY = ["recipe_collections"] as const;
 const membershipKey = (recipeId: string) => ["recipe_collection_recipes", recipeId] as const;
 
+const collectionsRepo = createOfflineRepository<RecipeCollection>("recipe_collections");
+
+/** Sème les collections par défaut si l'utilisateur n'en a encore aucune EN LOCAL — idempotent hors connexion. */
 async function seedDefaultCollectionsIfEmpty(userId: string): Promise<void> {
-  const { count, error } = await db
-    .from("recipe_collections")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", userId);
-  if (error || (count ?? 0) > 0) return;
-  const rows = DEFAULT_COLLECTION_NAMES.map((name) => ({
-    user_id: userId,
-    name,
-    is_default: true,
-  }));
-  await db.from("recipe_collections").insert(rows);
+  const local = await collectionsRepo.list(userId);
+  if (local.length > 0) return;
+  for (const name of DEFAULT_COLLECTION_NAMES) {
+    await collectionsRepo.create(userId, { name, is_default: true });
+  }
 }
 
 /** Liste des collections de l'utilisateur — sème les collections par défaut si nécessaire. */
 export function useCollections() {
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
+
   return useQuery({
-    queryKey: COLLECTIONS_KEY,
+    queryKey: [...COLLECTIONS_KEY, userId],
+    enabled: !!userId,
     queryFn: async (): Promise<RecipeCollection[]> => {
-      const {
-        data: { user },
-      } = await supabaseTyped.auth.getUser();
-      if (!user) return [];
+      if (!userId) return [];
 
-      await seedDefaultCollectionsIfEmpty(user.id);
+      if (getIsOnline()) {
+        try {
+          const { data, error } = await db
+            .from("recipe_collections")
+            .select("*")
+            .eq("user_id", userId);
+          if (!error && data) {
+            await hydrateEntitiesFromServer(
+              "recipe_collections",
+              userId,
+              data as RecipeCollection[],
+            );
+          }
+        } catch {
+          // Hors ligne ou erreur réseau : on continue avec le store local.
+        }
+      }
 
-      const { data, error } = await db
-        .from("recipe_collections")
-        .select("*")
-        .order("is_default", { ascending: false })
-        .order("name", { ascending: true });
-      if (error) throw error;
-      return (data ?? []) as unknown as RecipeCollection[];
+      await seedDefaultCollectionsIfEmpty(userId);
+
+      const local = await collectionsRepo.list(userId);
+      return [...local].sort((a, b) => {
+        if (a.is_default !== b.is_default) return a.is_default ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
     },
   });
 }
 
 export function useCreateCollection() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async (name: string) => {
       const trimmed = name.trim();
       if (!trimmed) throw new Error("Nom de collection requis");
-      const {
-        data: { user },
-      } = await supabaseTyped.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      const { error } = await db
-        .from("recipe_collections")
-        .insert({ user_id: user.id, name: trimmed, is_default: false });
-      if (error) throw error;
+      await collectionsRepo.create(user.id, { name: trimmed, is_default: false });
     },
     onSuccess: () => {
       toast.success("Collection créée");
@@ -106,12 +134,13 @@ export function useCreateCollection() {
 
 export function useRenameCollection() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async ({ id, name }: { id: string; name: string }) => {
       const trimmed = name.trim();
       if (!trimmed) throw new Error("Nom de collection requis");
-      const { error } = await db.from("recipe_collections").update({ name: trimmed }).eq("id", id);
-      if (error) throw error;
+      if (!user) throw new Error("Non authentifié");
+      await collectionsRepo.update(id, user.id, { name: trimmed });
     },
     onSuccess: () => {
       toast.success("Collection renommée");
@@ -123,10 +152,11 @@ export function useRenameCollection() {
 
 export function useDeleteCollection() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await db.from("recipe_collections").delete().eq("id", id);
-      if (error) throw error;
+      if (!user) throw new Error("Non authentifié");
+      await collectionsRepo.remove(id, user.id);
     },
     onSuccess: () => {
       toast.success("Collection supprimée");
@@ -136,7 +166,11 @@ export function useDeleteCollection() {
   });
 }
 
-/** Ids des collections (réelles) contenant cette recette. */
+/**
+ * Ids des collections (réelles) contenant cette recette.
+ * `recipe_collection_recipes` reste online-only (cf. note d'en-tête) — cette
+ * lecture nécessite donc une connexion.
+ */
 export function useRecipeCollectionIds(recipeId: string | null | undefined) {
   return useQuery({
     queryKey: membershipKey(recipeId ?? "none"),
@@ -153,6 +187,7 @@ export function useRecipeCollectionIds(recipeId: string | null | undefined) {
   });
 }
 
+/** `recipe_collection_recipes` reste online-only (cf. note d'en-tête) — nécessite une connexion. */
 export function useAddRecipeToCollection() {
   const qc = useQueryClient();
   return useMutation({
@@ -177,6 +212,7 @@ export function useAddRecipeToCollection() {
   });
 }
 
+/** `recipe_collection_recipes` reste online-only (cf. note d'en-tête) — nécessite une connexion. */
 export function useRemoveRecipeFromCollection() {
   const qc = useQueryClient();
   return useMutation({
