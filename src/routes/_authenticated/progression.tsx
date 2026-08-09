@@ -6,10 +6,12 @@ import { useWorkouts } from "@/hooks/use-fitness";
 import { useActivityStreak } from "@/hooks/useActivityStreak";
 import { useRankPromotions } from "@/hooks/useRankPromotions";
 import { useCortexAscensions } from "@/hooks/useCortexAscensions";
+import { useCortexPower } from "@/hooks/useCortexPower";
 import { mergePromotionTimeline } from "@/lib/fitness/rpg/ascension";
-import { titleProgressForXp, nextGradeLabel } from "@/lib/fitness/rpg/titleProgress";
+import { nextCortexGradeLabel } from "@/lib/fitness/rpg/cortexTitle";
 import { formatXp } from "@/lib/fitness/rpg/grade";
 import { RankIllustration } from "@/components/rpg/RankIllustration";
+import { Skeleton } from "@/components/ui/skeleton";
 import { PromotionHistoryTimeline } from "@/components/profile/rpg/PromotionHistoryTimeline";
 import { EASE_OUT } from "@/components/rpg/premium/tokens";
 import {
@@ -22,15 +24,17 @@ import {
 /**
  * Page dédiée « Progression RPG » — fiche joueur AAA.
  *
- * NB (dette assumée, route déjà identifiée comme legacy/orpheline avant ce
- * chantier) : l'en-tête (illustration/grade/barre) de cette page affiche
- * encore le Titre dérivé de l'XP (`titleProgressForXp`, `user_stats.xp`) —
- * hors du périmètre "une seule source de vérité" traité ailleurs dans
- * l'app (Accueil/Profil/séance, tous branchés sur `useCortexPower` —
- * Puissance Cortex). Seul l'historique ci-dessous a été mis à jour : il
- * fusionne l'historique gelé de l'ère XP (`rank_promotions`, plus aucune
- * écriture) et les nouvelles Ascensions (`cortex_ascensions`, Puissance
- * Cortex — voir `mergePromotionTimeline`).
+ * Audit RPG V2 Phase H (30/08/2026) : l'en-tête (illustration/Titre/grade/
+ * barre) affichait encore le Titre dérivé de l'XP (`titleProgressForXp`,
+ * `user_stats.xp`) — dernier écran de l'app encore branché sur ce chemin
+ * legacy. Corrigé : source unique désormais `useCortexPower` (Performance
+ * → Rang exercice → Rang musculaire → Puissance Cortex → Titre), comme
+ * Accueil/Profil/séance (`ProfileHeroCard`, `RPGProgressionSection`). L'XP
+ * reste affichée (carte "XP totale", stat "Séries") comme système de
+ * récompense PARALLÈLE — elle ne pilote plus jamais le Titre ni la barre
+ * de progression ici. L'historique fusionne l'historique gelé de l'ère XP
+ * (`rank_promotions`, plus aucune écriture) et les nouvelles Ascensions
+ * (`cortex_ascensions`, Puissance Cortex — voir `mergePromotionTimeline`).
  */
 export const Route = createFileRoute("/_authenticated/progression")({
   head: () => ({
@@ -50,19 +54,22 @@ function ProgressionPage() {
   const { data: ascensions } = useCortexAscensions();
   const promotionEvents = mergePromotionTimeline(legacyRows ?? [], ascensions ?? []);
 
+  // Source unique du Titre : Puissance Cortex (Performance → Rang exercice
+  // → Rang musculaire → Puissance Cortex → Titre), JAMAIS l'XP — même
+  // moteur que ProfileHeroCard/RPGProgressionSection.
+  const { isLoading: powerLoading, title: progress } = useCortexPower();
+  const ranked = progress.status === "ranked" ? progress : null;
+  const nextGrade = nextCortexGradeLabel(progress);
+  // Puissance Cortex est un palier discret (0-29), pas continu comme l'XP :
+  // la barre reflète la position parmi les 5 grades du Titre courant, pas
+  // une distance fractionnaire (règle RPG : aucune "XP restante" affichée
+  // pour la Puissance Cortex).
+  const clampedPercent = !ranked ? 0 : ranked.isMax ? 100 : ((ranked.gradeIndex + 1) / 5) * 100;
+  const theme = rankThemeByKey(ranked?.title.key ?? "mortel");
+
+  // XP : système de récompense PARALLÈLE, affiché mais ne pilote plus ni
+  // le Titre ni la barre de progression ci-dessous.
   const xp = userStats?.xp ?? 0;
-  const progress = titleProgressForXp(xp);
-  const theme = rankThemeByKey(progress.title.key);
-  const nextGrade = nextGradeLabel(progress);
-  const percent = progress.isMax
-    ? 100
-    : ((progress.xp - progress.xpCurrentThreshold) /
-        Math.max(
-          1,
-          (progress.xpNextThreshold ?? progress.xpCurrentThreshold) - progress.xpCurrentThreshold,
-        )) *
-      100;
-  const clampedPercent = Math.max(0, Math.min(100, percent));
 
   const totalWorkouts = workouts?.length ?? 0;
   const totalMinutes = (workouts ?? []).reduce(
@@ -98,28 +105,48 @@ function ProgressionPage() {
           transition={{ duration: 0.55, ease: EASE_OUT }}
           className="flex flex-col items-center"
         >
-          <div className="relative aspect-[4/5] w-44">
-            <RankIllustration
-              rankKey={progress.title.key}
-              label={progress.title.label}
-              className="h-full w-full"
-            />
-          </div>
-          <p
-            className="mt-4 text-[22px] font-black uppercase tracking-[0.22em]"
-            style={{
-              color: theme.text,
-              textShadow: rankTextGlow(theme.glow, 18, "0 1px 0 rgba(0,0,0,0.6)"),
-            }}
-          >
-            {progress.title.label}
-          </p>
-          <p
-            className="mt-1 text-[13px] font-semibold uppercase tracking-[0.18em]"
-            style={{ color: theme.secondary }}
-          >
-            {progress.grade}
-          </p>
+          {powerLoading ? (
+            <Skeleton className="aspect-[4/5] w-44 rounded-[22px]" />
+          ) : ranked ? (
+            <>
+              <div className="relative aspect-[4/5] w-44">
+                <RankIllustration
+                  rankKey={ranked.title.key}
+                  label={ranked.title.label}
+                  className="h-full w-full"
+                />
+              </div>
+              <p
+                className="mt-4 text-[22px] font-black uppercase tracking-[0.22em]"
+                style={{
+                  color: theme.text,
+                  textShadow: rankTextGlow(theme.glow, 18, "0 1px 0 rgba(0,0,0,0.6)"),
+                }}
+              >
+                {ranked.title.label}
+              </p>
+              <p
+                className="mt-1 text-[13px] font-semibold uppercase tracking-[0.18em]"
+                style={{ color: theme.secondary }}
+              >
+                {ranked.grade}
+              </p>
+            </>
+          ) : (
+            // Non classé (pas assez de données) ou Puissance Cortex partielle
+            // (< 5/8 muscles évalués) : jamais un Titre par défaut ("Mortel")
+            // qui flasherait avant la vraie valeur (règle RPG).
+            <div className="flex flex-col items-center py-6 text-center">
+              <p className="text-[16px] font-black uppercase tracking-[0.18em] text-muted-foreground">
+                {progress.status === "partial" ? "Puissance Cortex partielle" : "Non classé"}
+              </p>
+              <p className="mt-2 max-w-[260px] text-[12px] text-muted-foreground">
+                {progress.status === "partial"
+                  ? "Continue à t'entraîner pour évaluer suffisamment de muscles et débloquer ton Titre."
+                  : "Entraîne-toi pour obtenir tes premiers Rangs d'exercice et débloquer ton Titre."}
+              </p>
+            </div>
+          )}
         </motion.section>
 
         {/* ── XP TOTALE ───────────────────────────────────────── */}
@@ -145,7 +172,7 @@ function ProgressionPage() {
           <p className="mt-2 text-[11px] text-muted-foreground">Depuis la création du compte</p>
         </section>
 
-        {/* ── PROGRESSION ACTUELLE ────────────────────────────── */}
+        {/* ── PROGRESSION ACTUELLE (Puissance Cortex) ─────────── */}
         <section className="rounded-[22px] p-5 bg-white/[0.03] ring-1 ring-white/5">
           <p className="text-[9px] font-semibold uppercase tracking-[0.32em] text-muted-foreground/80">
             Grade actuel
@@ -154,7 +181,7 @@ function ProgressionPage() {
             className="mt-1 text-[18px] font-black uppercase tracking-[0.12em]"
             style={{ color: theme.text, textShadow: rankTextGlow(theme.glow, 12) }}
           >
-            {progress.grade}
+            {ranked?.grade ?? "—"}
           </p>
 
           <div
@@ -178,19 +205,19 @@ function ProgressionPage() {
             />
           </div>
 
+          {/* Pas de compte à rebours chiffré : la Puissance Cortex se révèle
+              par accomplissement (nouveau Rang d'exercice/musculaire),
+              jamais par une distance fractionnaire type "XP restante"
+              (règle RPG, aucune XP affichée pour cette progression-ci). */}
           <p
             className="mt-3 text-center text-[12px] font-semibold"
             style={{ color: "rgba(255,255,255,0.7)" }}
           >
-            {progress.isMax || !nextGrade ? (
+            {ranked?.isMax || !nextGrade ? (
               <span style={{ color: theme.secondary }}>Grade suprême atteint</span>
             ) : (
               <>
-                Encore{" "}
-                <span className="font-black" style={{ color: theme.secondary }}>
-                  {formatXp(progress.xpToNext)} XP
-                </span>{" "}
-                avant{" "}
+                Prochain grade :{" "}
                 <span
                   className="font-black uppercase tracking-wider"
                   style={{ color: theme.secondary }}

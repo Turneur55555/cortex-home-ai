@@ -7,16 +7,24 @@ import { useCortexAscensions } from "@/hooks/useCortexAscensions";
 import { shouldTriggerAscension } from "@/lib/fitness/rpg/ascension";
 
 /**
- * Synchronise le Titre courant (Puissance Cortex, calculée côté client)
- * vers l'historique serveur des Ascensions. Le serveur reste la source de
- * vérité : `record_cortex_ascension` (SECURITY DEFINER) ré-applique lui
- * -même la règle "changement de Titre + progression strictement
- * croissante" et ignore silencieusement tout appel qui ne la respecte pas
- * — cet effet ne fait qu'éviter des appels réseau inutiles.
+ * Déclenche la synchronisation SERVEUR de l'historique des Ascensions.
  *
- * Monté une fois (voir `AppShell`/layout authentifié), pas par écran —
- * une Ascension doit être détectée où que le joueur se trouve dans l'app,
- * pas seulement sur la page Progression.
+ * Audit RPG V2 Phase H (30/08/2026) — durci : ce hook n'envoie plus jamais
+ * de `tier_index` calculé côté client au serveur. Il appelle l'Edge
+ * Function `sync-cortex-ascension`, qui recalcule ENTIÈREMENT depuis les
+ * données brutes (performances → Rang exercice → Rang musculaire →
+ * Puissance Cortex) et n'enregistre une Ascension que si CE calcul serveur
+ * constate un changement de Titre — voir
+ * `supabase/functions/sync-cortex-ascension/index.ts` et la migration
+ * 20260830120000_cortex_ascension_server_only.sql (le RPC
+ * `record_cortex_ascension` n'est plus appelable que par le service role,
+ * jamais directement par le client). Le Titre client (`useCortexPower`)
+ * ne sert ici qu'à décider QUAND appeler le serveur (évite des appels
+ * réseau inutiles) — jamais à décider CE QUI est enregistré.
+ *
+ * Monté une fois (voir `PreferencesEffects`/layout authentifié), pas par
+ * écran — une Ascension doit être synchronisée où que le joueur se trouve
+ * dans l'app, pas seulement sur la page Progression.
  */
 export function useAscensionSync(): void {
   const { user } = useAuth();
@@ -37,11 +45,14 @@ export function useAscensionSync(): void {
     if (lastSynced.current === title.tierIndex) return; // déjà tenté cette session
     lastSynced.current = title.tierIndex;
 
-    (supabase as any)
-      .rpc("record_cortex_ascension", { _tier_index: title.tierIndex })
-      .then(({ error }: { error: unknown }) => {
+    void supabase.functions
+      .invoke("sync-cortex-ascension")
+      .then(({ error }) => {
         if (error) return;
         queryClient.invalidateQueries({ queryKey: ["cortex_ascensions", user.id] });
+      })
+      .catch((e) => {
+        console.error("[useAscensionSync] échec sync-cortex-ascension", e);
       });
   }, [user, isLoading, title, ascensions, queryClient]);
 }

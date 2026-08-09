@@ -120,6 +120,101 @@ describe("exerciseToMuscles", () => {
     expect(muscles).toContain("trapeze");
     expect(muscles).not.toContain("dos");
   });
+
+  // Régression audit RPG V2 Phase H (30/08/2026) : "Rotation externe/interne
+  // de l'épaule" (coiffe des rotateurs, 11 séries réelles Cortex) tombait à
+  // tort dans le mot-clé générique "rotation" de la règle obliques —
+  // aucun bucket obliques/abdos n'a de sens anatomique pour cet exercice.
+  it("mappe 'Rotation externe de l'épaule à la poulie' vers épaules, jamais obliques (régression audit)", () => {
+    const muscles = exerciseToMuscles("Rotation externe de l’épaule à la poulie");
+    expect(muscles).toEqual(["epaules"]);
+  });
+
+  it("mappe 'Rotation interne de l'épaule' vers épaules, jamais obliques (régression audit)", () => {
+    const muscles = exerciseToMuscles("Rotation interne de l’épaule à 90 degrés");
+    expect(muscles).toEqual(["epaules"]);
+  });
+
+  it("le mot-clé générique 'rotation' seul ne mappe plus vers obliques (garde-fou)", () => {
+    // Une rotation d'épaule ne doit jamais tomber dans obliques ; seule une
+    // rotation du tronc/torse/taille (russian twist et équivalents) doit.
+    expect(exerciseToMuscles("rotation du poignet")).not.toContain("obliques");
+  });
+
+  it("'russian twist' et 'woodchop' restent mappés vers obliques (non-régression)", () => {
+    expect(exerciseToMuscles("russian twist")).toEqual(["obliques", "abdos"]);
+    expect(exerciseToMuscles("woodchop poulie")).toEqual(["obliques", "abdos"]);
+  });
+
+  // Régression audit Phase H : "Dips" (16 séries réelles) ne créditait que
+  // les triceps — les dips sont un mouvement de poussée composé (consensus
+  // anatomique : pectoraux + triceps + épaules antérieures).
+  it("mappe 'Dips' (sans qualificatif) vers pectoraux, triceps, épaules (régression audit)", () => {
+    const muscles = exerciseToMuscles("Dips");
+    expect(muscles).toEqual(["pectoraux", "triceps", "epaules"]);
+  });
+
+  it("mappe 'Développé convergent à la poulie' vers pectoraux/triceps/épaules (régression audit)", () => {
+    const muscles = exerciseToMuscles("Développé convergent à la poulie");
+    expect(muscles).toContain("pectoraux");
+  });
+
+  it("mappe 'Dumbbell Push Press' vers épaules et triceps (régression audit)", () => {
+    const muscles = exerciseToMuscles("Dumbbell Push Press");
+    expect(muscles).toEqual(["epaules", "triceps"]);
+  });
+
+  it("mappe 'Pushdown corde' vers triceps (régression audit)", () => {
+    const muscles = exerciseToMuscles("Pushdown corde");
+    expect(muscles).toEqual(["triceps"]);
+  });
+
+  // Espaces multiples + mot "des" entre "extension" et "triceps" cassaient
+  // le pattern d'origine (`.?` = 1 caractère max) — 3 séries réelles.
+  it("mappe 'Extension     des triceps à la poulie' malgré les espaces multiples (régression audit)", () => {
+    const muscles = exerciseToMuscles("Extension     des triceps à la poulie haute, dos à la poulie");
+    expect(muscles).toEqual(["triceps"]);
+  });
+
+  it("mappe 'Relevé de jambes suspendu' vers abdos (régression audit)", () => {
+    const muscles = exerciseToMuscles("Relevé de jambes suspendu");
+    expect(muscles).toEqual(["abdos"]);
+  });
+
+  it("mappe 'Wheel rollout' vers abdos (régression audit)", () => {
+    const muscles = exerciseToMuscles("Wheel rollout");
+    expect(muscles).toEqual(["abdos"]);
+  });
+
+  it("mappe 'Extension dos' vers lombaires (régression audit)", () => {
+    const muscles = exerciseToMuscles("Extension dos");
+    expect(muscles).toEqual(["lombaires"]);
+  });
+
+  it("mappe 'Y-Raise poulie' vers épaules et trapèzes (régression audit)", () => {
+    const muscles = exerciseToMuscles("Y-Raise poulie");
+    expect(muscles).toEqual(["epaules", "trapeze"]);
+  });
+
+  it("mappe 'Farmer's Carry' vers trapèzes et avant-bras (régression audit)", () => {
+    const muscles = exerciseToMuscles("Farmer’s Carry");
+    expect(muscles).toEqual(["trapeze", "avant-bras"]);
+  });
+
+  it("mappe 'thruster' vers quadriceps/fessiers/épaules/triceps (mouvement hybride, régression audit)", () => {
+    const muscles = exerciseToMuscles("thruster haltère");
+    expect(muscles).toEqual(["quadriceps", "fessiers", "epaules", "triceps"]);
+  });
+
+  // Cas ambigus (audit Phase H) — volontairement laissés NON mappés plutôt
+  // que forcés vers une classification arbitraire (consigne explicite).
+  it("laisse 'Pull over' non mappé (ambigu dos/pectoraux, non tranché)", () => {
+    expect(exerciseToMuscles("Pull over poulie haute")).toEqual([]);
+  });
+
+  it("laisse 'Wall Balls' non mappé (mouvement composé ambigu)", () => {
+    expect(exerciseToMuscles("Wall Balls")).toEqual([]);
+  });
 });
 
 describe("MUSCLE_META", () => {

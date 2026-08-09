@@ -30,6 +30,14 @@ function stripDiacritics(value: string): string {
 const PRE_OVERRIDES: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /rotation.*epaule|epaule.*rotation|coiffe des rotateurs|rotator cuff/i, label: "Épaules" },
   { pattern: /developpe(?!.?militaire)/i, label: "Pectoraux" },
+  // Audit RPG V2 Phase H (30/08/2026) : `exerciseToMuscles` mappe désormais
+  // "Farmer's carry/walk" vers trapèzes/avant-bras (correct pour le Rang
+  // musculaire — voir muscleMapping.ts) mais ce badge de bibliothèque veut
+  // rester neutre pour les ports de charge (aucun muscle dominant unique du
+  // point de vue "quel groupe travailler aujourd'hui"). Interceptée ici
+  // AVANT l'appel, comme la rotation d'épaule ci-dessus, sans toucher au
+  // fichier partagé par le Rang musculaire.
+  { pattern: /farmer.?s?.?(carry|walk)/i, label: "Polyarticulaire" },
 ];
 
 // Mouvements sans muscle unique dominant — jamais mappés par

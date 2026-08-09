@@ -4688,7 +4688,7 @@ export type Database = {
         Returns: undefined
       }
       record_cortex_ascension: {
-        Args: { _tier_index: number }
+        Args: { _tier_index: number; _user_id: string }
         Returns: undefined
       }
       restore_exercise_reference: { Args: { p_id: string }; Returns: undefined }

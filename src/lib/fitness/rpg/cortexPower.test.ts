@@ -28,6 +28,47 @@ describe("computeCortexPower — Option 1 verrouillée (max(round(2G-A), min))",
     expect(r.status).toBe("complete");
   });
 
+  // Audit RPG V2 Phase H (30/08/2026) : couverture explicite 6/7/8 muscles
+  // évalués (le seuil 5/8 était déjà couvert, mais pas ces paliers précis).
+  it("6/8 muscles évalués → calcul possible", () => {
+    const r = computeCortexPower(
+      muscles({ dos: 10, pectoraux: 11, epaules: 12, abdos: 13, biceps: 14, triceps: 15 }),
+    );
+    expect(r.status).toBe("complete");
+    expect((r as { evaluatedCount: number }).evaluatedCount).toBe(6);
+  });
+
+  it("7/8 muscles évalués → calcul possible", () => {
+    const r = computeCortexPower(
+      muscles({
+        dos: 10,
+        pectoraux: 11,
+        epaules: 12,
+        abdos: 13,
+        biceps: 14,
+        triceps: 15,
+        trapeze: 16,
+      }),
+    );
+    expect(r.status).toBe("complete");
+    expect((r as { evaluatedCount: number }).evaluatedCount).toBe(7);
+  });
+
+  it("8/8 muscles évalués → calcul possible, evaluatedCount = 8", () => {
+    const r = computeCortexPower(allMuscles(15));
+    expect(r).toEqual({ status: "complete", tierIndex: 15, evaluatedCount: 8 });
+  });
+
+  it("données manquantes : 0 muscle évalué → partiel, evaluatedCount = 0", () => {
+    const r = computeCortexPower(muscles({}));
+    expect(r).toEqual({ status: "partial", evaluatedCount: 0 });
+  });
+
+  it("données manquantes : 1 muscle évalué → partiel, evaluatedCount = 1", () => {
+    const r = computeCortexPower(muscles({ dos: 12 }));
+    expect(r).toEqual({ status: "partial", evaluatedCount: 1 });
+  });
+
   it("Propriété D — homogénéité : 8 muscles à X → Puissance = X, pour X=0..29", () => {
     for (let x = 0; x <= 29; x++) {
       const r = computeCortexPower(allMuscles(x));
