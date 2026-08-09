@@ -5,7 +5,6 @@
 //     error logger plugins, and sandbox detection (port/host/strictPort).
 // You can pass additional config via defineConfig({ vite: { ... } }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
-import { VitePWA } from "vite-plugin-pwa";
 import { visualizer } from "rollup-plugin-visualizer";
 
 // Activer le rapport d'analyse de bundle avec ANALYZE=true bun run build
@@ -20,54 +19,6 @@ export default defineConfig({
   },
   vite: {
     plugins: [
-      VitePWA({
-        registerType: "autoUpdate",
-        // injectRegister: null pour éviter les conflits avec le SSR TanStack Start
-        injectRegister: "inline",
-        includeAssets: ["icons/apple-touch-icon.png"],
-        manifest: {
-          name: "ICORTEX",
-          short_name: "ICORTEX",
-          description: "ICORTEX — gestion intelligente de la nutrition et de la santé",
-          theme_color: "#0d0d14",
-          background_color: "#0d0d14",
-          display: "standalone",
-          start_url: "/",
-          orientation: "portrait",
-          icons: [
-            { src: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
-            { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
-            { src: "/icons/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any maskable" },
-          ],
-        },
-        workbox: {
-          // Les binaires WASM (onnxruntime du détourage) dépassent la limite de
-          // précache Workbox : chargés à la demande, jamais précachés.
-          globIgnores: ["**/*.wasm", "**/ort*.js"],
-          // NetworkFirst pour les requêtes Supabase
-          runtimeCaching: [
-            {
-              urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,
-              handler: "NetworkFirst",
-              options: {
-                cacheName: "supabase-api",
-                networkTimeoutSeconds: 5,
-                expiration: { maxEntries: 60, maxAgeSeconds: 5 * 60 },
-                cacheableResponse: { statuses: [0, 200] },
-              },
-            },
-            // CacheFirst pour les assets statiques
-            {
-              urlPattern: /\.(?:js|css|woff2?|png|svg|ico|webp)$/i,
-              handler: "CacheFirst",
-              options: {
-                cacheName: "static-assets",
-                expiration: { maxEntries: 120, maxAgeSeconds: 7 * 24 * 60 * 60 },
-              },
-            },
-          ],
-        },
-      }),
       ...(ANALYZE
         ? [
             visualizer({

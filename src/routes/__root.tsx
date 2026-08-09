@@ -11,6 +11,7 @@ import {
 import { Toaster } from "@/components/ui/sonner";
 import { Suspense, useEffect, useState } from "react";
 import { installErrorLogger, logError } from "@/lib/error-logger";
+import { registerServiceWorker } from "@/lib/pwa/registerServiceWorker";
 import { GlobalErrorBoundary } from "@/components/global-error-boundary";
 import { LoadingScreen } from "@/components/loading-screen";
 
@@ -173,6 +174,7 @@ function RootComponent() {
 
   useEffect(() => {
     installErrorLogger();
+    registerServiceWorker();
   }, []);
 
   return (
