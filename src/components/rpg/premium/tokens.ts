@@ -3,7 +3,7 @@
 //
 // UNE seule source pour le langage graphique du RPG : courbes d'animation,
 // durées, respiration, halos. Réutilisé par tous les écrans premium (Hero,
-// montées de rang, récompenses, Saisons, Chroniques, Reliques) qui affichent
+// montées de rang, récompenses, Chroniques, Reliques) qui affichent
 // un rang via `RankIllustration` (src/components/rpg/RankIllustration.tsx +
 // src/assets/ranks) — pour que chaque écran appartienne au même univers.
 //

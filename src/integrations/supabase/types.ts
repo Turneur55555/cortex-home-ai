@@ -3341,42 +3341,6 @@ export type Database = {
         }
         Relationships: []
       }
-      seasons: {
-        Row: {
-          created_at: string
-          ends_at: string
-          id: string
-          index: number
-          name: string
-          slug: string
-          starts_at: string
-          status: string
-          theme: string | null
-        }
-        Insert: {
-          created_at?: string
-          ends_at: string
-          id?: string
-          index: number
-          name: string
-          slug: string
-          starts_at: string
-          status?: string
-          theme?: string | null
-        }
-        Update: {
-          created_at?: string
-          ends_at?: string
-          id?: string
-          index?: number
-          name?: string
-          slug?: string
-          starts_at?: string
-          status?: string
-          theme?: string | null
-        }
-        Relationships: []
-      }
       shopping_list: {
         Row: {
           added_at: string
@@ -3445,51 +3409,6 @@ export type Database = {
           sync_type?: string
         }
         Relationships: []
-      }
-      sp_events: {
-        Row: {
-          amount: number
-          created_at: string
-          id: string
-          season_id: string
-          source: string
-          user_id: string
-          workout_id: string | null
-        }
-        Insert: {
-          amount: number
-          created_at?: string
-          id?: string
-          season_id: string
-          source: string
-          user_id: string
-          workout_id?: string | null
-        }
-        Update: {
-          amount?: number
-          created_at?: string
-          id?: string
-          season_id?: string
-          source?: string
-          user_id?: string
-          workout_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "sp_events_season_id_fkey"
-            columns: ["season_id"]
-            isOneToOne: false
-            referencedRelation: "seasons"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "sp_events_workout_id_fkey"
-            columns: ["workout_id"]
-            isOneToOne: false
-            referencedRelation: "workouts"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       stc: {
         Row: {
@@ -3963,38 +3882,6 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
-      }
-      user_season_progress: {
-        Row: {
-          ps: number
-          season_id: string
-          tier: number
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          ps?: number
-          season_id: string
-          tier?: number
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          ps?: number
-          season_id?: string
-          tier?: number
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "user_season_progress_season_id_fkey"
-            columns: ["season_id"]
-            isOneToOne: false
-            referencedRelation: "seasons"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       user_stats: {
         Row: {
@@ -4646,22 +4533,11 @@ export type Database = {
         Args: { _dedup_key?: string; _source_key: string; _workout_id?: string }
         Returns: undefined
       }
-      award_season_points: {
-        Args: {
-          _amount: number
-          _season_id: string
-          _source: string
-          _user_id: string
-          _workout_id?: string
-        }
-        Returns: undefined
-      }
       cleanup_expired_cache: { Args: never; Returns: undefined }
       cleanup_old_pdfs: { Args: never; Returns: undefined }
       compute_achievement_stats: { Args: { _uid: string }; Returns: Json }
       compute_fitness_stats: { Args: { _uid: string }; Returns: Json }
       compute_level_from_xp: { Args: { _xp: number }; Returns: number }
-      compute_season_tier: { Args: { _ps: number }; Returns: number }
       compute_tier_index_from_xp: { Args: { _xp: number }; Returns: number }
       create_custom_food_with_barcode: {
         Args: {
@@ -4764,6 +4640,7 @@ export type Database = {
       }
       generer_taches_recurrentes: { Args: never; Returns: number }
       get_user_streak_days: { Args: never; Returns: number }
+      is_paie_staff: { Args: never; Returns: boolean }
       log_saved_meal: {
         Args: { p_date?: string; p_meal?: string; p_meal_id: string }
         Returns: number
