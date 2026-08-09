@@ -9,7 +9,8 @@
 import { instagramScraperProvider, type InstagramProvider } from "./instagram-provider.ts";
 import { parseRecipeFromContent } from "./recipe-parser.ts";
 import { computeRecipeExtraction } from "./nutrition-engine.ts";
-import { RecipeImportError, type SourceHandler } from "./recipe-import.ts";
+import { RecipeImportError, type RecipeExtraction, type SourceHandler } from "./recipe-import.ts";
+import { findNonFrenchTerms } from "./recipe-language.ts";
 
 const INSTAGRAM_URL_RE = /^\/(reel|reels|p|tv)\/[\w-]+\/?$/;
 
