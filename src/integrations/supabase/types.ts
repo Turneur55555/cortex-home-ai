@@ -3046,6 +3046,7 @@ export type Database = {
           source_description: string | null
           source_image_url: string | null
           source_kind: string | null
+          source_recipe_id: string | null
           source_url: string | null
           sugars_g: number | null
           tags: string[] | null
@@ -3087,6 +3088,7 @@ export type Database = {
           source_description?: string | null
           source_image_url?: string | null
           source_kind?: string | null
+          source_recipe_id?: string | null
           source_url?: string | null
           sugars_g?: number | null
           tags?: string[] | null
@@ -3128,6 +3130,7 @@ export type Database = {
           source_description?: string | null
           source_image_url?: string | null
           source_kind?: string | null
+          source_recipe_id?: string | null
           source_url?: string | null
           sugars_g?: number | null
           tags?: string[] | null
@@ -3135,7 +3138,15 @@ export type Database = {
           updated_at?: string
           user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "recipes_source_recipe_id_fkey"
+            columns: ["source_recipe_id"]
+            isOneToOne: false
+            referencedRelation: "recipes"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       regles_analyse: {
         Row: {

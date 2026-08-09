@@ -1,7 +1,60 @@
 # Mémoire projet — cortex-home-ai
 
 ## Dernière mise à jour
-2026-08-08
+2026-08-09
+
+## "Proposer des variantes" (module Recettes) — génération IA en 1 appel (2026-08-09, branche `claude/recipe-variants-feature-r88ujt`)
+Demande : dans `RecipeDetailSheet`, bouton "✨ Proposer des variantes" → 3 choix (🥛 Sans produits
+laitiers [🌱 végétal / 🚫 suppression], 💪 Plus protéiné, ✏️ Demande personnalisée) → génère EXACTEMENT
+3 variantes réellement différentes (ingrédients complets, instructions adaptées, macros recalculées)
+en UN SEUL appel Gemini, affichées en cartes, avec "Enregistrer comme nouvelle recette" — la recette
+originale n'est jamais modifiée. Réutilise le pipeline IA/validation existant, ne touche pas à l'import
+Instagram ni à l'offline-first.
+- **Migration `20260829090000_recipe_variants.sql`** (appliquée en direct via MCP Supabase, `types.ts`
+  régénéré) : `recipes.source_recipe_id uuid REFERENCES recipes(id) ON DELETE SET NULL` (lien variante
+  → recette d'origine, purement informatif — aucune dépendance de calcul, chaque recette garde son
+  propre snapshot `per_serving_*`) + action de rate-limit `recipe_variants` (15/h) ajoutée à
+  `rate_limits_action_check`. Pas de nouvelle colonne pour l'explication/les instructions : réutilise
+  `recipes.notes` (explication de la modification) et `recipes.instructions` (déjà présent, legacy,
+  jusqu'ici inutilisé par le pipeline IA).
+- **Edge function `recipe-variants`** (nouvelle, `supabase/functions/recipe-variants/`) : endpoint
+  **stateless** (comme `recipe-assistant`, pas de lecture DB serveur — le client envoie un snapshot de
+  la recette déjà chargée). Handler extrait et testable (`_shared/recipe-variants-handler.ts`, même
+  pattern que `recipe-import-handler.ts`) : validation entrée → `checkRateLimit` → UN appel Gemini
+  (`_shared/recipe-variant-tool.ts`, tool calling forcé `save_recipe_variants`, schéma `minItems:3,
+  maxItems:3`, prompt système dédié par type de demande) → validation STRICTE de la sortie
+  (`_shared/recipe-variant-engine.ts`, contrairement à `nutrition-engine.ts` qui est best-effort avec
+  valeurs par défaut : ici une réponse structurellement invalide — pas 3 variantes, ingrédients/macros
+  manquants, 3 variantes identiques — est REJETÉE plutôt que silencieusement complétée). Réutilise
+  `safeNum`/`INGREDIENT_CATEGORIES` (`recipe-import.ts`) et `sanitizeCategory` (exportée depuis
+  `nutrition-engine.ts` pour l'occasion — auparavant privée).
+- **Contrats** : `_shared/recipe-variants.ts` (Deno) miroir de `src/lib/nutrition/recipeVariants/
+  types.ts` (frontend), même convention de duplication volontaire que `recipe-import.ts`/
+  `recipeImport/types.ts` (pas de bundler partagé entre les deux runtimes).
+- **`src/hooks/useRecipeVariants.ts`** : `generateRecipeVariants`/`saveRecipeVariantAsRecipe` — logique
+  extraite en fonctions simples (testables directement, même pattern que
+  `resolveCustomExerciseMuscles`) puis wrappées par `useGenerateRecipeVariants`/
+  `useSaveRecipeVariantAsRecipe` (`useMutation`). **En ligne uniquement** (`getIsOnline()` guard),
+  bypass volontaire du repository offline — même famille que `useDuplicateRecipe`/`useReanalyzeRecipe`.
+  L'enregistrement d'une variante est un insert direct `recipes`+`recipe_ingredients` (même schéma que
+  `useDuplicateRecipe`, `source_url`/`source_kind` restent `null`). `useRecipes.ts` : `RECIPES_KEY`
+  exportée (auparavant privée) pour l'invalidation de cache depuis ce nouveau hook.
+- **UI** : nouveau `src/components/fitness/RecipeVariantsSheet.tsx` (état choose → custom → loading →
+  results → detail), ouvert depuis `RecipeDetailSheet` (nouveau bouton, section actions). Cartes de
+  résultat : nom/explication/macros + "Voir la variante" (ingrédients+instructions complets) et
+  "Enregistrer comme nouvelle recette".
+- **Tests** : `supabase/functions/recipe-variants/recipe-variants.e2e.test.ts` (14 cas, même pattern
+  fake-Supabase + fetch mocké que `recipe-import.e2e.test.ts` — endpoint stateless donc fake DB limité
+  à `rate_limits`) + `src/hooks/useRecipeVariants.test.ts` (8 cas — recette originale jamais modifiée,
+  hors-ligne refusé, 1 seul appel edge function). Suite complète : 1376 passed/32 skipped (inchangé
+  hors nouveaux tests), `tsc --noEmit` 0 erreur, `vite build` OK, eslint clean sur les fichiers touchés
+  (mêmes avertissements `no-explicit-any` déjà tolérés ailleurs ; le lint global du repo a 1317
+  problèmes préexistants, confirmés identiques sur la branche de base avant cette session — hors
+  périmètre, non introduits par cette feature).
+- **Branche poussée** : `claude/recipe-variants-feature-r88ujt` sur origin, PAS mergée vers `main`
+  (contrainte d'environnement, cf. CLAUDE.md "Workflow Git et publication") — fusion manuelle restante
+  avant livraison prod/Lovable. La migration, elle, a été appliquée directement sur le projet Supabase
+  (base = source de vérité) pour permettre la régénération de `types.ts`.
 
 ## Architecture offline-first globale — infra générique + premier module migré (2026-08-08, branche `claude/cortex-offline-first-arch-hhan1x`)
 Demande : construire l'architecture OFFLINE-FIRST globale (UI → Repository → IndexedDB → Sync Queue →

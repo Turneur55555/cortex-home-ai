@@ -24,6 +24,7 @@ import {
 import { FullscreenSheet } from "@/components/shared/FormComponents";
 import { MealSelect } from "@/components/fitness/MealSelect";
 import { AddToShoppingListSheet } from "@/components/fitness/AddToShoppingListSheet";
+import { RecipeVariantsSheet } from "@/components/fitness/RecipeVariantsSheet";
 import { useAddNutrition } from "@/hooks/useNutritionData";
 import {
   useCollections,
@@ -127,6 +128,7 @@ export function RecipeDetailSheet({
   const [servingsToLog, setServingsToLog] = useState(1);
   const [comparison, setComparison] = useState<ImportedRecipe | null>(null);
   const [shoppingOpen, setShoppingOpen] = useState(false);
+  const [variantsOpen, setVariantsOpen] = useState(false);
 
   function toggleCollection(collectionId: string) {
     const isMember = (memberCollectionIds ?? []).includes(collectionId);
@@ -678,6 +680,18 @@ export function RecipeDetailSheet({
           </motion.button>
         )}
 
+        {!editing && (
+          <motion.button
+            whileTap={PRESS}
+            type="button"
+            onClick={() => setVariantsOpen(true)}
+            className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/5 text-sm font-semibold text-primary"
+          >
+            <span aria-hidden>✨</span>
+            Proposer des variantes
+          </motion.button>
+        )}
+
         {canReanalyze && !editing && (
           <motion.button
             whileTap={PRESS}
@@ -789,6 +803,10 @@ export function RecipeDetailSheet({
           onClose={() => setShoppingOpen(false)}
           onDone={() => setShoppingOpen(false)}
         />
+      )}
+
+      {variantsOpen && (
+        <RecipeVariantsSheet recipe={recipe} onClose={() => setVariantsOpen(false)} />
       )}
     </FullscreenSheet>
   );
