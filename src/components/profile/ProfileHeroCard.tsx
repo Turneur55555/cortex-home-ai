@@ -2,8 +2,7 @@ import { motion } from "framer-motion";
 
 import { RankIllustration } from "@/components/rpg/RankIllustration";
 import { toRankState } from "@/hooks/useExerciseProgression";
-import { useUserStats } from "@/hooks/useUserStats";
-import { titleProgressForXp } from "@/lib/fitness/rpg/titleProgress";
+import { useCortexPower } from "@/hooks/useCortexPower";
 import { EASE_OUT } from "@/components/rpg/premium/tokens";
 
 /**
@@ -21,19 +20,18 @@ import { EASE_OUT } from "@/components/rpg/premium/tokens";
  * plutôt que via le ratio lui-même : la largeur suit proportionnellement,
  * l'illustration (disque + nom du rang) reste toujours entière, jamais rognée.
  *
- * Aucune logique métier ici : le Titre vient du moteur de progression
- * principale (`titleProgress`, piloté PAR L'XP GLOBALE UNIQUEMENT — jamais
- * par le Rang par exercice, qui reste un système indépendant avec ses propres
- * paliers). La correspondance rang → illustration vit dans `assets/ranks`.
+ * Aucune logique métier ici : le Titre vient de `useCortexPower`
+ * (Performance → Rang exercice → Rang musculaire → Puissance Cortex →
+ * Titre — JAMAIS de l'XP, voir `lib/fitness/rpg/cortexTitle.ts`). La
+ * correspondance rang → illustration vit dans `assets/ranks`.
  */
 export function ProfileHeroCard() {
-  const { data: userStats } = useUserStats();
+  const { isLoading, title } = useCortexPower();
 
-  // `useUserStats` sert le dernier rang confirmé (cache local) dès le premier
-  // rendu ; `userStats` n'est `undefined` que pour un tout premier lancement
-  // sans aucun cache — dans ce seul cas, ne rien inventer, un squelette le
-  // temps que la vraie valeur arrive.
-  if (!userStats) {
+  // Ne rien inventer tant que le calcul n'est pas terminé, ou si le joueur
+  // n'a pas encore assez de données pour être classé/partiellement classé —
+  // un squelette plutôt qu'un Titre par défaut ("Mortel") trompeur.
+  if (isLoading || title.status !== "ranked") {
     return (
       <div
         className="relative mb-5 aspect-[4/5] w-full animate-pulse self-center overflow-hidden rounded-[28px] bg-white/5 shadow-elevated"
@@ -42,18 +40,10 @@ export function ProfileHeroCard() {
     );
   }
 
-  const progress = titleProgressForXp(userStats.xp);
-
-  // Position dans le palier courant (0..100).
-  const gradeSpan = Math.max(
-    1,
-    (progress.xpNextThreshold ?? progress.xpCurrentThreshold) - progress.xpCurrentThreshold,
-  );
-  const percentInGrade = progress.isMax
-    ? 100
-    : ((progress.xp - progress.xpCurrentThreshold) / gradeSpan) * 100;
-
-  const rank = toRankState(progress.tierIndex, percentInGrade);
+  // Position dans le grade courant : la Puissance Cortex est un palier
+  // discret (0-29), pas une valeur continue comme l'XP — on affiche donc le
+  // grade atteint sans barre de progression fractionnaire au sein du palier.
+  const rank = toRankState(title.tierIndex, 0);
 
   return (
     <motion.header

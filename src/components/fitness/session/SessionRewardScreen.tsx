@@ -12,9 +12,9 @@ import {
   rankThemeByKey,
 } from "@/components/rpg/rankTheme";
 import { useSessionReward } from "@/hooks/useSessionReward";
+import { useCortexPowerTransition } from "@/hooks/useCortexPowerTransition";
 import { Portal } from "@/components/Portal";
-import { buildTitleTransition } from "@/lib/fitness/rpg/sessionReward";
-import { nextGradeLabel } from "@/lib/fitness/rpg/titleProgress";
+import { nextCortexGradeLabel } from "@/lib/fitness/rpg/cortexTitle";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
@@ -83,11 +83,13 @@ export function SessionRewardScreen({
   onContinue: () => void;
   onViewAnalysis: () => void;
 }) {
-  const { totalXp, breakdown, level, hasXp } = useSessionReward(workoutId);
-  const titleTransition = buildTitleTransition(level.xpBefore, level.xpAfter);
+  const { totalXp, breakdown, hasXp } = useSessionReward(workoutId);
+  const titleTransition = useCortexPowerTransition(workoutId);
+  const afterRanked = titleTransition.after.status === "ranked" ? titleTransition.after : null;
+  const beforeRanked = titleTransition.before.status === "ranked" ? titleTransition.before : null;
   const hasPr = breakdown.some((b) => b.source === "pr_muscu");
-  const rankKey = titleTransition.after.title.key;
-  const beforeRankKey = titleTransition.before.title.key;
+  const rankKey = afterRanked?.title.key ?? "mortel";
+  const beforeRankKey = beforeRanked?.title.key ?? "mortel";
   const theme = rankThemeByKey(rankKey);
   const ambiance = RANK_AMBIANCE[rankKey];
 
@@ -188,7 +190,7 @@ export function SessionRewardScreen({
                     <motion.img
                       key={displayedRankKey}
                       src={trophySrc}
-                      alt={`Récompense — ${titleTransition.after.title.label}`}
+                      alt={`Récompense — ${afterRanked?.title.label ?? "Non classé"}`}
                       loading="eager"
                       decoding="async"
                       initial={{ opacity: 0, scale: 0.85 }}
@@ -268,7 +270,7 @@ export function SessionRewardScreen({
                       </p>
                       {phase === "rankUnlocked" && (
                         <p className="mt-1 text-3xl font-black uppercase tracking-wide text-white">
-                          {titleTransition.after.title.label}
+                          {afterRanked?.title.label ?? "Non classé"}
                         </p>
                       )}
                     </motion.div>
@@ -288,7 +290,7 @@ export function SessionRewardScreen({
                         transition={{ delay: 0.35, duration: 0.5 }}
                         className="text-lg font-bold uppercase tracking-wide text-white/70"
                       >
-                        {titleTransition.before.grade}
+                        {beforeRanked?.grade ?? "—"}
                       </motion.p>
                       <ArrowDown className="mx-auto my-1 h-4 w-4 text-white/30" />
                       <motion.p
@@ -298,7 +300,7 @@ export function SessionRewardScreen({
                         className="text-3xl font-black uppercase tracking-wide"
                         style={{ color: theme.secondary, textShadow: rankTextGlow(theme.glow, 24) }}
                       >
-                        {titleTransition.after.grade}
+                        {afterRanked?.grade}
                       </motion.p>
                     </motion.div>
                   )}
@@ -321,7 +323,7 @@ export function SessionRewardScreen({
                         className="mt-1 text-3xl font-black uppercase tracking-wide"
                         style={{ color: theme.secondary, textShadow: rankTextGlow(theme.glow, 24) }}
                       >
-                        {titleTransition.after.grade}
+                        {afterRanked?.grade}
                       </motion.p>
                     </motion.div>
                   )}
@@ -333,7 +335,7 @@ export function SessionRewardScreen({
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ duration: 0.5, ease: EASE }}
                     >
-                      {titleTransition.after.isMax ? (
+                      {afterRanked?.isMax ? (
                         <p className="text-sm font-bold text-white/70">Grade suprême atteint</p>
                       ) : (
                         <>
@@ -341,7 +343,7 @@ export function SessionRewardScreen({
                             Prochain objectif
                           </p>
                           <p className="mt-1 text-2xl font-black uppercase tracking-wide text-white">
-                            {nextGradeLabel(titleTransition.after)}
+                            {nextCortexGradeLabel(titleTransition.after)}
                           </p>
                         </>
                       )}
@@ -353,18 +355,16 @@ export function SessionRewardScreen({
           ) : (
             <Section delay={0.28}>
               <div className="mt-5 rounded-2xl border border-white/8 bg-white/[0.03] p-4">
+                {/* Puissance Cortex = palier discret (0-29), pas une valeur
+                    continue comme l'XP : la barre reflète la position parmi
+                    les 5 grades du Titre courant, pas une distance
+                    fractionnaire au prochain grade (aucun compte à rebours
+                    chiffré affiché — règle RPG). */}
                 <MasteryBar
                   percent={
-                    titleTransition.after.isMax
+                    afterRanked?.isMax
                       ? 100
-                      : ((titleTransition.after.xp - titleTransition.after.xpCurrentThreshold) /
-                          Math.max(
-                            1,
-                            (titleTransition.after.xpNextThreshold ??
-                              titleTransition.after.xpCurrentThreshold) -
-                              titleTransition.after.xpCurrentThreshold,
-                          )) *
-                        100
+                      : (((afterRanked?.gradeIndex ?? 0) + 1) / 5) * 100
                   }
                   colors={theme}
                   segments={5}
@@ -372,9 +372,9 @@ export function SessionRewardScreen({
                   showLabel={false}
                 />
                 <p className="mt-2 text-right text-[10px] text-white/40">
-                  {titleTransition.after.isMax
+                  {afterRanked?.isMax
                     ? "Grade suprême atteint"
-                    : `Encore ${titleTransition.after.xpToNext} XP avant ${nextGradeLabel(titleTransition.after)}`}
+                    : `Prochain grade : ${nextCortexGradeLabel(titleTransition.after)}`}
                 </p>
               </div>
             </Section>

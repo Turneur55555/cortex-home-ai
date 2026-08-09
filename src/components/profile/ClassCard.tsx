@@ -4,8 +4,7 @@ import { AppSheet } from "@/components/profile/AppSheet";
 import { computeCharacterClass, type CharacterClassResult } from "@/lib/profile/characterClass";
 import type { RankAggregate } from "@/components/fitness/RankAggregator";
 import { gradeName } from "@/lib/fitness/rpg/grade";
-import { useUserStats } from "@/hooks/useUserStats";
-import { titleProgressForXp } from "@/lib/fitness/rpg/titleProgress";
+import { useCortexPower } from "@/hooks/useCortexPower";
 import {
   RANK_AMBIANCE,
   rankGlowShadow,
@@ -44,9 +43,9 @@ interface Props {
  * transitent par les helpers `rankTheme`, jamais réassemblées à la main.
  *
  * Aucune nouvelle règle métier : la classe vient de `computeCharacterClass`
- * (volume × moteur Rang existant), le rang courant de l'XP globale
- * (`titleProgress`) — exactement comme Progression RPG, pour un accueil
- * cohérent, entièrement reforgé dans la même matière.
+ * (volume × moteur Rang existant), le rang courant de `useCortexPower`
+ * (Puissance Cortex, jamais l'XP) — exactement comme Progression RPG, pour
+ * un accueil cohérent, entièrement reforgé dans la même matière.
  *
  * NB (dette assumée) : les formules de matière ci-dessous reprennent celles de
  * `RPGProgressionSection` — elles seront unifiées dans le composant
@@ -55,7 +54,7 @@ interface Props {
  */
 export function ClassCard({ workouts, rankAggregate }: Props) {
   const [open, setOpen] = useState(false);
-  const { data: userStats } = useUserStats();
+  const { title: progress } = useCortexPower();
 
   const result = useMemo(
     () => computeCharacterClass(workouts, rankAggregate.reports),
@@ -63,9 +62,9 @@ export function ClassCard({ workouts, rankAggregate }: Props) {
   );
 
   // Matière du rang courant (couleurs RankTheme + profil de matériau RANK_AMBIANCE).
-  const progress = titleProgressForXp(userStats?.xp ?? 0);
-  const theme = rankThemeByKey(progress.title.key);
-  const amb = RANK_AMBIANCE[progress.title.key];
+  const themeKey = progress.status === "ranked" ? progress.title.key : "mortel";
+  const theme = rankThemeByKey(themeKey);
+  const amb = RANK_AMBIANCE[themeKey];
   const mix = amb.surfaceMix;
   const plateSurface =
     `radial-gradient(120% 120% at 50% -30%, color-mix(in oklch, ${theme.secondary} 42%, transparent), transparent 60%),` +

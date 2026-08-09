@@ -2,9 +2,8 @@ import { Swords } from "lucide-react";
 import { motion } from "framer-motion";
 import { Link } from "@tanstack/react-router";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useUserStats } from "@/hooks/useUserStats";
-import { titleProgressForXp, nextGradeLabel } from "@/lib/fitness/rpg/titleProgress";
-import { formatXp } from "@/lib/fitness/rpg/grade";
+import { useCortexPower } from "@/hooks/useCortexPower";
+import { nextCortexGradeLabel } from "@/lib/fitness/rpg/cortexTitle";
 import { EASE_OUT } from "@/components/rpg/premium/tokens";
 import {
   RANK_AMBIANCE,
@@ -28,34 +27,33 @@ import {
  * ne change pas une teinte, cela REFORGE l'objet dans une autre matière
  * (cuivre → lave, grain, biseau, rythme de lumière et reflets compris).
  *
- * Aucune donnée ni logique métier modifiée : Grade actuel → nom du grade →
- * barre → « Plus que X XP avant [grade] ». Source unique : `titleProgress`
- * (moteur piloté par l'XP globale, `user_stats.xp`).
+ * Grade actuel → nom du grade → barre (position parmi les 5 grades du
+ * Titre) → prochain grade. Source unique : `useCortexPower` (Performance →
+ * Rang exercice → Rang musculaire → Puissance Cortex → Titre — JAMAIS
+ * l'XP globale).
  *
  * NB : c'est la carte de RÉFÉRENCE. Une fois validée, sa matière sera extraite
  * dans un composant réutilisable qui forgera toutes les autres cartes Cortex.
  * Rien d'autre n'est touché pour l'instant.
  */
 export function RPGProgressionSection() {
-  const { data: userStats, isLoading } = useUserStats();
-  const progress = titleProgressForXp(userStats?.xp ?? 0);
-  const currentGrade = progress.grade;
-  const nextGrade = nextGradeLabel(progress);
-  const percent = progress.isMax
-    ? 100
-    : ((progress.xp - progress.xpCurrentThreshold) /
-        Math.max(
-          1,
-          (progress.xpNextThreshold ?? progress.xpCurrentThreshold) - progress.xpCurrentThreshold,
-        )) *
-      100;
-  const clampedPercent = Math.max(0, Math.min(100, percent));
+  const { isLoading, title: progress } = useCortexPower();
+  const notRanked = progress.status !== "ranked";
+  const ranked = progress.status === "ranked" ? progress : null;
+  const currentGrade = ranked?.grade ?? "Non classé";
+  const nextGrade = nextCortexGradeLabel(progress);
+  // La Puissance Cortex est un palier discret (0-29), pas une valeur
+  // continue comme l'XP : la barre reflète la position parmi les 5 grades
+  // du Titre courant (grade 1/5 → 20%, … 5/5 → 100%), pas une distance
+  // fractionnaire au prochain grade.
+  const clampedPercent = !ranked ? 0 : ranked.isMax ? 100 : ((ranked.gradeIndex + 1) / 5) * 100;
 
   // ── Matière du rang courant : couleurs (RankTheme) + profil de matériau
   //    (RANK_AMBIANCE). Tout ce qui suit en dérive — rien n'est codé « en dur »
   //    par rang, donc l'objet se reforge tout seul à chaque montée de Titre.
-  const theme = rankThemeByKey(progress.title.key);
-  const amb = RANK_AMBIANCE[progress.title.key];
+  const themeKey = ranked?.title.key ?? "mortel";
+  const theme = rankThemeByKey(themeKey);
+  const amb = RANK_AMBIANCE[themeKey];
 
   // Surface forgée : dégradé teinté par le rang sur une base NEUTRE (oklch L 0 0
   // — comme applyRankTheme, pour que le métal perçu soit vraiment celui du rang,
@@ -87,9 +85,9 @@ export function RPGProgressionSection() {
         </h2>
       </div>
 
-      {isLoading && <Skeleton className="h-40 w-full rounded-[22px]" />}
+      {(isLoading || notRanked) && <Skeleton className="h-40 w-full rounded-[22px]" />}
 
-      {!isLoading && (
+      {!isLoading && !notRanked && (
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -187,20 +185,20 @@ export function RPGProgressionSection() {
               </div>
             </div>
 
-            {/* XP restante — la raison de revenir. Valeurs en inlay du rang. */}
+            {/* Prochain grade — la raison de revenir. Pas de compte à rebours
+                chiffré : la Puissance Cortex se révèle par accomplissement
+                (nouveau rang d'exercice/musculaire), jamais par une barre de
+                progression à granularité fine (règle RPG, aucune "XP
+                restante" affichée). */}
             <p
               className="mt-3 text-center text-[12px] font-semibold"
               style={{ color: "rgba(255,255,255,0.66)", textShadow: "0 1px 1px rgba(0,0,0,0.5)" }}
             >
-              {progress.isMax || !nextGrade ? (
+              {ranked?.isMax || !nextGrade ? (
                 <span style={{ color: theme.secondary }}>Grade suprême atteint</span>
               ) : (
                 <>
-                  Plus que{" "}
-                  <span className="font-black" style={{ color: theme.secondary }}>
-                    {formatXp(progress.xpToNext)} XP
-                  </span>{" "}
-                  avant{" "}
+                  Prochain grade :{" "}
                   <span
                     className="font-black uppercase tracking-wider"
                     style={{ color: theme.secondary }}

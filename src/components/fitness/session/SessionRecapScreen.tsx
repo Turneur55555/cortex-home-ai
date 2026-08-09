@@ -4,8 +4,7 @@ import { toPng } from "html-to-image";
 import { Loader2, Share2 } from "lucide-react";
 import { Portal } from "@/components/Portal";
 import { SessionRecapCard } from "@/components/fitness/session/SessionRecapCard";
-import { useUserStats } from "@/hooks/useUserStats";
-import { titleProgressForXp } from "@/lib/fitness/rpg/titleProgress";
+import { useCortexPower } from "@/hooks/useCortexPower";
 import { formatRecapDate, type SessionRecap } from "@/lib/fitness/rpg/sessionRecap";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
@@ -15,9 +14,9 @@ const EASE = [0.22, 1, 0.36, 1] as const;
  * reste inchangé) : la carte récap partageable, puis « Terminer ».
  *
  * Aucune donnée nouvelle : le récap vient du snapshot de la séance déjà en
- * mémoire (`buildSessionRecap`), le rang/grade du système existant
- * (`user_stats.xp` → `titleProgressForXp`), les vignettes des mêmes URLs
- * signées que le reste de l'app.
+ * mémoire (`buildSessionRecap`), le rang/grade courant de `useCortexPower`
+ * (Puissance Cortex, jamais l'XP), les vignettes des mêmes URLs signées que
+ * le reste de l'app.
  *
  * Partage : on capture UNIQUEMENT un nœud dédié 9:16 (1080×1920 après
  * pixelRatio 2), rendu hors écran — jamais une capture de l'écran. Repli
@@ -39,8 +38,7 @@ export function SessionRecapScreen({
 }) {
   const exportRef = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState(false);
-  const { data: stats } = useUserStats();
-  const progress = titleProgressForXp(stats?.xp ?? 0);
+  const { title: progress } = useCortexPower();
 
   const dateLabel = useMemo(() => formatRecapDate(date ?? new Date()), [date]);
 
@@ -48,9 +46,9 @@ export function SessionRecapScreen({
     recap,
     dateLabel,
     prCount,
-    rankKey: progress.title.key,
-    rankLabel: progress.title.label,
-    grade: progress.grade,
+    rankKey: progress.status === "ranked" ? progress.title.key : "mortel",
+    rankLabel: progress.status === "ranked" ? progress.title.label : "Non classé",
+    grade: progress.status === "ranked" ? progress.grade : "",
   };
 
   async function handleShare() {
