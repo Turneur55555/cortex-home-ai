@@ -55,27 +55,48 @@ export function useOfflineSync(): OfflineSyncState {
     setConflicts(conflictList);
   }, [userId]);
 
-  const syncNow = useCallback(async () => {
-    if (!userId || !isOnline || syncingRef.current) return;
-    syncingRef.current = true;
-    setIsSyncing(true);
-    try {
-      await processSyncQueue(userId);
-    } finally {
-      syncingRef.current = false;
-      setIsSyncing(false);
-      await refreshCounts();
-    }
-  }, [userId, isOnline, refreshCounts]);
+  const attemptSync = useCallback(
+    async (options: { respectBackoff?: boolean } = {}) => {
+      if (!userId || !isOnline || syncingRef.current) return;
+      syncingRef.current = true;
+      setIsSyncing(true);
+      try {
+        await processSyncQueue(userId, options);
+      } finally {
+        syncingRef.current = false;
+        setIsSyncing(false);
+        await refreshCounts();
+      }
+    },
+    [userId, isOnline, refreshCounts],
+  );
+
+  // Bouton "Réessayer" / retour réseau explicite : retente immédiatement,
+  // sans respecter le backoff (l'utilisateur ou l'événement online vient
+  // de donner un signal explicite qu'il faut réessayer maintenant).
+  const syncNow = useCallback(() => attemptSync(), [attemptSync]);
 
   // Poll léger des compteurs — IndexedDB n'a pas d'events de changement
   // pratiques inter-onglet ; un intervalle discret suffit pour un indicateur
-  // "sobre", pas temps réel critique.
+  // "sobre", pas temps réel critique. Il sert AUSSI de filet de sécurité
+  // pour la sync automatique : `navigator.onLine`/les events `online` sont
+  // best-effort (une erreur réseau temporaire, ex. un blip 4G, ne fait
+  // jamais transiter `isOnline` par `false` — rien d'autre ne redéclenche
+  // alors `syncNow`, cf. l'effet "retour réseau" ci-dessous, ce qui laissait
+  // une opération `failed` bloquée jusqu'au bouton "Réessayer" manuel). Ce
+  // balayage réutilise l'intervalle déjà existant (pas de nouveau timer) et
+  // respecte le backoff exponentiel (`respectBackoff: true`, déjà prévu par
+  // `processSyncQueue` mais jamais appelé automatiquement) pour ne pas
+  // marteler le réseau après plusieurs échecs. `syncingRef` (partagé avec
+  // `syncNow`) garantit qu'un seul passage tourne à la fois.
   useEffect(() => {
     refreshCounts();
-    const interval = setInterval(refreshCounts, POLL_INTERVAL_MS);
+    const interval = setInterval(() => {
+      refreshCounts();
+      void attemptSync({ respectBackoff: true });
+    }, POLL_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [refreshCounts]);
+  }, [refreshCounts, attemptSync]);
 
   // Retour réseau → on relance la queue automatiquement.
   useEffect(() => {
