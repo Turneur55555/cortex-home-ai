@@ -3,17 +3,19 @@
 // characterLevel.sql-parity.test.ts — voir ce fichier pour l'historique
 // des divergences non-attrapées qui ont motivé ce type de test).
 //
-// `public.compute_tier_index_from_xp` (migration
-// 20260725130000_rpg_promotion_history.sql) est une copie SQL en LECTURE
-// SEULE de `tierForXp`/`XP_THRESHOLDS` (titleConfig.ts / titleProgress.ts),
-// utilisée UNIQUEMENT pour dater automatiquement les promotions déjà
-// survenues (`rank_promotions`) — jamais pour l'affichage (titleProgress.ts
-// reste l'unique moteur consommé par l'UI). Ce test lit la DERNIÈRE
-// définition SQL appliquée dans `supabase/migrations/` et vérifie qu'elle
-// encode exactement la même table de seuils que XP_THRESHOLDS, pour que
-// toute future rééquilibrage des seuils côté TS sans mise à jour de la
-// copie SQL fasse échouer la CI plutôt que de dater silencieusement les
-// promotions au mauvais palier.
+// STATUT (mis à jour RPG V2 Phase F/G, 29/08/2026) : `public.compute_tier_
+// index_from_xp` a été DÉFINITIVEMENT SUPPRIMÉE de la base live par la
+// migration 20260829120000_drop_xp_driven_title_path.sql — le Titre n'est
+// plus jamais dérivé de l'XP (voir cortexPower.ts / titleProgress.ts pour
+// le moteur actuel, basé sur la Puissance Cortex). Ce test ne vérifie donc
+// plus une fonction vivante : il lit le texte figé de l'ancienne migration
+// 20260725130000_rpg_promotion_history.sql (qui définissait la fonction
+// avant sa suppression) et s'assure que cette définition HISTORIQUE
+// correspond toujours à XP_THRESHOLDS — un garde-fou anti-réécriture d'une
+// migration déjà appliquée, pas une protection contre une divergence live.
+// Les 29 lignes de `rank_promotions` qu'elle a datées restent correctes et
+// gelées ; aucune nouvelle ligne n'est plus produite par ce chemin. Conservé
+// tel quel (inoffensif, aucune valeur à le supprimer) plutôt que retiré.
 // ============================================================
 import { describe, it, expect } from "vitest";
 import { readdirSync, readFileSync } from "fs";

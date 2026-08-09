@@ -35,6 +35,26 @@ describe("exerciseToMuscles", () => {
     expect(muscles).toEqual(["epaules"]);
   });
 
+  // Régression audit RPG V2 (29/08/2026) : "Élévations latérales câble"/
+  // "Élévations latérales haltères" (72 séries réelles Cortex, les
+  // exercices les plus loggués pour les épaules) ne matchaient PAS le
+  // pattern original (accord pluriel/féminin manquant) — le muscle
+  // épaules perdait silencieusement son signal le plus riche.
+  it("mappe 'Élévations latérales câble' au pluriel (régression audit)", () => {
+    const muscles = exerciseToMuscles("Élévations latérales câble");
+    expect(muscles).toEqual(["epaules"]);
+  });
+
+  it("mappe 'Élévation latéral poulie' sans accord féminin (régression audit)", () => {
+    const muscles = exerciseToMuscles("Élévation latéral poulie");
+    expect(muscles).toEqual(["epaules"]);
+  });
+
+  it("mappe 'Élévations frontales' au pluriel (régression audit)", () => {
+    const muscles = exerciseToMuscles("Élévations frontales épaule");
+    expect(muscles).toEqual(["epaules"]);
+  });
+
   it("mappe 'squat' vers quadriceps et fessiers", () => {
     const muscles = exerciseToMuscles("squat");
     expect(muscles).toContain("quadriceps");

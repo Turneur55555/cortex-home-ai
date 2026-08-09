@@ -18,13 +18,11 @@
 //     extrême, même après plafonnement du poids, ne fasse dériver le
 //     résultat trop loin du reste des données).
 //
-// Poids par exercice (primaire/secondaire) : AUCUNE donnée de ce type
-// n'existe aujourd'hui dans Cortex (`exerciseToMuscles()` ne renvoie qu'une
-// liste plate de muscles, sans rôle ni pondération — vérifié en session).
-// Le paramètre `weight` est donc optionnel et vaut 1 par défaut pour tout
-// exercice contributeur (poids égal) — prêt à recevoir une vraie
-// pondération primaire/secondaire le jour où cette donnée existera, sans
-// changement de signature.
+// Poids par exercice (primaire/secondaire) : calculé par l'appelant
+// (`muscleAggregation.ts`, audit RPG V2 du 29/08/2026) à partir de l'ordre
+// déjà existant dans `exerciseToMuscles()` — pas une donnée inventée ici.
+// Le paramètre `weight` reste optionnel (défaut 1, poids égal) pour rester
+// utilisable indépendamment de cette convention.
 // ============================================================
 
 export interface MuscleRankExerciseInput {

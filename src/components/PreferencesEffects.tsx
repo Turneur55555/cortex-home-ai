@@ -2,6 +2,7 @@ import { useEffect, type ReactNode } from "react";
 import { MotionConfig } from "framer-motion";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { useCortexPower } from "@/hooks/useCortexPower";
+import { useAscensionSync } from "@/hooks/useAscensionSync";
 import { applyRankTheme } from "@/components/rpg/rankTheme";
 
 /**
@@ -10,6 +11,9 @@ import { applyRankTheme } from "@/components/rpg/rankTheme";
  *   voir applyRankTheme) — le Titre global (`useCortexPower`, Puissance
  *   Cortex, comme ProfileHeroCard — jamais l'XP) est l'unique source de
  *   l'identité visuelle de Cortex
+ * - synchronisation de l'historique des Ascensions (`useAscensionSync`) —
+ *   montée ici, pas seulement sur l'écran Progression, pour qu'un
+ *   changement de Titre soit consigné où que le joueur navigue
  * - animations (framer-motion reducedMotion + boucles CSS pures de RankTheme,
  *   comme .animate-rank-breathe, via la classe .motion-reduce sur <html>)
  *
@@ -23,6 +27,7 @@ export function PreferencesEffects({ children }: { children: ReactNode }) {
   const { prefs } = useUserPreferences();
   const { isLoading, title } = useCortexPower();
   const rankKey = !isLoading && title.status === "ranked" ? title.title?.key : null;
+  useAscensionSync();
 
   useEffect(() => {
     if (!rankKey) return;

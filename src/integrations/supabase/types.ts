@@ -597,6 +597,30 @@ export type Database = {
           },
         ]
       }
+      cortex_ascensions: {
+        Row: {
+          created_at: string
+          id: string
+          previous_tier_index: number | null
+          tier_index: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          previous_tier_index?: number | null
+          tier_index: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          previous_tier_index?: number | null
+          tier_index?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       cp_controles: {
         Row: {
           commentaire: string | null
@@ -4661,6 +4685,10 @@ export type Database = {
       }
       recompute_recipe_nutrition: {
         Args: { p_recipe: string }
+        Returns: undefined
+      }
+      record_cortex_ascension: {
+        Args: { _tier_index: number }
         Returns: undefined
       }
       restore_exercise_reference: { Args: { p_id: string }; Returns: undefined }

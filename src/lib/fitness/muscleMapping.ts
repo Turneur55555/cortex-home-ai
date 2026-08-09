@@ -61,8 +61,13 @@ const EXERCISE_TO_MUSCLES: Array<{ pattern: string; muscles: MuscleId[] }> = [
     pattern: "développé.?militaire|overhead.?press|shoulder.?press|press.?épaule",
     muscles: ["epaules", "triceps"],
   },
-  { pattern: "élévation.?latérale|lateral.?raise", muscles: ["epaules"] },
-  { pattern: "élévation.?frontale|front.?raise", muscles: ["epaules"] },
+  // "élévations" (pluriel) / "latéral" sans accord féminin ("latéral poulie")
+  // sont des variantes réelles rencontrées dans le catalogue Cortex — audit
+  // RPG V2 (29/08/2026), corrige un vrai trou de mapping (72 séries logguées
+  // sur "Élévations latérales câble/haltères" restaient jusqu'ici sans
+  // muscle associé).
+  { pattern: "élévations?.?latéral(e|es)?|lateral.?raise", muscles: ["epaules"] },
+  { pattern: "élévations?.?frontale?s?|front.?raise", muscles: ["epaules"] },
   { pattern: "oiseau|face.?pull|rear.?delt|reverse.?fly", muscles: ["epaules", "trapeze"] },
   { pattern: "shrug|haussement", muscles: ["trapeze"] },
 

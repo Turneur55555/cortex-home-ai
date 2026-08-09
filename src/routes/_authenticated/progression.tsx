@@ -5,6 +5,8 @@ import { useUserStats } from "@/hooks/useUserStats";
 import { useWorkouts } from "@/hooks/use-fitness";
 import { useActivityStreak } from "@/hooks/useActivityStreak";
 import { useRankPromotions } from "@/hooks/useRankPromotions";
+import { useCortexAscensions } from "@/hooks/useCortexAscensions";
+import { mergePromotionTimeline } from "@/lib/fitness/rpg/ascension";
 import { titleProgressForXp, nextGradeLabel } from "@/lib/fitness/rpg/titleProgress";
 import { formatXp } from "@/lib/fitness/rpg/grade";
 import { RankIllustration } from "@/components/rpg/RankIllustration";
@@ -19,10 +21,16 @@ import {
 
 /**
  * Page dédiée « Progression RPG » — fiche joueur AAA.
- * Aucune donnée inventée : tout est dérivé de user_stats.xp (Titre/Grade),
- * useWorkouts (nb de séances), useActivityStreak (série en cours),
- * rank_promotions (historique des montées de Rang/Grade, écrit
- * automatiquement en base — voir useRankPromotions).
+ *
+ * NB (dette assumée, route déjà identifiée comme legacy/orpheline avant ce
+ * chantier) : l'en-tête (illustration/grade/barre) de cette page affiche
+ * encore le Titre dérivé de l'XP (`titleProgressForXp`, `user_stats.xp`) —
+ * hors du périmètre "une seule source de vérité" traité ailleurs dans
+ * l'app (Accueil/Profil/séance, tous branchés sur `useCortexPower` —
+ * Puissance Cortex). Seul l'historique ci-dessous a été mis à jour : il
+ * fusionne l'historique gelé de l'ère XP (`rank_promotions`, plus aucune
+ * écriture) et les nouvelles Ascensions (`cortex_ascensions`, Puissance
+ * Cortex — voir `mergePromotionTimeline`).
  */
 export const Route = createFileRoute("/_authenticated/progression")({
   head: () => ({
@@ -38,7 +46,9 @@ function ProgressionPage() {
   const { data: userStats } = useUserStats();
   const { data: workouts } = useWorkouts();
   const { current: streak } = useActivityStreak();
-  const { data: promotionEvents } = useRankPromotions();
+  const { data: legacyRows } = useRankPromotions();
+  const { data: ascensions } = useCortexAscensions();
+  const promotionEvents = mergePromotionTimeline(legacyRows ?? [], ascensions ?? []);
 
   const xp = userStats?.xp ?? 0;
   const progress = titleProgressForXp(xp);
