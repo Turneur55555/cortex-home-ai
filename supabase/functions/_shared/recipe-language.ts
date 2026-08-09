@@ -105,9 +105,12 @@ export function buildLanguageDirective(detected: DetectedLanguage): string {
   } else {
     const label = detected === "en" ? "anglais" : "espagnol";
     base.unshift(
-      `Le contenu source est en ${label} : traduis-le naturellement en français (pas de traduction littérale).`,
+      `Indice (non contraignant) : le contenu source semble être en ${label} — traduis-le naturellement en français ` +
+        "(pas de traduction littérale). Si ce n'est pas la bonne langue, fie-toi au contenu réel : détecte-la " +
+        "toi-même et, si elle est française, ne traduis pas.",
     );
   }
+
 
   return base.join("\n");
 }
