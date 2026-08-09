@@ -88,7 +88,7 @@ export interface RecipeWithMacros extends Recipe {
   totalGrams: number | null;
 }
 
-const RECIPES_KEY = ["recipes"] as const;
+export const RECIPES_KEY = ["recipes"] as const;
 const recipeKey = (id: string) => ["recipe", id] as const;
 
 const toMacroInput = (ing: RecipeIngredient) => ({

@@ -41,8 +41,12 @@ function safeMinutes(v: unknown): number | null {
   return n > 0 && n <= 600 ? Math.round(n) : null;
 }
 
-/** Rayon de courses IA, s'il fait partie de la liste fermée — `null` sinon (repli client). */
-function sanitizeCategory(v: unknown): IngredientCategory | null {
+/**
+ * Rayon de courses IA, s'il fait partie de la liste fermée — `null` sinon
+ * (repli client). Exportée : réutilisée par recipe-variant-engine.ts (mêmes
+ * bornes que l'import de recette, jamais redéfinies deux fois).
+ */
+export function sanitizeCategory(v: unknown): IngredientCategory | null {
   return typeof v === "string" && (INGREDIENT_CATEGORIES as readonly string[]).includes(v)
     ? (v as IngredientCategory)
     : null;
