@@ -39,6 +39,7 @@ function makeFakeSupabase(seed: Partial<Record<string, Row[]>> = {}) {
 
   function from(table: string) {
     const filters: Array<[string, unknown]> = [];
+    const gteFilters: Array<[string, number]> = [];
     let countMode = false;
     let insertRows: Row[] | null = null;
     let upsertRows: Row[] | null = null;
@@ -46,7 +47,8 @@ function makeFakeSupabase(seed: Partial<Record<string, Row[]>> = {}) {
     let updatePatch: Row | null = null;
     let deleteMode = false;
 
-    const matches = (r: Row) => filters.every(([c, v]) => r[c] === v);
+    const matches = (r: Row) =>
+      filters.every(([c, v]) => r[c] === v) && gteFilters.every(([c, v]) => Number(r[c] ?? 0) >= v);
 
     // deno-lint-ignore no-explicit-any
     const builder: any = {
