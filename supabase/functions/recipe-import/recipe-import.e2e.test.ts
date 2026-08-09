@@ -58,7 +58,9 @@ function makeFakeSupabase(seed: Partial<Record<string, Row[]>> = {}) {
         filters.push([col, val]);
         return builder;
       },
-      gte() {
+      gte(col?: string, val?: unknown) {
+        // Utilisé par le versionnement du cache de langue (language_rule_version).
+        if (typeof col === "string" && typeof val === "number") gteFilters.push([col, val]);
         return builder;
       },
       order() {
