@@ -39,6 +39,7 @@ function makeFakeSupabase(seed: Partial<Record<string, Row[]>> = {}) {
 
   function from(table: string) {
     const filters: Array<[string, unknown]> = [];
+    const gteFilters: Array<[string, number]> = [];
     let countMode = false;
     let insertRows: Row[] | null = null;
     let upsertRows: Row[] | null = null;
@@ -46,7 +47,8 @@ function makeFakeSupabase(seed: Partial<Record<string, Row[]>> = {}) {
     let updatePatch: Row | null = null;
     let deleteMode = false;
 
-    const matches = (r: Row) => filters.every(([c, v]) => r[c] === v);
+    const matches = (r: Row) =>
+      filters.every(([c, v]) => r[c] === v) && gteFilters.every(([c, v]) => Number(r[c] ?? 0) >= v);
 
     // deno-lint-ignore no-explicit-any
     const builder: any = {
@@ -58,7 +60,9 @@ function makeFakeSupabase(seed: Partial<Record<string, Row[]>> = {}) {
         filters.push([col, val]);
         return builder;
       },
-      gte() {
+      gte(col?: string, val?: unknown) {
+        // Utilisé par le versionnement du cache de langue (language_rule_version).
+        if (typeof col === "string" && typeof val === "number") gteFilters.push([col, val]);
         return builder;
       },
       order() {
@@ -493,4 +497,144 @@ describe("recipe-import — Instagram E2E (réseau + DB simulés)", () => {
     expect(result.error).toMatch(/TikTok/);
     expect(result.recipe).toBeUndefined();
   });
+
+  // ─── Règle de langue : la fiche STOCKÉE doit être réellement française ────
+  const EN_HTML = `<html><head>
+  <meta property="og:title" content="Jane Doe (@jane.cooks) on Instagram: Crispy honey carrots" />
+  <meta property="og:description" content="Method: toss the carrots with olive oil spray and smoked paprika, then bake. Estimated per serve. #recipe @jane.cooks" />
+  <meta property="og:image" content="https://scontent.cdninstagram.com/thumb.jpg" />
+</head></html>`;
+
+  const EN_PAYLOAD = {
+    title: "Crispy honey carrots",
+    notes: "Estimated per serve",
+    ai_summary: "Method: bake the carrots with smoked paprika.",
+    ingredients: [
+      { name: "Carrots", quantity: 600, unit: "g", grams: 600, category: "Légumes" },
+      { name: "Olive Oil Spray", quantity: 1, unit: "tablespoon", grams: 14, category: "Épicerie" },
+    ],
+  };
+  const FR_PAYLOAD = {
+    title: "Carottes croustillantes au miel",
+    notes: "Valeurs estimées par portion",
+    ai_summary: "Méthode : rôtir les carottes au paprika fumé.",
+    ingredients: [
+      { name: "Carottes", quantity: 600, unit: "g", grams: 600, category: "Légumes" },
+      { name: "Spray d'huile d'olive", quantity: 1, unit: "c. à soupe", grams: 14, category: "Épicerie" },
+    ],
+  };
+
+  /** Gemini renvoie d'abord la fiche VO, puis la fiche française sur la reprise renforcée. */
+  function geminiThenFrench() {
+    let call = 0;
+    return () => jsonResponse(geminiToolCallResponse(call++ === 0 ? EN_PAYLOAD : FR_PAYLOAD));
+  }
+
+  it("Anglais — la fiche stockée est réellement française (même pipeline, reprise renforcée)", async () => {
+    const { fn } = installFetchMock({ page: () => new Response(EN_HTML, { status: 200 }), gemini: geminiThenFrench() });
+    const supa = makeFakeSupabase();
+    const result = await handleRecipeImport(
+      { source: "instagram", input: { kind: "url", value: REEL_URL } },
+      deps(supa),
+    );
+    const recipe = result.recipe as Record<string, unknown>;
+    expect(recipe.title).toBe("Carottes croustillantes au miel");
+    const ings = recipe.ingredients as Array<Record<string, unknown>>;
+    expect(ings.map((i) => i.name)).toEqual(["Carottes", "Spray d'huile d'olive"]);
+    // Quantités et valeurs numériques strictement inchangées par la traduction.
+    expect(ings[0].quantity).toBe(600);
+    expect(ings[0].grams).toBe(600);
+    expect(ings[1].quantity).toBe(1);
+    // Légende Instagram d'origine conservée telle quelle (anglais, @ et #).
+    expect(recipe.originalCaption).toContain("olive oil spray");
+    expect(recipe.originalCaption).toContain("#recipe");
+    expect(recipe.originalCaption).toContain("@jane.cooks");
+    expect(supa.tables.recipes[0].source_description).toBe(recipe.originalCaption);
+    expect(supa.tables.recipes[0].name).toBe("Carottes croustillantes au miel");
+    // Aucun appel IA dédié uniquement à la traduction : exactement 2 extractions.
+    const geminiCalls = fn.mock.calls.filter((c) => String(c[0]).includes("generativelanguage")).length;
+    expect(geminiCalls).toBe(2);
+  });
+
+  it("Espagnol — la fiche stockée est réellement française", async () => {
+    const ES_HTML = `<html><head>
+  <meta property="og:title" content="Jane (@jane.cooks) on Instagram: Zanahorias al horno" />
+  <meta property="og:description" content="Receta: zanahorias con mantequilla, al horno hasta dorar. #receta" />
+  <meta property="og:image" content="https://scontent.cdninstagram.com/thumb.jpg" />
+</head></html>`;
+    installFetchMock({ page: () => new Response(ES_HTML, { status: 200 }), gemini: geminiThenFrench() });
+    const supa = makeFakeSupabase();
+    const result = await handleRecipeImport(
+      { source: "instagram", input: { kind: "url", value: REEL_URL } },
+      deps(supa),
+    );
+    const recipe = result.recipe as Record<string, unknown>;
+    expect(recipe.title).toBe("Carottes croustillantes au miel");
+    expect(recipe.originalCaption).toContain("zanahorias");
+  });
+
+  it("Français — aucune traduction inutile : un seul appel IA", async () => {
+    const { fn } = installFetchMock({ page: () => new Response(PUBLIC_HTML, { status: 200 }) });
+    const supa = makeFakeSupabase();
+    const result = await handleRecipeImport(
+      { source: "instagram", input: { kind: "url", value: REEL_URL } },
+      deps(supa),
+    );
+    expect((result.recipe as Record<string, unknown>).title).toBe("Poulet crémeux au parmesan");
+    const geminiCalls = fn.mock.calls.filter((c) => String(c[0]).includes("generativelanguage")).length;
+    expect(geminiCalls).toBe(1);
+  });
+
+  it("Cache hérité anglais (version 0) : ignoré, réanalysé une fois, remplacé par la version française", async () => {
+    const { fn } = installFetchMock({ page: () => new Response(EN_HTML, { status: 200 }), gemini: geminiThenFrench() });
+    const supa = makeFakeSupabase();
+    // Entrée de cache écrite AVANT la règle de langue : fiche restée en anglais.
+    supa.tables.recipe_import_cache.push({
+      id: "legacy-1",
+      source_kind: "instagram",
+      source_url: REEL_URL,
+      title: "Crispy honey carrots",
+      servings: 4,
+      confidence: 0.8,
+      notes: null,
+      source_image_url: null,
+      source_description: "Method: bake the carrots.",
+      ai_summary: null,
+      source_author: "jane.cooks",
+      prep_minutes: null,
+      cook_minutes: null,
+      tags: null,
+      per_serving_calories: 100,
+      per_serving_proteins: 1,
+      per_serving_carbs: 1,
+      per_serving_fats: 1,
+      per_serving_fiber: 1,
+      ingredients: [{ name: "Carrots", quantity: 600, unit: "g", grams: 600, category: "Légumes" }],
+      language_rule_version: 0,
+    });
+
+    const result = await handleRecipeImport(
+      { source: "instagram", input: { kind: "url", value: REEL_URL } },
+      deps(supa, "user-1"),
+    );
+    // L'entrée héritée n'a PAS été servie : le pipeline a réanalysé.
+    expect(result.cached).toBe(false);
+    expect(fn.mock.calls.some((c) => String(c[0]).includes("generativelanguage"))).toBe(true);
+    expect((result.recipe as Record<string, unknown>).title).toBe("Carottes croustillantes au miel");
+    // Le cache est REMPLACÉ (pas dupliqué) par la version française conforme.
+    expect(supa.tables.recipe_import_cache).toHaveLength(1);
+    expect(supa.tables.recipe_import_cache[0].title).toBe("Carottes croustillantes au miel");
+    expect(supa.tables.recipe_import_cache[0].language_rule_version).toBe(2);
+
+    // Import suivant (autre utilisateur) : cache français réutilisé, aucun appel IA.
+    fn.mockClear();
+    const second = await handleRecipeImport(
+      { source: "instagram", input: { kind: "url", value: REEL_URL } },
+      deps(supa, "user-2"),
+    );
+    expect(second.cached).toBe(true);
+    expect((second.recipe as Record<string, unknown>).title).toBe("Carottes croustillantes au miel");
+    expect(fn).not.toHaveBeenCalled();
+  });
 });
+

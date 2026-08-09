@@ -9,7 +9,8 @@
 import { instagramScraperProvider, type InstagramProvider } from "./instagram-provider.ts";
 import { parseRecipeFromContent } from "./recipe-parser.ts";
 import { computeRecipeExtraction } from "./nutrition-engine.ts";
-import { RecipeImportError, type SourceHandler } from "./recipe-import.ts";
+import { RecipeImportError, type RecipeExtraction, type SourceHandler } from "./recipe-import.ts";
+import { findNonFrenchTerms } from "./recipe-language.ts";
 
 const INSTAGRAM_URL_RE = /^\/(reel|reels|p|tv)\/[\w-]+\/?$/;
 
@@ -43,18 +44,36 @@ function makeInstagramHandler(provider: InstagramProvider): SourceHandler {
 
     async run(value, env) {
       const content = await provider.fetchContent(value, { openaiApiKey: env.openaiApiKey });
-      const raw = await parseRecipeFromContent(env.geminiApiKey, content);
-      return computeRecipeExtraction(
-        raw,
-        content.imageUrl,
-        {
-          hasTranscript: !!content.transcript,
-          hasCaption: !!content.caption,
-          hasImage: !!content.imageB64,
-        },
-        { originalCaption: content.caption, authorHandle: content.authorHandle },
-      );
+      const signals = {
+        hasTranscript: !!content.transcript,
+        hasCaption: !!content.caption,
+        hasImage: !!content.imageB64,
+      };
+      const passthrough = { originalCaption: content.caption, authorHandle: content.authorHandle };
+
+      const extract = async (reinforceFrench: boolean): Promise<RecipeExtraction> => {
+        const raw = await parseRecipeFromContent(env.geminiApiKey, content, { reinforceFrench });
+        return computeRecipeExtraction(raw, content.imageUrl, signals, passthrough);
+      };
+
+      const first = await extract(false);
+      // Garantie de RÉSULTAT (pas seulement de consigne) : si la fiche produite
+      // contient encore du texte source non traduit, la MÊME extraction est
+      // rejouée une fois avec une consigne durcie. Jamais d'appel dédié à la
+      // traduction, jamais plus d'une reprise.
+      const leftovers = findNonFrenchTerms(first);
+      if (leftovers.length === 0) return first;
+
+      console.warn("[recipe-import-instagram] fiche non française, ré-extraction renforcée:", leftovers.slice(0, 10));
+      try {
+        const second = await extract(true);
+        return findNonFrenchTerms(second).length <= leftovers.length ? second : first;
+      } catch (e) {
+        console.error("[recipe-import-instagram] ré-extraction renforcée échouée, fiche initiale conservée:", e);
+        return first;
+      }
     },
+
   };
 }
 

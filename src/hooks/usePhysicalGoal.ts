@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { db } from "@/integrations/supabase/db";
 import { useAuth } from "@/hooks/use-auth";
 import { getIsOnline } from "@/lib/offline/networkStatus";
 import { createOfflineRepository, hydrateEntitiesFromServer } from "@/lib/offline/repository";
@@ -92,7 +92,7 @@ function mapRow(data: PhysicalGoalRow): PhysicalGoal {
 async function refreshFromServer(userId: string): Promise<void> {
   if (!getIsOnline()) return;
   try {
-    const { data, error } = await supabase.from("physical_goals").select("*").eq("user_id", userId);
+    const { data, error } = await db.from("physical_goals").select("*").eq("user_id", userId);
     if (!error && data) {
       await hydrateEntitiesFromServer("physical_goals", userId, data as PhysicalGoalRow[]);
     }

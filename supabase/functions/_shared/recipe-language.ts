@@ -67,12 +67,9 @@ export function detectLanguage(...texts: Array<string | null | undefined>): Dete
 
   scores.sort((a, b) => b.score - a.score);
   const [best, second] = scores;
-  // Seuil : un seul mot commun (ex. "con"/"des") ne suffit pas à trancher — on
-  // préfère "unknown" et on laisse l'IA détecter la langue elle-même.
-  if (!best || best.score < 2) return "unknown";
+  if (!best || best.score === 0) return "unknown";
   if (second && best.score === second.score) return "unknown";
   return best.lang;
-
 }
 
 /** `true` si le contenu ne nécessite aucune traduction. */
@@ -84,7 +81,7 @@ export function isFrenchContent(...texts: Array<string | null | undefined>): boo
  * Directive de langue injectée dans le prompt IA existant.
  * Toujours présente (même en français) pour garantir une fiche 100 % française.
  */
-export function buildLanguageDirective(detected: DetectedLanguage): string {
+export function buildLanguageDirective(detected: DetectedLanguage, reinforce = false): string {
   const base = [
     "RÈGLE DE LANGUE (obligatoire) : la fiche finale doit être INTÉGRALEMENT en français " +
       "(titre, ingrédients, unités, notes, résumé, tags de texte libre).",
@@ -105,12 +102,98 @@ export function buildLanguageDirective(detected: DetectedLanguage): string {
   } else {
     const label = detected === "en" ? "anglais" : "espagnol";
     base.unshift(
-      `Indice (non contraignant) : le contenu source semble être en ${label} — traduis-le naturellement en français ` +
-        "(pas de traduction littérale). Si ce n'est pas la bonne langue, fie-toi au contenu réel : détecte-la " +
-        "toi-même et, si elle est française, ne traduis pas.",
+      `Le contenu source est en ${label} : traduis-le naturellement en français (pas de traduction littérale).`,
     );
   }
 
+  if (reinforce) {
+    base.push(
+      "RAPPEL CRITIQUE : la tentative précédente a laissé du texte NON FRANÇAIS dans la fiche " +
+        '(ex. "Carrots", "Olive Oil Spray", "Smoked Paprika", "Method", "Estimated per serve"). ' +
+        "Aucun mot anglais ou espagnol ne doit subsister dans title, ingredients[].name, ingredients[].unit, " +
+        "notes et ai_summary. Traduis chaque nom d'ingrédient (carrots -> carottes, olive oil spray -> spray " +
+        "d'huile d'olive, smoked paprika -> paprika fumé) et chaque intitulé (method -> méthode, per serve -> " +
+        "par portion), en gardant EXACTEMENT les mêmes valeurs numériques.",
+    );
+  }
 
   return base.join("\n");
 }
+
+// ─── Contrôle de conformité de la fiche PRODUITE (post-extraction) ───────────
+// La directive ne suffit pas : on vérifie réellement que les champs GÉNÉRÉS
+// par l'IA sont en français. La légende originale (`originalCaption`) n'est
+// JAMAIS contrôlée ni modifiée — elle doit rester dans sa langue d'origine.
+
+/**
+ * Vocabulaire anglais/espagnol non ambigu (aucun de ces mots n'est un mot
+ * français courant), suffisant pour détecter une fiche restée en VO.
+ */
+const NON_FRENCH_WORDS: ReadonlySet<string> = new Set([
+  // anglais — structure / intitulés
+  "method", "ingredients", "instructions", "directions", "steps", "serves", "serving", "servings",
+  "estimated", "per", "the", "with", "and", "then", "until", "your", "make", "add", "mix", "stir",
+  "bake", "baked", "baking", "cook", "cooked", "cooking", "oven", "heat", "high", "low", "protein",
+  "calories", "fat", "carbs", "fiber", "recipe", "spray", "smoked", "chopped", "sliced", "diced",
+  "grated", "boneless", "skinless", "fresh", "dried", "ground", "roasted", "grilled", "seasoning",
+  // anglais — aliments
+  "carrots", "carrot", "chicken", "beef", "pork", "shrimp", "eggs", "egg", "cheese", "butter",
+  "cream", "milk", "flour", "sugar", "salt", "pepper", "garlic", "onion", "onions", "rice",
+  "beans", "chickpeas", "spinach", "potatoes", "potato", "tomatoes", "tomato", "oil", "honey",
+  "breast", "thighs", "noodles", "broth", "stock", "yogurt", "greek",
+  // anglais — unités
+  "tablespoon", "tablespoons", "teaspoon", "teaspoons", "cup", "cups", "ounce", "ounces", "pound",
+  "pounds", "tbsp", "tsp", "oz", "lb", "lbs", "cloves", "clove", "slice", "slices", "pinch",
+  // espagnol
+  "receta", "ingredientes", "preparacion", "metodo", "pollo", "arroz", "huevos", "huevo", "queso",
+  "mantequilla", "crema", "harina", "azucar", "cebolla", "ajo", "zanahoria", "zanahorias",
+  "cucharada", "cucharadita", "taza", "tazas", "porciones", "sartén", "sarten", "horno", "hasta",
+  "con", "para", "luego", "anadir", "mezclar",
+]);
+
+function nonFrenchTokens(text: string | null | undefined): string[] {
+  if (!text) return [];
+  return normalize(text)
+    .split(" ")
+    .filter((w) => w.length > 1 && !w.startsWith("@") && !w.startsWith("#") && NON_FRENCH_WORDS.has(w));
+}
+
+/** Champs générés par l'IA, contrôlés pour la conformité de langue. */
+export interface TranslatableRecipeFields {
+  title: string;
+  notes?: string | null;
+  aiSummary?: string | null;
+  ingredients: Array<{ name: string; unit?: string | null }>;
+}
+
+/** Liste (dédupliquée) des mots non français trouvés dans les champs générés. */
+export function findNonFrenchTerms(fields: TranslatableRecipeFields): string[] {
+  const found = new Set<string>();
+  const push = (t: string | null | undefined) => nonFrenchTokens(t).forEach((w) => found.add(w));
+  push(fields.title);
+  push(fields.notes);
+  push(fields.aiSummary);
+  for (const ing of fields.ingredients ?? []) {
+    push(ing.name);
+    push(ing.unit ?? null);
+  }
+  return [...found];
+}
+
+/** `true` si la fiche générée est réellement en français (hors légende originale). */
+export function isFrenchExtraction(fields: TranslatableRecipeFields): boolean {
+  return findNonFrenchTerms(fields).length === 0;
+}
+
+/**
+ * Version de la RÈGLE DE LANGUE appliquée au pipeline. Toute entrée du cache
+ * global écrite avec une version inférieure est considérée comme non conforme :
+ * elle est ignorée à la lecture, réanalysée une fois par le pipeline courant,
+ * puis remplacée par la version française (voir recipe-db.ts + migration
+ * 20260829090000_recipe_import_cache_language_version.sql).
+ *
+ * v1 = directive de langue seule (pouvait laisser passer une fiche anglaise)
+ * v2 = directive + contrôle réel de francisation avec ré-extraction renforcée
+ */
+export const LANGUAGE_RULE_VERSION = 2;
+
