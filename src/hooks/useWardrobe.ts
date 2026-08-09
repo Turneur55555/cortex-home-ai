@@ -38,6 +38,7 @@ export interface WardrobeItem {
   brand: string | null;
   category: string | null;
   subcategory: string | null;
+  primary_color: string | null;
   storage_path: string | null;
   /** Version détourée/normalisée (Phase 5) — null si non générée/échouée. */
   processed_storage_path: string | null;
@@ -207,84 +208,102 @@ export interface CreateWardrobeItemInput {
   processedFile?: Blob | null;
 }
 
+/**
+ * Cœur du pipeline de création d'une pièce — upload original (bucket privé
+ * `wardrobe`) → upload détouré additif (jamais bloquant) → insert
+ * `wardrobe_items`, avec nettoyage Storage si l'insert échoue.
+ *
+ * Extrait de `useCreateWardrobeItem` (Phase 5.1) pour être réutilisé TEL
+ * QUEL par le pipeline d'import massif (`useWardrobeBulkImport`) — même
+ * upload original, même upload détouré, même insert, mêmes règles de
+ * nettoyage. Le flux d'ajout individuel (`ajouter.tsx`) continue de passer
+ * par `useCreateWardrobeItem`, comportement inchangé.
+ */
+export async function createWardrobeItemRecord(
+  authUserId: string,
+  input: CreateWardrobeItemInput,
+): Promise<string> {
+  const validation = validateWardrobePhotoFile(input.file);
+  if (!validation.ok) throw new Error(validation.message);
+
+  const itemId = crypto.randomUUID();
+  const extension = extensionForMimeType(input.file.type);
+  const storagePath = `${authUserId}/${itemId}/original.${extension}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from("wardrobe")
+    .upload(storagePath, input.file, {
+      contentType: input.file.type,
+      upsert: false,
+    });
+  if (uploadError) throw uploadError;
+
+  // Détourage/normalisation (Phase 5) : upload additif, jamais bloquant.
+  // L'original ci-dessus est toujours conservé tel quel, que ce second
+  // upload réussisse ou non (cf. §1/§2).
+  let processedStoragePath: string | null = null;
+  if (input.processedFile) {
+    const processedPath = `${authUserId}/${itemId}/processed.webp`;
+    const { error: processedUploadError } = await supabase.storage
+      .from("wardrobe")
+      .upload(processedPath, input.processedFile, {
+        contentType: "image/webp",
+        upsert: false,
+      });
+    if (!processedUploadError) {
+      processedStoragePath = processedPath;
+    } else {
+      console.error(
+        "[wardrobe] upload image détourée échoué, original conservé :",
+        processedUploadError,
+      );
+    }
+  }
+
+  const { error: insertError } = await db.from("wardrobe_items").insert({
+    id: itemId,
+    user_id: authUserId,
+    storage_path: storagePath,
+    processed_storage_path: processedStoragePath,
+    category: WARDROBE_DB_CATEGORY[input.category],
+    name: input.name?.trim() || null,
+    brand: input.brand?.trim() || null,
+    primary_color: input.primaryColor?.trim() || null,
+    size: input.size?.trim() || null,
+    subcategory: input.subcategory ?? null,
+    secondary_colors: input.secondaryColors ?? [],
+    pattern: input.pattern ?? null,
+    material: input.material ?? null,
+    fit: input.fit ?? null,
+    formality: input.formality ?? null,
+    seasons: input.seasons ?? [],
+    sleeve_length: input.sleeveLength ?? null,
+    usage: input.usage ?? [],
+    ai_description: input.aiDescription ?? null,
+    ai_metadata: input.aiMetadata ?? {},
+  });
+
+  if (insertError) {
+    const pathsToClean = [storagePath, ...(processedStoragePath ? [processedStoragePath] : [])];
+    await supabase.storage.from("wardrobe").remove(pathsToClean);
+    throw insertError;
+  }
+
+  return itemId;
+}
+
 export function useCreateWardrobeItem() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (input: CreateWardrobeItemInput) => {
-      const validation = validateWardrobePhotoFile(input.file);
-      if (!validation.ok) throw new Error(validation.message);
-
       const {
         data: { user: authUser },
       } = await supabase.auth.getUser();
       if (!authUser) throw new Error("Non authentifié.");
 
-      const itemId = crypto.randomUUID();
-      const extension = extensionForMimeType(input.file.type);
-      const storagePath = `${authUser.id}/${itemId}/original.${extension}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from("wardrobe")
-        .upload(storagePath, input.file, {
-          contentType: input.file.type,
-          upsert: false,
-        });
-      if (uploadError) throw uploadError;
-
-      // Détourage/normalisation (Phase 5) : upload additif, jamais bloquant.
-      // L'original ci-dessus est toujours conservé tel quel, que ce second
-      // upload réussisse ou non (cf. §1/§2).
-      let processedStoragePath: string | null = null;
-      if (input.processedFile) {
-        const processedPath = `${authUser.id}/${itemId}/processed.webp`;
-        const { error: processedUploadError } = await supabase.storage
-          .from("wardrobe")
-          .upload(processedPath, input.processedFile, {
-            contentType: "image/webp",
-            upsert: false,
-          });
-        if (!processedUploadError) {
-          processedStoragePath = processedPath;
-        } else {
-          console.error(
-            "[wardrobe] upload image détourée échoué, original conservé :",
-            processedUploadError,
-          );
-        }
-      }
-
-      const { error: insertError } = await db.from("wardrobe_items").insert({
-        id: itemId,
-        user_id: authUser.id,
-        storage_path: storagePath,
-        processed_storage_path: processedStoragePath,
-        category: WARDROBE_DB_CATEGORY[input.category],
-        name: input.name?.trim() || null,
-        brand: input.brand?.trim() || null,
-        primary_color: input.primaryColor?.trim() || null,
-        size: input.size?.trim() || null,
-        subcategory: input.subcategory ?? null,
-        secondary_colors: input.secondaryColors ?? [],
-        pattern: input.pattern ?? null,
-        material: input.material ?? null,
-        fit: input.fit ?? null,
-        formality: input.formality ?? null,
-        seasons: input.seasons ?? [],
-        sleeve_length: input.sleeveLength ?? null,
-        usage: input.usage ?? [],
-        ai_description: input.aiDescription ?? null,
-        ai_metadata: input.aiMetadata ?? {},
-      });
-
-      if (insertError) {
-        const pathsToClean = [storagePath, ...(processedStoragePath ? [processedStoragePath] : [])];
-        await supabase.storage.from("wardrobe").remove(pathsToClean);
-        throw insertError;
-      }
-
-      return itemId;
+      return createWardrobeItemRecord(authUser.id, input);
     },
     onSuccess: () => {
       toast.success("Pièce ajoutée à ton dressing.");
@@ -559,7 +578,7 @@ export function useWardrobeItems() {
       const { data, error } = await db
         .from("wardrobe_items")
         .select(
-          "id, user_id, name, brand, category, subcategory, storage_path, processed_storage_path, created_at",
+          "id, user_id, name, brand, category, subcategory, primary_color, storage_path, processed_storage_path, created_at",
         )
         .eq("user_id", user!.id)
         .order("created_at", { ascending: false });

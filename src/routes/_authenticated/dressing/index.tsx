@@ -1,6 +1,15 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ChevronLeft, ImageOff, Loader2, Plus, Shirt, Sparkles, TriangleAlert } from "lucide-react";
+import {
+  ChevronLeft,
+  ImageOff,
+  Images,
+  Loader2,
+  Plus,
+  Shirt,
+  Sparkles,
+  TriangleAlert,
+} from "lucide-react";
 import {
   WARDROBE_FILTERS,
   useWardrobeItems,
@@ -72,12 +81,19 @@ function DressingPage() {
           <Plus className="h-4 w-4" strokeWidth={2.5} />
           Ajouter une pièce
         </Link>
+        <Link
+          to="/dressing/import"
+          className="flex items-center justify-center gap-2 rounded-2xl border border-border bg-card px-4 py-3.5 text-sm font-semibold text-foreground transition-opacity active:opacity-80"
+        >
+          <Images className="h-4 w-4" />
+          Importer plusieurs pièces
+        </Link>
         <button
           type="button"
           disabled
           aria-disabled="true"
           title="Bientôt disponible"
-          className="flex cursor-not-allowed items-center justify-center gap-2 rounded-2xl border border-border bg-card px-4 py-3.5 text-sm font-semibold text-muted-foreground opacity-60"
+          className="flex cursor-not-allowed items-center justify-center gap-2 rounded-2xl border border-border bg-card px-4 py-3.5 text-sm font-semibold text-muted-foreground opacity-60 sm:col-span-2"
         >
           <Sparkles className="h-4 w-4" />
           Générer une tenue
