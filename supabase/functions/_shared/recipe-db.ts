@@ -258,7 +258,14 @@ function cacheRowToExtraction(row: CacheRow): RecipeExtraction {
   };
 }
 
-/** Recette déjà analysée par n'importe quel utilisateur pour ce lien — évite de rappeler l'IA. */
+/**
+ * Recette déjà analysée par n'importe quel utilisateur pour ce lien — évite de
+ * rappeler l'IA. Une entrée écrite avec une version de règle de langue
+ * ANTÉRIEURE (fiche potentiellement restée en anglais/espagnol) est considérée
+ * comme non conforme : elle est ignorée ici, ce qui déclenche une réanalyse par
+ * le pipeline courant, puis son remplacement par la version française
+ * (`saveCachedRecipe`, upsert sur (source_kind, source_url)).
+ */
 export async function findCachedRecipe(
   admin: SupabaseClient,
   source: RecipeSourceKind,
@@ -269,10 +276,12 @@ export async function findCachedRecipe(
     .select(CACHE_SELECT)
     .eq("source_kind", source)
     .eq("source_url", sourceUrl)
+    .gte("language_rule_version", LANGUAGE_RULE_VERSION)
     .maybeSingle();
   if (error || !data) return null;
   return cacheRowToExtraction(data as CacheRow);
 }
+
 
 function extractionToCacheRow(source: RecipeSourceKind, sourceUrl: string, extraction: RecipeExtraction) {
   return {
