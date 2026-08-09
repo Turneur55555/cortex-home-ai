@@ -304,15 +304,19 @@ function extractionToCacheRow(source: RecipeSourceKind, sourceUrl: string, extra
     per_serving_fats: extraction.perServing.fats,
     per_serving_fiber: extraction.perServing.fiber,
     ingredients: extraction.ingredients,
+    // Version de la règle de langue appliquée — sert d'invalidation du cache :
+    // une entrée plus ancienne n'est plus lue (voir findCachedRecipe).
+    language_rule_version: LANGUAGE_RULE_VERSION,
   };
 }
 
 /**
- * Écrit le résultat d'une analyse fraîche dans le cache global. Non-fatal :
- * si l'écriture échoue pour une raison autre qu'une course (23505), on
- * continue avec l'extraction déjà calculée plutôt que de faire échouer tout
- * l'import pour un problème de cache. Sur une course, on réutilise la version
- * du gagnant plutôt que d'en garder deux différentes en cache.
+ * Écrit le résultat d'une analyse fraîche dans le cache global. Upsert sur
+ * (source_kind, source_url) : une entrée existante mais NON CONFORME à la
+ * règle de langue courante (version antérieure, fiche restée en anglais) est
+ * remplacée par la version française fraîchement analysée — c'est exactement
+ * le mécanisme de migration du cache. Non-fatal : un échec d'écriture cache
+ * ne fait jamais échouer l'import lui-même.
  */
 export async function saveCachedRecipe(
   admin: SupabaseClient,
@@ -320,16 +324,13 @@ export async function saveCachedRecipe(
   sourceUrl: string,
   extraction: RecipeExtraction,
 ): Promise<RecipeExtraction> {
-  const { error } = await admin.from("recipe_import_cache").insert(extractionToCacheRow(source, sourceUrl, extraction));
-  if (error) {
-    if ((error as { code?: string }).code === "23505") {
-      const existing = await findCachedRecipe(admin, source, sourceUrl);
-      if (existing) return existing;
-    }
-    console.error("[recipe-db] cache insert failed (non-fatal):", error);
-  }
+  const { error } = await admin
+    .from("recipe_import_cache")
+    .upsert(extractionToCacheRow(source, sourceUrl, extraction), { onConflict: "source_kind,source_url" });
+  if (error) console.error("[recipe-db] cache upsert failed (non-fatal):", error);
   return extraction;
 }
+
 
 /**
  * Réanalyse ("Réanalyser la recette") : remplace l'entrée de cache existante
