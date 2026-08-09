@@ -270,6 +270,126 @@ describe("coupure réseau pendant la synchronisation + retry", () => {
   });
 });
 
+describe("retry automatique en arrière-plan (bug prod : action bloquée malgré réseau disponible)", () => {
+  // Reproduit exactement le scénario signalé : une opération échoue une
+  // seule fois (blip réseau temporaire, ex. 4G iOS) SANS jamais passer par
+  // un état hors-ligne détectable — `navigator.onLine` reste `true` tout du
+  // long, donc l'effet "retour réseau" de useOfflineSync.ts (basé sur la
+  // transition isOnline false→true) ne se redéclenche jamais. Avant le fix,
+  // la seule façon de rejouer l'opération est le bouton "Réessayer" manuel
+  // (`processSyncQueue(userId)` sans respectBackoff). Ce test prouve que le
+  // mécanisme de retry périodique respectant le backoff (`respectBackoff:
+  // true`, désormais appelé par le poll déjà existant dans
+  // useOfflineSync.ts) draine la queue tout seul, sans aucune action
+  // utilisateur ni transition réseau.
+  // NB : `vi.useFakeTimers()` gèle aussi les timers internes de
+  // fake-indexeddb (les IDBRequest ne résolvent alors plus jamais) — on
+  // utilise `vi.setSystemTime` à la place, qui ne modifie que `Date.now()`
+  // (seule dépendance temporelle de `isDueForRetry`), sans toucher aux
+  // timers réels dont IndexedDB a besoin pour fonctionner.
+  it("un échec isolé (réseau resté 'online') n'est PAS rejoué avant l'expiration du backoff", async () => {
+    try {
+      const repo = createOfflineRepository<FavoriteRow>("nutrition_favorites");
+      await repo.create(USER_A, { name: "Thé", meal: "collation", calories: 5 });
+
+      fakeSupabaseOpts.failNext = true;
+      await processSyncQueue(USER_A, { respectBackoff: true });
+      const afterFailure = await listAllOperations(USER_A);
+      expect(afterFailure).toHaveLength(1);
+      expect(afterFailure[0].status).toBe("failed");
+
+      // Un balayage périodique immédiat (poll toutes les 4s dans
+      // useOfflineSync.ts) ne doit pas marteler le réseau : le backoff
+      // (2s * 2^retryCount) n'est pas encore écoulé.
+      const tooSoon = await processSyncQueue(USER_A, { respectBackoff: true });
+      expect(tooSoon.retried).toBe(0);
+      expect(tooSoon.succeeded).toBe(0);
+      expect((await listAllOperations(USER_A))[0].status).toBe("failed");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("scénario complet : offline → action en queue → retour réseau SANS transition détectable → le balayage périodique automatique (respectBackoff) synchronise seul, sans bouton Réessayer", async () => {
+    try {
+      const repo = createOfflineRepository<FavoriteRow>("nutrition_favorites");
+      // 1. Hors connexion : création locale immédiate, mise en queue.
+      const created = await repo.create(USER_A, {
+        name: "Café",
+        meal: "petit-dej",
+        calories: 2,
+      });
+      expect(await listAllOperations(USER_A)).toHaveLength(1);
+
+      // 2. "Retour réseau" — mais un blip temporaire fait échouer la
+      // première tentative sans que `navigator.onLine` ne bascule jamais à
+      // false (cas D de l'audit : erreur réseau temporaire, pas une vraie
+      // coupure détectable par les events online/offline du navigateur).
+      fakeSupabaseOpts.failNext = true;
+      await processSyncQueue(USER_A, { respectBackoff: true });
+      expect((await listAllOperations(USER_A))[0].status).toBe("failed");
+      expect(serverStore.get("nutrition_favorites")?.has(created.id)).toBeFalsy();
+
+      // 3. Aucune action utilisateur (pas de tap "Réessayer"), aucune
+      // transition online/offline supplémentaire. Seul le balayage
+      // périodique (simulé ici en avançant l'horloge système au-delà du
+      // backoff, exactement ce que fait désormais le poll de
+      // useOfflineSync.ts) doit suffire à terminer la synchronisation.
+      vi.setSystemTime(Date.now() + 5_000);
+      const result = await processSyncQueue(USER_A, { respectBackoff: true });
+      expect(result.succeeded).toBe(1);
+
+      // 4. Historique correct côté "serveur", queue vide, plus d'action en
+      // attente — sans jamais avoir appelé syncNow() manuellement.
+      expect(serverStore.get("nutrition_favorites")?.get(created.id)?.name).toBe("Café");
+      expect(await listAllOperations(USER_A)).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("plusieurs opérations en attente : le balayage périodique les traite toutes une fois leur backoff respectif écoulé", async () => {
+    try {
+      const repo = createOfflineRepository<FavoriteRow>("nutrition_favorites");
+      const a = await repo.create(USER_A, { name: "A", meal: null, calories: 1 });
+      const b = await repo.create(USER_A, { name: "B", meal: null, calories: 2 });
+
+      // Un seul blip réseau touche la PREMIÈRE opération traitée par le
+      // FIFO (A) — `failNext` ne fait échouer qu'une seule requête, B passe
+      // donc au premier essai (comportement mock volontairement simple et
+      // déterministe, pas une hypothèse sur l'ordre métier).
+      fakeSupabaseOpts.failNext = true;
+      await processSyncQueue(USER_A, { respectBackoff: true });
+      const pending = await listAllOperations(USER_A);
+      expect(pending).toHaveLength(1);
+      expect(pending[0].status).toBe("failed");
+      // L'une des deux créations est déjà passée (celle qui n'a pas essuyé
+      // le blip réseau) — un seul appel a échoué (`failNext` est one-shot).
+      expect(serverStore.get("nutrition_favorites")?.size).toBe(1);
+
+      // Un balayage périodique trop tôt ne retente rien (backoff pas écoulé).
+      const tooSoon = await processSyncQueue(USER_A, { respectBackoff: true });
+      expect(tooSoon.succeeded).toBe(0);
+      expect(tooSoon.retried).toBe(0);
+
+      // Le backoff s'écoule (2s * 2^1 = 4s) sans nouvelle panne : le
+      // balayage périodique suivant termine la synchronisation seul.
+      vi.setSystemTime(Date.now() + 5_000);
+      const result = await processSyncQueue(USER_A, { respectBackoff: true });
+      expect(result.succeeded).toBe(1);
+      expect(await listAllOperations(USER_A)).toEqual([]);
+      expect(serverStore.get("nutrition_favorites")?.size).toBe(2);
+      const [aRow, bRow] = [a.id, b.id].map((id) =>
+        serverStore.get("nutrition_favorites")?.get(id),
+      );
+      expect(aRow?.name).toBe("A");
+      expect(bRow?.name).toBe("B");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe("conflit local/serveur", () => {
   async function seedSyncedFavorite(userId: string) {
     const repo = createOfflineRepository<FavoriteRow>("nutrition_favorites");
