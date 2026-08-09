@@ -122,6 +122,12 @@ function isTimeout(e: unknown): boolean {
 export async function parseRecipeFromContent(
   geminiApiKey: string,
   content: InstagramContent,
+  /**
+   * `reinforceFrench` : la MÊME extraction est rejouée une fois avec une
+   * consigne de langue durcie quand la fiche produite contenait encore du
+   * texte source non traduit. Ce n'est jamais un appel "traduction seule".
+   */
+  opts: { reinforceFrench?: boolean } = {},
 ): Promise<Record<string, unknown>> {
   const textLines = [
     content.caption ? `Légende du post : « ${content.caption} »` : "Aucune légende disponible.",
@@ -131,7 +137,7 @@ export async function parseRecipeFromContent(
     "Reconstitue la fiche recette complète à partir de ces éléments et de la miniature ci-jointe (si présente).",
     // Règle de langue — même pipeline IA : la traduction éventuelle est faite
     // par cet appel, jamais par un second passage (voir recipe-language.ts).
-    buildLanguageDirective(detectLanguage(content.caption, content.transcript)),
+    buildLanguageDirective(detectLanguage(content.caption, content.transcript), opts.reinforceFrench === true),
   ];
   const messageContent: unknown[] = [{ type: "text", text: textLines.join("\n\n") }];
   if (content.imageB64 && content.imageMime) {
