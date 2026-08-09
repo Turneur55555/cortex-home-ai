@@ -29,7 +29,17 @@ describe("detectLanguage", () => {
     expect(detectLanguage(null, undefined)).toBe("unknown");
     expect(detectLanguage("@chef.paul #foodporn 🍗")).toBe("unknown");
   });
+
+  it("langue non prévue (ex. italien) : 'unknown' plutôt qu'une fausse certitude", () => {
+    expect(
+      detectLanguage("Ricetta della nonna: polpette al sugo, cotte lentamente in padella. Buonissime!"),
+    ).toBe("unknown");
+    expect(buildLanguageDirective(detectLanguage("Ricetta della nonna: polpette al sugo"))).toContain(
+      "détecte-la toi-même",
+    );
+  });
 });
+
 
 describe("buildLanguageDirective", () => {
   it("français : demande explicitement de NE PAS traduire", () => {
