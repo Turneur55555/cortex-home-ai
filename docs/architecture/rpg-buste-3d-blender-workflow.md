@@ -1,10 +1,36 @@
 # Buste 3D Cortex — workflow Blender → GLB → React Three Fiber
 
-Phase RPG V2 — Phase I (buste 3D), démarrée le 31/08/2026. Ce document est la
-référence unique du pipeline : toute personne qui modélise le buste dans
-Blender doit suivre exactement ces conventions pour que le résultat
-s'intègre sans adaptation de code, comme `FORMAT.md` le fait déjà pour les
-illustrations de rang (`src/assets/ranks/FORMAT.md`).
+Phase RPG V2 — Phase I (buste 3D), démarrée le 31/08/2026, buste réel
+construit en Phase I-B (31/08/2026). Ce document est la référence unique du
+pipeline : toute personne qui modélise le buste dans Blender doit suivre
+exactement ces conventions pour que le résultat s'intègre sans adaptation de
+code, comme `FORMAT.md` le fait déjà pour les illustrations de rang
+(`src/assets/ranks/FORMAT.md`).
+
+## État réel du pipeline (Phase I-B)
+
+- **MCP Blender audité et écarté pour cet environnement** : `blender-mcp`
+  exige une fenêtre Blender ouverte AVEC interaction GUI ("Connect to
+  Claude" cliqué dans le panneau latéral) sur la même machine que le
+  serveur MCP — incompatible avec un conteneur distant sans affichage. Le
+  MCP reste la bonne option pour modéliser en local (voir §9).
+- **`public/buste/cortex-buste.glb` existe et a été généré RÉELLEMENT** —
+  Blender 4.0.2 installé (`apt-get install blender`) et exécuté en headless
+  (`blender --background --python tools/blender/build_buste.py`), pas un
+  script écrit-mais-jamais-lancé. Sortie vérifiée par parsing direct du GLB
+  (noms des 8 nœuds glTF exacts, un morph target `evolution` par zone) et
+  par rendu de contrôle (Cycles CPU, denoising désactivé — voir §8).
+- **Draco indisponible sur ce Blender headless** (`libextern_draco.so`
+  absent du paquet apt) : l'export actuel n'est PAS compressé (~280 Ko,
+  reste sous le seuil de 3 Mo malgré tout). Un export depuis un Blender
+  desktop complet pourra réactiver la compression Draco sans changement de
+  code (juste un fichier plus léger).
+- **Qualité artistique** : la géométrie est loftée par anneaux (pas des
+  primitives), anatomiquement cohérente (bras attachés au torse, pas de
+  fente aux jointures, silhouette buste reconnaissable), MAIS reste un
+  blockout procédural, pas un rendu "premium/RPG" fini — ce niveau de
+  finition demande soit des itérations supplémentaires de ce type de
+  script, soit un sculptage manuel (voir §9).
 
 ## 1. Décisions verrouillées (ne pas remettre en question sans repasser ici)
 
@@ -201,3 +227,32 @@ normalisation linéaire de l'échelle 0-29 déjà verrouillée vers l'intervalle
 Ces sujets sont des phases séparées, explicitement hors périmètre ici (voir
 consigne "ne commence pas encore les effets avancés ou les cinématiques
 d'Ascension").
+
+## 9. Scripts disponibles et itération future
+
+- `tools/blender/build_buste_prototype.py` — premier jet (capsules/boîtes,
+  Phase I), conservé pour référence historique, plus utilisé comme source
+  de l'asset officiel.
+- `tools/blender/build_buste.py` — **script actuel**, génère
+  `public/buste/cortex-buste.glb` par loft d'anneaux elliptiques (torse) et
+  tubes effilés (bras), avec les 8 zones découpées par sélection sur un
+  socle partagé (§4) et un shape key `evolution` par zone. Relancer
+  `blender --background --python tools/blender/build_buste.py` régénère
+  l'asset après toute modification du script.
+
+### Passer au sculptage manuel (recommandé pour la qualité finale)
+
+Le résultat procédural actuel valide tout le pipeline (nommage, export,
+chargement React Three Fiber) mais reste un blockout, pas un rendu
+"premium/RPG" fini. Pour aller plus loin, deux options, non exclusives :
+
+1. **Reprendre `cortex-buste.glb` dans un Blender desktop** (import direct,
+   les 8 objets et leurs shape keys `evolution` sont déjà en place) et
+   sculpter/raffiner chaque zone manuellement — la structure (noms,
+   Basis/evolution, découpage) n'a pas besoin d'être reconstruite.
+2. **Utiliser MCP Blender EN LOCAL** (pas depuis cet environnement distant,
+   voir audit ci-dessus) : ouvrir Blender sur ta machine, installer
+   `addon.py` (Edit → Preferences → Add-ons → Install...), l'activer,
+   cliquer "Connect to Claude" dans le panneau latéral (N), puis lancer
+   `uvx blender-mcp` comme serveur MCP d'une session Claude Code locale.
+   Cette session pourra alors piloter ce Blender réellement ouvert.
