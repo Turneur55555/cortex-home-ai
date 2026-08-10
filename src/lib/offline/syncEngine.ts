@@ -73,6 +73,59 @@ async function markConflict<T>(params: {
   await removeOperation(op.id);
 }
 
+/**
+ * Codes d'erreur Postgres qu'AUCUN retry ne peut jamais résoudre : le
+ * payload/schéma est structurellement invalide (colonne inconnue, contrainte
+ * NOT NULL/CHECK violée, syntaxe invalide, clé étrangère pointant vers une
+ * ligne qui n'existe pas). Un vrai souci réseau/transitoire (fetch échoué,
+ * timeout, 5xx) n'a PAS de `code` Postgres — il continue d'être retenté
+ * normalement par le backoff du sync engine. Ceci ne change PAS le
+ * comportement de retry (scope volontairement réduit, cf. brief) : ça sert
+ * uniquement à faire ressortir en logs qu'un échec qui persiste après
+ * plusieurs tentatives est probablement un bug de payload/schéma, pas un
+ * problème réseau — exactement le signal qui manquait pour diagnostiquer le
+ * bug prod "31 en échec" (cause réelle : cf. migration
+ * 20260829130000_exercises_created_at.sql).
+ */
+const NON_RETRYABLE_PG_ERROR_CODES = new Set([
+  "42703", // undefined_column
+  "42P10", // invalid_column_reference (ON CONFLICT target)
+  "23502", // not_null_violation
+  "23503", // foreign_key_violation
+  "23514", // check_violation
+  "22P02", // invalid_text_representation
+  "PGRST204", // PostgREST: colonne absente du schema cache
+]);
+
+/**
+ * PostgREST/Supabase renvoie `{ message, code, details, hint }` sur toute
+ * erreur (contrainte violée, colonne inconnue, réseau...). On capture tout
+ * ça explicitement — jamais juste `err.message` — pour qu'une opération en
+ * échec en prod soit diagnosticable sans avoir à reproduire (table,
+ * opération, id, erreur exacte Supabase, code, nombre de retries).
+ */
+function describeSyncError(op: SyncOperation, supabaseTable: string, err: unknown): string {
+  const pgError = err as {
+    message?: string;
+    code?: string;
+    details?: string;
+    hint?: string;
+  } | null;
+  const message = pgError?.message ?? (err instanceof Error ? err.message : String(err));
+  const parts = [message];
+  if (pgError?.code) parts.push(`code=${pgError.code}`);
+  if (pgError?.details) parts.push(`details=${pgError.details}`);
+  if (pgError?.hint) parts.push(`hint=${pgError.hint}`);
+  const summary = parts.join(" | ");
+  const permanent = !!pgError?.code && NON_RETRYABLE_PG_ERROR_CODES.has(pgError.code);
+
+  console.error(
+    `[syncEngine] échec ${op.opType} sur ${supabaseTable} (table locale=${op.table}, id=${op.recordLocalId}, opId=${op.id}, retry #${op.retryCount + 1}${permanent ? ", PERMANENT — payload/schéma invalide, un retry ne résoudra rien" : ""}) : ${summary}`,
+  );
+
+  return summary;
+}
+
 async function applyOperation(op: SyncOperation): Promise<"done" | "conflict" | "retry"> {
   const supabaseTable = getSupabaseTableName(op.table);
   const db = await getOfflineDb();
@@ -162,11 +215,11 @@ async function applyOperation(op: SyncOperation): Promise<"done" | "conflict" | 
     if (entity) await db.delete("entities", key);
     return "done";
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const summary = describeSyncError(op, supabaseTable, err);
     await updateOperationStatus(op.id, {
       status: "failed",
       retryCount: op.retryCount + 1,
-      lastError: message,
+      lastError: summary,
       lastAttemptAt: new Date().toISOString(),
     });
     return "retry";

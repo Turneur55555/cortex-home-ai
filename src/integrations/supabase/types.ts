@@ -597,6 +597,30 @@ export type Database = {
           },
         ]
       }
+      cortex_ascensions: {
+        Row: {
+          created_at: string
+          id: string
+          previous_tier_index: number | null
+          tier_index: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          previous_tier_index?: number | null
+          tier_index: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          previous_tier_index?: number | null
+          tier_index?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
       cp_controles: {
         Row: {
           commentaire: string | null
@@ -1565,6 +1589,7 @@ export type Database = {
       }
       exercises: {
         Row: {
+          created_at: string
           exercise_reference_id: string | null
           id: string
           image_path: string | null
@@ -1581,6 +1606,7 @@ export type Database = {
           workout_id: string
         }
         Insert: {
+          created_at?: string
           exercise_reference_id?: string | null
           id?: string
           image_path?: string | null
@@ -1597,6 +1623,7 @@ export type Database = {
           workout_id: string
         }
         Update: {
+          created_at?: string
           exercise_reference_id?: string | null
           id?: string
           image_path?: string | null
@@ -4549,7 +4576,6 @@ export type Database = {
       compute_achievement_stats: { Args: { _uid: string }; Returns: Json }
       compute_fitness_stats: { Args: { _uid: string }; Returns: Json }
       compute_level_from_xp: { Args: { _xp: number }; Returns: number }
-      compute_tier_index_from_xp: { Args: { _xp: number }; Returns: number }
       create_custom_food_with_barcode: {
         Args: {
           p_barcode: string
@@ -4662,6 +4688,10 @@ export type Database = {
       }
       recompute_recipe_nutrition: {
         Args: { p_recipe: string }
+        Returns: undefined
+      }
+      record_cortex_ascension: {
+        Args: { _tier_index: number; _user_id: string }
         Returns: undefined
       }
       restore_exercise_reference: { Args: { p_id: string }; Returns: undefined }
