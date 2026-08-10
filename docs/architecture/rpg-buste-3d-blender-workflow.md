@@ -1,13 +1,47 @@
 # Buste 3D Cortex — workflow Blender → GLB → React Three Fiber
 
 Phase RPG V2 — Phase I (buste 3D), démarrée le 31/08/2026, buste réel
-construit en Phase I-B (31/08/2026). Ce document est la référence unique du
-pipeline : toute personne qui modélise le buste dans Blender doit suivre
-exactement ces conventions pour que le résultat s'intègre sans adaptation de
-code, comme `FORMAT.md` le fait déjà pour les illustrations de rang
+construit en Phase I-B (31/08/2026), silhouette/anatomie retravaillée en
+Phase I-C (31/08/2026). Ce document est la référence unique du pipeline :
+toute personne qui modélise le buste dans Blender doit suivre exactement ces
+conventions pour que le résultat s'intègre sans adaptation de code, comme
+`FORMAT.md` le fait déjà pour les illustrations de rang
 (`src/assets/ranks/FORMAT.md`).
 
-## État réel du pipeline (Phase I-B)
+## État réel du pipeline (Phase I-C — dernière mise à jour)
+
+- **Silhouette et anatomie retravaillées par itérations réelles**, chacune
+  rendue et inspectée avant la suivante (5 cycles build→rendu→correction) :
+  1. v1 (Phase I-B) : bras détachés du torse (visible sur rendu de
+     contrôle) → corrigé en rapprochant le point d'ancrage.
+  2. v2 : épaules en pointe/diamant + fentes visibles aux jointures
+     épaule/bras → cause identifiée (deltoïde et bras construits comme
+     DEUX objets distincts, mal alignés) → corrigé en reconstruisant tout
+     le bras (épaule → poignet) comme UN SEUL loft continu découpé en 4
+     zones par sélection, exactement la même technique que le torse —
+     élimine structurellement toute fente possible.
+  3. v3 : bosses (pectoraux/dorsaux/deltoïdes) trop fortes → aspect "lame"
+     sur les bras → amplitudes des bosses angulaires réduites de moitié.
+  4. v4 : "collerette" dure au raccord trapèzes/cou, évolution des bras
+     à peine visible → amplitude des trapèzes réduite, biceps/triceps/
+     avant-bras augmentés nettement (le RPG doit rendre la progression des
+     bras lisible en premier).
+  5. v5 (actuelle) : évolution du torse (pectoraux/dos/épaules/abdos)
+     encore trop subtile en isolation (`chest=1` seul quasiment invisible)
+     → amplitudes remontées. Résultat final vérifié à `evolution` = 0,
+     0.25, 0.5, 0.75, 1 (aucun artefact/trou/étirement sur le dégradé),
+     en isolation par zone (aucune contamination croisée — structurellement
+     garanti : chaque zone est un mesh + shape key séparés) et sur la
+     combinaison asymétrique demandée (chest=0.4, back=1, shoulders=0.2,
+     biceps=0.7, triceps=0.3, forearms=0.1, traps=0.8, abs=0.5).
+- **Limite honnête qui subsiste** : le torse plein (chest+abs+back+traps
+  tous à 1) prend un aspect "tonneau/vase" — bombé au milieu, coupé assez
+  franchement en haut (trapèzes) et en bas (taille) plutôt qu'une transition
+  parfaitement lisse. Cause : un loft par anneaux + bosses angulaires
+  atteint sa limite pratique sans sculptage libre (déplacement de sommets
+  main levée). Le dos, en revanche, se lit correctement en évolution
+  maximale. Documenté explicitement plutôt que masqué — voir §9 pour la
+  suite (reprise manuelle du GLB actuel, ou nouvelle itération scriptée).
 
 - **MCP Blender audité et écarté pour cet environnement** : `blender-mcp`
   exige une fenêtre Blender ouverte AVEC interaction GUI ("Connect to
