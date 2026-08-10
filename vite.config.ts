@@ -41,9 +41,11 @@ export default defineConfig({
           ],
         },
         workbox: {
-          // Les binaires WASM (onnxruntime du détourage) dépassent la limite de
-          // précache Workbox : chargés à la demande, jamais précachés.
-          globIgnores: ["**/*.wasm", "**/ort*.js"],
+          // Les binaires WASM (onnxruntime du détourage) et le buste 3D (GLB,
+          // chargé à la demande sur /progression uniquement, voir
+          // docs/architecture/rpg-buste-3d-blender-workflow.md §6) dépassent
+          // la limite de précache Workbox : jamais précachés.
+          globIgnores: ["**/*.wasm", "**/ort*.js", "**/*.glb"],
           // NetworkFirst pour les requêtes Supabase
           runtimeCaching: [
             {

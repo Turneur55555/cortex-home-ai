@@ -6,6 +6,7 @@ import { computeRanksByName } from "@/utils/fitness/exercise-stats";
 import { aggregateMuscleRanks } from "@/lib/fitness/rpg/muscleAggregation";
 import { computeCortexPower, type BusteMuscleGroup } from "@/lib/fitness/rpg/cortexPower";
 import { titleForCortexPower, type CortexTitleProgress } from "@/lib/fitness/rpg/cortexTitle";
+import type { MuscleRankResult } from "@/lib/fitness/rpg/muscleRank";
 
 const DEFAULT_BODYWEIGHT_KG = 75;
 
@@ -22,16 +23,17 @@ type WorkoutForPower = {
 };
 
 /**
- * Titre pour un jeu de séances donné — fonction pure réutilisée par
- * `useCortexPower` (état courant) et `useCortexPowerTransition` (avant/
- * après une séance, écran de récompense). Chaîne : séances → Rang exercice
- * (`rank/engine.ts`, inchangé) → Rang musculaire → Puissance Cortex →
- * Titre. Ne lit JAMAIS l'XP.
+ * Rangs musculaires (8 groupes du buste) pour un jeu de séances donné —
+ * étape intermédiaire partagée par `titleFromWorkouts` (Titre global) et
+ * par le buste 3D (`useBusteMuscleRanks`, `src/hooks/useBusteMuscleRanks.ts`)
+ * qui a besoin du détail PAR muscle, pas seulement de l'agrégat final.
+ * Aucune nouvelle règle : même calcul (`aggregateMuscleRanks`, Méthode C),
+ * exposé une fois pour ne pas dupliquer la reconstitution nom/clé.
  */
-export function titleFromWorkouts(
+export function muscleRanksFromWorkouts(
   workouts: WorkoutForPower[] | null | undefined,
   bodyweightKg: number,
-): CortexTitleProgress {
+): Record<BusteMuscleGroup, MuscleRankResult> {
   // computeRanksByName ne renvoie que Map<clé, RankState> (pas le nom) — le
   // nom est nécessaire pour exerciseToMuscles(). Reconstitution légère par
   // un seul passage sur les séances déjà chargées (pas de requête
@@ -52,7 +54,21 @@ export function titleFromWorkouts(
     tierIndex: rank.tierIndex,
   }));
 
-  const muscleRanks = aggregateMuscleRanks(rankedExercises);
+  return aggregateMuscleRanks(rankedExercises);
+}
+
+/**
+ * Titre pour un jeu de séances donné — fonction pure réutilisée par
+ * `useCortexPower` (état courant) et `useCortexPowerTransition` (avant/
+ * après une séance, écran de récompense). Chaîne : séances → Rang exercice
+ * (`rank/engine.ts`, inchangé) → Rang musculaire → Puissance Cortex →
+ * Titre. Ne lit JAMAIS l'XP.
+ */
+export function titleFromWorkouts(
+  workouts: WorkoutForPower[] | null | undefined,
+  bodyweightKg: number,
+): CortexTitleProgress {
+  const muscleRanks = muscleRanksFromWorkouts(workouts, bodyweightKg);
   const powerInputs = Object.entries(muscleRanks).map(([muscle, result]) => ({
     muscle: muscle as BusteMuscleGroup,
     tierIndex: result.status === "evaluated" ? result.tierIndex : null,

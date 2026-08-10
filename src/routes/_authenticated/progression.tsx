@@ -10,7 +10,7 @@ import { useCortexPower } from "@/hooks/useCortexPower";
 import { mergePromotionTimeline } from "@/lib/fitness/rpg/ascension";
 import { nextCortexGradeLabel } from "@/lib/fitness/rpg/cortexTitle";
 import { formatXp } from "@/lib/fitness/rpg/grade";
-import { RankIllustration } from "@/components/rpg/RankIllustration";
+import { BusteViewer } from "@/components/rpg/buste3d/BusteViewer";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PromotionHistoryTimeline } from "@/components/profile/rpg/PromotionHistoryTimeline";
 import { EASE_OUT } from "@/components/rpg/premium/tokens";
@@ -106,16 +106,17 @@ function ProgressionPage() {
           className="flex flex-col items-center"
         >
           {powerLoading ? (
-            <Skeleton className="aspect-[4/5] w-44 rounded-[22px]" />
+            <Skeleton className="aspect-[4/5] w-full rounded-[22px]" />
           ) : ranked ? (
             <>
-              <div className="relative aspect-[4/5] w-44">
-                <RankIllustration
-                  rankKey={ranked.title.key}
-                  label={ranked.title.label}
-                  className="h-full w-full"
-                />
-              </div>
+              {/* Buste 3D évolutif — élément central de Progression (Phase I,
+                  RPG V2). Représente les 8 Rangs musculaires du buste, pas le
+                  Titre global directement (voir
+                  docs/architecture/rpg-buste-3d-blender-workflow.md §6).
+                  Retombe automatiquement sur RankIllustration (2D, système
+                  existant, inchangé) tant que l'asset GLB définitif n'est pas
+                  déposé, ou si WebGL est indisponible — jamais un écran cassé. */}
+              <BusteViewer />
               <p
                 className="mt-4 text-[22px] font-black uppercase tracking-[0.22em]"
                 style={{
