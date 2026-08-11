@@ -160,7 +160,11 @@ function DressingPage() {
         <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {visible.map((item) => (
             <li key={item.id}>
-              <article className="overflow-hidden rounded-2xl border border-white/5 bg-gradient-to-b from-card/95 to-card/70 shadow-card backdrop-blur-xl">
+              <Link
+                to="/dressing/$itemId"
+                params={{ itemId: item.id }}
+                className="block overflow-hidden rounded-2xl border border-white/5 bg-gradient-to-b from-card/95 to-card/70 shadow-card backdrop-blur-xl transition-opacity active:opacity-80"
+              >
                 <div className="relative aspect-[3/4] bg-muted/30">
                   {item.imageUrl ? (
                     <img
@@ -182,7 +186,7 @@ function DressingPage() {
                       "—"}
                   </p>
                 </div>
-              </article>
+              </Link>
             </li>
           ))}
         </ul>

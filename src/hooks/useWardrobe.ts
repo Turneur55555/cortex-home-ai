@@ -45,7 +45,25 @@ export interface WardrobeItem {
   created_at: string;
 }
 
-export interface WardrobeItemView extends WardrobeItem {
+/**
+ * Vue complète d'une pièce — colonnes supplémentaires nécessaires à l'écran
+ * d'édition (Part A) et à l'Outfit Engine (Part B). `useWardrobeItems`
+ * sélectionne désormais ces colonnes en plus de celles de `WardrobeItem` ;
+ * `useWardrobeItem(id)` (détail/édition) les renvoie également.
+ */
+export interface WardrobeItemDetail extends WardrobeItem {
+  size: string | null;
+  secondary_colors: string[];
+  pattern: string | null;
+  material: string | null;
+  fit: string | null;
+  formality: string | null;
+  seasons: string[];
+  sleeve_length: string | null;
+  usage: string[];
+}
+
+export interface WardrobeItemView extends WardrobeItemDetail {
   /** Catégorie normalisée pour les filtres UI. */
   uiCategory: WardrobeCategory;
   /** URL signée de l'image affichée dans la grille : détourée si
@@ -578,13 +596,13 @@ export function useWardrobeItems() {
       const { data, error } = await db
         .from("wardrobe_items")
         .select(
-          "id, user_id, name, brand, category, subcategory, primary_color, storage_path, processed_storage_path, created_at",
+          "id, user_id, name, brand, category, subcategory, primary_color, storage_path, processed_storage_path, created_at, size, secondary_colors, pattern, material, fit, formality, seasons, sleeve_length, usage",
         )
         .eq("user_id", user!.id)
         .order("created_at", { ascending: false });
       if (error) throw error;
 
-      const items = (data ?? []) as WardrobeItem[];
+      const items = (data ?? []) as WardrobeItemDetail[];
       const paths = Array.from(
         new Set(
           items
@@ -614,6 +632,107 @@ export function useWardrobeItems() {
             : null,
         };
       });
+    },
+  });
+}
+
+// ─── Édition d'une pièce (Dressing — édition des pièces) ───────────────────
+
+/**
+ * Une seule pièce, toutes colonnes pertinentes pour le formulaire d'édition.
+ * Portée par RLS (`wardrobe_items_select_own`) : renvoie `null` si la pièce
+ * n'existe pas ou n'appartient pas à l'utilisateur courant — jamais une
+ * pièce d'un autre utilisateur.
+ */
+export function useWardrobeItem(id: string | undefined) {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: ["wardrobe-item", id],
+    enabled: !!user && !!id,
+    queryFn: async (): Promise<WardrobeItemDetail | null> => {
+      const { data, error } = await supabase
+        .from("wardrobe_items")
+        .select(
+          "id, user_id, name, brand, category, subcategory, primary_color, storage_path, processed_storage_path, created_at, size, secondary_colors, pattern, material, fit, formality, seasons, sleeve_length, usage",
+        )
+        .eq("id", id!)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
+    },
+  });
+}
+
+export interface UpdateWardrobeItemInput {
+  id: string;
+  category: WardrobeAddCategoryKey;
+  name?: string;
+  brand?: string;
+  primaryColor?: string;
+  size?: string;
+  subcategory?: string | null;
+  sleeveLength?: string | null;
+  fit?: string | null;
+  material?: string | null;
+  pattern?: string | null;
+  usage?: string[];
+}
+
+/**
+ * Cœur de la mise à jour d'une pièce — même forme de payload que
+ * `createWardrobeItemRecord` pour les champs modifiables (photo exclue :
+ * hors périmètre de cette première version, cf. mission). Extrait en
+ * fonction pure testable, comme `createWardrobeItemRecord`.
+ *
+ * RLS (`wardrobe_items_update_own`) empêche déjà la modification d'une
+ * pièce d'un autre utilisateur ; `.eq("user_id", authUserId)` est une
+ * défense en profondeur, pas la seule barrière.
+ */
+export async function updateWardrobeItemRecord(
+  authUserId: string,
+  input: UpdateWardrobeItemInput,
+): Promise<void> {
+  const { error } = await supabase
+    .from("wardrobe_items")
+    .update({
+      category: WARDROBE_DB_CATEGORY[input.category],
+      name: input.name?.trim() || null,
+      brand: input.brand?.trim() || null,
+      primary_color: input.primaryColor?.trim() || null,
+      size: input.size?.trim() || null,
+      subcategory: input.subcategory ?? null,
+      sleeve_length: input.sleeveLength ?? null,
+      fit: input.fit ?? null,
+      material: input.material?.trim() || null,
+      pattern: input.pattern ?? null,
+      usage: input.usage ?? [],
+    })
+    .eq("id", input.id)
+    .eq("user_id", authUserId);
+  if (error) throw error;
+}
+
+export function useUpdateWardrobeItem() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: UpdateWardrobeItemInput) => {
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser();
+      if (!authUser) throw new Error("Non authentifié.");
+      await updateWardrobeItemRecord(authUser.id, input);
+      return input.id;
+    },
+    onSuccess: (id) => {
+      toast.success("Pièce mise à jour.");
+      void queryClient.invalidateQueries({ queryKey: ["wardrobe-items", user?.id] });
+      void queryClient.invalidateQueries({ queryKey: ["wardrobe-item", id] });
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Impossible de mettre à jour cette pièce.");
     },
   });
 }

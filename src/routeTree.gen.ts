@@ -30,7 +30,9 @@ import { Route as AuthenticatedFitnessIndexRouteImport } from './routes/_authent
 import { Route as AuthenticatedDressingIndexRouteImport } from './routes/_authenticated/dressing/index'
 import { Route as AuthenticatedRapportsIdRouteImport } from './routes/_authenticated/rapports/$id'
 import { Route as AuthenticatedDressingImportRouteImport } from './routes/_authenticated/dressing/import'
+import { Route as AuthenticatedDressingGenererRouteImport } from './routes/_authenticated/dressing/generer'
 import { Route as AuthenticatedDressingAjouterRouteImport } from './routes/_authenticated/dressing/ajouter'
+import { Route as AuthenticatedDressingItemIdRouteImport } from './routes/_authenticated/dressing/$itemId'
 import { Route as AuthenticatedAdminExercisesRouteImport } from './routes/_authenticated/admin/exercises'
 
 const Char91indexChar93Route = Char91indexChar93RouteImport.update({
@@ -145,10 +147,22 @@ const AuthenticatedDressingImportRoute =
     path: '/dressing/import',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedDressingGenererRoute =
+  AuthenticatedDressingGenererRouteImport.update({
+    id: '/dressing/generer',
+    path: '/dressing/generer',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedDressingAjouterRoute =
   AuthenticatedDressingAjouterRouteImport.update({
     id: '/dressing/ajouter',
     path: '/dressing/ajouter',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedDressingItemIdRoute =
+  AuthenticatedDressingItemIdRouteImport.update({
+    id: '/dressing/$itemId',
+    path: '/dressing/$itemId',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 const AuthenticatedAdminExercisesRoute =
@@ -175,7 +189,9 @@ export interface FileRoutesByFullPath {
   '/seances': typeof AuthenticatedSeancesRoute
   '/supplements': typeof AuthenticatedSupplementsRoute
   '/admin/exercises': typeof AuthenticatedAdminExercisesRoute
+  '/dressing/$itemId': typeof AuthenticatedDressingItemIdRoute
   '/dressing/ajouter': typeof AuthenticatedDressingAjouterRoute
+  '/dressing/generer': typeof AuthenticatedDressingGenererRoute
   '/dressing/import': typeof AuthenticatedDressingImportRoute
   '/rapports/$id': typeof AuthenticatedRapportsIdRoute
   '/dressing/': typeof AuthenticatedDressingIndexRoute
@@ -199,7 +215,9 @@ export interface FileRoutesByTo {
   '/supplements': typeof AuthenticatedSupplementsRoute
   '/': typeof AuthenticatedIndexRoute
   '/admin/exercises': typeof AuthenticatedAdminExercisesRoute
+  '/dressing/$itemId': typeof AuthenticatedDressingItemIdRoute
   '/dressing/ajouter': typeof AuthenticatedDressingAjouterRoute
+  '/dressing/generer': typeof AuthenticatedDressingGenererRoute
   '/dressing/import': typeof AuthenticatedDressingImportRoute
   '/rapports/$id': typeof AuthenticatedRapportsIdRoute
   '/dressing': typeof AuthenticatedDressingIndexRoute
@@ -225,7 +243,9 @@ export interface FileRoutesById {
   '/_authenticated/supplements': typeof AuthenticatedSupplementsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/_authenticated/admin/exercises': typeof AuthenticatedAdminExercisesRoute
+  '/_authenticated/dressing/$itemId': typeof AuthenticatedDressingItemIdRoute
   '/_authenticated/dressing/ajouter': typeof AuthenticatedDressingAjouterRoute
+  '/_authenticated/dressing/generer': typeof AuthenticatedDressingGenererRoute
   '/_authenticated/dressing/import': typeof AuthenticatedDressingImportRoute
   '/_authenticated/rapports/$id': typeof AuthenticatedRapportsIdRoute
   '/_authenticated/dressing/': typeof AuthenticatedDressingIndexRoute
@@ -251,7 +271,9 @@ export interface FileRouteTypes {
     | '/seances'
     | '/supplements'
     | '/admin/exercises'
+    | '/dressing/$itemId'
     | '/dressing/ajouter'
+    | '/dressing/generer'
     | '/dressing/import'
     | '/rapports/$id'
     | '/dressing/'
@@ -275,7 +297,9 @@ export interface FileRouteTypes {
     | '/supplements'
     | '/'
     | '/admin/exercises'
+    | '/dressing/$itemId'
     | '/dressing/ajouter'
+    | '/dressing/generer'
     | '/dressing/import'
     | '/rapports/$id'
     | '/dressing'
@@ -300,7 +324,9 @@ export interface FileRouteTypes {
     | '/_authenticated/supplements'
     | '/_authenticated/'
     | '/_authenticated/admin/exercises'
+    | '/_authenticated/dressing/$itemId'
     | '/_authenticated/dressing/ajouter'
+    | '/_authenticated/dressing/generer'
     | '/_authenticated/dressing/import'
     | '/_authenticated/rapports/$id'
     | '/_authenticated/dressing/'
@@ -465,11 +491,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDressingImportRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/dressing/generer': {
+      id: '/_authenticated/dressing/generer'
+      path: '/dressing/generer'
+      fullPath: '/dressing/generer'
+      preLoaderRoute: typeof AuthenticatedDressingGenererRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/dressing/ajouter': {
       id: '/_authenticated/dressing/ajouter'
       path: '/dressing/ajouter'
       fullPath: '/dressing/ajouter'
       preLoaderRoute: typeof AuthenticatedDressingAjouterRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/dressing/$itemId': {
+      id: '/_authenticated/dressing/$itemId'
+      path: '/dressing/$itemId'
+      fullPath: '/dressing/$itemId'
+      preLoaderRoute: typeof AuthenticatedDressingItemIdRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/admin/exercises': {
@@ -495,7 +535,9 @@ interface AuthenticatedRouteChildren {
   AuthenticatedSupplementsRoute: typeof AuthenticatedSupplementsRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedAdminExercisesRoute: typeof AuthenticatedAdminExercisesRoute
+  AuthenticatedDressingItemIdRoute: typeof AuthenticatedDressingItemIdRoute
   AuthenticatedDressingAjouterRoute: typeof AuthenticatedDressingAjouterRoute
+  AuthenticatedDressingGenererRoute: typeof AuthenticatedDressingGenererRoute
   AuthenticatedDressingImportRoute: typeof AuthenticatedDressingImportRoute
   AuthenticatedRapportsIdRoute: typeof AuthenticatedRapportsIdRoute
   AuthenticatedDressingIndexRoute: typeof AuthenticatedDressingIndexRoute
@@ -517,7 +559,9 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedSupplementsRoute: AuthenticatedSupplementsRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedAdminExercisesRoute: AuthenticatedAdminExercisesRoute,
+  AuthenticatedDressingItemIdRoute: AuthenticatedDressingItemIdRoute,
   AuthenticatedDressingAjouterRoute: AuthenticatedDressingAjouterRoute,
+  AuthenticatedDressingGenererRoute: AuthenticatedDressingGenererRoute,
   AuthenticatedDressingImportRoute: AuthenticatedDressingImportRoute,
   AuthenticatedRapportsIdRoute: AuthenticatedRapportsIdRoute,
   AuthenticatedDressingIndexRoute: AuthenticatedDressingIndexRoute,
