@@ -36,6 +36,82 @@ interface FakeSupabaseOptions {
   failNext?: boolean;
 }
 
+/**
+ * Colonnes réelles des tables du Cœur Fitness en prod (vérifié en direct via
+ * `information_schema.columns`, projet `bcwfvpwxzlmkxobvbtzp`) — reproduit
+ * ici pour que le simulateur Supabase rejette un payload contenant une
+ * colonne inconnue, exactement comme PostgREST le ferait (code `PGRST204`).
+ * Garde-fou contre la régression exacte trouvée en prod : `exercises`
+ * n'avait PAS de colonne `created_at` alors que `repository.ts::create()`
+ * l'ajoute inconditionnellement à CHAQUE payload créé (contrat générique
+ * partagé par toutes les tables offline) — tout `create` échouait donc en
+ * boucle (cf. migration `20260829130000_exercises_created_at.sql`).
+ */
+const SCHEMA_COLUMNS: Record<string, Set<string>> = {
+  workouts: new Set([
+    "id",
+    "user_id",
+    "name",
+    "date",
+    "gym_location",
+    "status",
+    "discipline",
+    "duration_minutes",
+    "notes",
+    "metadata",
+    "level_before",
+    "level_after",
+    "xp_before",
+    "xp_after",
+    "created_at",
+    "updated_at",
+  ]),
+  exercises: new Set([
+    "id",
+    "user_id",
+    "workout_id",
+    "name",
+    "sets",
+    "reps",
+    "weight",
+    "notes",
+    "image_path",
+    "muscle_groups",
+    "superset_group",
+    "exercise_reference_id",
+    "position",
+    "created_at",
+    "updated_at",
+  ]),
+  exercise_sets: new Set([
+    "id",
+    "exercise_id",
+    "user_id",
+    "set_number",
+    "reps",
+    "weight",
+    "notes",
+    "created_at",
+    "tempo",
+    "rest_seconds",
+    "completed",
+    "updated_at",
+  ]),
+};
+
+/** Clés étrangères réelles (`exercise_sets_exercise_id_fkey` en prod) — un
+ *  payload référençant une ligne absente de la table cible échoue en
+ *  `23503`, comme Postgres le ferait réellement. */
+const FOREIGN_KEYS: Record<string, Array<{ column: string; refTable: string }>> = {
+  exercises: [{ column: "workout_id", refTable: "workouts" }],
+  exercise_sets: [{ column: "exercise_id", refTable: "exercises" }],
+};
+
+interface FakePostgrestError {
+  message: string;
+  code: string;
+}
+
 function createFakeSupabase(server: Map<string, Map<string, Row>>, opts: FakeSupabaseOptions) {
   return {
     from(table: string) {
@@ -44,7 +120,10 @@ function createFakeSupabase(server: Map<string, Map<string, Row>>, opts: FakeSup
       let op: { type: "insert" | "upsert" | "update" | "delete"; payload?: Row } | null = null;
       let idFilter: string | null = null;
 
-      const exec = async (): Promise<{ data: unknown; error: Error | null }> => {
+      const exec = async (): Promise<{
+        data: unknown;
+        error: FakePostgrestError | Error | null;
+      }> => {
         if (opts.failNext) {
           opts.failNext = false;
           return { data: null, error: new Error("network down") };
@@ -55,6 +134,31 @@ function createFakeSupabase(server: Map<string, Map<string, Row>>, opts: FakeSup
         }
         if (op.type === "insert" || op.type === "upsert") {
           const row = { ...(op.payload as Row) };
+          const allowedColumns = SCHEMA_COLUMNS[table];
+          if (allowedColumns) {
+            const unknownColumn = Object.keys(row).find((col) => !allowedColumns.has(col));
+            if (unknownColumn) {
+              return {
+                data: null,
+                error: {
+                  message: `Could not find the '${unknownColumn}' column of '${table}' in the schema cache`,
+                  code: "PGRST204",
+                },
+              };
+            }
+          }
+          for (const fk of FOREIGN_KEYS[table] ?? []) {
+            const refId = row[fk.column] as string | undefined;
+            if (refId && !server.get(fk.refTable)?.has(refId)) {
+              return {
+                data: null,
+                error: {
+                  message: `insert or update on table "${table}" violates foreign key constraint`,
+                  code: "23503",
+                },
+              };
+            }
+          }
           store.set(row.id, row);
           return { data: row, error: null };
         }
@@ -793,5 +897,85 @@ describe("Cœur Fitness — scénario bout-en-bout : offline complet → reconne
     expect(second.retried).toBe(0);
     expect(serverStore.get("exercise_sets")!.size).toBe(3);
     expect(serverStore.get("exercises")!.size).toBe(2);
+  });
+});
+
+// ─── Régression — bug prod "31 actions en échec — nouvelle tentative
+// automatique" (panneau de sync, iPhone en ligne) ───────────────────────
+//
+// Cause racine (confirmée par les logs Supabase API + Postgres du projet en
+// prod) : `exercises` était la SEULE table câblée sur
+// `createOfflineRepository` sans colonne `created_at`, alors que
+// `repository.ts::create()` l'ajoute inconditionnellement à CHAQUE payload
+// créé. Tout `POST /exercises` échouait donc en 400 (PGRST204) →
+// l'exercice n'était jamais créé côté serveur → chaque `exercise_sets`
+// dépendant (FK `exercise_id`) échouait en cascade en 409 (violation FK),
+// retenté à l'infini sans jamais pouvoir réussir. Corrigé par la migration
+// `20260829130000_exercises_created_at.sql`. Le simulateur Supabase
+// ci-dessus valide désormais les colonnes réelles + la FK
+// `exercise_sets.exercise_id -> exercises.id`, exactement ce qui manquait
+// pour que cette régression soit détectable par les tests.
+describe("Cœur Fitness — régression bug prod : colonne manquante sur exercises + cascade FK", () => {
+  it("un exercice avec plusieurs séries synchronise entièrement (0 opération restante) — payload exercices conforme au schéma réel", async () => {
+    const workout = await workoutsRepo.create(USER_A, activeWorkoutInput());
+    const squat = await exercisesRepo.create(USER_A, {
+      workout_id: workout.id,
+      name: "Squat",
+      sets: null,
+      reps: null,
+      weight: null,
+      position: 0,
+    });
+    for (let setNumber = 1; setNumber <= 5; setNumber += 1) {
+      await exerciseSetsRepo.create(USER_A, {
+        exercise_id: squat.id,
+        set_number: setNumber,
+        reps: 8,
+        weight: 100,
+        completed: true,
+      });
+    }
+
+    const result = await processSyncQueue(USER_A);
+    expect(result.retried).toBe(0);
+    expect(result.conflicted).toBe(0);
+    expect(await listAllOperations(USER_A)).toEqual([]);
+
+    expect(serverStore.get("exercises")?.has(squat.id)).toBe(true);
+    expect(serverStore.get("exercise_sets")?.size).toBe(5);
+  });
+
+  it("une opération structurellement invalide (FK vers une ligne inexistante) échoue explicitement, avec le code Postgres en clair, sans bloquer une opération indépendante qui suit dans la file", async () => {
+    // Série orpheline : référence un exercice qui n'existe nulle part —
+    // simule une opération jamais résoluble par un retry (comme l'était
+    // chaque `exercise_sets` du bug prod tant que `exercises` échouait).
+    await exerciseSetsRepo.create(USER_A, {
+      exercise_id: "00000000-0000-0000-0000-000000000000",
+      set_number: 1,
+      reps: 5,
+      weight: 50,
+      completed: false,
+    });
+
+    // Opération indépendante mise en file après — ne doit jamais être
+    // bloquée par l'échec de la première (queue FIFO, pas de blocage global).
+    const otherWorkout = await workoutsRepo.create(USER_A, activeWorkoutInput({ name: "Léger" }));
+
+    const result = await processSyncQueue(USER_A);
+    expect(result.retried).toBe(1);
+    expect(result.succeeded).toBe(1);
+
+    const ops = await listAllOperations(USER_A);
+    const orphanOp = ops.find((o) => o.table === "exercise_sets");
+    // Jamais de succès silencieux : l'opération invalide reste visible en
+    // échec, avec le code Postgres exact (23503 = violation de clé
+    // étrangère) directement dans `lastError` — pas juste un message vague.
+    expect(orphanOp?.status).toBe("failed");
+    expect(orphanOp?.lastError).toContain("23503");
+    expect(serverStore.get("exercise_sets")?.size ?? 0).toBe(0);
+
+    // L'opération indépendante, elle, a bien atteint le serveur malgré
+    // l'échec de la première.
+    expect(serverStore.get("workouts")?.has(otherWorkout.id)).toBe(true);
   });
 });

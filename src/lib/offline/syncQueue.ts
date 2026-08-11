@@ -19,6 +19,24 @@ export interface EnqueueOperationInput<T> {
   baseUpdatedAt: string | null;
 }
 
+// `listPendingOperations` trie par `createdAt` pour garantir l'ordre FIFO
+// entre opérations dépendantes (ex. le `create` d'un exercice avant le
+// `create` de ses séries). `Date.now()` n'a qu'une précision milliseconde :
+// plusieurs opérations enfilées dans la même milliseconde (rafale de taps,
+// séquence synchrone rapide) auraient un `createdAt` identique, et le tri
+// (stable) retomberait sur l'ordre renvoyé par l'index IndexedDB — trié par
+// `userId` PUIS par la clé primaire `id` (uuid aléatoire), donc PAS l'ordre
+// de création réel. Horloge monotone strictement croissante ci-dessous :
+// chaque appel garantit un `createdAt` > au précédent, quel que soit
+// `Date.now()`.
+let lastEnqueuedAtMs = 0;
+
+function nextMonotonicIsoTimestamp(): string {
+  const now = Date.now();
+  lastEnqueuedAtMs = now > lastEnqueuedAtMs ? now : lastEnqueuedAtMs + 1;
+  return new Date(lastEnqueuedAtMs).toISOString();
+}
+
 export async function enqueueOperation<T>(
   input: EnqueueOperationInput<T>,
 ): Promise<SyncOperation<T>> {
@@ -31,7 +49,7 @@ export async function enqueueOperation<T>(
     opType: input.opType,
     payload: input.payload,
     baseUpdatedAt: input.baseUpdatedAt,
-    createdAt: new Date().toISOString(),
+    createdAt: nextMonotonicIsoTimestamp(),
     status: "pending",
     retryCount: 0,
     lastError: null,

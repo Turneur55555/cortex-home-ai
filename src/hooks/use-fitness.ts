@@ -100,6 +100,7 @@ export interface ExerciseRow {
   notes: string | null;
   superset_group: number | null;
   muscle_groups: string[] | null;
+  created_at: string;
   updated_at: string;
 }
 
