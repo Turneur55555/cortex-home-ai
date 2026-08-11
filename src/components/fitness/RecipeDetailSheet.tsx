@@ -693,21 +693,29 @@ export function RecipeDetailSheet({
         )}
 
         {canReanalyze && !editing && (
-          <motion.button
-            whileTap={PRESS}
-            type="button"
-            onClick={runReanalysis}
-            disabled={reanalyze.isPending || !!comparison}
-            className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border text-sm font-semibold text-muted-foreground disabled:opacity-60"
-          >
-            {reanalyze.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <RefreshCw className="h-4 w-4" />
-            )}
-            Réanalyser la recette
-          </motion.button>
+          <div className="rounded-2xl border border-dashed border-border p-3">
+            <motion.button
+              whileTap={PRESS}
+              type="button"
+              onClick={runReanalysis}
+              disabled={reanalyze.isPending || !!comparison}
+              className="flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-primary/30 bg-primary/5 text-sm font-semibold text-primary disabled:opacity-60"
+            >
+              {reanalyze.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+              Réanalyser avec la dernière version
+            </motion.button>
+            <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
+              Relance l&apos;analyse depuis le lien d&apos;origine avec la règle de langue actuelle :
+              la fiche est reproduite en français (quantités inchangées). Tu compares avant
+              d&apos;appliquer.
+            </p>
+          </div>
         )}
+
 
         {!editing && (
           <div className="rounded-2xl border border-border bg-card p-4">
