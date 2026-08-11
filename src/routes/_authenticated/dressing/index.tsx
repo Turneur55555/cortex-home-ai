@@ -88,19 +88,13 @@ function DressingPage() {
           <Images className="h-4 w-4" />
           Importer plusieurs pièces
         </Link>
-        <button
-          type="button"
-          disabled
-          aria-disabled="true"
-          title="Bientôt disponible"
-          className="flex cursor-not-allowed items-center justify-center gap-2 rounded-2xl border border-border bg-card px-4 py-3.5 text-sm font-semibold text-muted-foreground opacity-60 sm:col-span-2"
+        <Link
+          to="/dressing/generer"
+          className="flex items-center justify-center gap-2 rounded-2xl border border-border bg-card px-4 py-3.5 text-sm font-semibold text-foreground transition-opacity active:opacity-80 sm:col-span-2"
         >
           <Sparkles className="h-4 w-4" />
           Générer une tenue
-          <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider">
-            Bientôt
-          </span>
-        </button>
+        </Link>
       </div>
 
       {/* Filtres catégories */}
