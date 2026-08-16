@@ -53,6 +53,16 @@ jobs:
           node scripts/audit-migration-drift.mjs
           echo "exit_code=$?" >> "$GITHUB_OUTPUT" || true
 
+      # ── Invariants de sécurité (CTX-08, audit du 16/08/2026) ─────────────
+      # Complète l'audit ci-dessus : celui-ci ne compare que des NUMÉROS de
+      # version entre Git et supabase_migrations.schema_migrations, ce qui
+      # n'a pas suffi à détecter que la migration 20260607103913 était
+      # enregistrée "applied" tout en étant sans effet réel sur user_stats
+      # (voir scripts/audit-security-invariants.mjs). Ce step interroge
+      # directement l'état réel des policies/grants en base.
+      - name: Run security invariants audit
+        run: node scripts/audit-security-invariants.mjs
+
       # ── Commenter sur une PR si drift détecté ────────────────────────────
       - name: Comment on PR if drift detected
         if: |
