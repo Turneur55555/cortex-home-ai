@@ -23,9 +23,74 @@ jobs:
         with:
           bun-version: "1.3.11"
       - run: bun install --frozen-lockfile
+
+      # ── Fail-closed sur secrets manquants (CTX-21, audit du 16/08/2026) ──
+      # Sans cette garde, des secrets absents rendent HAS_ENV faux dans
+      # rls.test.ts, tous les tests passent en `skip`, et le job répond
+      # "success" en une seconde SANS AVOIR RIEN VÉRIFIÉ. C'était l'état réel
+      # de ce workflow depuis sa création (constaté dans les logs du run
+      # 31946849137 : « 41 tests | 41 skipped », SUPABASE_URL vide).
+      # Un test d'isolation qui ne s'exécute pas est pire qu'absent : il
+      # produit une confiance qu'il ne justifie pas.
+      - name: Vérifier que les secrets Supabase sont configurés
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          missing=""
+          [ -z "$SUPABASE_URL" ]              && missing="$missing SUPABASE_URL"
+          [ -z "$SUPABASE_ANON_KEY" ]         && missing="$missing SUPABASE_ANON_KEY"
+          [ -z "$SUPABASE_SERVICE_ROLE_KEY" ] && missing="$missing SUPABASE_SERVICE_ROLE_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error::Secrets GitHub Actions manquants :$missing"
+            echo "Sans eux, les tests RLS passent silencieusement en 'skipped'"
+            echo "et ce job rapporterait un succès sans rien vérifier."
+            echo "→ Settings → Secrets and variables → Actions, puis relancer."
+            exit 1
+          fi
+          echo "✅ Les trois secrets Supabase sont présents."
+
       - name: Run RLS regression tests
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: bunx vitest run src/lib/security/rls.test.ts
+        # --passWithNoTests=false + la garde ci-dessus : un fichier vide ou
+        # entièrement `skip` fait échouer le job au lieu de le verdir.
+        run: bunx vitest run src/lib/security/rls.test.ts --passWithNoTests=false
+
+      # Dernier filet : même secrets présents, un `describe.skip` résiduel
+      # (ou une future régression du garde HAS_ENV) rendrait le job vert sans
+      # exécuter les assertions. On relit le rapport JSON et on échoue si
+      # AUCUN test n'a réellement tourné, ou s'il reste des tests skippés.
+      - name: Vérifier qu'aucun test RLS n'a été skippé
+        if: always()
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          bunx vitest run src/lib/security/rls.test.ts \
+            --reporter=json --outputFile=/tmp/rls-report.json >/dev/null 2>&1 || true
+          if [ ! -f /tmp/rls-report.json ]; then
+            echo "::error::Rapport de tests introuvable — exécution RLS non vérifiable."
+            exit 1
+          fi
+          PASSED=$(jq '[.testResults[].assertionResults[] | select(.status=="passed")] | length' /tmp/rls-report.json)
+          SKIPPED=$(jq '[.testResults[].assertionResults[] | select(.status=="pending" or .status=="skipped" or .status=="todo")] | length' /tmp/rls-report.json)
+          FAILED=$(jq '[.testResults[].assertionResults[] | select(.status=="failed")] | length' /tmp/rls-report.json)
+          echo "Tests RLS — passés: $PASSED, skippés: $SKIPPED, échoués: $FAILED"
+          if [ "$PASSED" -eq 0 ]; then
+            echo "::error::Aucun test RLS n'a réellement été exécuté."
+            exit 1
+          fi
+          if [ "$SKIPPED" -ne 0 ]; then
+            echo "::error::$SKIPPED test(s) RLS skippé(s) — un test d'isolation non exécuté n'est pas une réussite."
+            exit 1
+          fi
+          if [ "$FAILED" -ne 0 ]; then
+            echo "::error::$FAILED test(s) RLS en échec."
+            exit 1
+          fi
+          echo "✅ $PASSED tests RLS réellement exécutés, 0 skippé, 0 échec."

@@ -134,6 +134,47 @@ const INVARIANTS = [
             and grantee in ('anon','authenticated','PUBLIC') and privilege_type='EXECUTE'`,
     check: (rows) => rows[0]?.n === 0,
   },
+  {
+    code: 'CTX-09_RECOMPUTE_RECIPE_OWNERSHIP_GUARD',
+    description: 'recompute_recipe_nutrition filtre sur le propriétaire de la recette',
+    sql: `select (prosrc ilike '%auth.uid()%')::bool as guarded
+          from pg_proc where proname='recompute_recipe_nutrition'
+            and pronamespace='public'::regnamespace`,
+    check: (rows) => rows[0]?.guarded === true,
+  },
+  {
+    code: 'CTX-10_FOOD_SATELLITES_NOT_WORLD_READABLE',
+    description: 'food_servings/barcodes/quality/synonyms ne sont plus en SELECT USING(true)',
+    sql: `select count(*)::int as n from pg_policies
+          where schemaname='public'
+            and tablename in ('food_servings','food_barcodes','food_quality_scores','food_synonyms')
+            and cmd='SELECT' and qual='true'`,
+    check: (rows) => rows[0]?.n === 0,
+  },
+  {
+    code: 'CTX-13_RECIPE_CACHE_NOT_CLIENT_READABLE',
+    description: "recipe_import_cache n'a plus de policy SELECT cliente",
+    sql: `select count(*)::int as n from pg_policies
+          where schemaname='public' and tablename='recipe_import_cache' and cmd='SELECT'`,
+    check: (rows) => rows[0]?.n === 0,
+  },
+  {
+    code: 'CTX-16_REFERENCE_TABLES_NOT_ANON',
+    description: 'disciplines/reward_catalog/exercise_families/exercise_media non lisibles par anon',
+    sql: `select count(*)::int as n from information_schema.role_table_grants
+          where table_schema='public'
+            and table_name in ('disciplines','reward_catalog','exercise_families','exercise_media')
+            and grantee='anon' and privilege_type='SELECT'`,
+    check: (rows) => rows[0]?.n === 0,
+  },
+  {
+    code: 'CTX-17_EXTENSIONS_OUT_OF_PUBLIC',
+    description: 'unaccent et fuzzystrmatch ne sont plus dans le schéma public',
+    sql: `select count(*)::int as n from pg_extension e
+          join pg_namespace n on n.oid=e.extnamespace
+          where n.nspname='public' and e.extname in ('unaccent','fuzzystrmatch')`,
+    check: (rows) => rows[0]?.n === 0,
+  },
 ];
 
 async function main() {
