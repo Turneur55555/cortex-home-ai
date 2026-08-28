@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/use-auth";
 import { localDateYMD } from "@/lib/dates";
 import { logActivity } from "@/lib/activity";
 import { ENGINE_REGISTRY } from "@/lib/fitness/engines/registry";
@@ -10,12 +10,15 @@ import type {
   LiveSegmentSeed,
   WorkoutRecordDraft,
 } from "@/lib/fitness/engines/types";
-import type { Tables } from "@/integrations/supabase/types";
 import { resolveExerciseId } from "@/services/exerciseResolution";
 import {
-  ACTIVE_WORKOUT_CONFLICT_MESSAGE,
-  isActiveWorkoutConflict,
-} from "@/lib/fitness/activeWorkoutGuard";
+  assertNoActiveWorkout,
+  cascadeDeleteWorkoutChildren,
+  refreshWorkoutsFromServer,
+  workoutSegmentsRepo,
+  workoutsRepo,
+  type WorkoutSegmentRow,
+} from "@/hooks/use-fitness";
 
 // Phase 3 (exercice-central) — Étape 2, double écriture : résout/crée
 // exercise_id en plus du libellé existant sur workout_segments. Ne doit
@@ -41,27 +44,20 @@ async function resolveSegmentExerciseId(
 // useStartWorkout / useAddExerciseSet / useUpdateExerciseSet /
 // useDeleteExerciseSet / useFinishWorkout / useCancelWorkout) pour toute
 // discipline Sensei avec `supportsLiveTracking=true` sur son moteur (voir
-// src/lib/fitness/engines/types.ts). Phase pilote : Course à pied
-// uniquement (2026-07-09) — CourseWorkoutEngine est le seul moteur qui
-// déclare ce flag et implémente buildLiveSegments()/formatLiveSegment().
+// src/lib/fitness/engines/types.ts).
 //
 // Musculation N'EST PAS TOUCHÉE : use-fitness.ts, ActiveWorkoutView,
 // ActiveExerciseCard restent strictement inchangés. `useActiveWorkout()`
-// (musculation) est explicitement filtré sur discipline='muscu' (un seul
-// changement d'une ligne dans use-fitness.ts, additif et sans risque
-// puisque toute séance existante a déjà discipline='muscu' par défaut
-// depuis la migration ..._workout_engine_foundation.sql) pour ne jamais
-// confondre une séance active muscu et une séance active générique.
+// (musculation) est explicitement filtré sur discipline='muscu' pour ne
+// jamais confondre une séance active muscu et une séance active générique.
 //
-// Persistance : contrairement à musculation (exercises/exercise_sets),
-// les segments vivent dans `workout_segments` (voir migration
-// ..._generic_workout_segments.sql) — table générique, réutilisable par
-// toute discipline future SANS nouvelle migration. Le résumé d'affichage
-// (workouts.metadata.segments) est resynchronisé à la clôture de la
-// séance via `engine.formatLiveSegment()` — même pattern que la synchro
-// exercises.sets/reps/weight côté musculation (useFinishWorkout) — pour
-// ne rien changer au kit UI générique existant (toSessionView,
-// GenericHistoryCard, SessionSegmentList).
+// Offline-first (audit offline 28/08/2026, CLAUDE.md) — `workouts` (via
+// `workoutsRepo`, réutilisé de use-fitness.ts) et `workout_segments` (via
+// `workoutSegmentsRepo`) passent TOUS DEUX par le même repository/queue/
+// sync engine que le module musculation : plus de moteur parallèle
+// online-only. Toute écriture est locale d'abord (IndexedDB), mise en
+// queue de sync, avec hydratation en ligne + fallback local hors
+// connexion (`refreshWorkoutsFromServer`, partagée avec use-fitness.ts).
 // ============================================================
 
 export type ActiveGenericSegment = {
@@ -109,13 +105,11 @@ const GENERIC_ACTIVE_KEY = ["fitness", "active_generic_workout"] as const;
  *  ActiveExerciseCard.tsx `cacheKey` prop). */
 export const HYBRID_BLOCKS_KEY = ["fitness", "active_workout_segments"] as const;
 
-type SegmentRowDb = Tables<"workout_segments">;
-
-function toActiveSegment(row: SegmentRowDb): ActiveGenericSegment {
+function toActiveSegment(row: WorkoutSegmentRow): ActiveGenericSegment {
   return {
     id: row.id,
     label: row.label,
-    metrics: (row.metrics ?? {}) as Record<string, number | string>,
+    metrics: row.metrics ?? {},
     metricKey: row.metric_key,
     completed: row.completed,
     position: row.position,
@@ -129,39 +123,30 @@ function toActiveSegment(row: SegmentRowDb): ActiveGenericSegment {
  *  useStartGenericActiveWorkout) — musculation et générique ne peuvent
  *  donc jamais être actives simultanément. */
 export function useActiveGenericWorkout() {
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
   return useQuery({
     queryKey: GENERIC_ACTIVE_KEY,
+    enabled: !!userId,
     queryFn: async (): Promise<ActiveGenericWorkout | null> => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return null;
+      if (!userId) return null;
+      await refreshWorkoutsFromServer(userId);
 
-      const { data: workout, error } = await supabase
-        .from("workouts")
-        .select("id, name, discipline, created_at")
-        .eq("user_id", user.id)
-        .eq("status", "active")
-        .neq("discipline", "muscu")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (error) throw error;
-      if (!workout) return null;
+      const workouts = await workoutsRepo.list(userId);
+      const candidates = workouts.filter((w) => w.status === "active" && w.discipline !== "muscu");
+      const active = [...candidates].sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+      if (!active) return null;
 
-      const { data: segments, error: segErr } = await supabase
-        .from("workout_segments")
-        .select("*")
-        .eq("workout_id", workout.id)
-        .order("position", { ascending: true });
-      if (segErr) throw segErr;
+      const segments = (await workoutSegmentsRepo.list(userId))
+        .filter((s) => s.workout_id === active.id)
+        .sort((a, b) => a.position - b.position);
 
       return {
-        id: workout.id,
-        name: workout.name,
-        discipline: workout.discipline as DisciplineId,
-        created_at: workout.created_at,
-        segments: (segments ?? []).map(toActiveSegment),
+        id: active.id,
+        name: active.name,
+        discipline: active.discipline as DisciplineId,
+        created_at: active.created_at,
+        segments: segments.map(toActiveSegment),
       };
     },
   });
@@ -185,34 +170,38 @@ export function useActiveGenericWorkout() {
 export function useActiveWorkoutSegments(
   workout: { id: string; discipline: DisciplineId } | null | undefined,
 ) {
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
   return useQuery({
     queryKey: HYBRID_BLOCKS_KEY,
     queryFn: async (): Promise<ActiveGenericWorkout | null> => {
-      if (!workout) return null;
-      const { data: segments, error } = await supabase
-        .from("workout_segments")
-        .select("*")
-        .eq("workout_id", workout.id)
-        .order("position", { ascending: true });
-      if (error) throw error;
+      if (!workout || !userId) return null;
+      await refreshWorkoutsFromServer(userId);
+      const segments = (await workoutSegmentsRepo.list(userId))
+        .filter((s) => s.workout_id === workout.id)
+        .sort((a, b) => a.position - b.position);
       return {
         id: workout.id,
         name: "",
         discipline: workout.discipline,
         created_at: new Date().toISOString(),
-        segments: (segments ?? []).map(toActiveSegment),
+        segments: segments.map(toActiveSegment),
       };
     },
-    enabled: !!workout,
+    enabled: !!workout && !!userId,
   });
 }
 
 /** Démarre une séance active générique à partir d'un brouillon Sensei
  *  (draft + segments seedés par engine.buildLiveSegments()). Garde : une
  *  seule séance active à la fois, tous types confondus (muscu inclus) —
- *  cohérent avec l'intention produit (une séance en cours à l'écran). */
+ *  vérification LOCALE (offline-first, voir `assertNoActiveWorkout` dans
+ *  use-fitness.ts, même garantie que musculation), l'index unique
+ *  `workouts_one_active_per_user` restant le garde-fou final côté serveur
+ *  pour une course entre appareils. */
 export function useStartGenericActiveWorkout() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async ({
       draft,
@@ -221,20 +210,8 @@ export function useStartGenericActiveWorkout() {
       draft: WorkoutRecordDraft;
       seedSegments: LiveSegmentSeed[];
     }) => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-
-      const { data: existing, error: existingErr } = await supabase
-        .from("workouts")
-        .select("id")
-        .eq("user_id", user.id)
-        .eq("status", "active")
-        .limit(1)
-        .maybeSingle();
-      if (existingErr) throw existingErr;
-      if (existing) throw new Error(ACTIVE_WORKOUT_CONFLICT_MESSAGE);
+      await assertNoActiveWorkout(user.id);
 
       const today = localDateYMD();
       // metadata sans `segments` : les segments live vivent dans
@@ -246,50 +223,45 @@ export function useStartGenericActiveWorkout() {
         unknown
       >;
 
-      const { data: workout, error } = await supabase
-        .from("workouts")
-        .insert({
-          user_id: user.id,
-          name: draft.name,
-          date: today,
-          duration_minutes: null,
-          notes: draft.notes ?? null,
-          // Même valeur par défaut que useAddWorkout (use-fitness.ts) pour
-          // toute discipline qui ne pose pas de lieu (course, notamment —
-          // voir commentaire d'en-tête de courseEngine.ts) : la colonne
-          // `gym_location` est NOT NULL en base, comportement déjà existant
-          // pour le parcours non-live (GenericSessionReviewSheet), pas une
-          // régression introduite ici.
-          gym_location: draft.gym_location ?? "Salle inconnue",
-          discipline: draft.discipline,
-          metadata: metadataWithoutSegments as never,
-          status: "active",
-        })
-        .select("id")
-        .single();
-      if (error) {
-        if (isActiveWorkoutConflict(error)) throw new Error(ACTIVE_WORKOUT_CONFLICT_MESSAGE);
-        throw error;
-      }
+      const workout = await workoutsRepo.create(user.id, {
+        name: draft.name,
+        date: today,
+        duration_minutes: null,
+        notes: draft.notes ?? null,
+        // Même valeur par défaut que useAddWorkout (use-fitness.ts) pour
+        // toute discipline qui ne pose pas de lieu (course, notamment —
+        // voir commentaire d'en-tête de courseEngine.ts) : la colonne
+        // `gym_location` est NOT NULL en base, comportement déjà existant
+        // pour le parcours non-live (GenericSessionReviewSheet), pas une
+        // régression introduite ici.
+        gym_location: draft.gym_location ?? "Salle inconnue",
+        discipline: draft.discipline,
+        metadata: metadataWithoutSegments,
+        status: "active",
+        level_before: null,
+        level_after: null,
+        xp_before: null,
+        xp_after: null,
+      });
 
       if (seedSegments.length > 0) {
         const seedExerciseIds = await Promise.all(
           seedSegments.map((seg) => resolveSegmentExerciseId(draft.discipline, seg.label)),
         );
-        const { error: segErr } = await supabase.from("workout_segments").insert(
-          seedSegments.map((seg, i) => ({
+        let position = 0;
+        for (const seg of seedSegments) {
+          await workoutSegmentsRepo.create(user.id, {
             workout_id: workout.id,
-            user_id: user.id,
-            position: i,
+            position: position,
             label: seg.label,
             metric_key: seg.metricKey ?? null,
-            metrics: seg.metrics as never,
+            metrics: seg.metrics,
             completed: false,
             discipline: draft.discipline,
-            exercise_id: seedExerciseIds[i],
-          })),
-        );
-        if (segErr) throw segErr;
+            exercise_id: seedExerciseIds[position],
+          });
+          position += 1;
+        }
       }
     },
     onSuccess: () => {
@@ -312,9 +284,12 @@ function patchGenericActiveCache(
   return prev;
 }
 
-/** Ajoute un segment personnalisé à la séance active (bouton "+ Ajouter"). */
+/** Ajoute un segment personnalisé à la séance active (bouton "+ Ajouter").
+ *  Offline-first : écrit d'abord dans `workoutSegmentsRepo` (IndexedDB +
+ *  sync queue) — aucun appel réseau direct. */
 export function useAddGenericSegment() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async ({
       workoutId,
@@ -333,23 +308,18 @@ export function useAddGenericSegment() {
       /** Défaut GENERIC_ACTIVE_KEY — voir HYBRID_BLOCKS_KEY ci-dessus. */
       cacheKey?: readonly unknown[];
     }) => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
       const exerciseId = await resolveSegmentExerciseId(discipline, label);
-      const { error } = await supabase.from("workout_segments").insert({
+      await workoutSegmentsRepo.create(user.id, {
         workout_id: workoutId,
-        user_id: user.id,
         position,
         label,
         metric_key: metricKey ?? null,
-        metrics: metrics as never,
+        metrics,
         completed: false,
         discipline,
         exercise_id: exerciseId,
       });
-      if (error) throw error;
     },
     onError: (e: Error) => toast.error(e.message),
     onSettled: (_d, _e, variables) => {
@@ -358,9 +328,14 @@ export function useAddGenericSegment() {
   });
 }
 
-/** Modifie label / metrics / completed d'un segment (édition inline). */
+/** Modifie label / metrics / completed d'un segment (édition inline).
+ *  Offline-first : `workoutSegmentsRepo.update` remplace le champ `metrics`
+ *  par la valeur fournie (pas de fusion profonde), exactement le
+ *  comportement de l'ancien `.update()` Supabase direct — la fusion locale
+ *  visible dans `onMutate` reste un aperçu optimiste immédiat. */
 export function useUpdateGenericSegment() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async ({
       id,
@@ -375,15 +350,8 @@ export function useUpdateGenericSegment() {
       cacheKey?: readonly unknown[];
     }) => {
       if (Object.keys(fields).length === 0) return;
-      const { error } = await supabase
-        .from("workout_segments")
-        .update({
-          ...fields,
-          metrics: fields.metrics as never,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", id);
-      if (error) throw error;
+      if (!user) throw new Error("Non authentifié");
+      await workoutSegmentsRepo.update(id, user.id, fields);
     },
     onMutate: async ({ id, cacheKey = GENERIC_ACTIVE_KEY, ...fields }) => {
       await qc.cancelQueries({ queryKey: cacheKey });
@@ -411,14 +379,18 @@ export function useUpdateGenericSegment() {
   });
 }
 
-/** Supprime un segment de la séance active. */
+/** Supprime un segment de la séance active. Offline-first :
+ *  `workoutSegmentsRepo.remove` annule proprement une création encore en
+ *  attente (jamais de sync orpheline) et enfile un `delete` idempotent
+ *  sinon — même garantie que `useDeleteExerciseSet` (use-fitness.ts). */
 export function useDeleteGenericSegment() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async (input: string | { id: string; cacheKey?: readonly unknown[] }) => {
       const id = typeof input === "string" ? input : input.id;
-      const { error } = await supabase.from("workout_segments").delete().eq("id", id);
-      if (error) throw error;
+      if (!user) throw new Error("Non authentifié");
+      await workoutSegmentsRepo.remove(id, user.id);
     },
     onMutate: async (input: string | { id: string; cacheKey?: readonly unknown[] }) => {
       const id = typeof input === "string" ? input : input.id;
@@ -449,9 +421,11 @@ export function useDeleteGenericSegment() {
 
 /** Réordonne un segment (flèche haut/bas — pas de dnd-kit, retiré du
  *  projet le 2026-07-05, voir MEMORY.md). Échange la position avec le
- *  voisin immédiat plutôt que de renuméroter toute la liste. */
+ *  voisin immédiat plutôt que de renuméroter toute la liste. Offline-first :
+ *  deux `workoutSegmentsRepo.update` locaux, mis en queue dans l'ordre. */
 export function useReorderGenericSegment() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async ({
       segments,
@@ -464,22 +438,15 @@ export function useReorderGenericSegment() {
       /** Défaut GENERIC_ACTIVE_KEY — voir HYBRID_BLOCKS_KEY ci-dessus. */
       cacheKey?: readonly unknown[];
     }) => {
+      if (!user) throw new Error("Non authentifié");
       const sorted = [...segments].sort((a, b) => a.position - b.position);
       const idx = sorted.findIndex((s) => s.id === id);
       const swapIdx = direction === "up" ? idx - 1 : idx + 1;
       if (idx === -1 || swapIdx < 0 || swapIdx >= sorted.length) return;
       const a = sorted[idx];
       const b = sorted[swapIdx];
-      const { error: e1 } = await supabase
-        .from("workout_segments")
-        .update({ position: b.position })
-        .eq("id", a.id);
-      if (e1) throw e1;
-      const { error: e2 } = await supabase
-        .from("workout_segments")
-        .update({ position: a.position })
-        .eq("id", b.id);
-      if (e2) throw e2;
+      await workoutSegmentsRepo.update(a.id, user.id, { position: b.position });
+      await workoutSegmentsRepo.update(b.id, user.id, { position: a.position });
     },
     onMutate: async ({ segments, id, direction, cacheKey = GENERIC_ACTIVE_KEY }) => {
       await qc.cancelQueries({ queryKey: cacheKey });
@@ -518,24 +485,26 @@ export function useReorderGenericSegment() {
 /** Termine la séance active générique : calcule la durée, resynchronise le
  *  résumé d'affichage (workouts.metadata.segments) via
  *  engine.formatLiveSegment(), même pattern que la synchro
- *  exercises.sets/reps/weight côté musculation (useFinishWorkout). */
+ *  exercises.sets/reps/weight côté musculation (useFinishWorkout).
+ *  Offline-first : lecture de la metadata existante et écriture du statut
+ *  `completed` sont toutes deux locales (workoutsRepo) — l'XP est versée
+ *  côté serveur par le trigger `award_xp_on_workout_complete` dès que la
+ *  sync queue pousse cette mise à jour au retour du réseau (même garantie
+ *  que useFinishWorkout, cf. doc en tête de use-fitness.ts). */
 export function useFinishGenericActiveWorkout() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async (workout: ActiveGenericWorkout) => {
+      if (!user) throw new Error("Non authentifié");
       const durationMs = Date.now() - new Date(workout.created_at).getTime();
       const durationMin = Math.min(600, Math.max(1, Math.round(durationMs / 60_000)));
 
       const entry = ENGINE_REGISTRY[workout.discipline];
       const engine = entry && isReadyEngine(entry) ? entry : null;
 
-      const { data: current, error: readErr } = await supabase
-        .from("workouts")
-        .select("metadata")
-        .eq("id", workout.id)
-        .single();
-      if (readErr) throw readErr;
-      const existingMetadata = (current?.metadata ?? {}) as Record<string, unknown>;
+      const localWorkout = await workoutsRepo.get(workout.id);
+      const existingMetadata = (localWorkout?.metadata ?? {}) as Record<string, unknown>;
 
       const formattedSegments =
         engine?.formatLiveSegment != null
@@ -563,15 +532,11 @@ export function useFinishGenericActiveWorkout() {
               }))
           : [];
 
-      const { error } = await supabase
-        .from("workouts")
-        .update({
-          duration_minutes: durationMin,
-          status: "completed",
-          metadata: { ...existingMetadata, segments: formattedSegments } as never,
-        })
-        .eq("id", workout.id);
-      if (error) throw error;
+      await workoutsRepo.update(workout.id, user.id, {
+        duration_minutes: durationMin,
+        status: "completed",
+        metadata: { ...existingMetadata, segments: formattedSegments },
+      });
     },
     onSuccess: (_d, workout) => {
       // Pas de toast ici : l'écran de récompense (SessionRewardScreen)
@@ -591,15 +556,20 @@ export function useFinishGenericActiveWorkout() {
   });
 }
 
-/** Annule (supprime) la séance active générique et ses segments (cascade). */
+/** Annule (supprime) la séance active générique et ses segments (cascade
+ *  locale, offline-first — même helper que useCancelWorkout côté
+ *  musculation, voir cascadeDeleteWorkoutChildren dans use-fitness.ts). */
 export function useCancelGenericActiveWorkout() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async (workoutId: string) => {
+      if (!user) throw new Error("Non authentifié");
       // L'XP éventuellement versée est retirée côté serveur avant la
-      // suppression (trigger `trg_reverse_xp_before_workout_delete`).
-      const { error } = await supabase.from("workouts").delete().eq("id", workoutId);
-      if (error) throw error;
+      // suppression (trigger `trg_reverse_xp_before_workout_delete`), dès
+      // que la sync queue pousse ce `delete` au retour du réseau.
+      await cascadeDeleteWorkoutChildren(user.id, workoutId);
+      await workoutsRepo.remove(workoutId, user.id);
     },
     onSuccess: () => {
       toast.success("Séance annulée");

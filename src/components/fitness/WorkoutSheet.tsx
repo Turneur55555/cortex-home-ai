@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { Camera, ChevronDown, Loader2, Minus, Plus, SlidersHorizontal, X } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
+import { getIsOnline } from "@/lib/offline/networkStatus";
 import { useAddWorkout, useExerciseImageUrls, useWorkouts } from "@/hooks/use-fitness";
 import { Field, Sheet, SubmitButton } from "@/components/shared/FormComponents";
 import type { WorkoutTemplate } from "@/routes/_authenticated/fitness/CoachSheet";
@@ -227,8 +228,14 @@ export function WorkoutSheet({
       exercises: payloadExercises,
     });
 
-    // Fire-and-forget: upsert exercise history (silently fails if table absent)
+    // Fire-and-forget: upsert exercise history — pur confort UX (suggère le
+    // dernier poids/reps utilisés au prochain ajout), AUCUNE donnée requise
+    // au fonctionnement de la séance elle-même (audit offline 28/08/2026).
+    // Ne tente aucun appel réseau hors connexion (évite un échec inutile
+    // déjà silencieux de toute façon) — la vraie donnée de séance a déjà été
+    // sauvegardée localement par `add.mutateAsync` ci-dessus.
     void (async () => {
+      if (!getIsOnline()) return;
       try {
         const {
           data: { user },

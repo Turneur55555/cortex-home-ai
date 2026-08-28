@@ -12,7 +12,12 @@ import type { DisciplineId } from "@/lib/fitness/engines/types";
 import { HYBRID_BLOCKS_KEY } from "@/hooks/useGenericActiveSession";
 import { orderedTemplateItems as orderedTemplateItemsPure } from "@/lib/fitness/workoutTemplates";
 import { ACTIVE_WORKOUT_CONFLICT_MESSAGE } from "@/lib/fitness/activeWorkoutGuard";
-import { workoutsRepo, exercisesRepo, exerciseSetsRepo } from "@/hooks/use-fitness";
+import {
+  workoutsRepo,
+  exercisesRepo,
+  exerciseSetsRepo,
+  workoutSegmentsRepo,
+} from "@/hooks/use-fitness";
 
 // ============================================================
 // Modèles de séance ("Utiliser une séance sauvegardée") — module Nouvelle
@@ -29,8 +34,8 @@ import { workoutsRepo, exercisesRepo, exerciseSetsRepo } from "@/hooks/use-fitne
 // modèle déjà synchronisé localement fonctionne hors connexion (la séance
 // créée réutilise workoutsRepo/exercisesRepo/exerciseSetsRepo du module
 // Cœur Fitness). Les blocs métriques (`workout_segments`, seedés par un
-// modèle hybride) restent online-only pour cette vague — même périmètre
-// déféré que useGenericActiveSession.ts, non bloquant (try/catch dédié).
+// modèle hybride) sont offline-first via `workoutSegmentsRepo` (audit
+// offline 28/08/2026) — même garantie que useGenericActiveSession.ts.
 // ============================================================
 
 const TEMPLATES_KEY = ["fitness", "workout_templates"];
@@ -478,10 +483,10 @@ export function useDuplicateWorkoutTemplate() {
  * Démarre une séance ACTIVE depuis un modèle : structure complète reprise
  * (exercices, ordre, supersets, notes, paramètres par défaut). Offline-first
  * dès lors que le modèle est déjà synchronisé localement : réutilise
- * workoutsRepo/exercisesRepo/exerciseSetsRepo (use-fitness.ts, même
- * garantie "une seule séance active" — voir assertNoActiveWorkout). Les
- * blocs métriques du modèle (`workout_segments`) restent online-only pour
- * cette vague (voir doc en tête de fichier), non bloquants.
+ * workoutsRepo/exercisesRepo/exerciseSetsRepo/workoutSegmentsRepo
+ * (use-fitness.ts, même garantie "une seule séance active" — voir
+ * assertNoActiveWorkout). Les blocs métriques du modèle (`workout_segments`)
+ * sont désormais offline-first eux aussi (voir doc en tête de fichier).
  */
 export function useStartWorkoutFromSavedTemplate() {
   const qc = useQueryClient();
@@ -552,47 +557,36 @@ export function useStartWorkoutFromSavedTemplate() {
       }
 
       // Musculation hybride (2026-08-19) — blocs métriques du modèle,
-      // online-only pour cette vague (voir doc en tête de fichier), non
-      // bloquant pour le reste de la séance.
+      // offline-first via workoutSegmentsRepo (audit offline 28/08/2026).
       const orderedSegments = [...template.segments].sort((a, b) => a.position - b.position);
       if (orderedSegments.length > 0) {
-        try {
-          const byDiscipline = new Map<DisciplineId, string[]>();
-          for (const s of orderedSegments) {
-            const discipline = s.discipline ?? "autre";
-            const list = byDiscipline.get(discipline) ?? [];
-            list.push(s.label);
-            byDiscipline.set(discipline, list);
-          }
-          const idsByDisciplineAndLabel = new Map<DisciplineId, Map<string, string | null>>();
-          for (const [discipline, labels] of byDiscipline) {
-            idsByDisciplineAndLabel.set(
-              discipline,
-              await resolveExerciseIdsByLabel(discipline, labels),
-            );
-          }
-          const { error: segErr } = await supabase.from("workout_segments").insert(
-            orderedSegments.map((s, i) => {
-              const discipline = s.discipline ?? "autre";
-              return {
-                workout_id: workout.id,
-                user_id: user.id,
-                position: i,
-                label: s.label,
-                metric_key: s.metric_key,
-                metrics: s.metrics as never,
-                completed: false,
-                discipline,
-                exercise_id: idsByDisciplineAndLabel.get(discipline)?.get(s.label) ?? null,
-              };
-            }),
+        const byDiscipline = new Map<DisciplineId, string[]>();
+        for (const s of orderedSegments) {
+          const discipline = s.discipline ?? "autre";
+          const list = byDiscipline.get(discipline) ?? [];
+          list.push(s.label);
+          byDiscipline.set(discipline, list);
+        }
+        const idsByDisciplineAndLabel = new Map<DisciplineId, Map<string, string | null>>();
+        for (const [discipline, labels] of byDiscipline) {
+          idsByDisciplineAndLabel.set(
+            discipline,
+            await resolveExerciseIdsByLabel(discipline, labels),
           );
-          if (segErr) throw segErr;
-        } catch (e) {
-          console.error(
-            "[useStartWorkoutFromSavedTemplate] blocs métriques non enregistrés (workout_segments nécessite une connexion — hors périmètre offline de cette vague)",
-            e,
-          );
+        }
+        let segPosition = 0;
+        for (const s of orderedSegments) {
+          const discipline = s.discipline ?? "autre";
+          await workoutSegmentsRepo.create(user.id, {
+            workout_id: workout.id,
+            position: segPosition++,
+            label: s.label,
+            metric_key: s.metric_key,
+            metrics: s.metrics,
+            completed: false,
+            discipline,
+            exercise_id: idsByDisciplineAndLabel.get(discipline)?.get(s.label) ?? null,
+          });
         }
       }
 

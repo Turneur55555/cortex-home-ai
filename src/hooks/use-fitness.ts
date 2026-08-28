@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { getIsOnline } from "@/lib/offline/networkStatus";
 import { createOfflineRepository, hydrateEntitiesFromServer } from "@/lib/offline/repository";
+import { createPendingIdResolver } from "@/lib/offline/pendingOptimisticId";
 import { logActivity } from "@/lib/activity";
 import { localDateYMD } from "@/lib/dates";
 import type { DisciplineId, SessionSegment } from "@/lib/fitness/engines/types";
@@ -119,15 +120,37 @@ export interface ExerciseSetRow {
   updated_at: string;
 }
 
+/** Segment générique (Course/Hyrox/hybride + blocs métriques d'une séance
+ *  hôte muscu) — voir `useGenericActiveSession.ts`. Même table que le
+ *  pilote online-only historique (`workout_segments`), désormais offline-
+ *  first via `createOfflineRepository`, exactement comme workouts/
+ *  exercises/exercise_sets ci-dessus. */
+export interface WorkoutSegmentRow {
+  id: string;
+  user_id: string;
+  workout_id: string;
+  position: number;
+  label: string;
+  metric_key: string | null;
+  metrics: Record<string, number | string>;
+  completed: boolean;
+  discipline: string | null;
+  exercise_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export const workoutsRepo = createOfflineRepository<WorkoutRow>("workouts");
 export const exercisesRepo = createOfflineRepository<ExerciseRow>("exercises");
 export const exerciseSetsRepo = createOfflineRepository<ExerciseSetRow>("exercise_sets");
+export const workoutSegmentsRepo = createOfflineRepository<WorkoutSegmentRow>("workout_segments");
 
 /** Hydrate le store local depuis le serveur (workouts + exercises +
- *  exercise_sets de l'utilisateur) — no-op silencieux hors connexion. Les
- *  200 séances les plus récentes suffisent très largement à couvrir toute
- *  séance active + l'historique affiché (useWorkouts en garde 60). */
-async function refreshWorkoutsFromServer(userId: string): Promise<void> {
+ *  exercise_sets + workout_segments de l'utilisateur) — no-op silencieux
+ *  hors connexion. Les 200 séances les plus récentes suffisent très
+ *  largement à couvrir toute séance active + l'historique affiché
+ *  (useWorkouts en garde 60). */
+export async function refreshWorkoutsFromServer(userId: string): Promise<void> {
   if (!getIsOnline()) return;
   try {
     const { data: workouts, error } = await supabase
@@ -152,6 +175,17 @@ async function refreshWorkoutsFromServer(userId: string): Promise<void> {
       .eq("user_id", userId);
     if (!setErr && sets) {
       await hydrateEntitiesFromServer("exercise_sets", userId, sets as unknown as ExerciseSetRow[]);
+    }
+    const { data: segments, error: segErr } = await supabase
+      .from("workout_segments")
+      .select("*")
+      .eq("user_id", userId);
+    if (!segErr && segments) {
+      await hydrateEntitiesFromServer(
+        "workout_segments",
+        userId,
+        segments as unknown as WorkoutSegmentRow[],
+      );
     }
   } catch {
     // Hors ligne ou erreur réseau : on continue avec le store local.
@@ -178,20 +212,27 @@ function groupByField<T, K extends keyof T>(rows: T[], key: K): Map<T[K], T[]> {
  *  course entre deux appareils qui créeraient chacun une séance active hors
  *  connexion (edge case rare, assumé — cf. limite déjà documentée pour
  *  physical_goals). */
-async function assertNoActiveWorkout(userId: string): Promise<void> {
+export async function assertNoActiveWorkout(userId: string): Promise<void> {
   const local = await workoutsRepo.list(userId);
   if (local.some((w) => w.status === "active")) {
     throw new Error(ACTIVE_WORKOUT_CONFLICT_MESSAGE);
   }
 }
 
-/** Cascade locale des enfants d'une séance (exercises + exercise_sets) —
- *  le serveur le fait déjà via ON DELETE CASCADE, ici on nettoie juste le
- *  store local (même pattern que `useRecipes.useDeleteRecipe` pour les
- *  ingrédients) pour ne pas laisser d'entités orphelines. `repo.remove`
- *  annule proprement toute création encore en attente (jamais de sync
- *  orpheline) et enfile un `delete` idempotent sinon. */
-async function cascadeDeleteWorkoutChildren(userId: string, workoutId: string): Promise<void> {
+/** Cascade locale des enfants d'une séance (exercises + exercise_sets +
+ *  workout_segments — blocs hybrides éventuels) — le serveur le fait déjà
+ *  via ON DELETE CASCADE, ici on nettoie juste le store local (même pattern
+ *  que `useRecipes.useDeleteRecipe` pour les ingrédients) pour ne pas
+ *  laisser d'entités orphelines. `repo.remove` annule proprement toute
+ *  création encore en attente (jamais de sync orpheline) et enfile un
+ *  `delete` idempotent sinon. Réutilisée par `useCancelWorkout` (muscu) ET
+ *  `useCancelGenericActiveWorkout` (Course/Hyrox/hybride, voir
+ *  useGenericActiveSession.ts) — un seul point de cascade pour toute
+ *  discipline. */
+export async function cascadeDeleteWorkoutChildren(
+  userId: string,
+  workoutId: string,
+): Promise<void> {
   const localExercises = (await exercisesRepo.list(userId)).filter(
     (e) => e.workout_id === workoutId,
   );
@@ -201,6 +242,12 @@ async function cascadeDeleteWorkoutChildren(userId: string, workoutId: string): 
       await exerciseSetsRepo.remove(s.id, userId);
     }
     await exercisesRepo.remove(ex.id, userId);
+  }
+  const localSegments = (await workoutSegmentsRepo.list(userId)).filter(
+    (s) => s.workout_id === workoutId,
+  );
+  for (const seg of localSegments) {
+    await workoutSegmentsRepo.remove(seg.id, userId);
   }
 }
 
@@ -796,11 +843,10 @@ export function useStartWorkout() {
 
 /** Musculation hybride générée par le Sensei (2026-08-05) — démarre une
  *  séance active "muscu" directement seedée avec force ET blocs métriques.
- *  Partie force (exercises/exercise_sets) offline-first via les repos —
- *  partie blocs (workout_segments) reste ONLINE-ONLY pour cette vague, au
- *  même titre que useGenericActiveSession.ts (déféré, voir doc en tête de
- *  useGenericActiveSession.ts) : non bloquante pour la partie musculation
- *  (try/catch dédié), seulement best-effort si le réseau est disponible. */
+ *  Offline-first de bout en bout (audit offline 28/08/2026) : partie force
+ *  (exercises/exercise_sets) ET blocs (workout_segments) passent toutes
+ *  deux par les repositories locaux — même garantie que
+ *  useGenericActiveSession.ts. */
 export function useStartHybridStrengthWorkout() {
   const qc = useQueryClient();
   const { user } = useAuth();
@@ -877,34 +923,26 @@ export function useStartHybridStrengthWorkout() {
         }
       }
 
-      // Blocs métriques — workout_segments, en ligne uniquement pour cette
-      // vague (voir doc en tête de fonction) : jamais bloquant pour le
-      // reste de la séance.
+      // Blocs métriques — offline-first via workoutSegmentsRepo (même
+      // pattern que exercises/exercise_sets ci-dessus), résolution
+      // d'exercise_id best-effort (ne bloque jamais l'écriture principale).
       if (segments.length > 0) {
-        try {
-          const idsByLabel = await resolveExerciseIdsByLabel(
-            blockDiscipline,
-            segments.map((s) => s.label),
-          );
-          const { error: segErr } = await supabase.from("workout_segments").insert(
-            segments.map((s, i) => ({
-              workout_id: workout.id,
-              user_id: user.id,
-              position: i,
-              label: s.label,
-              metric_key: null,
-              metrics: (s.metrics ?? {}) as never,
-              completed: false,
-              discipline: blockDiscipline,
-              exercise_id: idsByLabel.get(s.label) ?? null,
-            })),
-          );
-          if (segErr) throw segErr;
-        } catch (e) {
-          console.error(
-            "[useStartHybridStrengthWorkout] blocs métriques non enregistrés (workout_segments nécessite une connexion — hors périmètre offline de cette vague, voir useGenericActiveSession.ts)",
-            e,
-          );
+        const idsByLabel = await resolveExerciseIdsByLabel(
+          blockDiscipline,
+          segments.map((s) => s.label),
+        );
+        let segPosition = 0;
+        for (const s of segments) {
+          await workoutSegmentsRepo.create(user.id, {
+            workout_id: workout.id,
+            position: segPosition++,
+            label: s.label,
+            metric_key: null,
+            metrics: s.metrics ?? {},
+            completed: false,
+            discipline: blockDiscipline,
+            exercise_id: idsByLabel.get(s.label) ?? null,
+          });
         }
       }
 
@@ -1280,6 +1318,21 @@ export function useReorderActiveExercises() {
   });
 }
 
+/** Résolveur d'id optimiste `tmp-*` → id réel (voir
+ *  `src/lib/offline/pendingOptimisticId.ts`) — corrige le bug "tmp-*"
+ *  (audit offline 28/08/2026) : `useUpdateExerciseSet`/`useDeleteExerciseSet`
+ *  ignoraient SILENCIEUSEMENT toute action utilisateur sur une série dont la
+ *  création optimiste n'avait pas encore été remplacée par son vrai id dans
+ *  le cache React Query. */
+const setIdResolver = createPendingIdResolver();
+
+type AddExerciseSetInput = {
+  exerciseId: string;
+  setNumber: number;
+  reps: number | null;
+  weight: number | null;
+};
+
 /** Ajoute une série à un exercice de la séance active. Offline-first : le
  *  numéro de série est assigné DÉTERMINISTE à partir du store LOCAL
  *  (max existant + 1) — plus besoin du retry serveur sur conflit 23505
@@ -1290,25 +1343,21 @@ export function useReorderActiveExercises() {
 export function useAddExerciseSet() {
   const qc = useQueryClient();
   const { user } = useAuth();
-  return useMutation({
+  const mutation = useMutation({
     mutationFn: async ({
       exerciseId,
       setNumber,
       reps,
       weight,
-    }: {
-      exerciseId: string;
-      setNumber: number;
-      reps: number | null;
-      weight: number | null;
-    }) => {
+      tmpId,
+    }: AddExerciseSetInput & { tmpId: string }) => {
       if (!user) throw new Error("Non authentifié");
       const localSets = (await exerciseSetsRepo.list(user.id)).filter(
         (s) => s.exercise_id === exerciseId,
       );
       const n =
         localSets.length > 0 ? Math.max(...localSets.map((s) => s.set_number)) + 1 : setNumber;
-      await exerciseSetsRepo.create(user.id, {
+      const created = await exerciseSetsRepo.create(user.id, {
         exercise_id: exerciseId,
         set_number: n,
         reps,
@@ -1318,8 +1367,11 @@ export function useAddExerciseSet() {
         notes: null,
         tempo: null,
       });
+      setIdResolver.settle(tmpId, { ok: true, id: created.id });
+      return created;
     },
-    onMutate: async ({ exerciseId, setNumber, reps, weight }) => {
+    onMutate: async ({ exerciseId, setNumber, reps, weight, tmpId }) => {
+      setIdResolver.register(tmpId);
       await qc.cancelQueries({ queryKey: ACTIVE_KEY });
       const prev = patchActiveCache(qc, (w) => ({
         ...w,
@@ -1330,7 +1382,7 @@ export function useAddExerciseSet() {
                 exercise_sets: [
                   ...ex.exercise_sets,
                   {
-                    id: `tmp-${Date.now()}`,
+                    id: tmpId,
                     set_number: setNumber,
                     reps,
                     weight,
@@ -1343,7 +1395,22 @@ export function useAddExerciseSet() {
       }));
       return { prev };
     },
-    onError: (e: Error, _v, ctx) => {
+    onSuccess: (created, { tmpId }) => {
+      // Remplace l'entrée optimiste tmp-* par l'id réel dès qu'il est connu,
+      // sans attendre le refetch déclenché par onSettled — ferme la fenêtre
+      // de course qui causait le bug tmp-* sur un update/delete immédiat.
+      patchActiveCache(qc, (w) => ({
+        ...w,
+        exercises: w.exercises.map((ex) => ({
+          ...ex,
+          exercise_sets: ex.exercise_sets.map((set) =>
+            set.id === tmpId ? { ...set, id: created.id } : set,
+          ),
+        })),
+      }));
+    },
+    onError: (e: Error, { tmpId }, ctx) => {
+      setIdResolver.settle(tmpId, { ok: false, error: e });
       if (ctx?.prev) qc.setQueryData(ACTIVE_KEY, ctx.prev);
       toast.error(e.message);
     },
@@ -1351,9 +1418,20 @@ export function useAddExerciseSet() {
       qc.invalidateQueries({ queryKey: ACTIVE_KEY });
     },
   });
+
+  return {
+    ...mutation,
+    mutate: (vars: AddExerciseSetInput) =>
+      mutation.mutate({ ...vars, tmpId: `tmp-${crypto.randomUUID()}` }),
+    mutateAsync: (vars: AddExerciseSetInput) =>
+      mutation.mutateAsync({ ...vars, tmpId: `tmp-${crypto.randomUUID()}` }),
+  };
 }
 
-/** Met à jour reps / weight / completed d'une série. */
+/** Met à jour reps / weight / completed d'une série. Si `id` est encore un
+ *  id optimiste (`tmp-*`, création offline pas encore résolue), attend
+ *  cette résolution au lieu d'ignorer l'action (voir `setIdResolver.resolve`
+ *  ci-dessus — corrige le bug tmp-*). */
 export function useUpdateExerciseSet() {
   const qc = useQueryClient();
   const { user } = useAuth();
@@ -1369,10 +1447,9 @@ export function useUpdateExerciseSet() {
     }) => {
       // #1 : `completed` ne doit PAS être retiré — sinon la validation des séries n'est jamais enregistrée.
       if (Object.keys(fields).length === 0) return;
-      // Garde : série optimiste pas encore confirmée par le repository local.
-      if (id.startsWith("tmp-")) return;
       if (!user) throw new Error("Non authentifié");
-      await exerciseSetsRepo.update(id, user.id, fields);
+      const realId = await setIdResolver.resolve(id);
+      await exerciseSetsRepo.update(realId, user.id, fields);
     },
     onMutate: async ({ id, ...fields }) => {
       await qc.cancelQueries({ queryKey: ACTIVE_KEY });
@@ -1397,15 +1474,17 @@ export function useUpdateExerciseSet() {
   });
 }
 
-/** Supprime une série par son id. */
+/** Supprime une série par son id. Même résolution `tmp-*` que
+ *  `useUpdateExerciseSet` ci-dessus — jamais d'action utilisateur ignorée
+ *  silencieusement. */
 export function useDeleteExerciseSet() {
   const qc = useQueryClient();
   const { user } = useAuth();
   return useMutation({
     mutationFn: async (id: string) => {
-      if (id.startsWith("tmp-")) return;
       if (!user) throw new Error("Non authentifié");
-      await exerciseSetsRepo.remove(id, user.id);
+      const realId = await setIdResolver.resolve(id);
+      await exerciseSetsRepo.remove(realId, user.id);
     },
     onMutate: async (id: string) => {
       await qc.cancelQueries({ queryKey: ACTIVE_KEY });
