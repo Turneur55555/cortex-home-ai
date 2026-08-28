@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.17"
   }
   public: {
     Tables: {
@@ -4651,7 +4651,6 @@ export type Database = {
         Args: { p_items?: Json; p_meal?: string; p_name: string }
         Returns: string
       }
-      daitch_mokotoff: { Args: { "": string }; Returns: string[] }
       delete_exercise_reference_if_unused: {
         Args: { p_id: string }
         Returns: boolean
@@ -4660,8 +4659,6 @@ export type Database = {
         Args: { p_document_id: string; p_modules: Json }
         Returns: Json
       }
-      dmetaphone: { Args: { "": string }; Returns: string }
-      dmetaphone_alt: { Args: { "": string }; Returns: string }
       duplicate_saved_meal: { Args: { p_id: string }; Returns: string }
       f_unaccent: { Args: { "": string }; Returns: string }
       frequent_foods: {
@@ -4707,9 +4704,6 @@ export type Database = {
         Returns: undefined
       }
       run_weekly_backups: { Args: never; Returns: number }
-      soundex: { Args: { "": string }; Returns: string }
-      text_soundex: { Args: { "": string }; Returns: string }
-      unaccent: { Args: { "": string }; Returns: string }
       undo_exercise_merge: {
         Args: { p_merge_log_id: string }
         Returns: undefined
