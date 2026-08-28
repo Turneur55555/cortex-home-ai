@@ -168,6 +168,18 @@ const INVARIANTS = [
     check: (rows) => rows[0]?.n === 0,
   },
   {
+    code: 'NO_ANON_SECURITY_DEFINER',
+    description: "aucune fonction SECURITY DEFINER de public n'est exécutable par anon",
+    sql: `select coalesce(string_agg(distinct p.proname, ', '), '') as fns
+          from pg_proc p
+          join pg_namespace n on n.oid = p.pronamespace
+          join information_schema.routine_privileges rp
+            on rp.routine_schema = n.nspname and rp.routine_name = p.proname
+          where n.nspname = 'public' and p.prosecdef
+            and rp.grantee in ('anon','PUBLIC') and rp.privilege_type = 'EXECUTE'`,
+    check: (rows) => (rows[0]?.fns ?? '') === '',
+  },
+  {
     code: 'CTX-17_EXTENSIONS_OUT_OF_PUBLIC',
     description: 'unaccent et fuzzystrmatch ne sont plus dans le schéma public',
     sql: `select count(*)::int as n from pg_extension e
