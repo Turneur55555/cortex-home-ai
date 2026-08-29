@@ -1,6 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/use-auth";
+import { getIsOnline } from "@/lib/offline/networkStatus";
+import {
+  cascadeDeleteWorkoutChildren,
+  refreshWorkoutsFromServer,
+  workoutSegmentsRepo,
+  workoutsRepo,
+  type WorkoutSegmentRow,
+} from "@/hooks/use-fitness";
 import { localDateYMD } from "@/lib/dates";
 import { logActivity } from "@/lib/activity";
 import { ENGINE_REGISTRY } from "@/lib/fitness/engines/registry";
@@ -10,7 +18,6 @@ import type {
   LiveSegmentSeed,
   WorkoutRecordDraft,
 } from "@/lib/fitness/engines/types";
-import type { Tables } from "@/integrations/supabase/types";
 import { resolveExerciseId } from "@/services/exerciseResolution";
 import {
   ACTIVE_WORKOUT_CONFLICT_MESSAGE,
@@ -25,6 +32,10 @@ async function resolveSegmentExerciseId(
   discipline: DisciplineId,
   label: string,
 ): Promise<string | null> {
+  // Hors connexion : aucune tentative réseau (le segment est créé avec
+  // `exercise_id: null`, exactement comme lors d'un échec de résolution en
+  // ligne — la double écriture Phase 3 est best-effort par contrat).
+  if (!getIsOnline()) return null;
   try {
     return await resolveExerciseId(discipline, label);
   } catch (e) {
@@ -109,7 +120,7 @@ const GENERIC_ACTIVE_KEY = ["fitness", "active_generic_workout"] as const;
  *  ActiveExerciseCard.tsx `cacheKey` prop). */
 export const HYBRID_BLOCKS_KEY = ["fitness", "active_workout_segments"] as const;
 
-type SegmentRowDb = Tables<"workout_segments">;
+type SegmentRowDb = WorkoutSegmentRow;
 
 function toActiveSegment(row: SegmentRowDb): ActiveGenericSegment {
   return {
@@ -129,39 +140,35 @@ function toActiveSegment(row: SegmentRowDb): ActiveGenericSegment {
  *  useStartGenericActiveWorkout) — musculation et générique ne peuvent
  *  donc jamais être actives simultanément. */
 export function useActiveGenericWorkout() {
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
   return useQuery({
     queryKey: GENERIC_ACTIVE_KEY,
+    enabled: !!userId,
     queryFn: async (): Promise<ActiveGenericWorkout | null> => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return null;
+      if (!userId) return null;
+      // Hydratation en ligne puis lecture LOCALE — même pattern que
+      // `useActiveWorkout()` (use-fitness.ts) : hors connexion, la séance et
+      // ses segments viennent d'IndexedDB, jamais du réseau.
+      await refreshWorkoutsFromServer(userId);
+      const workouts = await workoutsRepo.list(userId);
+      const active = workouts
+        .filter((w) => w.status === "active" && w.discipline !== "muscu")
+        .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+      if (!active) return null;
 
-      const { data: workout, error } = await supabase
-        .from("workouts")
-        .select("id, name, discipline, created_at")
-        .eq("user_id", user.id)
-        .eq("status", "active")
-        .neq("discipline", "muscu")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (error) throw error;
-      if (!workout) return null;
-
-      const { data: segments, error: segErr } = await supabase
-        .from("workout_segments")
-        .select("*")
-        .eq("workout_id", workout.id)
-        .order("position", { ascending: true });
-      if (segErr) throw segErr;
+      const segments = (await workoutSegmentsRepo.list(userId))
+        .filter((seg) => seg.workout_id === active.id)
+        .sort((a, b) =>
+          a.position !== b.position ? a.position - b.position : a.id.localeCompare(b.id),
+        );
 
       return {
-        id: workout.id,
-        name: workout.name,
-        discipline: workout.discipline as DisciplineId,
-        created_at: workout.created_at,
-        segments: (segments ?? []).map(toActiveSegment),
+        id: active.id,
+        name: active.name,
+        discipline: active.discipline as DisciplineId,
+        created_at: active.created_at,
+        segments: segments.map(toActiveSegment),
       };
     },
   });
@@ -185,25 +192,28 @@ export function useActiveGenericWorkout() {
 export function useActiveWorkoutSegments(
   workout: { id: string; discipline: DisciplineId } | null | undefined,
 ) {
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
   return useQuery({
     queryKey: HYBRID_BLOCKS_KEY,
     queryFn: async (): Promise<ActiveGenericWorkout | null> => {
-      if (!workout) return null;
-      const { data: segments, error } = await supabase
-        .from("workout_segments")
-        .select("*")
-        .eq("workout_id", workout.id)
-        .order("position", { ascending: true });
-      if (error) throw error;
+      if (!workout || !userId) return null;
+      // Lecture LOCALE (voir useActiveGenericWorkout) : l'hydratation est
+      // déjà faite par `useActiveWorkout()` monté sur le même écran.
+      const segments = (await workoutSegmentsRepo.list(userId))
+        .filter((seg) => seg.workout_id === workout.id)
+        .sort((a, b) =>
+          a.position !== b.position ? a.position - b.position : a.id.localeCompare(b.id),
+        );
       return {
         id: workout.id,
         name: "",
         discipline: workout.discipline,
         created_at: new Date().toISOString(),
-        segments: (segments ?? []).map(toActiveSegment),
+        segments: segments.map(toActiveSegment),
       };
     },
-    enabled: !!workout,
+    enabled: !!workout && !!userId,
   });
 }
 
@@ -213,6 +223,7 @@ export function useActiveWorkoutSegments(
  *  cohérent avec l'intention produit (une séance en cours à l'écran). */
 export function useStartGenericActiveWorkout() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async ({
       draft,
@@ -221,20 +232,15 @@ export function useStartGenericActiveWorkout() {
       draft: WorkoutRecordDraft;
       seedSegments: LiveSegmentSeed[];
     }) => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
 
-      const { data: existing, error: existingErr } = await supabase
-        .from("workouts")
-        .select("id")
-        .eq("user_id", user.id)
-        .eq("status", "active")
-        .limit(1)
-        .maybeSingle();
-      if (existingErr) throw existingErr;
-      if (existing) throw new Error(ACTIVE_WORKOUT_CONFLICT_MESSAGE);
+      // Garde "une seule séance active" vérifiée EN LOCAL (aucun appel
+      // réseau) — même stratégie que `assertNoActiveWorkout` côté
+      // musculation ; l'index unique serveur reste le garde-fou final.
+      const localWorkouts = await workoutsRepo.list(user.id);
+      if (localWorkouts.some((w) => w.status === "active")) {
+        throw new Error(ACTIVE_WORKOUT_CONFLICT_MESSAGE);
+      }
 
       const today = localDateYMD();
       // metadata sans `segments` : les segments live vivent dans
@@ -246,10 +252,9 @@ export function useStartGenericActiveWorkout() {
         unknown
       >;
 
-      const { data: workout, error } = await supabase
-        .from("workouts")
-        .insert({
-          user_id: user.id,
+      let workout;
+      try {
+        workout = await workoutsRepo.create(user.id, {
           name: draft.name,
           date: today,
           duration_minutes: null,
@@ -262,34 +267,36 @@ export function useStartGenericActiveWorkout() {
           // régression introduite ici.
           gym_location: draft.gym_location ?? "Salle inconnue",
           discipline: draft.discipline,
-          metadata: metadataWithoutSegments as never,
+          metadata: metadataWithoutSegments,
           status: "active",
-        })
-        .select("id")
-        .single();
-      if (error) {
-        if (isActiveWorkoutConflict(error)) throw new Error(ACTIVE_WORKOUT_CONFLICT_MESSAGE);
-        throw error;
+          level_before: null,
+          level_after: null,
+          xp_before: null,
+          xp_after: null,
+        });
+      } catch (e) {
+        if (isActiveWorkoutConflict(e)) throw new Error(ACTIVE_WORKOUT_CONFLICT_MESSAGE);
+        throw e;
       }
 
       if (seedSegments.length > 0) {
         const seedExerciseIds = await Promise.all(
           seedSegments.map((seg) => resolveSegmentExerciseId(draft.discipline, seg.label)),
         );
-        const { error: segErr } = await supabase.from("workout_segments").insert(
-          seedSegments.map((seg, i) => ({
+        let i = 0;
+        for (const seg of seedSegments) {
+          await workoutSegmentsRepo.create(user.id, {
             workout_id: workout.id,
-            user_id: user.id,
             position: i,
             label: seg.label,
             metric_key: seg.metricKey ?? null,
-            metrics: seg.metrics as never,
+            metrics: seg.metrics as Record<string, number | string>,
             completed: false,
             discipline: draft.discipline,
             exercise_id: seedExerciseIds[i],
-          })),
-        );
-        if (segErr) throw segErr;
+          });
+          i++;
+        }
       }
     },
     onSuccess: () => {
@@ -315,6 +322,7 @@ function patchGenericActiveCache(
 /** Ajoute un segment personnalisé à la séance active (bouton "+ Ajouter"). */
 export function useAddGenericSegment() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async ({
       workoutId,
@@ -333,23 +341,18 @@ export function useAddGenericSegment() {
       /** Défaut GENERIC_ACTIVE_KEY — voir HYBRID_BLOCKS_KEY ci-dessus. */
       cacheKey?: readonly unknown[];
     }) => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
       const exerciseId = await resolveSegmentExerciseId(discipline, label);
-      const { error } = await supabase.from("workout_segments").insert({
+      await workoutSegmentsRepo.create(user.id, {
         workout_id: workoutId,
-        user_id: user.id,
         position,
         label,
         metric_key: metricKey ?? null,
-        metrics: metrics as never,
+        metrics,
         completed: false,
         discipline,
         exercise_id: exerciseId,
       });
-      if (error) throw error;
     },
     onError: (e: Error) => toast.error(e.message),
     onSettled: (_d, _e, variables) => {
@@ -361,6 +364,7 @@ export function useAddGenericSegment() {
 /** Modifie label / metrics / completed d'un segment (édition inline). */
 export function useUpdateGenericSegment() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async ({
       id,
@@ -375,15 +379,14 @@ export function useUpdateGenericSegment() {
       cacheKey?: readonly unknown[];
     }) => {
       if (Object.keys(fields).length === 0) return;
-      const { error } = await supabase
-        .from("workout_segments")
-        .update({
-          ...fields,
-          metrics: fields.metrics as never,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", id);
-      if (error) throw error;
+      if (!user) throw new Error("Non authentifié");
+      // `repo.update` fusionne le patch dans la création encore en attente
+      // s'il y en a une (jamais d'`update` orphelin sur une ligne qui
+      // n'existe pas encore côté serveur) — voir repository.ts.
+      await workoutSegmentsRepo.update(id, user.id, {
+        ...fields,
+        ...(fields.metrics ? { metrics: fields.metrics } : {}),
+      });
     },
     onMutate: async ({ id, cacheKey = GENERIC_ACTIVE_KEY, ...fields }) => {
       await qc.cancelQueries({ queryKey: cacheKey });
@@ -414,11 +417,12 @@ export function useUpdateGenericSegment() {
 /** Supprime un segment de la séance active. */
 export function useDeleteGenericSegment() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async (input: string | { id: string; cacheKey?: readonly unknown[] }) => {
       const id = typeof input === "string" ? input : input.id;
-      const { error } = await supabase.from("workout_segments").delete().eq("id", id);
-      if (error) throw error;
+      if (!user) throw new Error("Non authentifié");
+      await workoutSegmentsRepo.remove(id, user.id);
     },
     onMutate: async (input: string | { id: string; cacheKey?: readonly unknown[] }) => {
       const id = typeof input === "string" ? input : input.id;
@@ -452,6 +456,7 @@ export function useDeleteGenericSegment() {
  *  voisin immédiat plutôt que de renuméroter toute la liste. */
 export function useReorderGenericSegment() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async ({
       segments,
@@ -468,18 +473,11 @@ export function useReorderGenericSegment() {
       const idx = sorted.findIndex((s) => s.id === id);
       const swapIdx = direction === "up" ? idx - 1 : idx + 1;
       if (idx === -1 || swapIdx < 0 || swapIdx >= sorted.length) return;
+      if (!user) throw new Error("Non authentifié");
       const a = sorted[idx];
       const b = sorted[swapIdx];
-      const { error: e1 } = await supabase
-        .from("workout_segments")
-        .update({ position: b.position })
-        .eq("id", a.id);
-      if (e1) throw e1;
-      const { error: e2 } = await supabase
-        .from("workout_segments")
-        .update({ position: a.position })
-        .eq("id", b.id);
-      if (e2) throw e2;
+      await workoutSegmentsRepo.update(a.id, user.id, { position: b.position });
+      await workoutSegmentsRepo.update(b.id, user.id, { position: a.position });
     },
     onMutate: async ({ segments, id, direction, cacheKey = GENERIC_ACTIVE_KEY }) => {
       await qc.cancelQueries({ queryKey: cacheKey });
@@ -521,6 +519,7 @@ export function useReorderGenericSegment() {
  *  exercises.sets/reps/weight côté musculation (useFinishWorkout). */
 export function useFinishGenericActiveWorkout() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async (workout: ActiveGenericWorkout) => {
       const durationMs = Date.now() - new Date(workout.created_at).getTime();
@@ -529,12 +528,8 @@ export function useFinishGenericActiveWorkout() {
       const entry = ENGINE_REGISTRY[workout.discipline];
       const engine = entry && isReadyEngine(entry) ? entry : null;
 
-      const { data: current, error: readErr } = await supabase
-        .from("workouts")
-        .select("metadata")
-        .eq("id", workout.id)
-        .single();
-      if (readErr) throw readErr;
+      if (!user) throw new Error("Non authentifié");
+      const current = await workoutsRepo.get(workout.id);
       const existingMetadata = (current?.metadata ?? {}) as Record<string, unknown>;
 
       const formattedSegments =
@@ -563,15 +558,14 @@ export function useFinishGenericActiveWorkout() {
               }))
           : [];
 
-      const { error } = await supabase
-        .from("workouts")
-        .update({
-          duration_minutes: durationMin,
-          status: "completed",
-          metadata: { ...existingMetadata, segments: formattedSegments } as never,
-        })
-        .eq("id", workout.id);
-      if (error) throw error;
+      // Écriture LOCALE : le trigger serveur `award_xp_on_workout_complete`
+      // se déclenche naturellement quand la sync queue pousse ce passage à
+      // `completed` (même raisonnement que useFinishWorkout côté muscu).
+      await workoutsRepo.update(workout.id, user.id, {
+        duration_minutes: durationMin,
+        status: "completed",
+        metadata: { ...existingMetadata, segments: formattedSegments },
+      });
     },
     onSuccess: (_d, workout) => {
       // Pas de toast ici : l'écran de récompense (SessionRewardScreen)
@@ -594,12 +588,15 @@ export function useFinishGenericActiveWorkout() {
 /** Annule (supprime) la séance active générique et ses segments (cascade). */
 export function useCancelGenericActiveWorkout() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async (workoutId: string) => {
       // L'XP éventuellement versée est retirée côté serveur avant la
-      // suppression (trigger `trg_reverse_xp_before_workout_delete`).
-      const { error } = await supabase.from("workouts").delete().eq("id", workoutId);
-      if (error) throw error;
+      // suppression (trigger `trg_reverse_xp_before_workout_delete`), au
+      // moment où la sync queue pousse ce delete.
+      if (!user) throw new Error("Non authentifié");
+      await cascadeDeleteWorkoutChildren(user.id, workoutId);
+      await workoutsRepo.remove(workoutId, user.id);
     },
     onSuccess: () => {
       toast.success("Séance annulée");

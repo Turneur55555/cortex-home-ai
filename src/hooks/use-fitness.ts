@@ -119,15 +119,34 @@ export interface ExerciseSetRow {
   updated_at: string;
 }
 
+/** Blocs métriques génériques (course / HYROX / cardio / autre), partagés
+ *  par les séances génériques (useGenericActiveSession.ts) ET par les blocs
+ *  d'une séance muscu hybride — une seule table, un seul repository. */
+export interface WorkoutSegmentRow {
+  id: string;
+  user_id: string;
+  workout_id: string;
+  position: number;
+  label: string;
+  metric_key: string | null;
+  metrics: Record<string, number | string>;
+  completed: boolean;
+  discipline: string | null;
+  exercise_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export const workoutsRepo = createOfflineRepository<WorkoutRow>("workouts");
 export const exercisesRepo = createOfflineRepository<ExerciseRow>("exercises");
 export const exerciseSetsRepo = createOfflineRepository<ExerciseSetRow>("exercise_sets");
+export const workoutSegmentsRepo = createOfflineRepository<WorkoutSegmentRow>("workout_segments");
 
 /** Hydrate le store local depuis le serveur (workouts + exercises +
  *  exercise_sets de l'utilisateur) — no-op silencieux hors connexion. Les
  *  200 séances les plus récentes suffisent très largement à couvrir toute
  *  séance active + l'historique affiché (useWorkouts en garde 60). */
-async function refreshWorkoutsFromServer(userId: string): Promise<void> {
+export async function refreshWorkoutsFromServer(userId: string): Promise<void> {
   if (!getIsOnline()) return;
   try {
     const { data: workouts, error } = await supabase
@@ -152,6 +171,20 @@ async function refreshWorkoutsFromServer(userId: string): Promise<void> {
       .eq("user_id", userId);
     if (!setErr && sets) {
       await hydrateEntitiesFromServer("exercise_sets", userId, sets as unknown as ExerciseSetRow[]);
+    }
+    // Blocs métriques (séances génériques ET blocs d'une séance hybride) —
+    // même hydratation que les autres tables, pour qu'ils soient lisibles
+    // hors connexion après un simple passage en ligne.
+    const { data: segments, error: segErr } = await supabase
+      .from("workout_segments")
+      .select("*")
+      .eq("user_id", userId);
+    if (!segErr && segments) {
+      await hydrateEntitiesFromServer(
+        "workout_segments",
+        userId,
+        segments as unknown as WorkoutSegmentRow[],
+      );
     }
   } catch {
     // Hors ligne ou erreur réseau : on continue avec le store local.
@@ -185,13 +218,16 @@ async function assertNoActiveWorkout(userId: string): Promise<void> {
   }
 }
 
-/** Cascade locale des enfants d'une séance (exercises + exercise_sets) —
- *  le serveur le fait déjà via ON DELETE CASCADE, ici on nettoie juste le
- *  store local (même pattern que `useRecipes.useDeleteRecipe` pour les
- *  ingrédients) pour ne pas laisser d'entités orphelines. `repo.remove`
- *  annule proprement toute création encore en attente (jamais de sync
- *  orpheline) et enfile un `delete` idempotent sinon. */
-async function cascadeDeleteWorkoutChildren(userId: string, workoutId: string): Promise<void> {
+/** Cascade locale des enfants d'une séance (exercises + exercise_sets +
+ *  workout_segments) — le serveur le fait déjà via ON DELETE CASCADE, ici on
+ *  nettoie juste le store local (même pattern que `useRecipes.useDeleteRecipe`
+ *  pour les ingrédients) pour ne pas laisser d'entités orphelines.
+ *  `repo.remove` annule proprement toute création encore en attente (jamais
+ *  de sync orpheline) et enfile un `delete` idempotent sinon. */
+export async function cascadeDeleteWorkoutChildren(
+  userId: string,
+  workoutId: string,
+): Promise<void> {
   const localExercises = (await exercisesRepo.list(userId)).filter(
     (e) => e.workout_id === workoutId,
   );
@@ -201,6 +237,12 @@ async function cascadeDeleteWorkoutChildren(userId: string, workoutId: string): 
       await exerciseSetsRepo.remove(s.id, userId);
     }
     await exercisesRepo.remove(ex.id, userId);
+  }
+  const localSegments = (await workoutSegmentsRepo.list(userId)).filter(
+    (s) => s.workout_id === workoutId,
+  );
+  for (const seg of localSegments) {
+    await workoutSegmentsRepo.remove(seg.id, userId);
   }
 }
 
@@ -877,34 +919,39 @@ export function useStartHybridStrengthWorkout() {
         }
       }
 
-      // Blocs métriques — workout_segments, en ligne uniquement pour cette
-      // vague (voir doc en tête de fonction) : jamais bloquant pour le
-      // reste de la séance.
+      // Blocs métriques — workout_segments, offline-first au même titre que
+      // la partie force ci-dessus : écriture locale via le repository, sync
+      // différée par le sync engine. La résolution d'identité d'exercice
+      // (réseau) reste best-effort et non bloquante — hors connexion, les
+      // blocs sont créés avec `exercise_id: null`, exactement comme le fait
+      // déjà `resolveSegmentExerciseId` côté séance générique.
       if (segments.length > 0) {
-        try {
-          const idsByLabel = await resolveExerciseIdsByLabel(
-            blockDiscipline,
-            segments.map((s) => s.label),
-          );
-          const { error: segErr } = await supabase.from("workout_segments").insert(
-            segments.map((s, i) => ({
-              workout_id: workout.id,
-              user_id: user.id,
-              position: i,
-              label: s.label,
-              metric_key: null,
-              metrics: (s.metrics ?? {}) as never,
-              completed: false,
-              discipline: blockDiscipline,
-              exercise_id: idsByLabel.get(s.label) ?? null,
-            })),
-          );
-          if (segErr) throw segErr;
-        } catch (e) {
-          console.error(
-            "[useStartHybridStrengthWorkout] blocs métriques non enregistrés (workout_segments nécessite une connexion — hors périmètre offline de cette vague, voir useGenericActiveSession.ts)",
-            e,
-          );
+        let idsByLabel = new Map<string, string | null>();
+        if (getIsOnline()) {
+          try {
+            idsByLabel = await resolveExerciseIdsByLabel(
+              blockDiscipline,
+              segments.map((s) => s.label),
+            );
+          } catch (e) {
+            console.error(
+              "[useStartHybridStrengthWorkout] résolution exercise_id échouée — blocs créés sans identité (non bloquant)",
+              e,
+            );
+          }
+        }
+        let segPosition = 0;
+        for (const s of segments) {
+          await workoutSegmentsRepo.create(user.id, {
+            workout_id: workout.id,
+            position: segPosition++,
+            label: s.label,
+            metric_key: null,
+            metrics: (s.metrics ?? {}) as Record<string, number | string>,
+            completed: false,
+            discipline: blockDiscipline,
+            exercise_id: idsByLabel.get(s.label) ?? null,
+          });
         }
       }
 
