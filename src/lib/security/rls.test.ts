@@ -288,6 +288,200 @@ d("RLS regression — user isolation", () => {
     });
   });
 
+  // ── CTX-09 / CTX-10 / CTX-13 / CTX-16 (audit 16/08/2026, phase 2) ───────
+  describe("nutrition & catalogue — findings phase 2", () => {
+    let bobFoodId: string;
+    let bobRecipeId: string;
+
+    beforeAll(async () => {
+      // Aliment PRIVÉ de Bob + une portion rattachée : Alice ne doit voir
+      // ni l'aliment, ni ses satellites (CTX-10).
+      const { data: food, error: foodErr } = await admin
+        .from("foods")
+        .insert({ name: `rls-test-food-${crypto.randomUUID()}`, user_id: bob.id })
+        .select("id")
+        .single();
+      if (foodErr || !food) throw foodErr ?? new Error("food seed failed");
+      bobFoodId = food.id;
+      await admin
+        .from("food_servings")
+        .insert({ food_id: bobFoodId, label: "portion-secrete-bob", grams: 42 });
+
+      // Recette de Bob, pour CTX-09.
+      const { data: recipe, error: recErr } = await admin
+        .from("recipes")
+        .insert({ title: `rls-test-recipe-${crypto.randomUUID()}`, user_id: bob.id })
+        .select("id")
+        .single();
+      if (recErr || !recipe) throw recErr ?? new Error("recipe seed failed");
+      bobRecipeId = recipe.id;
+    }, 30_000);
+
+    afterAll(async () => {
+      if (bobRecipeId) await admin.from("recipes").delete().eq("id", bobRecipeId);
+      if (bobFoodId) {
+        await admin.from("food_servings").delete().eq("food_id", bobFoodId);
+        await admin.from("foods").delete().eq("id", bobFoodId);
+      }
+    }, 30_000);
+
+    it("CTX-10 — Alice ne voit PAS les portions d'un aliment privé de Bob", async () => {
+      const { data } = await alice.client
+        .from("food_servings")
+        .select("food_id, label")
+        .eq("food_id", bobFoodId);
+      expect(data ?? []).toHaveLength(0);
+    });
+
+    it("CTX-10 — Alice voit toujours les portions du référentiel commun", async () => {
+      // Non-régression : le catalogue public (foods.user_id IS NULL) doit
+      // rester lisible, sinon la recherche d'aliments serait cassée.
+      const { data: publicFood } = await admin
+        .from("foods")
+        .select("id")
+        .is("user_id", null)
+        .limit(1)
+        .maybeSingle();
+      if (!publicFood) return; // aucun aliment public : rien à vérifier
+      const { error } = await alice.client
+        .from("food_servings")
+        .select("food_id")
+        .eq("food_id", publicFood.id);
+      expect(error).toBeNull();
+    });
+
+    it("CTX-13 — Alice ne peut PAS énumérer le cache d'import de recettes", async () => {
+      const { data, error } = await alice.client
+        .from("recipe_import_cache")
+        .select("source_url, title");
+      expect(error !== null || (data ?? []).length === 0).toBe(true);
+    });
+
+    it("CTX-09 — Alice ne peut PAS recalculer la recette de Bob", async () => {
+      const { data: before } = await admin
+        .from("recipes")
+        .select("updated_at")
+        .eq("id", bobRecipeId)
+        .single();
+
+      await alice.client.rpc("recompute_recipe_nutrition", { p_recipe: bobRecipeId });
+
+      const { data: after } = await admin
+        .from("recipes")
+        .select("updated_at")
+        .eq("id", bobRecipeId)
+        .single();
+      // La ligne de Bob ne doit pas avoir été réécrite.
+      expect(after?.updated_at).toBe(before?.updated_at);
+    });
+
+    it("CTX-16 — un anonyme ne peut PAS lire le barème d'XP (reward_catalog)", async () => {
+      const anon = createClient(SUPABASE_URL, ANON_KEY, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+      const { data, error } = await anon.from("reward_catalog").select("source_key, xp_amount");
+      expect(error !== null || (data ?? []).length === 0).toBe(true);
+    });
+
+    it("CTX-16 — un utilisateur connecté lit toujours le barème d'XP", async () => {
+      const { error } = await alice.client.from("reward_catalog").select("source_key");
+      expect(error).toBeNull();
+    });
+  });
+
+  // ── CTX-06 — catalogue d'exercices partagé vs personnel ─────────────────
+  // Audit 16/08/2026 : exercise_reference (catalogue commun, 1500 lignes)
+  // était modifiable et supprimable par TOUT compte connecté
+  // (policies `auth.uid() IS NOT NULL`). Architecture retenue : catalogue
+  // partagé en lecture seule + catalogue personnel possédé.
+  describe("catalogue d'exercices (CTX-06)", () => {
+    it("Alice peut LIRE le catalogue partagé", async () => {
+      const { data, error } = await alice.client.from("exercise_reference").select("id").limit(1);
+      expect(error).toBeNull();
+      expect((data ?? []).length).toBeGreaterThan(0);
+    });
+
+    it("Alice ne peut PAS modifier le catalogue partagé", async () => {
+      const { data: row } = await admin
+        .from("exercise_reference")
+        .select("id, name")
+        .limit(1)
+        .single();
+      const { error } = await alice.client
+        .from("exercise_reference")
+        .update({ name: "PWNED" })
+        .eq("id", row!.id);
+      const { data: after } = await admin
+        .from("exercise_reference")
+        .select("name")
+        .eq("id", row!.id)
+        .single();
+      expect(after?.name).toBe(row!.name);
+      expect(error || after?.name === row!.name).toBeTruthy();
+    });
+
+    it("Alice ne peut PAS supprimer le catalogue partagé", async () => {
+      const { count: before } = await admin
+        .from("exercise_reference")
+        .select("id", { count: "exact", head: true });
+      await alice.client
+        .from("exercise_reference")
+        .delete()
+        .neq("id", "00000000-0000-0000-0000-000000000000");
+      const { count: after } = await admin
+        .from("exercise_reference")
+        .select("id", { count: "exact", head: true });
+      expect(after).toBe(before);
+    });
+
+    it("Alice ne peut PAS insérer dans le catalogue partagé", async () => {
+      const { error } = await alice.client
+        .from("exercise_reference")
+        .insert({ name: `intrusion-${crypto.randomUUID()}`, discipline_id: "muscu" });
+      expect(error).not.toBeNull();
+    });
+
+    it("Alice PEUT créer/modifier/supprimer dans SON catalogue personnel", async () => {
+      const name = `perso-${crypto.randomUUID()}`;
+      const { data: created, error: insErr } = await alice.client
+        .from("user_exercise_reference")
+        .insert({ user_id: alice.id, name, discipline_id: "muscu" })
+        .select("id")
+        .single();
+      expect(insErr).toBeNull();
+      expect(created?.id).toBeTruthy();
+
+      const { error: updErr } = await alice.client
+        .from("user_exercise_reference")
+        .update({ name: `${name}-v2` })
+        .eq("id", created!.id);
+      expect(updErr).toBeNull();
+
+      const { error: delErr } = await alice.client
+        .from("user_exercise_reference")
+        .delete()
+        .eq("id", created!.id);
+      expect(delErr).toBeNull();
+    });
+
+    it("Alice ne voit PAS le catalogue personnel de Bob", async () => {
+      const { data: bobRow } = await admin
+        .from("user_exercise_reference")
+        .insert({ user_id: bob.id, name: `bob-${crypto.randomUUID()}`, discipline_id: "muscu" })
+        .select("id")
+        .single();
+      try {
+        const { data } = await alice.client
+          .from("user_exercise_reference")
+          .select("id")
+          .eq("id", bobRow!.id);
+        expect(data ?? []).toHaveLength(0);
+      } finally {
+        await admin.from("user_exercise_reference").delete().eq("id", bobRow!.id);
+      }
+    });
+  });
+
   // ── storage.objects ─────────────────────────────────────────────────────
   describe("storage.objects (buckets privés)", () => {
     for (const bucket of TEST_BUCKETS) {
