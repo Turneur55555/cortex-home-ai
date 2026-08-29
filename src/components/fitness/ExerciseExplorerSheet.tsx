@@ -292,6 +292,12 @@ export function ExerciseExplorerSheet({
       toast.error("Exercice hors catalogue — supprime-le depuis tes séances.");
       return;
     }
+    // CTX-06 : le catalogue partagé est en lecture seule ; seuls les
+    // exercices créés par l'utilisateur (`owned`) sont supprimables.
+    if (!findRow(id)?.owned) {
+      toast.error("Exercice du catalogue partagé — il ne peut pas être supprimé.");
+      return;
+    }
     try {
       await deleteExercise.mutateAsync(id);
       toast.success(`"${name}" supprimé`);
@@ -430,7 +436,10 @@ export function ExerciseExplorerSheet({
         icon: <Star className="h-4 w-4" />,
         onClick: () => openPromote(ex),
       });
-    } else if (row) {
+    } else if (row?.owned) {
+      // CTX-06 : « Modifier » / « Supprimer » ne sont proposés que pour les
+      // exercices du catalogue PERSONNEL. Les entrées du catalogue partagé
+      // sont en lecture seule — les afficher mènerait à une erreur RLS.
       actions.push(
         {
           key: "edit",
@@ -456,8 +465,9 @@ export function ExerciseExplorerSheet({
     return {
       onStartSession: !activeWorkout ? () => handlePrimaryUseAction(ex.name) : undefined,
       onAddToActiveWorkout: activeWorkout ? () => handlePrimaryUseAction(ex.name) : undefined,
-      onEdit: !custom && row ? () => openEdit(row) : undefined,
-      onDelete: !custom ? () => handleDelete(ex.id, ex.name) : undefined,
+      // CTX-06 : édition/suppression réservées au catalogue personnel.
+      onEdit: !custom && row?.owned ? () => openEdit(row) : undefined,
+      onDelete: !custom && row?.owned ? () => handleDelete(ex.id, ex.name) : undefined,
       onPromote: custom ? () => openPromote(ex) : undefined,
     };
   };

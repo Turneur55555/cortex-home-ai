@@ -168,6 +168,28 @@ const INVARIANTS = [
     check: (rows) => rows[0]?.n === 0,
   },
   {
+    code: 'CTX-06_SHARED_CATALOG_READ_ONLY',
+    description: 'exercise_reference : aucune écriture cliente (3 RESTRICTIVE, 0 policy write permissive)',
+    sql: `select
+            (select count(*) from pg_policies
+              where schemaname='public' and tablename='exercise_reference'
+                and permissive='RESTRICTIVE' and cmd in ('INSERT','UPDATE','DELETE'))::int as blocked,
+            (select count(*) from pg_policies
+              where schemaname='public' and tablename='exercise_reference'
+                and permissive='PERMISSIVE' and cmd in ('INSERT','UPDATE','DELETE','ALL'))::int as permissive_writes`,
+    check: (rows) => rows[0]?.blocked === 3 && rows[0]?.permissive_writes === 0,
+  },
+  {
+    code: 'CTX-06_PERSONAL_CATALOG_OWNER_SCOPED',
+    description: 'user_exercise_reference : RLS actif et 4 policies propriétaire',
+    sql: `select
+            (select relrowsecurity from pg_class c join pg_namespace n on n.oid=c.relnamespace
+              where n.nspname='public' and c.relname='user_exercise_reference') as rls,
+            (select count(*) from pg_policies
+              where schemaname='public' and tablename='user_exercise_reference')::int as n`,
+    check: (rows) => rows[0]?.rls === true && rows[0]?.n === 4,
+  },
+  {
     code: 'NO_ANON_SECURITY_DEFINER',
     description: "aucune fonction SECURITY DEFINER de public n'est exécutable par anon",
     sql: `select coalesce(string_agg(distinct p.proname, ', '), '') as fns

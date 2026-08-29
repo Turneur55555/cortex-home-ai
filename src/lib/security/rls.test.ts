@@ -389,6 +389,99 @@ d("RLS regression — user isolation", () => {
     });
   });
 
+  // ── CTX-06 — catalogue d'exercices partagé vs personnel ─────────────────
+  // Audit 16/08/2026 : exercise_reference (catalogue commun, 1500 lignes)
+  // était modifiable et supprimable par TOUT compte connecté
+  // (policies `auth.uid() IS NOT NULL`). Architecture retenue : catalogue
+  // partagé en lecture seule + catalogue personnel possédé.
+  describe("catalogue d'exercices (CTX-06)", () => {
+    it("Alice peut LIRE le catalogue partagé", async () => {
+      const { data, error } = await alice.client.from("exercise_reference").select("id").limit(1);
+      expect(error).toBeNull();
+      expect((data ?? []).length).toBeGreaterThan(0);
+    });
+
+    it("Alice ne peut PAS modifier le catalogue partagé", async () => {
+      const { data: row } = await admin
+        .from("exercise_reference")
+        .select("id, name")
+        .limit(1)
+        .single();
+      const { error } = await alice.client
+        .from("exercise_reference")
+        .update({ name: "PWNED" })
+        .eq("id", row!.id);
+      const { data: after } = await admin
+        .from("exercise_reference")
+        .select("name")
+        .eq("id", row!.id)
+        .single();
+      expect(after?.name).toBe(row!.name);
+      expect(error || after?.name === row!.name).toBeTruthy();
+    });
+
+    it("Alice ne peut PAS supprimer le catalogue partagé", async () => {
+      const { count: before } = await admin
+        .from("exercise_reference")
+        .select("id", { count: "exact", head: true });
+      await alice.client
+        .from("exercise_reference")
+        .delete()
+        .neq("id", "00000000-0000-0000-0000-000000000000");
+      const { count: after } = await admin
+        .from("exercise_reference")
+        .select("id", { count: "exact", head: true });
+      expect(after).toBe(before);
+    });
+
+    it("Alice ne peut PAS insérer dans le catalogue partagé", async () => {
+      const { error } = await alice.client
+        .from("exercise_reference")
+        .insert({ name: `intrusion-${crypto.randomUUID()}`, discipline_id: "muscu" });
+      expect(error).not.toBeNull();
+    });
+
+    it("Alice PEUT créer/modifier/supprimer dans SON catalogue personnel", async () => {
+      const name = `perso-${crypto.randomUUID()}`;
+      const { data: created, error: insErr } = await alice.client
+        .from("user_exercise_reference")
+        .insert({ user_id: alice.id, name, discipline_id: "muscu" })
+        .select("id")
+        .single();
+      expect(insErr).toBeNull();
+      expect(created?.id).toBeTruthy();
+
+      const { error: updErr } = await alice.client
+        .from("user_exercise_reference")
+        .update({ name: `${name}-v2` })
+        .eq("id", created!.id);
+      expect(updErr).toBeNull();
+
+      const { error: delErr } = await alice.client
+        .from("user_exercise_reference")
+        .delete()
+        .eq("id", created!.id);
+      expect(delErr).toBeNull();
+    });
+
+    it("Alice ne voit PAS le catalogue personnel de Bob", async () => {
+      const { data: bobRow } = await admin
+        .from("user_exercise_reference")
+        .insert({ user_id: bob.id, name: `bob-${crypto.randomUUID()}`, discipline_id: "muscu" })
+        .select("id")
+        .single();
+      try {
+        const { data } = await alice.client
+          .from("user_exercise_reference")
+          .select("id")
+          .eq("id", bobRow!.id);
+        expect(data ?? []).toHaveLength(0);
+      } finally {
+        await admin.from("user_exercise_reference").delete().eq("id", bobRow!.id);
+      }
+    });
+  });
+
   // ── storage.objects ─────────────────────────────────────────────────────
   describe("storage.objects (buckets privés)", () => {
     for (const bucket of TEST_BUCKETS) {
