@@ -128,6 +128,10 @@ export function useActiveGenericWorkout() {
   return useQuery({
     queryKey: GENERIC_ACTIVE_KEY,
     enabled: !!userId,
+    // Offline-first (test terrain réel 28/08/2026, voir use-fitness.ts
+    // useActiveWorkout) : évite qu'un refetch après mutation offline reste
+    // en pause hors connexion alors que la donnée est déjà écrite localement.
+    networkMode: "always",
     queryFn: async (): Promise<ActiveGenericWorkout | null> => {
       if (!userId) return null;
       await refreshWorkoutsFromServer(userId);
@@ -174,6 +178,9 @@ export function useActiveWorkoutSegments(
   const userId = user?.id ?? null;
   return useQuery({
     queryKey: HYBRID_BLOCKS_KEY,
+    // Offline-first (test terrain réel 28/08/2026, voir use-fitness.ts
+    // useActiveWorkout) : mêmes garanties que GENERIC_ACTIVE_KEY ci-dessus.
+    networkMode: "always",
     queryFn: async (): Promise<ActiveGenericWorkout | null> => {
       if (!workout || !userId) return null;
       await refreshWorkoutsFromServer(userId);

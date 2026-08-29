@@ -261,6 +261,14 @@ export function useWorkouts() {
   return useQuery({
     queryKey: WORKOUTS_KEY,
     enabled: !!userId,
+    // Offline-first (test terrain réel 28/08/2026) : cette query lit
+    // `workoutsRepo`/`exercisesRepo`/`exerciseSetsRepo` (100% local, réseau
+    // uniquement best-effort via `refreshWorkoutsFromServer`, déjà gardé par
+    // `getIsOnline()`). Le `networkMode: "online"` par défaut de TanStack
+    // Query mettrait tout refetch (ex. après une mutation offline) EN PAUSE
+    // hors connexion — l'écran resterait figé sur les anciennes données
+    // alors que du nouveau contenu vient d'être écrit localement.
+    networkMode: "always",
     queryFn: async () => {
       if (!userId) return [];
       await refreshWorkoutsFromServer(userId);
@@ -774,6 +782,12 @@ export function useActiveWorkout() {
   return useQuery({
     queryKey: ACTIVE_KEY,
     enabled: !!userId,
+    // Offline-first (test terrain réel 28/08/2026) — voir useWorkouts
+    // ci-dessus : sans ce réglage, le refetch déclenché par les mutations
+    // de la séance active (ajout/modif/suppression, terminer...) resterait
+    // en pause hors connexion et l'écran n'afficherait jamais la séance
+    // qu'on vient pourtant d'écrire localement.
+    networkMode: "always",
     queryFn: async (): Promise<ActiveWorkout | null> => {
       if (!userId) return null;
       await refreshWorkoutsFromServer(userId);
