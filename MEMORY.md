@@ -1,7 +1,64 @@
 # Mémoire projet — cortex-home-ai
 
 ## Dernière mise à jour
-2026-08-09
+2026-08-31
+
+## Chantier 2 — contrat repository offline ⇄ tables Supabase (2026-08-31, branche `claude/cortex-offline-repository-contract-4dwf9i`)
+Audit technique du 30/08 : CRIT-02 (`shopping_list` incompatible avec `createOfflineRepository`),
+MAJ-01 (`update()` renvoyait toute la ligne et pouvait écraser des colonnes calculées serveur),
+tables offline sans trigger `set_updated_at`, et absence de garde-fou automatisé.
+
+- **Les 19 tables branchées sur `createOfflineRepository`** (source : appels réels dans `src/`) :
+  `workouts`, `exercises`, `exercise_sets`, `workout_segments`, `workout_templates`,
+  `workout_template_exercises`, `workout_template_segments`, `workout_analyses`, `physical_goals`,
+  `nutrition`, `nutrition_favorites`, `food_custom_foods`, `saved_meals`, `supplements`, `recipes`,
+  `recipe_ingredients`, `recipe_collections`, `meal_plans`, `shopping_list`.
+- **Migration `20260831090000_shopping_list_created_at.sql`** : `shopping_list` était la dernière
+  table offline sans `created_at` (constat vérifié en direct sur la base, pas déduit de `types.ts`)
+  alors que `create()` en met une dans CHAQUE payload → tous ses `create` échouaient en 400
+  PGRST204 et étaient retentés en boucle (même cause racine que `exercises`, migration
+  20260829130000). Ajout en 3 temps (colonne nullable → backfill depuis `added_at` → `NOT NULL` +
+  `DEFAULT now()`) pour rester réellement idempotente sans faire churner `updated_at` à un rejeu.
+  `added_at` (colonne produit, tri de la liste) est conservée telle quelle.
+- **Migration `20260831091000_offline_tables_set_updated_at_triggers.sql`** : trigger
+  `public.set_updated_at()` ajouté sur `recipes`, `recipe_collections`, `saved_meals`,
+  `workout_templates`, `workout_segments` — les 5 tables offline qui avaient la colonne `updated_at`
+  mais aucun trigger pour l'avancer. `supplements`/`food_custom_foods` utilisent
+  `touch_updated_at()`, strictement équivalent : volontairement non rebranchées.
+- **MAJ-01 — `repository.update()` envoie désormais le PATCH, plus l'entité complète.** La ligne
+  locale reste complète (les écrans continuent de tout lire), mais l'opération de sync ne porte que
+  les colonnes réellement modifiées, débarrassées des colonnes du contrat
+  (`buildUpdatePayload` / `OFFLINE_CONTRACT_COLUMNS`). Renommer une séance ne réécrit plus
+  `xp_before`/`xp_after`/`level_before`/`level_after` (calculées par `award_xp_on_workout_complete`),
+  et `updated_at` n'est plus jamais envoyé par le client — c'est le trigger serveur qui le pose.
+  Le payload d'un `create` reste la ligne complète (un INSERT a besoin de toutes les colonnes) et la
+  fusion `create` en attente + patch est inchangée (CREATE → UPDATE hors ligne intact).
+- **Adaptations minimales du sync engine** (rendues nécessaires par le nouveau format, chantier 1 non
+  touché) : `applyServerRowToEntity()` ne réécrit la donnée locale avec la réponse serveur que s'il
+  ne reste aucune opération en attente pour cet enregistrement (sinon la réponse est partielle et
+  ferait « reculer » l'écran), et `rebasePendingOperationsForRecord()` recale le `baseUpdatedAt` des
+  opérations suivantes sur l'état que le serveur vient d'atteindre — sans quoi deux patchs enchaînés
+  déclenchaient un FAUX conflit contre notre propre écriture précédente. `processSyncQueue` relit
+  chaque opération juste avant de l'envoyer (la liste FIFO est un instantané pris avant la boucle).
+  `resolveConflict('keep-local')` passe aussi par `buildUpdatePayload`.
+- **Garde-fou automatisé, deux niveaux** : (1) type `OfflineCompatibleTableName` (repository.ts) —
+  seules les tables de `types.ts` portant id/user_id/created_at/updated_at (timestamps non-nullables)
+  peuvent être passées à `createOfflineRepository` ; une table incompatible ne compile plus, donc
+  `typecheck.yml` (toute PR + push main) la bloque ; (2) `scripts/check-offline-repository-contract.mjs`
+  (`npm run check:offline-contract`, étape ajoutée à `typecheck.yml`) — dérive la liste des tables
+  DEPUIS le code et le schéma DEPUIS `types.ts`, et nomme table + colonne manquante + fichier fautif.
+  Aucune seconde source de vérité maintenue à la main.
+- **Tests** : `src/lib/offline/repositoryContract.test.ts` (16 cas — simulateur Supabase strict qui
+  refuse les colonnes inconnues sur INSERT **et** UPDATE et simule le trigger `set_updated_at`) +
+  `scripts/check-offline-repository-contract.test.mjs` (9 cas). Couvre : create shopping_list accepté
+  et synchronisé (+ le même create qui échouait avant migration), colonnes du contrat produites par
+  `create()`, update partiel, colonnes XP serveur préservées, CREATE→UPDATE avant sync, deux patchs
+  enchaînés sans perte ni faux conflit, `updated_at` serveur, table conforme OK / table non conforme
+  en échec explicite.
+- **Validation** : `npm test` 1512 passed / 60 skipped (106 fichiers, +25 cas vs avant), `npx tsc --noEmit` 0 erreur, `eslint` 0 erreur
+  sur les fichiers touchés. Les deux migrations ont été appliquées à la base en direct (MCP Supabase)
+  pour que `types.ts` reste conforme et que la CI soit verte sur la branche ; `migrate.yml` les
+  rejouera sans effet au merge (idempotentes).
 
 ## "Proposer des variantes" (module Recettes) — génération IA en 1 appel (2026-08-09, branche `claude/recipe-variants-feature-r88ujt`)
 Demande : dans `RecipeDetailSheet`, bouton "✨ Proposer des variantes" → 3 choix (🥛 Sans produits

@@ -1,3 +1,4 @@
+import type { Database } from "@/integrations/supabase/types";
 import { entityKey, getOfflineDb } from "./db";
 import {
   enqueueOperation,
@@ -24,6 +25,86 @@ type BaseRow = {
   updated_at?: string;
 };
 
+/**
+ * Contrat que TOUTE table branchée sur `createOfflineRepository` doit
+ * respecter côté base (cf. `scripts/check-offline-repository-contract.mjs`
+ * et le type `OfflineCompatibleTableName` ci-dessous) :
+ *
+ * - `id` (uuid) : généré côté CLIENT dès la création (jamais par la base),
+ *   c'est lui qui porte l'idempotence du retry (`upsert onConflict: id`) ;
+ * - `user_id` : scope obligatoire, aucune donnée offline n'est globale ;
+ * - `created_at` : ajouté par `create()` à CHAQUE payload — une table qui ne
+ *   l'a pas fait échouer tous ses `create` en PGRST204 (bug prod `exercises`
+ *   du 29/08, puis `shopping_list`, cf. migrations
+ *   20260829130000 / 20260831090000) ;
+ * - `updated_at` : socle du conflict detector, doit être avancé par un
+ *   trigger SERVEUR à chaque UPDATE (cf. migration 20260831091000).
+ */
+export const OFFLINE_CONTRACT_COLUMNS = ["id", "user_id", "created_at", "updated_at"] as const;
+
+type PublicTables = Database["public"]["Tables"];
+
+/**
+ * Une ligne respecte le contrat si elle porte les 4 colonnes ET si ses deux
+ * timestamps sont non-nullables (un `updated_at` nullable ne permettrait pas
+ * de comparer des versions de façon fiable).
+ */
+type RowRespectsOfflineContract<R> = (typeof OFFLINE_CONTRACT_COLUMNS)[number] extends keyof R
+  ? R extends { id: string; created_at: string; updated_at: string }
+    ? true
+    : false
+  : false;
+
+/**
+ * GARDE-FOU DE TYPE (le vrai filet CI : `typecheck.yml` tourne sur toute PR
+ * et tout push main) — seules les tables Supabase respectant le contrat
+ * ci-dessus peuvent être passées à `createOfflineRepository`. Une table à
+ * laquelle il manque `created_at`/`updated_at` (le bug `shopping_list` de
+ * l'audit du 30/08) ne compile tout simplement plus : impossible de la
+ * brancher SILENCIEUSEMENT sur le repository générique.
+ *
+ * La liste des tables valides est dérivée de `types.ts`, artefact généré
+ * depuis la base (source de vérité unique, cf. CLAUDE.md +
+ * `supabase-types.yml`) — aucune seconde liste à maintenir à la main.
+ */
+export type OfflineCompatibleTableName = {
+  [K in keyof PublicTables]: RowRespectsOfflineContract<PublicTables[K]["Row"]> extends true
+    ? K & string
+    : never;
+}[keyof PublicTables];
+
+/**
+ * Retire du patch les colonnes du contrat : elles sont soit immuables
+ * (`id`, `user_id`, `created_at` — l'identité de la ligne ne se « met pas à
+ * jour »), soit propriété exclusive du serveur (`updated_at`, avancé par le
+ * trigger `set_updated_at` à chaque UPDATE — l'horloge d'un client resté
+ * hors ligne n'a rien à y écrire).
+ */
+function stripContractColumns<T>(patch: Partial<T>): Partial<T> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(patch as Record<string, unknown>)) {
+    if ((OFFLINE_CONTRACT_COLUMNS as readonly string[]).includes(key)) continue;
+    out[key] = value;
+  }
+  return out as Partial<T>;
+}
+
+/**
+ * Payload d'un `update` envoyé à Supabase : STRICTEMENT le patch demandé par
+ * l'appelant, jamais l'entité complète.
+ *
+ * Avant (audit MAJ-01) : `update()` envoyait `{...entity.data, ...patch}`,
+ * donc toute la ligne locale. Renommer une séance renvoyait aussi
+ * `xp_before`/`xp_after`/`level_before`/`level_after` — colonnes calculées
+ * par les triggers RPG serveur (`award_xp_on_workout_complete`) — avec les
+ * valeurs locales, potentiellement périmées ou nulles : une modification
+ * anodine pouvait effacer la progression RPG calculée côté serveur.
+ * Maintenant, seules les colonnes réellement modifiées partent.
+ */
+export function buildUpdatePayload<T>(patch: Partial<T>): Partial<T> {
+  return stripContractColumns(patch);
+}
+
 export interface OfflineRepository<T extends BaseRow> {
   /** Table locale (clé logique dans IndexedDB). */
   table: string;
@@ -44,8 +125,8 @@ export function getSupabaseTableName(table: string): string {
 }
 
 export function createOfflineRepository<T extends BaseRow>(
-  table: string,
-  supabaseTableName: string = table,
+  table: OfflineCompatibleTableName,
+  supabaseTableName: OfflineCompatibleTableName = table,
 ): OfflineRepository<T> {
   tableRegistry.set(table, supabaseTableName);
 
@@ -79,6 +160,13 @@ export function createOfflineRepository<T extends BaseRow>(
       const db = await getOfflineDb();
       const now = new Date().toISOString();
       const id = crypto.randomUUID();
+      // `id` + `created_at` viennent du client PAR DESIGN : une ligne créée
+      // hors ligne le lundi et synchronisée le vendredi doit garder sa vraie
+      // date de création (le serveur, lui, ne peut que constater l'INSERT).
+      // `updated_at` part avec la même valeur initiale, puis passe
+      // définitivement sous contrôle du serveur (trigger `set_updated_at`,
+      // cf. migration 20260831091000) — plus aucun `update` client ne le
+      // renvoie, cf. `buildUpdatePayload`.
       const row = {
         ...data,
         id,
@@ -118,29 +206,43 @@ export function createOfflineRepository<T extends BaseRow>(
         throw new Error(`Offline update: entité introuvable (${table}/${id})`);
       }
       const now = new Date().toISOString();
+      // Localement, l'entité reste une ligne COMPLÈTE (c'est ce que lisent
+      // les écrans) — `updated_at` local sert d'horodatage optimiste en
+      // attendant la valeur serveur renvoyée par la synchronisation.
       const newData = { ...entity.data, ...patch, updated_at: now } as T;
+      // Vers le serveur, en revanche, on n'envoie QUE le patch demandé.
+      const payload = buildUpdatePayload<T>(patch);
+      const hasSyncableChange = Object.keys(payload).length > 0;
+
+      // Si une création n'a pas encore été synchronisée, fusionne le patch
+      // dans SON payload plutôt que d'enfiler un `update` séparé — il
+      // n'existe encore aucune ligne serveur à mettre à jour. Le payload
+      // d'un `create` reste volontairement la ligne complète : l'INSERT a
+      // besoin de toutes les colonnes, et aucune valeur serveur n'existe
+      // encore qui pourrait être écrasée.
+      const pendingCreate = await findPendingCreateForRecord(table, id);
+
       const db = await getOfflineDb();
       const updatedEntity: OfflineEntity<T> = {
         ...entity,
         data: newData,
         localUpdatedAt: now,
-        syncStatus: "pending",
+        // Un patch qui ne touche QUE des colonnes du contrat n'a rien à
+        // envoyer : le marquer `pending` laisserait l'entité bloquée dans cet
+        // état sans opération correspondante dans la queue.
+        syncStatus: pendingCreate || hasSyncableChange ? "pending" : entity.syncStatus,
       };
       await db.put("entities", updatedEntity as OfflineEntity);
 
-      // Si une création n'a pas encore été synchronisée, fusionne le patch
-      // dans SON payload plutôt que d'enfiler un `update` séparé — il
-      // n'existe encore aucune ligne serveur à mettre à jour.
-      const pendingCreate = await findPendingCreateForRecord(table, id);
       if (pendingCreate) {
         await updateOperationPayload(pendingCreate.id, newData);
-      } else {
-        await enqueueOperation<T>({
+      } else if (hasSyncableChange) {
+        await enqueueOperation<Partial<T>>({
           userId,
           table,
           recordLocalId: id,
           opType: "update",
-          payload: newData,
+          payload,
           baseUpdatedAt: entity.serverUpdatedAt,
         });
       }
@@ -189,7 +291,7 @@ export function createOfflineRepository<T extends BaseRow>(
  * conflict detector, pas d'un simple refresh.
  */
 export async function hydrateEntitiesFromServer<T extends BaseRow>(
-  table: string,
+  table: OfflineCompatibleTableName,
   userId: string,
   rows: T[],
 ): Promise<void> {

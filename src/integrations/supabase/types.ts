@@ -3383,6 +3383,7 @@ export type Database = {
         Row: {
           added_at: string
           category: string | null
+          created_at: string
           done: boolean
           id: string
           item_id: string | null
@@ -3395,6 +3396,7 @@ export type Database = {
         Insert: {
           added_at?: string
           category?: string | null
+          created_at?: string
           done?: boolean
           id?: string
           item_id?: string | null
@@ -3407,6 +3409,7 @@ export type Database = {
         Update: {
           added_at?: string
           category?: string | null
+          created_at?: string
           done?: boolean
           id?: string
           item_id?: string | null

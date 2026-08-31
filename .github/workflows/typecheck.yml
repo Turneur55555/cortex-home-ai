@@ -34,3 +34,12 @@ jobs:
 
       - name: Typecheck
         run: npm run typecheck
+
+      # Garde-fou du contrat offline (audit 30/08) : toute table branchée sur
+      # `createOfflineRepository` DOIT avoir id/user_id/created_at/updated_at
+      # en base, sinon tous ses `create` échouent en boucle (bugs prod
+      # `exercises` puis `shopping_list`). Le typecheck ci-dessus le bloque
+      # déjà au niveau des types ; ce script nomme la table et la colonne
+      # manquante, pour que l'échec CI soit lisible sans relire le diff.
+      - name: Contrat offline (createOfflineRepository)
+        run: npm run check:offline-contract

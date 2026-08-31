@@ -111,6 +111,49 @@ export async function findPendingCreateForRecord(
   );
 }
 
+export async function getOperation(id: string): Promise<SyncOperation | undefined> {
+  const db = await getOfflineDb();
+  return db.get("syncQueue", id);
+}
+
+/**
+ * Après qu'une opération a réussi, recale les opérations encore en attente
+ * sur le MÊME enregistrement : leur `baseUpdatedAt` devient le `updated_at`
+ * que le serveur vient d'atteindre. Renvoie le nombre d'opérations restantes.
+ *
+ * Nécessaire depuis le passage aux patchs partiels (`repository.update()`) :
+ * deux modifications locales enchaînées produisent désormais DEUX opérations
+ * qui portent chacune leur propre patch (avant, la seconde réécrivait toute
+ * la ligne et rendait la première caduque). Sans ce recalage, la seconde
+ * partirait avec le `baseUpdatedAt` d'AVANT la première : le conflict
+ * detector verrait un `updated_at` serveur différent de sa base et
+ * déclencherait un faux conflit… provoqué par notre propre opération
+ * précédente, pas par un autre appareil. Un `create` en attente n'est jamais
+ * recalé (`baseUpdatedAt` null par définition).
+ */
+export async function rebasePendingOperationsForRecord(params: {
+  table: string;
+  recordLocalId: string;
+  baseUpdatedAt: string | null;
+  excludeOperationId?: string;
+}): Promise<number> {
+  const db = await getOfflineDb();
+  const all = await db.getAll("syncQueue");
+  const remaining = all.filter(
+    (op) =>
+      op.table === params.table &&
+      op.recordLocalId === params.recordLocalId &&
+      op.id !== params.excludeOperationId &&
+      op.status !== "done",
+  );
+
+  for (const op of remaining) {
+    if (op.opType === "create" || op.baseUpdatedAt === null) continue;
+    await db.put("syncQueue", { ...op, baseUpdatedAt: params.baseUpdatedAt });
+  }
+  return remaining.length;
+}
+
 export async function updateOperationPayload<T>(id: string, payload: T): Promise<void> {
   const db = await getOfflineDb();
   const existing = await db.get("syncQueue", id);

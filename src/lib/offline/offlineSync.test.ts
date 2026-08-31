@@ -495,10 +495,10 @@ describe("généricité de la couche repository (autre table, ex. recettes)", ()
   }
 
   it("fonctionne pour n'importe quelle table sans dépendance spécifique", async () => {
-    const repo = createOfflineRepository<RecipeRow>("recipes_test_table", "recipes_test_table");
+    const repo = createOfflineRepository<RecipeRow>("recipes", "recipes");
     const created = await repo.create(USER_A, { name: "Curry" });
     expect(await repo.list(USER_A)).toHaveLength(1);
     await processSyncQueue(USER_A);
-    expect(serverStore.get("recipes_test_table")?.get(created.id)?.name).toBe("Curry");
+    expect(serverStore.get("recipes")?.get(created.id)?.name).toBe("Curry");
   });
 });

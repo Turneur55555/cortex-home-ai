@@ -1,10 +1,12 @@
 import { supabase } from "@/integrations/supabase/client";
 import { buildConflictRecord, detectConflict } from "./conflictDetector";
 import { entityKey, getOfflineDb } from "./db";
-import { getSupabaseTableName } from "./repository";
+import { buildUpdatePayload, getSupabaseTableName } from "./repository";
 import {
   enqueueOperation,
+  getOperation,
   listPendingOperations,
+  rebasePendingOperationsForRecord,
   removeOperation,
   updateOperationStatus,
 } from "./syncQueue";
@@ -126,6 +128,48 @@ function describeSyncError(op: SyncOperation, supabaseTable: string, err: unknow
   return summary;
 }
 
+/**
+ * Réapplique en local la ligne renvoyée par le serveur après un `create` /
+ * `update` réussi.
+ *
+ * Adaptation rendue nécessaire par le format d'opération `update` partiel
+ * (repository.ts) : la réponse serveur d'une opération ne reflète QUE les
+ * patchs déjà envoyés. S'il reste des opérations en attente pour ce même
+ * enregistrement (deux modifications locales enchaînées avant la
+ * synchronisation), écraser la donnée locale avec cette réponse ferait
+ * temporairement « reculer » l'écran jusqu'au passage de l'opération
+ * suivante. Dans ce cas on ne prend du serveur que `updated_at` (nécessaire
+ * comme base de comparaison du conflict detector) et on garde la donnée
+ * locale, qui reste la plus récente.
+ *
+ * L'entité est relue juste avant l'écriture : elle a pu être modifiée
+ * localement pendant l'aller-retour réseau.
+ */
+async function applyServerRowToEntity(op: SyncOperation, serverRow: unknown): Promise<void> {
+  const db = await getOfflineDb();
+  const key = entityKey(op.table, op.recordLocalId);
+  const current = (await db.get("entities", key)) as OfflineEntity | undefined;
+  if (!current) return;
+
+  const serverUpdatedAt = (serverRow as { updated_at?: string } | null)?.updated_at ?? null;
+  // Les opérations encore en attente sur cet enregistrement doivent repartir
+  // de l'état que le serveur vient d'atteindre, sinon la suivante déclenche
+  // un faux conflit contre notre propre écriture.
+  const remaining = await rebasePendingOperationsForRecord({
+    table: op.table,
+    recordLocalId: op.recordLocalId,
+    baseUpdatedAt: serverUpdatedAt,
+    excludeOperationId: op.id,
+  });
+
+  await db.put("entities", {
+    ...current,
+    data: remaining > 0 ? current.data : ((serverRow ?? current.data) as OfflineEntity["data"]),
+    syncStatus: remaining > 0 ? current.syncStatus : "synced",
+    serverUpdatedAt,
+  } as OfflineEntity);
+}
+
 async function applyOperation(op: SyncOperation): Promise<"done" | "conflict" | "retry"> {
   const supabaseTable = getSupabaseTableName(op.table);
   const db = await getOfflineDb();
@@ -140,14 +184,7 @@ async function applyOperation(op: SyncOperation): Promise<"done" | "conflict" | 
         .select()
         .single();
       if (error) throw error;
-      if (entity) {
-        await db.put("entities", {
-          ...entity,
-          data,
-          syncStatus: "synced",
-          serverUpdatedAt: data?.updated_at ?? null,
-        } as OfflineEntity);
-      }
+      await applyServerRowToEntity(op, data);
       return "done";
     }
 
@@ -174,14 +211,7 @@ async function applyOperation(op: SyncOperation): Promise<"done" | "conflict" | 
         .select()
         .single();
       if (error) throw error;
-      if (entity) {
-        await db.put("entities", {
-          ...entity,
-          data,
-          syncStatus: "synced",
-          serverUpdatedAt: data?.updated_at ?? null,
-        } as OfflineEntity);
-      }
+      await applyServerRowToEntity(op, data);
       return "done";
     }
 
@@ -244,7 +274,12 @@ export async function processSyncQueue(
 ): Promise<SyncResult> {
   const result: SyncResult = { succeeded: 0, conflicted: 0, retried: 0 };
   const ops = await listPendingOperations(userId);
-  for (const op of ops) {
+  for (const queued of ops) {
+    // Relecture de l'opération juste avant de l'envoyer : une opération
+    // traitée plus tôt dans cette même boucle a pu la recaler
+    // (`rebasePendingOperationsForRecord`), et la liste ci-dessus est un
+    // instantané pris AVANT la boucle.
+    const op = (await getOperation(queued.id)) ?? queued;
     // `respectBackoff` sert un futur scheduler périodique automatique — les
     // déclencheurs actuels (retour réseau, bouton "Réessayer") sont des
     // événements ponctuels et doivent retenter immédiatement.
@@ -293,7 +328,10 @@ export async function resolveConflict(
         table: conflict.table,
         recordLocalId: conflict.recordLocalId,
         opType: "update",
-        payload: conflict.localData,
+        // La version locale gagne, mais un `update` ne réécrit jamais les
+        // colonnes du contrat (id/user_id/created_at/updated_at) : elles ne
+        // font pas partie de l'arbitrage et `updated_at` reste au serveur.
+        payload: buildUpdatePayload(conflict.localData),
         baseUpdatedAt: null, // conflit déjà arbitré par l'utilisateur : pas de nouvelle détection
       });
     }
