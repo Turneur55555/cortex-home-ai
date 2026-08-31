@@ -6,6 +6,7 @@ const supabase = supabaseTyped as any;
 import type { Json } from "@/integrations/supabase/types";
 import { getIsOnline } from "@/lib/offline/networkStatus";
 import { createOfflineRepository, hydrateEntitiesFromServer } from "@/lib/offline/repository";
+import { OFFLINE_FIRST_QUERY_OPTIONS } from "@/lib/offline/offlineQuery";
 
 // Repas enregistrés — modèles multi-aliments réutilisables en 1 tap.
 // Client typé : `saved_meals`/`saved_meal_items` et les RPC figurent dans
@@ -89,6 +90,7 @@ export function useSavedMeals() {
   const userId = user?.id ?? null;
 
   return useQuery({
+    ...OFFLINE_FIRST_QUERY_OPTIONS,
     queryKey: ["saved_meals", userId],
     enabled: !!userId,
     staleTime: 60_000,

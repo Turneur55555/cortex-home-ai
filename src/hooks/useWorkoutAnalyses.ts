@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { getIsOnline } from "@/lib/offline/networkStatus";
 import { createOfflineRepository, hydrateEntitiesFromServer } from "@/lib/offline/repository";
 import type { WorkoutAnalysis } from "@/components/fitness/WorkoutAnalysisContent";
+import { OFFLINE_FIRST_QUERY_OPTIONS } from "@/lib/offline/offlineQuery";
 
 // ============================================================
 // Lecture des bilans IA persistés — Phase C, lot V2 (§8.2 du doc de
@@ -53,6 +54,7 @@ export function useWorkoutAnalysisIndex() {
   const { user } = useAuth();
   const userId = user?.id ?? null;
   return useQuery({
+    ...OFFLINE_FIRST_QUERY_OPTIONS,
     queryKey: [...WORKOUT_ANALYSES_QUERY_ROOT, "index", userId],
     enabled: !!userId,
     staleTime: 30_000,
@@ -71,6 +73,7 @@ export function useStoredWorkoutAnalysis(workoutId: string | undefined) {
   const { user } = useAuth();
   const userId = user?.id ?? null;
   return useQuery({
+    ...OFFLINE_FIRST_QUERY_OPTIONS,
     queryKey: [...WORKOUT_ANALYSES_QUERY_ROOT, "detail", workoutId, userId],
     enabled: !!userId && !!workoutId,
     queryFn: async (): Promise<WorkoutAnalysis | null> => {

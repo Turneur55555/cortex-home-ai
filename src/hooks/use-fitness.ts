@@ -16,6 +16,7 @@ import { verifyExerciseRanksForSession } from "@/hooks/useVerifyExerciseRanksFor
 import type { ActiveGenericSegment } from "@/hooks/useGenericActiveSession";
 import { HYBRID_BLOCKS_KEY } from "@/hooks/useGenericActiveSession";
 import { ACTIVE_WORKOUT_CONFLICT_MESSAGE } from "@/lib/fitness/activeWorkoutGuard";
+import { OFFLINE_FIRST_QUERY_OPTIONS } from "@/lib/offline/offlineQuery";
 
 /**
  * Offline-first (cf. src/lib/offline/, CLAUDE.md) — Cœur Fitness (vague
@@ -267,8 +268,9 @@ export function useWorkouts() {
     // `getIsOnline()`). Le `networkMode: "online"` par défaut de TanStack
     // Query mettrait tout refetch (ex. après une mutation offline) EN PAUSE
     // hors connexion — l'écran resterait figé sur les anciennes données
-    // alors que du nouveau contenu vient d'être écrit localement.
-    networkMode: "always",
+    // alors que du nouveau contenu vient d'être écrit localement. Marqueur
+    // partagé depuis le chantier 3 (cf. lib/offline/offlineQuery.ts).
+    ...OFFLINE_FIRST_QUERY_OPTIONS,
     queryFn: async () => {
       if (!userId) return [];
       await refreshWorkoutsFromServer(userId);
@@ -787,7 +789,7 @@ export function useActiveWorkout() {
     // de la séance active (ajout/modif/suppression, terminer...) resterait
     // en pause hors connexion et l'écran n'afficherait jamais la séance
     // qu'on vient pourtant d'écrire localement.
-    networkMode: "always",
+    ...OFFLINE_FIRST_QUERY_OPTIONS,
     queryFn: async (): Promise<ActiveWorkout | null> => {
       if (!userId) return null;
       await refreshWorkoutsFromServer(userId);

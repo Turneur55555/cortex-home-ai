@@ -3886,3 +3886,73 @@ d'autre dans le fonctionnement de l'import.
   donc non affectée) / `npm run build` vert. Aucun autre fichier du pipeline d'import touché
   (parser/engine/db/handler inchangés) — correctif strictement scopé au nettoyage de légende, comme
   demandé.
+
+---
+
+## 31/08/2026 — Chantier 3 (audit du 30/08) : OFFLINE GLOBAL — CRIT-05 + MAJ-07
+
+Suite des chantiers 1 (sync queue, `086b84d`) et 2 (repository + contrat DB, `0196888`), tous deux
+déjà dans `main` et **non modifiés** ici.
+
+### CRIT-05 — les queries locales ne fonctionnaient pas hors ligne
+- **Cause racine n°1 (React Query)** : le défaut `networkMode: "online"` met une query EN PAUSE tant
+  que `navigator.onLine` est faux — sa `queryFn` n'est **jamais** appelée. Les queries offline-first
+  du projet (leur `queryFn` fait un refresh serveur best-effort gardé par `getIsOnline()` puis lit
+  `createOfflineRepository`) ne lisaient donc jamais IndexedDB hors connexion. Le cache React Query
+  n'étant **pas persisté** (aucun `persistQueryClient` dans le projet), un rechargement hors ligne =
+  cache vide = écrans bloqués en chargement alors que la donnée est sur l'appareil.
+- **Solution centrale** : `src/lib/offline/offlineQuery.ts` → `OFFLINE_FIRST_QUERY_OPTIONS`
+  (`networkMode: "always"` + `refetchOnReconnect: true` + `meta.offlineFirst`), étalé dans les
+  **22** queries capables de lire IndexedDB (sur 81 `useQuery` au total). Le **défaut global reste
+  online-only** (`src/lib/queryClient.ts`, extrait de `router.tsx` pour être testable) : les ~59
+  queries réellement online-only ne changent pas de comportement.
+- **PIÈGE TANSTACK À CONNAÎTRE** : `QueryClient.defaultQueryOptions` fait
+  `refetchOnReconnect ??= networkMode !== "always"` — marquer une query `"always"` **désactive**
+  silencieusement son refetch au retour réseau. Les 4 queries passées en `"always"` au chantier 1
+  ne se rafraîchissaient donc jamais à la reconnexion. D'où le `refetchOnReconnect: true` explicite
+  dans le marqueur partagé.
+- **Cause racine n°2 (Shopping List)** : `useShoppingList.ts` déterminait l'utilisateur via
+  `supabase.auth.getUser()`, qui fait **toujours** un GET `/auth/v1/user` réseau (auth-js `_getUser`).
+  Hors ligne → `user: null` → liste vide (`return []`) et toutes les écritures en « Non authentifié »,
+  alors que le repository n'a jamais besoin du réseau. Migré vers `useAuth()` (convention de tous les
+  autres hooks offline-first). Clés de query désormais scopées par `userId`.
+- **Garde-fou** : `offlineQueryConvention.test.ts` relit les sources et échoue si une `useQuery` lit
+  un repository sans le marqueur (liste dérivée du code, aucune seconde liste à maintenir) — vérifié
+  comme non-vacuous (retirer un marqueur fait rougir le test).
+
+### MAJ-07 — session offline confondue avec « plus authentifié »
+- **Cause racine exacte** (auth-js 2.105.4, `GoTrueClient.__loadSession`) : si le token d'accès
+  stocké est expiré, `getSession()` appelle `_callRefreshToken`. Hors ligne → `AuthRetryableFetchError`
+  → `getSession()` renvoie `{ session: null, error }` **alors que la session reste en stockage**
+  (`_callRefreshToken` ne purge que sur erreur NON retryable). `restoreAuthSession` renvoyait `null`
+  → `routes/_authenticated.tsx` → `redirect({ to: "/login" })`. Idem via `_emitInitialSession`, qui
+  émet `INITIAL_SESSION` **avec `null`** dans ce cas → `AuthProvider` effaçait l'utilisateur.
+- **Solution** : `src/lib/offlineAuthSession.ts` — `resolveSessionWithOfflineFallback()` (fonction
+  pure) distingue « pas vérifiable » (erreur fetch retryable / hors ligne) de « verdict serveur »
+  (`AuthApiError`). Quand la vérification est impossible, on relit la session que **Supabase lui-même**
+  a laissée en stockage. **Aucun JWT fabriqué ni prolongé** ; le stockage reste l'autorité (déconnexion
+  ou refresh token invalide → Supabase purge → `null` → /login comme avant). Repli **borné** par
+  `OFFLINE_SESSION_MAX_AGE_MS` (30 j après expiration).
+- **Déconnexion explicite hors ligne** : `supabase.auth.signOut()` retourne son erreur réseau AVANT
+  `_removeSession()` — la session restait stockée. `use-auth.tsx` efface désormais la session locale
+  (`clearStoredAuthSession()`) quand `signOut()` échoue, + `setSession(null)` systématique.
+- **Retour réseau** : `AuthProvider` s'abonne à `subscribeToNetworkStatus` et relance
+  `refreshAuthSession()` — uniquement si la session est absente/expirée sous 5 min (pas de rotation
+  de refresh token à chaque micro-coupure).
+
+### Retour réseau & polling
+- `useOfflineSync` invalide, après une passe de sync ayant réellement abouti, **uniquement** les
+  queries offline-first (`predicate: isOfflineFirstQuery`, `refetchType: "active"`) — jamais tout
+  le cache. `hydrateEntitiesFromServer` ne touchant pas les entités non `synced`, un refetch de
+  reconnexion arrivant avant la fin du drain n'écrase aucune modification locale en attente.
+- Polling 4 s **conservé** (seul mécanisme qui remonte à l'indicateur une écriture offline —
+  IndexedDB n'a pas d'événement de changement — et seul filet quand `navigator.onLine` ne bascule
+  jamais). Optimisation : **suspendu quand l'onglet est masqué**, passage complet immédiat au retour
+  au premier plan.
+
+### Nouveaux fichiers
+`src/lib/offline/offlineQuery.ts`, `src/lib/queryClient.ts`, `src/lib/offlineAuthSession.ts`,
++ tests `src/lib/offline/offlineQueries.test.ts` (QueryObserver + `onlineManager` réels),
+`src/lib/offline/offlineQueryConvention.test.ts`, `src/lib/offlineAuthSession.test.ts` (jsdom).
+Validation : `npx vitest run` 1575 passed / 60 skipped (vs 1550 avant, +25), `tsc --noEmit` propre,
+eslint 0 erreur sur les fichiers touchés. Aucune migration SQL, aucun autre chantier de l'audit touché.

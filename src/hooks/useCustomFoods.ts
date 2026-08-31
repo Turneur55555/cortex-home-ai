@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/use-auth";
 import type { FoodSuggestion } from "@/services/foodSuggestion";
 import { getIsOnline } from "@/lib/offline/networkStatus";
 import { createOfflineRepository, hydrateEntitiesFromServer } from "@/lib/offline/repository";
+import { OFFLINE_FIRST_QUERY_OPTIONS } from "@/lib/offline/offlineQuery";
 
 /**
  * Aliments personnels créés par l'utilisateur — table `food_custom_foods`.
@@ -33,6 +34,7 @@ export function useCustomFoods() {
   const userId = user?.id ?? null;
 
   return useQuery({
+    ...OFFLINE_FIRST_QUERY_OPTIONS,
     queryKey: ["custom_foods", userId],
     enabled: !!userId,
     staleTime: 60_000,

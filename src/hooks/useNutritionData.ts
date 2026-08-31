@@ -6,6 +6,7 @@ import { logActivity } from "@/lib/activity";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase/types";
 import { createOfflineRepository, hydrateEntitiesFromServer } from "@/lib/offline/repository";
 import { getIsOnline } from "@/lib/offline/networkStatus";
+import { OFFLINE_FIRST_QUERY_OPTIONS } from "@/lib/offline/offlineQuery";
 
 const supabase = supabaseTyped as any;
 
@@ -41,6 +42,7 @@ export function useNutrition(date: string) {
   const userId = user?.id ?? null;
 
   return useQuery({
+    ...OFFLINE_FIRST_QUERY_OPTIONS,
     queryKey: ["nutrition", date],
     enabled: !!userId,
     staleTime: 30_000,

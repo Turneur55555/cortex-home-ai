@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useNetworkStatus } from "@/hooks/useNetworkStatus";
+import { isOfflineFirstQuery } from "@/lib/offline/offlineQuery";
 import {
   discardBlockedOperation,
   listConflicts,
@@ -49,6 +51,7 @@ const POLL_INTERVAL_MS = 4_000;
 export function useOfflineSync(): OfflineSyncState {
   const { user } = useAuth();
   const isOnline = useNetworkStatus();
+  const queryClient = useQueryClient();
   const userId = user?.id ?? null;
 
   const [isSyncing, setIsSyncing] = useState(false);
@@ -86,14 +89,29 @@ export function useOfflineSync(): OfflineSyncState {
       syncingRef.current = true;
       setIsSyncing(true);
       try {
-        await processSyncQueue(userId, options);
+        const result = await processSyncQueue(userId, options);
+        // RAFRAÎCHISSEMENT CIBLÉ (chantier 3, phase 7) : une opération
+        // réellement partie au serveur a fait évoluer le store local
+        // (entité repassée en `synced`, valeurs serveur fusionnées, conflit
+        // archivé). Seules les queries offline-first lisent ce store : on
+        // n'invalide QUE celles-là (marqueur `meta.offlineFirst`, cf.
+        // `lib/offline/offlineQuery.ts`), et uniquement celles montées
+        // (`refetchType: "active"`). Pas de `invalidateQueries()` global :
+        // ça relancerait au retour réseau des dizaines de requêtes
+        // online-only sans aucun rapport avec la synchronisation.
+        if (result.succeeded > 0 || result.conflicted > 0) {
+          void queryClient.invalidateQueries({
+            predicate: isOfflineFirstQuery,
+            refetchType: "active",
+          });
+        }
       } finally {
         syncingRef.current = false;
         setIsSyncing(false);
         await refreshCounts();
       }
     },
-    [userId, isOnline, refreshCounts],
+    [userId, isOnline, refreshCounts, queryClient],
   );
 
   // Bouton "Réessayer" / retour réseau explicite : retente immédiatement,
@@ -114,13 +132,54 @@ export function useOfflineSync(): OfflineSyncState {
   // `processSyncQueue` mais jamais appelé automatiquement) pour ne pas
   // marteler le réseau après plusieurs échecs. `syncingRef` (partagé avec
   // `syncNow`) garantit qu'un seul passage tourne à la fois.
+  //
+  // OPTIMISATION (chantier 3, phase 8) : le balayage est suspendu quand
+  // l'onglet est masqué. Rien n'y est affiché (les compteurs ne servent qu'à
+  // l'indicateur) et l'utilisateur ne peut créer aucune opération : il n'y a
+  // donc rien à observer. Au retour au premier plan on refait immédiatement
+  // un passage complet (compteurs + tentative de sync), donc la convergence
+  // n'est jamais retardée — elle est même plus rapide qu'en attendant le
+  // prochain tick. Le polling lui-même est CONSERVÉ : il reste le seul
+  // mécanisme qui remonte à l'indicateur une écriture faite hors ligne
+  // (IndexedDB n'émet pas d'événement de changement) et le seul filet de
+  // sécurité quand `navigator.onLine` ne bascule jamais (blip 4G).
   useEffect(() => {
-    refreshCounts();
-    const interval = setInterval(() => {
+    let interval: ReturnType<typeof setInterval> | null = null;
+
+    const stop = () => {
+      if (interval) clearInterval(interval);
+      interval = null;
+    };
+    const tick = () => {
       refreshCounts();
       void attemptSync({ respectBackoff: true });
-    }, POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
+    };
+    const start = () => {
+      if (interval) return;
+      interval = setInterval(tick, POLL_INTERVAL_MS);
+    };
+    const isHidden = () => typeof document !== "undefined" && document.visibilityState === "hidden";
+
+    const onVisibilityChange = () => {
+      if (isHidden()) {
+        stop();
+        return;
+      }
+      tick();
+      start();
+    };
+
+    refreshCounts();
+    if (!isHidden()) start();
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVisibilityChange);
+    }
+    return () => {
+      stop();
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVisibilityChange);
+      }
+    };
   }, [refreshCounts, attemptSync]);
 
   // Retour réseau → on relance la queue automatiquement.

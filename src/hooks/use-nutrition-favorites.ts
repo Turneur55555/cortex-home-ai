@@ -4,6 +4,7 @@ import { supabase as supabaseTyped } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { createOfflineRepository, hydrateEntitiesFromServer } from "@/lib/offline/repository";
 import { getIsOnline } from "@/lib/offline/networkStatus";
+import { OFFLINE_FIRST_QUERY_OPTIONS } from "@/lib/offline/offlineQuery";
 const supabase = supabaseTyped as any;
 
 // Favoris nutritionnels — aliments/repas réutilisables en 1 tap.
@@ -37,6 +38,7 @@ export function useNutritionFavorites() {
   const userId = user?.id ?? null;
 
   return useQuery({
+    ...OFFLINE_FIRST_QUERY_OPTIONS,
     queryKey: [...FAVORITES_KEY, userId],
     enabled: !!userId,
     staleTime: 30_000,
