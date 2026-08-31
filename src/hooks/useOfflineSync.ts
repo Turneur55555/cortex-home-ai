@@ -2,22 +2,40 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 import {
+  discardBlockedOperation,
   listConflicts,
   processSyncQueue,
   resolveConflict as resolveConflictEngine,
+  retryBlockedOperation,
 } from "@/lib/offline/syncEngine";
-import { countPendingAndFailed } from "@/lib/offline/syncQueue";
-import type { ConflictRecord, ConflictResolutionStrategy } from "@/lib/offline/types";
+import { countPendingAndFailed, listAllOperations } from "@/lib/offline/syncQueue";
+import type {
+  ConflictRecord,
+  ConflictResolutionStrategy,
+  SyncOperation,
+} from "@/lib/offline/types";
 
 export interface OfflineSyncState {
   isOnline: boolean;
   isSyncing: boolean;
   pendingCount: number;
   failedCount: number;
+  /** Opérations en échec définitif : elles n'avanceront plus sans action explicite. */
+  blockedCount: number;
+  /**
+   * File complète (FIFO), pour que le panneau de synchronisation affiche
+   * l'état RÉEL de chaque action — statut, nombre de tentatives et surtout
+   * l'erreur exacte (`lastError`), au lieu d'un compteur anonyme.
+   */
+  operations: SyncOperation[];
   conflicts: ConflictRecord[];
   /** Force une tentative de synchronisation immédiate (bouton "Réessayer"). */
   syncNow: () => Promise<void>;
   resolveConflict: (conflictId: string, strategy: ConflictResolutionStrategy) => Promise<void>;
+  /** Remet une opération bloquée en file (action utilisateur explicite). */
+  retryOperation: (operationId: string) => Promise<void>;
+  /** Retire de la file une opération bloquée — la donnée locale est conservée. */
+  discardOperation: (operationId: string) => Promise<void>;
 }
 
 const POLL_INTERVAL_MS = 4_000;
@@ -36,6 +54,8 @@ export function useOfflineSync(): OfflineSyncState {
   const [isSyncing, setIsSyncing] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [failedCount, setFailedCount] = useState(0);
+  const [blockedCount, setBlockedCount] = useState(0);
+  const [operations, setOperations] = useState<SyncOperation[]>([]);
   const [conflicts, setConflicts] = useState<ConflictRecord[]>([]);
   const syncingRef = useRef(false);
 
@@ -43,16 +63,21 @@ export function useOfflineSync(): OfflineSyncState {
     if (!userId) {
       setPendingCount(0);
       setFailedCount(0);
+      setBlockedCount(0);
+      setOperations([]);
       setConflicts([]);
       return;
     }
-    const [counts, conflictList] = await Promise.all([
+    const [counts, conflictList, ops] = await Promise.all([
       countPendingAndFailed(userId),
       listConflicts(userId),
+      listAllOperations(userId),
     ]);
     setPendingCount(counts.pending);
     setFailedCount(counts.failed);
+    setBlockedCount(counts.blocked);
     setConflicts(conflictList);
+    setOperations(ops);
   }, [userId]);
 
   const attemptSync = useCallback(
@@ -115,5 +140,38 @@ export function useOfflineSync(): OfflineSyncState {
     [refreshCounts, isOnline, syncNow],
   );
 
-  return { isOnline, isSyncing, pendingCount, failedCount, conflicts, syncNow, resolveConflict };
+  // Actions explicites sur une opération bloquée (panneau de
+  // synchronisation) : « Réessayer quand même » la remet en file et relance
+  // la queue, « Retirer de la file » ne touche jamais à la donnée locale
+  // (cf. `discardBlockedOperation`).
+  const retryOperation = useCallback(
+    async (operationId: string) => {
+      await retryBlockedOperation(operationId);
+      await refreshCounts();
+      if (isOnline) await syncNow();
+    },
+    [refreshCounts, isOnline, syncNow],
+  );
+
+  const discardOperation = useCallback(
+    async (operationId: string) => {
+      await discardBlockedOperation(operationId);
+      await refreshCounts();
+    },
+    [refreshCounts],
+  );
+
+  return {
+    isOnline,
+    isSyncing,
+    pendingCount,
+    failedCount,
+    blockedCount,
+    operations,
+    conflicts,
+    syncNow,
+    resolveConflict,
+    retryOperation,
+    discardOperation,
+  };
 }

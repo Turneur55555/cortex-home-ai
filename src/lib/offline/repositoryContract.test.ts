@@ -96,8 +96,17 @@ interface FakePostgrestError {
   code: string;
 }
 
-/** Horloge serveur strictement croissante : le trigger `set_updated_at` pose `now()` à chaque UPDATE. */
-let serverClockMs = Date.parse("2026-08-31T10:00:00.000Z");
+/**
+ * Horloge serveur strictement croissante : le trigger `set_updated_at` pose
+ * `now()` à chaque UPDATE. Amorcée DEVANT l'horloge client (réinitialisée à
+ * chaque test, cf. `beforeEach`) — sinon un `create()`, qui horodate avec
+ * l'horloge client réelle, produirait un `updated_at` plus récent que le
+ * serveur simulé et le test dépendrait de l'heure à laquelle il tourne.
+ */
+let serverClockMs = Date.now();
+function resetServerClock(): void {
+  serverClockMs = Date.now() + 60_000;
+}
 function serverNow(): string {
   serverClockMs += 1_000;
   return new Date(serverClockMs).toISOString();
@@ -330,6 +339,7 @@ beforeEach(async () => {
   resetOfflineDbForTests();
   await clearAllOfflineDataForTests();
   serverStore.clear();
+  resetServerClock();
   receivedUpdates.length = 0;
   fakeSupabaseOpts.failNext = false;
   fakeSupabaseOpts.shoppingListWithoutCreatedAt = false;
@@ -369,14 +379,16 @@ describe("CRIT-02 — shopping_list respecte le contrat du repository offline", 
 
     const result = await processSyncQueue(USER_A);
     expect(result.succeeded).toBe(0);
-    expect(result.retried).toBe(1);
+    // Depuis le chantier 1, une erreur de schéma (PGRST204) est reconnue
+    // DÉFINITIVE : l'opération est figée en `blocked` et rendue visible,
+    // au lieu d'être retentée à l'infini. Avant les deux chantiers, c'était
+    // exactement le symptôme prod "N actions en échec".
+    expect(result.blocked).toBe(1);
 
     const [op] = await listAllOperations(USER_A);
-    expect(op.status).toBe("failed");
-    expect(op.lastError).toContain("PGRST204");
+    expect(op.status).toBe("blocked");
     expect(op.lastError).toContain("created_at");
-    // L'opération reste en queue et serait retentée en boucle : exactement
-    // le symptôme prod "N actions en échec".
+    expect(op.lastErrorCode).toBe("PGRST204");
     expect(serverStore.get("shopping_list")?.size ?? 0).toBe(0);
   });
 

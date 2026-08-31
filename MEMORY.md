@@ -3,6 +3,51 @@
 ## Dernière mise à jour
 2026-08-31
 
+## Chantier 2 — validation complémentaire + intégration du chantier 1 (2026-08-31)
+Demandée par Nathan avant fusion. `main` portait déjà le chantier 1 (`086b84d`) : la compatibilité a
+donc été testée pour de vrai, en fusionnant `main` DANS la branche du chantier 2.
+- **4 conflits de fusion, tous dans `syncEngine.ts`** (`syncQueue.ts` s'est fusionné tout seul) :
+  imports (union), signature `applyOperation` (`"blocked"` du chantier 1 + helper
+  `applyServerRowToEntity` du chantier 2), boucle `processSyncQueue`, et `resolveConflict`.
+- **Simplification trouvée à la fusion** : la relecture d'opération ajoutée par le chantier 2
+  (`getOperation`) était REDONDANTE — `claimOperation()` (chantier 1) relit déjà l'opération de façon
+  atomique et renvoie l'état persisté, `baseUpdatedAt` recalé compris. `getOperation` supprimé.
+- **`resolveConflict('keep-local')`** combine désormais les deux : `opType` conservé (MAJ-05, un
+  `delete` ne ressuscite pas la ligne) ET payload assaini pour un `update`
+  (`opType === "delete" ? null : buildUpdatePayload(conflict.localData)`).
+- **`rebasePendingOperationsForRecord` durcie pour la machine d'état du chantier 1** : recalage
+  restreint à `REBASABLE_STATUSES` (pending/failed/syncing/blocked), relecture dans une transaction
+  `readwrite` et écriture du SEUL champ `baseUpdatedAt` — jamais le statut, le payload ni le
+  `retryCount`, qui appartiennent à la sync queue. Une opération `blocked` est donc recalée (si
+  l'utilisateur la réarme, elle repart de l'état serveur courant) sans être débloquée.
+- **Changement de comportement assumé et testé** : tant qu'une opération reste en attente (y compris
+  `blocked`) pour un enregistrement, l'entité locale ne repasse plus `synced` et garde sa donnée
+  locale. Avant, une synchronisation réussie marquait `synced` même s'il restait une modification
+  locale non partie — l'hydratation serveur pouvait alors l'écraser.
+- **Faux positif du garde-fou corrigé** : `syncQueueResilience.test.ts` (chantier 1) appelle
+  `createOfflineRepository(TABLE)` via une constante. Le contrôle résout désormais les
+  `const NOM = "littéral"` du même fichier — il ne doit pas imposer un style d'écriture.
+- **Bug corrigé dans MES tests** : l'horloge du faux serveur de `repositoryContract.test.ts` était
+  figée au 31/08 10:00 UTC ; passé cette heure, le test `updated_at` échouait selon l'heure
+  d'exécution. Horloge désormais amorcée devant l'horloge client à chaque test.
+- **Nouveau fichier `src/lib/offline/rebasePendingOperations.test.ts` (17 cas)** : CREATE→UPDATE→sync,
+  UPDATE1→sync→UPDATE2, deux UPDATE offline successifs, conflit réel multi-appareils, **conflit
+  survenant APRÈS un recalage** (écriture concurrente injectée dans la fenêtre exacte), UPDATE→erreur
+  →retry, `blocked` puis `retryBlockedOperation`, `discardBlockedOperation`, coexistence
+  `claimOperation`/`syncing` récent/`syncing` orphelin, et tests unitaires directs du recalage
+  (`create` jamais recalé, aucune autre ligne touchée, seul `baseUpdatedAt` réécrit).
+- **`types.ts` vérifié pour de bon** : régénéré via le générateur officiel (Management API, même
+  endpoint que `supabase gen types`) et comparé au fichier du dépôt — `diff` vide, identique octet
+  pour octet. Les 3 lignes ajoutées à la main étaient exactes.
+- **Base de production** : le schéma porte bien les deux changements (19/19 tables offline conformes,
+  19/19 avec trigger `updated_at`), mais les versions `20260831090000`/`20260831091000` ne sont PAS
+  encore inscrites dans `supabase_migrations.schema_migrations` — normal, c'est `migrate.yml` qui les
+  inscrira au merge en les rejouant (idempotentes). Aucune autre table touchée.
+- **Validation** : `npm test` 1550 passed / 60 skipped / 0 échec, `npx tsc --noEmit` 0 erreur,
+  `eslint .` 1349 problèmes — chiffre IDENTIQUE à `origin/main`, donc zéro warning ajouté. Aucun test
+  du chantier 1 modifié ; seul `offlineSync.test.ts` a changé (16 tests avant/après, uniquement le nom
+  de table fictive remplacé par une table réelle).
+
 ## Chantier 2 — contrat repository offline ⇄ tables Supabase (2026-08-31, branche `claude/cortex-offline-repository-contract-4dwf9i`)
 Audit technique du 30/08 : CRIT-02 (`shopping_list` incompatible avec `createOfflineRepository`),
 MAJ-01 (`update()` renvoyait toute la ligne et pouvait écraser des colonnes calculées serveur),
@@ -59,6 +104,58 @@ tables offline sans trigger `set_updated_at`, et absence de garde-fou automatis�
   sur les fichiers touchés. Les deux migrations ont été appliquées à la base en direct (MCP Supabase)
   pour que `types.ts` reste conforme et que la CI soit verte sur la branche ; `migrate.yml` les
   rejouera sans effet au merge (idempotentes).
+## Sync Queue — machine d'état robuste (récupération, concurrence, conflits DELETE, erreurs visibles) (2026-08-31, branche `claude/sync-queue-security-11zyiu`)
+Chantier 1 de l'audit technique du 30/08/2026 (CRIT-01, MAJ-05, MAJ-11, dette
+`NON_RETRYABLE_PG_ERROR_CODES`, protection anti-traitement concurrent). Aucun autre chantier de
+l'audit traité, aucun module métier modifié.
+- **Nouvel état `blocked`** (`types.ts`, `SyncOpStatus` = `pending | syncing | failed | blocked |
+  done`) : échec DÉFINITIF identifié (payload/schéma invalide). Plus jamais retenté
+  automatiquement (exclu de `listPendingOperations`), mais reste visible avec son erreur et attend
+  une action utilisateur. Le cycle de vie complet est documenté en tête de `types.ts`.
+- **CRIT-01 — reprise des orphelines** (`syncQueue.ts`) : `STALE_SYNCING_MS = 60 s` (justification du
+  seuil dans le code : au plus 2 aller-retours réseau par opération, `lastAttemptAt` réécrit à chaque
+  claim, très au-dessus du poll de 4 s de `useOfflineSync`). `reclaimStaleSyncingOperations(userId)`
+  remet en `pending` toute opération `syncing` plus vieille que ce seuil (ou sans `lastAttemptAt` —
+  écrite par le moteur précédent), en incrémentant `retryCount` et en écrivant un `lastError` lisible
+  (« Synchronisation interrompue… »). Appelée en tête de chaque `processSyncQueue`. Rien n'est jamais
+  supprimé : une orpheline est REPRISE.
+- **Concurrence** : `claimOperation(id)` prend possession de l'opération dans UNE seule transaction
+  IndexedDB `readwrite` (get+put), que le navigateur sérialise entre toutes les connexions
+  (onglets/PWA) → deux instances ne peuvent pas envoyer la même opération. La seconde reçoit `null`
+  (compté dans `SyncResult.skipped`), pas de deadlock, FIFO et idempotence inchangés. `syncingRef`
+  du hook reste la protection intra-instance.
+- **MAJ-05 — conflits DELETE** : `ConflictRecord.opType` (nouveau champ, optionnel au typage pour les
+  conflits déjà persistés = relus comme `update`). `resolveConflict("keep-local")` ré-enfile
+  désormais une opération du MÊME type : un conflit né d'un `delete` repart en `delete`
+  (payload `null`, tombstone local conservé) — la ligne ne ressuscite plus. `keep-server` inchangé.
+- **`NON_RETRYABLE_PG_ERROR_CODES` réellement effectif** (nouveau module pur
+  `src/lib/offline/syncErrors.ts` : extraction/format/classification + libellés FR) : les codes
+  structurels (42703, 42P10, 23502, 23514, 22P02, PGRST204) passent l'opération en `blocked` dès le
+  premier échec. **Nuance importante découverte via les tests existants** : `23503`
+  (foreign_key_violation) est le cas NORMAL d'une file FIFO parent→enfant (`workout` → `exercise` →
+  `exercise_set`) quand le parent a échoué sur un blip réseau — il reste donc retryable TANT QUE la
+  file contient une autre opération (`DEPENDENCY_PG_ERROR_CODES` + `hasOtherQueuedOperations`), et ne
+  bloque que lorsqu'il est seul en file (plus rien ne peut créer le parent) : la boucle infinie du
+  bug prod « 31 en échec » s'arrête, sans casser la reprise FIFO légitime.
+- **MAJ-11 — erreurs visibles** : `SyncOperation.lastErrorCode` (nouveau) + `useOfflineSync` expose
+  `operations`, `blockedCount`, `retryOperation`, `discardOperation`. `SyncQueueSheet` liste chaque
+  action (bloquées d'abord, puis échecs, puis le reste, 20 max) avec son état explicite — « Action en
+  attente / nouvelle tentative automatique », « Échec temporaire / nouvelle tentative prévue »,
+  « Action bloquée » + raison réelle (libellé FR du code, sinon message serveur exact — jamais un
+  message générique) + détail technique. `SyncStatusIndicator` gagne l'état « Action bloquée ».
+- **Actions utilisateur** (`syncEngine.ts`) : `retryBlockedOperation` (remet en `pending`) et
+  `discardBlockedOperation` (retire l'opération de la file, confirmation `AlertDialog` côté UI). Le
+  discard ne supprime JAMAIS la donnée métier locale : l'entité passe en `syncStatus: "failed"`,
+  reste visible et n'est pas écrasée par une hydratation ultérieure.
+- **Ré-armement automatique sur correction** : `updateOperationPayload` remet une opération
+  `blocked` en `pending` — le verdict portait sur un payload précis, et l'utilisateur vient d'en
+  écrire un nouveau (ex. champ obligatoire renseigné). `lastError`/`retryCount` conservés ; une
+  seule tentative par correction, donc pas de boucle.
+- **Tests** : nouveau `src/lib/offline/syncQueueResilience.test.ts` (21 tests) — syncing récent non
+  repris, orpheline reprise, interruption complète, claim concurrent, FIFO préservé, conflit
+  UPDATE/DELETE + legacy sans `opType`, erreur réseau retryable, erreur non retryable bloquée et non
+  rebouclée, FK retryable puis bloquante, ré-armement sur correction, `lastError` exposé. Suite
+  complète : 1508 tests verts, `tsc --noEmit` propre, aucun test offline existant modifié.
 
 ## "Proposer des variantes" (module Recettes) — génération IA en 1 appel (2026-08-09, branche `claude/recipe-variants-feature-r88ujt`)
 Demande : dans `RecipeDetailSheet`, bouton "✨ Proposer des variantes" → 3 choix (🥛 Sans produits

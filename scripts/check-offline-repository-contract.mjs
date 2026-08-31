@@ -57,6 +57,20 @@ export const OFFLINE_CONTRACT_COLUMNS = ["id", "user_id", "created_at", "updated
  * @param {{ path: string, content: string }[]} files
  * @returns {{ table: string, source: string }[]}
  */
+/**
+ * Constantes `const NOM = "littéral"` déclarées dans le même fichier —
+ * `createOfflineRepository(TABLE)` est un style parfaitement légitime
+ * (utilisé par `syncQueueResilience.test.ts`), le contrôle doit le résoudre
+ * plutôt qu'imposer le littéral en ligne.
+ */
+function collectStringConstants(content) {
+  const constants = new Map();
+  for (const match of content.matchAll(/\bconst\s+(\w+)\s*(?::[^=]+)?=\s*["'`]([^"'`]+)["'`]/g)) {
+    constants.set(match[1], match[2]);
+  }
+  return constants;
+}
+
 export function extractOfflineRepositoryTables(files) {
   const usages = [];
   const unresolved = [];
@@ -68,10 +82,25 @@ export function extractOfflineRepositoryTables(files) {
   const callPattern = /(\bfunction\s+)?createOfflineRepository\s*(?:<[^<>()]*>)?\s*\(([^)]*)\)/g;
   const stringPattern = /["'`]([^"'`]+)["'`]/g;
 
+  const identifierPattern = /^\s*([A-Za-z_$][\w$]*)\s*(?:,\s*([A-Za-z_$][\w$]*)\s*)?$/;
+
   for (const file of files) {
+    const constants = collectStringConstants(file.content);
     for (const call of file.content.matchAll(callPattern)) {
       if (call[1]) continue; // déclaration, pas un appel
-      const literals = [...call[2].matchAll(stringPattern)].map((m) => m[1]);
+      let literals = [...call[2].matchAll(stringPattern)].map((m) => m[1]);
+
+      // Argument(s) passé(s) par constante locale : on les résout.
+      if (literals.length === 0) {
+        const byIdentifier = identifierPattern.exec(call[2]);
+        if (byIdentifier) {
+          const resolved = [byIdentifier[1], byIdentifier[2]]
+            .filter(Boolean)
+            .map((name) => constants.get(name));
+          if (resolved.length > 0 && resolved.every(Boolean)) literals = resolved;
+        }
+      }
+
       if (literals.length === 0) {
         // Nom de table calculé : ce contrôle ne peut rien en dire, et le
         // laisser passer silencieusement rouvrirait exactement le trou qu'il

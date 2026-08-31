@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AlertTriangle, Check, CloudOff, Loader2, RefreshCw, WifiOff } from "lucide-react";
+import { AlertTriangle, Ban, Check, CloudOff, Loader2, RefreshCw, WifiOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useOfflineSync } from "@/hooks/useOfflineSync";
 import { SyncQueueSheet } from "@/components/shared/SyncQueueSheet";
@@ -7,15 +7,19 @@ import { SyncQueueSheet } from "@/components/shared/SyncQueueSheet";
 /**
  * Indicateur de statut de sync — discret, cohérent avec le reste de l'UI
  * premium (shadcn/ui). États : En ligne / Hors connexion / Synchronisation…
- * / Synchronisé / Action en attente / Conflit à résoudre. Un tap ouvre le
- * panneau des opérations en attente (`SyncQueueSheet`) quand il y a
- * quelque chose à montrer.
+ * / Synchronisé / Action en attente / Action bloquée / Conflit à résoudre.
+ * Un tap ouvre le panneau des opérations en attente (`SyncQueueSheet`)
+ * quand il y a quelque chose à montrer.
  */
 export function SyncStatusIndicator() {
   const sync = useOfflineSync();
   const [open, setOpen] = useState(false);
 
-  const hasWork = sync.pendingCount > 0 || sync.failedCount > 0 || sync.conflicts.length > 0;
+  const hasWork =
+    sync.pendingCount > 0 ||
+    sync.failedCount > 0 ||
+    sync.blockedCount > 0 ||
+    sync.conflicts.length > 0;
 
   // Rien à signaler et en ligne : pas d'indicateur (discret par défaut).
   if (sync.isOnline && !hasWork && !sync.isSyncing) return null;
@@ -27,6 +31,12 @@ export function SyncStatusIndicator() {
   if (sync.conflicts.length > 0) {
     label = "Conflit à résoudre";
     icon = <AlertTriangle className="h-3.5 w-3.5" />;
+    tone = "danger";
+  } else if (sync.blockedCount > 0) {
+    // Échec définitif : il n'y a plus de retry automatique à attendre, seule
+    // une action de l'utilisateur débloquera la situation — on le dit.
+    label = "Action bloquée";
+    icon = <Ban className="h-3.5 w-3.5" />;
     tone = "danger";
   } else if (!sync.isOnline) {
     label = "Hors connexion";
