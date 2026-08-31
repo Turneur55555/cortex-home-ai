@@ -269,6 +269,48 @@ describe("MAJ-07 — restoreAuthSession / refreshAuthSession", () => {
     await expect(refreshAuthSession("test:refresh-invalid")).resolves.toBeNull();
   });
 
+  it("TEST 6bis — hors ligne, `getSession()` qui ne répond pas ne bloque plus l'écran", async () => {
+    // Reproduit le comportement réel d'auth-js hors ligne : `getSession()`
+    // déclenche un refresh qui réessaie en backoff pendant ~30 s avant de
+    // rendre la main. Constaté en navigateur : la route protégée restait en
+    // `beforeLoad` et l'écran affichait « Chargement… » tout ce temps.
+    const session = makeSession();
+    storeSession(session);
+    let resolveLate: (v: unknown) => void = () => undefined;
+    auth.getSession.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveLate = resolve;
+        }),
+    );
+    setOnline(false);
+
+    const started = Date.now();
+    const restored = await restoreAuthSession("test:slow-offline", 50);
+    const elapsed = Date.now() - started;
+
+    expect(restored?.user.id).toBe("user-1");
+    expect(elapsed).toBeLessThan(2000);
+    // L'appel Supabase n'est pas annulé : il poursuit sa route en arrière-plan.
+    resolveLate({ data: { session: null }, error: new FakeAuthRetryableFetchError() });
+  });
+
+  it("TEST 6ter — EN LIGNE, une réponse lente est toujours attendue (aucun changement)", async () => {
+    const session = makeSession();
+    storeSession(session);
+    auth.getSession.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          setTimeout(() => resolve({ data: { session }, error: null }), 120);
+        }),
+    );
+    setOnline(true);
+
+    // Le délai imparti (50 ms) est dépassé : en ligne, on continue d'attendre
+    // la vraie réponse de Supabase plutôt que de se rabattre sur le stockage.
+    await expect(restoreAuthSession("test:slow-online", 50)).resolves.toEqual(session);
+  });
+
   it("TEST 11 — déconnexion explicite : la session locale est réellement effacée", async () => {
     storeSession(makeSession());
     expect(readStoredAuthSession()).not.toBeNull();

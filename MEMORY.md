@@ -3950,9 +3950,26 @@ déjà dans `main` et **non modifiés** ici.
   jamais). Optimisation : **suspendu quand l'onglet est masqué**, passage complet immédiat au retour
   au premier plan.
 
+### Validation manuelle en navigateur (31/08/2026) — 1 correctif supplémentaire
+Validation Playwright sur le build de production réel (service worker + shell offline du projet),
+backend Supabase SIMULÉ par interception réseau (l'hôte réel est bloqué par la politique d'egress ;
+aucune donnée de production touchée). Elle a révélé un défaut que les tests unitaires ne pouvaient
+pas voir :
+- **Hors ligne + token expiré, l'écran restait sur « Chargement… »** (jusqu'à ~30 s, davantage avec
+  le verrou d'auth). Cause : `supabase.auth.getSession()` déclenche `_refreshAccessToken`, qui
+  **réessaie en backoff exponentiel tant que le prochain essai tient dans
+  `AUTO_REFRESH_TICK_DURATION_MS` (30 s)** avant de rendre la main. Le repli MAJ-07, situé APRÈS
+  l'`await`, n'était donc jamais atteint à temps et `_authenticated.beforeLoad` restait bloqué.
+- **Correctif** : `getSessionWithin(waitMs)` borne l'attente dans `restoreAuthSession`. **Hors ligne
+  uniquement**, on repart alors de la session persistée ; **en ligne, on continue d'attendre la vraie
+  réponse de Supabase** (aucun changement de comportement, jamais de session acceptée sans que le
+  serveur ait pu se prononcer). L'appel n'est pas annulé : auth-js poursuit son refresh en arrière-plan.
+- Vérifié en navigateur après correctif : l'app s'affiche, journal `session:offline-fallback` →
+  `protected-route:session-ok`, aucune redirection /login.
+
 ### Nouveaux fichiers
 `src/lib/offline/offlineQuery.ts`, `src/lib/queryClient.ts`, `src/lib/offlineAuthSession.ts`,
 + tests `src/lib/offline/offlineQueries.test.ts` (QueryObserver + `onlineManager` réels),
 `src/lib/offline/offlineQueryConvention.test.ts`, `src/lib/offlineAuthSession.test.ts` (jsdom).
-Validation : `npx vitest run` 1575 passed / 60 skipped (vs 1550 avant, +25), `tsc --noEmit` propre,
+Validation : `npx vitest run` 1577 passed / 60 skipped (vs 1550 avant, +27), `tsc --noEmit` propre,
 eslint 0 erreur sur les fichiers touchés. Aucune migration SQL, aucun autre chantier de l'audit touché.

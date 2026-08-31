@@ -44,6 +44,38 @@ export function applyOfflineFallback(
 }
 
 /**
+ * Marqueur interne : `getSession()` n'a pas répondu dans le délai imparti.
+ * Ce n'est PAS une erreur d'authentification — juste une absence de réponse.
+ */
+const NO_ANSWER = Symbol("auth:no-answer");
+
+/**
+ * Attend `getSession()` au plus `waitMs`. Hors ligne avec un token expiré,
+ * `getSession()` déclenche `_callRefreshToken` → `_refreshAccessToken`, qui
+ * réessaie en backoff exponentiel TANT QUE le prochain essai tient dans
+ * `AUTO_REFRESH_TICK_DURATION_MS` (30 s, cf. auth-js) : l'appel peut donc
+ * bloquer ~30 s, et le verrou d'auth sérialise les appels suivants derrière
+ * lui. Sans borne, la route protégée reste en `beforeLoad` et l'écran
+ * affiche « Chargement… » pendant tout ce temps — constaté en navigateur
+ * réel le 31/08/2026. On ne l'ANNULE pas (auth-js poursuit son refresh en
+ * arrière-plan et émettra `TOKEN_REFRESHED` s'il aboutit) : on cesse
+ * seulement d'attendre.
+ */
+async function getSessionWithin(waitMs: number) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      supabase.auth.getSession(),
+      new Promise<typeof NO_ANSWER>((resolve) => {
+        timer = setTimeout(() => resolve(NO_ANSWER), waitMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/**
  * Récupère la session courante. Hors ligne avec un token expiré,
  * `supabase.auth.getSession()` renvoie `{ session: null, error }` alors que
  * la session reste stockée : on retombe alors sur la session persistée
@@ -53,7 +85,24 @@ export function applyOfflineFallback(
 export async function restoreAuthSession(source: string, waitMs = 900): Promise<Session | null> {
   logAuthEvent("session:restore:start", { source });
   try {
-    const first = await supabase.auth.getSession();
+    const raced = await getSessionWithin(waitMs);
+    if (raced === NO_ANSWER) {
+      // Pas de réponse dans le délai. HORS LIGNE UNIQUEMENT, on repart de la
+      // session persistée : c'est le cas MAJ-07 (impossible de vérifier), et
+      // laisser l'écran bloqué reviendrait à rendre l'app inutilisable hors
+      // connexion. EN LIGNE, on continue d'attendre la vraie réponse — aucun
+      // changement de comportement, et surtout aucune session acceptée sans
+      // que Supabase ait pu se prononcer alors qu'il en a les moyens.
+      if (!getIsOnline()) {
+        const fallback = applyOfflineFallback(source, "getsession-timeout", null);
+        if (fallback.session) return fallback.session;
+      }
+      logAuthEvent("session:restore:slow", { source, waitMs, online: getIsOnline() });
+      const late = await supabase.auth.getSession();
+      if (late.data.session) return late.data.session;
+      return applyOfflineFallback(source, "getsession-late", null, late.error).session;
+    }
+    const first = raced;
     if (first.error) {
       logAuthEvent("session:restore:error", { source, error: first.error });
       const fallback = applyOfflineFallback(source, "storage-error", null, first.error);
