@@ -1,4 +1,4 @@
-import type { ConflictRecord, OfflineEntity } from "./types";
+import type { ConflictRecord, OfflineEntity, SyncOpType } from "./types";
 
 /**
  * Détecteur de conflit local/serveur — appelé par le sync engine avant
@@ -45,6 +45,13 @@ export function buildConflictRecord<T>(input: {
   userId: string;
   table: string;
   recordLocalId: string;
+  /**
+   * Type de l'opération locale à l'origine du conflit. Conservé tel quel
+   * dans le `ConflictRecord` : « garder ma version » doit rejouer la MÊME
+   * intention (un `delete` reste un `delete`, il ne se transforme jamais en
+   * `update` qui ferait ressusciter la ligne).
+   */
+  opType: SyncOpType;
   localData: T;
   serverData: T;
   localUpdatedAt: string;
@@ -55,6 +62,7 @@ export function buildConflictRecord<T>(input: {
     userId: input.userId,
     table: input.table,
     recordLocalId: input.recordLocalId,
+    opType: input.opType,
     localData: input.localData,
     serverData: input.serverData,
     localUpdatedAt: input.localUpdatedAt,

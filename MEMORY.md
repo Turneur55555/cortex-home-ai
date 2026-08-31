@@ -1,7 +1,60 @@
 # Mémoire projet — cortex-home-ai
 
 ## Dernière mise à jour
-2026-08-09
+2026-08-31
+
+## Sync Queue — machine d'état robuste (récupération, concurrence, conflits DELETE, erreurs visibles) (2026-08-31, branche `claude/sync-queue-security-11zyiu`)
+Chantier 1 de l'audit technique du 30/08/2026 (CRIT-01, MAJ-05, MAJ-11, dette
+`NON_RETRYABLE_PG_ERROR_CODES`, protection anti-traitement concurrent). Aucun autre chantier de
+l'audit traité, aucun module métier modifié.
+- **Nouvel état `blocked`** (`types.ts`, `SyncOpStatus` = `pending | syncing | failed | blocked |
+  done`) : échec DÉFINITIF identifié (payload/schéma invalide). Plus jamais retenté
+  automatiquement (exclu de `listPendingOperations`), mais reste visible avec son erreur et attend
+  une action utilisateur. Le cycle de vie complet est documenté en tête de `types.ts`.
+- **CRIT-01 — reprise des orphelines** (`syncQueue.ts`) : `STALE_SYNCING_MS = 60 s` (justification du
+  seuil dans le code : au plus 2 aller-retours réseau par opération, `lastAttemptAt` réécrit à chaque
+  claim, très au-dessus du poll de 4 s de `useOfflineSync`). `reclaimStaleSyncingOperations(userId)`
+  remet en `pending` toute opération `syncing` plus vieille que ce seuil (ou sans `lastAttemptAt` —
+  écrite par le moteur précédent), en incrémentant `retryCount` et en écrivant un `lastError` lisible
+  (« Synchronisation interrompue… »). Appelée en tête de chaque `processSyncQueue`. Rien n'est jamais
+  supprimé : une orpheline est REPRISE.
+- **Concurrence** : `claimOperation(id)` prend possession de l'opération dans UNE seule transaction
+  IndexedDB `readwrite` (get+put), que le navigateur sérialise entre toutes les connexions
+  (onglets/PWA) → deux instances ne peuvent pas envoyer la même opération. La seconde reçoit `null`
+  (compté dans `SyncResult.skipped`), pas de deadlock, FIFO et idempotence inchangés. `syncingRef`
+  du hook reste la protection intra-instance.
+- **MAJ-05 — conflits DELETE** : `ConflictRecord.opType` (nouveau champ, optionnel au typage pour les
+  conflits déjà persistés = relus comme `update`). `resolveConflict("keep-local")` ré-enfile
+  désormais une opération du MÊME type : un conflit né d'un `delete` repart en `delete`
+  (payload `null`, tombstone local conservé) — la ligne ne ressuscite plus. `keep-server` inchangé.
+- **`NON_RETRYABLE_PG_ERROR_CODES` réellement effectif** (nouveau module pur
+  `src/lib/offline/syncErrors.ts` : extraction/format/classification + libellés FR) : les codes
+  structurels (42703, 42P10, 23502, 23514, 22P02, PGRST204) passent l'opération en `blocked` dès le
+  premier échec. **Nuance importante découverte via les tests existants** : `23503`
+  (foreign_key_violation) est le cas NORMAL d'une file FIFO parent→enfant (`workout` → `exercise` →
+  `exercise_set`) quand le parent a échoué sur un blip réseau — il reste donc retryable TANT QUE la
+  file contient une autre opération (`DEPENDENCY_PG_ERROR_CODES` + `hasOtherQueuedOperations`), et ne
+  bloque que lorsqu'il est seul en file (plus rien ne peut créer le parent) : la boucle infinie du
+  bug prod « 31 en échec » s'arrête, sans casser la reprise FIFO légitime.
+- **MAJ-11 — erreurs visibles** : `SyncOperation.lastErrorCode` (nouveau) + `useOfflineSync` expose
+  `operations`, `blockedCount`, `retryOperation`, `discardOperation`. `SyncQueueSheet` liste chaque
+  action (bloquées d'abord, puis échecs, puis le reste, 20 max) avec son état explicite — « Action en
+  attente / nouvelle tentative automatique », « Échec temporaire / nouvelle tentative prévue »,
+  « Action bloquée » + raison réelle (libellé FR du code, sinon message serveur exact — jamais un
+  message générique) + détail technique. `SyncStatusIndicator` gagne l'état « Action bloquée ».
+- **Actions utilisateur** (`syncEngine.ts`) : `retryBlockedOperation` (remet en `pending`) et
+  `discardBlockedOperation` (retire l'opération de la file, confirmation `AlertDialog` côté UI). Le
+  discard ne supprime JAMAIS la donnée métier locale : l'entité passe en `syncStatus: "failed"`,
+  reste visible et n'est pas écrasée par une hydratation ultérieure.
+- **Ré-armement automatique sur correction** : `updateOperationPayload` remet une opération
+  `blocked` en `pending` — le verdict portait sur un payload précis, et l'utilisateur vient d'en
+  écrire un nouveau (ex. champ obligatoire renseigné). `lastError`/`retryCount` conservés ; une
+  seule tentative par correction, donc pas de boucle.
+- **Tests** : nouveau `src/lib/offline/syncQueueResilience.test.ts` (21 tests) — syncing récent non
+  repris, orpheline reprise, interruption complète, claim concurrent, FIFO préservé, conflit
+  UPDATE/DELETE + legacy sans `opType`, erreur réseau retryable, erreur non retryable bloquée et non
+  rebouclée, FK retryable puis bloquante, ré-armement sur correction, `lastError` exposé. Suite
+  complète : 1508 tests verts, `tsc --noEmit` propre, aucun test offline existant modifié.
 
 ## "Proposer des variantes" (module Recettes) — génération IA en 1 appel (2026-08-09, branche `claude/recipe-variants-feature-r88ujt`)
 Demande : dans `RecipeDetailSheet`, bouton "✨ Proposer des variantes" → 3 choix (🥛 Sans produits
