@@ -49,17 +49,82 @@ function isDueForRetry(op: SyncOperation): boolean {
   return Date.now() - new Date(op.lastAttemptAt).getTime() >= backoff;
 }
 
+/**
+ * Délai au-delà duquel un aller-retour Supabase est considéré SANS RÉPONSE.
+ *
+ * Pourquoi c'est indispensable (bug prod du 01/09/2026, file « Modification ·
+ * Exercises » qui s'accumule) : `@supabase/supabase-js` ne pose AUCUN
+ * `AbortSignal` ni timeout sur ses requêtes, et chaque appel PostgREST
+ * commence par un `await auth.getSession()` (cf. `SupabaseClient
+ * ._getAccessToken`) AVANT même le fetch HTTP. Sur une socket morte — cas
+ * normal en réseau mobile, où `navigator.onLine` reste `true` — la promesse
+ * ne se règle jamais : ni résultat, ni erreur. `applyOperation` reste alors
+ * suspendu, `processSyncQueue` ne rend plus la main, et le verrou de
+ * ré-entrance de `useOfflineSync` n'est jamais relâché : plus AUCUNE
+ * opération ne part jusqu'au rechargement de l'app, et tout ce que
+ * l'utilisateur fait ensuite s'empile en `pending`.
+ *
+ * Choix du seuil (15 s), à partir du fonctionnement réel du moteur :
+ * - nettement SOUS `STALE_SYNCING_MS` (60 s, cf. `syncQueue.ts`) : une
+ *   opération sans réponse redevient `failed` (donc reprise par le backoff
+ *   normal) bien avant que le mécanisme d'orphelines n'ait à s'en mêler —
+ *   les deux filets ne se marchent jamais dessus ;
+ * - nettement AU-DESSUS d'un aller-retour PostgREST réel, même sur un réseau
+ *   mobile très dégradé : on ne coupe jamais une requête qui allait aboutir.
+ * Un dépassement n'annule PAS la requête (pas d'`AbortSignal` : il ne
+ * couvrirait que le fetch, pas l'attente d'`auth.getSession()` qui la
+ * précède) — on cesse seulement de l'attendre. C'est sans risque : toutes
+ * les opérations sont idempotentes (upsert par `id` client, delete
+ * idempotent), exactement la garantie qui permet déjà de reprendre une
+ * opération orpheline.
+ */
+export const REQUEST_TIMEOUT_MS = 15_000;
+
+/** Forme d'une réponse PostgREST, telle que consommée par ce moteur. */
+interface SupabaseResult {
+  data: unknown;
+  error: unknown;
+}
+
+/**
+ * Borne un aller-retour Supabase. Un dépassement lève une erreur ORDINAIRE
+ * (sans code Postgres) : elle suit donc exactement le chemin d'erreur déjà
+ * en place — `isBlockingSyncError` renvoie `false`, l'opération passe en
+ * `failed` avec son message visible dans le panneau, et repart toute seule
+ * après le backoff. Aucune nouvelle branche dans la machine à états.
+ */
+async function withTimeout<T>(request: PromiseLike<T>, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      request,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () =>
+            reject(
+              new Error(
+                `Le serveur n'a pas répondu (${label}, ${Math.round(REQUEST_TIMEOUT_MS / 1000)} s) — nouvelle tentative automatique.`,
+              ),
+            ),
+          REQUEST_TIMEOUT_MS,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 async function fetchServerRow(
   supabaseTable: string,
   id: string,
 ): Promise<{ id: string; updated_at?: string } | null> {
-  const { data, error } = await (supabase as any)
-    .from(supabaseTable)
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
+  const { data, error } = await withTimeout<SupabaseResult>(
+    (supabase as any).from(supabaseTable).select("*").eq("id", id).maybeSingle(),
+    `lecture ${supabaseTable}`,
+  );
   if (error) throw error;
-  return data ?? null;
+  return (data as { id: string; updated_at?: string } | null) ?? null;
 }
 
 async function markConflict<T>(params: {
@@ -156,11 +221,14 @@ async function applyOperation(
 
   try {
     if (op.opType === "create") {
-      const { data, error } = await (supabase as any)
-        .from(supabaseTable)
-        .upsert(op.payload, { onConflict: "id" })
-        .select()
-        .single();
+      const { data, error } = await withTimeout<SupabaseResult>(
+        (supabase as any)
+          .from(supabaseTable)
+          .upsert(op.payload, { onConflict: "id" })
+          .select()
+          .single(),
+        `création ${supabaseTable}`,
+      );
       if (error) throw error;
       await applyServerRowToEntity(op, data);
       return "done";
@@ -182,12 +250,15 @@ async function applyOperation(
           }
         }
       }
-      const { data, error } = await (supabase as any)
-        .from(supabaseTable)
-        .update(op.payload)
-        .eq("id", op.recordLocalId)
-        .select()
-        .single();
+      const { data, error } = await withTimeout<SupabaseResult>(
+        (supabase as any)
+          .from(supabaseTable)
+          .update(op.payload)
+          .eq("id", op.recordLocalId)
+          .select()
+          .single(),
+        `modification ${supabaseTable}`,
+      );
       if (error) throw error;
       await applyServerRowToEntity(op, data);
       return "done";
@@ -215,10 +286,10 @@ async function applyOperation(
         return "done";
       }
     }
-    const { error } = await (supabase as any)
-      .from(supabaseTable)
-      .delete()
-      .eq("id", op.recordLocalId);
+    const { error } = await withTimeout<SupabaseResult>(
+      (supabase as any).from(supabaseTable).delete().eq("id", op.recordLocalId),
+      `suppression ${supabaseTable}`,
+    );
     if (error) throw error;
     if (entity) await db.delete("entities", key);
     return "done";

@@ -3,7 +3,6 @@ import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { AppShell } from "@/components/AppShell";
 import { PreferencesEffects } from "@/components/PreferencesEffects";
 import { BottomNav } from "@/components/BottomNav";
-import { SyncStatusIndicator } from "@/components/shared/SyncStatusIndicator";
 import { Loader2 } from "lucide-react";
 import { logAuthEvent, summarizeSession } from "@/lib/authDiagnostics";
 import { restoreAuthSession } from "@/lib/authSession";
@@ -49,7 +48,12 @@ function AuthGate() {
   return (
     <PreferencesEffects>
       <AppShell>
-        <SyncStatusIndicator />
+        {/* Aucune UI de synchronisation montée globalement (audit UI du
+            01/09/2026) : elle apparaissait par-dessus n'importe quel écran
+            dès qu'une action était en attente — donc après quasiment chaque
+            geste pendant une séance. Le statut et le panneau détaillé vivent
+            désormais dans le bloc « Synchronisation » du Profil
+            (`components/profile/SyncStatusCard.tsx`). */}
         <div className="flex flex-1 flex-col pb-2">
           <Outlet />
         </div>

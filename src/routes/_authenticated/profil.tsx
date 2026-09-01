@@ -13,6 +13,7 @@ import { PersonalizationPanel } from "@/components/profile/PersonalizationPanel"
 import { SecurityPanel } from "@/components/profile/SecurityPanel";
 import { HealthDataPanel } from "@/components/profile/HealthDataPanel";
 import { SettingsGroup } from "@/components/profile/SettingsGroup";
+import { SyncStatusCard } from "@/components/profile/SyncStatusCard";
 
 export const Route = createFileRoute("/_authenticated/profil")({
   head: () => ({
@@ -85,6 +86,9 @@ function ProfilPage() {
         </SettingsGroup>
         <SettingsGroup title="Données">
           <HealthDataPanel />
+        </SettingsGroup>
+        <SettingsGroup title="Synchronisation">
+          <SyncStatusCard />
         </SettingsGroup>
       </Section>
     </main>
