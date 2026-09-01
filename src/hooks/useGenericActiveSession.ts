@@ -20,6 +20,7 @@ import {
   type WorkoutSegmentRow,
 } from "@/hooks/use-fitness";
 import { OFFLINE_FIRST_QUERY_OPTIONS } from "@/lib/offline/offlineQuery";
+import { requestSyncFlush } from "@/lib/offline/syncFlush";
 
 // Phase 3 (exercice-central) — Étape 2, double écriture : résout/crée
 // exercise_id en plus du libellé existant sur workout_segments. Ne doit
@@ -559,6 +560,9 @@ export function useFinishGenericActiveWorkout() {
       // RPG : la clôture verse de l'XP côté serveur (trigger
       // `award_xp_on_workout_complete`) — invalider le cache Niveau/Rang.
       qc.invalidateQueries({ queryKey: ["user_stats"] });
+      // CHANTIER 4 (CRIT-03) — même raison que useFinishWorkout : la
+      // récompense n'existe qu'une fois `status='completed'` arrivé en base.
+      requestSyncFlush(user?.id);
     },
     onError: (e: Error) => toast.error(e.message),
   });

@@ -3,6 +3,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 import { isOfflineFirstQuery } from "@/lib/offline/offlineQuery";
+import { isServerConfirmedQuery } from "@/lib/offline/serverConfirmedQuery";
+import { markWorkoutsServerRefreshStale } from "@/lib/offline/workoutsRefreshWindow";
 import {
   discardBlockedOperation,
   listConflicts,
@@ -100,8 +102,29 @@ export function useOfflineSync(): OfflineSyncState {
         // ça relancerait au retour réseau des dizaines de requêtes
         // online-only sans aucun rapport avec la synchronisation.
         if (result.succeeded > 0 || result.conflicted > 0) {
+          // NOTE (chantier 4, MAJ-04) : ce refetch n'a volontairement PAS
+          // besoin d'une relecture serveur complète. La réponse de chaque
+          // opération a déjà été réappliquée en local
+          // (`applyServerRowToEntity`), donc le store IndexedDB porte déjà la
+          // version serveur de NOS écritures ; les colonnes calculées par les
+          // triggers RPG (`workouts.xp_*`) ne sont lues nulle part depuis ce
+          // store, mais par la query dédiée de l'écran de récompense
+          // (invalidée juste en dessous). La fenêtre de fraîcheur n'est donc
+          // rouverte qu'au retour du réseau (voir plus bas), là où un autre
+          // appareil a pu écrire.
           void queryClient.invalidateQueries({
             predicate: isOfflineFirstQuery,
+            refetchType: "active",
+          });
+          // CHANTIER 4 (MAJ-08) : seconde catégorie légitime — les queries
+          // dont la valeur est PRODUITE PAR LE SERVEUR à partir de ce qu'on
+          // vient de lui pousser (`user_stats`, `rank_promotions`,
+          // récompense de séance). Elles ne lisent pas IndexedDB, donc le
+          // ciblage `offlineFirst` du chantier 3 ne les couvrait pas : le
+          // Niveau/Rang restait figé après la synchronisation d'une séance
+          // terminée hors ligne. Toujours pas d'invalidation globale.
+          void queryClient.invalidateQueries({
+            predicate: isServerConfirmedQuery,
             refetchType: "active",
           });
         }
@@ -185,6 +208,10 @@ export function useOfflineSync(): OfflineSyncState {
   // Retour réseau → on relance la queue automatiquement.
   useEffect(() => {
     if (isOnline && userId) {
+      // Le retour du réseau est un des moments où une lecture serveur est
+      // réellement utile (l'appareil a pu manquer des écritures faites
+      // ailleurs) : on périme la fenêtre de fraîcheur avant de relancer.
+      markWorkoutsServerRefreshStale();
       syncNow();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -17,6 +17,8 @@ import type { ActiveGenericSegment } from "@/hooks/useGenericActiveSession";
 import { HYBRID_BLOCKS_KEY } from "@/hooks/useGenericActiveSession";
 import { ACTIVE_WORKOUT_CONFLICT_MESSAGE } from "@/lib/fitness/activeWorkoutGuard";
 import { OFFLINE_FIRST_QUERY_OPTIONS } from "@/lib/offline/offlineQuery";
+import { workoutsServerRefreshGate } from "@/lib/offline/workoutsRefreshWindow";
+import { requestSyncFlush } from "@/lib/offline/syncFlush";
 
 /**
  * Offline-first (cf. src/lib/offline/, CLAUDE.md) — Cœur Fitness (vague
@@ -150,46 +152,72 @@ export const workoutSegmentsRepo = createOfflineRepository<WorkoutSegmentRow>("w
  *  exercise_sets + workout_segments de l'utilisateur) — no-op silencieux
  *  hors connexion. Les 200 séances les plus récentes suffisent très
  *  largement à couvrir toute séance active + l'historique affiché
- *  (useWorkouts en garde 60). */
-export async function refreshWorkoutsFromServer(userId: string): Promise<void> {
+ *  (useWorkouts en garde 60).
+ *
+ *  CHANTIER 4 (MAJ-04) — les 4 lectures ci-dessous passent désormais par une
+ *  fenêtre de fraîcheur partagée (`workoutsServerRefreshGate`) :
+ *  - deux queries qui rafraîchissent en même temps (jusqu'à 4 sont montées
+ *    pendant une séance : useWorkouts, useActiveWorkout,
+ *    useActiveGenericWorkout, useActiveWorkoutSegments) partagent le MÊME
+ *    aller-retour au lieu d'en faire un chacune ;
+ *  - une invalidation qui suit une écriture locale déjà connue du store
+ *    (validation d'une série, typiquement) ne relit plus le serveur pour rien.
+ *  La lecture du store local, elle, est INCHANGÉE et reste faite à chaque
+ *  appel par les `queryFn` appelantes : aucune donnée n'est perdue, seule une
+ *  relecture réseau redondante disparaît. Voir `lib/offline/serverRefreshWindow.ts`
+ *  pour le détail du compromis et les moments qui rouvrent la fenêtre. */
+export async function refreshWorkoutsFromServer(
+  userId: string,
+  options: { force?: boolean } = {},
+): Promise<void> {
   if (!getIsOnline()) return;
   try {
-    const { data: workouts, error } = await supabase
-      .from("workouts")
-      .select("*")
-      .eq("user_id", userId)
-      .order("date", { ascending: false })
-      .limit(200);
-    if (!error && workouts) {
-      await hydrateEntitiesFromServer("workouts", userId, workouts as unknown as WorkoutRow[]);
-    }
-    const { data: exercises, error: exErr } = await supabase
-      .from("exercises")
-      .select("*")
-      .eq("user_id", userId);
-    if (!exErr && exercises) {
-      await hydrateEntitiesFromServer("exercises", userId, exercises as unknown as ExerciseRow[]);
-    }
-    const { data: sets, error: setErr } = await supabase
-      .from("exercise_sets")
-      .select("*")
-      .eq("user_id", userId);
-    if (!setErr && sets) {
-      await hydrateEntitiesFromServer("exercise_sets", userId, sets as unknown as ExerciseSetRow[]);
-    }
-    const { data: segments, error: segErr } = await supabase
-      .from("workout_segments")
-      .select("*")
-      .eq("user_id", userId);
-    if (!segErr && segments) {
-      await hydrateEntitiesFromServer(
-        "workout_segments",
-        userId,
-        segments as unknown as WorkoutSegmentRow[],
-      );
-    }
+    await workoutsServerRefreshGate.run(userId, () => fetchWorkoutsIntoLocalStore(userId), options);
   } catch {
-    // Hors ligne ou erreur réseau : on continue avec le store local.
+    // Hors ligne ou erreur réseau : on continue avec le store local. La
+    // fenêtre de fraîcheur reste OUVERTE (la garde ne l'a pas refermée,
+    // l'aller-retour ayant échoué) : la prochaine lecture retentera.
+  }
+}
+
+/** Les 4 lectures serveur réelles — appelées uniquement par la fenêtre de
+ *  fraîcheur ci-dessus, jamais directement. Laisse remonter une erreur
+ *  réseau : c'est elle qui empêche la fenêtre de se refermer sur une donnée
+ *  qui n'a jamais été lue. */
+async function fetchWorkoutsIntoLocalStore(userId: string): Promise<void> {
+  const { data: workouts, error } = await supabase
+    .from("workouts")
+    .select("*")
+    .eq("user_id", userId)
+    .order("date", { ascending: false })
+    .limit(200);
+  if (!error && workouts) {
+    await hydrateEntitiesFromServer("workouts", userId, workouts as unknown as WorkoutRow[]);
+  }
+  const { data: exercises, error: exErr } = await supabase
+    .from("exercises")
+    .select("*")
+    .eq("user_id", userId);
+  if (!exErr && exercises) {
+    await hydrateEntitiesFromServer("exercises", userId, exercises as unknown as ExerciseRow[]);
+  }
+  const { data: sets, error: setErr } = await supabase
+    .from("exercise_sets")
+    .select("*")
+    .eq("user_id", userId);
+  if (!setErr && sets) {
+    await hydrateEntitiesFromServer("exercise_sets", userId, sets as unknown as ExerciseSetRow[]);
+  }
+  const { data: segments, error: segErr } = await supabase
+    .from("workout_segments")
+    .select("*")
+    .eq("user_id", userId);
+  if (!segErr && segments) {
+    await hydrateEntitiesFromServer(
+      "workout_segments",
+      userId,
+      segments as unknown as WorkoutSegmentRow[],
+    );
   }
 }
 
@@ -1068,6 +1096,12 @@ export function useFinishWorkout() {
       // pousse cette mise à jour) — invalider le cache Niveau/Rang pour ne
       // jamais afficher un XP/niveau périmé.
       qc.invalidateQueries({ queryKey: ["user_stats"] });
+      // CHANTIER 4 (CRIT-03) : c'est l'arrivée EN BASE de `status='completed'`
+      // qui déclenche le versement d'XP. On demande donc un passage immédiat
+      // de la queue au lieu d'attendre le balayage périodique — l'écran de
+      // récompense affiche un état honnête pendant ce temps et bascule seul
+      // dès que le serveur a confirmé.
+      requestSyncFlush(user?.id);
       // RPG : montée de Rang par exercice — hors périmètre offline (lecture
       // arbitrée serveur, cf. doc en tête de fichier), fire-and-forget déjà
       // tolérant à l'échec réseau.

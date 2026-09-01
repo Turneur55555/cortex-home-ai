@@ -4076,3 +4076,78 @@ Aucune migration SQL. `syncQueue.ts`, `repository.ts`, `types.ts`, `conflictDete
 - **Pas de plafond global de passe** (garde-fou 90 s explicitement écarté) : avec N opérations
   mortes, une passe peut durer jusqu'à N × 30 s (2 appels × 15 s). Le moteur rend toujours la main,
   mais tardivement. À traiter dans un second temps si le cas se présente.
+
+---
+
+## Chantier 4 — Récompense XP + progression de Rang + performance de séance (01/09/2026)
+
+Traite ensemble **CRIT-03** (récompense XP de fin de séance), **MAJ-08** (Rang hors ligne) et
+**MAJ-04** (coût réseau pendant la séance). Détail complet :
+`docs/architecture/recompense-et-progression-fin-de-seance.md`.
+
+### Cause racine CRIT-03
+La clôture (`workouts.status = 'completed'`) est une écriture **offline-first** : locale, puis
+poussée par la sync queue. C'est son **arrivée en base** qui déclenche `award_xp_on_workout_complete`.
+L'écran de récompense, lui, interrogeait `xp_events` / `workouts.xp_*` **immédiatement** après
+`finish.mutateAsync()` : rien n'existait encore. `useSessionReward` retombait alors silencieusement
+sur `user_stats.xp` (`xpBefore = xpAfter`) → **« +0 XP » et barre figée présentés comme la vraie
+récompense**, et `SessionRewardScreen` ignorait en plus le `isLoading` du hook.
+Second point structurel : le trigger est un **AFTER trigger** qui réécrit `workouts` dans un UPDATE
+séparé — le `RETURNING` de l'opération de sync ne contient donc jamais `xp_after`, **seule une
+relecture** apporte les compteurs (verrouillé par un test).
+
+### Correctifs
+- `lib/fitness/rpg/rewardConfirmation.ts` (**pur**) : `confirmed` / `syncing` / `awaiting-server`.
+  L'XP, la montée de grade et le badge « record » ne sont rendus **que** si `confirmed`. Sinon,
+  état honnête (« Récompense en attente de synchronisation » / « Calcul de ta récompense… »),
+  l'écran basculant **seul** dès confirmation. Aucun `setTimeout` masquant une course.
+- `lib/offline/syncFlush.ts` : `requestSyncFlush()` déclenche un passage **immédiat** de la file à
+  la clôture (au lieu d'attendre le balayage 4 s) — réutilise `processSyncQueue`, documenté sûr en
+  parallèle (claim atomique). Ne réimplémente rien du chantier 1.
+- `lib/offline/serverConfirmedQuery.ts` : **seconde** catégorie d'invalidation post-sync — les
+  queries produites par un trigger serveur (`user_stats`, `rank_promotions`, récompense). Le
+  ciblage `offlineFirst` du chantier 3 ne les couvrait pas → **c'était la vraie cause de MAJ-08** :
+  après la synchro d'une séance terminée hors ligne, le Niveau/Rang restait figé. Toujours par
+  prédicat, jamais d'invalidation globale.
+- `lib/offline/serverRefreshWindow.ts` + `workoutsRefreshWindow.ts` : fenêtre de fraîcheur (60 s) +
+  déduplication en vol pour `refreshWorkoutsFromServer`. Rouverte au retour du réseau
+  (`useOfflineSync`) et au changement de compte (`use-auth`). Un échec réseau **ne referme pas** la
+  fenêtre.
+- `routes/_authenticated/progression.tsx` : sans XP confirmée, plus de `?? 0` (qui affichait le tout
+  premier Rang comme réel) — état d'attente explicite, comme `ProfileHeroCard` le faisait déjà.
+- `syncQueue.ts` : + `hasQueuedOperationsForRecord()` (signal « cette écriture n'a pas encore
+  atteint le serveur »).
+
+### Mesure réseau (mesurée, pas estimée — code de `main` vs après)
+Montage d'une séance active **16 → 4** ; 10 séries validées **40 → 0** ; clôture **16 → 0**.
+La `queryFn` continue de lire le store local **à chaque appel** : aucune donnée perdue, seule une
+relecture serveur redondante disparaît.
+
+### Règles RPG : INCHANGÉES
+Noms, ordre, seuils (30 paliers) et règles d'ascension figés par
+`src/lib/fitness/rpg/rankRulesNonRegression.test.ts` (valeurs exactes, pas seulement des
+invariants). Aucun montant d'XP, aucun trigger, aucune migration SQL touchés.
+
+### Nouveaux fichiers
+`src/lib/fitness/rpg/rewardConfirmation.ts`, `src/lib/offline/serverConfirmedQuery.ts`,
+`src/lib/offline/serverRefreshWindow.ts`, `src/lib/offline/workoutsRefreshWindow.ts`,
+`src/lib/offline/syncFlush.ts`, `docs/architecture/recompense-et-progression-fin-de-seance.md`
+\+ tests `rewardConfirmation.test.ts`, `rankRulesNonRegression.test.ts`,
+`sessionRewardOffline.test.ts`, `serverRefreshWindow.test.ts`, `serverConfirmedQuery.test.ts`,
+`workoutsRefreshPerf.test.ts`.
+Validation : `npm test` **1662 passed** / 60 skipped (vs 1603, **+59**, aucun test existant
+modifié ni cassé), `tsc --noEmit` propre, `npm run build` OK, eslint 0 erreur sur les fichiers
+touchés (warnings `any` pré-existants, nombre identique).
+
+### Restes assumés / à décider (NON corrigés — hors périmètre)
+- **DISC-01 — XP partielle pour une séance vécue ENTIÈREMENT hors ligne.** Le `create` du workout
+  n'étant pas encore synchronisé, la clôture est **fusionnée dans son payload** (`repository.update`
+  → `findPendingCreateForRecord`). La file étant FIFO, le workout part donc en **INSERT avec
+  `status='completed'` AVANT ses exercices/séries** : le trigger verse le forfait `workout_muscu`
+  mais parcourt une séance encore vide → **pas d'XP de record ni de progression d'exercice**.
+  Corriger cela touche l'ordonnancement de la sync queue (chantier 1) ou l'économie XP serveur :
+  **décision produit requise**, ne pas patcher à l'aveugle. Options en §8 du rapport de chantier.
+- **Validation navigateur du parcours complet non faite** : elle exigerait un compte réel sur le
+  projet Supabase de PRODUCTION (`bcwfvpwxzlmkxobvbtzp`, identifiants en dur, aucun `.env` ici) et
+  y écrirait de vraies séances. Seuls `npm run build` et un smoke test Chromium réel sur `/login`
+  (rendu OK, **0 erreur console**) ont été exécutés.

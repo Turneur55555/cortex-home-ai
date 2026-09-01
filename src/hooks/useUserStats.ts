@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
+import { SERVER_CONFIRMED_QUERY_OPTIONS } from "@/lib/offline/serverConfirmedQuery";
 
 export interface UserStats {
   xp: number;
@@ -57,6 +58,12 @@ export function useUserStats() {
   const cached = useMemo(() => (userId ? readCache(userId) : null), [userId]);
 
   return useQuery({
+    // CHANTIER 4 (MAJ-08) : l'XP est écrite par des triggers SERVEUR
+    // déclenchés par l'arrivée de nos opérations (clôture de séance). Cette
+    // query doit donc être rafraîchie dès qu'un passage de la sync queue
+    // réussit — sinon le Niveau/Rang reste figé sur la valeur d'avant la
+    // séance après un retour de réseau. Voir `lib/offline/serverConfirmedQuery.ts`.
+    ...SERVER_CONFIRMED_QUERY_OPTIONS,
     queryKey: ["user_stats", userId],
     enabled: !!user,
     staleTime: 30_000,

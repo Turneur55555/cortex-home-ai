@@ -10,6 +10,7 @@ import {
   restoreAuthSession,
 } from "@/lib/authSession";
 import { purgeUserOfflineData } from "@/lib/offline/db";
+import { markWorkoutsServerRefreshStale } from "@/lib/offline/workoutsRefreshWindow";
 import { subscribeToNetworkStatus } from "@/lib/offline/networkStatus";
 
 interface AuthContextValue {
@@ -139,6 +140,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (outgoingUserId) {
       purgeUserOfflineData(outgoingUserId).catch(() => undefined);
     }
+    // CHANTIER 4 (MAJ-04) : la fenêtre de fraîcheur des lectures serveur de
+    // séances est en mémoire, elle survivrait au `queryClient.clear()`. La
+    // rouvrir garantit que le compte suivant (ou une reconnexion du même
+    // compte dans cet onglet) refait une vraie lecture serveur.
+    markWorkoutsServerRefreshStale();
   };
 
   return (

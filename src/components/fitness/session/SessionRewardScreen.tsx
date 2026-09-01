@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowDown, Trophy } from "lucide-react";
+import { ArrowDown, CloudOff, Loader2, Trophy } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { getRewardTrophy } from "@/assets/rewards";
 import { AnimatedNumber } from "@/components/fitness/AnimatedNumber";
@@ -63,7 +63,13 @@ function Section({ delay, children }: { delay: number; children: React.ReactNode
  * rejoindra une page d'historique dédiée.
  *
  * Lecture seule : toutes les valeurs viennent du serveur (xp_events /
- * user_stats via useSessionReward). Toutes les couleurs dynamiques
+ * workouts.xp_* via useSessionReward). CHANTIER 4 (CRIT-03) : tant que le
+ * serveur n'a pas versé l'XP de cette séance (clôture encore en file de
+ * synchronisation, ou hors connexion), l'écran affiche un ÉTAT HONNÊTE —
+ * « en attente de synchronisation » / « calcul en cours » — au lieu du
+ * « +0 XP » et de la barre figée d'avant. Aucun montant, aucune montée de
+ * grade et aucun record ne sont montrés avant confirmation serveur ; l'écran
+ * bascule tout seul dès que la récompense arrive, sans action utilisateur. Toutes les couleurs dynamiques
  * (halo, +XP, barre de progression, célébration de montée de grade)
  * suivent le `RankTheme` du rang courant — aucune palette propre à cet écran.
  *
@@ -83,7 +89,13 @@ export function SessionRewardScreen({
   onContinue: () => void;
   onViewAnalysis: () => void;
 }) {
-  const { totalXp, breakdown, level, hasXp } = useSessionReward(workoutId);
+  const { totalXp, breakdown, level, hasXp, confirmation } = useSessionReward(workoutId);
+  // CHANTIER 4 (CRIT-03) : tant que le serveur n'a pas versé l'XP de CETTE
+  // séance, aucun montant ni aucune progression n'est affiché — un état
+  // honnête prend la place (voir `lib/fitness/rpg/rewardConfirmation.ts`).
+  // `level` est alors une transition neutre : `gradeUp` est donc déjà faux,
+  // la cinématique de montée de grade ne peut pas se déclencher par erreur.
+  const rewardPending = confirmation !== "confirmed";
   const titleTransition = buildTitleTransition(level.xpBefore, level.xpAfter);
   const hasPr = breakdown.some((b) => b.source === "pr_muscu");
   const rankKey = titleTransition.after.title.key;
@@ -229,7 +241,7 @@ export function SessionRewardScreen({
           </Section>
 
           {/* XP totale gagnée */}
-          {hasXp && (
+          {hasXp && !rewardPending && (
             <Section delay={0.15}>
               <div className="mt-4 text-center">
                 <div
@@ -248,7 +260,33 @@ export function SessionRewardScreen({
           {/* Progression vers le prochain grade — OU célébration de montée de
             grade (jamais les deux : la barre disparaît complètement tant que
             la célébration joue). */}
-          {gradeUp ? (
+          {rewardPending ? (
+            <Section delay={0.28}>
+              <div className="mt-5 rounded-2xl border border-white/8 bg-white/[0.03] p-4 text-center">
+                {confirmation === "syncing" ? (
+                  <>
+                    <CloudOff aria-hidden className="mx-auto h-5 w-5 text-white/40" />
+                    <p className="mt-2 text-sm font-bold text-white/85">
+                      Récompense en attente de synchronisation
+                    </p>
+                    <p className="mt-1 text-[11px] leading-relaxed text-white/45">
+                      Ta séance est enregistrée sur l'appareil. L'XP est calculée par le serveur :
+                      elle s'affichera dès le retour du réseau.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <Loader2 aria-hidden className="mx-auto h-5 w-5 animate-spin text-white/40" />
+                    <p className="mt-2 text-sm font-bold text-white/85">Calcul de ta récompense…</p>
+                    <p className="mt-1 text-[11px] leading-relaxed text-white/45">
+                      Ta séance vient d'être envoyée. L'XP s'affichera dès que le serveur l'aura
+                      versée.
+                    </p>
+                  </>
+                )}
+              </div>
+            </Section>
+          ) : gradeUp ? (
             <Section delay={0.32}>
               <div className="mt-5 min-h-[132px] rounded-2xl border border-white/8 bg-white/[0.03] p-5 text-center">
                 <AnimatePresence mode="wait">
@@ -381,7 +419,7 @@ export function SessionRewardScreen({
           )}
 
           {/* Record personnel */}
-          {hasPr && (
+          {hasPr && !rewardPending && (
             <Section delay={0.55}>
               <div className="mt-3 flex items-center gap-2 rounded-xl border border-amber-400/25 bg-amber-400/10 px-3 py-2.5">
                 <Trophy className="h-4 w-4 shrink-0 text-amber-300" />

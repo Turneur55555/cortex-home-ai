@@ -40,7 +40,26 @@ function ProgressionPage() {
   const { current: streak } = useActivityStreak();
   const { data: promotionEvents } = useRankPromotions();
 
-  const xp = userStats?.xp ?? 0;
+  // CHANTIER 4 (MAJ-08) — état HONNÊTE quand aucune XP confirmée n'est
+  // disponible (tout premier lancement hors ligne : la query `user_stats` est
+  // en pause et aucun cache local n'existe encore). L'ancien `?? 0` affichait
+  // alors le tout premier Rang comme s'il était réel — une progression
+  // inventée. Même traitement que `ProfileHeroCard` : on n'invente rien, on
+  // attend la vraie valeur. Aucune règle RPG n'est touchée (seuils, ordre et
+  // noms des Rangs restent ceux de `titleProgress`).
+  if (!userStats) {
+    return (
+      <main className="flex flex-1 flex-col items-center justify-center gap-3 px-8 pb-8 text-center">
+        <div className="aspect-[4/5] w-44 animate-pulse rounded-[22px] bg-white/5" />
+        <p className="text-sm font-semibold text-foreground">Rang en attente de synchronisation</p>
+        <p className="text-xs text-muted-foreground">
+          Ton XP est calculée par le serveur. Ton rang s'affichera dès la prochaine connexion.
+        </p>
+      </main>
+    );
+  }
+
+  const xp = userStats.xp;
   const progress = titleProgressForXp(xp);
   const theme = rankThemeByKey(progress.title.key);
   const nextGrade = nextGradeLabel(progress);

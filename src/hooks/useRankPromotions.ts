@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { buildPromotionEvents, type PromotionEvent } from "@/lib/fitness/rpg/promotionHistory";
+import { SERVER_CONFIRMED_QUERY_OPTIONS } from "@/lib/offline/serverConfirmedQuery";
 
 /**
  * Historique persistant des promotions (Rang/Grade), écrit automatiquement
@@ -12,6 +13,9 @@ export function useRankPromotions() {
   const { user } = useAuth();
 
   return useQuery({
+    // CHANTIER 4 (MAJ-08) : écrit par le trigger `record_rank_promotions` à
+    // l'arrivée de l'XP — donc à rafraîchir après un passage de sync réussi.
+    ...SERVER_CONFIRMED_QUERY_OPTIONS,
     queryKey: ["rank_promotions", user?.id],
     enabled: !!user,
     staleTime: 30_000,

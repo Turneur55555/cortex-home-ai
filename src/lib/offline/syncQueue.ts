@@ -341,3 +341,26 @@ export async function countPendingAndFailed(userId: string): Promise<QueueCounts
     blocked: ops.filter((op) => op.status === "blocked").length,
   };
 }
+
+/**
+ * Reste-t-il une opération VIVANTE dans la file pour un enregistrement précis
+ * (ex. la clôture d'une séance qui n'a pas encore atteint le serveur) ?
+ *
+ * Sert exclusivement à répondre honnêtement à la question « le serveur
+ * connaît-il déjà cette écriture ? » (chantier 4, CRIT-03) : tant qu'une
+ * opération subsiste ici, aucune récompense serveur ne peut être présentée
+ * comme confirmée. Une opération `blocked` compte AUSSI : elle ne partira
+ * plus seule, donc l'écriture n'atteindra jamais le serveur sans action de
+ * l'utilisateur — la présenter comme « bientôt synchronisée » serait faux,
+ * mais elle reste tout aussi peu confirmée.
+ */
+export async function hasQueuedOperationsForRecord(
+  userId: string,
+  table: string,
+  recordLocalId: string,
+): Promise<boolean> {
+  const ops = await listAllOperations(userId);
+  return ops.some(
+    (op) => op.table === table && op.recordLocalId === recordLocalId && op.status !== "done",
+  );
+}
