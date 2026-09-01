@@ -11,6 +11,8 @@ import { resolveIngredientCategory } from "@/lib/nutrition/ingredientCategory";
 import type { IngredientCategory } from "@/lib/nutrition/recipeImport/types";
 import { createOfflineRepository, hydrateEntitiesFromServer } from "@/lib/offline/repository";
 import { getIsOnline } from "@/lib/offline/networkStatus";
+import { useAuth } from "@/hooks/use-auth";
+import { OFFLINE_FIRST_QUERY_OPTIONS } from "@/lib/offline/offlineQuery";
 
 /**
  * Liste de courses depuis des recettes sélectionnées (module "Recettes" —
@@ -25,6 +27,15 @@ import { getIsOnline } from "@/lib/offline/networkStatus";
  * `useNutritionData.ts`/`useRecipes.ts` : lecture/écriture de `shopping_list`
  * toujours locales (IndexedDB) d'abord, synchronisation vers Supabase en
  * arrière-plan via la sync queue.
+ *
+ * CRIT-05 (chantier 3, 31/08/2026) : l'identité vient de `useAuth()` — donc
+ * de la session déjà en mémoire — et NON de `supabase.auth.getUser()`.
+ * `getUser()` fait TOUJOURS un GET /auth/v1/user réseau (cf. auth-js
+ * `_getUser`) : hors connexion il renvoyait `user: null`, ce qui vidait la
+ * liste de courses (`return []`) et faisait échouer toutes les écritures
+ * (« Non authentifié ») ALORS QUE les données étaient dans IndexedDB et que
+ * le repository n'a jamais besoin du réseau. C'est aussi la convention de
+ * tous les autres hooks offline-first du projet.
  */
 const db = supabase;
 
@@ -64,15 +75,14 @@ const recipeIngredientsRepo = createOfflineRepository<RecipeIngredientRow>("reci
  * peuvent être consultées/éditées hors connexion.
  */
 export function useRecipesShoppingPreview(recipeIds: string[]) {
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
   return useQuery({
-    queryKey: ["shopping_list_recipes_preview", [...recipeIds].sort().join(",")],
-    enabled: recipeIds.length > 0,
+    ...OFFLINE_FIRST_QUERY_OPTIONS,
+    queryKey: ["shopping_list_recipes_preview", [...recipeIds].sort().join(","), userId],
+    enabled: recipeIds.length > 0 && !!userId,
     queryFn: async (): Promise<ShoppingLine[]> => {
-      if (recipeIds.length === 0) return [];
-      const {
-        data: { user },
-      } = await supabaseTyped.auth.getUser();
-      if (!user) return [];
+      if (recipeIds.length === 0 || !userId) return [];
 
       if (getIsOnline()) {
         try {
@@ -83,7 +93,7 @@ export function useRecipesShoppingPreview(recipeIds: string[]) {
           if (!error && data) {
             await hydrateEntitiesFromServer(
               "recipe_ingredients",
-              user.id,
+              userId,
               data as RecipeIngredientRow[],
             );
           }
@@ -92,7 +102,7 @@ export function useRecipesShoppingPreview(recipeIds: string[]) {
         }
       }
 
-      const local = await recipeIngredientsRepo.list(user.id);
+      const local = await recipeIngredientsRepo.list(userId);
       const idSet = new Set(recipeIds);
       const rows = local.filter((ing) => idSet.has(ing.recipe_id));
       const planned: PlannedIngredient[] = rows.map((ing) => ({
@@ -110,11 +120,9 @@ export function useRecipesShoppingPreview(recipeIds: string[]) {
 /** Enregistre la liste fusionnée dans `shopping_list` (table existante, catégorie incluse). */
 export function useSaveRecipesShoppingList() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async (lines: ShoppingLine[]) => {
-      const {
-        data: { user },
-      } = await supabaseTyped.auth.getUser();
       if (!user) throw new Error("Non authentifié");
       const rows = lines.filter((l) => l.needed > 0);
       for (const l of rows) {
@@ -139,13 +147,14 @@ export function useSaveRecipesShoppingList() {
 
 /** Liste de courses persistée de l'utilisateur, groupable par catégorie côté UI. */
 export function useShoppingList() {
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
   return useQuery({
-    queryKey: shoppingListKey,
+    ...OFFLINE_FIRST_QUERY_OPTIONS,
+    queryKey: [...shoppingListKey, userId],
+    enabled: !!userId,
     queryFn: async (): Promise<ShoppingListItem[]> => {
-      const {
-        data: { user },
-      } = await supabaseTyped.auth.getUser();
-      if (!user) return [];
+      if (!userId) return [];
 
       if (getIsOnline()) {
         try {
@@ -155,14 +164,14 @@ export function useShoppingList() {
             .order("done", { ascending: true })
             .order("added_at", { ascending: false });
           if (!error && data) {
-            await hydrateEntitiesFromServer("shopping_list", user.id, data as ShoppingListItem[]);
+            await hydrateEntitiesFromServer("shopping_list", userId, data as ShoppingListItem[]);
           }
         } catch {
           // Hors ligne ou erreur réseau : on continue avec le store local.
         }
       }
 
-      const local = await shoppingListRepo.list(user.id);
+      const local = await shoppingListRepo.list(userId);
       return [...local].sort((a, b) => {
         if (a.done !== b.done) return a.done ? 1 : -1;
         return b.added_at.localeCompare(a.added_at);
@@ -173,11 +182,9 @@ export function useShoppingList() {
 
 export function useToggleShoppingItem() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async ({ id, done }: { id: string; done: boolean }) => {
-      const {
-        data: { user },
-      } = await supabaseTyped.auth.getUser();
       if (!user) throw new Error("Non authentifié");
       await shoppingListRepo.update(id, user.id, { done });
     },
@@ -188,11 +195,9 @@ export function useToggleShoppingItem() {
 
 export function useDeleteShoppingItem() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async (id: string) => {
-      const {
-        data: { user },
-      } = await supabaseTyped.auth.getUser();
       if (!user) throw new Error("Non authentifié");
       await shoppingListRepo.remove(id, user.id);
     },
@@ -204,11 +209,9 @@ export function useDeleteShoppingItem() {
 /** Retire toutes les lignes cochées (achetées) d'un coup. */
 export function useClearBoughtItems() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   return useMutation({
     mutationFn: async () => {
-      const {
-        data: { user },
-      } = await supabaseTyped.auth.getUser();
       if (!user) throw new Error("Non authentifié");
       const local = await shoppingListRepo.list(user.id);
       const bought = local.filter((r) => r.done);

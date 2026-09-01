@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { getIsOnline } from "@/lib/offline/networkStatus";
 import { createOfflineRepository, hydrateEntitiesFromServer } from "@/lib/offline/repository";
+import { OFFLINE_FIRST_QUERY_OPTIONS } from "@/lib/offline/offlineQuery";
 
 /**
  * `supplements` (catalogue perso, id + updated_at) est offline-first (cf.
@@ -67,6 +68,7 @@ export function useSupplements(date: string) {
   const { user } = useAuth();
   const userId = user?.id ?? null;
   return useQuery({
+    ...OFFLINE_FIRST_QUERY_OPTIONS,
     queryKey: ["supplements", date, userId],
     enabled: !!userId,
     staleTime: 30_000,
@@ -100,6 +102,7 @@ export function useAllSupplements() {
   const { user } = useAuth();
   const userId = user?.id ?? null;
   return useQuery({
+    ...OFFLINE_FIRST_QUERY_OPTIONS,
     queryKey: ["supplements", "all", userId],
     enabled: !!userId,
     queryFn: async (): Promise<Supplement[]> => {

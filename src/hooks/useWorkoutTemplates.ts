@@ -18,6 +18,7 @@ import {
   exerciseSetsRepo,
   workoutSegmentsRepo,
 } from "@/hooks/use-fitness";
+import { OFFLINE_FIRST_QUERY_OPTIONS } from "@/lib/offline/offlineQuery";
 
 // ============================================================
 // Modèles de séance ("Utiliser une séance sauvegardée") — module Nouvelle
@@ -251,6 +252,7 @@ export function useWorkoutTemplates() {
   const { user } = useAuth();
   const userId = user?.id ?? null;
   return useQuery({
+    ...OFFLINE_FIRST_QUERY_OPTIONS,
     queryKey: TEMPLATES_KEY,
     enabled: !!userId,
     queryFn: async (): Promise<WorkoutTemplateRow[]> => {

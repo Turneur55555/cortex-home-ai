@@ -12,6 +12,14 @@ export const Route = createFileRoute("/_authenticated")({
   ssr: false,
   beforeLoad: async () => {
     const session = await restoreAuthSession("protected-route:beforeLoad", 1500);
+    // SEUL point de l'app qui redirige vers /login sur absence de session
+    // (l'autre `navigate("/login")`, dans SecurityPanel, suit une
+    // déconnexion explicite). Depuis le chantier 3, `restoreAuthSession` ne
+    // renvoie `null` que lorsqu'il n'y a RÉELLEMENT pas de session — plus
+    // seulement parce qu'un refresh a échoué faute de réseau (MAJ-07, voir
+    // `lib/offlineAuthSession.ts`). Une vraie absence de session et une
+    // session réellement invalidée par le serveur continuent donc bien
+    // d'atterrir ici.
     if (!session) throw redirect({ to: "/login" });
     logAuthEvent("protected-route:session-ok", { session: summarizeSession(session) });
   },

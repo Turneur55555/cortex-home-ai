@@ -4,6 +4,7 @@ import { supabase as supabaseTyped } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { getIsOnline } from "@/lib/offline/networkStatus";
 import { createOfflineRepository, hydrateEntitiesFromServer } from "@/lib/offline/repository";
+import { OFFLINE_FIRST_QUERY_OPTIONS } from "@/lib/offline/offlineQuery";
 const supabase = supabaseTyped as any;
 
 /**
@@ -80,6 +81,7 @@ export function useCollections() {
   const userId = user?.id ?? null;
 
   return useQuery({
+    ...OFFLINE_FIRST_QUERY_OPTIONS,
     queryKey: [...COLLECTIONS_KEY, userId],
     enabled: !!userId,
     queryFn: async (): Promise<RecipeCollection[]> => {

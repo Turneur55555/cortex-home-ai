@@ -11,6 +11,7 @@ import {
 } from "@/lib/nutrition/shoppingList";
 import { getIsOnline } from "@/lib/offline/networkStatus";
 import { createOfflineRepository, hydrateEntitiesFromServer } from "@/lib/offline/repository";
+import { OFFLINE_FIRST_QUERY_OPTIONS } from "@/lib/offline/offlineQuery";
 
 /**
  * Planning de repas Nutrition V2 + génération de liste de courses depuis le
@@ -89,11 +90,15 @@ const shoppingListRepo = createOfflineRepository<ShoppingListRow>("shopping_list
 const planKey = (start: string, end: string) => ["meal_plans", start, end] as const;
 
 /** Planning sur une plage de dates (incluses), trié par date puis ordre. */
-export function useMealPlan(startDate: string | null | undefined, endDate: string | null | undefined) {
+export function useMealPlan(
+  startDate: string | null | undefined,
+  endDate: string | null | undefined,
+) {
   const { user } = useAuth();
   const userId = user?.id ?? null;
 
   return useQuery({
+    ...OFFLINE_FIRST_QUERY_OPTIONS,
     queryKey: [...planKey(startDate ?? "none", endDate ?? "none"), userId],
     enabled: !!startDate && !!endDate && !!userId,
     queryFn: async (): Promise<MealPlanEntry[]> => {
@@ -186,11 +191,15 @@ export function useDeleteMealPlanEntry() {
  * locale d'abord (IndexedDB, `meal_plans`/`recipe_ingredients` déjà offline)
  * avec rafraîchissement serveur si en ligne.
  */
-export function useGenerateShoppingList(startDate: string | null | undefined, endDate: string | null | undefined) {
+export function useGenerateShoppingList(
+  startDate: string | null | undefined,
+  endDate: string | null | undefined,
+) {
   const { user } = useAuth();
   const userId = user?.id ?? null;
 
   return useQuery({
+    ...OFFLINE_FIRST_QUERY_OPTIONS,
     queryKey: ["shopping_list_preview", startDate ?? "none", endDate ?? "none", userId],
     enabled: !!startDate && !!endDate && !!userId,
     queryFn: async (): Promise<ShoppingLine[]> => {
@@ -229,7 +238,11 @@ export function useGenerateShoppingList(startDate: string | null | undefined, en
             .select("*")
             .in("recipe_id", Array.from(recipeIds));
           if (!error && data) {
-            await hydrateEntitiesFromServer("recipe_ingredients", userId, data as RecipeIngredientRow[]);
+            await hydrateEntitiesFromServer(
+              "recipe_ingredients",
+              userId,
+              data as RecipeIngredientRow[],
+            );
           }
         } catch {
           // Hors ligne ou erreur réseau : on continue avec le store local.

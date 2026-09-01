@@ -10,6 +10,7 @@ import type {
   MuscleGainRate,
 } from "@/lib/fitness/calorieStrategy";
 import { isKnownBodyFatMethod, type BodyFatMethod } from "@/lib/fitness/bodyComposition";
+import { OFFLINE_FIRST_QUERY_OPTIONS } from "@/lib/offline/offlineQuery";
 
 /**
  * Offline-first (cf. src/lib/offline/) — table `physical_goals`, même pattern
@@ -106,6 +107,7 @@ export function usePhysicalGoal() {
   const { user } = useAuth();
   const userId = user?.id ?? null;
   return useQuery({
+    ...OFFLINE_FIRST_QUERY_OPTIONS,
     queryKey: ["physical_goals", "active", userId],
     enabled: !!userId,
     staleTime: 60_000,
@@ -124,6 +126,7 @@ export function usePhysicalGoalHistory() {
   const { user } = useAuth();
   const userId = user?.id ?? null;
   return useQuery({
+    ...OFFLINE_FIRST_QUERY_OPTIONS,
     queryKey: ["physical_goals", "history", userId],
     enabled: !!userId,
     staleTime: 60_000,

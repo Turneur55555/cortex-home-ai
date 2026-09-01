@@ -8,6 +8,7 @@ import type { ImportedRecipe, RecipeSourceKind } from "@/lib/nutrition/recipeImp
 import { entityKey, getOfflineDb } from "@/lib/offline/db";
 import { getIsOnline } from "@/lib/offline/networkStatus";
 import { createOfflineRepository, hydrateEntitiesFromServer } from "@/lib/offline/repository";
+import { OFFLINE_FIRST_QUERY_OPTIONS } from "@/lib/offline/offlineQuery";
 
 /**
  * CRUD des recettes Nutrition V2 (react-query) — offline-first (cf.
@@ -142,6 +143,7 @@ export function useRecipes() {
   const userId = user?.id ?? null;
 
   return useQuery({
+    ...OFFLINE_FIRST_QUERY_OPTIONS,
     queryKey: [...RECIPES_KEY, userId],
     enabled: !!userId,
     queryFn: async (): Promise<Recipe[]> => {
@@ -215,6 +217,7 @@ export function useRecipe(id: string | null | undefined) {
   const { user } = useAuth();
   const userId = user?.id ?? null;
   return useQuery({
+    ...OFFLINE_FIRST_QUERY_OPTIONS,
     queryKey: recipeKey(id ?? "none"),
     enabled: !!id && !!userId,
     queryFn: () => fetchRecipeWithMacros(id as string, userId as string),
