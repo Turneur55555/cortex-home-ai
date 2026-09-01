@@ -3973,3 +3973,106 @@ pas voir :
 `src/lib/offline/offlineQueryConvention.test.ts`, `src/lib/offlineAuthSession.test.ts` (jsdom).
 Validation : `npx vitest run` 1577 passed / 60 skipped (vs 1550 avant, +27), `tsc --noEmit` propre,
 eslint 0 erreur sur les fichiers touchés. Aucune migration SQL, aucun autre chantier de l'audit touché.
+
+---
+
+## 01/09/2026 — Correctif file de sync bloquée + synchronisation rangée dans Profil
+
+Bug remonté par Nathan **en usage réel** : pendant une séance, chaque action modifiant un exercice
+ajoutait une opération « Modification · Exercises » / « Action en attente — nouvelle tentative
+automatique » dans la Sync Queue, **les anciennes ne partant jamais**. Suite des chantiers 1
+(`086b84d`), 2 (`0196888`) et 3 (`181662c`), tous **non modifiés** hors du correctif ci-dessous.
+
+### Diagnostic — comment la cause a été établie
+- **Trace serveur réelle** (projet `bcwfvpwxzlmkxobvbtzp`, user `f15351f1…`) : la séance écrivait
+  normalement (9 `UPDATE exercises` à 06:36:18 = un tap ↑/↓, séries jusqu'à 06:37:33.934), **puis
+  plus une seule écriture** pendant les 9 minutes suivantes alors que l'app était utilisée. RLS,
+  triggers `set_updated_at` et colonnes de `public.exercises` vérifiés sains — la base n'était pas
+  en cause.
+- **Signature IndexedDB décisive** : les opérations empilées étaient en `pending` avec
+  `retryCount: 0` et `lastError: null` — donc **jamais tentées**. Une opération réellement partie et
+  échouée serait en `failed` avec un message serveur (le moteur ne perd jamais une erreur).
+- Reproduction du flux nominal (simulateur PostgREST fidèle) : modification simple, réorganisation
+  9 updates, 2e modif pendant que la 1re est en vol → **la file se vide correctement**. Le moteur
+  n'était pas en faute sur le chemin normal.
+
+### CAUSE RACINE — un appel réseau qui ne se règle jamais fige TOUT le moteur
+- `@supabase/supabase-js@2.105.4` ne pose **aucun `AbortSignal` ni timeout** (vérifié dans
+  `dist/index.mjs`), et chaque appel PostgREST commence par un `await this.auth.getSession()`
+  (`SupabaseClient._getAccessToken`) **AVANT même le fetch HTTP**. Sur une socket morte — cas normal
+  en réseau mobile, où **`navigator.onLine` reste `true`** — la promesse ne se règle jamais : ni
+  résultat, ni erreur.
+- Enchaînement : `applyOperation` reste suspendu → `processSyncQueue` ne rend plus la main → le
+  `finally` de `useOfflineSync.attemptSync` **ne s'exécute jamais** → `syncingRef.current` reste
+  `true` → toute tentative ultérieure sort immédiatement (poll 4 s, retour réseau, et même le bouton
+  « Réessayer », désactivé par `isSyncing` gelé). Seul un rechargement de l'app débloquait.
+- **Le filet anti-orphelines du chantier 1 ne pouvait PAS aider** : `reclaimStaleSyncingOperations`
+  (`STALE_SYNCING_MS` 60 s) vit **à l'intérieur** de `processSyncQueue`, exactement ce que le blocage
+  empêche. Il couvre « l'instance a été tuée », pas « l'instance est vivante mais gelée ».
+
+### Correctif (`syncEngine.ts` uniquement)
+- `REQUEST_TIMEOUT_MS = 15_000` + `withTimeout()` (**`Promise.race`**) appliqué aux **4** aller-retours
+  du moteur : lecture du conflict detector, `upsert` du create, `update`, `delete`.
+- **`Promise.race` et NON `AbortSignal`** — à retenir : un `AbortSignal` n'annule que la requête
+  HTTP, il ne couvre pas l'attente d'`auth.getSession()` qui la précède, soit la moitié du risque.
+- **15 s < `STALE_SYNCING_MS` (60 s)** : une opération sans réponse redevient `failed` (reprise par le
+  backoff normal) bien avant que le mécanisme d'orphelines n'ait à s'en mêler — les deux filets ne se
+  marchent jamais dessus. Et 15 s ≫ un aller-retour PostgREST réel : on ne coupe jamais une requête
+  qui allait aboutir.
+- Un dépassement lève une erreur **ordinaire** (sans code Postgres) qui suit le chemin d'échec DÉJÀ
+  en place : `isBlockingSyncError` → `false` → `failed` → backoff → reprise. **Aucune branche ajoutée
+  à la machine à états** (chantier 1 intact). Sans risque : les opérations sont idempotentes.
+
+### UI — la synchronisation devient une fonctionnalité secondaire
+- `SyncStatusIndicator` était monté **globalement** dans `routes/_authenticated.tsx` : la pastille
+  flottante apparaissait par-dessus n'importe quel écran dès `pendingCount > 0`, donc après
+  quasiment chaque geste en séance, et c'était l'unique accès au grand panneau. **Supprimé.**
+  (Précision utile : aucun code n'ouvrait le panneau automatiquement — le `SyncQueueSheet` n'était
+  monté que sur `onClick` de cet indicateur. C'est bien la pastille globale qui s'imposait.)
+- Remplacé par `components/profile/SyncStatusCard.tsx`, rangé dans Profil → Paramètres →
+  Synchronisation, qui ouvre le `SyncQueueSheet` **existant et inchangé** sur clic explicite (liste,
+  états, erreurs serveur, « Réessayer », « Retirer de la file », résolution de conflit : intacts).
+  Indication discrète : une pastille de 6 px, **uniquement** quand une intervention est nécessaire.
+- `lib/offline/syncQueueSummary.ts` — `summarizeSyncQueue()`, logique **pure** (zéro React, aucun
+  code couleur : renvoie un `tone` sémantique, cf. convention `/src/lib/`). Ordre de priorité repris
+  **à l'identique** de l'ancien indicateur : conflit > bloquée > hors connexion > en cours > échec >
+  en attente > synchronisé. `queuedCount` = pending + failed + blocked, **même définition** que le
+  pied du `SyncQueueSheet` pour que les deux compteurs ne puissent jamais se contredire.
+- **Garde-fou anti-régression** : `components/profile/syncUiPlacement.test.ts` relit les sources et
+  échoue si un layout global remonte une UI de synchronisation, si `<SyncQueueSheet` est monté
+  ailleurs que dans le bloc Profil, ou si `useOfflineSync` est consommé par un autre composant.
+
+### Test de composant React — nouveau motif dans le projet
+`@testing-library/react` n'est **pas** une dépendance du projet. `SyncStatusCard.test.tsx` rend en
+jsdom avec `react-dom/client` + `act` (React 19), sans ajouter aucune dépendance. À reprendre pour
+tout futur test de composant. Points à connaître :
+- poser `globalThis.IS_REACT_ACT_ENVIRONMENT = true`, sinon `act()` avertit à chaque rendu ;
+- polyfiller `ResizeObserver`, `matchMedia`, `scrollIntoView`, `*PointerCapture` (Radix les utilise) ;
+- le `Sheet`/`AlertDialog` Radix passe par un **portail** : chercher dans `document.body`, jamais
+  dans le conteneur de rendu.
+Idem côté moteur : `vi.useFakeTimers()` **complet gèle fake-indexeddb** (ses `IDBRequest` ne résolvent
+plus). Dans `syncEngineTimeout.test.ts` on ne truque que `setTimeout`/`clearTimeout`/`Date` —
+fake-indexeddb s'ordonnance sur `setImmediate` (`fake-indexeddb/lib/scheduling`), qui reste réel.
+
+### Nouveaux fichiers
+`src/lib/offline/syncQueueSummary.ts`, `src/components/profile/SyncStatusCard.tsx`, + tests
+`src/lib/offline/syncEngineTimeout.test.ts`, `src/lib/offline/syncQueueSummary.test.ts`,
+`src/components/profile/SyncStatusCard.test.tsx`, `src/components/profile/syncUiPlacement.test.ts`.
+Supprimé : `src/components/shared/SyncStatusIndicator.tsx` (remplacé par le bloc Profil).
+Validation : `npm test` 1603 passed / 60 skipped (vs 1577, **+26**, aucun test existant cassé),
+`tsc --noEmit` propre, eslint 0 erreur sur les fichiers touchés (les 4 warnings `any` de
+`syncEngine.ts` sont pré-existants, `(supabase as any)`, nombre identique avant/après).
+Aucune migration SQL. `syncQueue.ts`, `repository.ts`, `types.ts`, `conflictDetector.ts`,
+`syncErrors.ts`, `useOfflineSync.ts`, `offlineQuery.ts`, `queryClient.ts` et `SyncQueueSheet.tsx`
+**non modifiés**.
+
+### Restes assumés (hors périmètre, décision de Nathan)
+- **`PGRST116` non classé** : une modification d'une ligne absente du serveur boucle indéfiniment en
+  `failed` sans jamais passer `blocked` (ni dans `NON_RETRYABLE_PG_ERROR_CODES`, ni dans
+  `DEPENDENCY_PG_ERROR_CODES`). Comportement **volontairement inchangé**, verrouillé par un test.
+- **`useReorderActiveExercises` enfile N opérations par tap ↑/↓**, y compris pour les exercices dont
+  la `position` n'a pas changé (9 ops pour 2 positions échangées). Amplifie l'effet visuel
+  d'accumulation, n'en est pas la cause.
+- **Pas de plafond global de passe** (garde-fou 90 s explicitement écarté) : avec N opérations
+  mortes, une passe peut durer jusqu'à N × 30 s (2 appels × 15 s). Le moteur rend toujours la main,
+  mais tardivement. À traiter dans un second temps si le cas se présente.
