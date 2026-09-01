@@ -1,5 +1,5 @@
 import { getOfflineDb } from "./db";
-import type { SyncOperation, SyncOpStatus, SyncOpType } from "./types";
+import type { SyncDependencyRef, SyncOperation, SyncOpStatus, SyncOpType } from "./types";
 
 /**
  * Gestion de la file d'opérations en attente de synchronisation
@@ -17,8 +17,8 @@ export interface EnqueueOperationInput<T> {
   opType: SyncOpType;
   payload: T | null;
   baseUpdatedAt: string | null;
-  /** CHANTIER 1 BIS — barrière de dépendance OPT-IN, cf. `SyncOperation`. */
-  waitForEarlierOperations?: boolean;
+  /** CHANTIER 1 BIS — dépendances explicites OPT-IN, cf. `SyncOperation`. */
+  dependsOnRecords?: SyncDependencyRef[];
 }
 
 // `listPendingOperations` trie par `createdAt` pour garantir l'ordre FIFO
@@ -51,9 +51,9 @@ export async function enqueueOperation<T>(
     opType: input.opType,
     payload: input.payload,
     baseUpdatedAt: input.baseUpdatedAt,
-    // Non renseigné → champ absent, lu comme `false` : aucune opération
-    // existante ne change de comportement.
-    ...(input.waitForEarlierOperations ? { waitForEarlierOperations: true } : {}),
+    // Non renseigné (ou vide) → champ absent, lu comme « aucune dépendance » :
+    // aucune opération existante ne change de comportement.
+    ...(input.dependsOnRecords?.length ? { dependsOnRecords: input.dependsOnRecords } : {}),
     createdAt: nextMonotonicIsoTimestamp(),
     status: "pending",
     retryCount: 0,
@@ -352,38 +352,55 @@ export async function hasOtherQueuedOperations(
  */
 const LIVE_OPERATION_STATUSES = new Set<SyncOpStatus>(["pending", "failed", "syncing", "blocked"]);
 
+function dependencyKey(table: string, recordLocalId: string): string {
+  return `${table}::${recordLocalId}`;
+}
+
 /**
- * Reste-t-il une opération PLUS ANCIENNE encore vivante dans la file de cet
- * utilisateur ? C'est l'unique prédicat de la barrière de dépendance
- * (`SyncOperation.waitForEarlierOperations`).
+ * L'une des dépendances déclarées par cette opération porte-t-elle encore une
+ * opération vivante ANTÉRIEURE ? C'est l'unique prédicat de la barrière de
+ * dépendance (`SyncOperation.dependsOnRecords`).
  *
  * Points importants :
+ * - PORTÉE STRICTEMENT LIMITÉE aux enregistrements déclarés. Une écriture
+ *   Nutrition, Recette ou Liste de courses sans rapport ne retient JAMAIS
+ *   l'opération protégée — c'est tout l'objet de ce resserrement ;
  * - la file COMPLÈTE est relue (`listAllOperations`), pas seulement la partie
  *   traitable : une opération `syncing` prise en charge par un AUTRE onglet
  *   est absente de `listPendingOperations` mais reste bel et bien vivante —
  *   la manquer laisserait passer la clôture pendant qu'une autre instance
- *   pousse encore ses enfants ;
- * - « plus ancienne » = `createdAt` strictement inférieur, c'est-à-dire
+ *   pousse encore un enfant ;
+ * - « antérieure » = `createdAt` strictement inférieur, c'est-à-dire
  *   exactement l'ordre FIFO utilisé par le moteur. L'horloge monotone de
- *   `enqueueOperation` rend toute égalité impossible au sein d'une instance,
- *   et une égalité entre deux instances ne concernerait que des
- *   enregistrements sans lien — jamais un enfant dont la clôture dépend ;
- * - l'opération elle-même est exclue (`op.id`), évidemment.
+ *   `enqueueOperation` rend toute égalité impossible au sein d'une instance.
+ *   Ce filtre évite qu'une écriture postérieure sur un enfant (ex. la
+ *   resynchro du résumé d'un exercice, enfilée APRÈS la clôture) ne retienne
+ *   inutilement l'opération d'un passage ;
+ * - l'opération elle-même est exclue (`op.id`) : une opération qui se
+ *   déclarerait dépendante de son propre enregistrement ne se bloque pas ;
+ * - une opération RETIRÉE de la file par l'utilisateur (« Retirer de la
+ *   file ») n'est plus vivante : la barrière se libère, conformément à son
+ *   choix explicite.
  *
  * Ce prédicat ne remplace JAMAIS `claimOperation` : il décide seulement s'il
  * y a lieu de tenter l'envoi ; l'exclusion mutuelle entre instances reste
  * entièrement portée par la prise de possession atomique.
  */
-export async function hasOlderLiveOperations(
+export async function hasLiveDependencies(
   userId: string,
-  op: Pick<SyncOperation, "id" | "createdAt">,
+  op: Pick<SyncOperation, "id" | "createdAt" | "dependsOnRecords">,
 ): Promise<boolean> {
+  if (!op.dependsOnRecords?.length) return false;
+  const awaited = new Set(
+    op.dependsOnRecords.map((ref) => dependencyKey(ref.table, ref.recordLocalId)),
+  );
   const ops = await listAllOperations(userId);
   return ops.some(
     (other) =>
       other.id !== op.id &&
       other.createdAt < op.createdAt &&
-      LIVE_OPERATION_STATUSES.has(other.status),
+      LIVE_OPERATION_STATUSES.has(other.status) &&
+      awaited.has(dependencyKey(other.table, other.recordLocalId)),
   );
 }
 

@@ -171,15 +171,19 @@ redéclencher quand les enfants arrivent enfin. En `blocked` (erreur Postgres no
 reprise automatiquement — précédent réel : le bug prod `exercises.created_at` du 29/08), la perte
 était **définitive**.
 
-**Le correctif — barrière OPT-IN par opération.** `SyncOperation.waitForEarlierOperations` : une
-opération qui porte ce drapeau n'est pas envoyée tant qu'il reste, dans la file du même
-utilisateur, une opération **plus ancienne encore vivante** (`pending` | `failed` | `syncing` |
-`blocked`). Elle est laissée intacte (comptée dans `skipped`), sans consommer de tentative ni
-avancer son backoff, et retentée au passage suivant.
+**Le correctif — barrière OPT-IN et EXPLICITE, par enregistrement.**
+`SyncOperation.dependsOnRecords: SyncDependencyRef[]` : une opération n'est pas envoyée tant que
+l'un des **enregistrements qu'elle déclare** porte encore, dans la file du même utilisateur, une
+opération **vivante antérieure** (`pending` | `failed` | `syncing` | `blocked`). Elle est laissée
+intacte (comptée dans `skipped`), sans consommer de tentative ni avancer son backoff, et retentée
+au passage suivant.
+
+La portée est **strictement** celle des enregistrements déclarés : une écriture Nutrition, Recette
+ou Liste de courses sans rapport ne retient jamais la clôture, même bloquée.
 
 Points de conception :
 
-- **Jamais un stop-on-error global.** Une opération sans le drapeau garde son comportement exact,
+- **Jamais un stop-on-error global.** Une opération sans dépendance déclarée garde son comportement exact,
   y compris placée après une opération en échec ou bloquée — garanti par un test dédié et par
   `fitnessCoreOffline.test.ts`, inchangé.
 - **Le test lit la file COMPLÈTE**, pas seulement sa partie traitable : une opération `syncing`
@@ -189,12 +193,23 @@ Points de conception :
   simultanément, c'est toujours le claim qui garantit un seul envoi.
 - **La barrière survit à un conflit** : elle est conservée dans le `ConflictRecord` et rejouée par
   « garder ma version », exactement comme `opType`.
+- **Dépendances par ENREGISTREMENT, pas par id d'opération.** Un id d'opération est interne et
+  instable — `resolveConflict` en ré-enfile un neuf, et une opération créée plus tard sur le même
+  enregistrement échapperait à une liste figée.
+- **La règle métier vit dans le domaine Fitness**, pas dans le moteur :
+  `lib/fitness/workoutSyncDependencies.ts` (pur) énumère les enfants d'une séance. Le schéma
+  l'impose — `exercise_sets` ne porte **aucun** `workout_id`, seule la jointure
+  `exercise_set.exercise_id → exercises.id → exercises.workout_id` les rattache. Une déduction
+  côté moteur aurait exigé des règles par table dans un composant générique.
+- **Aucun id optimiste.** Les dépendances sont calculées depuis le **store local**, jamais depuis le
+  snapshot React Query (qui peut porter des `tmp-*` transitoires) ; le helper filtre en second
+  rempart. Un `tmp-*` déclaré produirait une barrière qui ne retient rien — DISC-01b silencieusement
+  réintroduit.
 
-**Compromis assumé (figé par un test).** La barrière est à l'échelle de l'utilisateur : une
-opération antérieure **sans rapport** encore bloquée retient aussi la clôture. Choix conservateur —
-mieux vaut une clôture retardée (l'écran affiche « Récompense en attente de synchronisation », état
-honnête) qu'une XP amputée définitivement. Un resserrement aux seules lignes liées à la séance
-reste possible, ce serait un choix explicite.
+**Sémantique « Retirer de la file » (figée par un test).** Si l'utilisateur retire explicitement une
+opération enfant, elle cesse d'être une dépendance vivante et la clôture repart — le serveur voit
+alors la séance sans cet enfant. Conséquence d'un choix explicite de l'utilisateur, jamais d'une
+décision automatique.
 
 ## 6. Fichiers
 
@@ -206,7 +221,8 @@ reste possible, ce serait un choix explicite.
 | `lib/offline/workoutsRefreshWindow.ts`         | Instance partagée du domaine séances                      |
 | `lib/offline/syncFlush.ts`                     | Passage immédiat de la file à la clôture (fire-and-forget) |
 | `lib/offline/syncQueue.ts`                     | + `hasQueuedOperationsForRecord` (signal « pas encore parti ») |
-| `lib/offline/repository.ts`                    | + `OfflineUpdateOptions.neverMergeIntoPendingCreate` (DISC-01) + passe-plat `waitForEarlierOperations` |
+| `lib/offline/repository.ts`                    | + `OfflineUpdateOptions.neverMergeIntoPendingCreate` (DISC-01) + passe-plat `dependsOnRecords` |
 | `lib/offline/syncEngine.ts`                    | barrière de dépendance dans `processSyncQueue` (DISC-01b) |
+| `lib/fitness/workoutSyncDependencies.ts`       | enfants d'une séance → `SyncDependencyRef[]` (pur) |
 | `hooks/useSessionReward.ts`                    | Assemble l'état réel de la récompense                     |
 | `components/fitness/session/SessionRewardScreen.tsx` | Rend l'état honnête au lieu d'un « +0 XP »          |

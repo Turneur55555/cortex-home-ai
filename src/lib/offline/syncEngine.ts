@@ -5,7 +5,7 @@ import { buildUpdatePayload, getSupabaseTableName } from "./repository";
 import {
   claimOperation,
   enqueueOperation,
-  hasOlderLiveOperations,
+  hasLiveDependencies,
   hasOtherQueuedOperations,
   listPendingOperations,
   rebasePendingOperationsForRecord,
@@ -142,9 +142,10 @@ async function markConflict<T>(params: {
     // On conserve l'INTENTION locale (update ou delete) : c'est elle qui
     // sera rejouée si l'utilisateur choisit « garder ma version ».
     opType: op.opType,
-    // Chantier 1 bis : la barrière fait partie de l'intention locale, au même
-    // titre que `opType` — « garder ma version » doit la rejouer telle quelle.
-    waitForEarlierOperations: op.waitForEarlierOperations,
+    // Chantier 1 bis : les dépendances font partie de l'intention locale, au
+    // même titre que `opType` — « garder ma version » doit les rejouer telles
+    // quelles.
+    dependsOnRecords: op.dependsOnRecords,
     localData: entity.data,
     serverData: serverRow as unknown as T,
     localUpdatedAt: entity.localUpdatedAt,
@@ -378,18 +379,20 @@ export async function processSyncQueue(
     if (options.respectBackoff && !isDueForRetry(op)) continue;
 
     // BARRIÈRE DE DÉPENDANCE (chantier 1 bis, DISC-01b) — OPT-IN, jamais
-    // globale. Une opération qui porte `waitForEarlierOperations` déclare
-    // que le serveur ne doit pas l'observer tant qu'une opération plus
-    // ANCIENNE de cet utilisateur est encore vivante (pending / failed /
-    // syncing / blocked). Elle est alors laissée intacte dans la file
-    // (comptée dans `skipped`, comme toute opération qu'on n'a pas envoyée)
-    // et retentée au passage suivant, sans consommer de tentative ni
-    // avancer son backoff.
+    // globale. Une opération qui déclare des `dependsOnRecords` n'est pas
+    // envoyée tant que l'un de ces ENREGISTREMENTS porte encore une
+    // opération vivante antérieure (pending / failed / syncing / blocked).
+    // Elle est alors laissée intacte dans la file (comptée dans `skipped`,
+    // comme toute opération qu'on n'a pas envoyée) et retentée au passage
+    // suivant, sans consommer de tentative ni avancer son backoff.
     //
-    // Ce test ne concerne QUE les opérations qui portent le drapeau : la
-    // file n'est PAS un stop-on-error — une opération indépendante placée
-    // après une opération en échec continue de partir normalement
-    // (garanti par `fitnessCoreOffline.test.ts`, inchangé).
+    // La portée est celle des enregistrements DÉCLARÉS, et rien d'autre :
+    // une écriture Nutrition, Recette ou Liste de courses sans rapport ne
+    // retient jamais l'opération protégée. Et ce test ne concerne QUE les
+    // opérations qui déclarent des dépendances : la file n'est PAS un
+    // stop-on-error — une opération indépendante placée après une opération
+    // en échec continue de partir normalement (garanti par
+    // `fitnessCoreOffline.test.ts`, inchangé).
     //
     // Il est volontairement placé AVANT `claimOperation` : inutile de
     // prendre possession d'une opération qu'on ne va pas envoyer (le claim
@@ -397,7 +400,7 @@ export async function processSyncQueue(
     // Il ne REMPLACE pas le claim pour autant : deux instances peuvent très
     // bien franchir la barrière en même temps, c'est toujours le claim
     // atomique qui garantit un seul envoi.
-    if (op.waitForEarlierOperations && (await hasOlderLiveOperations(userId, op))) {
+    if (await hasLiveDependencies(userId, op)) {
       result.skipped += 1;
       continue;
     }
@@ -481,7 +484,7 @@ export async function resolveConflict(
         // La barrière de dépendance survit à l'arbitrage : l'utilisateur a
         // tranché QUELLE version gagne, pas QUAND le serveur a le droit de
         // l'observer (chantier 1 bis).
-        waitForEarlierOperations: conflict.waitForEarlierOperations,
+        dependsOnRecords: conflict.dependsOnRecords,
       });
     }
   } else {

@@ -39,7 +39,21 @@ export interface PendingIdResolver {
   resolve(id: string): Promise<string>;
 }
 
-export function createPendingIdResolver(prefix = "tmp-"): PendingIdResolver {
+/**
+ * Préfixe des ids optimistes, SOURCE UNIQUE de la convention. Exporté depuis
+ * le chantier 1 bis : le domaine Fitness doit pouvoir garantir qu'aucun id
+ * optimiste n'entre dans les dépendances d'une opération de synchronisation
+ * (cf. `lib/fitness/workoutSyncDependencies.ts`) — sans redéclarer « tmp- »
+ * de son côté.
+ */
+export const OPTIMISTIC_ID_PREFIX = "tmp-";
+
+/** Cet id est-il un id optimiste, pas encore résolu vers son id réel ? */
+export function isOptimisticId(id: string): boolean {
+  return id.startsWith(OPTIMISTIC_ID_PREFIX);
+}
+
+export function createPendingIdResolver(prefix = OPTIMISTIC_ID_PREFIX): PendingIdResolver {
   const pending = new Map<string, PendingEntry>();
 
   return {

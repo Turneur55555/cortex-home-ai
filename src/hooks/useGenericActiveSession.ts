@@ -15,12 +15,15 @@ import {
   assertNoActiveWorkout,
   cascadeDeleteWorkoutChildren,
   refreshWorkoutsFromServer,
+  exerciseSetsRepo,
+  exercisesRepo,
   workoutSegmentsRepo,
   workoutsRepo,
   type WorkoutSegmentRow,
 } from "@/hooks/use-fitness";
 import { OFFLINE_FIRST_QUERY_OPTIONS } from "@/lib/offline/offlineQuery";
 import { requestSyncFlush } from "@/lib/offline/syncFlush";
+import { collectWorkoutSyncDependencies } from "@/lib/fitness/workoutSyncDependencies";
 
 // Phase 3 (exercice-central) — Étape 2, double écriture : résout/crée
 // exercise_id en plus du libellé existant sur workout_segments. Ne doit
@@ -541,12 +544,24 @@ export function useFinishGenericActiveWorkout() {
               }))
           : [];
 
-      // CHANTIER 4 (DISC-01) — même raison que `useFinishWorkout` : la
-      // clôture ne doit jamais être fusionnée dans un `create` encore en
-      // attente, sinon le trigger d'XP serveur s'exécute avant l'arrivée des
-      // lignes liées à la séance ; et `waitForEarlierOperations` (chantier 1
-      // bis) la retient tant que ces lignes n'ont pas RÉUSSI, un échec
-      // n'interrompant pas la file. Voir `OfflineUpdateOptions`.
+      // CHANTIER 4 (DISC-01) + CHANTIER 1 BIS (DISC-01b) — même raison que
+      // `useFinishWorkout` : la clôture ne doit jamais être fusionnée dans un
+      // `create` encore en attente (sinon le trigger d'XP serveur s'exécute
+      // avant l'arrivée des lignes liées), et `dependsOnRecords` la retient
+      // tant que ces lignes n'ont pas RÉUSSI — un échec n'interrompant pas la
+      // file. Dépendances construites depuis le STORE LOCAL (jamais depuis le
+      // cache React, qui peut porter des ids optimistes `tmp-*`).
+      const [localExercises, localSets, localSegments] = await Promise.all([
+        exercisesRepo.list(user.id),
+        exerciseSetsRepo.list(user.id),
+        workoutSegmentsRepo.list(user.id),
+      ]);
+      const dependsOnRecords = collectWorkoutSyncDependencies(workout.id, {
+        exercises: localExercises,
+        exerciseSets: localSets,
+        workoutSegments: localSegments,
+      });
+
       await workoutsRepo.update(
         workout.id,
         user.id,
@@ -555,7 +570,7 @@ export function useFinishGenericActiveWorkout() {
           status: "completed",
           metadata: { ...existingMetadata, segments: formattedSegments },
         },
-        { neverMergeIntoPendingCreate: true, waitForEarlierOperations: true },
+        { neverMergeIntoPendingCreate: true, dependsOnRecords },
       );
     },
     onSuccess: (_d, workout) => {

@@ -27,11 +27,14 @@ import {
  * quand les enfants finissent par arriver. En `blocked`, la perte était
  * définitive (une opération `blocked` n'est jamais reprise automatiquement).
  *
- * CORRECTIF : une barrière STRICTEMENT OPT-IN portée par l'opération
- * (`SyncOperation.waitForEarlierOperations`). La file n'est JAMAIS transformée
- * en stop-on-error : une opération qui ne porte pas le drapeau garde son
- * comportement exact, y compris lorsqu'elle suit une opération en échec (test
- * dédié plus bas + `fitnessCoreOffline.test.ts`, inchangé).
+ * CORRECTIF : une barrière STRICTEMENT OPT-IN et EXPLICITE portée par
+ * l'opération (`SyncOperation.dependsOnRecords`) — elle n'attend que les
+ * ENREGISTREMENTS déclarés. Une écriture Nutrition, Recette ou Liste de
+ * courses sans rapport ne retient JAMAIS la clôture. La file n'est par
+ * ailleurs JAMAIS transformée en stop-on-error : une opération qui ne déclare
+ * aucune dépendance garde son comportement exact, y compris lorsqu'elle suit
+ * une opération en échec (tests dédiés plus bas + `fitnessCoreOffline.test.ts`,
+ * inchangé).
  *
  * Même harnais que `syncQueueResilience.test.ts` : `fake-indexeddb` + faux
  * client Supabase en mémoire, avec ici la possibilité de faire échouer les
@@ -147,9 +150,16 @@ function witnessCompletion(workoutId: string, previousStatus: string | undefined
     exercises: Array.from(serverStore.get("exercises")?.values() ?? []).filter(
       (e) => e.workout_id === workoutId,
     ).length,
-    sets: Array.from(serverStore.get("exercise_sets")?.values() ?? []).filter(
-      (st) => st.workout_id === workoutId,
-    ).length,
+    sets: (() => {
+      const exerciseIds = new Set(
+        Array.from(serverStore.get("exercises")?.values() ?? [])
+          .filter((e) => e.workout_id === workoutId)
+          .map((e) => e.id),
+      );
+      return Array.from(serverStore.get("exercise_sets")?.values() ?? []).filter((st) =>
+        exerciseIds.has(st.exercise_id as string),
+      ).length;
+    })(),
   });
 }
 
@@ -162,9 +172,15 @@ vi.mock("@/integrations/supabase/client", () => ({
 // Imports après le mock (obligatoire avec vi.mock hoisté).
 import { getOfflineDb, resetOfflineDbForTests } from "./db";
 import { createOfflineRepository } from "./repository";
-import { hasOlderLiveOperations, listAllOperations } from "./syncQueue";
-import { listConflicts, processSyncQueue, resolveConflict } from "./syncEngine";
-import type { SyncOperation } from "./types";
+import { hasLiveDependencies, listAllOperations } from "./syncQueue";
+import {
+  discardBlockedOperation,
+  listConflicts,
+  processSyncQueue,
+  resolveConflict,
+} from "./syncEngine";
+import type { SyncDependencyRef, SyncOperation } from "./types";
+import { collectWorkoutSyncDependencies } from "@/lib/fitness/workoutSyncDependencies";
 
 const USER = "user-barrier";
 
@@ -182,22 +198,33 @@ interface WorkoutRow extends Row {
   status: string;
   created_at: string;
 }
-interface ChildRow extends Row {
+interface ExerciseRow extends Row {
   user_id: string;
   workout_id: string;
   name: string;
   created_at: string;
 }
+/** Reproduit le schéma RÉEL : `exercise_sets` ne porte pas de `workout_id`. */
+interface ExerciseSetRow extends Row {
+  user_id: string;
+  exercise_id: string;
+  created_at: string;
+}
+interface SegmentRow extends Row {
+  user_id: string;
+  workout_id: string;
+  created_at: string;
+}
 
 const workoutsRepo = createOfflineRepository<WorkoutRow>("workouts");
-const exercisesRepo = createOfflineRepository<ChildRow>("exercises");
-const setsRepo = createOfflineRepository<ChildRow>("exercise_sets");
+const exercisesRepo = createOfflineRepository<ExerciseRow>("exercises");
+const setsRepo = createOfflineRepository<ExerciseSetRow>("exercise_sets");
+const segmentsRepo = createOfflineRepository<SegmentRow>("workout_segments");
 
 /** Options exactes posées par les deux chemins de clôture Fitness. */
-const CLOSURE_OPTIONS = {
-  neverMergeIntoPendingCreate: true,
-  waitForEarlierOperations: true,
-} as const;
+function closureOptions(dependsOnRecords: SyncDependencyRef[]) {
+  return { neverMergeIntoPendingCreate: true, dependsOnRecords } as const;
+}
 
 async function readOp(opId: string): Promise<SyncOperation> {
   const db = await getOfflineDb();
@@ -225,34 +252,51 @@ function opsByTable(ops: SyncOperation[]) {
 
 /**
  * Séance vécue hors ligne : séance + N exercices (chacun avec ses séries) +
- * clôture protégée par la barrière. Reproduit exactement l'enfilage réel de
- * `useFinishWorkout` (cf. `sessionRewardOffline.test.ts`).
+ * segments éventuels + clôture protégée par ses dépendances RÉELLES.
+ * Reproduit exactement ce que font `useFinishWorkout` /
+ * `useFinishGenericActiveWorkout` : les dépendances sont calculées depuis le
+ * STORE LOCAL par le helper du domaine Fitness, jamais à la main.
  */
-async function queueOfflineSession(exerciseCount = 1, setsPerExercise = 1) {
+async function queueOfflineSession(exerciseCount = 1, setsPerExercise = 1, segmentCount = 0) {
   const workout = await workoutsRepo.create(USER, {
     name: "Push Day",
     status: "active",
   } as never);
-  const children: ChildRow[] = [];
+  const exercises: ExerciseRow[] = [];
+  const sets: ExerciseSetRow[] = [];
+  const segments: SegmentRow[] = [];
   for (let i = 0; i < exerciseCount; i += 1) {
     const exercise = await exercisesRepo.create(USER, {
       workout_id: workout.id,
       name: `Exercice ${i}`,
     } as never);
-    children.push(exercise);
+    exercises.push(exercise);
     for (let k = 0; k < setsPerExercise; k += 1) {
-      children.push(
-        await setsRepo.create(USER, {
-          workout_id: workout.id,
-          name: `Série ${i}-${k}`,
-        } as never),
-      );
+      sets.push(await setsRepo.create(USER, { exercise_id: exercise.id } as never));
     }
   }
-  await workoutsRepo.update(workout.id, USER, { status: "completed" }, CLOSURE_OPTIONS);
+  for (let i = 0; i < segmentCount; i += 1) {
+    segments.push(await segmentsRepo.create(USER, { workout_id: workout.id } as never));
+  }
+
+  // ── Ce que fait la clôture réelle : lecture du STORE LOCAL puis helper ──
+  const dependsOnRecords = collectWorkoutSyncDependencies(workout.id, {
+    exercises: await exercisesRepo.list(USER),
+    exerciseSets: await setsRepo.list(USER),
+    workoutSegments: await segmentsRepo.list(USER),
+  });
+  await workoutsRepo.update(
+    workout.id,
+    USER,
+    { status: "completed" },
+    closureOptions(dependsOnRecords),
+  );
+
   const ops = await listAllOperations(USER);
-  const closureOp = ops.find((op) => op.opType === "update") as SyncOperation;
-  return { workout, children, closureOp };
+  const closureOp = ops.find(
+    (op) => op.opType === "update" && op.recordLocalId === workout.id,
+  ) as SyncOperation;
+  return { workout, exercises, sets, segments, closureOp, dependsOnRecords };
 }
 
 beforeEach(() => {
@@ -279,8 +323,12 @@ beforeEach(() => {
 
 describe("DISC-01b — scénario complet, avant/après résolution des enfants", () => {
   it("enfants en échec → la clôture N'EST PAS envoyée ; enfants réparés → elle part et le serveur voit la séance complète", async () => {
-    const { workout, closureOp } = await queueOfflineSession(1, 1);
-    expect(closureOp.waitForEarlierOperations).toBe(true);
+    const { workout, closureOp, exercises, sets } = await queueOfflineSession(1, 1);
+    // La clôture déclare exactement ses enfants réels — rien de plus.
+    expect(closureOp.dependsOnRecords).toEqual([
+      { table: "exercises", recordLocalId: exercises[0].id },
+      { table: "exercise_sets", recordLocalId: sets[0].id },
+    ]);
 
     // ── Passage 1 : les deux enfants échouent (coupure ciblée) ──────────
     fakeSupabaseOpts.failWrites.set("exercises", NETWORK_ERROR);
@@ -357,7 +405,7 @@ describe("Statuts qui retiennent la clôture", () => {
     const childOp = ops.find((op) => op.table === "exercises") as SyncOperation;
     expect(childOp.status).toBe("pending");
 
-    expect(await hasOlderLiveOperations(USER, closureOp)).toBe(true);
+    expect(await hasLiveDependencies(USER, closureOp)).toBe(true);
     expect(serverStore.get("workouts")?.get(workout.id)).toBeUndefined();
   });
 
@@ -487,18 +535,28 @@ describe("Barrière et mécanismes existants", () => {
       updated_at: new Date(Date.now() + 10_000).toISOString(),
     });
 
-    await workoutsRepo.update(workout.id, USER, { status: "completed" }, CLOSURE_OPTIONS);
+    const child = await exercisesRepo.create(USER, {
+      workout_id: workout.id,
+      name: "Développé",
+    } as never);
+    await processSyncQueue(USER);
+    await workoutsRepo.update(
+      workout.id,
+      USER,
+      { status: "completed" },
+      closureOptions([{ table: "exercises", recordLocalId: child.id }]),
+    );
     const conflicted = await processSyncQueue(USER);
     expect(conflicted.conflicted).toBe(1);
 
     const [conflict] = await listConflicts(USER);
-    expect(conflict.waitForEarlierOperations).toBe(true);
+    expect(conflict.dependsOnRecords).toEqual([{ table: "exercises", recordLocalId: child.id }]);
 
     await resolveConflict(conflict.id, "keep-local");
     const [replayed] = await listAllOperations(USER);
     // L'intention locale est rejouée TELLE QUELLE, barrière comprise.
     expect(replayed.opType).toBe("update");
-    expect(replayed.waitForEarlierOperations).toBe(true);
+    expect(replayed.dependsOnRecords).toEqual([{ table: "exercises", recordLocalId: child.id }]);
 
     await processSyncQueue(USER);
     expect(serverStore.get("workouts")?.get(workout.id)?.status).toBe("completed");
@@ -540,64 +598,253 @@ describe("Barrière et mécanismes existants", () => {
   });
 });
 
-// ─── Portée de la barrière : conséquence assumée, documentée ───────────
+// ─── RESSERREMENT : la portée est celle des enregistrements déclarés ───
 
-describe("Portée utilisateur de la barrière (compromis assumé)", () => {
-  it("une opération ANTÉRIEURE et SANS RAPPORT retient aussi la clôture", async () => {
-    // Conséquence directe de `hasOlderLiveOperations(userId, op)` : la
-    // barrière regarde toute la file de l'utilisateur, pas seulement les
-    // lignes liées à la séance. C'est le choix CONSERVATEUR — on préfère
-    // retarder une clôture (état « en attente de synchronisation », honnête)
-    // plutôt que risquer une XP amputée définitivement. Ce test fige ce
-    // comportement pour qu'un resserrement futur soit un choix explicite.
-    fakeSupabaseOpts.failWrites.set("nutrition_favorites", NETWORK_ERROR);
-    const unrelated = createOfflineRepository<Row & { user_id: string; name: string }>(
+describe("Portée par enregistrement — les opérations sans rapport ne bloquent plus", () => {
+  it("une écriture Nutrition BLOQUÉE et antérieure ne retient PAS la clôture", async () => {
+    // LE scénario du resserrement. Avant, la barrière regardait toute la file
+    // de l'utilisateur : cette opération sans le moindre rapport retenait la
+    // clôture — et, `blocked` ne repartant jamais seul, indéfiniment.
+    fakeSupabaseOpts.failWrites.set("nutrition_favorites", SCHEMA_ERROR);
+    const nutrition = createOfflineRepository<Row & { user_id: string; name: string }>(
       "nutrition_favorites",
     );
-    await unrelated.create(USER, { name: "Sans rapport" } as never);
+    await nutrition.create(USER, { name: "Sans rapport" } as never);
 
     const { workout } = await queueOfflineSession(1, 1);
     const result = await processSyncQueue(USER);
 
-    expect(result.skipped).toBe(1);
-    expect(serverStore.get("workouts")?.get(workout.id)?.status).toBe("active");
-
-    // Dès que l'opération sans rapport passe, la clôture repart.
-    fakeSupabaseOpts.failWrites.clear();
-    await processSyncQueue(USER);
+    expect(result.blocked).toBe(1); // l'écriture Nutrition, bloquée
+    expect(result.skipped).toBe(0); // la clôture n'est PAS retenue
     expect(serverStore.get("workouts")?.get(workout.id)?.status).toBe("completed");
     expect(completionWitness).toEqual([{ exercises: 1, sets: 1 }]);
+  });
+
+  it("une écriture Recette / Liste de courses en échec ne retient pas non plus", async () => {
+    fakeSupabaseOpts.failWrites.set("recipes", NETWORK_ERROR);
+    fakeSupabaseOpts.failWrites.set("shopping_list", NETWORK_ERROR);
+    const recipes = createOfflineRepository<Row & { user_id: string }>("recipes");
+    const shopping = createOfflineRepository<Row & { user_id: string }>("shopping_list");
+    await recipes.create(USER, {} as never);
+    await shopping.create(USER, {} as never);
+
+    const { workout } = await queueOfflineSession(1, 1);
+    const result = await processSyncQueue(USER);
+
+    expect(result.retried).toBe(2);
+    expect(result.skipped).toBe(0);
+    expect(serverStore.get("workouts")?.get(workout.id)?.status).toBe("completed");
+  });
+
+  it("un enfant d'une AUTRE séance ne retient pas cette clôture", async () => {
+    // Séance A, avec un exercice qu'on fige en `blocked` : il reste VIVANT
+    // dans la file (donc visible du prédicat) et antérieur à tout le reste,
+    // mais il n'appartient pas à la séance B.
+    const other = await workoutsRepo.create(USER, { name: "Autre", status: "active" } as never);
+    const otherChild = await exercisesRepo.create(USER, {
+      workout_id: other.id,
+      name: "Ex de la séance A",
+    } as never);
+    const otherChildOp = (await listAllOperations(USER)).find(
+      (op) => op.recordLocalId === otherChild.id,
+    ) as SyncOperation;
+    await forceStatus(otherChildOp.id, "blocked");
+
+    // Séance B : ses propres enfants passent.
+    const { workout, closureOp } = await queueOfflineSession(1, 1);
+    expect(closureOp.dependsOnRecords?.map((r) => r.recordLocalId)).not.toContain(otherChild.id);
+
+    const result = await processSyncQueue(USER);
+
+    // La clôture de B part malgré l'enfant bloqué de A.
+    expect(result.skipped).toBe(0);
+    expect(serverStore.get("workouts")?.get(workout.id)?.status).toBe("completed");
+    expect(completionWitness).toEqual([{ exercises: 1, sets: 1 }]);
+    // L'opération bloquée de A est toujours là, intacte.
+    expect((await readOp(otherChildOp.id)).status).toBe("blocked");
+  });
+
+  it("un `exercise` de la BONNE séance retient bien la clôture", async () => {
+    const { workout } = await queueOfflineSession(1, 0);
+    fakeSupabaseOpts.failWrites.set("exercises", NETWORK_ERROR);
+
+    const result = await processSyncQueue(USER);
+    expect(result.skipped).toBe(1);
+    expect(serverStore.get("workouts")?.get(workout.id)?.status).toBe("active");
+  });
+
+  it("un `exercise_set` de la BONNE séance retient la clôture (jointure par exercise_id)", async () => {
+    const { workout } = await queueOfflineSession(1, 2);
+    // Seules les SÉRIES échouent : l'exercice passe. `exercise_sets` ne porte
+    // aucun `workout_id` — seule la jointure du helper les rattache.
+    fakeSupabaseOpts.failWrites.set("exercise_sets", NETWORK_ERROR);
+
+    const result = await processSyncQueue(USER);
+    expect(result.succeeded).toBe(2); // séance + exercice
+    expect(result.retried).toBe(2); // les 2 séries
+    expect(result.skipped).toBe(1); // la clôture
+    expect(serverStore.get("workouts")?.get(workout.id)?.status).toBe("active");
+  });
+
+  it("un `workout_segment` de la BONNE séance retient la clôture", async () => {
+    const { workout } = await queueOfflineSession(0, 0, 1);
+    fakeSupabaseOpts.failWrites.set("workout_segments", NETWORK_ERROR);
+
+    const result = await processSyncQueue(USER);
+    expect(result.skipped).toBe(1);
+    expect(serverStore.get("workouts")?.get(workout.id)?.status).toBe("active");
+  });
+
+  it("une séance SANS aucun enfant ne déclare aucune dépendance et part immédiatement", async () => {
+    const { workout, closureOp } = await queueOfflineSession(0, 0, 0);
+    expect(closureOp.dependsOnRecords).toBeUndefined();
+
+    const result = await processSyncQueue(USER);
+    expect(result.skipped).toBe(0);
+    expect(serverStore.get("workouts")?.get(workout.id)?.status).toBe("completed");
+  });
+
+  it("les dépendances déclarées ne contiennent JAMAIS d'id optimiste `tmp-*`", async () => {
+    const { closureOp, dependsOnRecords } = await queueOfflineSession(2, 2, 1);
+    const declared = closureOp.dependsOnRecords ?? [];
+    expect(declared).toEqual(dependsOnRecords);
+    expect(declared.length).toBe(2 + 4 + 1);
+    expect(declared.some((ref) => ref.recordLocalId.startsWith("tmp-"))).toBe(false);
+    // Et toutes les tables enfants sont bien couvertes.
+    expect(new Set(declared.map((ref) => ref.table))).toEqual(
+      new Set(["exercises", "exercise_sets", "workout_segments"]),
+    );
+  });
+
+  it("un enfant RETIRÉ de la file par l'utilisateur libère la barrière", async () => {
+    // Sémantique voulue : l'utilisateur a explicitement renoncé à cette
+    // écriture (« Retirer de la file ») — elle n'est plus une dépendance
+    // vivante, la clôture peut continuer.
+    const { workout } = await queueOfflineSession(1, 0);
+    fakeSupabaseOpts.failWrites.set("exercises", SCHEMA_ERROR);
+
+    const blockedPass = await processSyncQueue(USER);
+    expect(blockedPass.blocked).toBe(1);
+    expect(blockedPass.skipped).toBe(1);
+
+    const childOp = (await listAllOperations(USER)).find(
+      (op) => op.table === "exercises",
+    ) as SyncOperation;
+    await discardBlockedOperation(childOp.id);
+
+    fakeSupabaseOpts.failWrites.clear();
+    const after = await processSyncQueue(USER);
+    expect(after.skipped).toBe(0);
+    expect(serverStore.get("workouts")?.get(workout.id)?.status).toBe("completed");
+    // Le serveur voit une séance sans cet exercice — conséquence assumée du
+    // choix explicite de l'utilisateur, jamais d'une décision automatique.
+    expect(completionWitness).toEqual([{ exercises: 0, sets: 0 }]);
   });
 });
 
 // ─── Le prédicat lui-même ──────────────────────────────────────────────
 
-describe("hasOlderLiveOperations", () => {
-  it("ignore les opérations PLUS RÉCENTES", async () => {
-    const first = await workoutsRepo.create(USER, { name: "A", status: "active" } as never);
-    await workoutsRepo.create(USER, { name: "B", status: "active" } as never);
-    const ops = await listAllOperations(USER);
-    const firstOp = ops.find((op) => op.recordLocalId === first.id) as SyncOperation;
-    expect(await hasOlderLiveOperations(USER, firstOp)).toBe(false);
+describe("hasLiveDependencies", () => {
+  it("faux quand aucune dépendance n'est déclarée", async () => {
+    await workoutsRepo.create(USER, { name: "A", status: "active" } as never);
+    const later = await workoutsRepo.create(USER, { name: "B", status: "active" } as never);
+    const op = (await listAllOperations(USER)).find(
+      (o) => o.recordLocalId === later.id,
+    ) as SyncOperation;
+    expect(op.dependsOnRecords).toBeUndefined();
+    expect(await hasLiveDependencies(USER, op)).toBe(false);
+  });
+
+  it("ignore une opération vivante sur un enregistrement NON déclaré", async () => {
+    const untracked = await exercisesRepo.create(USER, {
+      workout_id: "w-x",
+      name: "Non déclaré",
+    } as never);
+    const target = await workoutsRepo.create(USER, { name: "B", status: "active" } as never);
+    const op = (await listAllOperations(USER)).find(
+      (o) => o.recordLocalId === target.id,
+    ) as SyncOperation;
+    expect(
+      await hasLiveDependencies(USER, {
+        ...op,
+        dependsOnRecords: [{ table: "exercises", recordLocalId: "autre-id" }],
+      }),
+    ).toBe(false);
+    // …mais le voit dès qu'il est déclaré.
+    expect(
+      await hasLiveDependencies(USER, {
+        ...op,
+        dependsOnRecords: [{ table: "exercises", recordLocalId: untracked.id }],
+      }),
+    ).toBe(true);
+  });
+
+  it("la table fait partie de l'identité : même id, autre table → pas de dépendance", async () => {
+    const exercise = await exercisesRepo.create(USER, {
+      workout_id: "w-x",
+      name: "Ex",
+    } as never);
+    const target = await workoutsRepo.create(USER, { name: "B", status: "active" } as never);
+    const op = (await listAllOperations(USER)).find(
+      (o) => o.recordLocalId === target.id,
+    ) as SyncOperation;
+    expect(
+      await hasLiveDependencies(USER, {
+        ...op,
+        dependsOnRecords: [{ table: "exercise_sets", recordLocalId: exercise.id }],
+      }),
+    ).toBe(false);
+  });
+
+  it("ignore une opération POSTÉRIEURE sur un enregistrement déclaré", async () => {
+    const target = await workoutsRepo.create(USER, { name: "A", status: "active" } as never);
+    const op = (await listAllOperations(USER)).find(
+      (o) => o.recordLocalId === target.id,
+    ) as SyncOperation;
+    // Enfilé APRÈS l'opération protégée.
+    const later = await exercisesRepo.create(USER, {
+      workout_id: target.id,
+      name: "Après",
+    } as never);
+    expect(
+      await hasLiveDependencies(USER, {
+        ...op,
+        dependsOnRecords: [{ table: "exercises", recordLocalId: later.id }],
+      }),
+    ).toBe(false);
   });
 
   it("ne se compte jamais elle-même", async () => {
-    await workoutsRepo.create(USER, { name: "Seule", status: "active" } as never);
+    const created = await workoutsRepo.create(USER, { name: "Seule", status: "active" } as never);
     const [only] = await listAllOperations(USER);
-    expect(await hasOlderLiveOperations(USER, only)).toBe(false);
+    expect(
+      await hasLiveDependencies(USER, {
+        ...only,
+        dependsOnRecords: [{ table: "workouts", recordLocalId: created.id }],
+      }),
+    ).toBe(false);
   });
 
   it("ne voit pas la file d'un AUTRE utilisateur", async () => {
-    await workoutsRepo.create("autre-user", { name: "Ailleurs", status: "active" } as never);
-    const later = await workoutsRepo.create(USER, { name: "Ici", status: "active" } as never);
-    const ops = await listAllOperations(USER);
-    const op = ops.find((o) => o.recordLocalId === later.id) as SyncOperation;
-    expect(await hasOlderLiveOperations(USER, op)).toBe(false);
+    const elsewhere = await exercisesRepo.create("autre-user", {
+      workout_id: "w-x",
+      name: "Ailleurs",
+    } as never);
+    const target = await workoutsRepo.create(USER, { name: "Ici", status: "active" } as never);
+    const op = (await listAllOperations(USER)).find(
+      (o) => o.recordLocalId === target.id,
+    ) as SyncOperation;
+    expect(
+      await hasLiveDependencies(USER, {
+        ...op,
+        dependsOnRecords: [{ table: "exercises", recordLocalId: elsewhere.id }],
+      }),
+    ).toBe(false);
   });
 
   it("une file vidée rouvre la barrière", async () => {
     const { closureOp } = await queueOfflineSession(1, 1);
-    expect(await hasOlderLiveOperations(USER, closureOp)).toBe(true);
+    expect(await hasLiveDependencies(USER, closureOp)).toBe(true);
     await processSyncQueue(USER);
     expect(await listAllOperations(USER)).toHaveLength(0);
   });

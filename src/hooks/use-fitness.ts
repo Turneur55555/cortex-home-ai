@@ -17,6 +17,7 @@ import type { ActiveGenericSegment } from "@/hooks/useGenericActiveSession";
 import { HYBRID_BLOCKS_KEY } from "@/hooks/useGenericActiveSession";
 import { ACTIVE_WORKOUT_CONFLICT_MESSAGE } from "@/lib/fitness/activeWorkoutGuard";
 import { OFFLINE_FIRST_QUERY_OPTIONS } from "@/lib/offline/offlineQuery";
+import { collectWorkoutSyncDependencies } from "@/lib/fitness/workoutSyncDependencies";
 import { workoutsServerRefreshGate } from "@/lib/offline/workoutsRefreshWindow";
 import { requestSyncFlush } from "@/lib/offline/syncFlush";
 
@@ -1054,17 +1055,32 @@ export function useFinishWorkout() {
       // clôture fusionnée dans son `create` encore en attente : elle arrivait
       // en INSERT déjà terminée, donc AVANT ses exercices (FIFO), et le
       // trigger s'exécutait sur une séance vide — XP de record et de
-      // progression jamais versées. Avec l'option, la clôture part comme une
-      // opération SÉPARÉE, enfilée après les enfants : le serveur observe la
-      // même chose qu'en ligne. Aucune règle d'XP n'est touchée.
+      // progression jamais versées.
       //
-      // CHANTIER 1 BIS (DISC-01b) — `waitForEarlierOperations` complète la
-      // précédente : être enfilée après les enfants ne suffit pas, car la
-      // file traite chaque opération indépendamment et POURSUIT après un
-      // échec. Sans cette barrière, un `create` d'enfant en échec réseau (ou
-      // `blocked`) laissait quand même partir la clôture, et le trigger
-      // s'exécutait sur une séance incomplète — sans jamais se redéclencher
-      // ensuite. Les deux options sont les deux moitiés d'une même garantie.
+      // CHANTIER 1 BIS (DISC-01b) — `dependsOnRecords` complète la précédente :
+      // être enfilée après les enfants ne suffit pas, car la file traite
+      // chaque opération indépendamment et POURSUIT après un échec. Sans
+      // cette barrière, un `create` d'enfant en échec réseau (ou `blocked`)
+      // laissait quand même partir la clôture, et le trigger s'exécutait sur
+      // une séance incomplète — sans jamais se redéclencher ensuite. Les deux
+      // options sont les deux moitiés d'une même garantie.
+      //
+      // Les dépendances sont construites depuis le STORE LOCAL, jamais depuis
+      // le snapshot React reçu en argument : celui-ci vient du cache React
+      // Query et peut porter transitoirement des ids optimistes `tmp-*`
+      // (useAddExerciseSet), qui ne correspondent à aucune opération de la
+      // file — la barrière ne retiendrait alors plus rien.
+      const [localExercises, localSets, localSegments] = await Promise.all([
+        exercisesRepo.list(user.id),
+        exerciseSetsRepo.list(user.id),
+        workoutSegmentsRepo.list(user.id),
+      ]);
+      const dependsOnRecords = collectWorkoutSyncDependencies(workout.id, {
+        exercises: localExercises,
+        exerciseSets: localSets,
+        workoutSegments: localSegments,
+      });
+
       await workoutsRepo.update(
         workout.id,
         user.id,
@@ -1073,7 +1089,7 @@ export function useFinishWorkout() {
           status: "completed",
           ...(metadataUpdate ? { metadata: metadataUpdate } : {}),
         },
-        { neverMergeIntoPendingCreate: true, waitForEarlierOperations: true },
+        { neverMergeIntoPendingCreate: true, dependsOnRecords },
       );
 
       // H2 : synchronise les colonnes résumé `exercises.sets/reps/weight`

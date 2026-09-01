@@ -38,6 +38,19 @@ export interface OfflineEntity<T = Record<string, unknown>> {
 export type SyncOpType = "create" | "update" | "delete";
 
 /**
+ * Référence à un enregistrement dont une opération dépend (chantier 1 bis).
+ * Volontairement réduite au couple qui identifie une ligne dans la file :
+ * le moteur n'a besoin de rien d'autre, et surtout d'aucune connaissance du
+ * modèle métier de l'appelant.
+ */
+export interface SyncDependencyRef {
+  /** Table locale de l'enregistrement attendu (ex. "exercises"). */
+  table: EntityTable;
+  /** Id local (= id serveur, généré côté client, cf. repository.ts). */
+  recordLocalId: string;
+}
+
+/**
  * Cycle de vie d'une opération de la sync queue :
  *
  *   pending ──claim──▶ syncing ──succès──▶ (retirée de la queue)
@@ -82,12 +95,14 @@ export interface SyncOperation<T = Record<string, unknown>> {
   /** Code d'erreur Postgres/PostgREST de la dernière erreur, quand il existe — sert à décider `failed` vs `blocked` et à expliquer la cause à l'utilisateur sans re-parser `lastError`. */
   lastErrorCode?: string | null;
   /**
-   * CHANTIER 1 BIS (DISC-01b) — BARRIÈRE DE DÉPENDANCE, OPT-IN.
+   * CHANTIER 1 BIS (DISC-01b) — BARRIÈRE DE DÉPENDANCE EXPLICITE, OPT-IN.
    *
-   * `true` : cette opération ne doit PAS être envoyée tant qu'il reste, dans
-   * la file du même utilisateur, une opération PLUS ANCIENNE encore vivante
-   * (`pending` | `failed` | `syncing` | `blocked`). Elle est alors laissée en
-   * file (comptée dans `skipped`) et retentée au passage suivant.
+   * Liste des ENREGISTREMENTS dont cette opération dépend. Elle n'est pas
+   * envoyée tant que l'un d'eux porte encore, dans la file du même
+   * utilisateur, une opération vivante (`pending` | `failed` | `syncing` |
+   * `blocked`) ANTÉRIEURE à celle-ci. Elle est alors laissée intacte en file
+   * (comptée dans `skipped`) et retentée au passage suivant, sans consommer
+   * de tentative ni avancer son backoff.
    *
    * POURQUOI (reproduit et mesuré) : le FIFO du moteur est un ordre
    * TEMPOREL, pas une dépendance. `processSyncQueue` traite chaque opération
@@ -99,15 +114,28 @@ export interface SyncOperation<T = Record<string, unknown>> {
    * (`OLD.status IS DISTINCT FROM 'completed'`) l'empêche de se redéclencher
    * quand les enfants arrivent enfin. En `blocked`, la perte était définitive.
    *
-   * STRICTEMENT OPT-IN : une opération sans ce drapeau garde exactement le
-   * comportement d'avant — une opération indépendante placée après une
-   * opération en échec continue de partir normalement (la file n'est JAMAIS
-   * un stop-on-error global, cf. `fitnessCoreOffline.test.ts`).
+   * POURQUOI DES ENREGISTREMENTS ET NON DES ids D'OPÉRATION : un id
+   * d'opération est interne et instable — `resolveConflict` en ré-enfile un
+   * neuf, et une opération créée plus tard sur le même enregistrement
+   * échapperait à une liste figée. Une dépendance par enregistrement reste
+   * juste quoi qu'il arrive à la file.
+   *
+   * POURQUOI PAS UNE DÉDUCTION CÔTÉ MOTEUR : `exercise_sets` ne porte AUCUN
+   * `workout_id` (seulement `exercise_id`) ; déduire les enfants d'une séance
+   * imposerait une jointure et des règles par table DANS le moteur générique.
+   * C'est l'appelant — le domaine Fitness, qui connaît son propre modèle —
+   * qui déclare (cf. `lib/fitness/workoutSyncDependencies.ts`).
+   *
+   * STRICTEMENT OPT-IN : une opération sans cette liste garde exactement le
+   * comportement d'avant, et la barrière ne retient QUE l'opération qui la
+   * porte — une opération indépendante placée après une opération en échec
+   * continue de partir normalement (la file n'est JAMAIS un stop-on-error
+   * global, cf. `fitnessCoreOffline.test.ts`).
    *
    * Absent (undefined) pour toute opération persistée avant l'ajout du champ,
-   * lu comme `false` : aucune migration de la file.
+   * lu comme « aucune dépendance » : aucune migration de la file.
    */
-  waitForEarlierOperations?: boolean;
+  dependsOnRecords?: SyncDependencyRef[];
   /**
    * Horodatage de la dernière tentative. Sert à DEUX mécanismes :
    * 1. le backoff exponentiel des opérations `failed` (sync engine) ;
@@ -147,14 +175,15 @@ export interface ConflictRecord<T = Record<string, unknown>> {
   serverUpdatedAt: string;
   detectedAt: string;
   /**
-   * CHANTIER 1 BIS — barrière de l'opération à l'origine du conflit,
-   * conservée pour la même raison que `opType` juste au-dessus : « garder ma
+   * CHANTIER 1 BIS — dépendances de l'opération à l'origine du conflit,
+   * conservées pour la même raison que `opType` juste au-dessus : « garder ma
    * version » doit rejouer la MÊME intention, barrière comprise. Sans ça, une
    * clôture rejouée après arbitrage repartirait sans garde et pourrait
-   * doubler des enfants encore en échec. Optionnel au typage pour les
-   * conflits déjà persistés avant l'ajout du champ (relus comme `false`).
+   * devancer des enfants encore en échec. Optionnel au typage pour les
+   * conflits déjà persistés avant l'ajout du champ (relus comme « aucune
+   * dépendance »).
    */
-  waitForEarlierOperations?: boolean;
+  dependsOnRecords?: SyncDependencyRef[];
   /** Renseigné une fois résolu par l'utilisateur ; absent tant que le conflit est en attente. */
   resolution?: ConflictResolutionStrategy;
   resolvedAt?: string;
