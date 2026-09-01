@@ -1057,6 +1057,14 @@ export function useFinishWorkout() {
       // progression jamais versées. Avec l'option, la clôture part comme une
       // opération SÉPARÉE, enfilée après les enfants : le serveur observe la
       // même chose qu'en ligne. Aucune règle d'XP n'est touchée.
+      //
+      // CHANTIER 1 BIS (DISC-01b) — `waitForEarlierOperations` complète la
+      // précédente : être enfilée après les enfants ne suffit pas, car la
+      // file traite chaque opération indépendamment et POURSUIT après un
+      // échec. Sans cette barrière, un `create` d'enfant en échec réseau (ou
+      // `blocked`) laissait quand même partir la clôture, et le trigger
+      // s'exécutait sur une séance incomplète — sans jamais se redéclencher
+      // ensuite. Les deux options sont les deux moitiés d'une même garantie.
       await workoutsRepo.update(
         workout.id,
         user.id,
@@ -1065,7 +1073,7 @@ export function useFinishWorkout() {
           status: "completed",
           ...(metadataUpdate ? { metadata: metadataUpdate } : {}),
         },
-        { neverMergeIntoPendingCreate: true },
+        { neverMergeIntoPendingCreate: true, waitForEarlierOperations: true },
       );
 
       // H2 : synchronise les colonnes résumé `exercises.sets/reps/weight`

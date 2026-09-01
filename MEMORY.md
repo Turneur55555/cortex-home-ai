@@ -4172,8 +4172,46 @@ online inchangée (opération `update` séparée), modification ordinaire toujou
 suppression sans opération orpheline, XP déjà acquise non rejouée.
 `npm test` **1672 passed** / 60 skipped, `tsc` propre, build OK, eslint 0 erreur.
 
+### DISC-01b — CORRIGÉ (chantier 1 bis, barrière de dépendance, 01/09/2026)
+**Bug** (reproduit et mesuré) : le FIFO du moteur est un ordre TEMPOREL, pas une dépendance.
+`processSyncQueue` traite chaque opération indépendamment et POURSUIT après un échec. La clôture
+d'une séance partait donc même quand le `create` de ses exercices/séries avait échoué :
+`{ succeeded: 2, retried: 3 }`, `trigger = [{ exercises: 0, sets: 0 }]`. Irréversible (garde
+`OLD.status IS DISTINCT FROM 'completed'`) ; en `blocked`, perte **définitive** — précédent réel :
+le bug prod `exercises.created_at` du 29/08 aurait produit exactement ça.
+
+**Correctif — barrière OPT-IN par opération**, jamais de stop-on-error global :
+`SyncOperation.waitForEarlierOperations` → l'opération n'est pas envoyée tant qu'une opération
+PLUS ANCIENNE de la file du même utilisateur est encore vivante (`pending`/`failed`/`syncing`/
+`blocked`) ; elle est laissée intacte, comptée dans `skipped`, sans consommer de tentative ni
+avancer son backoff.
+- `hasOlderLiveOperations(userId, op)` (`syncQueue.ts`) lit la file **complète** — une opération
+  `syncing` dans un AUTRE onglet est absente de `listPendingOperations` mais bel et bien vivante.
+- Test placé **avant** `claimOperation`, qui reste l'**unique** protection atomique : la barrière
+  décide seulement s'il y a lieu de TENTER l'envoi.
+- La barrière est conservée dans le `ConflictRecord` et rejouée par « garder ma version », comme
+  `opType`.
+- Passe-plat `repository.ts` uniquement ; les deux clôtures Fitness posent le drapeau, à côté de
+  `neverMergeIntoPendingCreate` — les deux moitiés d'une même garantie.
+
+**Compromis assumé, figé par un test** : la barrière est à l'échelle de l'utilisateur — une
+opération antérieure SANS RAPPORT encore bloquée retient aussi la clôture. Choix conservateur
+(clôture retardée + état honnête à l'écran > XP amputée définitivement). Un resserrement aux seules
+lignes liées à la séance resterait un choix explicite.
+
+Tests : `syncQueueDependencyBarrier.test.ts` (19 tests) — **8 échouent si la barrière est
+désactivée** (vérifié). Couvre : scénario DISC-01b complet avant/après réparation des enfants,
+les 4 statuts vivants, tous enfants OK → clôture dans le MÊME passage, opérations indépendantes qui
+continuent (après `failed` ET après `blocked`), plusieurs enfants, reprise d'orpheline, conflit,
+deux instances concurrentes, comptage `skipped`, prédicat isolé. Un **témoin de trigger** enregistre
+ce que le serveur voit des enfants au moment exact où la séance passe `completed` : avant,
+`[{exercises:0,sets:0}]` ; après, `[{exercises:1,sets:1}]`.
+`npm test` **1691 passed** / 60 skipped (+19), `tsc` propre, build OK, eslint 0 erreur, 295 tests
+offline verts (chantiers 1→4 non régressés).
+
 ### Restes assumés / à décider (NON corrigés — hors périmètre)
-- **DISC-01b — échec partiel d'un enfant pendant le passage de file.** Si un `create` d'enfant
+- ~~**DISC-01b — échec partiel d'un enfant pendant le passage de file.**~~ → **corrigé** ci-dessus.
+  Ancien constat conservé pour mémoire : Si un `create` d'enfant
   échoue (coupure) alors que l'`UPDATE status='completed'` réussit dans le même passage, le trigger
   voit une séance partielle. **Pré-existant et identique en ligne** (le correctif ci-dessus n'aggrave
   rien : il aligne l'offline sur l'online). Fermer cette fenêtre demanderait une notion de

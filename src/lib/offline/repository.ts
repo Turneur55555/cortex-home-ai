@@ -140,6 +140,25 @@ export interface OfflineUpdateOptions {
    * strictement INCHANGÉ.
    */
   neverMergeIntoPendingCreate?: boolean;
+
+  /**
+   * PASSE-PLAT vers `SyncOperation.waitForEarlierOperations` (barrière de
+   * dépendance du moteur de file, chantier 1 bis). Le repository ne
+   * l'interprète pas : il le transmet à `enqueueOperation`.
+   *
+   * Complément indissociable de `neverMergeIntoPendingCreate` pour une
+   * écriture qui déclenche un calcul serveur portant sur des lignes liées :
+   * la première option garantit que le patch part APRÈS les enfants dans
+   * l'ORDRE de la file, la seconde qu'il n'est pas ENVOYÉ tant que ces
+   * enfants n'ont pas réussi (un échec réseau ou un `blocked` sur un enfant
+   * ne suffit pas à interrompre la file, cf. DISC-01b).
+   *
+   * N'a d'effet que sur une opération `update` réellement enfilée : si le
+   * patch est fusionné dans un `create` en attente (comportement par défaut),
+   * il n'y a pas d'opération distincte à retenir. Les deux options vont donc
+   * ensemble.
+   */
+  waitForEarlierOperations?: boolean;
 }
 
 export interface OfflineRepository<T extends BaseRow> {
@@ -286,6 +305,7 @@ export function createOfflineRepository<T extends BaseRow>(
           opType: "update",
           payload,
           baseUpdatedAt: entity.serverUpdatedAt,
+          waitForEarlierOperations: options?.waitForEarlierOperations,
         });
       }
       return newData;

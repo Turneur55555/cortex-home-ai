@@ -5,6 +5,7 @@ import { buildUpdatePayload, getSupabaseTableName } from "./repository";
 import {
   claimOperation,
   enqueueOperation,
+  hasOlderLiveOperations,
   hasOtherQueuedOperations,
   listPendingOperations,
   rebasePendingOperationsForRecord,
@@ -141,6 +142,9 @@ async function markConflict<T>(params: {
     // On conserve l'INTENTION locale (update ou delete) : c'est elle qui
     // sera rejouée si l'utilisateur choisit « garder ma version ».
     opType: op.opType,
+    // Chantier 1 bis : la barrière fait partie de l'intention locale, au même
+    // titre que `opType` — « garder ma version » doit la rejouer telle quelle.
+    waitForEarlierOperations: op.waitForEarlierOperations,
     localData: entity.data,
     serverData: serverRow as unknown as T,
     localUpdatedAt: entity.localUpdatedAt,
@@ -373,6 +377,31 @@ export async function processSyncQueue(
     // renvoie l'état PERSISTÉ, `baseUpdatedAt` recalé compris.
     if (options.respectBackoff && !isDueForRetry(op)) continue;
 
+    // BARRIÈRE DE DÉPENDANCE (chantier 1 bis, DISC-01b) — OPT-IN, jamais
+    // globale. Une opération qui porte `waitForEarlierOperations` déclare
+    // que le serveur ne doit pas l'observer tant qu'une opération plus
+    // ANCIENNE de cet utilisateur est encore vivante (pending / failed /
+    // syncing / blocked). Elle est alors laissée intacte dans la file
+    // (comptée dans `skipped`, comme toute opération qu'on n'a pas envoyée)
+    // et retentée au passage suivant, sans consommer de tentative ni
+    // avancer son backoff.
+    //
+    // Ce test ne concerne QUE les opérations qui portent le drapeau : la
+    // file n'est PAS un stop-on-error — une opération indépendante placée
+    // après une opération en échec continue de partir normalement
+    // (garanti par `fitnessCoreOffline.test.ts`, inchangé).
+    //
+    // Il est volontairement placé AVANT `claimOperation` : inutile de
+    // prendre possession d'une opération qu'on ne va pas envoyer (le claim
+    // la passerait en `syncing` et fausserait la détection d'orpheline).
+    // Il ne REMPLACE pas le claim pour autant : deux instances peuvent très
+    // bien franchir la barrière en même temps, c'est toujours le claim
+    // atomique qui garantit un seul envoi.
+    if (op.waitForEarlierOperations && (await hasOlderLiveOperations(userId, op))) {
+      result.skipped += 1;
+      continue;
+    }
+
     // Prise de possession atomique : une seule instance peut envoyer cette
     // opération. `claimOperation` renvoie l'état persisté (avec le
     // `lastAttemptAt` qui sert ensuite à détecter une orpheline).
@@ -449,6 +478,10 @@ export async function resolveConflict(
         // font pas partie de l'arbitrage et `updated_at` reste au serveur.
         payload: opType === "delete" ? null : buildUpdatePayload(conflict.localData),
         baseUpdatedAt: null, // conflit déjà arbitré par l'utilisateur : pas de nouvelle détection
+        // La barrière de dépendance survit à l'arbitrage : l'utilisateur a
+        // tranché QUELLE version gagne, pas QUAND le serveur a le droit de
+        // l'observer (chantier 1 bis).
+        waitForEarlierOperations: conflict.waitForEarlierOperations,
       });
     }
   } else {

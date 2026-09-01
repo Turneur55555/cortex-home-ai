@@ -82,6 +82,33 @@ export interface SyncOperation<T = Record<string, unknown>> {
   /** Code d'erreur Postgres/PostgREST de la dernière erreur, quand il existe — sert à décider `failed` vs `blocked` et à expliquer la cause à l'utilisateur sans re-parser `lastError`. */
   lastErrorCode?: string | null;
   /**
+   * CHANTIER 1 BIS (DISC-01b) — BARRIÈRE DE DÉPENDANCE, OPT-IN.
+   *
+   * `true` : cette opération ne doit PAS être envoyée tant qu'il reste, dans
+   * la file du même utilisateur, une opération PLUS ANCIENNE encore vivante
+   * (`pending` | `failed` | `syncing` | `blocked`). Elle est alors laissée en
+   * file (comptée dans `skipped`) et retentée au passage suivant.
+   *
+   * POURQUOI (reproduit et mesuré) : le FIFO du moteur est un ordre
+   * TEMPOREL, pas une dépendance. `processSyncQueue` traite chaque opération
+   * indépendamment et continue après un échec. Une clôture de séance
+   * (`workouts.status='completed'`) pouvait donc partir alors que le `create`
+   * de ses exercices/séries avait échoué — et le trigger serveur
+   * `award_xp_on_workout_complete`, qui parcourt ces lignes, s'exécutait sur
+   * une séance vide. Irréversible : son garde
+   * (`OLD.status IS DISTINCT FROM 'completed'`) l'empêche de se redéclencher
+   * quand les enfants arrivent enfin. En `blocked`, la perte était définitive.
+   *
+   * STRICTEMENT OPT-IN : une opération sans ce drapeau garde exactement le
+   * comportement d'avant — une opération indépendante placée après une
+   * opération en échec continue de partir normalement (la file n'est JAMAIS
+   * un stop-on-error global, cf. `fitnessCoreOffline.test.ts`).
+   *
+   * Absent (undefined) pour toute opération persistée avant l'ajout du champ,
+   * lu comme `false` : aucune migration de la file.
+   */
+  waitForEarlierOperations?: boolean;
+  /**
    * Horodatage de la dernière tentative. Sert à DEUX mécanismes :
    * 1. le backoff exponentiel des opérations `failed` (sync engine) ;
    * 2. la prise de possession / détection d'orpheline d'une opération
@@ -119,6 +146,15 @@ export interface ConflictRecord<T = Record<string, unknown>> {
   localUpdatedAt: string;
   serverUpdatedAt: string;
   detectedAt: string;
+  /**
+   * CHANTIER 1 BIS — barrière de l'opération à l'origine du conflit,
+   * conservée pour la même raison que `opType` juste au-dessus : « garder ma
+   * version » doit rejouer la MÊME intention, barrière comprise. Sans ça, une
+   * clôture rejouée après arbitrage repartirait sans garde et pourrait
+   * doubler des enfants encore en échec. Optionnel au typage pour les
+   * conflits déjà persistés avant l'ajout du champ (relus comme `false`).
+   */
+  waitForEarlierOperations?: boolean;
   /** Renseigné une fois résolu par l'utilisateur ; absent tant que le conflit est en attente. */
   resolution?: ConflictResolutionStrategy;
   resolvedAt?: string;

@@ -52,6 +52,9 @@ export function buildConflictRecord<T>(input: {
    * `update` qui ferait ressusciter la ligne).
    */
   opType: SyncOpType;
+  /** Chantier 1 bis — barrière de dépendance de l'opération d'origine, conservée
+   *  pour que « garder ma version » rejoue la même intention (cf. `opType`). */
+  waitForEarlierOperations?: boolean;
   localData: T;
   serverData: T;
   localUpdatedAt: string;
@@ -63,6 +66,7 @@ export function buildConflictRecord<T>(input: {
     table: input.table,
     recordLocalId: input.recordLocalId,
     opType: input.opType,
+    waitForEarlierOperations: input.waitForEarlierOperations,
     localData: input.localData,
     serverData: input.serverData,
     localUpdatedAt: input.localUpdatedAt,

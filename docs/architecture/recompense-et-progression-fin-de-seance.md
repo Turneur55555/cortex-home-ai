@@ -154,10 +154,47 @@ Deux garde-fous indispensables, tous deux vérifiés par des tests :
   `update` tenter de modifier une ligne que le serveur n'a jamais vue. Sans l'option, la file ne
   contient de toute façon que le `create` — comportement identique.
 
-**Non traité (pré-existant, identique en ligne et hors ligne).** Si un `create` d'enfant échoue
-(coupure) alors que l'`UPDATE status='completed'` réussit dans le même passage, le trigger voit une
-séance partielle. Fermer cette fenêtre demanderait une notion de dépendance/barrière **dans le
-moteur de file** (chantier 1) — hors périmètre, à arbitrer séparément.
+## 5 bis. DISC-01b — barrière de dépendance de la file (chantier 1 bis)
+
+**Le problème.** Arriver après les enfants dans l'ORDRE de la file ne suffit pas. Le FIFO du moteur
+est un ordre **temporel**, pas une dépendance : `processSyncQueue` traite chaque opération
+indépendamment et **poursuit la boucle après un échec**. Mesuré avant correctif — un `create`
+d'enfant en échec réseau laissait quand même partir la clôture :
+
+```
+result  = { succeeded: 2, retried: 3 }   ← create:workouts ET update:workouts(completed)
+trigger = [{ exercises: 0, sets: 0 }]    ← séance vide
+```
+
+Irréversible : le garde du trigger (`OLD.status IS DISTINCT FROM 'completed'`) l'empêche de se
+redéclencher quand les enfants arrivent enfin. En `blocked` (erreur Postgres non retryable, jamais
+reprise automatiquement — précédent réel : le bug prod `exercises.created_at` du 29/08), la perte
+était **définitive**.
+
+**Le correctif — barrière OPT-IN par opération.** `SyncOperation.waitForEarlierOperations` : une
+opération qui porte ce drapeau n'est pas envoyée tant qu'il reste, dans la file du même
+utilisateur, une opération **plus ancienne encore vivante** (`pending` | `failed` | `syncing` |
+`blocked`). Elle est laissée intacte (comptée dans `skipped`), sans consommer de tentative ni
+avancer son backoff, et retentée au passage suivant.
+
+Points de conception :
+
+- **Jamais un stop-on-error global.** Une opération sans le drapeau garde son comportement exact,
+  y compris placée après une opération en échec ou bloquée — garanti par un test dédié et par
+  `fitnessCoreOffline.test.ts`, inchangé.
+- **Le test lit la file COMPLÈTE**, pas seulement sa partie traitable : une opération `syncing`
+  prise en charge par un autre onglet est absente de `listPendingOperations` mais reste vivante.
+- **`claimOperation` reste l'unique protection atomique.** La barrière est évaluée *avant* le
+  claim et décide seulement s'il y a lieu de tenter l'envoi ; deux instances peuvent la franchir
+  simultanément, c'est toujours le claim qui garantit un seul envoi.
+- **La barrière survit à un conflit** : elle est conservée dans le `ConflictRecord` et rejouée par
+  « garder ma version », exactement comme `opType`.
+
+**Compromis assumé (figé par un test).** La barrière est à l'échelle de l'utilisateur : une
+opération antérieure **sans rapport** encore bloquée retient aussi la clôture. Choix conservateur —
+mieux vaut une clôture retardée (l'écran affiche « Récompense en attente de synchronisation », état
+honnête) qu'une XP amputée définitivement. Un resserrement aux seules lignes liées à la séance
+reste possible, ce serait un choix explicite.
 
 ## 6. Fichiers
 
@@ -169,6 +206,7 @@ moteur de file** (chantier 1) — hors périmètre, à arbitrer séparément.
 | `lib/offline/workoutsRefreshWindow.ts`         | Instance partagée du domaine séances                      |
 | `lib/offline/syncFlush.ts`                     | Passage immédiat de la file à la clôture (fire-and-forget) |
 | `lib/offline/syncQueue.ts`                     | + `hasQueuedOperationsForRecord` (signal « pas encore parti ») |
-| `lib/offline/repository.ts`                    | + `OfflineUpdateOptions.neverMergeIntoPendingCreate` (DISC-01) |
+| `lib/offline/repository.ts`                    | + `OfflineUpdateOptions.neverMergeIntoPendingCreate` (DISC-01) + passe-plat `waitForEarlierOperations` |
+| `lib/offline/syncEngine.ts`                    | barrière de dépendance dans `processSyncQueue` (DISC-01b) |
 | `hooks/useSessionReward.ts`                    | Assemble l'état réel de la récompense                     |
 | `components/fitness/session/SessionRewardScreen.tsx` | Rend l'état honnête au lieu d'un « +0 XP »          |

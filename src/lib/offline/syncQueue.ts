@@ -17,6 +17,8 @@ export interface EnqueueOperationInput<T> {
   opType: SyncOpType;
   payload: T | null;
   baseUpdatedAt: string | null;
+  /** CHANTIER 1 BIS — barrière de dépendance OPT-IN, cf. `SyncOperation`. */
+  waitForEarlierOperations?: boolean;
 }
 
 // `listPendingOperations` trie par `createdAt` pour garantir l'ordre FIFO
@@ -49,6 +51,9 @@ export async function enqueueOperation<T>(
     opType: input.opType,
     payload: input.payload,
     baseUpdatedAt: input.baseUpdatedAt,
+    // Non renseigné → champ absent, lu comme `false` : aucune opération
+    // existante ne change de comportement.
+    ...(input.waitForEarlierOperations ? { waitForEarlierOperations: true } : {}),
     createdAt: nextMonotonicIsoTimestamp(),
     status: "pending",
     retryCount: 0,
@@ -331,6 +336,55 @@ export async function hasOtherQueuedOperations(
 ): Promise<boolean> {
   const ops = await listAllOperations(userId);
   return ops.some((op) => op.id !== excludeOperationId && op.status !== "blocked");
+}
+
+/**
+ * CHANTIER 1 BIS (DISC-01b) — statuts d'une opération encore VIVANTE : elle
+ * finira par partir toute seule (`pending`, `failed` après backoff,
+ * `syncing` en cours ailleurs) ou attend une action explicite de
+ * l'utilisateur (`blocked`). Seul `done` est terminal — et il n'est jamais
+ * persisté (une opération réussie est retirée de la file).
+ *
+ * Volontairement DISTINCT de `REBASABLE_STATUSES` (même contenu aujourd'hui) :
+ * ce sont deux questions différentes — « peut-on recaler son baseUpdatedAt ? »
+ * et « le serveur ignore-t-il encore cette écriture ? ». Les fusionner
+ * coupleraient deux mécanismes sans rapport.
+ */
+const LIVE_OPERATION_STATUSES = new Set<SyncOpStatus>(["pending", "failed", "syncing", "blocked"]);
+
+/**
+ * Reste-t-il une opération PLUS ANCIENNE encore vivante dans la file de cet
+ * utilisateur ? C'est l'unique prédicat de la barrière de dépendance
+ * (`SyncOperation.waitForEarlierOperations`).
+ *
+ * Points importants :
+ * - la file COMPLÈTE est relue (`listAllOperations`), pas seulement la partie
+ *   traitable : une opération `syncing` prise en charge par un AUTRE onglet
+ *   est absente de `listPendingOperations` mais reste bel et bien vivante —
+ *   la manquer laisserait passer la clôture pendant qu'une autre instance
+ *   pousse encore ses enfants ;
+ * - « plus ancienne » = `createdAt` strictement inférieur, c'est-à-dire
+ *   exactement l'ordre FIFO utilisé par le moteur. L'horloge monotone de
+ *   `enqueueOperation` rend toute égalité impossible au sein d'une instance,
+ *   et une égalité entre deux instances ne concernerait que des
+ *   enregistrements sans lien — jamais un enfant dont la clôture dépend ;
+ * - l'opération elle-même est exclue (`op.id`), évidemment.
+ *
+ * Ce prédicat ne remplace JAMAIS `claimOperation` : il décide seulement s'il
+ * y a lieu de tenter l'envoi ; l'exclusion mutuelle entre instances reste
+ * entièrement portée par la prise de possession atomique.
+ */
+export async function hasOlderLiveOperations(
+  userId: string,
+  op: Pick<SyncOperation, "id" | "createdAt">,
+): Promise<boolean> {
+  const ops = await listAllOperations(userId);
+  return ops.some(
+    (other) =>
+      other.id !== op.id &&
+      other.createdAt < op.createdAt &&
+      LIVE_OPERATION_STATUSES.has(other.status),
+  );
 }
 
 export async function countPendingAndFailed(userId: string): Promise<QueueCounts> {

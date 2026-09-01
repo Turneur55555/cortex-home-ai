@@ -544,7 +544,9 @@ export function useFinishGenericActiveWorkout() {
       // CHANTIER 4 (DISC-01) — même raison que `useFinishWorkout` : la
       // clôture ne doit jamais être fusionnée dans un `create` encore en
       // attente, sinon le trigger d'XP serveur s'exécute avant l'arrivée des
-      // lignes liées à la séance. Voir `OfflineUpdateOptions`.
+      // lignes liées à la séance ; et `waitForEarlierOperations` (chantier 1
+      // bis) la retient tant que ces lignes n'ont pas RÉUSSI, un échec
+      // n'interrompant pas la file. Voir `OfflineUpdateOptions`.
       await workoutsRepo.update(
         workout.id,
         user.id,
@@ -553,7 +555,7 @@ export function useFinishGenericActiveWorkout() {
           status: "completed",
           metadata: { ...existingMetadata, segments: formattedSegments },
         },
-        { neverMergeIntoPendingCreate: true },
+        { neverMergeIntoPendingCreate: true, waitForEarlierOperations: true },
       );
     },
     onSuccess: (_d, workout) => {
