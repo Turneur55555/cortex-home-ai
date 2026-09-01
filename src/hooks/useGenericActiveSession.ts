@@ -541,11 +541,20 @@ export function useFinishGenericActiveWorkout() {
               }))
           : [];
 
-      await workoutsRepo.update(workout.id, user.id, {
-        duration_minutes: durationMin,
-        status: "completed",
-        metadata: { ...existingMetadata, segments: formattedSegments },
-      });
+      // CHANTIER 4 (DISC-01) — même raison que `useFinishWorkout` : la
+      // clôture ne doit jamais être fusionnée dans un `create` encore en
+      // attente, sinon le trigger d'XP serveur s'exécute avant l'arrivée des
+      // lignes liées à la séance. Voir `OfflineUpdateOptions`.
+      await workoutsRepo.update(
+        workout.id,
+        user.id,
+        {
+          duration_minutes: durationMin,
+          status: "completed",
+          metadata: { ...existingMetadata, segments: formattedSegments },
+        },
+        { neverMergeIntoPendingCreate: true },
+      );
     },
     onSuccess: (_d, workout) => {
       // Pas de toast ici : l'écran de récompense (SessionRewardScreen)

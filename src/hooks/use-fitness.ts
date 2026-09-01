@@ -1046,11 +1046,27 @@ export function useFinishWorkout() {
         };
       }
 
-      await workoutsRepo.update(workout.id, user.id, {
-        duration_minutes: durationMin,
-        status: "completed",
-        ...(metadataUpdate ? { metadata: metadataUpdate } : {}),
-      });
+      // CHANTIER 4 (DISC-01) — `neverMergeIntoPendingCreate` : c'est l'arrivée
+      // de `status='completed'` EN BASE qui déclenche
+      // `award_xp_on_workout_complete`, et ce trigger PARCOURT les exercices
+      // et les séries de la séance (records, progression par exercice). Sans
+      // cette option, une séance vécue entièrement hors ligne voyait sa
+      // clôture fusionnée dans son `create` encore en attente : elle arrivait
+      // en INSERT déjà terminée, donc AVANT ses exercices (FIFO), et le
+      // trigger s'exécutait sur une séance vide — XP de record et de
+      // progression jamais versées. Avec l'option, la clôture part comme une
+      // opération SÉPARÉE, enfilée après les enfants : le serveur observe la
+      // même chose qu'en ligne. Aucune règle d'XP n'est touchée.
+      await workoutsRepo.update(
+        workout.id,
+        user.id,
+        {
+          duration_minutes: durationMin,
+          status: "completed",
+          ...(metadataUpdate ? { metadata: metadataUpdate } : {}),
+        },
+        { neverMergeIntoPendingCreate: true },
+      );
 
       // H2 : synchronise les colonnes résumé `exercises.sets/reps/weight`
       // depuis les séries réelles — offline-first au même titre que tout

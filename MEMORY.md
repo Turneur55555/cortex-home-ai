@@ -4139,14 +4139,47 @@ Validation : `npm test` **1662 passed** / 60 skipped (vs 1603, **+59**, aucun te
 modifié ni cassé), `tsc --noEmit` propre, `npm run build` OK, eslint 0 erreur sur les fichiers
 touchés (warnings `any` pré-existants, nombre identique).
 
+### DISC-01 — CORRIGÉ (option (a) validée par Nathan, 01/09/2026)
+**Bug** : la clôture d'une séance jamais synchronisée était fusionnée dans son `create` en attente
+(`repository.update` → `findPendingCreateForRecord`). La séance arrivait donc en INSERT déjà
+`status='completed'`, **avant** ses exercices et ses séries (FIFO), et
+`award_xp_on_workout_complete` — qui PARCOURT `exercises` et `exercise_sets` — s'exécutait sur une
+séance vide. Forfait `workout_muscu` versé, **XP de record et de progression jamais versées**.
+Mesuré : `exercisesSeenByTrigger === [0]`.
+
+**Correctif — LOCAL** : ni `syncQueue.ts`, ni `syncEngine.ts`, ni le trigger SQL, ni l'économie XP
+ne sont touchés. `repository.update()` accepte `OfflineUpdateOptions.neverMergeIntoPendingCreate`
+(**défaut `false`** → toutes les autres tables et tous les autres appels strictement inchangés). Le
+repository reste générique : il ne connaît ni `workouts` ni `status` — c'est l'appelant qui déclare
+« le serveur ne doit observer ce patch qu'une fois les lignes liées arrivées ». Posé par
+`useFinishWorkout` et `useFinishGenericActiveWorkout` sur la seule écriture de clôture.
+Ordre serveur obtenu, identique au parcours en ligne :
+`INSERT workouts(active)` (le trigger ne se déclenche pas) → `INSERT exercises` →
+`INSERT exercise_sets` → `UPDATE status='completed'` (trigger, séance COMPLÈTE).
+
+Deux garde-fous, testés : (1) **l'état local ne recule jamais** — le `create` répond
+`status='active'`, et c'est le rebase du chantier 1 (`applyServerRowToEntity` ne réécrit l'entité
+que s'il ne reste aucune opération en attente) qui l'empêche ; mécanisme existant, non modifié.
+(2) `repository.remove()` annule désormais **toutes** les opérations vivantes de l'enregistrement
+(et plus seulement le `create`) : sinon l'`update` séparé survivrait, orphelin, et échouerait en
+boucle sur une ligne jamais créée côté serveur. Sans l'option, la file ne contient que le `create` —
+comportement identique.
+
+Tests : le scénario complet (séance + exercice + 2 séries + clôture, hors ligne → sync → trigger)
+**échoue sans le correctif** (4 tests rouges, vérifié) et passe avec. + non-régressions : clôture
+online inchangée (opération `update` séparée), modification ordinaire toujours fusionnée dans le
+`create`, créations offline sans doublon, retry après coupure sans double versement d'XP,
+suppression sans opération orpheline, XP déjà acquise non rejouée.
+`npm test` **1672 passed** / 60 skipped, `tsc` propre, build OK, eslint 0 erreur.
+
 ### Restes assumés / à décider (NON corrigés — hors périmètre)
-- **DISC-01 — XP partielle pour une séance vécue ENTIÈREMENT hors ligne.** Le `create` du workout
-  n'étant pas encore synchronisé, la clôture est **fusionnée dans son payload** (`repository.update`
-  → `findPendingCreateForRecord`). La file étant FIFO, le workout part donc en **INSERT avec
-  `status='completed'` AVANT ses exercices/séries** : le trigger verse le forfait `workout_muscu`
-  mais parcourt une séance encore vide → **pas d'XP de record ni de progression d'exercice**.
-  Corriger cela touche l'ordonnancement de la sync queue (chantier 1) ou l'économie XP serveur :
-  **décision produit requise**, ne pas patcher à l'aveugle. Options en §8 du rapport de chantier.
+- **DISC-01b — échec partiel d'un enfant pendant le passage de file.** Si un `create` d'enfant
+  échoue (coupure) alors que l'`UPDATE status='completed'` réussit dans le même passage, le trigger
+  voit une séance partielle. **Pré-existant et identique en ligne** (le correctif ci-dessus n'aggrave
+  rien : il aligne l'offline sur l'online). Fermer cette fenêtre demanderait une notion de
+  dépendance/barrière DANS LE MOTEUR DE FILE (chantier 1) — à arbitrer séparément.
+- ~~**DISC-01 — XP partielle pour une séance vécue ENTIÈREMENT hors ligne.**~~ → **corrigé**, voir
+  la section « DISC-01 — CORRIGÉ » ci-dessus.
 - **Validation navigateur du parcours complet non faite** : elle exigerait un compte réel sur le
   projet Supabase de PRODUCTION (`bcwfvpwxzlmkxobvbtzp`, identifiants en dur, aucun `.env` ici) et
   y écrirait de vraies séances. Seuls `npm run build` et un smoke test Chromium réel sur `/login`

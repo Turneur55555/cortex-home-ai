@@ -3,6 +3,7 @@ import { entityKey, getOfflineDb } from "./db";
 import {
   enqueueOperation,
   findPendingCreateForRecord,
+  listAllOperations,
   removeOperation,
   updateOperationPayload,
 } from "./syncQueue";
@@ -105,6 +106,42 @@ export function buildUpdatePayload<T>(patch: Partial<T>): Partial<T> {
   return stripContractColumns(patch);
 }
 
+/**
+ * Options d'un `update` (chantier 4, DISC-01). Générique : le repository ne
+ * connaît toujours AUCUNE table ni AUCUNE colonne en particulier — c'est
+ * l'appelant, seul à connaître la sémantique de son patch, qui déclare la
+ * contrainte.
+ */
+export interface OfflineUpdateOptions {
+  /**
+   * N'AUTORISE PAS la fusion de ce patch dans un `create` encore en attente :
+   * enfile une opération `update` SÉPARÉE, qui partira donc APRÈS tout ce qui
+   * a été enfilé entre-temps (FIFO).
+   *
+   * POURQUOI CETTE OPTION EXISTE (DISC-01, mesuré)
+   * ----------------------------------------------
+   * Le comportement par défaut — fusionner — est le bon dans le cas général :
+   * il n'existe aucune ligne serveur à mettre à jour, et cela évite une
+   * opération inutile. Mais il change AUSSI le moment où le serveur observe
+   * la valeur : au lieu d'un UPDATE tardif, elle arrive dans l'INSERT
+   * initial, donc AVANT toutes les lignes enfilées après ce `create`.
+   *
+   * C'est indifférent pour une donnée passive, et FAUX pour une valeur qui
+   * déclenche un calcul serveur portant sur des lignes liées. Cas réel : une
+   * séance vécue entièrement hors ligne. La clôture (`status='completed'`)
+   * fusionnée dans le `create` faisait arriver la séance en INSERT déjà
+   * terminée, AVANT ses exercices et ses séries (FIFO) — le trigger
+   * `award_xp_on_workout_complete` s'exécutait alors sur une séance vide et
+   * ne versait ni XP de record, ni XP de progression d'exercice.
+   *
+   * L'appelant qui pose cette option affirme : « le serveur ne doit observer
+   * ce patch qu'une fois les lignes liées arrivées ». Défaut `false` :
+   * comportement de toutes les autres tables et de tous les autres appels
+   * strictement INCHANGÉ.
+   */
+  neverMergeIntoPendingCreate?: boolean;
+}
+
 export interface OfflineRepository<T extends BaseRow> {
   /** Table locale (clé logique dans IndexedDB). */
   table: string;
@@ -113,7 +150,7 @@ export interface OfflineRepository<T extends BaseRow> {
   list(userId: string): Promise<T[]>;
   get(id: string): Promise<T | undefined>;
   create(userId: string, data: Omit<T, "id" | "user_id" | "created_at" | "updated_at">): Promise<T>;
-  update(id: string, userId: string, patch: Partial<T>): Promise<T>;
+  update(id: string, userId: string, patch: Partial<T>, options?: OfflineUpdateOptions): Promise<T>;
   remove(id: string, userId: string): Promise<void>;
 }
 
@@ -200,7 +237,7 @@ export function createOfflineRepository<T extends BaseRow>(
       return row;
     },
 
-    async update(id, userId, patch): Promise<T> {
+    async update(id, userId, patch, options): Promise<T> {
       const entity = await readEntity(id);
       if (!entity || entity.deleted) {
         throw new Error(`Offline update: entité introuvable (${table}/${id})`);
@@ -220,7 +257,12 @@ export function createOfflineRepository<T extends BaseRow>(
       // d'un `create` reste volontairement la ligne complète : l'INSERT a
       // besoin de toutes les colonnes, et aucune valeur serveur n'existe
       // encore qui pourrait être écrasée.
-      const pendingCreate = await findPendingCreateForRecord(table, id);
+      // `neverMergeIntoPendingCreate` (cf. OfflineUpdateOptions) : l'appelant
+      // exige que le serveur n'observe ce patch qu'APRÈS les lignes enfilées
+      // depuis la création — on ignore donc délibérément la fusion.
+      const pendingCreate = options?.neverMergeIntoPendingCreate
+        ? undefined
+        : await findPendingCreateForRecord(table, id);
 
       const db = await getOfflineDb();
       const updatedEntity: OfflineEntity<T> = {
@@ -257,8 +299,21 @@ export function createOfflineRepository<T extends BaseRow>(
       const pendingCreate = await findPendingCreateForRecord(table, id);
       if (pendingCreate) {
         // Jamais synchronisée côté serveur : on efface tout, rien à envoyer.
+        //
+        // On retire TOUTES les opérations encore vivantes de cet
+        // enregistrement, pas seulement le `create` (chantier 4, DISC-01) :
+        // depuis `neverMergeIntoPendingCreate`, un `update` séparé peut
+        // coexister avec un `create` pas encore parti. Ne retirer que le
+        // `create` laisserait cet `update` orphelin, qui tenterait ensuite de
+        // modifier une ligne que le serveur n'a jamais vue — échec en boucle.
+        // Sans cette option, la file ne contient de toute façon que le
+        // `create` (tout patch y est fusionné) : comportement identique.
         await db.delete("entities", entityKey(table, id));
-        await removeOperation(pendingCreate.id);
+        for (const op of await listAllOperations(userId)) {
+          if (op.table === table && op.recordLocalId === id) {
+            await removeOperation(op.id);
+          }
+        }
         return;
       }
 

@@ -55,6 +55,10 @@ const XP_PER_MUSCU_SESSION = 150;
  */
 const exercisesSeenByTrigger: number[] = [];
 
+/** Idem pour les SÉRIES rattachées aux exercices de la séance (le trigger les
+ *  agrège pour détecter un record : `MAX(weight)`, `MAX(reps)`, volume, 1RM). */
+const setsSeenByTrigger: number[] = [];
+
 function computeLevelFromXp(xp: number): number {
   // Simple monotone croissante — la vraie courbe est testée ailleurs ; ici on
   // a seulement besoin d'un niveau cohérent avec l'XP.
@@ -75,9 +79,15 @@ function runAwardXpTrigger(
   if (previousStatus === "completed") return;
 
   const userId = workout.user_id as string;
-  exercisesSeenByTrigger.push(
-    Array.from(server.get("exercises")?.values() ?? []).filter((e) => e.workout_id === workout.id)
-      .length,
+  const workoutExercises = Array.from(server.get("exercises")?.values() ?? []).filter(
+    (e) => e.workout_id === workout.id,
+  );
+  const exerciseIds = new Set(workoutExercises.map((e) => e.id));
+  exercisesSeenByTrigger.push(workoutExercises.length);
+  setsSeenByTrigger.push(
+    Array.from(server.get("exercise_sets")?.values() ?? []).filter((st) =>
+      exerciseIds.has(st.exercise_id as string),
+    ).length,
   );
   const statsStore = server.get("user_stats") ?? new Map<string, Row>();
   server.set("user_stats", statsStore);
@@ -240,6 +250,47 @@ const workoutsRepo = createOfflineRepository<WorkoutRow>("workouts");
 const exercisesRepo = createOfflineRepository<Row & { user_id: string; workout_id: string }>(
   "exercises",
 );
+const exerciseSetsRepo = createOfflineRepository<Row & { user_id: string; exercise_id: string }>(
+  "exercise_sets",
+);
+
+/** Clôture d'une séance, telle que `useFinishWorkout` l'écrit réellement. */
+function finishWorkoutLocally(workoutId: string, durationMinutes = 45) {
+  return workoutsRepo.update(
+    workoutId,
+    USER,
+    { status: "completed", duration_minutes: durationMinutes },
+    { neverMergeIntoPendingCreate: true },
+  );
+}
+
+/** Séance muscu complète écrite localement : séance + 1 exercice + 2 séries. */
+async function createFullSessionLocally() {
+  const workout = await workoutsRepo.create(USER, activeWorkout());
+  const exercise = await exercisesRepo.create(USER, {
+    workout_id: workout.id,
+    name: "Développé couché",
+    sets: null,
+    reps: null,
+    weight: null,
+    position: 0,
+  } as never);
+  const setA = await exerciseSetsRepo.create(USER, {
+    exercise_id: exercise.id,
+    set_number: 1,
+    reps: 8,
+    weight: 80,
+    completed: true,
+  } as never);
+  const setB = await exerciseSetsRepo.create(USER, {
+    exercise_id: exercise.id,
+    set_number: 2,
+    reps: 6,
+    weight: 90,
+    completed: true,
+  } as never);
+  return { workout, exercise, sets: [setA, setB] };
+}
 
 beforeEach(() => {
   Object.assign(globalThis, {
@@ -260,6 +311,7 @@ beforeEach(() => {
   fakeSupabaseOpts.failNext = false;
   fakeSupabaseOpts.reads = undefined;
   exercisesSeenByTrigger.length = 0;
+  setsSeenByTrigger.length = 0;
   online = true;
 });
 
@@ -547,64 +599,236 @@ describe("MAJ-04 — la validation d'une série n'entraîne aucune écriture ré
   });
 });
 
-// ─── DISC-01 — comportement DOCUMENTÉ, non corrigé (décision produit) ───
+// ─── DISC-01 — CORRIGÉ : ordre d'arrivée serveur d'une séance offline ───
 
-describe("DISC-01 — séance vécue ENTIÈREMENT hors ligne : ordre d'arrivée serveur", () => {
+describe("DISC-01 — séance vécue ENTIÈREMENT hors ligne", () => {
   /**
-   * CONSTAT (mesuré, pas supposé) — hors périmètre du chantier 4, documenté
-   * ici pour qu'il soit visible et qu'une régression future soit détectée.
+   * REPRODUCTION EXACTE DU BUG (mesurée avant/après).
    *
-   * Quand la séance N'A JAMAIS été synchronisée, la clôture est FUSIONNÉE dans
-   * le `create` encore en attente (`repository.update` →
-   * `findPendingCreateForRecord`) : la séance part donc en INSERT avec
-   * `status='completed'`. La file étant FIFO, cet INSERT précède celui de ses
-   * exercices — le trigger `award_xp_on_workout_complete` s'exécute donc sur
-   * une séance encore VIDE côté serveur. Le forfait `workout_muscu` est bien
-   * versé, mais l'XP de record / de progression d'exercice, elle, ne peut pas
-   * l'être.
+   * Avant le correctif : la clôture d'une séance jamais synchronisée était
+   * FUSIONNÉE dans son `create` encore en attente (`repository.update` →
+   * `findPendingCreateForRecord`). La séance arrivait donc en INSERT avec
+   * `status='completed'` AVANT ses exercices et ses séries (file FIFO), et
+   * `award_xp_on_workout_complete` s'exécutait sur une séance VIDE :
+   * `exercisesSeenByTrigger === [0]`, aucune XP de record ni de progression
+   * possible.
    *
-   * Corriger cela touche l'ordonnancement de la sync queue (chantier 1) ou
-   * l'économie XP serveur : décision produit requise, PAS un patch à l'aveugle.
-   * Ce test fige donc l'état ACTUEL — il devra être mis à jour le jour où la
-   * décision est prise.
+   * Après : la clôture part comme une opération SÉPARÉE
+   * (`neverMergeIntoPendingCreate`), enfilée après les enfants — le serveur
+   * observe exactement la même chose qu'en ligne.
    */
-  it("le trigger s'exécute avant l'arrivée des exercices (XP de record impossible)", async () => {
+  it("le trigger voit les exercices ET les séries de la séance", async () => {
     online = false;
-    const w = await workoutsRepo.create(USER, activeWorkout());
-    await exercisesRepo.create(USER, {
-      workout_id: w.id,
-      name: "Développé couché",
-      sets: null,
-      reps: null,
-      weight: null,
-      position: 0,
-    } as never);
-    await workoutsRepo.update(w.id, USER, { status: "completed" });
+    const { workout } = await createFullSessionLocally();
+    await finishWorkoutLocally(workout.id);
 
     online = true;
     await processSyncQueue(USER);
 
-    expect(exercisesSeenByTrigger).toEqual([0]);
-    // Le forfait de base est bien versé : la récompense n'est pas nulle, elle
-    // est INCOMPLÈTE — et elle est affichée telle que le serveur l'a calculée.
+    expect(exercisesSeenByTrigger).toEqual([1]);
+    expect(setsSeenByTrigger).toEqual([2]);
+  });
+
+  it("le trigger ne se déclenche QU'UNE fois, à l'UPDATE — jamais à l'INSERT", async () => {
+    online = false;
+    const { workout } = await createFullSessionLocally();
+    await finishWorkoutLocally(workout.id);
+
+    online = true;
+    await processSyncQueue(USER);
+
+    // Un seul déclenchement : l'INSERT arrive en 'active' (donc sous le
+    // garde `NEW.status = 'completed'`), seul l'UPDATE final déclenche.
+    expect(exercisesSeenByTrigger).toHaveLength(1);
     expect(serverStore.get("user_stats")?.get(USER)?.xp).toBe(XP_PER_MUSCU_SESSION);
   });
 
-  it("à l'inverse, une séance déjà synchronisée expose ses exercices au trigger", async () => {
-    const w = await workoutsRepo.create(USER, activeWorkout());
-    await exercisesRepo.create(USER, {
-      workout_id: w.id,
-      name: "Développé couché",
-      sets: null,
-      reps: null,
-      weight: null,
-      position: 0,
-    } as never);
-    await processSyncQueue(USER); // la séance ET son exercice partent d'abord
+  it("la séance arrive bien en 'active' puis passe à 'completed' (ordre FIFO respecté)", async () => {
+    online = false;
+    const { workout, exercise, sets } = await createFullSessionLocally();
+    await finishWorkoutLocally(workout.id);
 
-    await workoutsRepo.update(w.id, USER, { status: "completed" });
+    const ops = await listAllOperations(USER);
+    expect(ops.map((op) => `${op.opType}:${op.table}`)).toEqual([
+      "create:workouts",
+      "create:exercises",
+      "create:exercise_sets",
+      "create:exercise_sets",
+      "update:workouts",
+    ]);
+    // Le `create` de la séance n'emporte PAS la clôture...
+    expect((ops[0].payload as Row).status).toBe("active");
+    // ...mais l'état LOCAL, lui, est bien terminé (l'écran ne recule jamais).
+    expect((await workoutsRepo.get(workout.id))?.status).toBe("completed");
+
+    online = true;
     await processSyncQueue(USER);
 
+    expect(serverStore.get("workouts")?.get(workout.id)?.status).toBe("completed");
+    expect(serverStore.get("exercises")?.get(exercise.id)).toBeDefined();
+    for (const st of sets) expect(serverStore.get("exercise_sets")?.get(st.id)).toBeDefined();
+    expect(await listAllOperations(USER)).toHaveLength(0);
+  });
+
+  it("la clôture locale n'est jamais écrasée par la réponse serveur du `create`", async () => {
+    // `applyServerRowToEntity` ne réécrit l'entité que s'il ne reste AUCUNE
+    // opération en attente pour elle (chantier 1). Le `create` répondant
+    // `status='active'`, sans ce garde-fou l'écran repasserait la séance en
+    // « active » entre les deux opérations.
+    online = false;
+    const { workout } = await createFullSessionLocally();
+    await finishWorkoutLocally(workout.id);
+
+    online = true;
+    fakeSupabaseOpts.failNext = true; // le `create` passe, la suite trébuche
+    await processSyncQueue(USER);
+    expect((await workoutsRepo.get(workout.id))?.status).toBe("completed");
+
+    await processSyncQueue(USER);
+    expect((await workoutsRepo.get(workout.id))?.status).toBe("completed");
+    expect(serverStore.get("workouts")?.get(workout.id)?.status).toBe("completed");
+  });
+
+  it("la récompense reste honnête pendant tout le trajet, puis se confirme", async () => {
+    online = false;
+    const { workout } = await createFullSessionLocally();
+    await finishWorkoutLocally(workout.id);
+
+    expect(
+      resolveRewardConfirmation({
+        snapshot: null,
+        hasQueuedWorkoutOps: await hasQueuedOperationsForRecord(USER, "workouts", workout.id),
+        isOnline: false,
+      }),
+    ).toBe("syncing");
+
+    online = true;
+    await processSyncQueue(USER);
+    const { snapshot, events } = await readRewardFromServer(workout.id);
+    expect(
+      resolveRewardConfirmation({
+        snapshot,
+        hasQueuedWorkoutOps: await hasQueuedOperationsForRecord(USER, "workouts", workout.id),
+        isOnline: true,
+      }),
+    ).toBe("confirmed");
+    expect(totalSessionXp(events)).toBe(XP_PER_MUSCU_SESSION);
+  });
+
+  it("un retry après coupure ne verse pas l'XP deux fois", async () => {
+    online = false;
+    const { workout } = await createFullSessionLocally();
+    await finishWorkoutLocally(workout.id);
+
+    online = true;
+    fakeSupabaseOpts.failNext = true;
+    await processSyncQueue(USER);
+    await processSyncQueue(USER);
+    await processSyncQueue(USER);
+
+    expect(serverStore.get("user_stats")?.get(USER)?.xp).toBe(XP_PER_MUSCU_SESSION);
     expect(exercisesSeenByTrigger).toEqual([1]);
+    expect(await listAllOperations(USER)).toHaveLength(0);
+  });
+
+  it("supprimer une séance offline terminée ne laisse AUCUNE opération orpheline", async () => {
+    // Sans l'annulation complète dans `repository.remove`, l'`update` séparé
+    // survivrait au `create` annulé et tenterait de modifier une ligne que le
+    // serveur n'a jamais vue — échec en boucle.
+    online = false;
+    const { workout } = await createFullSessionLocally();
+    await finishWorkoutLocally(workout.id);
+    await workoutsRepo.remove(workout.id, USER);
+
+    const remaining = await listAllOperations(USER);
+    expect(remaining.filter((op) => op.recordLocalId === workout.id)).toHaveLength(0);
+    expect(await workoutsRepo.get(workout.id)).toBeUndefined();
+
+    online = true;
+    const result = await processSyncQueue(USER);
+    expect(result.retried).toBe(0);
+    expect(result.blocked).toBe(0);
+    expect(serverStore.get("workouts")?.get(workout.id)).toBeUndefined();
+  });
+});
+
+// ─── Non-régressions demandées ─────────────────────────────────────────
+
+describe("DISC-01 — non-régressions", () => {
+  it("clôture ONLINE : comportement inchangé (opération update séparée, trigger complet)", async () => {
+    const { workout } = await createFullSessionLocally();
+    await processSyncQueue(USER); // séance + enfants déjà synchronisés
+
+    await finishWorkoutLocally(workout.id);
+    const ops = await listAllOperations(USER);
+    expect(ops).toHaveLength(1);
+    expect(ops[0].opType).toBe("update");
+
+    await processSyncQueue(USER);
+    expect(exercisesSeenByTrigger).toEqual([1]);
+    expect(setsSeenByTrigger).toEqual([2]);
+    expect(serverStore.get("user_stats")?.get(USER)?.xp).toBe(XP_PER_MUSCU_SESSION);
+  });
+
+  it("une modification ORDINAIRE reste fusionnée dans le create en attente (comportement par défaut)", async () => {
+    online = false;
+    const w = await workoutsRepo.create(USER, activeWorkout());
+    await workoutsRepo.update(w.id, USER, { name: "Séance renommée" });
+
+    const ops = await listAllOperations(USER);
+    expect(ops).toHaveLength(1);
+    expect(ops[0].opType).toBe("create");
+    expect((ops[0].payload as Row).name).toBe("Séance renommée");
+  });
+
+  it("les créations offline (séance, exercices, séries) partent toutes, sans doublon", async () => {
+    online = false;
+    const { workout, exercise, sets } = await createFullSessionLocally();
+
+    online = true;
+    await processSyncQueue(USER);
+
+    expect(serverStore.get("workouts")?.size).toBe(1);
+    expect(serverStore.get("exercises")?.size).toBe(1);
+    expect(serverStore.get("exercise_sets")?.size).toBe(2);
+    expect(serverStore.get("workouts")?.get(workout.id)?.status).toBe("active");
+    expect(serverStore.get("exercises")?.get(exercise.id)?.name).toBe("Développé couché");
+    expect(serverStore.get("exercise_sets")?.get(sets[1].id)?.weight).toBe(90);
+    // Aucune XP tant que la séance n'est pas clôturée.
+    expect(exercisesSeenByTrigger).toEqual([]);
+    expect(serverStore.get("user_stats")?.get(USER)?.xp ?? 0).toBe(0);
+  });
+
+  it("des séries ajoutées APRÈS la clôture locale ne rendent pas la file incohérente", async () => {
+    // Cas limite : l'écran de récompense est ouvert, une opération tardive
+    // arrive (resynchro du résumé d'exercice par `useFinishWorkout`).
+    online = false;
+    const { workout, exercise } = await createFullSessionLocally();
+    await finishWorkoutLocally(workout.id);
+    await exercisesRepo.update(exercise.id, USER, { sets: 2, reps: 6, weight: 90 } as never);
+
+    online = true;
+    await processSyncQueue(USER);
+
+    expect(serverStore.get("exercises")?.get(exercise.id)?.weight).toBe(90);
+    expect(exercisesSeenByTrigger).toEqual([1]);
+    expect(await listAllOperations(USER)).toHaveLength(0);
+  });
+
+  it("l'XP déjà acquise n'est pas rejouée par la synchronisation d'une nouvelle séance", async () => {
+    const first = await createFullSessionLocally();
+    await processSyncQueue(USER);
+    await finishWorkoutLocally(first.workout.id);
+    await processSyncQueue(USER);
+    expect(serverStore.get("user_stats")?.get(USER)?.xp).toBe(XP_PER_MUSCU_SESSION);
+
+    online = false;
+    const second = await createFullSessionLocally();
+    await finishWorkoutLocally(second.workout.id);
+    online = true;
+    await processSyncQueue(USER);
+
+    expect(serverStore.get("user_stats")?.get(USER)?.xp).toBe(XP_PER_MUSCU_SESSION * 2);
+    expect(exercisesSeenByTrigger).toEqual([1, 1]);
   });
 });

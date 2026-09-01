@@ -114,7 +114,52 @@ aller-retour qui n'aurait rien appris. Seul cas non couvert : une écriture fait
 appareil** pendant que celui-ci reste connecté et actif apparaît au plus tard 60 s après (ou
 immédiatement au retour du réseau).
 
-## 5. Fichiers
+## 5. DISC-01 — ordre d'arrivée serveur d'une séance vécue hors ligne
+
+**Le problème.** Quand la séance n'a **jamais** été synchronisée, son `create` est encore dans la
+file. `repository.update()` fusionne alors tout patch dans **ce `create`** plutôt que d'enfiler un
+`update` séparé (comportement correct dans le cas général : il n'existe aucune ligne serveur à
+mettre à jour). Conséquence pour la clôture : la séance arrivait en **INSERT déjà
+`status='completed'`**, donc **avant** ses exercices et ses séries (file FIFO). Or
+`award_xp_on_workout_complete` **parcourt** `exercises` et `exercise_sets` de la séance pour
+accorder les récompenses de record et de progression : il s'exécutait sur une séance **vide**.
+Le forfait `workout_muscu` était versé, **le reste jamais**. Mesuré : `exercisesSeenByTrigger === [0]`.
+
+**Le correctif — local, sans toucher au moteur de synchronisation ni aux règles d'XP.**
+`repository.update()` accepte une option `neverMergeIntoPendingCreate` (défaut `false` : toutes les
+autres tables et tous les autres appels sont **strictement inchangés**). Le repository reste
+générique — il ne connaît ni la table `workouts` ni la colonne `status` ; c'est l'appelant, seul à
+connaître la sémantique de son patch, qui déclare : « le serveur ne doit observer ce patch qu'une
+fois les lignes liées arrivées ». Les deux clôtures (`useFinishWorkout`,
+`useFinishGenericActiveWorkout`) posent l'option.
+
+Ordre d'arrivée serveur après correctif — identique au parcours en ligne :
+
+```
+INSERT workouts (status='active')   ← le trigger ne se déclenche PAS (garde NEW.status='completed')
+INSERT exercises
+INSERT exercise_sets
+UPDATE workouts SET status='completed'  ← le trigger se déclenche, séance COMPLÈTE
+```
+
+Deux garde-fous indispensables, tous deux vérifiés par des tests :
+
+- **L'état local ne recule jamais.** Le `create` répond `status='active'` ; sans le mécanisme de
+  rebase du chantier 1 (`applyServerRowToEntity` ne réécrit l'entité que s'il ne reste **aucune**
+  opération en attente pour elle), l'écran repasserait la séance en « active » entre les deux
+  opérations. Ce mécanisme existait déjà et suffit — rien n'a été modifié.
+- **Pas d'opération orpheline.** `repository.remove()` annule désormais **toutes** les opérations
+  vivantes de l'enregistrement, pas seulement le `create` : depuis cette option, un `update` séparé
+  peut coexister avec un `create` pas encore parti, et ne retirer que le `create` laisserait cet
+  `update` tenter de modifier une ligne que le serveur n'a jamais vue. Sans l'option, la file ne
+  contient de toute façon que le `create` — comportement identique.
+
+**Non traité (pré-existant, identique en ligne et hors ligne).** Si un `create` d'enfant échoue
+(coupure) alors que l'`UPDATE status='completed'` réussit dans le même passage, le trigger voit une
+séance partielle. Fermer cette fenêtre demanderait une notion de dépendance/barrière **dans le
+moteur de file** (chantier 1) — hors périmètre, à arbitrer séparément.
+
+## 6. Fichiers
 
 | Fichier                                        | Rôle                                                     |
 | ---------------------------------------------- | -------------------------------------------------------- |
@@ -124,5 +169,6 @@ immédiatement au retour du réseau).
 | `lib/offline/workoutsRefreshWindow.ts`         | Instance partagée du domaine séances                      |
 | `lib/offline/syncFlush.ts`                     | Passage immédiat de la file à la clôture (fire-and-forget) |
 | `lib/offline/syncQueue.ts`                     | + `hasQueuedOperationsForRecord` (signal « pas encore parti ») |
+| `lib/offline/repository.ts`                    | + `OfflineUpdateOptions.neverMergeIntoPendingCreate` (DISC-01) |
 | `hooks/useSessionReward.ts`                    | Assemble l'état réel de la récompense                     |
 | `components/fitness/session/SessionRewardScreen.tsx` | Rend l'état honnête au lieu d'un « +0 XP »          |
