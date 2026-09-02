@@ -157,7 +157,7 @@ vi.mock("@/integrations/supabase/client", () => ({
 import { resetOfflineDbForTests } from "./db";
 import { createOfflineRepository, hydrateEntitiesFromServer } from "./repository";
 import { listAllOperations } from "./syncQueue";
-import { processSyncQueue, REQUEST_TIMEOUT_MS } from "./syncEngine";
+import { listConflicts, processSyncQueue, REQUEST_TIMEOUT_MS } from "./syncEngine";
 
 interface ExerciseRow extends Row {
   id: string;
@@ -286,8 +286,9 @@ describe("syncEngine — bornage des appels réseau (bug file bloquée du 01/09/
     expect(serverRows.get("ex-0")?.name).toBe("Développé couché");
   });
 
-  it("TEST 2 — ligne absente du serveur : comportement existant inchangé (PGRST116, retryable)", async () => {
-    // Entité connue localement comme synchronisée, mais absente du serveur.
+  it("TEST 2 — ligne absente du serveur : comportement VOLONTAIREMENT CORRIGÉ le 02/09/2026 (PGRST116 → conflit explicite, plus jamais un retry infini)", async () => {
+    // Entité connue localement comme synchronisée, mais absente du serveur —
+    // EXACTEMENT le même scénario que l'ancienne version de ce test.
     await seedServerExercises(1);
     serverRows.delete("ex-0");
 
@@ -297,14 +298,35 @@ describe("syncEngine — bornage des appels réseau (bug file bloquée du 01/09/
       await processSyncQueue(USER, {});
     }
 
+    // ── COMPORTEMENT CORRIGÉ ────────────────────────────────────────────
+    // Avant le 02/09/2026, ce test attendait ICI `ops).toHaveLength(1)` +
+    // `status: "failed"` + `retryCount: 3` + `lastErrorCode: "PGRST116"` —
+    // c'était le bug prod du 01/09/2026 (boucle de retry infinie, cause
+    // racine : `applyOperation` n'avait aucune garde « ligne disparue » dans
+    // sa branche `update`, contrairement à `delete`). Ce comportement était
+    // délibérément verrouillé ici, en attendant l'arbitrage sur la correction
+    // à apporter (cf. commit 88640b8) — arbitrage rendu le 02/09/2026 :
+    // conflit explicite, jamais un échec silencieux ni un écrasement
+    // automatique (une modification locale peut porter des données à
+    // conserver). Voir `pgrst116DeletedRowConflict.test.ts` pour la
+    // couverture complète (résolution, barrière de dépendance, non-régression
+    // des conflits `updated_at`, idempotence de `delete`).
     const ops = await listAllOperations(USER);
-    expect(ops).toHaveLength(1);
-    expect(ops[0].status).toBe("failed");
-    expect(ops[0].lastErrorCode).toBe("PGRST116");
-    expect(ops[0].retryCount).toBe(3);
-    // Inchangé : PGRST116 n'est pas classé comme définitif, l'opération
-    // reste retryable (elle n'est jamais passée `blocked`).
-    expect(ops[0].lastError).toMatch(/PGRST116/);
+    expect(ops).toHaveLength(0); // plus AUCUNE opération en attente…
+    const conflicts = await listConflicts(USER);
+    expect(conflicts).toHaveLength(1); // …elle est devenue un conflit à arbitrer
+    expect(conflicts[0].reason).toBe("server_row_deleted");
+    expect(conflicts[0].recordLocalId).toBe("ex-0");
+    expect((conflicts[0].localData as { name: string }).name).toBe("Fantôme"); // rien n'est perdu
+    expect(conflicts[0].serverData).toBeNull();
+
+    // ── PREUVE EXPLICITE QUE L'ANCIEN COMPORTEMENT ÉCHOUERAIT DÉSORMAIS ──
+    // Ces trois assertions sont l'exact inverse de ce que ce test vérifiait
+    // avant le correctif — si l'ancien comportement (PGRST116 → `failed`
+    // retryable) revenait par régression, elles échoueraient.
+    expect(ops.some((op) => op.status === "failed")).toBe(false);
+    expect(ops.some((op) => op.lastErrorCode === "PGRST116")).toBe(false);
+    expect(ops.some((op) => op.retryCount >= 3)).toBe(false);
   });
 
   it("TEST 2 bis — une requête qui répond normalement n'est jamais coupée", async () => {

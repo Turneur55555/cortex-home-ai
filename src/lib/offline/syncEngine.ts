@@ -5,6 +5,7 @@ import { buildUpdatePayload, getSupabaseTableName } from "./repository";
 import {
   claimOperation,
   enqueueOperation,
+  findPendingCreateForRecord,
   hasLiveDependencies,
   hasOtherQueuedOperations,
   listPendingOperations,
@@ -20,6 +21,7 @@ import {
   type SyncErrorDetails,
 } from "./syncErrors";
 import type {
+  ConflictReason,
   ConflictRecord,
   ConflictResolutionStrategy,
   OfflineEntity,
@@ -131,9 +133,14 @@ async function fetchServerRow(
 async function markConflict<T>(params: {
   op: SyncOperation<T>;
   entity: OfflineEntity<T>;
-  serverRow: { id: string; updated_at?: string };
+  /**
+   * `null` uniquement pour `reason: "server_row_deleted"` — il n'existe
+   * littéralement aucune ligne serveur à archiver dans le conflit.
+   */
+  serverRow: { id: string; updated_at?: string } | null;
+  reason: ConflictReason;
 }): Promise<void> {
-  const { op, entity, serverRow } = params;
+  const { op, entity, serverRow, reason } = params;
   const db = await getOfflineDb();
   const conflict: ConflictRecord<T> = buildConflictRecord({
     userId: op.userId,
@@ -142,14 +149,16 @@ async function markConflict<T>(params: {
     // On conserve l'INTENTION locale (update ou delete) : c'est elle qui
     // sera rejouée si l'utilisateur choisit « garder ma version ».
     opType: op.opType,
+    reason,
+    sourceCreatedAt: op.createdAt,
     // Chantier 1 bis : les dépendances font partie de l'intention locale, au
     // même titre que `opType` — « garder ma version » doit les rejouer telles
     // quelles.
     dependsOnRecords: op.dependsOnRecords,
     localData: entity.data,
-    serverData: serverRow as unknown as T,
+    serverData: serverRow ? (serverRow as unknown as T) : null,
     localUpdatedAt: entity.localUpdatedAt,
-    serverUpdatedAt: serverRow.updated_at ?? "",
+    serverUpdatedAt: serverRow?.updated_at ?? null,
   });
   await db.put("conflicts", conflict as ConflictRecord);
   await db.put("entities", { ...entity, syncStatus: "conflict" } as OfflineEntity);
@@ -240,19 +249,80 @@ async function applyOperation(
     }
 
     if (op.opType === "update") {
-      if (op.baseUpdatedAt !== null) {
-        const serverRow = await fetchServerRow(supabaseTable, op.recordLocalId);
-        if (serverRow && entity) {
-          const conflict = detectConflict({
-            entity,
-            baseUpdatedAt: op.baseUpdatedAt,
-            serverUpdatedAt: serverRow.updated_at ?? "",
-            serverData: serverRow,
-          });
-          if (conflict) {
-            await markConflict({ op, entity, serverRow });
+      // GARDE PGRST116 (correctif du 02/09/2026, cf. audit du 01/09/2026) —
+      // on vérifie TOUJOURS que la ligne existe encore côté serveur avant
+      // d'émettre l'UPDATE, que `baseUpdatedAt` soit connu ou non.
+      //
+      // AVANT : cette lecture n'avait lieu QUE si `baseUpdatedAt !== null`,
+      // et même alors, une ligne absente (`serverRow === null`) n'était pas
+      // du tout traitée — le code retombait directement sur l'appel
+      // `.update(...).select().single()`, qui échoue en `PGRST116` (« 0 rows
+      // returned »). Cette erreur n'a pas de code Postgres classé définitif
+      // (`isBlockingSyncError` renvoie `false` pour `PGRST116`), donc
+      // l'opération restait `failed` indéfiniment : `retryCount` n'est
+      // jamais plafonné, seul un passage en `blocked` (jamais atteint ici)
+      // sort de la boucle de retry — d'où la boucle infinie observée en prod.
+      //
+      // MAINTENANT : une ligne disparue devient un CONFLIT EXPLICITE
+      // (`reason: "server_row_deleted"`), jamais un échec `failed` retenté
+      // en boucle, et jamais un écrasement silencieux façon `delete`
+      // idempotent — une modification locale peut porter des données que
+      // l'utilisateur veut conserver ; c'est à lui d'arbitrer (panneau de
+      // synchronisation, `SyncQueueSheet`). L'opération est retirée de
+      // `syncQueue` (comme tout conflit) mais RIEN n'est perdu : elle est
+      // archivée dans `conflicts` jusqu'à résolution explicite
+      // (`resolveConflict`), et la barrière de dépendance du chantier 1 bis
+      // (`hasLiveDependencies`) traite désormais un conflit non résolu comme
+      // une dépendance toujours vivante (cf. `syncQueue.ts`) — aucun
+      // changement à la machine à états générale du chantier 1 (`pending` /
+      // `syncing` / `failed` / `blocked` conservent exactement leur sens).
+      const serverRow = await fetchServerRow(supabaseTable, op.recordLocalId);
+      if (!serverRow) {
+        // DISTINCTION IMPORTANTE (audit du 02/09/2026, régression trouvée en
+        // testant DISC-01 — `sessionRewardOffline.test.ts`) : une ligne
+        // absente ne signifie pas toujours « supprimée » — pour un
+        // enregistrement dont le `create` est enfilé SÉPARÉMENT
+        // (`neverMergeIntoPendingCreate`, chantier 4/DISC-01) et n'a pas
+        // ENCORE réussi (FIFO en cours, ou ce `create` a lui-même échoué
+        // PENDANT ce même passage), la ligne n'existe pas ENCORE — ce n'est
+        // pas une suppression, juste une course normale de la file. La
+        // traiter comme un conflit retirerait à tort cette opération de
+        // `syncQueue`, cassant le garde-fou de `applyServerRowToEntity`
+        // (« ne réécrit l'entité que s'il ne reste AUCUNE opération en
+        // attente ») dès que le `create` finit par réussir — l'écran
+        // repasserait alors brièvement la séance en `active`.
+        const stillAwaitingCreate = Boolean(
+          await findPendingCreateForRecord(op.table, op.recordLocalId),
+        );
+        if (!stillAwaitingCreate) {
+          if (entity) {
+            await markConflict({ op, entity, serverRow: null, reason: "server_row_deleted" });
             return "conflict";
           }
+          // Aucune entité locale à préserver (déjà effacée localement par
+          // ailleurs) : il n'y a rien à arbitrer, l'opération n'a plus
+          // d'objet. `processSyncQueue` retire l'opération de la file pour
+          // tout retour "done" — inutile de le faire ici aussi (cf.
+          // `create`/`delete` réussis juste au-dessus/en dessous, qui
+          // suivent le même principe).
+          return "done";
+        }
+        // Le `create` de cet enregistrement est encore vivant dans la file :
+        // on laisse l'UPDATE échouer normalement (comportement inchangé
+        // depuis avant ce correctif) — il repart avec son backoff, sans
+        // jamais rester bloqué : dès que le `create` aboutit, cette même
+        // opération aboutit à son tour au passage suivant (ou au même
+        // passage si le `create` réussit avant qu'elle ne soit atteinte).
+      } else if (op.baseUpdatedAt !== null && entity) {
+        const conflict = detectConflict({
+          entity,
+          baseUpdatedAt: op.baseUpdatedAt,
+          serverUpdatedAt: serverRow.updated_at ?? "",
+          serverData: serverRow,
+        });
+        if (conflict) {
+          await markConflict({ op, entity, serverRow, reason: "updated_at_mismatch" });
+          return "conflict";
         }
       }
       const { data, error } = await withTimeout<SupabaseResult>(
@@ -269,7 +339,10 @@ async function applyOperation(
       return "done";
     }
 
-    // delete
+    // delete — comportement INCHANGÉ (cf. audit du 02/09/2026, Phase 1) :
+    // une ligne déjà absente reste un succès idempotent, jamais un conflit —
+    // l'intention locale (« je veux que cette ligne n'existe plus ») est de
+    // toute façon satisfaite.
     if (op.baseUpdatedAt !== null) {
       const serverRow = await fetchServerRow(supabaseTable, op.recordLocalId);
       if (serverRow && entity) {
@@ -280,7 +353,7 @@ async function applyOperation(
           serverData: serverRow,
         });
         if (conflict) {
-          await markConflict({ op, entity, serverRow });
+          await markConflict({ op, entity, serverRow, reason: "updated_at_mismatch" });
           return "conflict";
         }
       }
@@ -440,8 +513,14 @@ export async function processSyncQueue(
  *   (audit MAJ-05).
  * - "keep-server" : la version serveur doit gagner → applique directement
  *   `serverData` en local, entité `synced`, rien à ré-envoyer (y compris
- *   pour un conflit de suppression : la ligne serveur existe toujours, elle
- *   est donc restaurée localement — comportement inchangé).
+ *   pour un conflit `updated_at_mismatch` né d'un `delete` : la ligne
+ *   serveur existe toujours, elle est donc restaurée localement —
+ *   comportement inchangé).
+ *   Cas particulier `reason: "server_row_deleted"` (correctif PGRST116,
+ *   02/09/2026) : il n'existe AUCUNE version serveur (`serverData === null`)
+ *   — « garder la version serveur » signifie alors accepter qu'elle n'existe
+ *   plus. L'entité locale est retirée (exactement ce que ferait un `delete`
+ *   réussi), jamais laissée avec `data: null`.
  *
  * Point d'extension (voir `types.ts`) : une future fusion champ par champ
  * ajoutera un troisième cas `"merge"` ici, sans changer la signature.
@@ -487,6 +566,13 @@ export async function resolveConflict(
         dependsOnRecords: conflict.dependsOnRecords,
       });
     }
+  } else if (conflict.serverData === null) {
+    // reason: "server_row_deleted" — pas de version serveur à appliquer.
+    // « Garder la version serveur » = accepter qu'elle n'existe plus : on
+    // aligne le local sur cette réalité, comme un `delete` réussi. On ne
+    // laisse JAMAIS `data: null` dans l'entité (contrairement au fallback
+    // générique ci-dessous, qui suppose toujours une ligne serveur réelle).
+    if (entity) await db.delete("entities", key);
   } else {
     const serverData = conflict.serverData as { updated_at?: string };
     if (entity) {
