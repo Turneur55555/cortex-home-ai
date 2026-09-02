@@ -395,12 +395,39 @@ export async function hasLiveDependencies(
     op.dependsOnRecords.map((ref) => dependencyKey(ref.table, ref.recordLocalId)),
   );
   const ops = await listAllOperations(userId);
-  return ops.some(
+  const blockedByQueue = ops.some(
     (other) =>
       other.id !== op.id &&
       other.createdAt < op.createdAt &&
       LIVE_OPERATION_STATUSES.has(other.status) &&
       awaited.has(dependencyKey(other.table, other.recordLocalId)),
+  );
+  if (blockedByQueue) return true;
+
+  // CORRECTIF PGRST116 (02/09/2026) — un conflit sur un enregistrement
+  // attendu doit continuer à retenir la barrière. `markConflict`
+  // (`syncEngine.ts`) RETIRE l'opération de `syncQueue` dès qu'un conflit est
+  // détecté (elle est archivée dans le store `conflicts` à la place) : sans
+  // ce second contrôle, la barrière se lèverait dès l'apparition du conflit,
+  // alors que rien n'est réellement résolu tant que l'utilisateur n'a pas
+  // arbitré (`resolveConflict`). Un conflit non résolu compte donc comme
+  // « vivant » au même titre que `pending` / `failed` / `syncing` /
+  // `blocked`, avec la même règle d'antériorité — `sourceCreatedAt` est le
+  // `createdAt` de l'opération qui a produit le conflit (absent sur un
+  // conflit persisté avant l'ajout du champ : lu comme `""`, donc toujours
+  // antérieur — comportement conservateur, il ne peut que bloquer, jamais
+  // laisser passer à tort).
+  //
+  // Import direct de `getOfflineDb`/`IDBKeyRange` plutôt que de réutiliser
+  // `listConflicts` de `syncEngine.ts` : ce dernier importe déjà `syncQueue.ts`,
+  // un import inverse créerait une dépendance circulaire entre les deux
+  // modules.
+  const db = await getOfflineDb();
+  const conflicts = await db.getAllFromIndex("conflicts", "by-user", IDBKeyRange.only(userId));
+  return conflicts.some(
+    (conflict) =>
+      (conflict.sourceCreatedAt ?? "") < op.createdAt &&
+      awaited.has(dependencyKey(conflict.table, conflict.recordLocalId)),
   );
 }
 

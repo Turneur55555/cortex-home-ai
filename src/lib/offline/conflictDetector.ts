@@ -1,4 +1,10 @@
-import type { ConflictRecord, OfflineEntity, SyncDependencyRef, SyncOpType } from "./types";
+import type {
+  ConflictReason,
+  ConflictRecord,
+  OfflineEntity,
+  SyncDependencyRef,
+  SyncOpType,
+} from "./types";
 
 /**
  * Détecteur de conflit local/serveur — appelé par le sync engine avant
@@ -52,13 +58,24 @@ export function buildConflictRecord<T>(input: {
    * `update` qui ferait ressusciter la ligne).
    */
   opType: SyncOpType;
+  /**
+   * Cause du conflit — voir `ConflictReason`. Par défaut
+   * `updated_at_mismatch` (comportement historique inchangé) : seul
+   * `syncEngine.ts` passe explicitement `server_row_deleted`, pour le
+   * nouveau cas « ligne disparue avant l'UPDATE ».
+   */
+  reason?: ConflictReason;
+  /** `createdAt` de l'opération à l'origine du conflit — cf. doc sur `ConflictRecord.sourceCreatedAt`. */
+  sourceCreatedAt: string;
   /** Chantier 1 bis — dépendances de l'opération d'origine, conservées pour
    *  que « garder ma version » rejoue la même intention (cf. `opType`). */
   dependsOnRecords?: SyncDependencyRef[];
   localData: T;
-  serverData: T;
+  /** `null` uniquement pour `reason: "server_row_deleted"` — aucune ligne serveur à représenter. */
+  serverData: T | null;
   localUpdatedAt: string;
-  serverUpdatedAt: string;
+  /** `null` uniquement pour `reason: "server_row_deleted"`. */
+  serverUpdatedAt: string | null;
 }): ConflictRecord<T> {
   return {
     id: crypto.randomUUID(),
@@ -66,6 +83,8 @@ export function buildConflictRecord<T>(input: {
     table: input.table,
     recordLocalId: input.recordLocalId,
     opType: input.opType,
+    reason: input.reason ?? "updated_at_mismatch",
+    sourceCreatedAt: input.sourceCreatedAt,
     dependsOnRecords: input.dependsOnRecords,
     localData: input.localData,
     serverData: input.serverData,

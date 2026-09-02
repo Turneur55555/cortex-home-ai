@@ -130,6 +130,17 @@ export function SyncQueueSheet({ onClose, sync }: { onClose: () => void; sync: O
   );
 }
 
+/**
+ * Deux causes de conflit (`ConflictRecord.reason`, cf. `types.ts`) :
+ * - `updated_at_mismatch` (historique) : la ligne serveur existe toujours,
+ *   juste modifiée entre-temps — comparaison 2 colonnes, 2 actions.
+ * - `server_row_deleted` (correctif PGRST116 du 02/09/2026) : la ligne a été
+ *   supprimée côté serveur alors qu'une modification locale était encore en
+ *   attente. Il n'existe AUCUNE version serveur à montrer ni à garder — on
+ *   ne propose donc PAS « Garder ma version » (elle relancerait un UPDATE
+ *   sur une ligne inexistante, donc une action impossible), seulement
+ *   l'abandon explicite de la modification locale.
+ */
 function ConflictCard({
   conflict,
   onResolve,
@@ -138,14 +149,16 @@ function ConflictCard({
   onResolve: (strategy: "keep-local" | "keep-server") => void;
 }) {
   const local = conflict.localData as Record<string, unknown>;
-  const server = conflict.serverData as Record<string, unknown>;
   const label = typeof local.name === "string" ? local.name : conflict.table;
+  const isServerRowDeleted = conflict.reason === "server_row_deleted";
 
   return (
     <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3">
       <p className="text-sm font-medium text-foreground">{label}</p>
       <p className="mt-1 text-xs text-muted-foreground">
-        Cette donnée a été modifiée ailleurs. Choisissez la version à conserver.
+        {isServerRowDeleted
+          ? "La ligne a été supprimée du serveur alors qu'une modification locale était encore en attente."
+          : "Cette donnée a été modifiée ailleurs. Choisissez la version à conserver."}
       </p>
       <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
         <div className="rounded-md border border-border/60 bg-background/60 p-2">
@@ -158,20 +171,29 @@ function ConflictCard({
           <Badge variant="secondary" className="mb-1">
             Version serveur
           </Badge>
-          <VersionPreview data={server} />
+          {conflict.serverData ? (
+            <VersionPreview data={conflict.serverData as Record<string, unknown>} />
+          ) : (
+            <p className="text-muted-foreground">Ligne supprimée du serveur</p>
+          )}
         </div>
       </div>
       <div className="mt-3 flex gap-2">
-        <Button size="sm" className="flex-1" onClick={() => onResolve("keep-local")}>
-          Garder ma version
-        </Button>
+        {/* « Garder ma version » exigerait de ré-écrire une ligne qui n'existe
+            plus côté serveur — action impossible, jamais proposée pour ce
+            motif (cf. doc ci-dessus). */}
+        {!isServerRowDeleted && (
+          <Button size="sm" className="flex-1" onClick={() => onResolve("keep-local")}>
+            Garder ma version
+          </Button>
+        )}
         <Button
           size="sm"
-          variant="outline"
+          variant={isServerRowDeleted ? "default" : "outline"}
           className="flex-1"
           onClick={() => onResolve("keep-server")}
         >
-          Garder la version serveur
+          {isServerRowDeleted ? "Abandonner ma modification" : "Garder la version serveur"}
         </Button>
       </div>
     </div>

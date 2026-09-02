@@ -152,6 +152,24 @@ export type ConflictResolutionStrategy = "keep-local" | "keep-server";
 // à mettre à jour à ce moment-là).
 export type ExtensibleConflictResolutionStrategy = ConflictResolutionStrategy | "merge";
 
+/**
+ * Cause d'un conflit (02/09/2026, correctif PGRST116) :
+ * - `updated_at_mismatch` (comportement historique, inchangé) : le serveur
+ *   PORTE toujours la ligne, mais avec un `updated_at` différent du
+ *   `baseUpdatedAt` connu au moment de la modification locale — quelqu'un
+ *   d'autre l'a modifiée entre-temps. `serverData`/`serverUpdatedAt` sont
+ *   renseignés.
+ * - `server_row_deleted` (nouveau) : la ligne visée par un `update` local
+ *   N'EXISTE PLUS côté serveur (cause racine de la boucle de retry infinie
+ *   `PGRST116` du 01/09/2026 — cf. `syncEngine.ts`). Il n'y a AUCUNE version
+ *   serveur à comparer : `serverData`/`serverUpdatedAt` sont `null`.
+ *
+ * Absent (undefined) pour tout conflit persisté avant l'ajout de ce champ :
+ * relu comme `updated_at_mismatch`, seul cas qui existait à l'époque — aucune
+ * migration de données, aucun changement de comportement pour ces conflits.
+ */
+export type ConflictReason = "updated_at_mismatch" | "server_row_deleted";
+
 export interface ConflictRecord<T = Record<string, unknown>> {
   id: string;
   userId: string;
@@ -167,13 +185,35 @@ export interface ConflictRecord<T = Record<string, unknown>> {
    * qui était le seul comportement possible à l'époque.
    */
   opType?: SyncOpType;
+  /** Cause du conflit — voir `ConflictReason`. Absent = `updated_at_mismatch` (legacy). */
+  reason?: ConflictReason;
   /** Version locale au moment du conflit. */
   localData: T;
-  /** Version serveur au moment du conflit. */
-  serverData: T;
+  /**
+   * Version serveur au moment du conflit. `null` uniquement pour
+   * `reason: "server_row_deleted"` — il n'existe littéralement aucune ligne
+   * serveur à représenter.
+   */
+  serverData: T | null;
   localUpdatedAt: string;
-  serverUpdatedAt: string;
+  /** `null` uniquement pour `reason: "server_row_deleted"` (pas de ligne serveur, donc pas de timestamp). */
+  serverUpdatedAt: string | null;
   detectedAt: string;
+  /**
+   * `createdAt` de l'opération de synchronisation à l'origine de ce conflit.
+   * Nécessaire pour que la barrière de dépendance (chantier 1 bis,
+   * `hasLiveDependencies` dans `syncQueue.ts`) applique la MÊME règle
+   * d'antériorité qu'aux opérations encore présentes dans `syncQueue` : un
+   * conflit compte comme dépendance vivante seulement s'il provient d'une
+   * opération antérieure à celle qui déclare en dépendre. Un conflit est en
+   * effet retiré de `syncQueue` dès sa détection (`markConflict`) — sans ce
+   * champ, la barrière ne verrait plus du tout cette dépendance dès qu'un
+   * conflit est levé, alors que rien n'est résolu tant que l'utilisateur n'a
+   * pas arbitré. Optionnel au typage pour les conflits persistés avant
+   * l'ajout du champ : relus comme `""`, donc toujours considérés antérieurs
+   * (comportement conservateur — ils bloquent, jamais l'inverse).
+   */
+  sourceCreatedAt?: string;
   /**
    * CHANTIER 1 BIS — dépendances de l'opération à l'origine du conflit,
    * conservées pour la même raison que `opType` juste au-dessus : « garder ma
