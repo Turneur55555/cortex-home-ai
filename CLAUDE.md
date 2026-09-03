@@ -43,9 +43,37 @@ CORTEX vise à être **le plus beau RPG de progression du fitness**, pas une app
 - **Ne JAMAIS éditer `src/integrations/supabase/types.ts` à la main.** C'est un artefact généré.
 - Pour ajouter/modifier une table : écrire une migration → merger (migrate.yml applique) → régénérer
   via `npm run gen:types` → committer les types. La base fait foi, jamais l'inverse.
-- La CI **échoue** (sans corriger) si `types.ts` ne correspond plus à la base (`supabase-types.yml`,
-  étape finale de `migrate.yml`) + garde-fou `tsc` sur toute PR (`typecheck.yml`).
+- Le comportement de la CI **dépend du déclencheur** (`supabase-types.yml`) :
+  - **PR vers `main`** touchant `types.ts` → job `check-pr` : **bloquant, aucune correction
+    automatique**. C'est à l'auteur de lancer `npm run gen:types` et de committer. Le job se
+    retire si la PR modifie aussi `supabase/migrations/**` (la table n'existe pas encore en
+    base) : la vérification est alors déléguée à `migrate.yml`, après le merge.
+  - **Push direct sur `main`** touchant `types.ts` → job `fix-push` : **auto-correction**. La CI
+    régénère depuis la base et committe (`ci: auto-corrige la dérive types.ts …`). Nécessaire car
+    Lovable / `gpt-engineer-app[bot]` poussent sans PR. L'auto-heal échoue au lieu de committer
+    si la base est injoignable, si une migration locale n'est pas appliquée, ou si la
+    régénération casse `tsc` ailleurs.
+  - **Push sur `main` avec migrations** → `migrate.yml` applique les migrations puis régénère et
+    committe `types.ts` si besoin (étape finale).
+- Garde-fou côté code : `tsc` sur toute PR et tout push `main` (`typecheck.yml`).
+- Vérification locale : `npm run check:types` (`scripts/check-supabase-types.mjs`) — compare sans
+  jamais modifier le dépôt.
 - Détail : `docs/architecture/supabase-types-source-of-truth.md`.
+
+## Qualité automatisée — ce que la CI vérifie réellement
+- `quality.yml` (toute PR + push `main`) :
+  - **`vitest`** — suite Vitest **complète** (`npm test`), plus un garde-fou anti-skip : un test
+    désactivé hors des deux fichiers d'intégration env-gated (`src/lib/security/rls.test.ts`,
+    `src/lib/nutrition/nutritionMealCheck.test.ts`) fait échouer le job.
+  - **`lint`** — `npm run lint` **bloquant** (ESLint + Prettier). Le dépôt est à 0 erreur ; les
+    warnings historiques restent affichés, non masqués.
+  - **`e2e-offline`** — `e2e/05-offline-sync.spec.ts` (Playwright) : hors ligne → création →
+    retour réseau → synchronisation, contre un backend Supabase **simulé**. Les autres specs e2e
+    tapent la base de production et restent manuelles (voir `e2e/README.md`).
+- Workflows ciblés conservés : `typecheck.yml` (tsc + contrat offline), `rls-tests.yml` (RLS avec
+  secrets), `meal-slugs-check.yml`, `supabase-types.yml`, `migrate.yml`,
+  `supabase-project-ref.yml`, `audit-migration-drift.yml`, `health-check.yml`,
+  `deploy-functions.yml`.
 
 ## Avant chaque modification, lire obligatoirement :
 1. MEMORY.md
