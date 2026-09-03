@@ -3,6 +3,12 @@ import { defineConfig, devices } from "@playwright/test";
 const PORT = Number(process.env.PORT ?? 8080);
 const BASE_URL = process.env.E2E_BASE_URL ?? `http://localhost:${PORT}`;
 
+// Environnements où Chromium est déjà installé hors du cache Playwright
+// (images CI, conteneurs de dev) : permet de pointer le binaire existant
+// plutôt que d'en télécharger un second. Non renseignée → Playwright utilise
+// son cache habituel.
+const CHROMIUM_EXECUTABLE = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE;
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: false,
@@ -21,13 +27,21 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"], viewport: { width: 414, height: 896 } },
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 414, height: 896 },
+        ...(CHROMIUM_EXECUTABLE ? { launchOptions: { executablePath: CHROMIUM_EXECUTABLE } } : {}),
+      },
     },
   ],
   webServer: process.env.E2E_BASE_URL
     ? undefined
     : {
-        command: "bun run dev",
+        // `npm run dev` (et non `bun run dev`) : toute la CI installe les
+        // dépendances avec `npm ci` et Node est le runtime documenté
+        // (package.json → engines). En local, `bun run dev` reste
+        // utilisable — `reuseExistingServer` réutilise un serveur déjà lancé.
+        command: "npm run dev",
         url: BASE_URL,
         reuseExistingServer: true,
         timeout: 120_000,

@@ -95,3 +95,46 @@ jobs:
           fi
 
           echo "✅ Suite complète exécutée — seuls les tests d'intégration env-gated sont skippés."
+
+  # ── Scénario offline de bout en bout (audit MIN-05) ───────────────────────
+  # Playwright n'était intégré à AUCUN workflow, et aucun parcours offline
+  # réel n'était exécuté automatiquement.
+  #
+  # Seul `e2e/05-offline-sync.spec.ts` tourne ici : c'est la seule spec qui
+  # n'a pas besoin de la base de PRODUCTION. Les autres (`01-auth`,
+  # `02-navigation`, `04-signout`, `auth-persistence`) créent de vrais comptes
+  # et de vraies lignes sur le projet `bcwfvpwxzlmkxobvbtzp` — le seul projet
+  # que l'application accepte (src/config/supabase-project.ts). Les faire
+  # tourner en CI polluerait la base réelle à chaque PR ; elles restent donc
+  # manuelles tant qu'aucun projet Supabase de test n'existe (voir
+  # e2e/README.md).
+  e2e-offline:
+    name: Scénario offline (Playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      - run: npm ci
+
+      - name: Installer Chromium
+        run: npx playwright install --with-deps chromium
+
+      # Le serveur de dev est démarré par playwright.config.ts (webServer).
+      - name: Parcours offline → retour réseau → synchronisation
+        run: npx playwright test e2e/05-offline-sync.spec.ts
+
+      - name: Rapport d'échec
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-offline-report
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 7
+          if-no-files-found: ignore
