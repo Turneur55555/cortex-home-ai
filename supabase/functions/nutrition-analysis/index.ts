@@ -120,7 +120,7 @@ async function fetchUsdaMicros(apiKey: string, fdcId: string): Promise<Record<st
 async function estimateMicrosAI(apiKey: string, names: string[]): Promise<Record<string, { kcal100: number; micros: Record<string, number> }>> {
   if (!names.length) return {};
   const keys = Object.keys(RDA).join(", ");
-  const prompt = `Estime la composition nutritionnelle MOYENNE pour 100 g de chaque aliment.\nAliments: ${JSON.stringify(names)}.\nRéponds STRICTEMENT en JSON (aucun texte autour), objet dont chaque clé est le nom EXACT de l'aliment et la valeur:\n{ \"kcal100\": number, \"iron\": number, \"calcium\": number, \"magnesium\": number, \"zinc\": number, \"potassium\": number, \"vitamin_c\": number, \"vitamin_d\": number, \"vitamin_b12\": number, \"folate\": number, \"vitamin_a\": number, \"vitamin_b6\": number, \"vitamin_e\": number }\nUnités /100 g: kcal100 en kcal; ${keys}: minéraux et vitamines C/E/B6 en mg; vitamines D/B12/A et folates en µg. Si inconnu, mets 0.`;
+  const prompt = `Estime la composition nutritionnelle MOYENNE pour 100 g de chaque aliment.\nAliments: ${JSON.stringify(names)}.\nRéponds STRICTEMENT en JSON (aucun texte autour), objet dont chaque clé est le nom EXACT de l'aliment et la valeur:\n{ "kcal100": number, "iron": number, "calcium": number, "magnesium": number, "zinc": number, "potassium": number, "vitamin_c": number, "vitamin_d": number, "vitamin_b12": number, "folate": number, "vitamin_a": number, "vitamin_b6": number, "vitamin_e": number }\nUnités /100 g: kcal100 en kcal; ${keys}: minéraux et vitamines C/E/B6 en mg; vitamines D/B12/A et folates en µg. Si inconnu, mets 0.`;
   try {
     const res = await fetch("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions", {
       method: "POST",

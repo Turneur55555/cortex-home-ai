@@ -27,6 +27,7 @@ function clampNumber(value: unknown, min: number, max: number): number | null {
 // libre saisi par l'utilisateur, jamais fait confiance tel quel dans un prompt.
 function sanitizeExerciseName(name: unknown): string {
   if (typeof name !== "string") return "";
+  // eslint-disable-next-line no-control-regex -- plage de contrôle volontaire (anti-injection de prompt)
   return name.replace(/[\u0000-\u001F\u007F<>]/g, " ").trim().slice(0, 60);
 }
 
@@ -452,6 +453,7 @@ Règles :
 - Retourne STRICTEMENT du JSON via tool calling.`;
     } else {
       const activityRaw = typeof body.activity === "string"
+        // eslint-disable-next-line no-control-regex -- plage de contrôle volontaire (anti-injection de prompt)
         ? body.activity.replace(/[\u0000-\u001F\u007F<>]/g, " ").trim().slice(0, 120)
         : "";
       if (activityRaw.length < 2) return fail("Décris l'activité", 400);
