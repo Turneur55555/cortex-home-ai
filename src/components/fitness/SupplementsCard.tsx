@@ -52,29 +52,21 @@ export function SupplementsCard({ date }: { date: string }) {
             <li key={s.id}>
               <button
                 type="button"
-                onClick={() =>
-                  toggle.mutate({ supplement_id: s.id, taken: !s.taken })
-                }
+                onClick={() => toggle.mutate({ supplement_id: s.id, taken: !s.taken })}
                 className={`flex w-full items-center gap-2.5 rounded-xl border px-3 py-2 text-left transition-colors ${
-                  s.taken
-                    ? "border-primary/30 bg-primary/5"
-                    : "border-border bg-transparent"
+                  s.taken ? "border-primary/30 bg-primary/5" : "border-border bg-transparent"
                 }`}
               >
                 <span
                   className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border ${
-                    s.taken
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border"
+                    s.taken ? "border-primary bg-primary text-primary-foreground" : "border-border"
                   }`}
                 >
                   {s.taken && <Check className="h-3 w-3" strokeWidth={3} />}
                 </span>
                 <span
                   className={`flex-1 truncate text-sm ${
-                    s.taken
-                      ? "font-medium text-foreground"
-                      : "text-foreground"
+                    s.taken ? "font-medium text-foreground" : "text-foreground"
                   }`}
                 >
                   {s.name}

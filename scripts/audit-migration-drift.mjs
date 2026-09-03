@@ -20,14 +20,14 @@
  *   2 — erreur de configuration/connectivité
  */
 
-import { execFileSync, execSync } from 'node:child_process';
-import { readdirSync, readFileSync, appendFileSync } from 'node:fs';
-import { join, basename } from 'node:path';
+import { execFileSync, execSync } from "node:child_process";
+import { readdirSync, readFileSync, appendFileSync } from "node:fs";
+import { join, basename } from "node:path";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 const ROOT = process.cwd();
-const MIG_DIR = join(ROOT, 'supabase/migrations');
-const PROJECT_REF = process.env.SUPABASE_PROJECT_REF || 'bcwfvpwxzlmkxobvbtzp';
+const MIG_DIR = join(ROOT, "supabase/migrations");
+const PROJECT_REF = process.env.SUPABASE_PROJECT_REF || "bcwfvpwxzlmkxobvbtzp";
 const COLORS = process.stdout.isTTY;
 
 const c = {
@@ -51,13 +51,15 @@ function addDrift(type, migration, details) {
 // ─── Récupérer les migrations Git ────────────────────────────────────────────
 function loadGitMigrations() {
   try {
-    const files = readdirSync(MIG_DIR).filter((f) => f.endsWith('.sql')).sort();
-    gitMigrations = new Set(files.map((f) => f.match(/^(\d+)/)?.[1] ?? ''));
-    if (gitMigrations.has('')) gitMigrations.delete('');
+    const files = readdirSync(MIG_DIR)
+      .filter((f) => f.endsWith(".sql"))
+      .sort();
+    gitMigrations = new Set(files.map((f) => f.match(/^(\d+)/)?.[1] ?? ""));
+    if (gitMigrations.has("")) gitMigrations.delete("");
     return files.length;
   } catch (e) {
-    console.error('❌ Impossible de lire les migrations Git');
-    console.error('   ' + e.message);
+    console.error("❌ Impossible de lire les migrations Git");
+    console.error("   " + e.message);
     process.exit(2);
   }
 }
@@ -70,26 +72,26 @@ function loadRemoteMigrations() {
     // la sortie structurée de la commande elle-même (confirmé via `supabase migration
     // list --help` et test local contre un Postgres réel avec CLI 2.109.1).
     const output = execFileSync(
-      'supabase',
-      ['migration', 'list', '--linked', '--output-format', 'json'],
+      "supabase",
+      ["migration", "list", "--linked", "--output-format", "json"],
       {
-        encoding: 'utf8',
+        encoding: "utf8",
         maxBuffer: 64 * 1024 * 1024,
-        stdio: ['pipe', 'pipe', 'pipe'],
-      }
+        stdio: ["pipe", "pipe", "pipe"],
+      },
     );
 
-    const jsonStart = output.indexOf('{');
+    const jsonStart = output.indexOf("{");
     if (jsonStart === -1) {
-      console.error('❌ Format inattendu de supabase migration list');
-      console.error('   Réponse : ' + output.slice(0, 200));
+      console.error("❌ Format inattendu de supabase migration list");
+      console.error("   Réponse : " + output.slice(0, 200));
       process.exit(2);
     }
     const parsed = JSON.parse(output.slice(jsonStart));
     const migrations = parsed.migrations;
     if (!Array.isArray(migrations)) {
-      console.error('❌ Format inattendu de supabase migration list');
-      console.error('   Réponse : ' + output.slice(0, 200));
+      console.error("❌ Format inattendu de supabase migration list");
+      console.error("   Réponse : " + output.slice(0, 200));
       process.exit(2);
     }
 
@@ -100,24 +102,24 @@ function loadRemoteMigrations() {
     for (const m of migrations) {
       if (!m.remote) continue;
       if (!byVersion.has(m.remote)) {
-        byVersion.set(m.remote, { status: 'APPLIED', timestamp: m.time });
+        byVersion.set(m.remote, { status: "APPLIED", timestamp: m.time });
       }
     }
 
     remoteMigrations = byVersion;
     return byVersion.size;
   } catch (e) {
-    if (e.code === 'ENOENT') {
-      console.error('❌ CLI Supabase non disponible (supabase gen types fonctionne-t-il ?)');
+    if (e.code === "ENOENT") {
+      console.error("❌ CLI Supabase non disponible (supabase gen types fonctionne-t-il ?)");
       process.exit(2);
     }
-    if (e.stderr?.includes('not linked')) {
-      console.error('❌ Aucun projet Supabase lié');
-      console.error('   Exécute : supabase link --project-ref ' + PROJECT_REF);
+    if (e.stderr?.includes("not linked")) {
+      console.error("❌ Aucun projet Supabase lié");
+      console.error("   Exécute : supabase link --project-ref " + PROJECT_REF);
       process.exit(2);
     }
-    console.error('❌ Impossible de récupérer les migrations Supabase');
-    console.error('   ' + (e.stderr?.toString?.() || e.message || e));
+    console.error("❌ Impossible de récupérer les migrations Supabase");
+    console.error("   " + (e.stderr?.toString?.() || e.message || e));
     process.exit(2);
   }
 }
@@ -133,13 +135,13 @@ function detectDeletedMigrations() {
   try {
     const deleted = execSync(
       'git log HEAD --diff-filter=D --name-only --pretty=format: -- "supabase/migrations/*.sql" 2>/dev/null | grep -v "^$" | sort -u || true',
-      { encoding: 'utf8', cwd: ROOT, stdio: ['pipe', 'pipe', 'pipe'] }
+      { encoding: "utf8", cwd: ROOT, stdio: ["pipe", "pipe", "pipe"] },
     )
       .trim()
-      .split('\n')
+      .split("\n")
       .filter(Boolean);
 
-    return new Set(deleted.map((p) => basename(p).match(/^(\d+)/)?.[1] ?? '').filter(Boolean));
+    return new Set(deleted.map((p) => basename(p).match(/^(\d+)/)?.[1] ?? "").filter(Boolean));
   } catch {
     return new Set();
   }
@@ -152,8 +154,8 @@ function analyzeGitVsRemote() {
   // Dérive 1 : Migration appliquée en Supabase mais absente de Git
   for (const [version, info] of remoteMigrations) {
     if (!gitMigrations.has(version)) {
-      if (info.status === 'APPLIED') {
-        addDrift('remote_only', version, 'Appliquée en Supabase, absente de Git (orpheline)');
+      if (info.status === "APPLIED") {
+        addDrift("remote_only", version, "Appliquée en Supabase, absente de Git (orpheline)");
       }
     }
   }
@@ -166,8 +168,8 @@ function analyzeGitVsRemote() {
     if (gitMigrations.has(version)) continue;
     if (remoteMigrations.has(version)) {
       const info = remoteMigrations.get(version);
-      if (info.status === 'APPLIED') {
-        addDrift('deleted_in_git', version, 'Supprimée dans Git mais toujours APPLIED en base');
+      if (info.status === "APPLIED") {
+        addDrift("deleted_in_git", version, "Supprimée dans Git mais toujours APPLIED en base");
       }
     }
   }
@@ -178,8 +180,8 @@ function analyzeGitVsRemote() {
       // normal en cas de migration locale non pousée — pas de dérive
     } else {
       const info = remoteMigrations.get(version);
-      if (info.status !== 'APPLIED') {
-        addDrift('not_applied', version, `État : ${info.status} (attendu : APPLIED)`);
+      if (info.status !== "APPLIED") {
+        addDrift("not_applied", version, `État : ${info.status} (attendu : APPLIED)`);
       }
     }
   }
@@ -187,22 +189,22 @@ function analyzeGitVsRemote() {
 
 // ─── Afficher le rapport ─────────────────────────────────────────────────────
 function printReport(gitCount, remoteCount) {
-  console.log('');
-  console.log(c.bold('═══════════════════════════════════════════════════════════════'));
-  console.log(c.bold('  Audit : Détection des dérives Git ↔ Supabase'));
-  console.log(c.bold('═══════════════════════════════════════════════════════════════'));
-  console.log('');
+  console.log("");
+  console.log(c.bold("═══════════════════════════════════════════════════════════════"));
+  console.log(c.bold("  Audit : Détection des dérives Git ↔ Supabase"));
+  console.log(c.bold("═══════════════════════════════════════════════════════════════"));
+  console.log("");
 
   console.log(
     c.blue(
-      `📊 Comparaison : ${c.bold(gitCount)} migrations Git vs ${c.bold(remoteCount)} versions en base`
-    )
+      `📊 Comparaison : ${c.bold(gitCount)} migrations Git vs ${c.bold(remoteCount)} versions en base`,
+    ),
   );
-  console.log('');
+  console.log("");
 
   if (driftIssues.length === 0) {
-    console.log(c.green('✅ Aucune dérive — Git et Supabase sont synchronisés'));
-    console.log('');
+    console.log(c.green("✅ Aucune dérive — Git et Supabase sont synchronisés"));
+    console.log("");
     return true;
   }
 
@@ -214,9 +216,9 @@ function printReport(gitCount, remoteCount) {
   }
 
   // Afficher par sévérité
-  const remote_only = byType.get('remote_only') || [];
-  const deleted_in_git = byType.get('deleted_in_git') || [];
-  const not_applied = byType.get('not_applied') || [];
+  const remote_only = byType.get("remote_only") || [];
+  const deleted_in_git = byType.get("deleted_in_git") || [];
+  const not_applied = byType.get("not_applied") || [];
 
   if (remote_only.length) {
     console.log(c.red(`❌ CRITIQUE : ${remote_only.length} migration(s) orpheline(s) en base`));
@@ -224,11 +226,11 @@ function printReport(gitCount, remoteCount) {
       console.log(c.red(`   [${issue.migration}] ${issue.details}`));
       console.log(
         c.dim(
-          `           → Correction : supabase migration repair --linked --status reverted ${issue.migration}`
-        )
+          `           → Correction : supabase migration repair --linked --status reverted ${issue.migration}`,
+        ),
       );
     }
-    console.log('');
+    console.log("");
   }
 
   if (deleted_in_git.length) {
@@ -236,19 +238,23 @@ function printReport(gitCount, remoteCount) {
     for (const issue of deleted_in_git) {
       console.log(c.red(`   [${issue.migration}] ${issue.details}`));
       console.log(
-        c.dim(`           → Vérifier l'historique Git ou restaurer via supabase migration repair`)
+        c.dim(`           → Vérifier l'historique Git ou restaurer via supabase migration repair`),
       );
     }
-    console.log('');
+    console.log("");
   }
 
   if (not_applied.length) {
     console.log(c.yellow(`⚠️  ATTENTION : ${not_applied.length} migration(s) non appliquée(s)`));
     for (const issue of not_applied) {
       console.log(c.yellow(`   [${issue.migration}] ${issue.details}`));
-      console.log(c.dim(`           → Vérifier le statut : git log -1 supabase/migrations/*${issue.migration}*`));
+      console.log(
+        c.dim(
+          `           → Vérifier le statut : git log -1 supabase/migrations/*${issue.migration}*`,
+        ),
+      );
     }
-    console.log('');
+    console.log("");
   }
 
   return false;
@@ -259,31 +265,31 @@ function generateGithubSummary(gitCount, remoteCount) {
   if (!process.env.GITHUB_STEP_SUMMARY) return;
 
   const critical = driftIssues.filter(
-    (i) => i.type === 'remote_only' || i.type === 'deleted_in_git'
+    (i) => i.type === "remote_only" || i.type === "deleted_in_git",
   );
-  const statusEmoji = critical.length === 0 ? '✅' : '❌';
+  const statusEmoji = critical.length === 0 ? "✅" : "❌";
 
   const lines = [
     `## ${statusEmoji} Audit : Git ↔ Supabase Drift Detection`,
-    '',
+    "",
     `| Indicateur | Valeur |`,
     `|---|---|`,
     `| Migrations Git | ${gitCount} |`,
     `| Versions en base | ${remoteCount} |`,
     `| Dérives détectées | ${driftIssues.length} |`,
     `| Critiques | ${critical.length} |`,
-    '',
+    "",
   ];
 
   if (critical.length > 0) {
-    lines.push('### ❌ Dérives critiques détectées');
+    lines.push("### ❌ Dérives critiques détectées");
     for (const issue of critical) {
       lines.push(`- **[${issue.migration}]** ${issue.details}`);
     }
-    lines.push('');
+    lines.push("");
   }
 
-  appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join('\n'));
+  appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n"));
 }
 
 // ─── Main ────────────────────────────────────────────────────────────────────

@@ -9,11 +9,11 @@ const DEFAULTS_KEY = "rest-timer:per-exercise:v2";
 const SETTINGS_KEY = "rest-timer:settings:v2";
 
 export type RestTimerState = {
-  endAt: number | null;        // ms epoch when timer ends (null = idle)
-  totalSec: number;            // full duration for progress ring
+  endAt: number | null; // ms epoch when timer ends (null = idle)
+  totalSec: number; // full duration for progress ring
   pausedRemaining: number | null; // seconds remaining if paused
   exerciseId: string | null;
-  finished: boolean;           // reached zero, awaiting user action
+  finished: boolean; // reached zero, awaiting user action
 };
 
 type Settings = {
@@ -103,7 +103,12 @@ function onFinish() {
   if (settings.soundEnabled) {
     try {
       const Ctx =
-        (window as unknown as { AudioContext?: typeof AudioContext; webkitAudioContext?: typeof AudioContext }).AudioContext ||
+        (
+          window as unknown as {
+            AudioContext?: typeof AudioContext;
+            webkitAudioContext?: typeof AudioContext;
+          }
+        ).AudioContext ||
         (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (Ctx) {
         const ctx = new Ctx();

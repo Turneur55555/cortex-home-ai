@@ -6,9 +6,16 @@ const CHUNK = 500;
 
 type AnyFrom = {
   from: (t: string) => {
-    insert: (rows: unknown[]) => { select: (c: string) => Promise<{ data: unknown[] | null; error: { message: string } | null }> };
-    upsert: (rows: unknown[], opts: { onConflict: string }) => Promise<{ error: { message: string } | null }>;
-    select: (c: string) => { eq: (col: string, val: string) => Promise<{ data: { date: string }[] | null }> };
+    insert: (rows: unknown[]) => {
+      select: (c: string) => Promise<{ data: unknown[] | null; error: { message: string } | null }>;
+    };
+    upsert: (
+      rows: unknown[],
+      opts: { onConflict: string },
+    ) => Promise<{ error: { message: string } | null }>;
+    select: (c: string) => {
+      eq: (col: string, val: string) => Promise<{ data: { date: string }[] | null }>;
+    };
   };
 };
 const sb = supabase as unknown as AnyFrom;
@@ -79,11 +86,7 @@ export async function importAppleHealth(
     .filter((a) => a.date <= today)
     .map((a) => ({ user_id: userId, source: "apple_health", ...a }));
 
-  const activityRes = await upsertChunks(
-    "daily_activity",
-    activityRows,
-    "user_id,date,source",
-  );
+  const activityRes = await upsertChunks("daily_activity", activityRows, "user_id,date,source");
 
   return {
     body: bodyInserted,

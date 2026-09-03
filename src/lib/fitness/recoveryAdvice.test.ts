@@ -65,7 +65,9 @@ describe("buildAiRecoveryContext", () => {
   });
   it("agrège les muscles fins sous un même nom AI", () => {
     // quadriceps + ischio → 'jambes' ; si tous deux fatigués → une seule entrée
-    const w: Workout[] = [{ date: daysAgo(1), exercises: [{ name: "squat" }, { name: "leg curl" }] }];
+    const w: Workout[] = [
+      { date: daysAgo(1), exercises: [{ name: "squat" }, { name: "leg curl" }] },
+    ];
     const m = computeRecovery(w, NOW);
     const ctx = buildAiRecoveryContext(["quadriceps", "ischio"], m);
     const jambes = ctx.filter((c) => c.muscle === "jambes");
@@ -76,8 +78,19 @@ describe("buildAiRecoveryContext", () => {
 describe("MUSCLE_AI_NAME", () => {
   it("ne produit que des noms autorisés par l'edge", () => {
     const allowed = new Set([
-      "pectoraux", "dos", "épaules", "biceps", "triceps", "jambes",
-      "fessiers", "abdos", "cardio", "avant-bras", "mollets", "trapèzes", "lombaires",
+      "pectoraux",
+      "dos",
+      "épaules",
+      "biceps",
+      "triceps",
+      "jambes",
+      "fessiers",
+      "abdos",
+      "cardio",
+      "avant-bras",
+      "mollets",
+      "trapèzes",
+      "lombaires",
     ]);
     for (const name of Object.values(MUSCLE_AI_NAME)) {
       expect(allowed.has(name)).toBe(true);

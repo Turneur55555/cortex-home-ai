@@ -23,7 +23,9 @@ let config = "";
 try {
   config = readFileSync(CONFIG_FILE, "utf8");
 } catch {
-  errors.push(`${CONFIG_FILE} est introuvable — la configuration Supabase doit rester centralisée.`);
+  errors.push(
+    `${CONFIG_FILE} est introuvable — la configuration Supabase doit rester centralisée.`,
+  );
 }
 
 if (config) {
@@ -54,7 +56,8 @@ if (config) {
 // 3 — aucun autre project ref dans le code applicatif
 const SCAN_DIRS = ["src", "scripts", "supabase/functions", ".github/workflows"];
 const SCAN_EXT = new Set([".ts", ".tsx", ".js", ".mjs", ".cjs", ".json", ".yml", ".yaml", ".sql"]);
-const REF_RE = /\b([a-z]{20})\.supabase\.(?:co|in)\b|project-id\s+([a-z]{20})\b|project_id:\s*([a-z]{20})\b/g;
+const REF_RE =
+  /\b([a-z]{20})\.supabase\.(?:co|in)\b|project-id\s+([a-z]{20})\b|project_id:\s*([a-z]{20})\b/g;
 
 function walk(dir) {
   let entries;

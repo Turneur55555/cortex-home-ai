@@ -6,12 +6,7 @@
 // ============================================================
 
 import { bestEstimated1RM, setsTonnage, topSet, type WorkingSet } from "../sets";
-import type {
-  ComparisonReport,
-  MetricComparison,
-  ProgressState,
-  Trend,
-} from "./types";
+import type { ComparisonReport, MetricComparison, ProgressState, Trend } from "./types";
 
 export interface SessionLike {
   date: string;
@@ -29,9 +24,7 @@ interface SessionSummary {
 
 function summarize(s: SessionLike): SessionSummary {
   const ts = topSet(s.sets);
-  const valid = s.sets.filter(
-    (x) => x.reps != null && x.weight != null && (x.reps as number) > 0,
-  );
+  const valid = s.sets.filter((x) => x.reps != null && x.weight != null && (x.reps as number) > 0);
   return {
     date: s.date,
     topWeight: ts?.weight ?? null,

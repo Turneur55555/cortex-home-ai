@@ -29,7 +29,7 @@ describe("computeRecovery", () => {
 
   it("marque un muscle 'fatigued' si entraîné il y a moins de 48h", () => {
     const workout: Workout = {
-      date: hoursAgo(24),  // entraîné il y a 24h
+      date: hoursAgo(24), // entraîné il y a 24h
       exercises: [{ name: "bench press" }],
     };
     const result = computeRecovery([workout], NOW);
@@ -65,7 +65,7 @@ describe("computeRecovery", () => {
   it("prend en compte le dernier entraînement quand plusieurs workouts existent", () => {
     const workouts: Workout[] = [
       { date: hoursAgo(100), exercises: [{ name: "squat" }] }, // vieux
-      { date: hoursAgo(24), exercises: [{ name: "squat" }] },  // récent → fatigued
+      { date: hoursAgo(24), exercises: [{ name: "squat" }] }, // récent → fatigued
     ];
     const result = computeRecovery(workouts, NOW);
     const quads = result.get("quadriceps");

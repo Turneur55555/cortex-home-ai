@@ -277,7 +277,13 @@ function DepositReportCard({
             )}
           </div>
         </div>
-        <Button type="button" size="icon" variant="ghost" className="h-7 w-7 shrink-0" onClick={onDismiss}>
+        <Button
+          type="button"
+          size="icon"
+          variant="ghost"
+          className="h-7 w-7 shrink-0"
+          onClick={onDismiss}
+        >
           <X className="h-3.5 w-3.5" />
         </Button>
       </div>
@@ -356,7 +362,10 @@ function DepositReportCard({
             Séance réalisée détectée — à confirmer
           </p>
           {journalEntries.map((entry, idx) => (
-            <div key={idx} className="flex items-center justify-between gap-2 rounded-xl bg-white/[0.03] p-2.5">
+            <div
+              key={idx}
+              className="flex items-center justify-between gap-2 rounded-xl bg-white/[0.03] p-2.5"
+            >
               <div className="min-w-0">
                 <p className="truncate text-xs font-semibold text-foreground">{entry.name}</p>
                 <p className="text-[11px] text-muted-foreground">

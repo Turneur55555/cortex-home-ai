@@ -59,8 +59,7 @@ function mk(
  * conseil constructif.
  */
 export function buildRecommendations(input: RecommendationInput): Recommendation[] {
-  const { comparison, objective, avgReps, lastSetCount, sessionCount, primaryRecovery } =
-    input;
+  const { comparison, objective, avgReps, lastSetCount, sessionCount, primaryRecovery } = input;
   const recs: Recommendation[] = [];
   const [minReps, maxReps] = targetRepRange(objective);
 

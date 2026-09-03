@@ -110,17 +110,37 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
       { name: "apple-mobile-web-app-title", content: "ICORTEX" },
       { title: "ICORTEX" },
-      { name: "description", content: "ICORTEX — plateforme premium de fitness et nutrition propulsée par l'IA. La performance commence ici." },
+      {
+        name: "description",
+        content:
+          "ICORTEX — plateforme premium de fitness et nutrition propulsée par l'IA. La performance commence ici.",
+      },
       { name: "author", content: "ICORTEX" },
       { property: "og:title", content: "ICORTEX — La performance commence ici." },
-      { property: "og:description", content: "Plateforme premium de fitness et nutrition propulsée par l'IA : entraînement, nutrition, récupération et progression." },
+      {
+        property: "og:description",
+        content:
+          "Plateforme premium de fitness et nutrition propulsée par l'IA : entraînement, nutrition, récupération et progression.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@ICORTEX" },
       { name: "twitter:title", content: "ICORTEX — La performance commence ici." },
-      { name: "twitter:description", content: "Plateforme premium de fitness et nutrition propulsée par l'IA : entraînement, nutrition, récupération et progression." },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/c56feb7b-5013-4cff-b123-4abf943d0833/id-preview-dab94316--2c9444e5-f2d2-4c68-9566-e9e8569dc37a.lovable.app-1778441430327.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/c56feb7b-5013-4cff-b123-4abf943d0833/id-preview-dab94316--2c9444e5-f2d2-4c68-9566-e9e8569dc37a.lovable.app-1778441430327.png" },
+      {
+        name: "twitter:description",
+        content:
+          "Plateforme premium de fitness et nutrition propulsée par l'IA : entraînement, nutrition, récupération et progression.",
+      },
+      {
+        property: "og:image",
+        content:
+          "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/c56feb7b-5013-4cff-b123-4abf943d0833/id-preview-dab94316--2c9444e5-f2d2-4c68-9566-e9e8569dc37a.lovable.app-1778441430327.png",
+      },
+      {
+        name: "twitter:image",
+        content:
+          "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/c56feb7b-5013-4cff-b123-4abf943d0833/id-preview-dab94316--2c9444e5-f2d2-4c68-9566-e9e8569dc37a.lovable.app-1778441430327.png",
+      },
     ],
     links: [
       { rel: "stylesheet", href: appCss },

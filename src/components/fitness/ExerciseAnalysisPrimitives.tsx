@@ -22,7 +22,9 @@ export function SectionCard({
     <div className="rounded-2xl border border-border bg-surface/40 p-4">
       <div className="mb-3 flex items-center gap-2">
         <span className="text-primary">{icon}</span>
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</h3>
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          {title}
+        </h3>
       </div>
       {children}
     </div>
@@ -52,7 +54,10 @@ export function TrendIcon({ trend }: { trend: Trend }) {
 export function Bar({ value }: { value: number }) {
   return (
     <div className="h-2 overflow-hidden rounded-full bg-white/5">
-      <div className="h-full rounded-full bg-primary" style={{ width: `${Math.max(4, Math.min(100, value))}%` }} />
+      <div
+        className="h-full rounded-full bg-primary"
+        style={{ width: `${Math.max(4, Math.min(100, value))}%` }}
+      />
     </div>
   );
 }
@@ -92,14 +97,24 @@ export function StatTileMini({
     <div className={`rounded-xl p-3 text-center ${highlight ? "bg-warning/10" : "bg-surface"}`}>
       <div className="mb-1 flex items-center justify-center gap-1">
         {icon}
-        <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">{label}</span>
+        <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+          {label}
+        </span>
       </div>
       <p className={`text-sm font-bold ${valueClass ?? ""}`}>{value}</p>
     </div>
   );
 }
 
-export function ObjChip({ active, label, onClick }: { active: boolean; label: string; onClick: () => void }) {
+export function ObjChip({
+  active,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}) {
   return (
     <button
       onClick={onClick}

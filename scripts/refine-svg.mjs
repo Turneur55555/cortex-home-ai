@@ -51,7 +51,7 @@ viewBox: 0 0 200 500, centre x=100.
 Path actuel : ${muscle.d}
 Problème : ${feedback}
 Retourne uniquement la valeur du attribut d (pas la balise path, juste la chaîne de coordonnées).
-Utilise des courbes Bézier cubiques (C) pour un rendu organique et anatomique.`
+Utilise des courbes Bézier cubiques (C) pour un rendu organique et anatomique.`,
 );
 
 muscle.d = newPath;

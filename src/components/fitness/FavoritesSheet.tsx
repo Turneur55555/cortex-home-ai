@@ -125,9 +125,8 @@ export function FavoritesSheet({ date, onClose }: { date: string; onClose: () =>
                 <WeightSelector food={picked} value={grams} onChange={setGrams} />
                 <MealSelect value={newMeal} onChange={setNewMeal} />
                 <p className="text-xs text-muted-foreground">
-                  {Math.round(scale(picked.calories, g) ?? 0)} kcal · L
-                  {scale(picked.fats, g) ?? 0} G{scale(picked.carbs, g) ?? 0} P
-                  {scale(picked.proteins, g) ?? 0}
+                  {Math.round(scale(picked.calories, g) ?? 0)} kcal · L{scale(picked.fats, g) ?? 0}{" "}
+                  G{scale(picked.carbs, g) ?? 0} P{scale(picked.proteins, g) ?? 0}
                 </p>
                 <button
                   type="button"

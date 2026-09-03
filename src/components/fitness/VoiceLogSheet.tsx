@@ -391,8 +391,8 @@ export function VoiceLogSheet({ date, onClose }: VoiceLogSheetProps) {
                         <p className="truncate text-sm font-medium">{item.name}</p>
                         <p className="text-[11px] text-muted-foreground">
                           {safeGrams(item.grams) != null ? `${formatDecimal(item.grams)} g · ` : ""}
-                          {Math.round(item.calories)} kcal · L{Math.round(item.fats * 10) / 10}{" "}
-                          G{Math.round(item.carbs * 10) / 10} P{Math.round(item.proteins * 10) / 10}
+                          {Math.round(item.calories)} kcal · L{Math.round(item.fats * 10) / 10} G
+                          {Math.round(item.carbs * 10) / 10} P{Math.round(item.proteins * 10) / 10}
                         </p>
                       </div>
                       <button

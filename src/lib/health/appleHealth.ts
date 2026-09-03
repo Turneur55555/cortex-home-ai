@@ -84,11 +84,16 @@ function distanceToMeters(value: number, unit?: string): number {
 function decodeXml(value: string): string {
   return value.replace(/&(?:quot|apos|lt|gt|amp|#\d+|#x[0-9a-fA-F]+);/g, (entity) => {
     switch (entity) {
-      case "&quot;": return '"';
-      case "&apos;": return "'";
-      case "&lt;": return "<";
-      case "&gt;": return ">";
-      case "&amp;": return "&";
+      case "&quot;":
+        return '"';
+      case "&apos;":
+        return "'";
+      case "&lt;":
+        return "<";
+      case "&gt;":
+        return ">";
+      case "&amp;":
+        return "&";
       default: {
         const hex = entity.startsWith("&#x");
         const raw = entity.slice(hex ? 3 : 2, -1);
@@ -177,7 +182,8 @@ function applyWorkout(w: AppleAttributes, workouts: ParsedWorkoutRow[]): void {
   const minutes = unit === "min" ? Math.round(dur) : Math.round(dur / 60);
   if (minutes < 1 || minutes > 600) return;
   const actType = w.workoutActivityType || "";
-  const name = WORKOUT_TYPE_LABELS[actType] || actType.replace(/^HKWorkoutActivityType/, "") || "Séance";
+  const name =
+    WORKOUT_TYPE_LABELS[actType] || actType.replace(/^HKWorkoutActivityType/, "") || "Séance";
   workouts.push({ date, name, duration_minutes: minutes, notes: "Importé Apple Health" });
 }
 

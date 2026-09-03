@@ -113,11 +113,7 @@ export function useSaveBodyPhotoAnalysis() {
         throw trackingError ?? new Error("Échec de l'enregistrement.");
 
       const rollbackTracking = async () => {
-        await db
-          .from("body_tracking")
-          .delete()
-          .eq("id", trackingRow.id)
-          .eq("user_id", user.id);
+        await db.from("body_tracking").delete().eq("id", trackingRow.id).eq("user_id", user.id);
       };
 
       const analysisId = crypto.randomUUID();

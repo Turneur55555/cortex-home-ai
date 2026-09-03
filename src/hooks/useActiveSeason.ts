@@ -73,7 +73,6 @@ export function useActiveSeason(): ActiveSeasonState {
         .maybeSingle();
       if (error) throw error;
       return (data as { ps: number; tier: number } | null) ?? null;
-
     },
   });
 

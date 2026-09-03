@@ -31,15 +31,14 @@ export function computeMacros(
   nutriments: ProductNutriments | undefined,
   totalQty: number,
 ): MacroValues {
-  const r = (v: number | undefined | null) =>
-    v != null ? Math.round((v * totalQty) / 100) : null;
+  const r = (v: number | undefined | null) => (v != null ? Math.round((v * totalQty) / 100) : null);
   const r1 = (v: number | undefined | null) =>
     v != null ? Math.round(((v * totalQty) / 100) * 10) / 10 : null;
   return {
     calories: r(nutriments?.["energy-kcal_100g"]),
     proteins: r1(nutriments?.proteins_100g),
-    carbs:    r1(nutriments?.carbohydrates_100g),
-    fats:     r1(nutriments?.fat_100g),
+    carbs: r1(nutriments?.carbohydrates_100g),
+    fats: r1(nutriments?.fat_100g),
   };
 }
 
@@ -48,10 +47,6 @@ export function computeMacros(
  * protéines/glucides = 4 kcal/g, lipides = 9 kcal/g). Seule source de vérité
  * pour ce calcul — à réutiliser partout où un aliment est créé/modifié.
  */
-export function calculateCaloriesFromMacros(
-  protein: number,
-  carbs: number,
-  fat: number,
-): number {
+export function calculateCaloriesFromMacros(protein: number, carbs: number, fat: number): number {
   return Math.round(protein * 4 + carbs * 4 + fat * 9);
 }

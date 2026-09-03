@@ -19,7 +19,7 @@ export function Confetti() {
     () =>
       Array.from({ length: 24 }, (_, i) => ({
         id: i,
-        left: `${5 + (i * 3.9) % 92}%`,
+        left: `${5 + ((i * 3.9) % 92)}%`,
         color: COLORS[i % COLORS.length],
         delay: `${(i * 0.04).toFixed(2)}s`,
         duration: `${(0.8 + (i % 5) * 0.22).toFixed(2)}s`,

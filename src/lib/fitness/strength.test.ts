@@ -56,12 +56,8 @@ describe("workoutActiveSeconds", () => {
   });
 
   it("is unaffected by weight — only reps drive active time", () => {
-    const withLightWeight = [
-      { exercise_sets: [{ reps: 10, weight: 20, completed: true }] },
-    ];
-    const withHeavyWeight = [
-      { exercise_sets: [{ reps: 10, weight: 120, completed: true }] },
-    ];
+    const withLightWeight = [{ exercise_sets: [{ reps: 10, weight: 20, completed: true }] }];
+    const withHeavyWeight = [{ exercise_sets: [{ reps: 10, weight: 120, completed: true }] }];
     expect(exerciseActiveSeconds(withLightWeight[0], SEC_PER_REP)).toBe(
       exerciseActiveSeconds(withHeavyWeight[0], SEC_PER_REP),
     );

@@ -348,9 +348,9 @@ export function MealScanSheet({ onClose, date }: MealScanSheetProps) {
                             {safeGrams(item.grams) != null
                               ? `${formatDecimal(item.grams)} g · `
                               : ""}
-                            {Math.round(item.calories)} kcal · L
-                            {Math.round(item.fats * 10) / 10} G
-                            {Math.round(item.carbs * 10) / 10} P{Math.round(item.proteins * 10) / 10}
+                            {Math.round(item.calories)} kcal · L{Math.round(item.fats * 10) / 10} G
+                            {Math.round(item.carbs * 10) / 10} P
+                            {Math.round(item.proteins * 10) / 10}
                           </p>
                         </div>
                         <button

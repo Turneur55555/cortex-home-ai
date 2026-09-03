@@ -39,13 +39,7 @@ const THICKNESS_MUSCLES = new Set<MuscleId>([
   "ischio",
 ]);
 // Muscles posturaux (chaîne postérieure + tronc).
-const POSTURE_MUSCLES = new Set<MuscleId>([
-  "dos",
-  "trapeze",
-  "lombaires",
-  "abdos",
-  "epaules",
-]);
+const POSTURE_MUSCLES = new Set<MuscleId>(["dos", "trapeze", "lombaires", "abdos", "epaules"]);
 
 function has(set: Set<MuscleId>, muscles: MuscleId[]): boolean {
   return muscles.some((m) => set.has(m));
@@ -96,11 +90,12 @@ function baseVector(exerciseName: string, roles: RoleMap): TraitVector {
     v.epaisseur = /row|rowing|horizontal|shrug|presse|squat|hack/.test(n) ? 0.8 : 0.5;
   }
   if (has(POSTURE_MUSCLES, allMuscles)) {
-    v.posture = /row|rowing|face.?pull|oiseau|rear|extension.?lombaire|good.?morning|gainage|planche|souleve|deadlift/.test(
-      n,
-    )
-      ? 0.8
-      : 0.4;
+    v.posture =
+      /row|rowing|face.?pull|oiseau|rear|extension.?lombaire|good.?morning|gainage|planche|souleve|deadlift/.test(
+        n,
+      )
+        ? 0.8
+        : 0.4;
   }
 
   // Bornage [0,1].

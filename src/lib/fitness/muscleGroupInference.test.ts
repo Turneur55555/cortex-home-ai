@@ -21,7 +21,10 @@ describe("resolveMuscleGroup", () => {
   });
 
   it("ne retourne jamais une chaîne vide — repli neutre en dernier recours", () => {
-    const result = resolveMuscleGroup({ category: null, config: null }, "Exercice totalement inconnu xyz123");
+    const result = resolveMuscleGroup(
+      { category: null, config: null },
+      "Exercice totalement inconnu xyz123",
+    );
     expect(result).toBe(UNCATEGORIZED_MUSCLE_GROUP);
     expect(result.length).toBeGreaterThan(0);
   });

@@ -7,7 +7,11 @@ function formatWeekRange(weekStart: string, weekEnd: string) {
   const start = new Date(weekStart + "T00:00:00");
   const end = new Date(weekEnd + "T00:00:00");
   const startDay = start.getDate();
-  const endStr = end.toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" });
+  const endStr = end.toLocaleDateString("fr-FR", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
   return `${startDay} – ${endStr}`;
 }
 
@@ -45,15 +49,10 @@ export function ReportCard({
         {status === "ready" && (
           <div className="mb-4 grid grid-cols-3 gap-2">
             <MetricChip label="Séances" value={String(summary.sessions_count ?? 0)} />
-            <MetricChip
-              label="Cal. moy."
-              value={`${summary.avg_calories ?? 0} kcal`}
-            />
+            <MetricChip label="Cal. moy." value={`${summary.avg_calories ?? 0} kcal`} />
             <MetricChip
               label="Poids"
-              value={
-                summary.current_weight != null ? `${summary.current_weight} kg` : "—"
-              }
+              value={summary.current_weight != null ? `${summary.current_weight} kg` : "—"}
             />
           </div>
         )}

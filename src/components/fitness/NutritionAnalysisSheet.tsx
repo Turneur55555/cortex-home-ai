@@ -1,16 +1,17 @@
 import { useEffect, useState } from "react";
 import { Loader2, Activity, AlertTriangle, Pill, Sparkles } from "lucide-react";
 import { FullscreenSheet as Sheet } from "@/components/shared/FormComponents";
-import {
-  useNutritionAnalysis,
-  type AnalysisNutrient,
-} from "@/hooks/useNutritionAnalysis";
+import { useNutritionAnalysis, type AnalysisNutrient } from "@/hooks/useNutritionAnalysis";
 
 const STATUS_STYLE: Record<
   AnalysisNutrient["status"],
   { bar: string; text: string; label: string }
 > = {
-  ok: { bar: "bg-gradient-to-r from-emerald-500 to-cyan-400", text: "text-emerald-400", label: "OK" },
+  ok: {
+    bar: "bg-gradient-to-r from-emerald-500 to-cyan-400",
+    text: "text-emerald-400",
+    label: "OK",
+  },
   low: { bar: "bg-amber-400/80", text: "text-amber-400", label: "Bas" },
   deficient: { bar: "bg-red-400/80", text: "text-red-400", label: "Très bas" },
   unknown: { bar: "bg-white/15", text: "text-muted-foreground", label: "—" },

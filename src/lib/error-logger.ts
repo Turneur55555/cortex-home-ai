@@ -30,7 +30,7 @@ type LogPayload = {
 const NOISE_PATTERNS: RegExp[] = [
   /^Warning:/i,
   /React does not recognize/i,
-  /hydrat/i,                          // hydration mismatch warnings (dev builds)
+  /hydrat/i, // hydration mismatch warnings (dev builds)
   /react\.dev\/errors\/4(18|19|21|22|23|25)\b/, // minified hydration errors (prod builds) — React recovers by re-rendering client-side
   /source map/i,
   /ResizeObserver loop/i,
@@ -52,7 +52,12 @@ function isNoise(message: string): boolean {
 const recent = new Map<string, number>();
 const DEDUPE_MS = 30_000;
 
-function isDuplicate(level: LogLevel, message: string, source?: string | null, line?: number | null): boolean {
+function isDuplicate(
+  level: LogLevel,
+  message: string,
+  source?: string | null,
+  line?: number | null,
+): boolean {
   const key = `${level}|${message}|${source ?? ""}|${line ?? ""}`;
   const now = Date.now();
   const last = recent.get(key);
@@ -89,7 +94,9 @@ export async function logError(
     const support_id = generateSupportId();
 
     if (shouldPersist(level)) {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) return null; // Anonymous logging disabled (RLS requires auth)
 
       const row = {

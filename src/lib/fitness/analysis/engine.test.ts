@@ -12,29 +12,43 @@ function muscle(
   return { id, status, hoursSinceLast, hoursRemaining: 0 };
 }
 
-const READY_ALL = ([
-  "pectoraux",
-  "dos",
-  "epaules",
-  "biceps",
-  "triceps",
-  "abdos",
-  "obliques",
-  "quadriceps",
-  "ischio",
-  "fessiers",
-  "mollets",
-  "trapeze",
-  "avant-bras",
-  "lombaires",
-] as MuscleId[]).map((id) => muscle(id));
+const READY_ALL = (
+  [
+    "pectoraux",
+    "dos",
+    "epaules",
+    "biceps",
+    "triceps",
+    "abdos",
+    "obliques",
+    "quadriceps",
+    "ischio",
+    "fessiers",
+    "mollets",
+    "trapeze",
+    "avant-bras",
+    "lombaires",
+  ] as MuscleId[]
+).map((id) => muscle(id));
 
 function base(overrides: Partial<AnalyzeInput> = {}): AnalyzeInput {
   return {
     exerciseName: "Développé couché",
     sessions: [
-      { date: "2026-01-01", sets: [{ reps: 10, weight: 60 }, { reps: 10, weight: 60 }] },
-      { date: "2026-01-08", sets: [{ reps: 10, weight: 62.5 }, { reps: 9, weight: 62.5 }] },
+      {
+        date: "2026-01-01",
+        sets: [
+          { reps: 10, weight: 60 },
+          { reps: 10, weight: 60 },
+        ],
+      },
+      {
+        date: "2026-01-08",
+        sets: [
+          { reps: 10, weight: 62.5 },
+          { reps: 9, weight: 62.5 },
+        ],
+      },
     ],
     recovery: READY_ALL,
     profile: {},

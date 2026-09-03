@@ -101,7 +101,8 @@ function isImageFile(file: File): boolean {
 // Compression canvas — HEIC/HEIF exclus car les navigateurs ne savent pas les
 // dessiner sur un canvas ; l'edge function les gère nativement via magic bytes.
 async function compressImage(file: File): Promise<Blob> {
-  const isHeic = /\.(heic|heif)$/i.test(file.name) || file.type === "image/heic" || file.type === "image/heif";
+  const isHeic =
+    /\.(heic|heif)$/i.test(file.name) || file.type === "image/heic" || file.type === "image/heif";
   if (isHeic) return file;
 
   const dataUrl = await new Promise<string>((res, rej) => {
@@ -143,7 +144,9 @@ async function compressImage(file: File): Promise<Blob> {
 function withTimeout<T>(promise: PromiseLike<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {
-      reject(new Error(`Timeout: l'étape "${label}" n'a pas répondu après ${Math.round(ms / 1000)}s.`));
+      reject(
+        new Error(`Timeout: l'étape "${label}" n'a pas répondu après ${Math.round(ms / 1000)}s.`),
+      );
     }, ms);
     promise.then(
       (v) => {
@@ -212,7 +215,9 @@ export function useDeposeDocument() {
 
         mark("storage:upload");
         const { error: upErr } = await withTimeout(
-          supabase.storage.from("pdf-documents").upload(path, uploadBlob, { contentType, upsert: false }),
+          supabase.storage
+            .from("pdf-documents")
+            .upload(path, uploadBlob, { contentType, upsert: false }),
           30_000,
           "storage.upload",
         );
@@ -224,7 +229,12 @@ export function useDeposeDocument() {
         const { data: stubDoc, error: stubErr } = await withTimeout(
           supabase
             .from("documents")
-            .insert({ user_id: user.id, name: displayName, storage_path: path, module: "documents" })
+            .insert({
+              user_id: user.id,
+              name: displayName,
+              storage_path: path,
+              module: "documents",
+            })
             .select()
             .single(),
           15_000,
@@ -245,7 +255,8 @@ export function useDeposeDocument() {
         if ((ai as { error?: string })?.error) throw new Error((ai as { error: string }).error);
 
         const analysis = ai as AnalysisResult;
-        const primaryModule: DocModule = (analysis.detected_modules?.[0] as DocModule) ?? "documents";
+        const primaryModule: DocModule =
+          (analysis.detected_modules?.[0] as DocModule) ?? "documents";
 
         mark("db:update-analysis");
         const { data: updatedDoc, error: updErr } = await withTimeout(
@@ -269,8 +280,10 @@ export function useDeposeDocument() {
 
         const depositPayload: Record<string, unknown> = {};
         if (analysis.modules?.body?.length) depositPayload.body = analysis.modules.body;
-        if (analysis.modules?.nutrition?.length) depositPayload.nutrition = analysis.modules.nutrition;
-        if (analysis.modules?.supplements?.length) depositPayload.supplements = analysis.modules.supplements;
+        if (analysis.modules?.nutrition?.length)
+          depositPayload.nutrition = analysis.modules.nutrition;
+        if (analysis.modules?.supplements?.length)
+          depositPayload.supplements = analysis.modules.supplements;
         if (analysis.modules?.fitness_template?.length)
           depositPayload.fitness_template = analysis.modules.fitness_template;
 
@@ -312,7 +325,8 @@ export function useDeposeDocument() {
       if (report.body) qc.invalidateQueries({ queryKey: ["body_tracking"] });
       if (report.nutrition) qc.invalidateQueries({ queryKey: ["nutrition"] });
       if (report.supplements) qc.invalidateQueries({ queryKey: ["supplements"] });
-      if (report.fitness_template) qc.invalidateQueries({ queryKey: ["fitness", "workout_templates"] });
+      if (report.fitness_template)
+        qc.invalidateQueries({ queryKey: ["fitness", "workout_templates"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });

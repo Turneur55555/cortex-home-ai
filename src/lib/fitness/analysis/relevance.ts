@@ -8,11 +8,7 @@
 import { normalize } from "../exerciseCatalog";
 import { exerciseDifficulty } from "../exerciseRanks";
 import type { MuscleId } from "../muscleMapping";
-import type {
-  RelevanceLabel,
-  RelevanceScore,
-  TrainingObjective,
-} from "./types";
+import type { RelevanceLabel, RelevanceScore, TrainingObjective } from "./types";
 import type { RoleMap } from "./muscleRoles";
 
 export interface RelevanceInput {
@@ -59,7 +55,10 @@ function objectiveFit(
       return /row|rowing|face.?pull|oiseau|rear|extension.?lombaire|good.?morning|traction|tirage|gainage|planche/.test(
         n,
       )
-        ? { delta: 1, reason: "renforce la chaîne posturale, prioritaire pour ton objectif posture" }
+        ? {
+            delta: 1,
+            reason: "renforce la chaîne posturale, prioritaire pour ton objectif posture",
+          }
         : { delta: -0.5, reason: "peu spécifique à un objectif postural" };
     case "general":
       return compound

@@ -85,7 +85,12 @@ describe("estimateSessionCalories", () => {
 describe("estimateSessionCalories — musculation : moteur basé sur les séries (pas la durée)", () => {
   it("FONDAMENTAL : deux séances muscu avec les mêmes séries mais des durée_minutes différentes produisent la MÊME estimation", () => {
     const exercises = [
-      { exercise_sets: [{ reps: 10, weight: 50, completed: true }, { reps: 8, weight: 55, completed: true }] },
+      {
+        exercise_sets: [
+          { reps: 10, weight: 50, completed: true },
+          { reps: 8, weight: 55, completed: true },
+        ],
+      },
       { exercise_sets: [{ reps: 12, weight: 30, completed: true }] },
     ];
     const short: WorkoutForEAT = {

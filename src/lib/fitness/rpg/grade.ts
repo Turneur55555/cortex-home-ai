@@ -11,7 +11,12 @@
 // que traduire `levelInRank` (1..5) en libellé pour l'UI.
 // ============================================================
 
-import { RANK_TIERS, LEVELS_PER_RANK, type RankKey, type RankState } from "@/lib/fitness/exerciseRanks";
+import {
+  RANK_TIERS,
+  LEVELS_PER_RANK,
+  type RankKey,
+  type RankState,
+} from "@/lib/fitness/exerciseRanks";
 
 /**
  * Grades nommés à l'intérieur d'une famille (positions 1..5), propres à

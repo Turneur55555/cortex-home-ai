@@ -172,15 +172,13 @@ export function useExerciseCatalogEntry(exerciseName: string | null | undefined)
           : Promise.resolve({ data: [] as Array<{ id: string; name: string }>, error: null }),
       ])) as [
         {
-          data:
-            | Array<{
-                id: string;
-                media_type: string | null;
-                url: string | null;
-                is_primary: boolean | null;
-                attribution: string | null;
-              }>
-            | null;
+          data: Array<{
+            id: string;
+            media_type: string | null;
+            url: string | null;
+            is_primary: boolean | null;
+            attribution: string | null;
+          }> | null;
           error: unknown;
         },
         { data: Array<{ id: string; name: string }> | null; error: unknown },

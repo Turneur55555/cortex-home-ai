@@ -38,10 +38,13 @@ export default tseslint.config(
       // Bloquer les any explicites
       "@typescript-eslint/no-explicit-any": "warn",
       // Bloquer les variables non utilisées (avec exception pour _prefix)
-      "@typescript-eslint/no-unused-vars": ["warn", {
-        argsIgnorePattern: "^_",
-        varsIgnorePattern: "^_"
-      }],
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+        },
+      ],
     },
   },
   eslintPluginPrettier,

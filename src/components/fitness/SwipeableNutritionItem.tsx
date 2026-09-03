@@ -32,9 +32,7 @@ export function SwipeableNutritionItem({
   const apply = (x: number, animate: boolean) => {
     const el = contentRef.current;
     if (!el) return;
-    el.style.transition = animate
-      ? "transform 260ms cubic-bezier(0.32, 0.72, 0, 1)"
-      : "none";
+    el.style.transition = animate ? "transform 260ms cubic-bezier(0.32, 0.72, 0, 1)" : "none";
     el.style.transform = `translate3d(${x}px, 0, 0)`;
     offset.current = x;
   };
@@ -82,10 +80,7 @@ export function SwipeableNutritionItem({
   return (
     <li className="relative overflow-hidden rounded-2xl">
       {/* Zone d'action révélée — compacte, icône seule */}
-      <div
-        className="absolute inset-y-0 right-0 flex items-center justify-end pr-1"
-        aria-hidden
-      >
+      <div className="absolute inset-y-0 right-0 flex items-center justify-end pr-1" aria-hidden>
         <button
           type="button"
           onClick={handleDelete}

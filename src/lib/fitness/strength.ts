@@ -8,7 +8,10 @@
  * Retourne null si les entrées sont invalides.
  * Pour reps = 1, retourne weight tel quel.
  */
-export function estimate1RM(weight: number | null | undefined, reps: number | null | undefined): number | null {
+export function estimate1RM(
+  weight: number | null | undefined,
+  reps: number | null | undefined,
+): number | null {
   if (weight == null || reps == null) return null;
   if (!Number.isFinite(weight) || !Number.isFinite(reps)) return null;
   if (weight <= 0 || reps <= 0) return null;

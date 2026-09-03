@@ -95,7 +95,9 @@ export type LibraryFilter = "all" | "cortex" | "dataset" | "merged" | "archived"
  * `undo_exercise_merge`) prévaut sur l'origine d'import d'origine : une
  * fiche dataset qui a ensuite reçu une fusion devient "Fusionné".
  */
-export function deriveExerciseOrigin(row: Pick<ExerciseRow, "merged_at" | "dataset_source">): ExerciseOrigin {
+export function deriveExerciseOrigin(
+  row: Pick<ExerciseRow, "merged_at" | "dataset_source">,
+): ExerciseOrigin {
   if (row.merged_at) return "merged";
   return row.dataset_source ? "dataset" : "cortex";
 }
@@ -105,7 +107,10 @@ export interface CompletenessResult {
   missing: string[];
 }
 
-const COMPLETENESS_CHECKS: Array<{ label: string; has: (row: ExerciseRow, media?: ExerciseMediaSummary) => boolean }> = [
+const COMPLETENESS_CHECKS: Array<{
+  label: string;
+  has: (row: ExerciseRow, media?: ExerciseMediaSummary) => boolean;
+}> = [
   { label: "Photo", has: (_row, media) => !!media?.hasPhoto },
   { label: "GIF", has: (_row, media) => !!media?.hasGif },
   { label: "Vidéo", has: (_row, media) => !!media?.hasVideo },
@@ -118,9 +123,14 @@ const COMPLETENESS_CHECKS: Array<{ label: string; has: (row: ExerciseRow, media?
 ];
 
 /** Score de complétude (0-100) + liste des informations manquantes. */
-export function computeCompleteness(row: ExerciseRow, media?: ExerciseMediaSummary): CompletenessResult {
+export function computeCompleteness(
+  row: ExerciseRow,
+  media?: ExerciseMediaSummary,
+): CompletenessResult {
   const missing = COMPLETENESS_CHECKS.filter((c) => !c.has(row, media)).map((c) => c.label);
-  const percent = Math.round(((COMPLETENESS_CHECKS.length - missing.length) / COMPLETENESS_CHECKS.length) * 100);
+  const percent = Math.round(
+    ((COMPLETENESS_CHECKS.length - missing.length) / COMPLETENESS_CHECKS.length) * 100,
+  );
   return { percent, missing };
 }
 
@@ -138,16 +148,24 @@ export function useLibraryStats() {
     queryKey: ["admin", "library-stats"],
     queryFn: async (): Promise<LibraryStats> => {
       const base = () =>
-        admin.from("exercise_reference").select("id", { count: "exact", head: true }).eq("discipline_id", DISCIPLINE);
+        admin
+          .from("exercise_reference")
+          .select("id", { count: "exact", head: true })
+          .eq("discipline_id", DISCIPLINE);
 
-      const [{ count: total }, { count: archived }, { count: merged }, { count: dataset }, { count: cortex }] =
-        await Promise.all([
-          base(),
-          base().eq("is_active", false),
-          base().eq("is_active", true).not("merged_at", "is", null),
-          base().eq("is_active", true).is("merged_at", null).not("dataset_source", "is", null),
-          base().eq("is_active", true).is("merged_at", null).is("dataset_source", null),
-        ]);
+      const [
+        { count: total },
+        { count: archived },
+        { count: merged },
+        { count: dataset },
+        { count: cortex },
+      ] = await Promise.all([
+        base(),
+        base().eq("is_active", false),
+        base().eq("is_active", true).not("merged_at", "is", null),
+        base().eq("is_active", true).is("merged_at", null).not("dataset_source", "is", null),
+        base().eq("is_active", true).is("merged_at", null).is("dataset_source", null),
+      ]);
 
       return {
         total: total ?? 0,
@@ -271,7 +289,10 @@ export function useExerciseMediaSummary(ids: string[]) {
       if (error) throw error;
       const summary: Record<string, ExerciseMediaSummary> = {};
       for (const id of sortedIds) summary[id] = { hasPhoto: false, hasGif: false, hasVideo: false };
-      for (const row of (data ?? []) as Array<{ exercise_reference_id: string; media_type: string }>) {
+      for (const row of (data ?? []) as Array<{
+        exercise_reference_id: string;
+        media_type: string;
+      }>) {
         const entry = summary[row.exercise_reference_id];
         if (!entry) continue;
         if (row.media_type === "image") entry.hasPhoto = true;

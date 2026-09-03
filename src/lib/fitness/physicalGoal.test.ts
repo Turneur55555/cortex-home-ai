@@ -17,15 +17,15 @@ describe("validatePhysicalGoalInput — objectifs supportés (§2/§47)", () => 
   });
 
   it("maintenance sans rythme ni cible → valide", () => {
-    expect(
-      validatePhysicalGoalInput(base({ goal: "maintenance", targetRate: null })),
-    ).toEqual({ status: "valid" });
+    expect(validatePhysicalGoalInput(base({ goal: "maintenance", targetRate: null }))).toEqual({
+      status: "valid",
+    });
   });
 
   it("muscle_gain avec rythme valide → valide", () => {
-    expect(
-      validatePhysicalGoalInput(base({ goal: "muscle_gain", targetRate: "slow" })),
-    ).toEqual({ status: "valid" });
+    expect(validatePhysicalGoalInput(base({ goal: "muscle_gain", targetRate: "slow" }))).toEqual({
+      status: "valid",
+    });
   });
 
   it("objectif inconnu → invalide", () => {
@@ -53,13 +53,17 @@ describe("validatePhysicalGoalInput — poids/BF cible (§3/§4/§6)", () => {
 
   it("poids ET BF cible → valide", () => {
     expect(
-      validatePhysicalGoalInput(base({ targets: { targetWeightKg: 72, targetBodyFatPercent: 15 } })),
+      validatePhysicalGoalInput(
+        base({ targets: { targetWeightKg: 72, targetBodyFatPercent: 15 } }),
+      ),
     ).toEqual({ status: "valid" });
   });
 
   it("aucun des deux → valide", () => {
     expect(
-      validatePhysicalGoalInput(base({ targets: { targetWeightKg: null, targetBodyFatPercent: null } })),
+      validatePhysicalGoalInput(
+        base({ targets: { targetWeightKg: null, targetBodyFatPercent: null } }),
+      ),
     ).toEqual({ status: "valid" });
   });
 });
@@ -67,7 +71,9 @@ describe("validatePhysicalGoalInput — poids/BF cible (§3/§4/§6)", () => {
 describe("validatePhysicalGoalInput — refus propre des données invalides (§7)", () => {
   it("poids cible NaN/Infinity/négatif/hors bornes → invalide", () => {
     for (const targetWeightKg of [NaN, Infinity, -10, 0, 1000]) {
-      const result = validatePhysicalGoalInput(base({ targets: { targetWeightKg, targetBodyFatPercent: null } }));
+      const result = validatePhysicalGoalInput(
+        base({ targets: { targetWeightKg, targetBodyFatPercent: null } }),
+      );
       expect(result.status).toBe("invalid");
     }
   });
@@ -90,7 +96,11 @@ describe("validatePhysicalGoalInput — refus propre des données invalides (§7
 
   it("muscle_gain avec poids cible inférieur au poids de départ → contradiction détectée", () => {
     const result = validatePhysicalGoalInput(
-      base({ goal: "muscle_gain", targetRate: "slow", targets: { targetWeightKg: 70, targetBodyFatPercent: null } }),
+      base({
+        goal: "muscle_gain",
+        targetRate: "slow",
+        targets: { targetWeightKg: 70, targetBodyFatPercent: null },
+      }),
     );
     expect(result.status).toBe("invalid");
   });

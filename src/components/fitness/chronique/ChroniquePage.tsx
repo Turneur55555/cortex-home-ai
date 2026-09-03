@@ -629,7 +629,9 @@ export function ChroniquePage({
                   label: "Calories",
                   today: agg.calories != null ? formatEstimatedKcal(agg.calories) : "—",
                   avg:
-                    comparison.avg.calories > 0 ? formatEstimatedKcal(comparison.avg.calories) : "—",
+                    comparison.avg.calories > 0
+                      ? formatEstimatedKcal(comparison.avg.calories)
+                      : "—",
                   best:
                     comparison.bestMetric?.calories != null
                       ? formatEstimatedKcal(comparison.bestMetric.calories)

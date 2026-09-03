@@ -112,13 +112,7 @@ function suggestInitialGrams(raw: string | undefined): number {
 
 // ─── Main component ────────────────────────────────────────────────────────────
 
-export function BarcodeScannerSheet({
-  date,
-  onClose,
-}: {
-  date: string;
-  onClose: () => void;
-}) {
+export function BarcodeScannerSheet({ date, onClose }: { date: string; onClose: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const readerRef = useRef<BrowserMultiFormatReader | null>(null);
   const controlsRef = useRef<{ stop: () => void } | null>(null);
@@ -711,8 +705,8 @@ export function BarcodeScannerSheet({
             {/* Référence 100g */}
             {per100?.calories != null && (
               <p className="text-center text-[10px] text-muted-foreground">
-                Référence : {per100.calories} kcal · {per100.fats}g lip · {per100.carbs}g gluc
-                · {per100.proteins}g prot pour 100 g
+                Référence : {per100.calories} kcal · {per100.fats}g lip · {per100.carbs}g gluc ·{" "}
+                {per100.proteins}g prot pour 100 g
               </p>
             )}
 

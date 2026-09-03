@@ -65,9 +65,7 @@ export function detectImbalances(input: ImbalanceInput): Imbalance[] {
   const out: Imbalance[] = [];
 
   // 1. Muscles moteurs de CET exercice actuellement fatigués.
-  const fatiguedPrimary = input.primary.filter(
-    (id) => byId.get(id)?.status === "fatigued",
-  );
+  const fatiguedPrimary = input.primary.filter((id) => byId.get(id)?.status === "fatigued");
   if (fatiguedPrimary.length > 0) {
     out.push({
       type: "recuperation_incomplete",

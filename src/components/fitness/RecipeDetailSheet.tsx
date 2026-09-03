@@ -709,13 +709,12 @@ export function RecipeDetailSheet({
               Réanalyser avec la dernière version
             </motion.button>
             <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
-              Relance l&apos;analyse depuis le lien d&apos;origine avec la règle de langue actuelle :
-              la fiche est reproduite en français (quantités inchangées). Tu compares avant
+              Relance l&apos;analyse depuis le lien d&apos;origine avec la règle de langue actuelle
+              : la fiche est reproduite en français (quantités inchangées). Tu compares avant
               d&apos;appliquer.
             </p>
           </div>
         )}
-
 
         {!editing && (
           <div className="rounded-2xl border border-border bg-card p-4">

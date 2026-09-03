@@ -29,7 +29,10 @@ export function EditableText({
         onBlur={commit}
         onKeyDown={(e) => {
           if (e.key === "Enter") e.currentTarget.blur();
-          if (e.key === "Escape") { setDraft(value); setEditing(false); }
+          if (e.key === "Escape") {
+            setDraft(value);
+            setEditing(false);
+          }
         }}
         className={`bg-transparent outline-none border-b border-primary ${className}`}
         style={{ minWidth: 60 }}
@@ -40,7 +43,10 @@ export function EditableText({
   return (
     <button
       type="button"
-      onClick={() => { setDraft(value); setEditing(true); }}
+      onClick={() => {
+        setDraft(value);
+        setEditing(true);
+      }}
       className={`group inline-flex items-center gap-1.5 text-left ${className}`}
     >
       <span>{value}</span>

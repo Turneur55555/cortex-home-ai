@@ -14,7 +14,8 @@ interface FamilyRule {
 
 const FAMILY_RULES: FamilyRule[] = [
   {
-    pattern: /\bsquat\b|hack squat|front squat|goblet|presse.?(a|à).?cuisses|leg press|fentes?|lunge/,
+    pattern:
+      /\bsquat\b|hack squat|front squat|goblet|presse.?(a|à).?cuisses|leg press|fentes?|lunge/,
     family: "squat_presse_jambes",
   },
   { pattern: /soulev(e|é) de terre|deadlift/, family: "deadlift_tirage_hanche" },
@@ -23,7 +24,8 @@ const FAMILY_RULES: FamilyRule[] = [
     family: "developpe_couche",
   },
   {
-    pattern: /d(e|é)velopp(e|é) militaire|overhead press|d(e|é)velopp(e|é) nuque|d(e|é)velopp(e|é) (e|é)paules?/,
+    pattern:
+      /d(e|é)velopp(e|é) militaire|overhead press|d(e|é)velopp(e|é) nuque|d(e|é)velopp(e|é) (e|é)paules?/,
     family: "developpe_militaire",
   },
   { pattern: /traction|pull ?up|chin ?up|\bdips?\b/, family: "poids_de_corps" },

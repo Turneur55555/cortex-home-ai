@@ -27,7 +27,10 @@ const iso = (d: Date) => format(d, "yyyy-MM-dd");
 export function MealPlanSheet({ onClose }: { onClose: () => void }) {
   const [weekBase, setWeekBase] = useState(() => new Date());
   const weekStart = useMemo(() => startOfWeek(weekBase, { weekStartsOn: 1 }), [weekBase]);
-  const days = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)), [weekStart]);
+  const days = useMemo(
+    () => Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)),
+    [weekStart],
+  );
   const startStr = iso(weekStart);
   const endStr = iso(addDays(weekStart, 6));
 
@@ -37,7 +40,10 @@ export function MealPlanSheet({ onClose }: { onClose: () => void }) {
   const deleteEntry = useDeleteMealPlanEntry();
 
   const [showShopping, setShowShopping] = useState(false);
-  const shopping = useGenerateShoppingList(showShopping ? startStr : null, showShopping ? endStr : null);
+  const shopping = useGenerateShoppingList(
+    showShopping ? startStr : null,
+    showShopping ? endStr : null,
+  );
   const saveShopping = useSaveShoppingList();
 
   const [form, setForm] = useState<{
@@ -86,7 +92,8 @@ export function MealPlanSheet({ onClose }: { onClose: () => void }) {
           <ChevronLeft className="h-4 w-4" />
         </button>
         <span className="text-sm font-semibold">
-          {format(weekStart, "d MMM", { locale: fr })} – {format(addDays(weekStart, 6), "d MMM", { locale: fr })}
+          {format(weekStart, "d MMM", { locale: fr })} –{" "}
+          {format(addDays(weekStart, 6), "d MMM", { locale: fr })}
         </span>
         <button
           type="button"
@@ -99,7 +106,10 @@ export function MealPlanSheet({ onClose }: { onClose: () => void }) {
       </div>
 
       {/* Formulaire d'ajout */}
-      <form onSubmit={submit} className="mb-5 space-y-3 rounded-2xl border border-border bg-surface p-3">
+      <form
+        onSubmit={submit}
+        className="mb-5 space-y-3 rounded-2xl border border-border bg-surface p-3"
+      >
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground">

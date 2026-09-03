@@ -125,9 +125,7 @@ export function PostWorkoutAnalysisSheet({
       error={error}
       onClose={onClose}
     >
-      {analysis && (
-        <WorkoutAnalysisContent analysis={analysis} variant="muscu" onClose={onClose} />
-      )}
+      {analysis && <WorkoutAnalysisContent analysis={analysis} variant="muscu" onClose={onClose} />}
     </AnalysisSheetShell>
   );
 }

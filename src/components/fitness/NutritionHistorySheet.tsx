@@ -14,18 +14,15 @@ import { format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
 import { FullscreenSheet as Sheet } from "@/components/shared/FormComponents";
 import { useNutritionGoals } from "@/hooks/use-fitness";
-import {
-  averageOverTrackedDays,
-  useNutritionHistory,
-} from "@/hooks/use-nutrition-history";
+import { averageOverTrackedDays, useNutritionHistory } from "@/hooks/use-nutrition-history";
 
 type Metric = "kcal" | "proteins" | "carbs" | "fats";
 
 const METRICS: { key: Metric; label: string; color: string; unit: string }[] = [
-  { key: "kcal",     label: "Calories", color: "hsl(var(--primary))",    unit: "kcal" },
-  { key: "fats",     label: "Lipides",   color: "hsl(0 84% 60%)",        unit: "g" },
-  { key: "carbs",    label: "Glucides",  color: "hsl(38 92% 50%)",       unit: "g" },
-  { key: "proteins", label: "Protéines", color: "hsl(142 76% 36%)",      unit: "g" },
+  { key: "kcal", label: "Calories", color: "hsl(var(--primary))", unit: "kcal" },
+  { key: "fats", label: "Lipides", color: "hsl(0 84% 60%)", unit: "g" },
+  { key: "carbs", label: "Glucides", color: "hsl(38 92% 50%)", unit: "g" },
+  { key: "proteins", label: "Protéines", color: "hsl(142 76% 36%)", unit: "g" },
 ];
 
 interface Props {
@@ -139,7 +136,11 @@ export function NutritionHistorySheet({ onClose }: Props) {
               <div className="h-48 w-full rounded-2xl border border-border bg-surface p-2">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={chartData} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      stroke="hsl(var(--border))"
+                      vertical={false}
+                    />
                     <XAxis
                       dataKey="label"
                       tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }}

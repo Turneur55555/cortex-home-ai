@@ -28,8 +28,7 @@ export function SenseiIACard({ onClick }: { onClick: () => void }) {
         aria-hidden
         className="pointer-events-none absolute inset-x-5 top-0 h-px"
         style={{
-          background:
-            "linear-gradient(90deg, transparent, rgba(234,179,8,0.55), transparent)",
+          background: "linear-gradient(90deg, transparent, rgba(234,179,8,0.55), transparent)",
         }}
       />
       {/* Halo doré très discret suivant le hover */}
@@ -37,8 +36,7 @@ export function SenseiIACard({ onClick }: { onClick: () => void }) {
         aria-hidden
         className="pointer-events-none absolute -inset-px opacity-0 transition-opacity duration-500 group-hover:opacity-100"
         style={{
-          background:
-            "radial-gradient(80% 60% at 20% 0%, rgba(234,179,8,0.14), transparent 60%)",
+          background: "radial-gradient(80% 60% at 20% 0%, rgba(234,179,8,0.14), transparent 60%)",
         }}
       />
 

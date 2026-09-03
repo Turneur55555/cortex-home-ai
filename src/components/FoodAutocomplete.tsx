@@ -13,7 +13,14 @@ interface Props {
   required?: boolean;
 }
 
-export function FoodAutocomplete({ value, onChange, onSelect, onCreateCustom, placeholder, required }: Props) {
+export function FoodAutocomplete({
+  value,
+  onChange,
+  onSelect,
+  onCreateCustom,
+  placeholder,
+  required,
+}: Props) {
   const [open, setOpen] = useState(false);
   const [recent, setRecent] = useState<FoodSuggestion[]>([]);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -42,9 +49,7 @@ export function FoodAutocomplete({ value, onChange, onSelect, onCreateCustom, pl
   const showResults = !isEmpty;
   // Fréquents filtrés : exclure ce qui est déjà dans les récents (par nom) pour éviter les doublons.
   const recentNames = new Set(recent.map((f) => f.name.toLowerCase()));
-  const frequentFiltered = (frequent ?? []).filter(
-    (f) => !recentNames.has(f.name.toLowerCase()),
-  );
+  const frequentFiltered = (frequent ?? []).filter((f) => !recentNames.has(f.name.toLowerCase()));
   const showSuggestions = isEmpty && (recent.length > 0 || frequentFiltered.length > 0);
 
   return (
@@ -112,16 +117,17 @@ export function FoodAutocomplete({ value, onChange, onSelect, onCreateCustom, pl
                   <Loader2 className="h-3.5 w-3.5 animate-spin" /> Recherche…
                 </div>
               )}
-              {!loading && error && (
-                <p className="px-3 py-3 text-xs text-destructive">{error}</p>
-              )}
+              {!loading && error && <p className="px-3 py-3 text-xs text-destructive">{error}</p>}
               {!loading && !error && results.length === 0 && (
                 <>
                   <p className="px-3 py-3 text-xs text-muted-foreground">Aucun aliment trouvé</p>
                   {onCreateCustom && value.trim().length >= 2 && (
                     <button
                       type="button"
-                      onClick={() => { onCreateCustom(value.trim()); setOpen(false); }}
+                      onClick={() => {
+                        onCreateCustom(value.trim());
+                        setOpen(false);
+                      }}
                       className="flex w-full items-center gap-2 border-t border-border/50 px-3 py-2.5 text-left text-sm font-medium text-primary hover:bg-muted/50"
                     >
                       + Créer « {value.trim()} »
@@ -129,8 +135,7 @@ export function FoodAutocomplete({ value, onChange, onSelect, onCreateCustom, pl
                   )}
                 </>
               )}
-              {!loading &&
-                results.map((f) => <SuggestionRow key={f.id} food={f} onPick={pick} />)}
+              {!loading && results.map((f) => <SuggestionRow key={f.id} food={f} onPick={pick} />)}
             </>
           )}
         </div>
@@ -167,7 +172,9 @@ function SuggestionRow({
           {food.brand ? `${food.brand} · ` : ""}
           {food.calories ?? "?"} kcal · L{food.fats ?? "?"} G{food.carbs ?? "?"} P
           {food.proteins ?? "?"} /100g
-          {food.default_serving ? ` \u00b7 ${food.default_serving.label} (${food.default_serving.grams} g)` : ""}
+          {food.default_serving
+            ? ` \u00b7 ${food.default_serving.label} (${food.default_serving.grams} g)`
+            : ""}
         </p>
       </div>
     </button>

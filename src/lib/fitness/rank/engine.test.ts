@@ -169,7 +169,13 @@ describe("moteur Rang/Maîtrise — profils représentatifs", () => {
     // Sanity checks argumentés (pas de valeurs figées à la décimale près) :
 
     // 1. Débutant : Guerrier (ratio 0.72 → bande 0.5-0.9)
-    const beginner = computeRankState(DEFAULT_RANK_ENGINE_CONFIG, "Squat", profiles[0].sessions, 70, NOW);
+    const beginner = computeRankState(
+      DEFAULT_RANK_ENGINE_CONFIG,
+      "Squat",
+      profiles[0].sessions,
+      70,
+      NOW,
+    );
     expect(beginner.confirmedTierIndex).toBeGreaterThanOrEqual(5);
     expect(beginner.confirmedTierIndex).toBeLessThan(10);
 

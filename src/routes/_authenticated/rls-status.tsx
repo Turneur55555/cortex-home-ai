@@ -11,7 +11,10 @@ export const Route = createFileRoute("/_authenticated/rls-status")({
   head: () => ({
     meta: [
       { title: "État des tests RLS — ICORTEX" },
-      { name: "description", content: "État des tests d'isolation RLS et dernières exécutions CI." },
+      {
+        name: "description",
+        content: "État des tests d'isolation RLS et dernières exécutions CI.",
+      },
     ],
   }),
   component: RlsStatusPage,
@@ -128,8 +131,7 @@ function RlsStatusPage() {
           <h1 className="text-xl font-semibold tracking-tight">État des tests RLS</h1>
         </div>
         <p className="text-sm text-muted-foreground">
-          Isolation entre utilisateurs sur <code>user_stats</code> et{" "}
-          <code>storage.objects</code>.
+          Isolation entre utilisateurs sur <code>user_stats</code> et <code>storage.objects</code>.
         </p>
       </header>
 
@@ -157,13 +159,11 @@ function RlsStatusPage() {
         <CardContent>
           {!GITHUB_REPO && (
             <p className="text-xs text-muted-foreground">
-              Définis <code>VITE_GITHUB_REPO="owner/repo"</code> dans <code>.env</code> pour afficher
-              les exécutions GitHub Actions ici.
+              Définis <code>VITE_GITHUB_REPO="owner/repo"</code> dans <code>.env</code> pour
+              afficher les exécutions GitHub Actions ici.
             </p>
           )}
-          {GITHUB_REPO && isLoading && (
-            <p className="text-sm text-muted-foreground">Chargement…</p>
-          )}
+          {GITHUB_REPO && isLoading && <p className="text-sm text-muted-foreground">Chargement…</p>}
           {GITHUB_REPO && isError && (
             <p className="text-sm text-destructive">Erreur : {(error as Error).message}</p>
           )}

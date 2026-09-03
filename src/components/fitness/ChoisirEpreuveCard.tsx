@@ -24,8 +24,7 @@ export function ChoisirEpreuveCard({ onClick }: { onClick: () => void }) {
           radial-gradient(120% 80% at 50% 0%, rgba(239,68,68,0.22) 0%, transparent 55%),
           radial-gradient(80% 70% at 100% 100%, rgba(185,28,28,0.28) 0%, transparent 60%),
           linear-gradient(180deg,#1a0606 0%,#080202 100%)`,
-        boxShadow:
-          "inset 0 0 0 1px rgba(239,68,68,0.35), 0 14px 48px -22px rgba(239,68,68,0.45)",
+        boxShadow: "inset 0 0 0 1px rgba(239,68,68,0.35), 0 14px 48px -22px rgba(239,68,68,0.45)",
       }}
     >
       {/* Filet métallique haut */}
@@ -33,8 +32,7 @@ export function ChoisirEpreuveCard({ onClick }: { onClick: () => void }) {
         aria-hidden
         className="pointer-events-none absolute inset-x-5 top-0 h-px"
         style={{
-          background:
-            "linear-gradient(90deg, transparent, rgba(239,68,68,0.75), transparent)",
+          background: "linear-gradient(90deg, transparent, rgba(239,68,68,0.75), transparent)",
         }}
       />
 
@@ -43,8 +41,7 @@ export function ChoisirEpreuveCard({ onClick }: { onClick: () => void }) {
         aria-hidden
         className="pointer-events-none absolute -inset-px"
         style={{
-          background:
-            "radial-gradient(60% 50% at 50% 100%, rgba(239,68,68,0.20), transparent 70%)",
+          background: "radial-gradient(60% 50% at 50% 100%, rgba(239,68,68,0.20), transparent 70%)",
         }}
         animate={{ opacity: [0.4, 0.75, 0.4] }}
         transition={{ duration: 3.2, repeat: Infinity, ease: "easeInOut" }}
@@ -55,10 +52,8 @@ export function ChoisirEpreuveCard({ onClick }: { onClick: () => void }) {
           aria-hidden
           className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl"
           style={{
-            background:
-              "linear-gradient(140deg,#7f1d1d 0%,#ef4444 45%,#450a0a 100%)",
-            boxShadow:
-              "inset 0 1px 0 rgba(255,255,255,0.25), 0 6px 24px -8px rgba(239,68,68,0.7)",
+            background: "linear-gradient(140deg,#7f1d1d 0%,#ef4444 45%,#450a0a 100%)",
+            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.25), 0 6px 24px -8px rgba(239,68,68,0.7)",
           }}
         >
           <Swords className="h-6 w-6 text-white drop-shadow" />

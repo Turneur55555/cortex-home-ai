@@ -36,10 +36,7 @@ export const MUSCLE_AI_NAME: Record<MuscleId, string> = {
 };
 
 /** Statut le plus défavorable parmi un ensemble de muscles (groupe UI agrégé). */
-export function worstStatus(
-  ids: MuscleId[],
-  map: Map<MuscleId, MuscleRecovery>,
-): RecoveryStatus {
+export function worstStatus(ids: MuscleId[], map: Map<MuscleId, MuscleRecovery>): RecoveryStatus {
   let worst: RecoveryStatus | null = null;
   for (const id of ids) {
     const rec = map.get(id);

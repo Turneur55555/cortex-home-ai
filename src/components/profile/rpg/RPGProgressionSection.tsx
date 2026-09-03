@@ -98,11 +98,11 @@ export function RPGProgressionSection() {
           className="relative overflow-hidden rounded-[22px] p-4"
           style={{ background: plateSurface, boxShadow: plateShadow }}
         >
-        <Link
-          to="/progression"
-          className="absolute inset-0 z-10 rounded-[22px]"
-          aria-label="Ouvrir la progression RPG"
-        />
+          <Link
+            to="/progression"
+            className="absolute inset-0 z-10 rounded-[22px]"
+            aria-label="Ouvrir la progression RPG"
+          />
           {/* Grain martelé du rang courant (grossier/pierre → fin/cristal). */}
           <div aria-hidden className="bg-rank-grain pointer-events-none absolute inset-0" />
           {/* Respiration TRÈS discrète de la lumière — rythme propre au rang. */}

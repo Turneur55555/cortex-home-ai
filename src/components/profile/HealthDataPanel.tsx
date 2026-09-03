@@ -116,7 +116,11 @@ export function HealthDataPanel() {
           className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-white/[0.03] disabled:opacity-50"
         >
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-500/15 text-red-400">
-            {busy === "import" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <HeartPulse className="h-3.5 w-3.5" />}
+            {busy === "import" ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <HeartPulse className="h-3.5 w-3.5" />
+            )}
           </span>
           <span className="flex-1">
             <span className="block text-sm font-medium">Importer depuis Apple Santé</span>
@@ -133,11 +137,17 @@ export function HealthDataPanel() {
           className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-white/[0.03] disabled:opacity-50"
         >
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/15 text-blue-400">
-            {busy === "json" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileJson className="h-3.5 w-3.5" />}
+            {busy === "json" ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <FileJson className="h-3.5 w-3.5" />
+            )}
           </span>
           <span className="flex-1">
             <span className="block text-sm font-medium">Exporter en JSON</span>
-            <span className="block text-xs text-muted-foreground">Toutes vos données dans un fichier</span>
+            <span className="block text-xs text-muted-foreground">
+              Toutes vos données dans un fichier
+            </span>
           </span>
           <Download className="h-4 w-4 text-muted-foreground" />
         </button>
@@ -149,11 +159,17 @@ export function HealthDataPanel() {
           className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-white/[0.03] disabled:opacity-50"
         >
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-400">
-            {busy === "csv" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileSpreadsheet className="h-3.5 w-3.5" />}
+            {busy === "csv" ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <FileSpreadsheet className="h-3.5 w-3.5" />
+            )}
           </span>
           <span className="flex-1">
             <span className="block text-sm font-medium">Exporter en CSV (Excel, Strava…)</span>
-            <span className="block text-xs text-muted-foreground">Archive ZIP, un fichier par table</span>
+            <span className="block text-xs text-muted-foreground">
+              Archive ZIP, un fichier par table
+            </span>
           </span>
           <Download className="h-4 w-4 text-muted-foreground" />
         </button>
@@ -161,7 +177,8 @@ export function HealthDataPanel() {
 
       <p className="mt-2 px-1 text-[11px] leading-snug text-muted-foreground">
         <Upload className="mr-1 inline h-3 w-3" />
-        Pour Apple Santé : app Santé → profil → « Exporter toutes les données santé ». Puis importez le fichier
+        Pour Apple Santé : app Santé → profil → « Exporter toutes les données santé ». Puis importez
+        le fichier
         <span className="mx-1 font-mono text-[10px]">export.zip</span>ici.
       </p>
 
@@ -173,13 +190,16 @@ export function HealthDataPanel() {
               <div className="space-y-2 pt-2">
                 {preview ? (
                   <ul className="space-y-1 text-sm text-foreground">
-                    <li>• {preview.body.length} mesures corporelles (poids, masse grasse, muscle)</li>
+                    <li>
+                      • {preview.body.length} mesures corporelles (poids, masse grasse, muscle)
+                    </li>
                     <li>• {preview.workouts.length} séances</li>
                     <li>• {preview.activity.length} jours d'activité (pas, cardio, calories)</li>
                   </ul>
                 ) : null}
                 <p className="pt-2 text-xs text-muted-foreground">
-                  Les doublons de dates existantes seront ignorés. L'import peut prendre 1-2 minutes.
+                  Les doublons de dates existantes seront ignorés. L'import peut prendre 1-2
+                  minutes.
                 </p>
               </div>
             </DialogDescription>

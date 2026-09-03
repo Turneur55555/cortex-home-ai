@@ -65,11 +65,7 @@ function RapportsPage() {
       ) : !reports?.length ? (
         <EmptyState onGenerate={() => generate(undefined)} isPending={isPending} />
       ) : (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="space-y-3"
-        >
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
           {reports.map((report, i) => (
             <motion.div
               key={report.id}
@@ -91,13 +87,7 @@ function RapportsPage() {
   );
 }
 
-function EmptyState({
-  onGenerate,
-  isPending,
-}: {
-  onGenerate: () => void;
-  isPending: boolean;
-}) {
+function EmptyState({ onGenerate, isPending }: { onGenerate: () => void; isPending: boolean }) {
   return (
     <div className="flex flex-1 flex-col items-center justify-center py-16 text-center">
       <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-border bg-card">
@@ -105,18 +95,15 @@ function EmptyState({
       </div>
       <h2 className="mb-1 text-base font-semibold">Aucun rapport</h2>
       <p className="mb-6 max-w-[240px] text-xs leading-relaxed text-muted-foreground">
-        Génère ton premier rapport hebdomadaire pour voir une analyse complète de tes entraînements, nutrition et évolution corporelle.
+        Génère ton premier rapport hebdomadaire pour voir une analyse complète de tes entraînements,
+        nutrition et évolution corporelle.
       </p>
       <button
         onClick={onGenerate}
         disabled={isPending}
         className="flex items-center gap-2 rounded-xl bg-gradient-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-60"
       >
-        {isPending ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        ) : (
-          <Plus className="h-4 w-4" />
-        )}
+        {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
         Générer mon rapport
       </button>
     </div>

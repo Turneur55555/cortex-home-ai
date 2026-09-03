@@ -18,10 +18,7 @@ export type TrendDirection = "good" | "bad" | "neutral";
  * - "down-is-good" → waist / hips
  * - "neutral" → poitrine (peut être musculaire ou graisseuse)
  */
-export function directionForField(
-  field: BodyField,
-  delta: number,
-): TrendDirection {
+export function directionForField(field: BodyField, delta: number): TrendDirection {
   if (delta === 0) return "neutral";
   const up = delta > 0;
   switch (field) {
@@ -127,8 +124,7 @@ export function detectPlateau(
     .map((r) => r.weight as number);
   if (recent.length < 4) return false;
   const mean = recent.reduce((a, b) => a + b, 0) / recent.length;
-  const variance =
-    recent.reduce((a, b) => a + (b - mean) ** 2, 0) / recent.length;
+  const variance = recent.reduce((a, b) => a + (b - mean) ** 2, 0) / recent.length;
   return Math.sqrt(variance) < threshold;
 }
 

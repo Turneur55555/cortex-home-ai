@@ -12,27 +12,15 @@ import { MUSCLE_META, type MuscleId } from "../muscleMapping";
 import type { RecoveryStatus } from "../recovery";
 import type { WorkingSet } from "../sets";
 import { topSet } from "../sets";
-import {
-  averageTopReps,
-  buildComparison,
-  type SessionLike,
-} from "./comparison";
+import { averageTopReps, buildComparison, type SessionLike } from "./comparison";
 import { detectImbalances, type MuscleState } from "./imbalance";
-import {
-  baseSolicitationForRole,
-  resolveMuscleRoles,
-  type RoleMap,
-} from "./muscleRoles";
+import { baseSolicitationForRole, resolveMuscleRoles, type RoleMap } from "./muscleRoles";
 import { writeNarrative, writeSmartSummary } from "./narrative";
 import { computePhysicalImpact } from "./physicalImpact";
 import { buildProfileContext, type ProfileInput } from "./profile";
 import { buildRecommendations } from "./recommendations";
 import { computeRelevance } from "./relevance";
-import type {
-  ExerciseAnalysis,
-  MuscleContribution,
-  MuscleRole,
-} from "./types";
+import type { ExerciseAnalysis, MuscleContribution, MuscleRole } from "./types";
 
 export interface AnalyzeInput {
   exerciseName: string;
@@ -96,12 +84,7 @@ export function analyzeExercise(input: AnalyzeInput): ExerciseAnalysis {
   const profileCtx = buildProfileContext({ ...input.profile, avgReps });
 
   // 4. Impact physique (dépend du profil).
-  const physicalImpact = computePhysicalImpact(
-    exerciseName,
-    roles,
-    avgReps,
-    profileCtx.objective,
-  );
+  const physicalImpact = computePhysicalImpact(exerciseName, roles, avgReps, profileCtx.objective);
 
   // 5. Comparaison temporelle.
   const comparison = buildComparison(sessions);

@@ -5,7 +5,10 @@ export const Route = createFileRoute("/_authenticated/corps")({
   head: () => ({
     meta: [
       { title: "Corps — ICORTEX" },
-      { name: "description", content: "Suivi de ta composition corporelle et de tes mensurations." },
+      {
+        name: "description",
+        content: "Suivi de ta composition corporelle et de tes mensurations.",
+      },
     ],
   }),
   component: CorpsPage,

@@ -58,9 +58,7 @@ function signature(a: ExerciseAnalysis): string {
   ].join(":");
 }
 
-export function useDeepExerciseAI(
-  analysis: ExerciseAnalysis | null,
-): DeepAIResult {
+export function useDeepExerciseAI(analysis: ExerciseAnalysis | null): DeepAIResult {
   const key = analysis ? normalize(analysis.exerciseName) : "";
   const sig = analysis ? signature(analysis) : "";
 

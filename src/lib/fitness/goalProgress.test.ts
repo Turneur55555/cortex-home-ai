@@ -22,12 +22,16 @@ function base(overrides: Partial<GoalProgressInput> = {}): GoalProgressInput {
 
 describe("evaluateGoalProgress — données insuffisantes (§26/§51)", () => {
   it("mesures insuffisantes → insufficient_data, jamais fabriqué en on_track", () => {
-    const result = evaluateGoalProgress(base({ measurementCount: GOAL_PROGRESS_MIN_MEASUREMENTS - 1 }));
+    const result = evaluateGoalProgress(
+      base({ measurementCount: GOAL_PROGRESS_MIN_MEASUREMENTS - 1 }),
+    );
     expect(result.state).toBe("insufficient_data");
   });
 
   it("fenêtre trop courte → insufficient_data (§27/§52 : pas de jugement sur 24h/quelques jours)", () => {
-    const result = evaluateGoalProgress(base({ windowCalendarDays: GOAL_PROGRESS_MIN_WINDOW_DAYS - 1 }));
+    const result = evaluateGoalProgress(
+      base({ windowCalendarDays: GOAL_PROGRESS_MIN_WINDOW_DAYS - 1 }),
+    );
     expect(result.state).toBe("insufficient_data");
   });
 
@@ -93,14 +97,24 @@ describe("evaluateGoalProgress — fat_loss/muscle_gain (§25/§51)", () => {
 describe("evaluateGoalProgress — maintenance (§12/§44/§51)", () => {
   it("poids stable dans la zone → maintaining", () => {
     const result = evaluateGoalProgress(
-      base({ goal: "maintenance", weeklyTargetChangeKg: null, maintenanceToleranceKg: 1, observedWeeklyTrendKg: 0.3 }),
+      base({
+        goal: "maintenance",
+        weeklyTargetChangeKg: null,
+        maintenanceToleranceKg: 1,
+        observedWeeklyTrendKg: 0.3,
+      }),
     );
     expect(result.state).toBe("maintaining");
   });
 
   it("dérive hors zone → état distinct de maintaining, jamais un faux on_track", () => {
     const result = evaluateGoalProgress(
-      base({ goal: "maintenance", weeklyTargetChangeKg: null, maintenanceToleranceKg: 1, observedWeeklyTrendKg: 2 }),
+      base({
+        goal: "maintenance",
+        weeklyTargetChangeKg: null,
+        maintenanceToleranceKg: 1,
+        observedWeeklyTrendKg: 2,
+      }),
     );
     expect(result.state).not.toBe("maintaining");
     expect(result.state).not.toBe("on_track");
@@ -110,9 +124,7 @@ describe("evaluateGoalProgress — maintenance (§12/§44/§51)", () => {
 describe("evaluateGoalProgress — fluctuation isolée (§52)", () => {
   it("une variation ponctuelle ne suffit pas à faire basculer l'état si measurementCount reste faible", () => {
     // Une seule pesée extrême, mais measurementCount encore sous le seuil.
-    const result = evaluateGoalProgress(
-      base({ measurementCount: 1, observedWeeklyTrendKg: -3 }),
-    );
+    const result = evaluateGoalProgress(base({ measurementCount: 1, observedWeeklyTrendKg: -3 }));
     expect(result.state).toBe("insufficient_data");
   });
 });

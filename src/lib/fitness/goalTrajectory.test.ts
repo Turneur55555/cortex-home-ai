@@ -28,21 +28,19 @@ describe("computeGoalTrajectory — rythmes perte (§48)", () => {
 });
 
 describe("computeGoalTrajectory — rythmes prise (§48)", () => {
-  it.each(["slow", "moderate"] as const)(
-    "muscle_gain %s → kg/semaine signé positif",
-    (rate) => {
-      const result = computeGoalTrajectory({
-        goal: "muscle_gain",
-        targetRate: rate,
-        currentWeightKg: 70,
-        targetWeightKg: null,
-        todayIso: TODAY,
-      });
-      const expectedKg = 70 * (CALORIE_STRATEGY_RATES.muscle_gain[rate].weeklyBodyWeightPercent / 100);
-      expect(result.weeklyTargetChangeKg).toBeCloseTo(expectedKg, 2);
-      expect(result.weeklyTargetChangeKg!).toBeGreaterThan(0);
-    },
-  );
+  it.each(["slow", "moderate"] as const)("muscle_gain %s → kg/semaine signé positif", (rate) => {
+    const result = computeGoalTrajectory({
+      goal: "muscle_gain",
+      targetRate: rate,
+      currentWeightKg: 70,
+      targetWeightKg: null,
+      todayIso: TODAY,
+    });
+    const expectedKg =
+      70 * (CALORIE_STRATEGY_RATES.muscle_gain[rate].weeklyBodyWeightPercent / 100);
+    expect(result.weeklyTargetChangeKg).toBeCloseTo(expectedKg, 2);
+    expect(result.weeklyTargetChangeKg!).toBeGreaterThan(0);
+  });
 });
 
 describe("computeGoalTrajectory — modèle composé, pas une projection linéaire naïve (§11/§48)", () => {
@@ -59,7 +57,8 @@ describe("computeGoalTrajectory — modèle composé, pas une projection linéai
     });
     expect(result.status).toBe("ok");
 
-    const signedPercent = -1 * (CALORIE_STRATEGY_RATES.fat_loss[rate].weeklyBodyWeightPercent / 100);
+    const signedPercent =
+      -1 * (CALORIE_STRATEGY_RATES.fat_loss[rate].weeklyBodyWeightPercent / 100);
     const expectedWeeks = Math.round(
       Math.log(targetWeightKg / currentWeightKg) / Math.log(1 + signedPercent),
     );

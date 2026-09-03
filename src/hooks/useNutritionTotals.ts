@@ -41,8 +41,7 @@ export function useNutritionTotals(data: NutritionData, goals: NutritionGoalsDat
   // Macros restantes vs objectifs.
   const remaining = useMemo<NutritionRemaining>(() => {
     if (!goals) return null;
-    const r = (g: number | null | undefined, v: number) =>
-      g != null ? Math.round(g - v) : null;
+    const r = (g: number | null | undefined, v: number) => (g != null ? Math.round(g - v) : null);
     return {
       calories: r(goals.calories, totals.calories),
       proteins: r(goals.proteins, totals.proteins),

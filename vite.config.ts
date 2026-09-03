@@ -42,10 +42,7 @@ export default defineConfig({
           manualChunks: (id) => {
             if (id.includes("node_modules")) {
               // UI — Radix + lucide-react
-              if (
-                id.includes("@radix-ui") ||
-                id.includes("lucide-react")
-              ) {
+              if (id.includes("@radix-ui") || id.includes("lucide-react")) {
                 return "vendor-ui";
               }
               // Charts — recharts (d3 non présent en dépendance directe)
@@ -61,10 +58,7 @@ export default defineConfig({
                 return "vendor-tanstack";
               }
               // React core
-              if (
-                id.includes("react-dom") ||
-                id.includes("react/")
-              ) {
+              if (id.includes("react-dom") || id.includes("react/")) {
                 return "vendor-react";
               }
             }

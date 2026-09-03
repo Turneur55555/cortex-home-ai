@@ -7,7 +7,9 @@ type WorkoutInput = {
   exercises?: Array<{ name: string; muscle_groups?: string[] | null }> | null;
 };
 
-export function useRecoveryMap(workouts: WorkoutInput[] | null | undefined): Map<MuscleId, MuscleRecovery> {
+export function useRecoveryMap(
+  workouts: WorkoutInput[] | null | undefined,
+): Map<MuscleId, MuscleRecovery> {
   return useMemo(() => {
     if (!workouts) return new Map<MuscleId, MuscleRecovery>();
     return computeRecovery(

@@ -77,7 +77,6 @@ export function useTrainingObjective() {
   return {
     objective: query.data ?? null,
     isLoading: query.isLoading,
-    setObjective: (o: TrainingObjective | null) =>
-      update.mutateAsync(o).catch(() => {}),
+    setObjective: (o: TrainingObjective | null) => update.mutateAsync(o).catch(() => {}),
   };
 }

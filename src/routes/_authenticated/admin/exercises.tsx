@@ -255,83 +255,83 @@ function SearchAndMergeTab() {
           const muscleGroup = resolveMuscleGroup(row, row.name);
           const completeness = computeCompleteness(row, media);
           return (
-          <div
-            key={row.id}
-            className="flex items-center justify-between gap-3 border-b p-3 last:border-b-0"
-          >
-            <button
-              className="flex-1 text-left"
-              onClick={() => toggleSelect(row)}
-              aria-pressed={!!selected.find((r) => r.id === row.id)}
+            <div
+              key={row.id}
+              className="flex items-center justify-between gap-3 border-b p-3 last:border-b-0"
             >
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-medium">{row.name}</span>
-                <Badge variant="secondary">{muscleGroup}</Badge>
-                <OriginBadge origin={origin} />
-                {!row.is_active && <Badge variant="outline">Archivé</Badge>}
-                <MediaBadges media={media} />
-                <Badge variant="outline">{completeness.percent}% complet</Badge>
-              </div>
-              <div className="mt-0.5 text-xs text-muted-foreground">{usageLabel(stats)}</div>
-              {completeness.missing.length > 0 && (
-                <div className="mt-0.5 text-xs text-muted-foreground">
-                  Manque : {completeness.missing.join(", ")}
-                </div>
-              )}
-              {row.aliases && row.aliases.length > 0 && (
-                <div className="mt-0.5 text-xs text-muted-foreground">
-                  Alias : {row.aliases.join(", ")}
-                </div>
-              )}
-            </button>
-            <div className="flex shrink-0 gap-2">
-              {row.is_active ? (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    archiveMutation.mutate(
-                      { id: row.id },
-                      { onSuccess: () => toast.success(`"${row.name}" archivé.`) },
-                    )
-                  }
-                >
-                  Archiver
-                </Button>
-              ) : (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    restoreMutation.mutate(
-                      { id: row.id },
-                      { onSuccess: () => toast.success(`"${row.name}" restauré.`) },
-                    )
-                  }
-                >
-                  Restaurer
-                </Button>
-              )}
-              <Button
-                size="sm"
-                variant="ghost"
-                className="text-destructive"
-                onClick={() =>
-                  deleteMutation.mutate(
-                    { id: row.id },
-                    {
-                      onSuccess: (res) => {
-                        if (res.deleted) toast.success(`"${row.name}" supprimé.`);
-                        else toast.warning(res.reason as string);
-                      },
-                    },
-                  )
-                }
+              <button
+                className="flex-1 text-left"
+                onClick={() => toggleSelect(row)}
+                aria-pressed={!!selected.find((r) => r.id === row.id)}
               >
-                Supprimer
-              </Button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium">{row.name}</span>
+                  <Badge variant="secondary">{muscleGroup}</Badge>
+                  <OriginBadge origin={origin} />
+                  {!row.is_active && <Badge variant="outline">Archivé</Badge>}
+                  <MediaBadges media={media} />
+                  <Badge variant="outline">{completeness.percent}% complet</Badge>
+                </div>
+                <div className="mt-0.5 text-xs text-muted-foreground">{usageLabel(stats)}</div>
+                {completeness.missing.length > 0 && (
+                  <div className="mt-0.5 text-xs text-muted-foreground">
+                    Manque : {completeness.missing.join(", ")}
+                  </div>
+                )}
+                {row.aliases && row.aliases.length > 0 && (
+                  <div className="mt-0.5 text-xs text-muted-foreground">
+                    Alias : {row.aliases.join(", ")}
+                  </div>
+                )}
+              </button>
+              <div className="flex shrink-0 gap-2">
+                {row.is_active ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      archiveMutation.mutate(
+                        { id: row.id },
+                        { onSuccess: () => toast.success(`"${row.name}" archivé.`) },
+                      )
+                    }
+                  >
+                    Archiver
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() =>
+                      restoreMutation.mutate(
+                        { id: row.id },
+                        { onSuccess: () => toast.success(`"${row.name}" restauré.`) },
+                      )
+                    }
+                  >
+                    Restaurer
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-destructive"
+                  onClick={() =>
+                    deleteMutation.mutate(
+                      { id: row.id },
+                      {
+                        onSuccess: (res) => {
+                          if (res.deleted) toast.success(`"${row.name}" supprimé.`);
+                          else toast.warning(res.reason as string);
+                        },
+                      },
+                    )
+                  }
+                >
+                  Supprimer
+                </Button>
+              </div>
             </div>
-          </div>
           );
         })}
       </div>
@@ -346,11 +346,17 @@ interface CompareField {
 
 const COMPARE_FIELDS: CompareField[] = [
   { label: "Groupe musculaire", value: (row) => resolveMuscleGroup(row, row.name) },
-  { label: "Muscles secondaires", value: (row) => row.config?.secondary_muscles?.join(", ") ?? null },
+  {
+    label: "Muscles secondaires",
+    value: (row) => row.config?.secondary_muscles?.join(", ") ?? null,
+  },
   { label: "Équipement", value: (row) => row.config?.equipment ?? null },
   { label: "Catégorie", value: (row) => row.category ?? null },
   { label: "Instructions", value: (row) => row.description ?? null },
-  { label: "Alias", value: (row) => (row.aliases && row.aliases.length > 0 ? row.aliases.join(", ") : null) },
+  {
+    label: "Alias",
+    value: (row) => (row.aliases && row.aliases.length > 0 ? row.aliases.join(", ") : null),
+  },
 ];
 
 function mediaCounts(media: { media_type: string }[] | undefined) {
@@ -443,13 +449,15 @@ function CompareCard({ a, b, onClose }: { a: ExerciseRow; b: ExerciseRow; onClos
         </div>
 
         <div className="rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
-          Si « {keep.name} » est conservée : les champs suivants sont vides sur la fiche conservée et
-          seront complétés depuis « {other.name} » —{" "}
-          {COMPARE_FIELDS.filter((field) => !field.value(keep) && field.value(other)).map((field) => (
-            <Badge key={field.label} variant="secondary" className="mr-1">
-              + {field.label}
-            </Badge>
-          ))}
+          Si « {keep.name} » est conservée : les champs suivants sont vides sur la fiche conservée
+          et seront complétés depuis « {other.name} » —{" "}
+          {COMPARE_FIELDS.filter((field) => !field.value(keep) && field.value(other)).map(
+            (field) => (
+              <Badge key={field.label} variant="secondary" className="mr-1">
+                + {field.label}
+              </Badge>
+            ),
+          )}
           {COMPARE_FIELDS.every((field) => field.value(keep) || !field.value(other)) && (
             <span>aucun — la fiche conservée a déjà toutes ces informations.</span>
           )}

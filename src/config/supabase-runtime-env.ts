@@ -21,11 +21,7 @@
  * laisser une opération privilégiée s'exécuter sur la mauvaise base — un appel
  * admin échouera bruyamment au lieu d'écrire au mauvais endroit.
  */
-import {
-  SUPABASE_PROJECT_REF,
-  SUPABASE_PUBLISHABLE_KEY,
-  SUPABASE_URL,
-} from "./supabase-project";
+import { SUPABASE_PROJECT_REF, SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from "./supabase-project";
 
 function belongsToCanonicalProject(value: string | undefined): boolean {
   return !!value && value.includes(SUPABASE_PROJECT_REF);

@@ -7,11 +7,7 @@ export type ActivityType = "workout" | "meal" | "goal" | "body";
  * Journalise un événement dans user_activity (section « Activité récente » du Profil).
  * Fire-and-forget : ne doit jamais bloquer ni faire échouer l'action principale.
  */
-export function logActivity(
-  type: ActivityType,
-  label: string,
-  metadata: Json = {},
-): void {
+export function logActivity(type: ActivityType, label: string, metadata: Json = {}): void {
   void (async () => {
     try {
       const {

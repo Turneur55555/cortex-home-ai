@@ -66,7 +66,11 @@ export function BodyStatusCard() {
                     delta < 0 ? "text-success" : "text-amber-500"
                   }`}
                 >
-                  {delta < 0 ? <TrendingDown className="h-3 w-3" /> : <TrendingUp className="h-3 w-3" />}
+                  {delta < 0 ? (
+                    <TrendingDown className="h-3 w-3" />
+                  ) : (
+                    <TrendingUp className="h-3 w-3" />
+                  )}
                   {delta > 0 ? "+" : ""}
                   {delta} kg
                 </span>

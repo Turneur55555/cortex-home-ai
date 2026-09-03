@@ -22,7 +22,8 @@ export interface IngredientMacroInput {
   fatPer100g?: number | null;
 }
 
-const num = (v: number | null | undefined): number => (v != null && Number.isFinite(v) && v > 0 ? v : 0);
+const num = (v: number | null | undefined): number =>
+  v != null && Number.isFinite(v) && v > 0 ? v : 0;
 const r1 = (v: number) => Math.round(v * 10) / 10;
 
 export const EMPTY_MACROS: MacroTotals = { calories: 0, protein: 0, carbs: 0, fat: 0 };
@@ -41,17 +42,27 @@ function ingredientMacros(input: IngredientMacroInput): MacroTotals {
 }
 
 /** Somme des macros de tous les ingrédients d'une recette (total recette). */
-export function recipeMacros(ingredients: ReadonlyArray<IngredientMacroInput> | null | undefined): MacroTotals {
+export function recipeMacros(
+  ingredients: ReadonlyArray<IngredientMacroInput> | null | undefined,
+): MacroTotals {
   if (!ingredients || ingredients.length === 0) return { ...EMPTY_MACROS };
-  const total = ingredients.reduce<MacroTotals>((acc, ing) => {
-    const m = ingredientMacros(ing);
-    acc.calories += m.calories;
-    acc.protein += m.protein;
-    acc.carbs += m.carbs;
-    acc.fat += m.fat;
-    return acc;
-  }, { ...EMPTY_MACROS });
-  return { calories: r1(total.calories), protein: r1(total.protein), carbs: r1(total.carbs), fat: r1(total.fat) };
+  const total = ingredients.reduce<MacroTotals>(
+    (acc, ing) => {
+      const m = ingredientMacros(ing);
+      acc.calories += m.calories;
+      acc.protein += m.protein;
+      acc.carbs += m.carbs;
+      acc.fat += m.fat;
+      return acc;
+    },
+    { ...EMPTY_MACROS },
+  );
+  return {
+    calories: r1(total.calories),
+    protein: r1(total.protein),
+    carbs: r1(total.carbs),
+    fat: r1(total.fat),
+  };
 }
 
 /** Macros par portion : total / nombre de portions. */
@@ -67,7 +78,10 @@ export function perServing(total: MacroTotals, servings: number | null | undefin
 }
 
 /** Macros d'un nombre arbitraire de portions consommées (ex. planning repas). */
-export function scaleServings(perServingMacros: MacroTotals, servings: number | null | undefined): MacroTotals {
+export function scaleServings(
+  perServingMacros: MacroTotals,
+  servings: number | null | undefined,
+): MacroTotals {
   const s = num(servings);
   return {
     calories: r1(perServingMacros.calories * s),

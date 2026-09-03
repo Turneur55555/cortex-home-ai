@@ -60,9 +60,7 @@ export function estimateWorkoutCalories({
 }: EstimateCaloriesInput): number | null {
   if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) return null;
   const weight =
-    typeof bodyWeightKg === "number" && bodyWeightKg > 0
-      ? bodyWeightKg
-      : DEFAULT_BODYWEIGHT_KG;
+    typeof bodyWeightKg === "number" && bodyWeightKg > 0 ? bodyWeightKg : DEFAULT_BODYWEIGHT_KG;
   const level = intensity ?? deriveIntensity(volumeKg, durationMinutes);
   const met = MET_BY_INTENSITY[level];
   const kcal = met * weight * (durationMinutes / 60);

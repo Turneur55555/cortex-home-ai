@@ -37,12 +37,18 @@ interface EdgeResponse<T> {
   error?: string;
 }
 
-export async function searchFoodCatalog(query: string, signal?: AbortSignal): Promise<FoodResult[]> {
+export async function searchFoodCatalog(
+  query: string,
+  signal?: AbortSignal,
+): Promise<FoodResult[]> {
   const q = query.trim();
   if (q.length < 2) return [];
-  const { data, error } = await supabase.functions.invoke<EdgeResponse<FoodResult[]>>("food-lookup", {
-    body: { type: "search", query: q },
-  });
+  const { data, error } = await supabase.functions.invoke<EdgeResponse<FoodResult[]>>(
+    "food-lookup",
+    {
+      body: { type: "search", query: q },
+    },
+  );
   if (signal?.aborted) return [];
   if (error || !data?.ok) throw new Error(data?.error ?? error?.message ?? "search failed");
   return data.data ?? [];

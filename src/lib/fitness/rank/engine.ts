@@ -82,7 +82,10 @@ function ratioOrRepsForFamily(
 
 // ── Position continue sur l'échelle des 30 paliers ───────────
 
-function interpolateTierPosition(value: number, boundaries: [number, number, number, number, number]): number {
+function interpolateTierPosition(
+  value: number,
+  boundaries: [number, number, number, number, number],
+): number {
   const extended = [0, ...boundaries, boundaries[4] + (boundaries[4] - boundaries[3])];
   for (let i = 0; i < 6; i++) {
     if (value <= extended[i + 1] || i === 5) {
@@ -168,9 +171,7 @@ function computeMasteryPercent(
   const dates = metricsWindow.map((m) => new Date(m.date).getTime()).sort((a, b) => a - b);
   const gaps = dates.slice(1).map((d, i) => (d - dates[i]) / MS_PER_DAY);
   const avgGap = gaps.length ? gaps.reduce((a, b) => a + b, 0) / gaps.length : 0;
-  const variance = gaps.length
-    ? gaps.reduce((a, g) => a + (g - avgGap) ** 2, 0) / gaps.length
-    : 0;
+  const variance = gaps.length ? gaps.reduce((a, g) => a + (g - avgGap) ** 2, 0) / gaps.length : 0;
   const consistency = avgGap > 0 ? clamp(1 - Math.sqrt(variance) / avgGap, 0, 1) : 0;
 
   const bestEver = Math.max(...metricsWindow.map((m) => m.best1RM), 0);
@@ -229,7 +230,12 @@ export function computeRankState(
   );
   const bestIdx = positions.indexOf(Math.max(...positions));
   const rawTierPosition = positions[bestIdx];
-  const rawRatioOrReps = ratioOrRepsForFamily(family, standard, windowMetrics[bestIdx], bodyweightKg);
+  const rawRatioOrReps = ratioOrRepsForFamily(
+    family,
+    standard,
+    windowMetrics[bestIdx],
+    bodyweightKg,
+  );
 
   let confirmedTierIndex = Math.floor(rawTierPosition);
 
@@ -239,19 +245,26 @@ export function computeRankState(
   // sont les deux seuls rangs qui doivent représenter une vraie référence
   // dans le temps, pas juste un excellent niveau instantané. En dessous de
   // la plus basse gate, une seule séance suffit à être crédité pleinement.
-  const gatesDesc = [...config.confirmation.gates].sort((a, b) => b.fromTierIndex - a.fromTierIndex);
+  const gatesDesc = [...config.confirmation.gates].sort(
+    (a, b) => b.fromTierIndex - a.fromTierIndex,
+  );
   for (const gate of gatesDesc) {
     if (confirmedTierIndex < gate.fromTierIndex) continue;
     const lookback = allMetrics.slice(-gate.lookbackSessions);
     const qualifying = lookback.filter(
-      (m) => computeRankScorePosition(config, family, standard, m, bodyweightKg) >= gate.fromTierIndex,
+      (m) =>
+        computeRankScorePosition(config, family, standard, m, bodyweightKg) >= gate.fromTierIndex,
     );
     const span =
       qualifying.length >= 2
-        ? daysBetween(new Date(qualifying[0].date), new Date(qualifying[qualifying.length - 1].date))
+        ? daysBetween(
+            new Date(qualifying[0].date),
+            new Date(qualifying[qualifying.length - 1].date),
+          )
         : 0;
     const hasExperience = allMetrics.length >= gate.minExperienceSessions;
-    const satisfied = qualifying.length >= gate.sessionsRequired && span >= gate.minSpanDays && hasExperience;
+    const satisfied =
+      qualifying.length >= gate.sessionsRequired && span >= gate.minSpanDays && hasExperience;
     if (!satisfied) {
       confirmedTierIndex = Math.min(confirmedTierIndex, gate.fromTierIndex - 1);
     }

@@ -72,10 +72,7 @@ export function useProfile(fallback: string) {
     },
   });
 
-  const updatePseudo = useCallback(
-    (next: string) => mutation.mutateAsync(next),
-    [mutation],
-  );
+  const updatePseudo = useCallback((next: string) => mutation.mutateAsync(next), [mutation]);
 
   const updateAvatar = useCallback(
     (url: string) => avatarMutation.mutateAsync(url),

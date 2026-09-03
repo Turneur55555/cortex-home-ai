@@ -94,7 +94,10 @@ export function ReportDetail({ id }: { id: string }) {
       {/* Header */}
       <header className="mb-4 flex items-center justify-between px-5">
         <div className="flex items-center gap-3">
-          <Link to="/rapports" className="flex h-8 w-8 items-center justify-center rounded-xl border border-border bg-surface">
+          <Link
+            to="/rapports"
+            className="flex h-8 w-8 items-center justify-center rounded-xl border border-border bg-surface"
+          >
             <ArrowLeft className="h-4 w-4" />
           </Link>
           <div>
@@ -193,12 +196,12 @@ function ScoreCard({ summary }: { summary: WeeklyReportSummary }) {
     score >= 85
       ? "text-emerald-400"
       : score >= 70
-      ? "text-cyan-400"
-      : score >= 55
-      ? "text-amber-400"
-      : score >= 40
-      ? "text-orange-400"
-      : "text-red-400";
+        ? "text-cyan-400"
+        : score >= 55
+          ? "text-amber-400"
+          : score >= 40
+            ? "text-orange-400"
+            : "text-red-400";
   const C = 2 * Math.PI * 34;
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-gradient-to-b from-card to-card/70 p-5">
@@ -250,7 +253,11 @@ function ResumeTab({ report }: { report: WeeklyReport }) {
       {s.week_score != null && <ScoreCard summary={s} />}
       <div className="grid grid-cols-2 gap-3">
         <KpiCard label="Séances" value={String(s.sessions_count ?? 0)} sub="cette semaine" />
-        <KpiCard label="Temps total" value={`${s.total_training_time ?? 0} min`} sub="d'entraînement" />
+        <KpiCard
+          label="Temps total"
+          value={`${s.total_training_time ?? 0} min`}
+          sub="d'entraînement"
+        />
         <KpiCard label="Calories moy." value={`${s.avg_calories ?? 0} kcal`} sub="par jour" />
         <KpiCard label="Protéines moy." value={`${s.avg_proteins ?? 0} g`} sub="par jour" />
       </div>
@@ -268,8 +275,8 @@ function ResumeTab({ report }: { report: WeeklyReport }) {
                   s.weight_evolution < 0
                     ? "bg-emerald-500/15 text-emerald-400"
                     : s.weight_evolution > 0
-                    ? "bg-amber-500/15 text-amber-400"
-                    : "bg-border/30 text-muted-foreground"
+                      ? "bg-amber-500/15 text-amber-400"
+                      : "bg-border/30 text-muted-foreground"
                 }`}
               >
                 {s.weight_evolution > 0 ? "+" : ""}
@@ -292,8 +299,8 @@ function ResumeTab({ report }: { report: WeeklyReport }) {
                 s.goals_respect_pct >= 80
                   ? "bg-gradient-to-r from-emerald-500 to-cyan-400"
                   : s.goals_respect_pct >= 50
-                  ? "bg-gradient-to-r from-amber-500 to-orange-400"
-                  : "bg-gradient-to-r from-red-500 to-red-400"
+                    ? "bg-gradient-to-r from-amber-500 to-orange-400"
+                    : "bg-gradient-to-r from-red-500 to-red-400"
               }`}
               style={{ width: `${Math.min(100, s.goals_respect_pct)}%` }}
             />
@@ -327,7 +334,10 @@ function FitnessTab({ report }: { report: WeeklyReport }) {
           </p>
           <div className="space-y-2">
             {f.top_exercises.map((ex, i) => (
-              <div key={i} className="flex items-center justify-between rounded-xl bg-surface px-3 py-2">
+              <div
+                key={i}
+                className="flex items-center justify-between rounded-xl bg-surface px-3 py-2"
+              >
                 <span className="text-xs font-medium">{ex.name}</span>
                 <span className="text-[11px] text-muted-foreground">
                   {ex.sets} × {ex.reps}
@@ -349,7 +359,12 @@ function FitnessTab({ report }: { report: WeeklyReport }) {
               <XAxis dataKey="name" tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 9 }} />
               <YAxis tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 9 }} />
               <Tooltip
-                contentStyle={{ background: "#1a1a2e", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontSize: 11 }}
+                contentStyle={{
+                  background: "#1a1a2e",
+                  border: "1px solid rgba(255,255,255,0.1)",
+                  borderRadius: 8,
+                  fontSize: 11,
+                }}
                 labelStyle={{ color: "rgba(255,255,255,0.8)" }}
               />
               <Bar dataKey="séries" fill="#6c63ff" radius={[4, 4, 0, 0]} />
@@ -365,7 +380,10 @@ function FitnessTab({ report }: { report: WeeklyReport }) {
           </p>
           <div className="flex flex-wrap gap-1.5">
             {f.most_worked_muscles.map((m, i) => (
-              <span key={i} className="rounded-full border border-primary/30 bg-primary/10 px-2.5 py-0.5 text-[11px] font-medium text-primary">
+              <span
+                key={i}
+                className="rounded-full border border-primary/30 bg-primary/10 px-2.5 py-0.5 text-[11px] font-medium text-primary"
+              >
                 {m}
               </span>
             ))}
@@ -403,7 +421,12 @@ function NutritionTab({ report }: { report: WeeklyReport }) {
             <XAxis dataKey="name" tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 9 }} />
             <YAxis tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 9 }} />
             <Tooltip
-              contentStyle={{ background: "#1a1a2e", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontSize: 11 }}
+              contentStyle={{
+                background: "#1a1a2e",
+                border: "1px solid rgba(255,255,255,0.1)",
+                borderRadius: 8,
+                fontSize: 11,
+              }}
             />
             <Bar dataKey="value" radius={[4, 4, 0, 0]}>
               {macroData.map((entry, index) => (
@@ -427,8 +450,14 @@ function NutritionTab({ report }: { report: WeeklyReport }) {
           </p>
           <div className="flex flex-wrap gap-1.5">
             {n.best_days.map((d, i) => (
-              <span key={i} className="rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-[11px] font-medium text-emerald-400">
-                {new Date(d + "T00:00:00").toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" })}
+              <span
+                key={i}
+                className="rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-[11px] font-medium text-emerald-400"
+              >
+                {new Date(d + "T00:00:00").toLocaleDateString("fr-FR", {
+                  weekday: "short",
+                  day: "numeric",
+                })}
               </span>
             ))}
           </div>
@@ -479,12 +508,14 @@ function CorpsTab({ report }: { report: WeeklyReport }) {
                 b.weight_delta < 0
                   ? "border-emerald-500/20 bg-emerald-500/5"
                   : b.weight_delta > 0
-                  ? "border-amber-500/20 bg-amber-500/5"
-                  : "border-border bg-card"
+                    ? "border-amber-500/20 bg-amber-500/5"
+                    : "border-border bg-card"
               }`}
             >
               <p className="text-xs text-muted-foreground">Évolution du poids</p>
-              <p className={`mt-1 text-2xl font-bold ${b.weight_delta < 0 ? "text-emerald-400" : b.weight_delta > 0 ? "text-amber-400" : "text-foreground"}`}>
+              <p
+                className={`mt-1 text-2xl font-bold ${b.weight_delta < 0 ? "text-emerald-400" : b.weight_delta > 0 ? "text-amber-400" : "text-foreground"}`}
+              >
                 {b.weight_delta > 0 ? "+" : ""}
                 {b.weight_delta} kg
               </p>
@@ -509,11 +540,25 @@ function CorpsTab({ report }: { report: WeeklyReport }) {
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                   <XAxis dataKey="label" tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 9 }} />
-                  <YAxis tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 9 }} domain={["auto", "auto"]} />
-                  <Tooltip
-                    contentStyle={{ background: "#1a1a2e", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, fontSize: 11 }}
+                  <YAxis
+                    tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 9 }}
+                    domain={["auto", "auto"]}
                   />
-                  <Area type="monotone" dataKey="poids" stroke="#6c63ff" fill="url(#weightGrad)" strokeWidth={2} />
+                  <Tooltip
+                    contentStyle={{
+                      background: "#1a1a2e",
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      borderRadius: 8,
+                      fontSize: 11,
+                    }}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="poids"
+                    stroke="#6c63ff"
+                    fill="url(#weightGrad)"
+                    strokeWidth={2}
+                  />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -537,7 +582,11 @@ function CorpsTab({ report }: { report: WeeklyReport }) {
                 <span className="text-xs">{MEASUREMENT_LABELS[key] ?? key}</span>
                 <span
                   className={`text-xs font-semibold ${
-                    delta < 0 ? "text-emerald-400" : delta > 0 ? "text-amber-400" : "text-muted-foreground"
+                    delta < 0
+                      ? "text-emerald-400"
+                      : delta > 0
+                        ? "text-amber-400"
+                        : "text-muted-foreground"
                   }`}
                 >
                   {delta > 0 ? "+" : ""}
@@ -556,7 +605,11 @@ function CorpsTab({ report }: { report: WeeklyReport }) {
 
 function IATab({ report }: { report: WeeklyReport }) {
   const ai = report.ai_analysis;
-  const isEmpty = !ai.strengths?.length && !ai.weaknesses?.length && !ai.risks?.length && !ai.recommendations?.length;
+  const isEmpty =
+    !ai.strengths?.length &&
+    !ai.weaknesses?.length &&
+    !ai.risks?.length &&
+    !ai.recommendations?.length;
 
   if (isEmpty) {
     return (

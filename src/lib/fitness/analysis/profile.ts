@@ -52,10 +52,7 @@ function firstNonNull<T extends keyof BodyRow>(
 }
 
 /** Différence entre la valeur la plus récente et la plus ancienne disponible. */
-function trend<T extends keyof BodyRow>(
-  rows: ReadonlyArray<BodyRow>,
-  field: T,
-): number | null {
+function trend<T extends keyof BodyRow>(rows: ReadonlyArray<BodyRow>, field: T): number | null {
   const values: number[] = [];
   for (const r of rows) {
     const v = r[field];

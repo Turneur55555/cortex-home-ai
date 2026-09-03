@@ -28,7 +28,10 @@ function stripDiacritics(value: string): string {
 // Vérifiées AVANT `exerciseToMuscles` — cas où son résultat serait absent ou
 // incorrect pour cet usage (voir commentaire d'en-tête).
 const PRE_OVERRIDES: Array<{ pattern: RegExp; label: string }> = [
-  { pattern: /rotation.*epaule|epaule.*rotation|coiffe des rotateurs|rotator cuff/i, label: "Épaules" },
+  {
+    pattern: /rotation.*epaule|epaule.*rotation|coiffe des rotateurs|rotator cuff/i,
+    label: "Épaules",
+  },
   { pattern: /developpe(?!.?militaire)/i, label: "Pectoraux" },
 ];
 
@@ -45,7 +48,8 @@ const NON_MUSCLE_BUCKETS: Array<{ pattern: RegExp; label: string }> = [
     label: "Récupération",
   },
   {
-    pattern: /full.?body|farmer|wall.?ball|circuit|flow|complex|carry|haut du corps.*stabilite|haut du corps.*gainage/i,
+    pattern:
+      /full.?body|farmer|wall.?ball|circuit|flow|complex|carry|haut du corps.*stabilite|haut du corps.*gainage/i,
     label: "Polyarticulaire",
   },
 ];

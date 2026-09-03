@@ -217,9 +217,7 @@ export function resolveMuscleRoles(
   }
 
   // Repli 2 : muscles résolus par l'IA (exercices personnalisés).
-  const aiMuscles = (aiMuscleGroups ?? []).filter(
-    (m): m is MuscleId => m in MUSCLE_META,
-  );
+  const aiMuscles = (aiMuscleGroups ?? []).filter((m): m is MuscleId => m in MUSCLE_META);
   if (aiMuscles.length > 0) {
     const [head, ...rest] = dedupe(aiMuscles);
     return { primary: [head], secondary: rest, stabilizer: [], isGeneric: false };

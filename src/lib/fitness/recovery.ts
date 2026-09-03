@@ -31,9 +31,7 @@ export function computeRecovery(
       const muscles: MuscleId[] =
         regexMuscles.length > 0
           ? regexMuscles
-          : (ex.muscle_groups ?? []).filter(
-              (m): m is MuscleId => m in MUSCLE_META,
-            );
+          : (ex.muscle_groups ?? []).filter((m): m is MuscleId => m in MUSCLE_META);
       for (const m of muscles) {
         const prev = lastTrainedMap.get(m);
         if (!prev || wDate > prev) {
@@ -45,7 +43,9 @@ export function computeRecovery(
 
   const result = new Map<MuscleId, MuscleRecovery>();
 
-  for (const [id, meta] of Object.entries(MUSCLE_META) as Array<[MuscleId, typeof MUSCLE_META[MuscleId]]>) {
+  for (const [id, meta] of Object.entries(MUSCLE_META) as Array<
+    [MuscleId, (typeof MUSCLE_META)[MuscleId]]
+  >) {
     const lastTrained = lastTrainedMap.get(id) ?? null;
 
     if (!lastTrained) {
@@ -87,14 +87,17 @@ export function computeRecovery(
   return result;
 }
 
-export const RECOVERY_COLORS: Record<RecoveryStatus, {
-  fill: string;    // with alpha — SVG muscle fill
-  stroke: string;  // solid — SVG muscle outline + legend dot
-}> = {
-  fatigued:  { fill: "#EF444433", stroke: "#EF4444" },
-  recovering:{ fill: "#F9731633", stroke: "#F97316" },
-  ready:     { fill: "#22C55E33", stroke: "#22C55E" },
-  unknown:   { fill: "#1F293700", stroke: "#374151" },
+export const RECOVERY_COLORS: Record<
+  RecoveryStatus,
+  {
+    fill: string; // with alpha — SVG muscle fill
+    stroke: string; // solid — SVG muscle outline + legend dot
+  }
+> = {
+  fatigued: { fill: "#EF444433", stroke: "#EF4444" },
+  recovering: { fill: "#F9731633", stroke: "#F97316" },
+  ready: { fill: "#22C55E33", stroke: "#22C55E" },
+  unknown: { fill: "#1F293700", stroke: "#374151" },
 };
 
 export const RECOVERY_LABELS: Record<RecoveryStatus, string> = {
@@ -104,9 +107,10 @@ export const RECOVERY_LABELS: Record<RecoveryStatus, string> = {
   unknown: "Inconnu",
 };
 
-export const RECOVERY_LEGEND: Array<{ status: RecoveryStatus; label: string; color: string }> =
-  (["fatigued", "recovering", "ready", "unknown"] as const).map((status) => ({
-    status,
-    label: RECOVERY_LABELS[status],
-    color: RECOVERY_COLORS[status].stroke,
-  }));
+export const RECOVERY_LEGEND: Array<{ status: RecoveryStatus; label: string; color: string }> = (
+  ["fatigued", "recovering", "ready", "unknown"] as const
+).map((status) => ({
+  status,
+  label: RECOVERY_LABELS[status],
+  color: RECOVERY_COLORS[status].stroke,
+}));

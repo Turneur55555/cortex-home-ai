@@ -3,79 +3,152 @@
 import { normalize } from "./exerciseCatalog";
 
 const MAP: Record<string, string> = {
-  "abducteur machine": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/abducteur-machine.webp",
-  "adducteur machine": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/adducteur-machine.webp",
-  "barre au front": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/barre-au-front.webp",
-  "crunch cable debout": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/crunch-cable-debout.webp",
-  "crunch cable a genoux": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/crunch-cable-a-genoux.webp",
-  "crunch inverse banc": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/crunch-inverse-banc.webp",
-  "crunch machine": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/crunch-machine.webp",
-  "curl barre ez": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/curl-barre-ez.webp",
-  "curl barre droite": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/curl-barre-droite.webp",
-  "curl concentre haltere": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/curl-concentre-haltere.webp",
-  "curl cable basse poulie": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/curl-cable-basse-poulie.webp",
-  "curl halteres": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/curl-halteres.webp",
-  "curl halteres alternes": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/curl-halteres-alternes.webp",
-  "curl incline halteres": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/curl-incline-halteres.webp",
-  "curl marteau halteres": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/curl-marteau-halteres.webp",
-  "curl pupitre barre ez": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/curl-pupitre-barre-ez.webp",
-  "dips barres paralleles": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/dips-barres-paralleles.webp",
-  "dips triceps banc": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/dips-triceps-banc.webp",
-  "developpe couche barre": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/developpe-couche-barre.webp",
-  "developpe couche halteres": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/developpe-couche-halteres.webp",
-  "developpe decline halteres": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/developpe-decline-halteres.webp",
-  "developpe incline barre": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/developpe-incline-barre.webp",
-  "developpe incline halteres": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/developpe-incline-halteres.webp",
-  "developpe militaire barre": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/developpe-militaire-barre.webp",
-  "developpe militaire halteres": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/developpe-militaire-halteres.webp",
-  "developpe militaire halteres assis": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/developpe-militaire-halteres-assis.webp",
-  "extension triceps cable barre droite": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/extension-triceps-cable-barre-droite.webp",
-  "extension triceps cable corde": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/extension-triceps-cable-corde.webp",
-  "extension triceps haltere nuque": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/extension-triceps-haltere-nuque.webp",
-  "extension triceps haltere unilateral": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/extension-triceps-haltere-unilateral.webp",
-  "extension triceps poulie haute": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/extension-triceps-poulie-haute.webp",
-  "face pull cable": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/face-pull-cable.webp",
-  "fente avant barre": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/fente-avant-barre.webp",
-  "fente avant halteres": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/fente-avant-halteres.webp",
-  "fente bulgare halteres": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/fente-bulgare-halteres.webp",
-  "hip thrust barre": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/hip-thrust-barre.webp",
-  "hyperextension banc": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/hyperextension-banc.webp",
-  "kickback cable fessier": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/kickback-cable-fessier.webp",
-  "kickback triceps haltere": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/kickback-triceps-haltere.webp",
-  "leg curl allonge machine": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/leg-curl-allonge-machine.webp",
-  "leg curl assis machine": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/leg-curl-assis-machine.webp",
-  "leg extension machine": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/leg-extension-machine.webp",
-  "leg press": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/leg-press.webp",
-  "leg press incline": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/leg-press-incline.webp",
-  "oiseau halteres": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/oiseau-halteres.webp",
-  "pec deck machine": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/pec-deck-machine.webp",
-  "planche laterale": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/planche-laterale.webp",
-  "pompes": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/pompes.webp",
-  "releve de buste banc incline": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/releve-de-buste-banc-incline.webp",
-  "releve de jambes chaise romaine": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/releve-de-jambes-chaise-romaine.webp",
-  "releve de jambes suspendu": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/releve-de-jambes-suspendu.webp",
-  "rotation cable assis": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/rotation-cable-assis.webp",
-  "rotation cable debout": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/rotation-cable-debout.webp",
-  "rowing barre": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/rowing-barre.webp",
-  "rowing debout barre": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/rowing-debout-barre.webp",
-  "rowing haltere unilateral": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/rowing-haltere-unilateral.webp",
-  "souleve de terre jambes tendues": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/souleve-de-terre-jambes-tendues.webp",
-  "souleve de terre roumain barre": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/souleve-de-terre-roumain-barre.webp",
-  "souleve de terre roumain halteres": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/souleve-de-terre-roumain-halteres.webp",
-  "squat avant barre": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/squat-avant-barre.webp",
-  "squat barre": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/squat-barre.webp",
-  "squat gobelet": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/squat-gobelet.webp",
-  "squat hack machine": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/squat-hack-machine.webp",
-  "tirage horizontal assis poitrine": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/tirage-horizontal-assis-poitrine.webp",
-  "tirage vertical poignee large": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/tirage-vertical-poignee-large.webp",
-  "tirage vertical poignee serree": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/tirage-vertical-poignee-serree.webp",
-  "traction prise large": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/traction-prise-large.webp",
-  "traction prise neutre": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/traction-prise-neutre.webp",
-  "wheel rollout": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/wheel-rollout.webp",
-  "ecarte cable croise": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/ecarte-cable-croise.webp",
-  "ecarte incline halteres": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/ecarte-incline-halteres.webp",
-  "elevations frontales halteres": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/elevations-frontales-halteres.webp",
-  "elevations laterales halteres": "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/elevations-laterales-halteres.webp",
+  "abducteur machine":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/abducteur-machine.webp",
+  "adducteur machine":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/adducteur-machine.webp",
+  "barre au front":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/barre-au-front.webp",
+  "crunch cable debout":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/crunch-cable-debout.webp",
+  "crunch cable a genoux":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/crunch-cable-a-genoux.webp",
+  "crunch inverse banc":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/crunch-inverse-banc.webp",
+  "crunch machine":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/crunch-machine.webp",
+  "curl barre ez":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/curl-barre-ez.webp",
+  "curl barre droite":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/curl-barre-droite.webp",
+  "curl concentre haltere":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/curl-concentre-haltere.webp",
+  "curl cable basse poulie":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/curl-cable-basse-poulie.webp",
+  "curl halteres":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/curl-halteres.webp",
+  "curl halteres alternes":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/curl-halteres-alternes.webp",
+  "curl incline halteres":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/curl-incline-halteres.webp",
+  "curl marteau halteres":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/curl-marteau-halteres.webp",
+  "curl pupitre barre ez":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/curl-pupitre-barre-ez.webp",
+  "dips barres paralleles":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/dips-barres-paralleles.webp",
+  "dips triceps banc":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/dips-triceps-banc.webp",
+  "developpe couche barre":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/developpe-couche-barre.webp",
+  "developpe couche halteres":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/developpe-couche-halteres.webp",
+  "developpe decline halteres":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/developpe-decline-halteres.webp",
+  "developpe incline barre":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/developpe-incline-barre.webp",
+  "developpe incline halteres":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/developpe-incline-halteres.webp",
+  "developpe militaire barre":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/developpe-militaire-barre.webp",
+  "developpe militaire halteres":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/developpe-militaire-halteres.webp",
+  "developpe militaire halteres assis":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/developpe-militaire-halteres-assis.webp",
+  "extension triceps cable barre droite":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/extension-triceps-cable-barre-droite.webp",
+  "extension triceps cable corde":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/extension-triceps-cable-corde.webp",
+  "extension triceps haltere nuque":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/extension-triceps-haltere-nuque.webp",
+  "extension triceps haltere unilateral":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/extension-triceps-haltere-unilateral.webp",
+  "extension triceps poulie haute":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/extension-triceps-poulie-haute.webp",
+  "face pull cable":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/face-pull-cable.webp",
+  "fente avant barre":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/fente-avant-barre.webp",
+  "fente avant halteres":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/fente-avant-halteres.webp",
+  "fente bulgare halteres":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/fente-bulgare-halteres.webp",
+  "hip thrust barre":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/hip-thrust-barre.webp",
+  "hyperextension banc":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/hyperextension-banc.webp",
+  "kickback cable fessier":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/kickback-cable-fessier.webp",
+  "kickback triceps haltere":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/kickback-triceps-haltere.webp",
+  "leg curl allonge machine":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/leg-curl-allonge-machine.webp",
+  "leg curl assis machine":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/leg-curl-assis-machine.webp",
+  "leg extension machine":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/leg-extension-machine.webp",
+  "leg press":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/leg-press.webp",
+  "leg press incline":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/leg-press-incline.webp",
+  "oiseau halteres":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/oiseau-halteres.webp",
+  "pec deck machine":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/pec-deck-machine.webp",
+  "planche laterale":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/planche-laterale.webp",
+  pompes:
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/pompes.webp",
+  "releve de buste banc incline":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/releve-de-buste-banc-incline.webp",
+  "releve de jambes chaise romaine":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/releve-de-jambes-chaise-romaine.webp",
+  "releve de jambes suspendu":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/releve-de-jambes-suspendu.webp",
+  "rotation cable assis":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/rotation-cable-assis.webp",
+  "rotation cable debout":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/rotation-cable-debout.webp",
+  "rowing barre":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/rowing-barre.webp",
+  "rowing debout barre":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/rowing-debout-barre.webp",
+  "rowing haltere unilateral":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/rowing-haltere-unilateral.webp",
+  "souleve de terre jambes tendues":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/souleve-de-terre-jambes-tendues.webp",
+  "souleve de terre roumain barre":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/souleve-de-terre-roumain-barre.webp",
+  "souleve de terre roumain halteres":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/souleve-de-terre-roumain-halteres.webp",
+  "squat avant barre":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/squat-avant-barre.webp",
+  "squat barre":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/squat-barre.webp",
+  "squat gobelet":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/squat-gobelet.webp",
+  "squat hack machine":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/squat-hack-machine.webp",
+  "tirage horizontal assis poitrine":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/tirage-horizontal-assis-poitrine.webp",
+  "tirage vertical poignee large":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/tirage-vertical-poignee-large.webp",
+  "tirage vertical poignee serree":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/tirage-vertical-poignee-serree.webp",
+  "traction prise large":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/traction-prise-large.webp",
+  "traction prise neutre":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/traction-prise-neutre.webp",
+  "wheel rollout":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/wheel-rollout.webp",
+  "ecarte cable croise":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/ecarte-cable-croise.webp",
+  "ecarte incline halteres":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/ecarte-incline-halteres.webp",
+  "elevations frontales halteres":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/elevations-frontales-halteres.webp",
+  "elevations laterales halteres":
+    "https://bcwfvpwxzlmkxobvbtzp.supabase.co/storage/v1/object/public/exercise-catalog/elevations-laterales-halteres.webp",
 };
 
 export function exerciseIllustration(name: string | null | undefined): string | null {

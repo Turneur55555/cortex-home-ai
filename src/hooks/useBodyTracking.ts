@@ -56,7 +56,11 @@ export function useAddBodyMeasurement() {
     },
     onSuccess: (_d, vars) => {
       toast.success("Mesure ajoutée");
-      logActivity("body", vars.weight != null ? `Pesée : ${vars.weight} kg` : "Mensuration ajoutée", { date: vars.date });
+      logActivity(
+        "body",
+        vars.weight != null ? `Pesée : ${vars.weight} kg` : "Mensuration ajoutée",
+        { date: vars.date },
+      );
       qc.invalidateQueries({ queryKey: ["body_tracking"] });
       qc.invalidateQueries({ queryKey: ["user_activity"] });
       qc.invalidateQueries({ queryKey: ["activity_streak"] });
@@ -73,11 +77,7 @@ export function useDeleteBodyMeasurement() {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) throw new Error("Non authentifié");
-      const { error } = await db
-        .from("body_tracking")
-        .delete()
-        .eq("id", id)
-        .eq("user_id", user.id);
+      const { error } = await db.from("body_tracking").delete().eq("id", id).eq("user_id", user.id);
       if (error) throw error;
     },
     onSuccess: () => {

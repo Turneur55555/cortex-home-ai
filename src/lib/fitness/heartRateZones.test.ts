@@ -5,7 +5,12 @@ describe("computeHeartRateZones", () => {
   it("computes 5 zones from a max heart rate", () => {
     const zones = computeHeartRateZones(190);
     expect(zones).toHaveLength(5);
-    expect(zones[1]).toEqual({ zone: 2, label: "Z2 — Endurance fondamentale", minBpm: 114, maxBpm: 133 });
+    expect(zones[1]).toEqual({
+      zone: 2,
+      label: "Z2 — Endurance fondamentale",
+      minBpm: 114,
+      maxBpm: 133,
+    });
   });
 
   it("returns an empty array for an invalid max heart rate", () => {

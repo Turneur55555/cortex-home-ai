@@ -48,7 +48,14 @@ export function EditWorkoutScheduleModal({
   return (
     <Sheet title="Modifier la séance" onClose={onClose}>
       <div className="space-y-5">
-        <Field id="workout-date" label="Date" type="date" value={dateText} onChange={setDateText} required />
+        <Field
+          id="workout-date"
+          label="Date"
+          type="date"
+          value={dateText}
+          onChange={setDateText}
+          required
+        />
         <div>
           <Field
             id="workout-duration"
