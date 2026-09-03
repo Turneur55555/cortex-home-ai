@@ -15,6 +15,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { SignOutSyncGuardDialog } from "@/components/profile/SignOutSyncGuardDialog";
+import {
+  attemptSyncBeforeSignOut,
+  getOfflineSignOutSummary,
+  hasUnresolvedOfflineWork,
+  type OfflineSignOutSummary,
+} from "@/lib/offline/signOutGuard";
 
 export function SecurityPanel() {
   const { user, signOut } = useAuth();
@@ -23,6 +30,12 @@ export function SecurityPanel() {
   const [pwd, setPwd] = useState("");
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
+  // CHANTIER 4 (MAJ-04) — non-`null` quand `signOut()` purgerait des
+  // opérations/conflits non résolus : le dialogue de confirmation est alors
+  // affiché AVANT tout appel à `signOut()` (qui, lui, n'a pas changé — il
+  // continue de purger `syncQueue`/`conflicts`, cf. `hooks/use-auth.tsx`).
+  const [signOutGuard, setSignOutGuard] = useState<OfflineSignOutSummary | null>(null);
+  const [syncingBeforeSignOut, setSyncingBeforeSignOut] = useState(false);
 
   const changePassword = async () => {
     if (pwd.length < 8) {
@@ -61,12 +74,57 @@ export function SecurityPanel() {
     }
   };
 
-  const handleSignOut = async () => {
+  const performSignOut = async () => {
     await qc.cancelQueries();
     qc.clear();
     await signOut();
     toast.success("Déconnecté");
     navigate({ to: "/login", replace: true });
+  };
+
+  /**
+   * Point d'entrée du bouton « Se déconnecter ». Ne purge JAMAIS
+   * silencieusement : cas 1 (aucune opération) et cas 2 (opérations déjà
+   * résolues) partent directement, tout le reste ouvre la confirmation
+   * (section 3 du chantier).
+   */
+  const handleSignOut = async () => {
+    const userId = user?.id ?? null;
+    if (!userId) {
+      await performSignOut();
+      return;
+    }
+    const summary = await getOfflineSignOutSummary(userId);
+    if (!hasUnresolvedOfflineWork(summary)) {
+      await performSignOut();
+      return;
+    }
+    setSignOutGuard(summary);
+  };
+
+  /** « Synchroniser d'abord » : réutilise le moteur existant, ne déconnecte
+   * que si tout est effectivement résolu après la passe. */
+  const handleSyncFirst = async () => {
+    const userId = user?.id ?? null;
+    if (!userId) return;
+    setSyncingBeforeSignOut(true);
+    const remaining = await attemptSyncBeforeSignOut(userId);
+    setSyncingBeforeSignOut(false);
+    if (!hasUnresolvedOfflineWork(remaining)) {
+      setSignOutGuard(null);
+      await performSignOut();
+      return;
+    }
+    // Toujours quelque chose en attente (bloqué / conflit / échec persistant) :
+    // on reste connecté et on explique pourquoi, avec l'état à jour.
+    setSignOutGuard(remaining);
+    toast.info("Certaines actions restent en attente — vous êtes toujours connecté(e).");
+  };
+
+  /** « Se déconnecter quand même », après confirmation explicite dans le dialogue. */
+  const handleSignOutAnyway = async () => {
+    setSignOutGuard(null);
+    await performSignOut();
   };
 
   return (
@@ -161,6 +219,16 @@ export function SecurityPanel() {
           <span className="flex-1 text-sm font-semibold">Se déconnecter</span>
         </button>
       </div>
+
+      {signOutGuard && (
+        <SignOutSyncGuardDialog
+          summary={signOutGuard}
+          busy={syncingBeforeSignOut}
+          onSyncFirst={handleSyncFirst}
+          onSignOutAnyway={handleSignOutAnyway}
+          onCancel={() => setSignOutGuard(null)}
+        />
+      )}
     </section>
   );
 }
