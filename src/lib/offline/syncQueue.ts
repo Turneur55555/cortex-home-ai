@@ -222,6 +222,48 @@ export async function removeOperation(id: string): Promise<void> {
  * au lieu d'empiler une opération séparée qui référencerait un id inconnu
  * du serveur.
  */
+/**
+ * Statuts d'un `create` dont on peut encore ATTENDRE l'arrivée côté serveur,
+ * tout seul, sans action de l'utilisateur : il est en file (`pending`), en
+ * échec temporaire (`failed`, il repartira après backoff) ou déjà en vol
+ * (`syncing`, éventuellement dans un autre onglet).
+ *
+ * `blocked` en est volontairement EXCLU (MAJ-01) : une opération bloquée
+ * n'est plus jamais retentée automatiquement — la ligne n'apparaîtra donc
+ * JAMAIS côté serveur sans une action explicite. C'est toute la différence
+ * avec `findPendingCreateForRecord` juste en dessous, qui répond à une autre
+ * question (« puis-je fusionner mon écriture dans ce `create` ? ») et pour
+ * laquelle un `create` bloqué compte bel et bien.
+ */
+const AWAITED_CREATE_STATUSES = new Set<SyncOpStatus>(["pending", "failed", "syncing"]);
+
+/**
+ * Existe-t-il, pour cet enregistrement, un `create` qui va encore
+ * NÉCESSAIREMENT tenter d'atteindre le serveur ?
+ *
+ * Utilisé par le sync engine sur le chemin `update` → ligne serveur absente
+ * (garde PGRST116) : tant qu'un tel `create` est vivant, une ligne absente
+ * n'est pas une suppression mais une course normale de la file FIFO — on
+ * laisse l'UPDATE repartir. Si le `create` est `blocked`, en revanche, plus
+ * rien ne créera la ligne : continuer à retenter l'UPDATE serait la boucle
+ * infinie MAJ-01. Le moteur traite alors le cas comme ce qu'il est — un
+ * conflit `server_row_deleted` à arbitrer.
+ */
+export async function findAwaitedCreateForRecord(
+  table: string,
+  recordLocalId: string,
+): Promise<SyncOperation | undefined> {
+  const db = await getOfflineDb();
+  const all = await db.getAll("syncQueue");
+  return all.find(
+    (op) =>
+      op.table === table &&
+      op.recordLocalId === recordLocalId &&
+      op.opType === "create" &&
+      AWAITED_CREATE_STATUSES.has(op.status),
+  );
+}
+
 export async function findPendingCreateForRecord(
   table: string,
   recordLocalId: string,
@@ -301,16 +343,24 @@ export async function updateOperationPayload<T>(id: string, payload: T): Promise
   const db = await getOfflineDb();
   const existing = await db.get("syncQueue", id);
   if (!existing) return;
+  const unblocking = existing.status === "blocked";
   await db.put("syncQueue", {
     ...existing,
     payload,
+    // Le budget de tentatives (`MAX_RETRY_ATTEMPTS`, cf. `syncEngine.ts`) est
+    // remis à zéro quand — et seulement quand — l'opération sort de
+    // `blocked` : sans ça, une opération bloquée pour avoir épuisé ses
+    // tentatives repasserait `pending` puis rebloquerait au premier passage,
+    // sans jamais retenter. `lastError`/`lastErrorCode` sont conservés
+    // (historique de diagnostic).
+    ...(unblocking ? { retryCount: 0 } : {}),
     // Le verdict `blocked` porte sur un PAYLOAD précis (« celui-là ne
     // passera jamais »). L'utilisateur vient d'en écrire un nouveau — par
     // exemple en renseignant le champ manquant : l'opération redevient
     // candidate. On garde `lastError`/`retryCount` (historique de
     // diagnostic) ; si le nouveau payload échoue pareil, il rebloquera au
     // prochain passage. Pas de boucle : une seule tentative par correction.
-    status: existing.status === "blocked" ? "pending" : existing.status,
+    status: unblocking ? "pending" : existing.status,
   } as SyncOperation);
 }
 

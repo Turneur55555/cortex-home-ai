@@ -139,7 +139,10 @@ export function SyncQueueSheet({ onClose, sync }: { onClose: () => void; sync: O
  *   attente. Il n'existe AUCUNE version serveur à montrer ni à garder — on
  *   ne propose donc PAS « Garder ma version » (elle relancerait un UPDATE
  *   sur une ligne inexistante, donc une action impossible), seulement
- *   l'abandon explicite de la modification locale.
+ *   l'abandon explicite de la modification locale. Depuis le chantier
+ *   « fiabilisation du moteur offline » (MIN-06), le MOTEUR refuse lui aussi
+ *   cette résolution (`resolveConflict`) : la règle ne dépend plus du seul
+ *   masquage côté UI.
  */
 function ConflictCard({
   conflict,

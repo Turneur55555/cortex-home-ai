@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { AppShell } from "@/components/AppShell";
 import { PreferencesEffects } from "@/components/PreferencesEffects";
 import { BottomNav } from "@/components/BottomNav";
+import { OfflineSyncDriver } from "@/components/OfflineSyncDriver";
 import { Loader2 } from "lucide-react";
 import { logAuthEvent, summarizeSession } from "@/lib/authDiagnostics";
 import { restoreAuthSession } from "@/lib/authSession";
@@ -47,13 +48,19 @@ function AuthGate() {
   if (!user) return null; // beforeLoad will redirect
   return (
     <PreferencesEffects>
+      {/* MOTEUR OFFLINE — driver NON VISUEL, monté une seule fois ici (CRIT-01).
+          Il fait tourner la synchronisation en permanence, quel que soit
+          l'écran affiché ; avant, ces effets vivaient dans `useOfflineSync`,
+          consommé par le seul bloc « Synchronisation » du Profil : hors de cet
+          écran, la file n'était jamais reprise.
+          Aucune UI de synchronisation n'est montée globalement pour autant
+          (audit UI du 01/09/2026) : l'ancien indicateur s'imposait par-dessus
+          n'importe quel écran dès qu'une action était en attente — donc après
+          quasiment chaque geste pendant une séance. Le statut et le panneau
+          détaillé vivent toujours dans le bloc « Synchronisation » du Profil
+          (`components/profile/SyncStatusCard.tsx`). */}
+      <OfflineSyncDriver />
       <AppShell>
-        {/* Aucune UI de synchronisation montée globalement (audit UI du
-            01/09/2026) : elle apparaissait par-dessus n'importe quel écran
-            dès qu'une action était en attente — donc après quasiment chaque
-            geste pendant une séance. Le statut et le panneau détaillé vivent
-            désormais dans le bloc « Synchronisation » du Profil
-            (`components/profile/SyncStatusCard.tsx`). */}
         <div className="flex flex-1 flex-col pb-2">
           <Outlet />
         </div>

@@ -254,11 +254,76 @@ describe("PGRST116 — ligne absente du serveur avant l'UPDATE", () => {
     expect(local?.name).toBe("Développé incliné");
   });
 
-  it("5. résolution « garder ma version » : ré-enfile l'update, aboutit si la ligne réapparaît", async () => {
+  it("5. résolution « garder ma version » : REFUSÉE par le moteur (MIN-06) — le conflit reste à arbitrer", async () => {
+    // COMPORTEMENT VOLONTAIREMENT CORRIGÉ (chantier « fiabilisation du moteur
+    // offline », MIN-06). Avant : le moteur acceptait « garder ma version »
+    // pour un conflit `server_row_deleted` et ré-enfilait l'`update` — sur une
+    // ligne qui n'existe plus, ce qui ne pouvait produire qu'un nouveau
+    // PGRST116, donc un nouveau conflit (cf. l'ancien test « 5bis »).
+    // Maintenant : cette résolution n'a pas de sens dans ce cas, le moteur la
+    // REFUSE (l'UI masquait déjà le choix ; la garde est désormais aussi
+    // côté moteur, donc incontournable).
     const exercise = await createSyncedThenDeletedOnServer();
     await exercisesRepo.update(exercise.id, USER, { name: "Fantôme" });
     await processSyncQueue(USER);
     const [conflict] = await listConflicts(USER);
+
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    await resolveConflict(conflict.id, "keep-local");
+    consoleError.mockRestore();
+
+    // Rien n'a bougé : le conflit reste EN ATTENTE d'un arbitrage réel…
+    const stillPending = await listConflicts(USER);
+    expect(stillPending).toHaveLength(1);
+    expect(stillPending[0].id).toBe(conflict.id);
+    expect(stillPending[0].resolution).toBeUndefined();
+    // …aucune opération n'est ré-enfilée (donc aucune insistance stérile)…
+    expect(await listAllOperations(USER)).toHaveLength(0);
+    // …et la donnée locale est intégralement conservée.
+    const local = await exercisesRepo.get(exercise.id);
+    expect(local?.name).toBe("Fantôme");
+  });
+
+  it("5bis. le refus n'ouvre aucune boucle : passages suivants sans tentative ni nouveau conflit", async () => {
+    const exercise = await createSyncedThenDeletedOnServer();
+    await exercisesRepo.update(exercise.id, USER, { name: "Fantôme" });
+    await processSyncQueue(USER);
+    const [conflict] = await listConflicts(USER);
+
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    await resolveConflict(conflict.id, "keep-local");
+    consoleError.mockRestore();
+
+    const result = await processSyncQueue(USER);
+    expect(result.conflicted).toBe(0);
+    expect(result.retried).toBe(0);
+    expect(result.blocked).toBe(0);
+    expect(await listAllOperations(USER)).toHaveLength(0);
+    expect(await listConflicts(USER)).toHaveLength(1);
+  });
+
+  it("5ter. `updated_at_mismatch` n'est PAS concerné : « garder ma version » y reste accepté", async () => {
+    // Non-régression explicite du garde-fou ci-dessus : il ne vise QUE
+    // `server_row_deleted` (la ligne serveur existe toujours ici, l'arbitrage
+    // « ma version gagne » a un sens et doit continuer de fonctionner).
+    const exercise = await exercisesRepo.create(USER, {
+      workout_id: "w-1",
+      name: "Développé couché",
+    } as never);
+    await processSyncQueue(USER);
+    // Un autre appareil modifie la ligne : `updated_at` serveur diverge.
+    const serverRow = serverStore.get("exercises")?.get(exercise.id) as Row;
+    serverStore.get("exercises")?.set(exercise.id, {
+      ...serverRow,
+      name: "Modifié ailleurs",
+      updated_at: new Date(Date.now() + 60_000).toISOString(),
+    });
+    await exercisesRepo.update(exercise.id, USER, { name: "Ma version" });
+
+    const conflictPass = await processSyncQueue(USER);
+    expect(conflictPass.conflicted).toBe(1);
+    const [conflict] = await listConflicts(USER);
+    expect(conflict.reason).toBe("updated_at_mismatch");
 
     await resolveConflict(conflict.id, "keep-local");
     expect(await listConflicts(USER)).toHaveLength(0);
@@ -266,33 +331,9 @@ describe("PGRST116 — ligne absente du serveur avant l'UPDATE", () => {
     expect(replayed.opType).toBe("update");
     expect(replayed.baseUpdatedAt).toBeNull();
 
-    // La ligne réapparaît côté serveur (ex. un autre appareil l'a recréée) :
-    // l'update rejoué aboutit normalement, comme n'importe quelle opération.
-    serverStore.get("exercises")?.set(exercise.id, {
-      id: exercise.id,
-      user_id: USER,
-      workout_id: "w-1",
-      name: "Développé couché",
-      updated_at: new Date().toISOString(),
-    });
     const result = await processSyncQueue(USER);
     expect(result.succeeded).toBe(1);
-    expect(serverStore.get("exercises")?.get(exercise.id)?.name).toBe("Fantôme");
-  });
-
-  it("5bis. résolution « garder ma version » sans que la ligne ne réapparaisse : re-conflit maîtrisé, jamais de retry infini", async () => {
-    const exercise = await createSyncedThenDeletedOnServer();
-    await exercisesRepo.update(exercise.id, USER, { name: "Fantôme" });
-    await processSyncQueue(USER);
-    const [conflict] = await listConflicts(USER);
-    await resolveConflict(conflict.id, "keep-local");
-
-    // Toujours pas de ligne serveur : la garde du correctif intercepte à
-    // nouveau AVANT l'UPDATE — un second conflit, jamais une boucle `failed`.
-    const result = await processSyncQueue(USER);
-    expect(result.conflicted).toBe(1);
-    expect(result.retried).toBe(0);
-    expect(await listAllOperations(USER)).toHaveLength(0);
+    expect(serverStore.get("exercises")?.get(exercise.id)?.name).toBe("Ma version");
   });
 
   it("6. abandon explicite (« garder la version serveur ») supprime proprement l'entité locale, sans opération orpheline", async () => {

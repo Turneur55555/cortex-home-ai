@@ -67,10 +67,13 @@ export interface SyncDependencyRef {
  *   (cf. `syncQueue.ts`) — elle ne reste JAMAIS bloquée en `syncing`.
  * - `failed` : échec retryable, rejoué automatiquement après backoff.
  * - `blocked` : échec définitif identifié (payload/schéma structurellement
- *   invalide, cf. `NON_RETRYABLE_PG_ERROR_CODES` dans `syncErrors.ts`).
- *   Plus jamais retenté automatiquement, reste visible dans le panneau de
- *   synchronisation avec sa raison réelle, et n'attend qu'une action
- *   explicite de l'utilisateur (« Réessayer » / « Retirer de la file »).
+ *   invalide, cf. `NON_RETRYABLE_PG_ERROR_CODES` dans `syncErrors.ts`) OU
+ *   budget de tentatives épuisé (`MAX_RETRY_ATTEMPTS`, cf. `syncEngine.ts`,
+ *   MIN-17 : même une erreur temporaire finit par s'arrêter, sinon elle est
+ *   retentée sans fin). Plus jamais retenté automatiquement, reste visible
+ *   dans le panneau de synchronisation avec sa raison réelle, et n'attend
+ *   qu'une action explicite de l'utilisateur (« Réessayer » — qui rend un
+ *   budget de tentatives neuf — ou « Retirer de la file »).
  * - `done` : état terminal jamais persisté (l'opération réussie est
  *   supprimée de la queue), conservé pour compatibilité des types.
  */

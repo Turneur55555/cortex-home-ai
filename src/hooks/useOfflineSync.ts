@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useNetworkStatus } from "@/hooks/useNetworkStatus";
@@ -7,12 +7,16 @@ import { isServerConfirmedQuery } from "@/lib/offline/serverConfirmedQuery";
 import { markWorkoutsServerRefreshStale } from "@/lib/offline/workoutsRefreshWindow";
 import {
   discardBlockedOperation,
-  listConflicts,
-  processSyncQueue,
   resolveConflict as resolveConflictEngine,
   retryBlockedOperation,
 } from "@/lib/offline/syncEngine";
-import { countPendingAndFailed, listAllOperations } from "@/lib/offline/syncQueue";
+import {
+  getSyncRuntimeServerSnapshot,
+  getSyncRuntimeSnapshot,
+  refreshSyncRuntime,
+  runSyncQueueOnce,
+  subscribeSyncRuntime,
+} from "@/lib/offline/syncRuntime";
 import type {
   ConflictRecord,
   ConflictResolutionStrategy,
@@ -45,102 +49,108 @@ export interface OfflineSyncState {
 const POLL_INTERVAL_MS = 4_000;
 
 /**
- * Hook central de l'indicateur de sync — regroupe statut réseau, compteurs
- * de la queue et conflits en attente pour piloter `SyncStatusIndicator`,
- * le panneau des opérations en attente et l'UI de résolution de conflit.
- * Déclenche automatiquement une synchronisation au retour réseau.
+ * Cœur partagé : identité de l'utilisateur, état réseau et déclenchement
+ * d'une passe de queue avec l'invalidation ciblée qui suit. Utilisé par le
+ * DRIVER (effets permanents) comme par les ACTIONS de l'UI — une seule
+ * implémentation, donc aucun risque que les deux divergent.
  */
-export function useOfflineSync(): OfflineSyncState {
+function useSyncRunner() {
   const { user } = useAuth();
   const isOnline = useNetworkStatus();
   const queryClient = useQueryClient();
   const userId = user?.id ?? null;
 
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [pendingCount, setPendingCount] = useState(0);
-  const [failedCount, setFailedCount] = useState(0);
-  const [blockedCount, setBlockedCount] = useState(0);
-  const [operations, setOperations] = useState<SyncOperation[]>([]);
-  const [conflicts, setConflicts] = useState<ConflictRecord[]>([]);
-  const syncingRef = useRef(false);
-
-  const refreshCounts = useCallback(async () => {
-    if (!userId) {
-      setPendingCount(0);
-      setFailedCount(0);
-      setBlockedCount(0);
-      setOperations([]);
-      setConflicts([]);
-      return;
-    }
-    const [counts, conflictList, ops] = await Promise.all([
-      countPendingAndFailed(userId),
-      listConflicts(userId),
-      listAllOperations(userId),
-    ]);
-    setPendingCount(counts.pending);
-    setFailedCount(counts.failed);
-    setBlockedCount(counts.blocked);
-    setConflicts(conflictList);
-    setOperations(ops);
-  }, [userId]);
-
   const attemptSync = useCallback(
     async (options: { respectBackoff?: boolean } = {}) => {
-      if (!userId || !isOnline || syncingRef.current) return;
-      syncingRef.current = true;
-      setIsSyncing(true);
-      try {
-        const result = await processSyncQueue(userId, options);
-        // RAFRAÎCHISSEMENT CIBLÉ (chantier 3, phase 7) : une opération
-        // réellement partie au serveur a fait évoluer le store local
-        // (entité repassée en `synced`, valeurs serveur fusionnées, conflit
-        // archivé). Seules les queries offline-first lisent ce store : on
-        // n'invalide QUE celles-là (marqueur `meta.offlineFirst`, cf.
-        // `lib/offline/offlineQuery.ts`), et uniquement celles montées
-        // (`refetchType: "active"`). Pas de `invalidateQueries()` global :
-        // ça relancerait au retour réseau des dizaines de requêtes
-        // online-only sans aucun rapport avec la synchronisation.
-        if (result.succeeded > 0 || result.conflicted > 0) {
-          // NOTE (chantier 4, MAJ-04) : ce refetch n'a volontairement PAS
-          // besoin d'une relecture serveur complète. La réponse de chaque
-          // opération a déjà été réappliquée en local
-          // (`applyServerRowToEntity`), donc le store IndexedDB porte déjà la
-          // version serveur de NOS écritures ; les colonnes calculées par les
-          // triggers RPG (`workouts.xp_*`) ne sont lues nulle part depuis ce
-          // store, mais par la query dédiée de l'écran de récompense
-          // (invalidée juste en dessous). La fenêtre de fraîcheur n'est donc
-          // rouverte qu'au retour du réseau (voir plus bas), là où un autre
-          // appareil a pu écrire.
-          void queryClient.invalidateQueries({
-            predicate: isOfflineFirstQuery,
-            refetchType: "active",
-          });
-          // CHANTIER 4 (MAJ-08) : seconde catégorie légitime — les queries
-          // dont la valeur est PRODUITE PAR LE SERVEUR à partir de ce qu'on
-          // vient de lui pousser (`user_stats`, `rank_promotions`,
-          // récompense de séance). Elles ne lisent pas IndexedDB, donc le
-          // ciblage `offlineFirst` du chantier 3 ne les couvrait pas : le
-          // Niveau/Rang restait figé après la synchronisation d'une séance
-          // terminée hors ligne. Toujours pas d'invalidation globale.
-          void queryClient.invalidateQueries({
-            predicate: isServerConfirmedQuery,
-            refetchType: "active",
-          });
-        }
-      } finally {
-        syncingRef.current = false;
-        setIsSyncing(false);
-        await refreshCounts();
+      if (!userId || !isOnline) return;
+      // `runSyncQueueOnce` porte le verrou de passe unique (cf.
+      // `lib/offline/syncRuntime.ts`) : un second déclencheur pendant qu'une
+      // passe tourne ne fait rien, il ne lance jamais une boucle concurrente.
+      const result = await runSyncQueueOnce(userId, options);
+      if (!result) return;
+      // RAFRAÎCHISSEMENT CIBLÉ (chantier 3, phase 7) : une opération
+      // réellement partie au serveur a fait évoluer le store local
+      // (entité repassée en `synced`, valeurs serveur fusionnées, conflit
+      // archivé). Seules les queries offline-first lisent ce store : on
+      // n'invalide QUE celles-là (marqueur `meta.offlineFirst`, cf.
+      // `lib/offline/offlineQuery.ts`), et uniquement celles montées
+      // (`refetchType: "active"`). Pas de `invalidateQueries()` global :
+      // ça relancerait au retour réseau des dizaines de requêtes
+      // online-only sans aucun rapport avec la synchronisation.
+      if (result.succeeded > 0 || result.conflicted > 0) {
+        // NOTE (chantier 4, MAJ-04) : ce refetch n'a volontairement PAS
+        // besoin d'une relecture serveur complète. La réponse de chaque
+        // opération a déjà été réappliquée en local
+        // (`applyServerRowToEntity`), donc le store IndexedDB porte déjà la
+        // version serveur de NOS écritures ; les colonnes calculées par les
+        // triggers RPG (`workouts.xp_*`) ne sont lues nulle part depuis ce
+        // store, mais par la query dédiée de l'écran de récompense
+        // (invalidée juste en dessous). La fenêtre de fraîcheur n'est donc
+        // rouverte qu'au retour du réseau (voir plus bas), là où un autre
+        // appareil a pu écrire.
+        void queryClient.invalidateQueries({
+          predicate: isOfflineFirstQuery,
+          refetchType: "active",
+        });
+        // CHANTIER 4 (MAJ-08) : seconde catégorie légitime — les queries
+        // dont la valeur est PRODUITE PAR LE SERVEUR à partir de ce qu'on
+        // vient de lui pousser (`user_stats`, `rank_promotions`,
+        // récompense de séance). Elles ne lisent pas IndexedDB, donc le
+        // ciblage `offlineFirst` du chantier 3 ne les couvrait pas : le
+        // Niveau/Rang restait figé après la synchronisation d'une séance
+        // terminée hors ligne. Toujours pas d'invalidation globale.
+        void queryClient.invalidateQueries({
+          predicate: isServerConfirmedQuery,
+          refetchType: "active",
+        });
       }
     },
-    [userId, isOnline, refreshCounts, queryClient],
+    [userId, isOnline, queryClient],
   );
 
-  // Bouton "Réessayer" / retour réseau explicite : retente immédiatement,
-  // sans respecter le backoff (l'utilisateur ou l'événement online vient
-  // de donner un signal explicite qu'il faut réessayer maintenant).
-  const syncNow = useCallback(() => attemptSync(), [attemptSync]);
+  const refresh = useCallback(() => refreshSyncRuntime(userId), [userId]);
+
+  return { userId, isOnline, attemptSync, refresh };
+}
+
+/**
+ * Garde-fou anti-double driver. Deux instances monteraient DEUX boucles de
+ * poll : le verrou de passe unique empêcherait la double synchronisation,
+ * mais pas le gaspillage ni la confusion de diagnostic. En dev, on le dit
+ * fort ; en prod le verrou suffit à préserver le comportement.
+ */
+let mountedDrivers = 0;
+
+/**
+ * DRIVER DU MOTEUR OFFLINE — à monter UNE SEULE FOIS, au niveau de l'espace
+ * authentifié (`components/OfflineSyncDriver.tsx`, monté par
+ * `routes/_authenticated.tsx`).
+ *
+ * Il porte TOUT ce qui doit tourner en permanence, quel que soit l'écran
+ * affiché : balayage périodique, reprise au retour réseau, récupération des
+ * opérations `syncing` orphelines et retry/backoff (assurés par
+ * `processSyncQueue` lui-même), et rafraîchissement de l'état partagé lu par
+ * l'UI. AUCUN rendu : ce hook ne renvoie rien et le composant qui le monte
+ * renvoie `null`.
+ *
+ * Avant ce chantier, ces effets vivaient dans `useOfflineSync`, consommé par
+ * le seul bloc « Synchronisation » du Profil : hors de cet écran, la queue
+ * n'était jamais reprise (CRIT-01).
+ */
+export function useOfflineSyncDriver(): void {
+  const { userId, isOnline, attemptSync, refresh } = useSyncRunner();
+
+  useEffect(() => {
+    mountedDrivers += 1;
+    if (mountedDrivers > 1 && import.meta.env?.DEV) {
+      console.error(
+        `[useOfflineSyncDriver] ${mountedDrivers} drivers montés simultanément — un seul composant OfflineSyncDriver doit exister (routes/_authenticated.tsx).`,
+      );
+    }
+    return () => {
+      mountedDrivers -= 1;
+    };
+  }, []);
 
   // Poll léger des compteurs — IndexedDB n'a pas d'events de changement
   // pratiques inter-onglet ; un intervalle discret suffit pour un indicateur
@@ -152,20 +162,19 @@ export function useOfflineSync(): OfflineSyncState {
   // une opération `failed` bloquée jusqu'au bouton "Réessayer" manuel). Ce
   // balayage réutilise l'intervalle déjà existant (pas de nouveau timer) et
   // respecte le backoff exponentiel (`respectBackoff: true`, déjà prévu par
-  // `processSyncQueue` mais jamais appelé automatiquement) pour ne pas
-  // marteler le réseau après plusieurs échecs. `syncingRef` (partagé avec
-  // `syncNow`) garantit qu'un seul passage tourne à la fois.
+  // `processSyncQueue`) pour ne pas marteler le réseau après plusieurs
+  // échecs. Le verrou de passe unique (`syncRuntime`) garantit qu'un seul
+  // passage tourne à la fois.
   //
   // OPTIMISATION (chantier 3, phase 8) : le balayage est suspendu quand
-  // l'onglet est masqué. Rien n'y est affiché (les compteurs ne servent qu'à
-  // l'indicateur) et l'utilisateur ne peut créer aucune opération : il n'y a
-  // donc rien à observer. Au retour au premier plan on refait immédiatement
-  // un passage complet (compteurs + tentative de sync), donc la convergence
-  // n'est jamais retardée — elle est même plus rapide qu'en attendant le
-  // prochain tick. Le polling lui-même est CONSERVÉ : il reste le seul
-  // mécanisme qui remonte à l'indicateur une écriture faite hors ligne
-  // (IndexedDB n'émet pas d'événement de changement) et le seul filet de
-  // sécurité quand `navigator.onLine` ne bascule jamais (blip 4G).
+  // l'onglet est masqué. Rien n'y est affiché et l'utilisateur ne peut créer
+  // aucune opération : il n'y a donc rien à observer. Au retour au premier
+  // plan on refait immédiatement un passage complet (compteurs + tentative de
+  // sync), donc la convergence n'est jamais retardée — elle est même plus
+  // rapide qu'en attendant le prochain tick. Le polling lui-même est
+  // CONSERVÉ : il reste le seul mécanisme qui remonte une écriture faite hors
+  // ligne (IndexedDB n'émet pas d'événement de changement) et le seul filet
+  // de sécurité quand `navigator.onLine` ne bascule jamais (blip 4G).
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | null = null;
 
@@ -174,7 +183,7 @@ export function useOfflineSync(): OfflineSyncState {
       interval = null;
     };
     const tick = () => {
-      refreshCounts();
+      void refresh();
       void attemptSync({ respectBackoff: true });
     };
     const start = () => {
@@ -192,7 +201,7 @@ export function useOfflineSync(): OfflineSyncState {
       start();
     };
 
-    refreshCounts();
+    void refresh();
     if (!isHidden()) start();
     if (typeof document !== "undefined") {
       document.addEventListener("visibilitychange", onVisibilityChange);
@@ -203,7 +212,7 @@ export function useOfflineSync(): OfflineSyncState {
         document.removeEventListener("visibilitychange", onVisibilityChange);
       }
     };
-  }, [refreshCounts, attemptSync]);
+  }, [refresh, attemptSync]);
 
   // Retour réseau → on relance la queue automatiquement.
   useEffect(() => {
@@ -212,18 +221,50 @@ export function useOfflineSync(): OfflineSyncState {
       // réellement utile (l'appareil a pu manquer des écritures faites
       // ailleurs) : on périme la fenêtre de fraîcheur avant de relancer.
       markWorkoutsServerRefreshStale();
-      syncNow();
+      void attemptSync();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOnline, userId]);
+}
+
+/**
+ * Hook de LECTURE de l'état de synchronisation (+ actions utilisateur
+ * explicites). Il ne porte AUCUN effet nécessaire au fonctionnement du
+ * moteur : celui-ci tourne en permanence dans `useOfflineSyncDriver`, monté
+ * globalement. Ce hook peut donc être monté, démonté ou jamais monté du tout
+ * sans que la synchronisation ne s'arrête — c'est précisément le correctif
+ * CRIT-01.
+ *
+ * Il alimente le bloc « Synchronisation » du Profil (`SyncStatusCard`) et le
+ * panneau détaillé (`SyncQueueSheet`) : statut, file complète, conflits, et
+ * les actions « Réessayer », « Retirer de la file », résolution de conflit.
+ */
+export function useOfflineSync(): OfflineSyncState {
+  const { userId, isOnline, attemptSync, refresh } = useSyncRunner();
+  const runtime = useSyncExternalStore(
+    subscribeSyncRuntime,
+    getSyncRuntimeSnapshot,
+    getSyncRuntimeServerSnapshot,
+  );
+
+  // Lecture immédiate à l'ouverture de l'écran : on n'attend pas le prochain
+  // tick du driver pour afficher l'état réel de la file.
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  // Bouton "Réessayer" / action explicite : retente immédiatement, sans
+  // respecter le backoff (l'utilisateur vient de donner un signal explicite
+  // qu'il faut réessayer maintenant).
+  const syncNow = useCallback(() => attemptSync(), [attemptSync]);
 
   const resolveConflict = useCallback(
     async (conflictId: string, strategy: ConflictResolutionStrategy) => {
       await resolveConflictEngine(conflictId, strategy);
-      await refreshCounts();
+      await refresh();
       if (isOnline) await syncNow();
     },
-    [refreshCounts, isOnline, syncNow],
+    [refresh, isOnline, syncNow],
   );
 
   // Actions explicites sur une opération bloquée (panneau de
@@ -233,28 +274,28 @@ export function useOfflineSync(): OfflineSyncState {
   const retryOperation = useCallback(
     async (operationId: string) => {
       await retryBlockedOperation(operationId);
-      await refreshCounts();
+      await refresh();
       if (isOnline) await syncNow();
     },
-    [refreshCounts, isOnline, syncNow],
+    [refresh, isOnline, syncNow],
   );
 
   const discardOperation = useCallback(
     async (operationId: string) => {
       await discardBlockedOperation(operationId);
-      await refreshCounts();
+      await refresh();
     },
-    [refreshCounts],
+    [refresh],
   );
 
   return {
     isOnline,
-    isSyncing,
-    pendingCount,
-    failedCount,
-    blockedCount,
-    operations,
-    conflicts,
+    isSyncing: runtime.isSyncing,
+    pendingCount: userId ? runtime.pendingCount : 0,
+    failedCount: userId ? runtime.failedCount : 0,
+    blockedCount: userId ? runtime.blockedCount : 0,
+    operations: userId ? runtime.operations : [],
+    conflicts: userId ? runtime.conflicts : [],
     syncNow,
     resolveConflict,
     retryOperation,

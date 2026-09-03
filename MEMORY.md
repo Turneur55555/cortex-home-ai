@@ -4234,3 +4234,74 @@ régressés).
   projet Supabase de PRODUCTION (`bcwfvpwxzlmkxobvbtzp`, identifiants en dur, aucun `.env` ici) et
   y écrirait de vraies séances. Seuls `npm run build` et un smoke test Chromium réel sur `/login`
   (rendu OK, **0 erreur console**) ont été exécutés.
+
+## Chantier « Fiabilisation du moteur offline » — driver global + boucles de retry (2026-09-03, branche `claude/offline-engine-reliability-j5udmo`)
+Suite de l'audit global : deux groupes strictement liés au moteur de synchronisation (aucun autre
+domaine touché — pas d'hydratation, pas de signOut, pas de RLS, pas de refonte de la sync).
+
+### A — Driver global de synchronisation (CRIT-01, MIN-02)
+- **Cause** : depuis l'audit UI du 01/09 (indicateur global retiré), TOUS les effets du moteur
+  (poll 4 s, reprise au retour réseau, appel à `processSyncQueue`, donc aussi la reprise des
+  orphelines `syncing`) vivaient dans `useOfflineSync`, hook consommé par le SEUL bloc
+  « Synchronisation » du Profil. Hors de cet écran, plus AUCUNE passe de queue n'était déclenchée.
+- **Correctif** : nouveau composant NON VISUEL `src/components/OfflineSyncDriver.tsx` (rend `null`),
+  monté **une seule fois** dans `routes/_authenticated.tsx`. Il porte les effets via le nouveau hook
+  `useOfflineSyncDriver()` (même fichier `hooks/useOfflineSync.ts`, cœur commun `useSyncRunner`
+  partagé avec les actions de l'UI — une seule implémentation de l'invalidation ciblée
+  `isOfflineFirstQuery` / `isServerConfirmedQuery`).
+- **Nouveau `src/lib/offline/syncRuntime.ts`** (zéro React) : état PARTAGÉ (compteurs, file,
+  conflits, `isSyncing`) exposé par `subscribe`/`getSnapshot` (`useSyncExternalStore`), + **verrou de
+  passe unique** `runSyncQueueOnce` qui remplace l'ancien `syncingRef` local au hook (un ref par
+  instance n'aurait rien protégé avec plusieurs consommateurs). Comparaison de signature avant
+  notification : le poll ne provoque plus de rendu inutile.
+- **`useOfflineSync` est devenu un hook de LECTURE + actions** (« Réessayer », « Retirer de la file »,
+  résolution de conflit). `SyncStatusCard` ne porte plus aucun effet ; l'ancien indicateur global
+  n'est PAS revenu ; l'interface Profil → Paramètres → Synchronisation est inchangée.
+- **`syncUiPlacement.test.ts` réécrit** (MIN-02) : il n'impose plus que `useOfflineSync` soit
+  consommé par le seul Profil. Il vérifie maintenant : driver monté au niveau authentifié global,
+  **une seule** occurrence de `<OfflineSyncDriver` dans tout `src/` (commentaires écartés),
+  `SyncStatusCard` = UI de lecture (aucun `useEffect`/`setInterval`/`visibilitychange`),
+  `SyncQueueSheet` toujours monté depuis le seul bloc Profil, et `processSyncQueue` importé
+  uniquement par `syncRuntime.ts` (verrou) et `syncFlush.ts` (coup de pouce ponctuel, sans timer).
+- **Nouveau test d'intégration React** `src/components/OfflineSyncDriver.test.tsx` (jsdom +
+  `fake-indexeddb` + faux client Supabase, aucun navigateur réel) : opération enfilée HORS LIGNE
+  alors que le Profil n'est JAMAIS monté → seul `<OfflineSyncDriver />` est rendu → event `online`
+  réel → l'opération part et quitte la file. + le poll fait partir une écriture sans event `online`,
+  + une fois démonté le driver n'entretient plus aucune boucle. Vérifié « faux négatif » : 2 des 3
+  tests échouent si le driver ne monte plus les effets.
+
+### B — Boucles de retry (MAJ-01, MIN-06, MIN-17)
+- **MAJ-01 — `PGRST116` pouvait encore boucler.** La garde « ligne serveur absente » du correctif du
+  02/09 laissait l'UPDATE repartir dès qu'un `create` existait dans la file, `blocked` COMPRIS — or
+  un `create` bloqué ne repart jamais seul : la ligne n'apparaîtrait jamais et l'UPDATE échouait en
+  `PGRST116` à chaque passage. Nouveau `findAwaitedCreateForRecord` (`syncQueue.ts`) restreint aux
+  statuts réellement vivants (`pending`/`failed`/`syncing`) ; `findPendingCreateForRecord` reste
+  inchangée pour `repository.ts` (fusion d'un patch dans un `create` non parti, `blocked` compris —
+  question différente). Un `create` bloqué ⇒ conflit explicite `server_row_deleted`, jamais une
+  boucle. Le cas « create encore vivant » est INCHANGÉ (l'UPDATE continue de l'attendre).
+- **MIN-06 — `keep-local` refusé pour `server_row_deleted`.** L'UI masquait déjà le choix ; le moteur
+  (`resolveConflict`) le refuse désormais aussi : rien n'est ré-enfilé, le conflit RESTE en attente
+  d'arbitrage et la donnée locale est conservée. Seule issue réelle : « garder la version serveur »
+  = abandon explicite de la modification. `updated_at_mismatch` **strictement inchangé** (test de
+  non-régression dédié `5ter`).
+- **MIN-17 — `retryCount` borné.** Nouvelle constante `MAX_RETRY_ATTEMPTS = 10` (`syncEngine.ts`, à
+  côté du backoff, aucune valeur magique dispersée) ≈ 3,5 min d'insistance réelle. Au-delà,
+  l'opération passe dans l'état de blocage DÉJÀ existant (`blocked`) : plus de retry automatique,
+  mais elle reste en file, visible dans le panneau avec son erreur RÉELLE (complétée, jamais
+  remplacée, par `tentatives=10/10`). Second point de contrôle en tête de `processSyncQueue` car
+  `reclaimStaleSyncingOperations` incrémente aussi `retryCount` (reprise d'orpheline) — bloquée
+  avant tout envoi réseau. **Conséquence assumée** : `retryBlockedOperation` (« Réessayer quand
+  même ») et le déblocage par nouveau payload (`updateOperationPayload`) remettent `retryCount` à 0
+  — sinon l'action serait sans effet (reblocage immédiat) ; `lastError`/`lastErrorCode` conservés.
+  Backoff, erreurs temporaires et conflits archivés inchangés.
+- **Nouveau `src/lib/offline/syncRetryBounds.test.ts`** (6 tests) : plafond atteint → `blocked` avec
+  erreur visible et plus aucun appel réseau, retries normaux intacts, « Réessayer quand même »
+  efficace, compteur gonflé par les orphelines bloqué avant envoi, MAJ-01 (create bloqué → conflit,
+  vérifié « faux négatif » : le test échoue avec l'ancien `findPendingCreateForRecord`), MAJ-01
+  inverse (create vivant → comportement inchangé).
+
+### Validation
+`npx vitest run` **1737 passed / 60 skipped / 0 échec** (126 fichiers), `npx tsc --noEmit` 0 erreur,
+`npm run build` OK (build client + shell offline + service worker). `eslint .` : **1346 problèmes,
+chiffre IDENTIQUE avant/après le chantier** (mesuré par `git stash`) — préexistants (prettier sur
+tout le dépôt), zéro problème ajouté.

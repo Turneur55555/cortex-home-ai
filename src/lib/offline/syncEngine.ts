@@ -5,7 +5,7 @@ import { buildUpdatePayload, getSupabaseTableName } from "./repository";
 import {
   claimOperation,
   enqueueOperation,
-  findPendingCreateForRecord,
+  findAwaitedCreateForRecord,
   hasLiveDependencies,
   hasOtherQueuedOperations,
   listPendingOperations,
@@ -44,6 +44,33 @@ import type {
 // plusieurs échecs consécutifs sans bloquer indéfiniment un retry manuel.
 const BACKOFF_BASE_MS = 2_000;
 const BACKOFF_MAX_MS = 30_000;
+
+/**
+ * PLAFOND DE TENTATIVES AUTOMATIQUES (MIN-17, audit du 02/09/2026).
+ *
+ * Avant : `retryCount` n'était borné par RIEN. Une erreur sans code Postgres
+ * (réseau, timeout, 5xx, ou n'importe quel code inconnu de
+ * `NON_RETRYABLE_PG_ERROR_CODES`) laissait l'opération en `failed`, donc
+ * retentée à chaque passage du moteur, indéfiniment — le backoff plafonne le
+ * RYTHME (30 s) mais n'arrête jamais la boucle, et seul un passage en
+ * `blocked` (jamais atteint pour ces erreurs) en sort.
+ *
+ * Maintenant : au bout de `MAX_RETRY_ATTEMPTS` tentatives, l'opération passe
+ * dans l'état de blocage DÉJÀ existant du moteur (`blocked`) — plus aucun
+ * retry automatique, mais elle reste dans la file, VISIBLE dans le panneau de
+ * synchronisation avec son erreur réelle, et l'utilisateur garde les deux
+ * actions existantes : « Réessayer quand même » (`retryBlockedOperation`, qui
+ * rend un budget de tentatives neuf) et « Retirer de la file »
+ * (`discardBlockedOperation`, qui ne touche JAMAIS à la donnée locale).
+ *
+ * Choix de la valeur (10), à partir du backoff réel : 2 + 4 + 8 + 16 + 30 × 6
+ * ≈ 3,5 minutes d'insistance avant abandon automatique. Assez pour absorber
+ * une coupure réseau ordinaire (tunnel, ascenseur, bascule wifi/4G) sans
+ * jamais transformer une panne durable en boucle éternelle. Les retries
+ * NORMAUX sont donc intacts : aucune opération qui réussissait avant ne
+ * bloque désormais.
+ */
+export const MAX_RETRY_ATTEMPTS = 10;
 
 function isDueForRetry(op: SyncOperation): boolean {
   if (op.status !== "failed") return true;
@@ -291,8 +318,16 @@ async function applyOperation(
         // (« ne réécrit l'entité que s'il ne reste AUCUNE opération en
         // attente ») dès que le `create` finit par réussir — l'écran
         // repasserait alors brièvement la séance en `active`.
+        // MAJ-01 (02/09/2026) : on ne cherche QUE les `create` encore VIVANTS
+        // (`pending` / `failed` / `syncing`). Un `create` `blocked` ne
+        // repartira JAMAIS tout seul : la ligne n'apparaîtra pas côté serveur,
+        // et faire attendre l'UPDATE dessus, c'est exactement la boucle de
+        // retry infinie qu'on corrige — l'UPDATE échouerait en PGRST116 à
+        // chaque passage, sans fin. On traite donc ce cas comme ce qu'il est :
+        // un conflit explicite à arbitrer (`server_row_deleted`), ce qui
+        // préserve intégralement la modification locale.
         const stillAwaitingCreate = Boolean(
-          await findPendingCreateForRecord(op.table, op.recordLocalId),
+          await findAwaitedCreateForRecord(op.table, op.recordLocalId),
         );
         if (!stillAwaitingCreate) {
           if (entity) {
@@ -380,18 +415,28 @@ async function applyOperation(
     // dépendance (FK) qu'une autre opération de la file peut encore
     // satisfaire — cf. `isBlockingSyncError`.
     const error = extractSyncError(err);
+    const retryCount = op.retryCount + 1;
     const permanent = isBlockingSyncError(error, {
       hasOtherQueuedOperations: await hasOtherQueuedOperations(op.userId, op.id),
     });
-    logSyncError(op, supabaseTable, error, permanent);
+    // MIN-17 : même une erreur classée « temporaire » finit par épuiser son
+    // budget de tentatives. On garde l'erreur RÉELLE en tête de `lastError`
+    // (c'est elle que lit l'utilisateur, cf. `describeSyncFailure`) et on
+    // ajoute le compteur en partie technique — jamais un message générique
+    // qui masquerait la cause.
+    const exhausted = !permanent && retryCount >= MAX_RETRY_ATTEMPTS;
+    const summary = exhausted
+      ? `${formatSyncErrorSummary(error)} | tentatives=${retryCount}/${MAX_RETRY_ATTEMPTS}`
+      : formatSyncErrorSummary(error);
+    logSyncError(op, supabaseTable, error, permanent || exhausted);
     await updateOperationStatus(op.id, {
-      status: permanent ? "blocked" : "failed",
-      retryCount: op.retryCount + 1,
-      lastError: formatSyncErrorSummary(error),
+      status: permanent || exhausted ? "blocked" : "failed",
+      retryCount,
+      lastError: summary,
       lastErrorCode: error.code,
       lastAttemptAt: new Date().toISOString(),
     });
-    return permanent ? "blocked" : "retry";
+    return permanent || exhausted ? "blocked" : "retry";
   }
 }
 
@@ -450,6 +495,25 @@ export async function processSyncQueue(
     // le problème — il relit l'opération en base de façon atomique et
     // renvoie l'état PERSISTÉ, `baseUpdatedAt` recalé compris.
     if (options.respectBackoff && !isDueForRetry(op)) continue;
+
+    // PLAFOND DE TENTATIVES (MIN-17) — second point de contrôle, ici parce
+    // que `retryCount` n'augmente pas QUE dans le `catch` d'`applyOperation` :
+    // `reclaimStaleSyncingOperations` le fait aussi à chaque reprise
+    // d'orpheline. Une opération qui aurait épuisé son budget par ce chemin
+    // (ou une opération persistée avant l'introduction du plafond) est figée
+    // ici, avant tout envoi, dans l'état de blocage déjà existant — jamais
+    // supprimée, toujours visible avec son erreur dans le panneau, et
+    // débloquable par « Réessayer quand même ».
+    if (op.retryCount >= MAX_RETRY_ATTEMPTS) {
+      await updateOperationStatus(op.id, {
+        status: "blocked",
+        lastError:
+          op.lastError ??
+          `Trop de tentatives infructueuses (${op.retryCount}/${MAX_RETRY_ATTEMPTS}).`,
+      });
+      result.blocked += 1;
+      continue;
+    }
 
     // BARRIÈRE DE DÉPENDANCE (chantier 1 bis, DISC-01b) — OPT-IN, jamais
     // globale. Une opération qui déclare des `dependsOnRecords` n'est pas
@@ -536,6 +600,25 @@ export async function resolveConflict(
   const entity = (await db.get("entities", key)) as OfflineEntity | undefined;
 
   if (strategy === "keep-local") {
+    // GARDE-FOU MOTEUR (MIN-17/MIN-06, 02/09/2026) — « garder ma version »
+    // n'a AUCUN sens pour un conflit `server_row_deleted` : la ligne n'existe
+    // plus côté serveur, et rejouer l'`update` local produirait exactement le
+    // même PGRST116 → un nouveau conflit, au mieux, une insistance stérile au
+    // pire. L'UI masque déjà ce choix (`SyncQueueSheet`) ; le moteur le refuse
+    // désormais aussi, pour qu'aucun appelant (code futur, conflit rejoué,
+    // test) ne puisse contourner la règle.
+    //
+    // Refuser = NE RIEN CHANGER : le conflit reste en attente d'arbitrage et
+    // la donnée locale est conservée telle quelle (jamais supprimée, jamais
+    // écrasée). Les deux seules issues réelles restent celles du modèle
+    // actuel : accepter la disparition serveur (« keep-server », qui abandonne
+    // explicitement la modification locale) ou laisser le conflit ouvert.
+    if (conflict.reason === "server_row_deleted") {
+      console.error(
+        `[syncEngine] résolution « garder ma version » refusée pour un conflit server_row_deleted (id=${conflictId}, table=${conflict.table}, record=${conflict.recordLocalId}) : la ligne n'existe plus côté serveur. Conflit laissé en attente, donnée locale conservée.`,
+      );
+      return;
+    }
     // Conflit persisté avant l'ajout de `opType` (cf. types.ts) : à l'époque
     // seul un `update` pouvait être rejoué — on garde cette lecture.
     const opType = conflict.opType ?? "update";
@@ -593,14 +676,21 @@ export async function resolveConflict(
  * Action utilisateur explicite sur une opération bloquée : « Réessayer
  * quand même ». La remet en file (`pending`) — utile quand la cause a
  * disparu entre-temps (application mise à jour, ligne parente recréée,
- * droits corrigés). Le compteur de tentatives et l'erreur précédente sont
- * conservés : on ne réécrit pas l'historique de diagnostic.
+ * droits corrigés).
+ *
+ * L'erreur précédente (`lastError`/`lastErrorCode`) est CONSERVÉE : on ne
+ * réécrit pas l'historique de diagnostic. Le compteur de tentatives, lui, est
+ * remis à zéro depuis l'introduction du plafond (`MAX_RETRY_ATTEMPTS`,
+ * MIN-17) : le garder ferait rebloquer l'opération au premier passage suivant
+ * sans qu'aucune tentative n'ait lieu — l'action utilisateur serait sans
+ * effet. Un budget neuf est exactement ce que demande un « réessayer » manuel
+ * (le backoff repart lui aussi de zéro).
  */
 export async function retryBlockedOperation(operationId: string): Promise<void> {
   const db = await getOfflineDb();
   const op = await db.get("syncQueue", operationId);
   if (!op || op.status !== "blocked") return;
-  await updateOperationStatus(operationId, { status: "pending" });
+  await updateOperationStatus(operationId, { status: "pending", retryCount: 0 });
 }
 
 /**
