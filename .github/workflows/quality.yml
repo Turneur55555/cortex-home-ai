@@ -96,6 +96,36 @@ jobs:
 
           echo "✅ Suite complète exécutée — seuls les tests d'intégration env-gated sont skippés."
 
+  # ── Lint bloquant (audit MAJ-06) ──────────────────────────────────────────
+  # `npm run lint` n'était exécuté par AUCUN workflow, et sortait sur 1189
+  # erreurs (1158 Prettier + 31 réelles). Ces erreurs ayant été corrigées
+  # (voir les deux commits précédents), le lint peut redevenir un vrai
+  # garde-fou : ce job échoue sur toute NOUVELLE erreur ESLint ou tout écart
+  # de formatage Prettier.
+  #
+  # Les 157 warnings restants (no-console, no-explicit-any,
+  # react-refresh/only-export-components, no-unused-vars) sont dette
+  # historique. Ils restent VISIBLES dans les logs et ne sont ni masqués ni
+  # transformés en erreurs : les résorber demande de vraies modifications de
+  # code applicatif, hors du périmètre « qualité/CI ». Aucun seuil
+  # `--max-warnings` n'est posé tant que la décision de les traiter n'est pas
+  # prise, pour ne pas figer un nombre magique.
+  lint:
+    name: ESLint + Prettier
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
   # ── Scénario offline de bout en bout (audit MIN-05) ───────────────────────
   # Playwright n'était intégré à AUCUN workflow, et aucun parcours offline
   # réel n'était exécuté automatiquement.
