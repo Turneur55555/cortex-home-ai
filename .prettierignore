@@ -11,3 +11,4 @@ e2e
 playwright.config.ts
 test-results
 playwright-report
+vitest-report.json

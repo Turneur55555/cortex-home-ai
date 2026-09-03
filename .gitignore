@@ -44,3 +44,6 @@ dist-ssr
 supabase/.temp/
 
 supabase/.temp/
+
+# Rapport JSON de la suite Vitest (garde-fou anti-skip, quality.yml)
+vitest-report.json

@@ -1,0 +1,97 @@
+name: Quality
+
+# Garde-fou qualité du code applicatif, en complément de typecheck.yml (tsc)
+# et des workflows ciblés (meal-slugs-check.yml, rls-tests.yml).
+#
+# ── Pourquoi ce workflow (audit MAJ-05) ────────────────────────────────────
+# La suite Vitest compte ~1800 tests, mais AUCUN workflow ne l'exécutait en
+# entier : `meal-slugs-check.yml` ne lance que 2 fichiers (et seulement quand
+# `src/lib/nutrition/**` change), `rls-tests.yml` un seul (et seulement quand
+# `src/lib/security/**` ou les migrations changent). Autrement dit, une
+# régression dans le moteur offline, les Chroniques, les Saisons ou la
+# récupération musculaire passait la CI sans être vue. Ce job exécute la suite
+# COMPLÈTE (`npm test` → `vitest run`, même commande qu'en local) sur toute PR
+# et sur chaque push `main`, et échoue si un seul test échoue.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  vitest:
+    name: Suite Vitest complète
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+
+      - run: npm ci
+
+      # `npm test` = `vitest run` (vitest.config.ts couvre src/**, scripts/**
+      # et supabase/functions/**). `--passWithNoTests=false` : une config
+      # cassée qui ne collecterait plus aucun fichier doit échouer, pas verdir.
+      # Le rapport JSON alimente le garde-fou anti-skip de l'étape suivante.
+      - name: Suite Vitest complète
+        run: >-
+          npm test --
+          --passWithNoTests=false
+          --reporter=default
+          --reporter=json
+          --outputFile=vitest-report.json
+
+      # Leçon de rls-tests.yml : un test qui ne s'exécute pas n'est pas une
+      # réussite. Deux fichiers sont volontairement `describe.skip` sans
+      # secrets Supabase (tests d'intégration qui tapent la vraie base) :
+      #   - src/lib/security/rls.test.ts            (couvert par rls-tests.yml)
+      #   - src/lib/nutrition/nutritionMealCheck.test.ts
+      # Tout AUTRE test skippé signale un `.skip` ajouté pour verdir la CI :
+      # ce job échoue alors en nommant le fichier fautif.
+      - name: Garde-fou anti-skip
+        if: always()
+        run: |
+          REPORT=vitest-report.json
+          if [ ! -f "$REPORT" ]; then
+            echo "::error::Rapport Vitest introuvable — exécution non vérifiable."
+            exit 1
+          fi
+
+          PASSED=$(jq '[.testResults[].assertionResults[] | select(.status=="passed")] | length' "$REPORT")
+          FAILED=$(jq '[.testResults[].assertionResults[] | select(.status=="failed")] | length' "$REPORT")
+          SKIPPED=$(jq '[.testResults[].assertionResults[] | select(.status=="pending" or .status=="skipped" or .status=="todo")] | length' "$REPORT")
+          echo "Vitest — passés: $PASSED, skippés: $SKIPPED, échoués: $FAILED"
+
+          if [ "$PASSED" -eq 0 ]; then
+            echo "::error::Aucun test n'a réellement été exécuté."
+            exit 1
+          fi
+
+          UNEXPECTED=$(jq -r --arg root "$PWD/" '
+            [ .testResults[]
+              | select([.assertionResults[] | select(.status=="pending" or .status=="skipped" or .status=="todo")] | length > 0)
+              | (.name | ltrimstr($root))
+            ]
+            | map(select(
+                . != "src/lib/security/rls.test.ts"
+                and . != "src/lib/nutrition/nutritionMealCheck.test.ts"
+              ))
+            | .[]
+          ' "$REPORT")
+
+          if [ -n "$UNEXPECTED" ]; then
+            echo "::error::Test(s) skippé(s) hors des deux fichiers d'intégration env-gated :"
+            echo "$UNEXPECTED" | sed 's/^/   - /'
+            echo "Un test désactivé pour faire passer la CI n'est pas une réussite."
+            exit 1
+          fi
+
+          echo "✅ Suite complète exécutée — seuls les tests d'intégration env-gated sont skippés."
