@@ -20,6 +20,7 @@ import {
   isBlockingSyncError,
   type SyncErrorDetails,
 } from "./syncErrors";
+import { serverRewritesRowAfterReturning } from "./serverRewrittenRows";
 import type {
   ConflictReason,
   ConflictRecord,
@@ -157,6 +158,46 @@ async function fetchServerRow(
   return (data as { id: string; updated_at?: string } | null) ?? null;
 }
 
+/**
+ * CHANTIER 3 — MAJ-02. Renvoie la ligne réellement PERSISTÉE côté serveur
+ * après une mutation réussie, quand le `RETURNING` de cette mutation ne peut
+ * pas être la vérité.
+ *
+ * Pour toute table ordinaire, la réponse `.select().single()` EST la vérité et
+ * cette fonction la renvoie telle quelle — aucun aller-retour supplémentaire,
+ * comportement strictement inchangé. Pour les tables déclarées dans
+ * `serverRewrittenRows.ts` (aujourd'hui `workouts`), un trigger AFTER réécrit
+ * la ligne APRÈS que le `RETURNING` a été calculé : la valeur reçue est déjà
+ * périmée à l'arrivée, et la mémoriser comme `serverUpdatedAt` fabrique un
+ * faux conflit `updated_at_mismatch` à la modification locale suivante. On
+ * relit donc la ligne.
+ *
+ * TOLÉRANCE AUX PANNES : l'opération a DÉJÀ réussi côté serveur quand cette
+ * relecture a lieu. Un échec de relecture (réseau coupé juste après, timeout)
+ * ne doit donc jamais transformer un succès en échec — on retombe sur la
+ * réponse du `RETURNING`, c'est-à-dire exactement le comportement d'avant ce
+ * correctif. Une ligne introuvable (supprimée dans l'intervalle par un autre
+ * appareil) suit la même règle : rien de mieux à mémoriser que ce que le
+ * serveur vient de nous renvoyer.
+ */
+async function readAuthoritativeRow(
+  op: SyncOperation,
+  supabaseTable: string,
+  returnedRow: unknown,
+): Promise<unknown> {
+  if (!serverRewritesRowAfterReturning(op.table)) return returnedRow;
+  try {
+    const fresh = await fetchServerRow(supabaseTable, op.recordLocalId);
+    return fresh ?? returnedRow;
+  } catch (err) {
+    console.error(
+      `[syncEngine] relecture post-écriture impossible sur ${supabaseTable} (id=${op.recordLocalId}) — on conserve la réponse RETURNING (MAJ-02) :`,
+      err,
+    );
+    return returnedRow;
+  }
+}
+
 async function markConflict<T>(params: {
   op: SyncOperation<T>;
   entity: OfflineEntity<T>;
@@ -271,7 +312,7 @@ async function applyOperation(
         `création ${supabaseTable}`,
       );
       if (error) throw error;
-      await applyServerRowToEntity(op, data);
+      await applyServerRowToEntity(op, await readAuthoritativeRow(op, supabaseTable, data));
       return "done";
     }
 
@@ -370,7 +411,7 @@ async function applyOperation(
         `modification ${supabaseTable}`,
       );
       if (error) throw error;
-      await applyServerRowToEntity(op, data);
+      await applyServerRowToEntity(op, await readAuthoritativeRow(op, supabaseTable, data));
       return "done";
     }
 

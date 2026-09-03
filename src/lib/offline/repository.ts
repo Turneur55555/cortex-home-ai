@@ -264,14 +264,44 @@ export function createOfflineRepository<T extends BaseRow>(
       if (!entity || entity.deleted) {
         throw new Error(`Offline update: entité introuvable (${table}/${id})`);
       }
+      // Vers le serveur, on n'envoie QUE le patch demandé, débarrassé des
+      // colonnes du contrat (immuables ou propriété du serveur).
+      const payload = buildUpdatePayload<T>(patch);
+      const hasSyncableChange = Object.keys(payload).length > 0;
+
+      // MIN-16 (chantier 3) — UNE MODIFICATION SANS CONTENU SYNCHRONISABLE
+      // NE DOIT RIEN AVANCER DU TOUT.
+      //
+      // Avant : un patch ne portant que des colonnes du contrat (`{}`,
+      // `{ updated_at }`, `{ id }`…) réécrivait quand même l'entité avec
+      // `data.updated_at = now()` ET `localUpdatedAt = now()`, alors
+      // qu'AUCUNE opération n'était enfilée. Le store local se retrouvait
+      // donc à affirmer une version (`updated_at` local, plus récent que
+      // `serverUpdatedAt`) que le serveur ne verrait JAMAIS, puisque rien
+      // n'était envoyé — et `localUpdatedAt`, qui est précisément
+      // l'horodatage présenté à l'utilisateur comme « votre version » dans
+      // l'arbitrage de conflit (`ConflictRecord.localUpdatedAt`), désignait
+      // une modification qui n'existe pas.
+      //
+      // Maintenant : sans changement réellement synchronisable, `update()`
+      // est un NO-OP strict — aucune écriture IndexedDB, aucun timestamp
+      // avancé, aucun changement de `syncStatus`, y compris quand une
+      // création est encore en attente (il n'y a alors rien de plus à
+      // fusionner dans son payload : les colonnes du contrat y sont déjà,
+      // et elles sont immuables). Une modification RÉELLEMENT
+      // synchronisable, elle, avance le timestamp local exactement comme
+      // avant — c'est la seule chose qui doit le faire.
+      if (!hasSyncableChange) return entity.data;
+
       const now = new Date().toISOString();
       // Localement, l'entité reste une ligne COMPLÈTE (c'est ce que lisent
       // les écrans) — `updated_at` local sert d'horodatage optimiste en
       // attendant la valeur serveur renvoyée par la synchronisation.
-      const newData = { ...entity.data, ...patch, updated_at: now } as T;
-      // Vers le serveur, en revanche, on n'envoie QUE le patch demandé.
-      const payload = buildUpdatePayload<T>(patch);
-      const hasSyncableChange = Object.keys(payload).length > 0;
+      // On applique le patch DÉBARRASSÉ des colonnes du contrat : ce qui
+      // n'a pas le droit de partir vers le serveur n'a pas davantage le
+      // droit de réécrire l'identité de la ligne en local (`id`,
+      // `user_id`, `created_at`) ni de doubler l'horloge serveur.
+      const newData = { ...entity.data, ...payload, updated_at: now } as T;
 
       // Si une création n'a pas encore été synchronisée, fusionne le patch
       // dans SON payload plutôt que d'enfiler un `update` séparé — il
@@ -291,16 +321,15 @@ export function createOfflineRepository<T extends BaseRow>(
         ...entity,
         data: newData,
         localUpdatedAt: now,
-        // Un patch qui ne touche QUE des colonnes du contrat n'a rien à
-        // envoyer : le marquer `pending` laisserait l'entité bloquée dans cet
-        // état sans opération correspondante dans la queue.
-        syncStatus: pendingCreate || hasSyncableChange ? "pending" : entity.syncStatus,
+        // À ce stade il y a forcément quelque chose à synchroniser — le cas
+        // « rien à envoyer » est sorti plus haut par le no-op strict.
+        syncStatus: "pending",
       };
       await db.put("entities", updatedEntity as OfflineEntity);
 
       if (pendingCreate) {
         await updateOperationPayload(pendingCreate.id, newData);
-      } else if (hasSyncableChange) {
+      } else {
         await enqueueOperation<Partial<T>>({
           userId,
           table,
@@ -362,17 +391,84 @@ export function createOfflineRepository<T extends BaseRow>(
 }
 
 /**
+ * CHANTIER 3 — MAJ-03 : options de RÉCONCILIATION DES SUPPRESSIONS SERVEUR.
+ *
+ * L'hydratation est additive par défaut, et doit le rester : une ligne
+ * absente d'une réponse serveur n'est PAS une preuve de suppression. Elle
+ * peut manquer parce que la réponse est paginée, tronquée par la limite
+ * `max-rows` de PostgREST, filtrée (fenêtre d'historique, RLS), ou parce que
+ * la requête a partiellement échoué. Supprimer sur cette base détruirait des
+ * données utilisateur — interdit (cf. `docs/architecture/offline-data-integrity.md`).
+ *
+ * `reconcileWithin` est le SEUL moyen d'autoriser une suppression locale, et
+ * c'est une AFFIRMATION FORTE de l'appelant :
+ *
+ *   « `rows` contient TOUTES les lignes serveur de cette table, pour cet
+ *     utilisateur, qui satisfont ce prédicat — j'ai la preuve que le jeu de
+ *     données est complet et borné. »
+ *
+ * Cette preuve ne peut venir que du site d'appel (c'est lui qui connaît la
+ * requête, sa pagination et ses filtres). Elle repose aujourd'hui sur le
+ * TOTAL EXACT annoncé par la base (`count: "exact"`), jamais sur une
+ * heuristique de taille de réponse — « moins de lignes que demandé » ne
+ * distingue pas « fin du jeu de données » de « réponse tronquée par le
+ * `max-rows` du serveur », et cette distinction autorise des suppressions.
+ * Deux formes utilisées aujourd'hui, cf.
+ * `use-fitness.ts::fetchWorkoutsIntoLocalStore` :
+ *   - « le nombre de séances reçues ATTEINT le total exact » → le jeu est
+ *     complet pour cet utilisateur ;
+ *   - « j'ai demandé les enfants d'une liste EXPLICITE de parents, page par
+ *     page jusqu'à atteindre leur total exact, sans aucune erreur » → le jeu
+ *     est complet pour ces parents-là, et le prédicat borne la
+ *     réconciliation à eux.
+ *
+ * Même avec cette affirmation, la fonction ne supprime une ligne locale que
+ * si TOUTES ces conditions sont réunies :
+ *   1. elle est `synced` — aucune modification locale non confirmée
+ *      (`pending`/`failed`/`conflict` sont laissées intactes : elles relèvent
+ *      de la file et du conflict detector, jamais d'un refresh) ;
+ *   2. aucune opération ne la vise encore dans la sync queue (ceinture et
+ *      bretelles : une opération vivante sur un enregistrement `synced` est
+ *      anormale, mais on ne prend pas le risque) ;
+ *   3. elle n'est pas déjà marquée supprimée localement ;
+ *   4. elle tombe dans le périmètre prouvé complet (`reconcileWithin`).
+ */
+export interface HydrationOptions<T> {
+  /**
+   * Périmètre PROUVÉ COMPLET par l'appelant — prédicat évalué sur la ligne
+   * LOCALE. Absent (cas par défaut) : hydratation strictement additive,
+   * aucune suppression locale, comportement historique inchangé.
+   */
+  reconcileWithin?: (row: T) => boolean;
+}
+
+export interface HydrationResult {
+  /**
+   * Ids des enregistrements locaux retirés parce que prouvés absents du
+   * serveur. Vide si `reconcileWithin` n'était pas fourni. Permet à
+   * l'appelant d'étendre le périmètre de réconciliation aux ENFANTS de ces
+   * lignes (un enfant dont le parent a disparu du serveur a disparu avec lui
+   * — `ON DELETE CASCADE`).
+   */
+  removedLocalIds: string[];
+}
+
+/**
  * Fusionne des lignes serveur dans le store local — utilisé à l'hydratation
  * initiale et après une synchronisation réussie. N'écrase JAMAIS un
  * enregistrement local qui a une modification non synchronisée
  * (`syncStatus: 'pending' | 'failed' | 'conflict'`) : ce cas relève du
  * conflict detector, pas d'un simple refresh.
+ *
+ * Additive par défaut. Voir `HydrationOptions.reconcileWithin` pour le seul
+ * cas où une suppression locale est autorisée (MAJ-03).
  */
 export async function hydrateEntitiesFromServer<T extends BaseRow>(
   table: OfflineCompatibleTableName,
   userId: string,
   rows: T[],
-): Promise<void> {
+  options?: HydrationOptions<T>,
+): Promise<HydrationResult> {
   const db = await getOfflineDb();
   const tx = db.transaction("entities", "readwrite");
   for (const row of rows) {
@@ -393,4 +489,34 @@ export async function hydrateEntitiesFromServer<T extends BaseRow>(
     await tx.store.put(entity as OfflineEntity);
   }
   await tx.done;
+
+  const reconcileWithin = options?.reconcileWithin;
+  if (!reconcileWithin) return { removedLocalIds: [] };
+
+  // Lu AVANT d'ouvrir la transaction de réconciliation : `listAllOperations`
+  // ouvre sa propre transaction sur `syncQueue`, l'imbriquer bloquerait.
+  const queuedRecordIds = new Set(
+    (await listAllOperations(userId))
+      .filter((op) => op.table === table)
+      .map((op) => op.recordLocalId),
+  );
+  const serverIds = new Set(rows.map((row) => row.id));
+
+  const removedLocalIds: string[] = [];
+  const reconcileTx = db.transaction("entities", "readwrite");
+  const locals = (await reconcileTx.store
+    .index("by-table-user")
+    .getAll(IDBKeyRange.only([table, userId]))) as OfflineEntity<T>[];
+  for (const local of locals) {
+    if (local.syncStatus !== "synced") continue;
+    if (local.deleted) continue;
+    if (serverIds.has(local.localId)) continue;
+    if (queuedRecordIds.has(local.localId)) continue;
+    if (!reconcileWithin(local.data)) continue;
+    await reconcileTx.store.delete(local.key ?? entityKey(table, local.localId));
+    removedLocalIds.push(local.localId);
+  }
+  await reconcileTx.done;
+
+  return { removedLocalIds };
 }

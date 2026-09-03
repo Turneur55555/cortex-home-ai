@@ -39,17 +39,47 @@ type Row = Record<string, unknown> & { id: string };
 const reads: Record<string, number> = {};
 let online = true;
 
+/**
+ * Jeu de données minimal mais NON VIDE — indispensable depuis le bornage
+ * déterministe du chantier 3 (MAJ-08) : les enfants sont désormais demandés
+ * `in(<clé parente>, …)` à partir des séances réellement rapatriées. Avec un
+ * serveur vide, il n'y a aucun parent, donc aucune requête enfant à compter,
+ * et ce fichier ne mesurerait plus rien. Une séance avec un exercice, une
+ * série et un segment suffit à produire exactement UN aller-retour par table.
+ */
+const SERVER_ROWS: Record<string, Row[]> = {
+  workouts: [
+    { id: "w-1", user_id: "user-perf", date: "2026-09-03", updated_at: "2026-09-03T10:00:00.000Z" },
+  ],
+  exercises: [
+    { id: "e-1", workout_id: "w-1", user_id: "user-perf", updated_at: "2026-09-03T10:00:00.000Z" },
+  ],
+  exercise_sets: [
+    { id: "s-1", exercise_id: "e-1", user_id: "user-perf", updated_at: "2026-09-03T10:00:00.000Z" },
+  ],
+  workout_segments: [
+    { id: "g-1", workout_id: "w-1", user_id: "user-perf", updated_at: "2026-09-03T10:00:00.000Z" },
+  ],
+};
+
 function createCountingSupabase() {
   return {
     from(table: string) {
+      const run = () => {
+        reads[table] = (reads[table] ?? 0) + 1;
+        return Promise.resolve({ data: SERVER_ROWS[table] ?? [], error: null });
+      };
       const builder = {
         select: () => builder,
         eq: () => builder,
+        in: () => builder,
         order: () => builder,
         limit: () => builder,
-        then(resolve: (v: unknown) => void) {
-          reads[table] = (reads[table] ?? 0) + 1;
-          resolve({ data: [] as Row[], error: null });
+        // Lecture paginée des enfants (MAJ-08) : une seule page suffit ici,
+        // le jeu de test étant très en dessous de `CHILD_PAGE_SIZE`.
+        range: () => run(),
+        then(resolve: (v: unknown) => void, reject: (e: unknown) => void) {
+          run().then(resolve, reject);
         },
       };
       return builder;

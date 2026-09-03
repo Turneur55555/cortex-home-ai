@@ -4305,3 +4305,90 @@ domaine touché — pas d'hydratation, pas de signOut, pas de RLS, pas de refont
 `npm run build` OK (build client + shell offline + service worker). `eslint .` : **1346 problèmes,
 chiffre IDENTIQUE avant/après le chantier** (mesuré par `git stash`) — préexistants (prettier sur
 tout le dépôt), zéro problème ajouté.
+
+## Chantier 3 — Intégrité et vérité des données offline (2026-09-03, branche `claude/offline-data-integrity-6eaduy`)
+
+Périmètre strict : DONNÉES → HYDRATATION → TIMESTAMPS → RÉCONCILIATION → SUPPRESSIONS.
+Détail complet et justifications : **`docs/architecture/offline-data-integrity.md`**.
+
+### MAJ-02 — `updated_at` réécrit par un trigger AFTER, après le `RETURNING`
+- **Cause prouvée** (vérifiée en direct sur `bcwfvpwxzlmkxobvbtzp` via `pg_trigger` /
+  `pg_get_functiondef`) : `trg_award_xp_on_workout_complete`
+  (`AFTER INSERT OR UPDATE OF status ON public.workouts`) et
+  `trg_reverse_xp_on_workout_uncomplete` terminent par un `UPDATE public.workouts … WHERE id = NEW.id`,
+  qui redéclenche le trigger BEFORE `trg_workouts_updated_at` (`set_updated_at()`). PostgreSQL ayant
+  déjà calculé le `RETURNING` avant les triggers AFTER, le client mémorise un `updated_at` périmé →
+  faux conflit `updated_at_mismatch` à la modification suivante (ex. annoter une séance qu'on vient
+  de terminer).
+- **Correction** : nouveau `src/lib/offline/serverRewrittenRows.ts` (liste statique, aujourd'hui
+  `workouts` seule, documentée avec le trigger exact) + `readAuthoritativeRow` dans `syncEngine.ts` :
+  relecture serveur de la ligne après une écriture RÉUSSIE, pour ces tables uniquement. **Aucun
+  trigger modifié**, garanties XP/nutrition intactes. Bonus : `xp_before`/`xp_after`/`level_*`
+  arrivent enfin dans le store local. Un échec de relecture retombe sur la réponse du `RETURNING`
+  (jamais un échec).
+- **Cas voisin documenté, non traité par ce mécanisme** : `recipe_ing_recompute` →
+  `recompute_recipe_nutrition()` pose `recipes.updated_at = now()` lors d'une écriture sur
+  `recipe_ingredients` — la ligne réécrite n'est pas celle de l'opération. Réparé par l'hydratation
+  post-synchronisation existante ; le « corriger » dans le moteur reviendrait à recaler la base de
+  comparaison d'une ligne parente sans l'avoir écrite, donc à écraser silencieusement une
+  modification concurrente.
+
+### MAJ-03 — réconciliation des suppressions serveur
+- `hydrateEntitiesFromServer` reste **additive par défaut**. Nouvelle option `reconcileWithin`
+  (`HydrationOptions`) = affirmation de COMPLÉTUDE par l'appelant, seule autorisation de suppression
+  locale. Retourne désormais `{ removedLocalIds }` pour étendre le périmètre aux enfants.
+- Garde-fous cumulatifs : ligne `synced` uniquement, aucune opération vivante dans la file, pas déjà
+  supprimée localement, et dans le périmètre prouvé.
+- Preuve de complétude fondée sur le TOTAL EXACT annoncé par la base (`count: "exact"`), jamais sur
+  « moins de lignes que demandé » (qui ne distingue pas la fin du jeu de données d'une troncature
+  `max-rows`) : « le nombre de séances reçues atteint le total exact » (workouts) et « enfants d'une
+  liste explicite de parents, paginés jusqu'à atteindre leur total exact, sans erreur »
+  (exercises / exercise_sets / workout_segments). Les enfants des séances prouvées supprimées sont
+  inclus (cascade serveur) — pas d'orphelins locaux.
+- **Toutes les autres hydratations restent additives** (recettes, nutrition, courses, templates…) :
+  leurs requêtes ne sont pas paginées explicitement, donc « absent de la réponse » n'y prouve rien.
+
+### AMEL-05 — tombstones : NON, et documenté
+Options A (réconciliation sur jeu prouvé complet) / B (`deleted_at`) / C (statu quo) comparées dans
+la doc. **Retenu : A.** B imposerait une migration sur ~19 tables + réécriture de toutes les lectures
+(`deleted_at is null`) + RLS + index + purge, pour un bénéfice nul là où A suffit. **Aucune migration
+Supabase créée par ce chantier** ; `types.ts` non touché.
+
+### MAJ-08 — hydratation fitness bornée
+- **Avant** : seules les séances étaient bornées (`limit(200)`) ; `exercises`, `exercise_sets`,
+  `workout_segments` partaient sans aucune limite. Volumétrie réelle relevée le 03/09/2026 :
+  616 séances / 385 exercices / **1 128 séries** / 26 segments pour l'utilisateur le plus actif —
+  au-delà du plafond `max-rows` de PostgREST (1 000 par défaut), qui tronque **sans erreur**.
+- **Maintenant** : stratégie parent → enfants. 200 séances (limite INCHANGÉE, calée sur l'usage :
+  `useWorkouts` en affiche 60, la séance active porte la date du jour, l'historique profond passe par
+  le serveur), départagées par `created_at` ; puis leurs enfants via `in(<clé parente>, …)` par
+  paquets de 100 ids, paginés par pages de 500 (`CHILD_PAGE_SIZE`), la boucle s'arrêtant sur le
+  **total exact** annoncé par la base (`count: "exact"`) et non sur la taille de la dernière page —
+  `max-rows` est une configuration serveur, dont aucune suppression ne doit dépendre. Effet de bord :
+  un `max-rows` abaissé sous la taille de page est ABSORBÉ (la pagination continue) au lieu de
+  tronquer. `exercise_sets` n'ayant pas de `workout_id`, descente en deux temps
+  séances → exercices → séries.
+- Une erreur sur la lecture des séances est désormais **remontée** (la fenêtre de fraîcheur reste
+  ouverte) au lieu d'être avalée : sans séances, il n'y a aucun enfant à demander.
+
+### MIN-16 — `updated_at` local avancé pour rien
+`repository.update()` avançait `data.updated_at` ET `localUpdatedAt` même quand le patch ne portait
+aucune colonne synchronisable (`{}`, `{ updated_at }`, `{ id }`) — donc sans aucune opération
+enfilée. Désormais **no-op strict** dans ce cas. Corollaire : le patch appliqué en local est celui
+débarrassé des colonnes du contrat (l'identité de la ligne n'est plus réécrite localement).
+
+### Fichiers
+`src/lib/offline/serverRewrittenRows.ts` (nouveau), `src/lib/offline/syncEngine.ts`,
+`src/lib/offline/repository.ts`, `src/hooks/use-fitness.ts`,
+`src/lib/offline/updatedAtIntegrity.test.ts` (nouveau, 11 tests),
+`src/lib/offline/fitnessHydrationBounds.test.ts` (nouveau, 12 tests),
+`src/lib/offline/sessionRewardOffline.test.ts` + `src/lib/offline/workoutsRefreshPerf.test.ts`
+(adaptés aux nouveaux invariants), `docs/architecture/offline-data-integrity.md` (nouveau).
+
+### Validation
+`npx vitest run` **1760 passed / 60 skipped / 0 échec** (128 fichiers) — les 60 skips sont les mêmes
+qu'avant le chantier (fichiers d'intégration env-gated), aucun ajouté. `npx tsc --noEmit` 0 erreur.
+`npm run lint` **0 erreur / 157 warnings — chiffre IDENTIQUE avant/après** (mesuré par `git stash`).
+`npm run build` OK. `npm run check:offline-contract` OK (19 tables). `npm run check:types` **non
+exécutable dans l'environnement** (CLI Supabase absente) — sans objet ici : aucune migration, aucun
+changement de schéma, `types.ts` non modifié.

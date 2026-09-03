@@ -404,20 +404,29 @@ describe("CRIT-03 — récompense d'une séance terminée EN LIGNE", () => {
     expect(await hasQueuedOperationsForRecord(USER, "workouts", w.id)).toBe(false);
   });
 
-  it("la réponse de l'opération de sync ne suffit PAS : les compteurs sont écrits par un trigger AFTER", async () => {
-    // Régression de la cause racine : avant ce chantier l'écran se contentait
-    // de ce que la mutation avait sous la main. Le RETURNING de l'UPDATE ne
-    // contient pas encore xp_after — seule une RELECTURE l'apporte.
+  it("le RETURNING ne porte pas les compteurs du trigger AFTER — la relecture du moteur (MAJ-02) les ramène", async () => {
+    // Régression de la cause racine : le RETURNING de l'UPDATE est calculé
+    // AVANT l'exécution du trigger AFTER, il ne contient donc jamais
+    // xp_after (le simulateur le reproduit fidèlement : `returned` est figé
+    // avant `runAwardXpTrigger`). Seule une RELECTURE l'apporte.
+    //
+    // Avant le chantier 3, personne ne faisait cette relecture côté moteur :
+    // le store local restait à `xp_after: null` après synchronisation, et
+    // seul l'écran, en relisant le serveur, voyait la vraie valeur. Depuis
+    // MAJ-02, `syncEngine` relit lui-même la ligne des tables déclarées dans
+    // `serverRewrittenRows.ts` — le local est donc aligné sur ce qui est
+    // RÉELLEMENT persisté, compteurs RPG compris.
     const w = await workoutsRepo.create(USER, activeWorkout());
     await processSyncQueue(USER);
     await workoutsRepo.update(w.id, USER, { status: "completed" });
     await processSyncQueue(USER);
 
-    const localAfterSync = await workoutsRepo.get(w.id);
-    expect(localAfterSync?.xp_after ?? null).toBeNull();
-
     const { snapshot } = await readRewardFromServer(w.id);
     expect(snapshot!.xp_after).toBe(XP_PER_MUSCU_SESSION);
+
+    const localAfterSync = await workoutsRepo.get(w.id);
+    expect(localAfterSync?.xp_after).toBe(XP_PER_MUSCU_SESSION);
+    expect(localAfterSync?.xp_before).toBe(0);
   });
 
   it("l'XP de la séance PRÉCÉDENTE n'est jamais présentée comme celle de la nouvelle", async () => {

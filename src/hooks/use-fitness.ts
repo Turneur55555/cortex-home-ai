@@ -181,45 +181,259 @@ export async function refreshWorkoutsFromServer(
   }
 }
 
-/** Les 4 lectures serveur réelles — appelées uniquement par la fenêtre de
+/**
+ * CHANTIER 3 — MAJ-08 : BORNAGE DÉTERMINISTE DE L'HYDRATATION FITNESS.
+ *
+ * AVANT (mesuré sur le projet `bcwfvpwxzlmkxobvbtzp`, 03/09/2026) : seules
+ * les séances étaient bornées (`limit(200)`) ; `exercises`, `exercise_sets`
+ * et `workout_segments` partaient en `select("*").eq("user_id", …)` SANS
+ * AUCUNE limite. Deux défauts, et le second est une perte de données :
+ *   1. on rapatriait les enfants des 616 séances de l'utilisateur alors que
+ *      seules 200 séances sont hydratées — le reste est inexploitable (aucun
+ *      parent en local pour les joindre) ;
+ *   2. surtout, `exercise_sets` compte déjà 1 128 lignes pour cet
+ *      utilisateur, au-delà du plafond `max-rows` que PostgREST applique
+ *      SILENCIEUSEMENT (1 000 par défaut chez Supabase) : la réponse était
+ *      tronquée sans erreur, et les séries manquantes n'arrivaient JAMAIS
+ *      en local.
+ *
+ * MAINTENANT : une stratégie parent → enfants, explicite et bornée.
+ *   - les `WORKOUTS_HYDRATION_LIMIT` séances les plus récentes (valeur
+ *     inchangée : 200, cf. justification métier sur la constante) ;
+ *   - PUIS uniquement leurs enfants, demandés par `in(<clé parente>, …)` sur
+ *     des paquets d'ids bornés, page par page jusqu'à épuisement.
+ * Aucune requête ne peut donc plus être tronquée en silence, et le volume
+ * transféré est proportionnel à la fenêtre réellement exploitable.
+ *
+ * CE QUI N'EST PAS PERDU : les écrans qui ont besoin d'un historique plus
+ * profond que la fenêtre ne lisent pas le store local — ils interrogent le
+ * serveur directement (`useExerciseSetHistory`, `useLastExerciseSession`,
+ * `useSenseiTrainingHistory`). Et les lignes déjà hydratées lors d'un
+ * passage précédent restent en local : la fenêtre borne ce qu'on RAPATRIE,
+ * elle ne supprime rien (les seules suppressions locales possibles sont
+ * celles, prouvées, de la réconciliation ci-dessous).
+ */
+
+/**
+ * Nombre de séances hydratées, de la plus récente à la plus ancienne.
+ *
+ * Valeur INCHANGÉE depuis l'introduction de l'hydratation fitness, et
+ * conservée volontairement : elle est calée sur l'usage réel de l'app —
+ * `useWorkouts` n'affiche que les 60 séances les plus récentes, la séance
+ * active porte toujours la date du jour (donc toujours dans la fenêtre), et
+ * les analyses d'historique profond passent par le serveur. 200 laisse donc
+ * plus du triple de marge sur le seul écran qui lit vraiment le store local.
+ */
+const WORKOUTS_HYDRATION_LIMIT = 200;
+
+/**
+ * Taille d'un paquet d'ids parents dans un filtre `in(...)`. Borne la
+ * longueur de l'URL PostgREST (100 uuids ≈ 4 ko de query string, très en
+ * dessous des limites usuelles des proxys HTTP).
+ */
+const PARENT_ID_CHUNK_SIZE = 100;
+
+/**
+ * Taille de page d'une lecture d'enfants. Volontairement SOUS le plafond
+ * `max-rows` de PostgREST (1 000 par défaut) : une page ne peut donc jamais
+ * être tronquée en silence, et « page incomplète » signifie sans ambiguïté
+ * « fin du jeu de données ».
+ */
+const CHILD_PAGE_SIZE = 500;
+
+/** Découpe une liste d'ids en paquets de `PARENT_ID_CHUNK_SIZE`. */
+function chunkIds(ids: string[]): string[][] {
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += PARENT_ID_CHUNK_SIZE) {
+    chunks.push(ids.slice(i, i + PARENT_ID_CHUNK_SIZE));
+  }
+  return chunks;
+}
+
+/**
+ * Vue minimale du client Supabase utilisée par la lecture paginée
+ * générique ci-dessous. Évite un `any` (le nom de table est dynamique, donc
+ * hors du typage généré) tout en gardant un contrat explicite.
+ */
+interface PagedRowsQuery {
+  select: (columns: string, options: { count: "exact" }) => PagedRowsQuery;
+  eq: (column: string, value: string) => PagedRowsQuery;
+  in: (column: string, values: string[]) => PagedRowsQuery;
+  order: (column: string, options: { ascending: boolean }) => PagedRowsQuery;
+  range: (
+    from: number,
+    to: number,
+  ) => PromiseLike<{ data: unknown[] | null; error: unknown; count: number | null }>;
+}
+
+function pagedFrom(table: string): PagedRowsQuery {
+  return (supabase as unknown as { from: (t: string) => PagedRowsQuery }).from(table);
+}
+
+/**
+ * Lit TOUS les enfants des parents donnés, par paquets d'ids et par pages,
+ * jusqu'à épuisement.
+ *
+ * `complete: true` est une PREUVE, pas une supposition : il n'est renvoyé que
+ * si chaque paquet a été lu sans erreur ET si le nombre de lignes réellement
+ * accumulées ATTEINT le total exact annoncé par PostgREST
+ * (`count: "exact"`, en-tête `Content-Range`).
+ *
+ * POURQUOI COMPTER PLUTÔT QUE DE SE FIER À « dernière page incomplète » :
+ * `max-rows` est une configuration SERVEUR. `CHILD_PAGE_SIZE` est choisi sous
+ * sa valeur par défaut (1 000), mais si ce plafond était un jour abaissé sous
+ * la taille de page, chaque page reviendrait tronquée — donc « incomplète » —
+ * et on conclurait à tort à la fin du jeu de données. Comme cette conclusion
+ * AUTORISE des suppressions locales (MAJ-03), elle ne doit dépendre d'aucun
+ * réglage serveur : le total exact, lui, est renvoyé par la base elle-même.
+ *
+ * À la moindre erreur réseau, ou si le total n'est pas disponible, on renvoie
+ * ce qui a été lu avec `complete: false` : l'hydratation reste additive et
+ * rien n'est supprimé.
+ */
+async function fetchChildRowsForParents<T>(
+  table: string,
+  parentColumn: string,
+  userId: string,
+  parentIds: string[],
+): Promise<{ rows: T[]; complete: boolean }> {
+  const rows: T[] = [];
+  for (const chunk of chunkIds(parentIds)) {
+    let fetched = 0;
+    for (;;) {
+      const { data, error, count } = await pagedFrom(table)
+        .select("*", { count: "exact" })
+        .eq("user_id", userId)
+        .in(parentColumn, chunk)
+        // Ordre stable : sans lui, deux pages successives peuvent renvoyer
+        // deux fois la même ligne et en omettre une autre.
+        .order("id", { ascending: true })
+        .range(fetched, fetched + CHILD_PAGE_SIZE - 1);
+      if (error || !data) return { rows, complete: false };
+      rows.push(...(data as T[]));
+      fetched += data.length;
+      // Sans total exact, aucune preuve de complétude possible.
+      if (count == null) return { rows, complete: false };
+      if (fetched >= count) break;
+      // Une page vide alors qu'il resterait des lignes à lire : la lecture
+      // n'avance plus (plafond serveur, filtre inattendu). On refuse de
+      // conclure plutôt que de supprimer à tort.
+      if (data.length === 0) return { rows, complete: false };
+    }
+  }
+  return { rows, complete: true };
+}
+
+/** Les lectures serveur réelles — appelées uniquement par la fenêtre de
  *  fraîcheur ci-dessus, jamais directement. Laisse remonter une erreur
  *  réseau : c'est elle qui empêche la fenêtre de se refermer sur une donnée
  *  qui n'a jamais été lue. */
 async function fetchWorkoutsIntoLocalStore(userId: string): Promise<void> {
-  const { data: workouts, error } = await supabase
+  const {
+    data: workouts,
+    error,
+    count: workoutsCount,
+  } = await supabase
     .from("workouts")
-    .select("*")
+    .select("*", { count: "exact" })
     .eq("user_id", userId)
     .order("date", { ascending: false })
-    .limit(200);
-  if (!error && workouts) {
-    await hydrateEntitiesFromServer("workouts", userId, workouts as unknown as WorkoutRow[]);
+    // Départage déterministe des séances de même date — sans lui, la
+    // frontière de la fenêtre serait arbitraire d'un appel à l'autre.
+    .order("created_at", { ascending: false })
+    .limit(WORKOUTS_HYDRATION_LIMIT);
+  // Les enfants sont désormais demandés PAR séance : sans la liste des
+  // séances, il n'y a rien à demander. On laisse donc remonter l'erreur —
+  // la fenêtre de fraîcheur reste ouverte et la prochaine lecture retentera
+  // (cf. `refreshWorkoutsFromServer`), au lieu de faire croire à un
+  // rafraîchissement réussi.
+  if (error || !workouts) {
+    throw error ?? new Error("Lecture des séances impossible");
   }
-  const { data: exercises, error: exErr } = await supabase
-    .from("exercises")
-    .select("*")
-    .eq("user_id", userId);
-  if (!exErr && exercises) {
-    await hydrateEntitiesFromServer("exercises", userId, exercises as unknown as ExerciseRow[]);
-  }
-  const { data: sets, error: setErr } = await supabase
-    .from("exercise_sets")
-    .select("*")
-    .eq("user_id", userId);
-  if (!setErr && sets) {
-    await hydrateEntitiesFromServer("exercise_sets", userId, sets as unknown as ExerciseSetRow[]);
-  }
-  const { data: segments, error: segErr } = await supabase
-    .from("workout_segments")
-    .select("*")
-    .eq("user_id", userId);
-  if (!segErr && segments) {
-    await hydrateEntitiesFromServer(
-      "workout_segments",
-      userId,
-      segments as unknown as WorkoutSegmentRow[],
-    );
-  }
+  const workoutRows = workouts as unknown as WorkoutRow[];
+
+  // RÉCONCILIATION DES SUPPRESSIONS (MAJ-03) — cf.
+  // `hydrateEntitiesFromServer`. Le jeu de données des séances n'est prouvé
+  // COMPLET que si le nombre de lignes reçues ATTEINT le total exact annoncé
+  // par la base (`count: "exact"`) : dans ce cas, et dans ce cas seulement,
+  // une séance locale `synced` absente de la réponse a bien été supprimée
+  // ailleurs. Si l'historique dépasse la fenêtre — ou si un plafond serveur
+  // a tronqué la réponse, ou si le total est indisponible — on ne supprime
+  // RIEN. On ne se fie donc PAS au seul « moins que la limite demandée » :
+  // il ne distingue pas « fin du jeu de données » de « réponse tronquée par
+  // `max-rows` », et cette distinction autorise des suppressions.
+  const workoutsAreComplete = workoutsCount != null && workoutRows.length === workoutsCount;
+  const { removedLocalIds: removedWorkoutIds } = await hydrateEntitiesFromServer<WorkoutRow>(
+    "workouts",
+    userId,
+    workoutRows,
+    workoutsAreComplete ? { reconcileWithin: () => true } : undefined,
+  );
+
+  // Périmètre des enfants : les séances hydratées PLUS celles qu'on vient de
+  // prouver supprimées côté serveur — leurs enfants ont disparu avec elles
+  // (`ON DELETE CASCADE`), les laisser en local créerait des orphelins.
+  const parentWorkoutIds = new Set<string>([
+    ...workoutRows.map((workout) => workout.id),
+    ...removedWorkoutIds,
+  ]);
+  const parentWorkoutIdList = [...parentWorkoutIds];
+
+  const exercises = await fetchChildRowsForParents<ExerciseRow>(
+    "exercises",
+    "workout_id",
+    userId,
+    parentWorkoutIdList,
+  );
+  const { removedLocalIds: removedExerciseIds } = await hydrateEntitiesFromServer<ExerciseRow>(
+    "exercises",
+    userId,
+    exercises.rows,
+    exercises.complete
+      ? { reconcileWithin: (row) => parentWorkoutIds.has(row.workout_id) }
+      : undefined,
+  );
+
+  // Même raisonnement d'un cran plus bas : `exercise_sets` ne porte pas de
+  // `workout_id`, seulement `exercise_id` (cf. `workoutSyncDependencies.ts`).
+  // Le périmètre est donc l'ensemble des exercices rapatriés PLUS ceux qu'on
+  // vient de prouver supprimés.
+  const parentExerciseIds = new Set<string>([
+    ...exercises.rows.map((exercise) => exercise.id),
+    ...removedExerciseIds,
+  ]);
+  const sets = await fetchChildRowsForParents<ExerciseSetRow>(
+    "exercise_sets",
+    "exercise_id",
+    userId,
+    [...parentExerciseIds],
+  );
+  await hydrateEntitiesFromServer<ExerciseSetRow>(
+    "exercise_sets",
+    userId,
+    sets.rows,
+    // Les séries ne sont réconciliables que si LES DEUX niveaux au-dessus
+    // sont prouvés complets : un exercice manquant faute de lecture
+    // complète sortirait ses séries du périmètre sans qu'on puisse conclure.
+    sets.complete && exercises.complete
+      ? { reconcileWithin: (row) => parentExerciseIds.has(row.exercise_id) }
+      : undefined,
+  );
+
+  const segments = await fetchChildRowsForParents<WorkoutSegmentRow>(
+    "workout_segments",
+    "workout_id",
+    userId,
+    parentWorkoutIdList,
+  );
+  await hydrateEntitiesFromServer<WorkoutSegmentRow>(
+    "workout_segments",
+    userId,
+    segments.rows,
+    segments.complete
+      ? { reconcileWithin: (row) => parentWorkoutIds.has(row.workout_id) }
+      : undefined,
+  );
 }
 
 /** Regroupe une liste de lignes par une clé de champ — utilitaire local aux
