@@ -75,13 +75,32 @@ function setState(patch: Partial<RestTimerState>) {
 }
 
 // ─── Effects: tick & finish detection ────────────────────────────────────────
+//
+// `intervalId` is module-level by design (the countdown must keep running
+// across navigation/unmounts, per the singleton store above). It must NOT,
+// however, keep ticking forever once there is nothing left to count down:
+// `ensureTick()` lazily creates it, and every path that leaves the "actively
+// counting down" state (finish, pause, stop) must call `stopTick()` so the
+// 250ms loop does not run for the rest of the tab's lifetime.
 
 let intervalId: ReturnType<typeof setInterval> | null = null;
+
+function stopTick() {
+  if (intervalId != null) {
+    clearInterval(intervalId);
+    intervalId = null;
+  }
+}
 
 function ensureTick() {
   if (intervalId != null) return;
   intervalId = setInterval(() => {
-    if (state.endAt == null || state.pausedRemaining != null || state.finished) return;
+    if (state.finished || state.pausedRemaining != null || state.endAt == null) {
+      // Nothing left to count down (finished/paused/idle) — stop polling
+      // instead of ticking uselessly every 250ms indefinitely.
+      stopTick();
+      return;
+    }
     const remaining = Math.ceil((state.endAt - Date.now()) / 1000);
     if (remaining <= 0) {
       onFinish();
@@ -92,6 +111,7 @@ function ensureTick() {
 }
 
 function onFinish() {
+  stopTick();
   setState({ finished: true, endAt: null });
   // Vibration
   try {
@@ -126,6 +146,14 @@ function onFinish() {
         };
         playAt(0, 880);
         playAt(0.35, 1175);
+        // Browsers cap the number of concurrent AudioContext instances (this
+        // fires once per rest-timer completion) — close it once the two
+        // beeps have finished playing so it doesn't leak for the rest of
+        // the session.
+        const CLOSE_DELAY_MS = 750; // last beep starts at 0.35s and lasts 0.35s + margin
+        setTimeout(() => {
+          ctx.close().catch(() => {});
+        }, CLOSE_DELAY_MS);
       }
     } catch {
       /* ignore */
@@ -181,6 +209,7 @@ export const restTimer = {
   pause() {
     if (state.endAt == null || state.pausedRemaining != null) return;
     const remaining = Math.max(0, Math.ceil((state.endAt - Date.now()) / 1000));
+    stopTick();
     setState({ pausedRemaining: remaining });
   },
   resume() {
@@ -195,6 +224,7 @@ export const restTimer = {
     if (state.totalSec > 0) this.start(state.totalSec, state.exerciseId);
   },
   stop() {
+    stopTick();
     setState({ ...defaultState });
   },
   setSound(enabled: boolean) {
@@ -230,7 +260,7 @@ if (typeof window !== "undefined") {
       notify();
     }
   });
-  if (state.endAt != null && !state.finished) ensureTick();
+  if (state.endAt != null && state.pausedRemaining == null && !state.finished) ensureTick();
 }
 
 // ─── React hook ──────────────────────────────────────────────────────────────
