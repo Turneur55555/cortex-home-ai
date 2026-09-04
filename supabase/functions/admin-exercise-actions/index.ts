@@ -34,7 +34,9 @@ type Action =
   | "restore"
   | "delete"
   | "dismiss_pair"
-  | "usage_stats";
+  | "usage_stats"
+  | "list_similarity_pairs"
+  | "list_merge_log";
 
 Deno.serve(async (req) => {
   const corsHeaders = buildCors(req);
@@ -146,8 +148,46 @@ Deno.serve(async (req) => {
 
         return jsonResponse({ stats });
       }
+      // Lectures protégées (MAJ-07) — `exercise_similarity_pairs` et
+      // `exercise_merge_log` n'ont que des policies RLS `service_role`
+      // (voir migration 20260731120000_exercise_library_admin.sql) : un
+      // SELECT direct depuis le client authentifié renvoie [] sans erreur,
+      // jamais un refus explicite. Ces deux actions passent par le même
+      // client service_role que les écritures ci-dessus, derrière le même
+      // `requireAdminUser` — les policies restent inchangées, aucune
+      // table n'est ouverte au rôle `authenticated`.
+      case "list_similarity_pairs": {
+        const status = (body?.status as string | undefined) ?? "suggested";
+        const { data, error } = await supa
+          .from("exercise_similarity_pairs")
+          .select(
+            "*, exerciseA:exercise_id_a(id, name, category), exerciseB:exercise_id_b(id, name, category)",
+          )
+          .eq("status", status)
+          .order("score", { ascending: false })
+          .limit(200);
+        if (error) return jsonResponse({ error: error.message }, 400);
+        return jsonResponse({ pairs: data ?? [] });
+      }
+      case "list_merge_log": {
+        const { data, error } = await supa
+          .from("exercise_merge_log")
+          .select(
+            "id, kept_exercise_id, archived_exercise_id, performed_at, undone_at, kept:kept_exercise_id(name), archived:archived_exercise_id(name)",
+          )
+          .order("performed_at", { ascending: false })
+          .limit(100);
+        if (error) return jsonResponse({ error: error.message }, 400);
+        return jsonResponse({ log: data ?? [] });
+      }
       default:
-        return jsonResponse({ error: "action inconnue (merge|undo_merge|archive|restore|delete|dismiss_pair|usage_stats)" }, 400);
+        return jsonResponse(
+          {
+            error:
+              "action inconnue (merge|undo_merge|archive|restore|delete|dismiss_pair|usage_stats|list_similarity_pairs|list_merge_log)",
+          },
+          400,
+        );
     }
   } catch (e) {
     console.error("[admin-exercise-actions] erreur:", e);

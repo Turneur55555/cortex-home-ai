@@ -482,6 +482,45 @@ d("RLS regression — user isolation", () => {
     });
   });
 
+  // ── exercise_similarity_pairs / exercise_merge_log (MAJ-07) ─────────────
+  // Ces deux tables n'ont QUE des policies RLS `service_role` (voir migration
+  // 20260731120000_exercise_library_admin.sql) — aucune policy `authenticated`.
+  // Un SELECT direct depuis un client authentifié standard doit rester vide
+  // (RLS filtre silencieusement, PAS d'erreur), jamais accessible. Les
+  // lectures admin passent désormais par l'edge function
+  // `admin-exercise-actions` (service_role + `requireAdminUser`), qui n'est
+  // pas exercée ici (pas de runtime Deno dans cette suite Vitest/Node) —
+  // voir `src/hooks/useExerciseAdmin.test.ts` pour la classification
+  // autorisé/refusé/erreur côté client.
+  describe("exercise_similarity_pairs / exercise_merge_log (MAJ-07)", () => {
+    it("Alice (compte standard) ne peut PAS lire exercise_similarity_pairs", async () => {
+      const { data, error } = await alice.client.from("exercise_similarity_pairs").select("id");
+      expect(error !== null || (data ?? []).length === 0).toBe(true);
+    });
+
+    it("Alice (compte standard) ne peut PAS lire exercise_merge_log", async () => {
+      const { data, error } = await alice.client.from("exercise_merge_log").select("id");
+      expect(error !== null || (data ?? []).length === 0).toBe(true);
+    });
+
+    it("un utilisateur anonyme ne peut PAS lire exercise_similarity_pairs", async () => {
+      const anon = createClient(SUPABASE_URL, ANON_KEY, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+      const { data, error } = await anon.from("exercise_similarity_pairs").select("id");
+      expect(error !== null || (data ?? []).length === 0).toBe(true);
+    });
+
+    // Pas de test positif "service_role peut lire" ici : la migration
+    // 20260731120000_exercise_library_admin.sql n'a volontairement PAS
+    // encore été appliquée en production (voir docs/architecture/
+    // exercises-dataset-integration.md §14) — un test qui exige la
+    // présence de la table ferait échouer ce job tant que ce n'est pas le
+    // cas, alors que ces deux tests négatifs restent vrais dans les deux
+    // cas (table absente → erreur "relation does not exist", table
+    // présente sans policy authenticated → RLS filtre tout).
+  });
+
   // ── storage.objects ─────────────────────────────────────────────────────
   describe("storage.objects (buckets privés)", () => {
     for (const bucket of TEST_BUCKETS) {

@@ -11,6 +11,7 @@
 // soit appliquée et `npm run gen:types` régénéré — à ne PAS garder après coup
 // (voir docs/architecture/supabase-types-source-of-truth.md).
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { FunctionsHttpError } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import {
   scoreExercisePair,
@@ -181,10 +182,40 @@ export function useLibraryStats() {
 
 const DISCIPLINE = "muscu";
 
+// Distingue, pour l'UI (MAJ-07) : un refus d'autorisation serveur (401/403
+// — `requireAdminUser` a rejeté l'appel) d'une erreur technique quelconque
+// (réseau, 500, RPC en échec…). Une absence de donnée n'est PAS une erreur :
+// `invokeAdminAction` résout normalement avec `{ pairs: [] }` / `{ log: [] }`
+// quand l'appel est autorisé mais qu'il n'y a rien à renvoyer.
+export class AdminActionError extends Error {
+  kind: "unauthorized" | "server";
+  constructor(message: string, kind: "unauthorized" | "server") {
+    super(message);
+    this.name = "AdminActionError";
+    this.kind = kind;
+  }
+}
+
 async function invokeAdminAction<T>(body: Record<string, unknown>): Promise<T> {
   const { data, error } = await supabase.functions.invoke("admin-exercise-actions", { body });
-  if (error) throw error;
-  if (data?.error) throw new Error(data.error);
+  if (error) {
+    if (error instanceof FunctionsHttpError) {
+      const status = error.context?.status as number | undefined;
+      let message = "Erreur du service d'administration.";
+      try {
+        const parsed = await error.context.json();
+        if (parsed?.error) message = parsed.error;
+      } catch {
+        // Corps non JSON (ou déjà consommé) — on garde le message par défaut.
+      }
+      throw new AdminActionError(
+        message,
+        status === 401 || status === 403 ? "unauthorized" : "server",
+      );
+    }
+    throw new AdminActionError(error.message ?? "Erreur réseau.", "server");
+  }
+  if (data?.error) throw new AdminActionError(data.error, "server");
   return data as T;
 }
 
@@ -305,49 +336,51 @@ export function useExerciseMediaSummary(ids: string[]) {
   });
 }
 
-// ── Suggestions de similarité ────────────────────────────────────────────
+// ── Suggestions de similarité — `exercise_similarity_pairs` est RLS
+//    service-role-only (voir migration 20260731120000_exercise_library_admin
+//    .sql) : un SELECT direct depuis le client authentifié renverrait []
+//    sans jamais indiquer un refus (MAJ-07). Passe donc par
+//    admin-exercise-actions (même garde `requireAdminUser` que les
+//    écritures), qui relaie via service_role. ─────────────────────────────
+export async function fetchSimilarityPairs(
+  status: "suggested" | "dismissed" | "merged" = "suggested",
+): Promise<SimilarityPairRow[]> {
+  const data = await invokeAdminAction<{ pairs: SimilarityPairRow[] }>({
+    action: "list_similarity_pairs",
+    status,
+  });
+  return data.pairs ?? [];
+}
+
 export function useSimilarityPairs(status: "suggested" | "dismissed" | "merged" = "suggested") {
   return useQuery({
     queryKey: ["admin", "similarity-pairs", status],
-    queryFn: async (): Promise<SimilarityPairRow[]> => {
-      const { data, error } = await admin
-        .from("exercise_similarity_pairs")
-        .select(
-          "*, exerciseA:exercise_id_a(id, name, category), exerciseB:exercise_id_b(id, name, category)",
-        )
-        .eq("status", status)
-        .order("score", { ascending: false })
-        .limit(200);
-      if (error) throw error;
-      return (data ?? []) as SimilarityPairRow[];
-    },
+    queryFn: () => fetchSimilarityPairs(status),
     staleTime: 30_000,
   });
 }
 
-// ── Journal de fusions ────────────────────────────────────────────────────
+// ── Journal de fusions — même raison que ci-dessus : `exercise_merge_log`
+//    est également RLS service-role-only. ────────────────────────────────
+export async function fetchMergeLog(): Promise<MergeLogRow[]> {
+  const data = await invokeAdminAction<{ log: Array<Record<string, unknown>> }>({
+    action: "list_merge_log",
+  });
+  return (data.log ?? []).map((row) => ({
+    id: row.id as string,
+    kept_exercise_id: row.kept_exercise_id as string,
+    archived_exercise_id: row.archived_exercise_id as string,
+    performed_at: row.performed_at as string,
+    undone_at: row.undone_at as string | null,
+    keptName: (row.kept as { name?: string } | null)?.name,
+    archivedName: (row.archived as { name?: string } | null)?.name,
+  }));
+}
+
 export function useMergeLog() {
   return useQuery({
     queryKey: ["admin", "merge-log"],
-    queryFn: async (): Promise<MergeLogRow[]> => {
-      const { data, error } = await admin
-        .from("exercise_merge_log")
-        .select(
-          "id, kept_exercise_id, archived_exercise_id, performed_at, undone_at, kept:kept_exercise_id(name), archived:archived_exercise_id(name)",
-        )
-        .order("performed_at", { ascending: false })
-        .limit(100);
-      if (error) throw error;
-      return ((data ?? []) as Array<Record<string, unknown>>).map((row) => ({
-        id: row.id as string,
-        kept_exercise_id: row.kept_exercise_id as string,
-        archived_exercise_id: row.archived_exercise_id as string,
-        performed_at: row.performed_at as string,
-        undone_at: row.undone_at as string | null,
-        keptName: (row.kept as { name?: string } | null)?.name,
-        archivedName: (row.archived as { name?: string } | null)?.name,
-      }));
-    },
+    queryFn: fetchMergeLog,
     staleTime: 15_000,
   });
 }

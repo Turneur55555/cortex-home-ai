@@ -1,11 +1,14 @@
 import { useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/use-auth";
+import { restoreAuthSession } from "@/lib/authSession";
+import { isAdminEmail } from "@/lib/admin/adminAccess";
 import {
   useExerciseSearch,
   useSimilarityPairs,
   useMergeLog,
+  AdminActionError,
   compareExercises,
   useMergeExercises,
   useUndoMerge,
@@ -44,6 +47,16 @@ import {
 } from "@/components/ui/dialog";
 
 export const Route = createFileRoute("/_authenticated/admin/exercises")({
+  // MIN-09 — garde de routing (pas seulement un lien masqué) : un compte
+  // authentifié mais non admin est redirigé avant même que la page ne
+  // charge quoi que ce soit. Reste un gate UX : le vrai garde-fou, pour
+  // toute donnée réellement sensible, est côté serveur (edge function
+  // `admin-exercise-actions`, voir `_shared/adminAuth.ts`), qui revérifie
+  // systématiquement le JWT — jamais confiance en ce contrôle client.
+  beforeLoad: async () => {
+    const session = await restoreAuthSession("admin-route:exercises:beforeLoad", 1500);
+    if (!isAdminEmail(session?.user?.email)) throw redirect({ to: "/" });
+  },
   head: () => ({
     meta: [
       { title: "Administration exercices — Cortex" },
@@ -56,15 +69,9 @@ export const Route = createFileRoute("/_authenticated/admin/exercises")({
   component: AdminExercisesPage,
 });
 
-// Gate applicatif (UX uniquement) : le vrai garde-fou est côté serveur dans
-// l'edge function admin-exercise-actions (voir _shared/adminAuth.ts), qui
-// vérifie l'email de l'utilisateur authentifié avant toute écriture. Ceci
-// n'évite qu'un aller-retour inutile pour un compte non autorisé.
-const ADMIN_EMAIL = "Turneur555@gmail.com";
-
 function AdminExercisesPage() {
   const { user } = useAuth();
-  if ((user?.email ?? "").toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
+  if (!isAdminEmail(user?.email)) {
     return (
       <div className="mx-auto max-w-lg p-8 text-center text-muted-foreground">
         Cette page est réservée à l'administration de la bibliothèque d'exercices.
@@ -520,11 +527,21 @@ function CompareCard({ a, b, onClose }: { a: ExerciseRow; b: ExerciseRow; onClos
 // Onglet Suggestions de similarité
 // ─────────────────────────────────────────────────────────────────────────
 function SimilarityTab() {
-  const { data: pairs, isLoading } = useSimilarityPairs("suggested");
+  const { data: pairs, isLoading, isError, error } = useSimilarityPairs("suggested");
   const dismissMutation = useDismissSimilarityPair();
   const mergeMutation = useMergeExercises();
 
   if (isLoading) return <div className="text-sm text-muted-foreground">Chargement…</div>;
+  if (isError) {
+    const unauthorized = error instanceof AdminActionError && error.kind === "unauthorized";
+    return (
+      <div className="text-sm text-destructive">
+        {unauthorized
+          ? "Accès refusé — cette lecture est réservée à l'administration Cortex."
+          : "Erreur technique lors du chargement des suggestions — réessaie plus tard."}
+      </div>
+    );
+  }
   if (!pairs || pairs.length === 0) {
     return (
       <div className="text-sm text-muted-foreground">
@@ -589,10 +606,20 @@ function SimilarityTab() {
 // Onglet Fusions récentes
 // ─────────────────────────────────────────────────────────────────────────
 function HistoryTab() {
-  const { data: log, isLoading } = useMergeLog();
+  const { data: log, isLoading, isError, error } = useMergeLog();
   const undoMutation = useUndoMerge();
 
   if (isLoading) return <div className="text-sm text-muted-foreground">Chargement…</div>;
+  if (isError) {
+    const unauthorized = error instanceof AdminActionError && error.kind === "unauthorized";
+    return (
+      <div className="text-sm text-destructive">
+        {unauthorized
+          ? "Accès refusé — cette lecture est réservée à l'administration Cortex."
+          : "Erreur technique lors du chargement de l'historique — réessaie plus tard."}
+      </div>
+    );
+  }
   if (!log || log.length === 0) {
     return <div className="text-sm text-muted-foreground">Aucune fusion effectuée.</div>;
   }

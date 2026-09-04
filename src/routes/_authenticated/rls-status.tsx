@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, XCircle, Clock, ExternalLink, ShieldCheck, RefreshCw } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,8 +6,18 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import { restoreAuthSession } from "@/lib/authSession";
+import { isAdminEmail } from "@/lib/admin/adminAccess";
 
 export const Route = createFileRoute("/_authenticated/rls-status")({
+  // MIN-09 — jusqu'ici cette route n'avait AUCUNE garde de rôle : tout
+  // compte authentifié y accédait. Même garde que `/admin/exercises` (voir
+  // `lib/admin/adminAccess.ts`) : redirection avant chargement pour un
+  // compte non admin.
+  beforeLoad: async () => {
+    const session = await restoreAuthSession("admin-route:rls-status:beforeLoad", 1500);
+    if (!isAdminEmail(session?.user?.email)) throw redirect({ to: "/" });
+  },
   head: () => ({
     meta: [
       { title: "État des tests RLS — ICORTEX" },
