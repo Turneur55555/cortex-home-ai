@@ -60,9 +60,9 @@ export function SignOutSyncGuardDialog({
             <AlertDialogHeader>
               <AlertDialogTitle>Se déconnecter sans synchroniser ?</AlertDialogTitle>
               <AlertDialogDescription>
-                Les données listées ci-dessous ne sont pas encore confirmées par le serveur. En
-                vous déconnectant maintenant, elles seront définitivement supprimées de cet
-                appareil — cette action est irréversible.
+                Les données listées ci-dessous ne sont pas encore confirmées par le serveur. En vous
+                déconnectant maintenant, elles seront définitivement supprimées de cet appareil —
+                cette action est irréversible.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <ul className="mt-1 list-inside list-disc space-y-1 text-sm text-foreground/80">
@@ -74,7 +74,11 @@ export function SignOutSyncGuardDialog({
               {/* Bouton simple, PAS `AlertDialogCancel` : celui-ci fermerait tout
                   le flux (Radix ferme le dialogue au clic sur "Cancel"), alors
                   qu'ici on veut seulement revenir à l'étape précédente. */}
-              <Button type="button" variant="outline" onClick={() => setConfirmingDestructive(false)}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setConfirmingDestructive(false)}
+              >
                 Annuler
               </Button>
               <AlertDialogAction
@@ -88,7 +92,9 @@ export function SignOutSyncGuardDialog({
         ) : (
           <>
             <AlertDialogHeader>
-              <AlertDialogTitle>Des modifications ne sont pas encore synchronisées</AlertDialogTitle>
+              <AlertDialogTitle>
+                Des modifications ne sont pas encore synchronisées
+              </AlertDialogTitle>
               <AlertDialogDescription>
                 Vous avez des modifications faites sur cet appareil qui n&apos;ont pas encore
                 atteint le serveur. Se déconnecter maintenant les supprimerait de cet appareil.
@@ -100,12 +106,7 @@ export function SignOutSyncGuardDialog({
               ))}
             </ul>
             <AlertDialogFooter className="flex-col gap-2 sm:flex-col">
-              <Button
-                type="button"
-                className="w-full"
-                disabled={busy}
-                onClick={onSyncFirst}
-              >
+              <Button type="button" className="w-full" disabled={busy} onClick={onSyncFirst}>
                 {busy ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
