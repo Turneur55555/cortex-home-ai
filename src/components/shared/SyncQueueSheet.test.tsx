@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import type { OfflineSyncState } from "@/hooks/useOfflineSync";
-import type { ConflictRecord } from "@/lib/offline/types";
+import type { ConflictRecord, SyncOperation } from "@/lib/offline/types";
 
 /**
  * CHANTIER 4, section 5 — vocabulaire utilisateur des conflits, et garde-fou
@@ -30,6 +30,25 @@ function makeConflict(overrides: Partial<ConflictRecord> = {}): ConflictRecord {
     localUpdatedAt: "2026-09-01T06:00:00.000Z",
     serverUpdatedAt: "2026-09-01T06:05:00.000Z",
     detectedAt: "2026-09-01T06:06:00.000Z",
+    ...overrides,
+  };
+}
+
+function makeOperation(overrides: Partial<SyncOperation> = {}): SyncOperation {
+  return {
+    id: "op-1",
+    userId: "user-1",
+    table: "exercise_sets",
+    recordLocalId: "set-1",
+    opType: "update",
+    payload: { reps: 10 },
+    baseUpdatedAt: "2026-09-01T06:00:00.000Z",
+    createdAt: "2026-09-01T06:01:00.000Z",
+    status: "pending",
+    retryCount: 0,
+    lastError: null,
+    lastErrorCode: null,
+    lastAttemptAt: null,
     ...overrides,
   };
 }
@@ -131,5 +150,92 @@ describe("SyncQueueSheet — conflits (cas 12 du chantier)", () => {
       }),
     );
     expect(document.body.textContent).not.toMatch(/updated_at_mismatch|server_row_deleted/);
+  });
+});
+
+describe("SyncQueueSheet — libellés de table en français (MIN-08, chantier 6)", () => {
+  it("le nom technique de la table n'apparaît jamais brut — un libellé français lisible est affiché à la place", () => {
+    render(
+      makeSyncState({
+        pendingCount: 1,
+        operations: [makeOperation({ table: "exercise_sets", opType: "update" })],
+      }),
+    );
+    expect(document.body.textContent).toContain("Séries");
+    // Ni le nom technique brut, ni la capitalisation mot-à-mot anglaise
+    // affichée avant correctif ("Exercise sets").
+    expect(document.body.textContent).not.toMatch(/exercise_sets|Exercise sets/i);
+  });
+
+  it("couvre toutes les tables du domaine offline-first par un libellé français distinct", () => {
+    const tables: SyncOperation["table"][] = [
+      "exercises",
+      "exercise_sets",
+      "workouts",
+      "workout_segments",
+      "workout_templates",
+      "workout_analyses",
+      "physical_goals",
+      "supplements",
+      "recipes",
+      "recipe_ingredients",
+      "recipe_collections",
+      "meal_plans",
+      "shopping_list",
+      "saved_meals",
+      "food_custom_foods",
+      "nutrition",
+      "nutrition_favorites",
+    ];
+    render(
+      makeSyncState({
+        pendingCount: tables.length,
+        operations: tables.map((table, i) =>
+          makeOperation({ id: `op-${i}`, table, recordLocalId: `rec-${i}` }),
+        ),
+      }),
+    );
+    for (const table of tables) {
+      // Le nom technique AVEC underscore (jamais un mot français) ne doit
+      // jamais apparaître brut dans le texte affiché.
+      if (table.includes("_")) {
+        expect(document.body.textContent).not.toContain(table);
+      }
+    }
+    // Cas concrets avant/après le plus parlants : plus de mot-à-mot anglais
+    // capitalisé pour les tables composées.
+    expect(document.body.textContent).not.toMatch(/Exercise sets|Nutrition favorites/);
+  });
+
+  it("le libellé de repli d'un conflit (sans nom d'entité) reste en français, jamais le nom technique de la table", () => {
+    render(
+      makeSyncState({
+        conflicts: [
+          makeConflict({
+            table: "nutrition_favorites",
+            localData: { calories: 200 }, // pas de champ `name`
+          }),
+        ],
+      }),
+    );
+    expect(document.body.textContent).toContain("Favoris nutrition");
+    expect(document.body.textContent).not.toMatch(/nutrition_favorites/);
+  });
+
+  it("les noms de colonnes affichés dans la comparaison de conflit sont en français, pas des clés techniques brutes", () => {
+    render(
+      makeSyncState({
+        conflicts: [
+          makeConflict({
+            table: "exercise_sets",
+            localData: { name: "Développé couché", rest_seconds: 90, set_number: 3 },
+            serverData: { name: "Développé couché", rest_seconds: 120, set_number: 3 },
+          }),
+        ],
+      }),
+    );
+    expect(document.body.textContent).toContain("Repos (s)");
+    expect(document.body.textContent).toContain("N° de série");
+    expect(document.body.textContent).not.toMatch(/rest_seconds|set_number/);
   });
 });

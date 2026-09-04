@@ -218,7 +218,9 @@ describe("SyncStatusCard — bloc Synchronisation du Profil", () => {
     expect(sheetIsOpen()).toBe(true);
     // Le panneau existant, intact : titre, liste des opérations, pied de file.
     expect(document.body.textContent).toContain("Synchronisation");
-    expect(document.body.textContent).toContain("Modification · Exercises");
+    // MIN-08 (chantier 6) — libellé de table en français, plus le nom
+    // technique anglais ("Exercises") affiché tel quel à l'utilisateur.
+    expect(document.body.textContent).toContain("Modification · Exercices");
     expect(document.body.textContent).toContain("1 action en attente");
   });
 

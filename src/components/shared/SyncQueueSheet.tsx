@@ -152,7 +152,9 @@ function ConflictCard({
   onResolve: (strategy: "keep-local" | "keep-server") => void;
 }) {
   const local = conflict.localData as Record<string, unknown>;
-  const label = typeof local.name === "string" ? local.name : conflict.table;
+  // MIN-08 — repli sur le libellé français de la table (jamais le nom
+  // technique brut, cf. `formatTableLabel`) quand la ligne n'a pas de `name`.
+  const label = typeof local.name === "string" ? local.name : formatTableLabel(conflict.table);
   const isServerRowDeleted = conflict.reason === "server_row_deleted";
 
   return (
@@ -203,6 +205,93 @@ function ConflictCard({
   );
 }
 
+/**
+ * MIN-08 — mêmes colonnes Supabase (`snake_case` anglais) que celles qui
+ * peuvent apparaître dans une comparaison de conflit, pour TOUTES les tables
+ * offline-first (`TABLE_LABELS_FR` ci-dessus). Couvre l'union des colonnes
+ * de `types.ts` hors `id`/`user_id`/`created_at`/`updated_at` (déjà exclues
+ * plus bas) et des `*_id` de relation (généralement filtrés eux aussi, mais
+ * gardés ici par prudence si un jour affichés).
+ */
+const FIELD_LABELS_FR: Record<string, string> = {
+  name: "Nom",
+  notes: "Notes",
+  position: "Position",
+  reps: "Répétitions",
+  sets: "Séries",
+  weight: "Poids",
+  superset_group: "Groupe superset",
+  muscle_groups: "Groupes musculaires",
+  image_path: "Image",
+  completed: "Terminé",
+  rest_seconds: "Repos (s)",
+  set_number: "N° de série",
+  tempo: "Tempo",
+  date: "Date",
+  discipline: "Discipline",
+  duration_minutes: "Durée (min)",
+  gym_location: "Lieu",
+  level_before: "Niveau avant",
+  level_after: "Niveau après",
+  xp_before: "XP avant",
+  xp_after: "XP après",
+  status: "Statut",
+  metadata: "Métadonnées",
+  label: "Libellé",
+  metric_key: "Métrique",
+  metrics: "Mesures",
+  color: "Couleur",
+  icon: "Icône",
+  summary: "Résumé",
+  goal: "Objectif",
+  started_at: "Débuté le",
+  completed_at: "Terminé le",
+  target_weight_kg: "Poids cible (kg)",
+  target_rate: "Rythme cible",
+  target_body_fat_percent: "Taux de masse grasse cible (%)",
+  starting_weight_kg: "Poids de départ (kg)",
+  starting_body_fat_percent: "Masse grasse de départ (%)",
+  starting_body_fat_method: "Méthode de mesure",
+  starting_lean_mass_kg: "Masse maigre de départ (kg)",
+  dosage: "Dosage",
+  unit: "Unité",
+  is_active: "Actif",
+  is_default: "Par défaut",
+  sort_order: "Ordre",
+  quantity: "Quantité",
+  grams: "Grammes",
+  category: "Catégorie",
+  done: "Fait",
+  custom_name: "Nom personnalisé",
+  meal: "Repas",
+  servings: "Portions",
+  brand: "Marque",
+  calories: "Calories",
+  carbs: "Glucides",
+  fats: "Lipides",
+  proteins: "Protéines",
+  default_serving_grams: "Portion par défaut (g)",
+  base_calories: "Calories (base)",
+  base_carbs: "Glucides (base)",
+  base_fats: "Lipides (base)",
+  base_proteins: "Protéines (base)",
+  consumed_quantity: "Quantité consommée",
+  consumed_unit: "Unité consommée",
+  consumed_grams_per_unit: "Grammes par unité",
+  percentage_consumed: "% consommé",
+  serving_count: "Nombre de portions",
+};
+
+/** Toute colonne relationnelle (`xxx_id`) ou inconnue garde un libellé neutre. */
+function formatFieldLabel(field: string): string {
+  if (FIELD_LABELS_FR[field]) return FIELD_LABELS_FR[field];
+  if (field.endsWith("_id")) return "Référence";
+  // Repli : jamais le nom technique brut avec underscore — au minimum
+  // humanisé (espaces, première lettre en majuscule).
+  const words = field.replace(/_/g, " ").trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 function VersionPreview({ data }: { data: Record<string, unknown> }) {
   const entries = Object.entries(data).filter(
     ([field]) => !["id", "user_id", "created_at", "updated_at"].includes(field),
@@ -211,7 +300,7 @@ function VersionPreview({ data }: { data: Record<string, unknown> }) {
     <dl className="space-y-0.5">
       {entries.slice(0, 4).map(([field, value]) => (
         <div key={field} className="flex justify-between gap-2 text-muted-foreground">
-          <dt className="truncate">{field}</dt>
+          <dt className="truncate">{formatFieldLabel(field)}</dt>
           <dd className="truncate text-foreground">{formatValue(value)}</dd>
         </div>
       ))}
@@ -237,10 +326,43 @@ const OP_TYPE_LABELS: Record<SyncOperation["opType"], string> = {
   delete: "Suppression",
 };
 
-/** `nutrition_favorites` → « Nutrition favorites » : lisible, sans couplage à un module. */
+/**
+ * MIN-08 (audit du 04/09/2026, chantier 6) — le nom TECHNIQUE de la table
+ * Supabase (`exercise_sets`, `nutrition_favorites`…) apparaissait tel quel à
+ * l'utilisateur, juste capitalisé (« Exercise sets », « Nutrition
+ * favorites ») : un libellé anglais dans une UI entièrement française. Cette
+ * table couvre TOUTES les tables offline-first du repository (cf.
+ * `createOfflineRepository` — cf. les hooks) avec un libellé français
+ * lisible — le nom technique lui-même (clé) reste inchangé partout ailleurs
+ * dans le code (types, requêtes, sync engine).
+ */
+const TABLE_LABELS_FR: Record<string, string> = {
+  exercises: "Exercices",
+  exercise_sets: "Séries",
+  workouts: "Séances",
+  workout_segments: "Segments de séance",
+  workout_templates: "Modèles de séance",
+  workout_analyses: "Analyses de séance",
+  physical_goals: "Objectifs physiques",
+  supplements: "Compléments",
+  recipes: "Recettes",
+  recipe_ingredients: "Ingrédients de recette",
+  recipe_collections: "Collections de recettes",
+  meal_plans: "Plannings de repas",
+  shopping_list: "Liste de courses",
+  saved_meals: "Repas enregistrés",
+  food_custom_foods: "Aliments personnalisés",
+  nutrition: "Nutrition",
+  nutrition_favorites: "Favoris nutrition",
+};
+
+/**
+ * Table sans traduction connue (ne devrait pas arriver, cf. `TABLE_LABELS_FR`
+ * ci-dessus) : on ne réaffiche jamais le nom technique brut à l'utilisateur —
+ * repli neutre plutôt qu'un mot anglais capitalisé.
+ */
 function formatTableLabel(table: string): string {
-  const words = table.replace(/_/g, " ").trim();
-  return words.charAt(0).toUpperCase() + words.slice(1);
+  return TABLE_LABELS_FR[table] ?? "Donnée";
 }
 
 /**
