@@ -47,3 +47,6 @@ supabase/.temp/
 
 # Rapport JSON de la suite Vitest (garde-fou anti-skip, quality.yml)
 vitest-report.json
+
+# Worktrees d'agents Claude Code (espaces de travail isolés temporaires)
+.claude/worktrees/
