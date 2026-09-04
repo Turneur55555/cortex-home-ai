@@ -64,6 +64,17 @@ export function createPendingIdResolver(prefix = OPTIMISTIC_ID_PREFIX): PendingI
         resolveFn = res;
         rejectFn = rej;
       });
+      // MIN-07 (audit du 04/09/2026, chantier 6) — `settle(tmpId, { ok: false })`
+      // rejette cette promesse dès que la création échoue, MÊME si personne
+      // n'a encore (ou ne va jamais) appelé `resolve(tmpId)` — le cas courant
+      // d'une création qui échoue sans qu'aucun update/delete concurrent ne
+      // soit en vol. Sans gestionnaire attaché, ce rejet est alors une
+      // "unhandled promise rejection" (vérifié : reproduit à l'identique dans
+      // ce fichier avant correctif). Cette poignée silencieuse ne change RIEN
+      // au comportement fonctionnel : `resolve()` continue de recevoir/attendre
+      // le MÊME rejet et de le propager normalement à son appelant — elle sert
+      // uniquement à marquer la promesse comme « gérée » pour le runtime.
+      promise.catch(() => {});
       pending.set(tmpId, { promise, resolve: resolveFn, reject: rejectFn });
     },
     settle(tmpId, result) {

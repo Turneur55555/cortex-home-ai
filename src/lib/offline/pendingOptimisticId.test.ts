@@ -61,6 +61,31 @@ describe("createPendingIdResolver — corrige le bug tmp-*", () => {
     await expect(pending).rejects.toThrow("réseau indisponible");
   });
 
+  it("MIN-07 (chantier 6) — settle(ok:false) sans AUCUN resolve() en attente ne produit pas de rejet non géré", async () => {
+    // Cas réel de `useAddExerciseSet` (use-fitness.ts) : une création échoue
+    // (`onError` → `settle(tmpId, { ok:false, ... })`) alors que personne
+    // n'a modifié/supprimé cette entrée entre-temps — donc personne n'a
+    // jamais appelé `resolve(tmpId)`. La promesse interne doit rester
+    // rejetable pour un `resolve()` tardif, sans jamais remonter comme
+    // "unhandled promise rejection".
+    let unhandled: unknown = null;
+    const onUnhandledRejection = (err: unknown) => {
+      unhandled = err;
+    };
+    process.on("unhandledRejection", onUnhandledRejection);
+    try {
+      const resolver = createPendingIdResolver();
+      resolver.register("tmp-orphan");
+      resolver.settle("tmp-orphan", { ok: false, error: new Error("création échouée") });
+      // Laisse tourner la boucle d'événements assez pour qu'un rejet non
+      // géré, s'il existait, soit signalé par le runtime.
+      await new Promise((r) => setTimeout(r, 20));
+    } finally {
+      process.off("unhandledRejection", onUnhandledRejection);
+    }
+    expect(unhandled).toBeNull();
+  });
+
   it("un tmp-id déjà résolu et retiré ne bloque pas un second appel — ressort inchangé", async () => {
     const resolver = createPendingIdResolver();
     resolver.register("tmp-once");
