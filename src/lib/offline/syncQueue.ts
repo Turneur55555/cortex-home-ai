@@ -250,11 +250,20 @@ const AWAITED_CREATE_STATUSES = new Set<SyncOpStatus>(["pending", "failed", "syn
  * conflit `server_row_deleted` à arbitrer.
  */
 export async function findAwaitedCreateForRecord(
+  userId: string,
   table: string,
   recordLocalId: string,
 ): Promise<SyncOperation | undefined> {
   const db = await getOfflineDb();
-  const all = await db.getAll("syncQueue");
+  // MIN-01 (audit du 04/09/2026, chantier 6) — scopé par utilisateur comme le
+  // reste du module (`by-user`) : un `getAll` non scopé balaierait la file
+  // COMPLÈTE, celle de tous les utilisateurs ayant jamais utilisé cet
+  // appareil, avant de filtrer par `table`/`recordLocalId`. Sans effet
+  // observable en pratique (`recordLocalId` est un UUID v4 aléatoire, une
+  // collision entre deux comptes est infinitésimale), mais c'est un balayage
+  // hors périmètre que rien ne justifie — corrigé au même titre que
+  // `listPendingOperations`/`listAllOperations`, déjà scopées.
+  const all = await db.getAllFromIndex("syncQueue", "by-user", IDBKeyRange.only(userId));
   return all.find(
     (op) =>
       op.table === table &&
@@ -265,11 +274,13 @@ export async function findAwaitedCreateForRecord(
 }
 
 export async function findPendingCreateForRecord(
+  userId: string,
   table: string,
   recordLocalId: string,
 ): Promise<SyncOperation | undefined> {
   const db = await getOfflineDb();
-  const all = await db.getAll("syncQueue");
+  // MIN-01 — voir `findAwaitedCreateForRecord` juste au-dessus.
+  const all = await db.getAllFromIndex("syncQueue", "by-user", IDBKeyRange.only(userId));
   return all.find(
     (op) =>
       op.table === table &&
@@ -300,13 +311,17 @@ export async function findPendingCreateForRecord(
 const REBASABLE_STATUSES = new Set<SyncOpStatus>(["pending", "failed", "syncing", "blocked"]);
 
 export async function rebasePendingOperationsForRecord(params: {
+  userId: string;
   table: string;
   recordLocalId: string;
   baseUpdatedAt: string | null;
   excludeOperationId?: string;
 }): Promise<number> {
   const db = await getOfflineDb();
-  const all = await db.getAll("syncQueue");
+  // MIN-01 — scopé par utilisateur, cf. `findAwaitedCreateForRecord` plus
+  // haut : sans ça, la re-calibration relisait la file de tous les comptes
+  // ayant jamais utilisé cet appareil.
+  const all = await db.getAllFromIndex("syncQueue", "by-user", IDBKeyRange.only(params.userId));
   // Toute opération non terminée compte, `blocked` comprise : la ligne
   // locale porte alors une modification que le serveur n'a pas encore, et
   // si l'utilisateur débloque l'opération (`updateOperationPayload` la

@@ -314,7 +314,7 @@ export function createOfflineRepository<T extends BaseRow>(
       // depuis la création — on ignore donc délibérément la fusion.
       const pendingCreate = options?.neverMergeIntoPendingCreate
         ? undefined
-        : await findPendingCreateForRecord(table, id);
+        : await findPendingCreateForRecord(userId, table, id);
 
       const db = await getOfflineDb();
       const updatedEntity: OfflineEntity<T> = {
@@ -348,7 +348,7 @@ export function createOfflineRepository<T extends BaseRow>(
       if (!entity) return;
       const db = await getOfflineDb();
 
-      const pendingCreate = await findPendingCreateForRecord(table, id);
+      const pendingCreate = await findPendingCreateForRecord(userId, table, id);
       if (pendingCreate) {
         // Jamais synchronisée côté serveur : on efface tout, rien à envoyer.
         //

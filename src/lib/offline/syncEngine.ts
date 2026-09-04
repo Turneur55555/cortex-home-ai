@@ -279,6 +279,7 @@ async function applyServerRowToEntity(op: SyncOperation, serverRow: unknown): Pr
   // de l'état que le serveur vient d'atteindre, sinon la suivante déclenche
   // un faux conflit contre notre propre écriture.
   const remaining = await rebasePendingOperationsForRecord({
+    userId: op.userId,
     table: op.table,
     recordLocalId: op.recordLocalId,
     baseUpdatedAt: serverUpdatedAt,
@@ -368,7 +369,7 @@ async function applyOperation(
         // un conflit explicite à arbitrer (`server_row_deleted`), ce qui
         // préserve intégralement la modification locale.
         const stillAwaitingCreate = Boolean(
-          await findAwaitedCreateForRecord(op.table, op.recordLocalId),
+          await findAwaitedCreateForRecord(op.userId, op.table, op.recordLocalId),
         );
         if (!stillAwaitingCreate) {
           if (entity) {

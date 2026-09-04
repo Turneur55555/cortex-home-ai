@@ -335,6 +335,7 @@ describe("deux UPDATE offline successifs avant synchronisation", () => {
     const before = { ...op2 };
 
     const remaining = await rebasePendingOperationsForRecord({
+      userId: USER,
       table: TABLE,
       recordLocalId: created.id,
       baseUpdatedAt: "2030-01-01T00:00:00.000Z",
@@ -360,6 +361,7 @@ describe("deux UPDATE offline successifs avant synchronisation", () => {
     const [createOp] = await listAllOperations(USER);
 
     await rebasePendingOperationsForRecord({
+      userId: USER,
       table: TABLE,
       recordLocalId: created.id,
       baseUpdatedAt: "2030-01-01T00:00:00.000Z",
@@ -379,6 +381,7 @@ describe("deux UPDATE offline successifs avant synchronisation", () => {
     const opB = ops.find((o) => o.recordLocalId === b.id) as SyncOperation;
 
     await rebasePendingOperationsForRecord({
+      userId: USER,
       table: TABLE,
       recordLocalId: a.id,
       baseUpdatedAt: "2030-01-01T00:00:00.000Z",
