@@ -354,6 +354,51 @@ export async function rebasePendingOperationsForRecord(params: {
   return remaining.length;
 }
 
+/**
+ * CHANTIER 8 (A1) — REPROGRAMME une opération avec un payload CORRIGÉ par le
+ * moteur lui-même (remappage d'un numéro d'ordre après collision d'unicité,
+ * cf. `syncEngine.remapUniqueSequence`).
+ *
+ * Différences volontaires avec `updateOperationPayload` juste en dessous, qui
+ * répond à une autre question (« l'utilisateur a réécrit son payload ») :
+ * - l'opération repasse en `pending` DEPUIS `syncing` (elle vient d'être
+ *   claimée puis refusée par le serveur), donc elle repart au passage suivant ;
+ * - `retryCount` est laissé INTACT — ce n'est pas une tentative perdue mais
+ *   une correction, exactement comme une opération retenue par la barrière ne
+ *   consomme pas de budget. La terminaison ne repose donc pas sur ce
+ *   compteur mais sur la croissance STRICTE du numéro remappé
+ *   (`nextFreeSequenceValue`) : un nouveau tour exige qu'un autre acteur ait
+ *   réellement inséré ce numéro entre-temps ;
+ * - `lastError` conserve la trace de la collision (diagnostic), jamais effacée.
+ *
+ * Écriture atomique (relecture dans la transaction) : si une autre instance a
+ * fait évoluer l'opération entre-temps, on ne réécrit rien.
+ */
+export async function rescheduleOperationWithPayload<T>(params: {
+  operationId: string;
+  payload: T;
+  lastError: string;
+  lastErrorCode: string | null;
+}): Promise<boolean> {
+  const db = await getOfflineDb();
+  const tx = db.transaction("syncQueue", "readwrite");
+  const current = await tx.store.get(params.operationId);
+  if (!current || current.status !== "syncing") {
+    await tx.done;
+    return false;
+  }
+  await tx.store.put({
+    ...current,
+    payload: params.payload as SyncOperation["payload"],
+    status: "pending",
+    lastError: params.lastError,
+    lastErrorCode: params.lastErrorCode,
+    lastAttemptAt: new Date().toISOString(),
+  });
+  await tx.done;
+  return true;
+}
+
 export async function updateOperationPayload<T>(id: string, payload: T): Promise<void> {
   const db = await getOfflineDb();
   const existing = await db.get("syncQueue", id);
@@ -493,6 +538,48 @@ export async function hasLiveDependencies(
     (conflict) =>
       (conflict.sourceCreatedAt ?? "") < op.createdAt &&
       awaited.has(dependencyKey(conflict.table, conflict.recordLocalId)),
+  );
+}
+
+/**
+ * CHANTIER 8 (A1, volet 2) — QUELLES OPÉRATIONS BLOQUÉES RETIENNENT CELLE-CI ?
+ *
+ * `blocked` reste volontairement une dépendance VIVANTE pour la barrière
+ * (cf. `LIVE_OPERATION_STATUSES` ci-dessus) : l'en retirer laisserait partir
+ * une clôture de séance alors que ses enfants ne sont jamais arrivés, et le
+ * trigger `award_xp_on_workout_complete` — qui ne se redéclenche JAMAIS —
+ * s'exécuterait sur une séance incomplète. C'est la régression DISC-01b, et
+ * elle est irréversible : on ne la rouvre pas.
+ *
+ * Ce qui manquait n'était donc pas une issue (« Réessayer quand même » et
+ * « Retirer de la file » existent déjà, et aucune des deux ne supprime la
+ * donnée métier locale), mais le LIEN VISIBLE entre « ma séance ne se
+ * synchronise pas » et « c'est cette action-là qui attend une décision ». Ce
+ * prédicat le fournit au panneau de synchronisation.
+ *
+ * PUR À DESSEIN — il travaille sur la file DÉJÀ chargée par l'UI
+ * (`OfflineSyncState.operations`), sans relire IndexedDB : il explique, il ne
+ * décide rien. La décision reste entièrement à `hasLiveDependencies`, qui
+ * seule relit la file complète et les conflits archivés.
+ *
+ * Même règle d'antériorité que la barrière (`createdAt` strictement
+ * inférieur), pour qu'un message ne puisse jamais désigner une opération qui
+ * ne retient rien.
+ */
+export function listBlockedDependencies(
+  op: Pick<SyncOperation, "id" | "createdAt" | "dependsOnRecords">,
+  operations: readonly SyncOperation[],
+): SyncOperation[] {
+  if (!op.dependsOnRecords?.length) return [];
+  const awaited = new Set(
+    op.dependsOnRecords.map((ref) => dependencyKey(ref.table, ref.recordLocalId)),
+  );
+  return operations.filter(
+    (other) =>
+      other.id !== op.id &&
+      other.status === "blocked" &&
+      other.createdAt < op.createdAt &&
+      awaited.has(dependencyKey(other.table, other.recordLocalId)),
   );
 }
 

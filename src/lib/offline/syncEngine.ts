@@ -12,15 +12,23 @@ import {
   rebasePendingOperationsForRecord,
   reclaimStaleSyncingOperations,
   removeOperation,
+  rescheduleOperationWithPayload,
   updateOperationStatus,
 } from "./syncQueue";
 import {
+  classifyUniqueViolation,
   extractSyncError,
   formatSyncErrorSummary,
   isBlockingSyncError,
+  UNIQUE_VIOLATION_PG_ERROR_CODE,
   type SyncErrorDetails,
 } from "./syncErrors";
 import { serverRewritesRowAfterReturning } from "./serverRewrittenRows";
+import {
+  nextFreeSequenceValue,
+  uniqueSequenceRuleFor,
+  type UniqueSequenceRule,
+} from "./uniqueSequenceRemap";
 import type {
   ConflictReason,
   ConflictRecord,
@@ -294,9 +302,144 @@ async function applyServerRowToEntity(op: SyncOperation, serverRow: unknown): Pr
   } as OfflineEntity);
 }
 
+/**
+ * CHANTIER 8 (A1) — Numéros d'ordre DÉJÀ PRIS dans le même groupe d'unicité,
+ * côté serveur. C'est la seule lecture réseau du remappage, et elle n'a lieu
+ * QU'APRÈS une collision réelle : créer une série hors ligne ne dépend
+ * toujours d'aucun réseau.
+ */
+async function fetchTakenSequenceValues(
+  supabaseTable: string,
+  rule: UniqueSequenceRule,
+  scopeValue: unknown,
+): Promise<number[]> {
+  const { data, error } = await withTimeout<SupabaseResult>(
+    (supabase as any)
+      .from(supabaseTable)
+      .select(`${rule.scopeColumn},${rule.sequenceColumn}`)
+      .eq(rule.scopeColumn, scopeValue),
+    `lecture ${supabaseTable}.${rule.sequenceColumn}`,
+  );
+  if (error) throw error;
+  const rows = Array.isArray(data) ? data : [];
+  return rows
+    .map((row) => Number((row as Record<string, unknown>)[rule.sequenceColumn]))
+    .filter((value) => Number.isFinite(value));
+}
+
+/** Numéros d'ordre déjà pris LOCALEMENT dans le même groupe (hors cette ligne). */
+async function readLocalSequenceValues(
+  op: SyncOperation,
+  rule: UniqueSequenceRule,
+  scopeValue: unknown,
+): Promise<number[]> {
+  const db = await getOfflineDb();
+  const entities = (await db.getAllFromIndex(
+    "entities",
+    "by-table-user",
+    IDBKeyRange.only([op.table, op.userId]),
+  )) as OfflineEntity[];
+  return entities
+    .filter(
+      (entity) =>
+        !entity.deleted &&
+        entity.localId !== op.recordLocalId &&
+        (entity.data as Record<string, unknown>)[rule.scopeColumn] === scopeValue,
+    )
+    .map((entity) => Number((entity.data as Record<string, unknown>)[rule.sequenceColumn]))
+    .filter((value) => Number.isFinite(value));
+}
+
+/**
+ * CHANTIER 8 (A1) — RÉSOUT une collision d'unicité portant sur un NUMÉRO
+ * D'ORDRE attribué par le client (`exercise_sets.set_number`), en recalculant
+ * ce numéro à partir de ceux réellement pris — côté serveur ET côté local.
+ *
+ * POURQUOI C'EST LA SEULE ISSUE QUI NE PERD RIEN
+ * ---------------------------------------------
+ * Les deux séries en collision sont deux séries RÉELLES, distinctes, saisies
+ * par l'utilisateur sur deux contextes différents. Les autres issues
+ * envisageables les détruisent : un `upsert onConflict: (exercise_id,
+ * set_number)` écraserait celle qui est déjà arrivée ; un abandon de
+ * l'opération supprimerait celle qui n'est pas passée ; un `blocked`
+ * conserverait la donnée mais retiendrait la clôture de la séance
+ * indéfiniment (`blocked` compte comme dépendance vivante pour la barrière du
+ * chantier 1 bis) — c'est exactement le défaut A1.
+ *
+ * Décaler le numéro ne perd RIEN : ni les reps, ni le poids, ni
+ * l'appartenance à l'exercice, ni l'identité de la ligne (son `id` client, qui
+ * ne bouge pas — la barrière de dépendance de la clôture, qui référence cet
+ * `id`, reste donc valide, et l'idempotence du retry aussi).
+ *
+ * L'ENTITÉ LOCALE EST MISE À JOUR EN MÊME TEMPS, sans quoi l'écran continuerait
+ * d'afficher l'ancien numéro et le prochain calcul de `max + 1` repartirait
+ * d'une valeur périmée.
+ *
+ * Renvoie `false` quand le remappage n'a pas eu lieu (lecture serveur
+ * impossible, aucun numéro atteignable, opération plus disponible) : l'erreur
+ * suit alors son chemin d'échec normal, sans traitement de faveur.
+ */
+async function remapUniqueSequence(
+  op: SyncOperation,
+  supabaseTable: string,
+  rule: UniqueSequenceRule,
+  error: SyncErrorDetails,
+): Promise<boolean> {
+  const payload = op.payload as Record<string, unknown> | null;
+  if (!payload) return false;
+  const scopeValue = payload[rule.scopeColumn];
+  const current = Number(payload[rule.sequenceColumn]);
+  if (scopeValue == null || !Number.isFinite(current)) return false;
+
+  let taken: number[];
+  try {
+    taken = [
+      ...(await fetchTakenSequenceValues(supabaseTable, rule, scopeValue)),
+      ...(await readLocalSequenceValues(op, rule, scopeValue)),
+    ];
+  } catch (err) {
+    // La collision est réelle mais on ne sait pas encore vers quoi remapper :
+    // on ne devine pas. L'échec initial repart par le chemin normal (backoff),
+    // et le remappage se retentera au passage suivant.
+    console.error(
+      `[syncEngine] remappage ${op.table}.${rule.sequenceColumn} impossible (lecture des valeurs prises en échec, id=${op.recordLocalId}) :`,
+      err,
+    );
+    return false;
+  }
+
+  const next = nextFreeSequenceValue({ current, taken, maxValue: rule.maxValue });
+  if (next === null) return false;
+
+  const rescheduled = await rescheduleOperationWithPayload({
+    operationId: op.id,
+    payload: { ...payload, [rule.sequenceColumn]: next },
+    lastError: `${formatSyncErrorSummary(error)} | ${rule.sequenceColumn} ${current} → ${next} (numéro déjà pris, série renumérotée automatiquement)`,
+    lastErrorCode: error.code,
+  });
+  if (!rescheduled) return false;
+
+  const db = await getOfflineDb();
+  const key = entityKey(op.table, op.recordLocalId);
+  const entity = (await db.get("entities", key)) as OfflineEntity | undefined;
+  if (entity) {
+    await db.put("entities", {
+      ...entity,
+      data: { ...(entity.data as Record<string, unknown>), [rule.sequenceColumn]: next },
+    } as OfflineEntity);
+  }
+  // `console.error` et non `console.warn` : c'est la seule méthode autorisée
+  // par la règle `no-console` du dépôt. Le message dit explicitement que le
+  // cas est RÉSOLU — il sert au diagnostic, pas à signaler une panne.
+  console.error(
+    `[syncEngine] collision d'unicité RÉSOLUE sur ${supabaseTable} (${rule.constraintName}) — ${rule.sequenceColumn} ${current} → ${next} pour id=${op.recordLocalId}. Aucune donnée perdue : la ligne repart au passage suivant.`,
+  );
+  return true;
+}
+
 async function applyOperation(
   op: SyncOperation,
-): Promise<"done" | "conflict" | "retry" | "blocked"> {
+): Promise<"done" | "conflict" | "retry" | "blocked" | "remapped"> {
   const supabaseTable = getSupabaseTableName(op.table);
   const db = await getOfflineDb();
   const key = entityKey(op.table, op.recordLocalId);
@@ -457,9 +600,28 @@ async function applyOperation(
     // dépendance (FK) qu'une autre opération de la file peut encore
     // satisfaire — cf. `isBlockingSyncError`.
     const error = extractSyncError(err);
+
+    // CHANTIER 8 (A1) — COLLISION SUR UN NUMÉRO D'ORDRE ATTRIBUÉ PAR LE
+    // CLIENT : on ne la retente pas à l'identique (elle échouerait toujours)
+    // et on ne la bloque pas (un `blocked` retiendrait la clôture de la
+    // séance indéfiniment). On renumérote la ligne et on la renvoie — la
+    // seule issue qui ne détruit ni la série déjà arrivée, ni celle-ci.
+    // Un remappage impossible (lecture serveur en échec, numéro inatteignable)
+    // ne bénéficie d'aucun traitement de faveur : on retombe simplement dans
+    // le chemin d'échec normal juste en dessous, qui journalise l'erreur.
+    if (error.code === UNIQUE_VIOLATION_PG_ERROR_CODE) {
+      const rule = uniqueSequenceRuleFor(op.table);
+      const kind = classifyUniqueViolation(error, { table: op.table, opType: op.opType });
+      if (rule && kind === "remappable-sequence") {
+        if (await remapUniqueSequence(op, supabaseTable, rule, error)) return "remapped";
+      }
+    }
+
     const retryCount = op.retryCount + 1;
     const permanent = isBlockingSyncError(error, {
       hasOtherQueuedOperations: await hasOtherQueuedOperations(op.userId, op.id),
+      table: op.table,
+      opType: op.opType,
     });
     // MIN-17 : même une erreur classée « temporaire » finit par épuiser son
     // budget de tentatives. On garde l'erreur RÉELLE en tête de `lastError`
@@ -489,6 +651,13 @@ export interface SyncResult {
   retried: number;
   /** Opérations passées en échec définitif pendant ce passage. */
   blocked: number;
+  /**
+   * CHANTIER 8 (A1) — opérations dont un NUMÉRO D'ORDRE en collision d'unicité
+   * a été recalculé pendant ce passage. Elles repartent au passage suivant
+   * sans consommer de tentative : ni un échec (rien n'est perdu), ni un succès
+   * (le serveur ne les a pas encore acceptées).
+   */
+  remapped: number;
   /** Opérations laissées à une autre instance (déjà `syncing` ailleurs) ou plus disponibles. */
   skipped: number;
   /** Opérations orphelines (`syncing` abandonnées) remises en file au début du passage. */
@@ -519,6 +688,7 @@ export async function processSyncQueue(
     conflicted: 0,
     retried: 0,
     blocked: 0,
+    remapped: 0,
     skipped: 0,
     reclaimed: 0,
   };
@@ -601,6 +771,8 @@ export async function processSyncQueue(
       result.conflicted += 1;
     } else if (outcome === "blocked") {
       result.blocked += 1;
+    } else if (outcome === "remapped") {
+      result.remapped += 1;
     } else {
       result.retried += 1;
     }
