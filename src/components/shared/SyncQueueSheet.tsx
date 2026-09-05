@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { OfflineSyncState } from "@/hooks/useOfflineSync";
 import { describeSyncFailure, technicalErrorDetail } from "@/lib/offline/syncErrors";
+import { listBlockedDependencies } from "@/lib/offline/syncQueue";
 import type { SyncOperation } from "@/lib/offline/types";
 
 const MAX_VISIBLE_OPERATIONS = 20;
@@ -82,6 +83,9 @@ export function SyncQueueSheet({ onClose, sync }: { onClose: () => void; sync: O
                 <OperationCard
                   key={operation.id}
                   operation={operation}
+                  blockedDependencyCount={
+                    listBlockedDependencies(operation, sync.operations).length
+                  }
                   onRetry={() => sync.retryOperation(operation.id)}
                   onDiscard={() => sync.discardOperation(operation.id)}
                 />
@@ -373,16 +377,26 @@ function formatTableLabel(table: string): string {
  */
 function OperationCard({
   operation,
+  blockedDependencyCount,
   onRetry,
   onDiscard,
 }: {
   operation: SyncOperation;
+  /**
+   * CHANTIER 8 (A1, volet 2) — nombre d'actions BLOQUÉES qui retiennent
+   * celle-ci via la barrière de dépendance (`dependsOnRecords`). Sans ce
+   * lien, une clôture de séance restait affichée « en attente » sans que rien
+   * n'indique QUELLE action attend une décision : l'utilisateur voyait sa
+   * séance ne jamais se synchroniser sans savoir quoi faire.
+   */
+  blockedDependencyCount: number;
   onRetry: () => void;
   onDiscard: () => void;
 }) {
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const isBlocked = operation.status === "blocked";
   const isFailed = operation.status === "failed";
+  const isHeldByBlockedDependency = !isBlocked && blockedDependencyCount > 0;
   const reason = describeSyncFailure(operation);
   const technical = technicalErrorDetail(operation.lastError);
 
@@ -438,6 +452,13 @@ function OperationCard({
         )}
       </div>
 
+      {isHeldByBlockedDependency && (
+        <p className="mt-2 break-words text-xs text-foreground/80">
+          {blockedDependencyCount > 1
+            ? `En attente de ${blockedDependencyCount} actions bloquées ci-dessus : traitez-les d'abord, sinon vos données seraient enregistrées de façon incomplète.`
+            : "En attente d'une action bloquée ci-dessus : traitez-la d'abord, sinon vos données seraient enregistrées de façon incomplète."}
+        </p>
+      )}
       {reason && (isBlocked || isFailed) && (
         <p className="mt-2 break-words text-xs text-foreground/80">{reason}</p>
       )}
