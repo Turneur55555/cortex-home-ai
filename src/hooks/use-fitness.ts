@@ -18,6 +18,7 @@ import { HYBRID_BLOCKS_KEY } from "@/hooks/useGenericActiveSession";
 import { ACTIVE_WORKOUT_CONFLICT_MESSAGE } from "@/lib/fitness/activeWorkoutGuard";
 import { OFFLINE_FIRST_QUERY_OPTIONS } from "@/lib/offline/offlineQuery";
 import { collectWorkoutSyncDependencies } from "@/lib/fitness/workoutSyncDependencies";
+import { allocateSetNumber, nextSetNumber } from "@/lib/fitness/setNumberAllocation";
 import { workoutsServerRefreshGate } from "@/lib/offline/workoutsRefreshWindow";
 import { requestSyncFlush } from "@/lib/offline/syncFlush";
 
@@ -1639,11 +1640,22 @@ type AddExerciseSetInput = {
 
 /** Ajoute une série à un exercice de la séance active. Offline-first : le
  *  numéro de série est assigné DÉTERMINISTE à partir du store LOCAL
- *  (max existant + 1) — plus besoin du retry serveur sur conflit 23505
- *  (pensé pour des courses entre onglets EN LIGNE) : hors ligne, le store
- *  local est la seule source de vérité, et l'id client-généré + l'upsert
+ *  (max existant + 1) — jamais par un aller-retour serveur : hors ligne, le
+ *  store local est la seule source de vérité, et l'id client-généré + l'upsert
  *  `onConflict: id` du sync engine garantissent qu'un retry réseau après
- *  coupure ne crée jamais deux fois la même série. */
+ *  coupure ne crée jamais deux fois la même série.
+ *
+ *  CHANTIER 8 (A1) — la lecture du store et la création qui la consomme sont
+ *  désormais SÉRIALISÉES par exercice (`allocateSetNumber`). Sans cela, deux
+ *  créations rapprochées (double tap sur « + Série », restauration de la
+ *  séance précédente, mutations lancées sans être attendues) lisaient toutes
+ *  deux l'état d'AVANT la première écriture et produisaient le MÊME
+ *  `set_number` — donc, à la synchronisation, une violation de
+ *  `UNIQUE (exercise_id, set_number)`. La sérialisation est purement locale :
+ *  elle n'ajoute aucune dépendance réseau et ne ralentit jamais un autre
+ *  exercice. La collision ENTRE APPAREILS, elle, reste impossible à prévenir
+ *  côté client : c'est le moteur qui la résout en renumérotant la série
+ *  (`lib/offline/uniqueSequenceRemap.ts`). */
 export function useAddExerciseSet() {
   const qc = useQueryClient();
   const { user } = useAuth();
@@ -1656,20 +1668,20 @@ export function useAddExerciseSet() {
       tmpId,
     }: AddExerciseSetInput & { tmpId: string }) => {
       if (!user) throw new Error("Non authentifié");
-      const localSets = (await exerciseSetsRepo.list(user.id)).filter(
-        (s) => s.exercise_id === exerciseId,
-      );
-      const n =
-        localSets.length > 0 ? Math.max(...localSets.map((s) => s.set_number)) + 1 : setNumber;
-      const created = await exerciseSetsRepo.create(user.id, {
-        exercise_id: exerciseId,
-        set_number: n,
-        reps,
-        weight,
-        completed: false,
-        rest_seconds: null,
-        notes: null,
-        tempo: null,
+      const created = await allocateSetNumber(exerciseId, async () => {
+        const localSets = (await exerciseSetsRepo.list(user.id)).filter(
+          (s) => s.exercise_id === exerciseId,
+        );
+        return exerciseSetsRepo.create(user.id, {
+          exercise_id: exerciseId,
+          set_number: nextSetNumber({ existing: localSets, fallback: setNumber }),
+          reps,
+          weight,
+          completed: false,
+          rest_seconds: null,
+          notes: null,
+          tempo: null,
+        });
       });
       setIdResolver.settle(tmpId, { ok: true, id: created.id });
       return created;
