@@ -4463,8 +4463,9 @@ Tests nouveaux : `exerciseSetUniqueCollision.test.ts` (12), `uniqueViolationClas
 (21), `blockedDependencies.test.ts` (8), `setNumberAllocation.test.ts` (10).
 
 ### Validation
-`npx vitest run` **1873 passed / 63 skipped / 0 échec** (140 fichiers) — les 63 skips sont les deux
-fichiers env-gated habituels, aucun ajouté. `npx tsc --noEmit` 0 erreur. `npm run lint` **0 erreur /
-158 warnings** (aucun ajouté). `npm run build` OK. `npm run check:offline-contract` OK (19 tables).
+`npx vitest run` **1873 passed / 63 skipped / 0 échec** (140 fichiers, +51 tests) — les 63 skips sont
+les deux fichiers env-gated habituels, aucun ajouté. `npx tsc --noEmit` 0 erreur. `npm run lint`
+**0 erreur / 157 warnings — chiffre IDENTIQUE à `main`** (mesuré par `git checkout main`).
+`npm run build` OK. `npm run check:offline-contract` OK (19 tables).
 E2E `05-offline-sync.spec.ts` **1 passed** (Chromium, backend simulé). Tests RLS non exécutables ici
 (secrets absents) — sans objet : aucune policy ni migration touchée.

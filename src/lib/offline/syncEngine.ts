@@ -308,13 +308,28 @@ async function applyServerRowToEntity(op: SyncOperation, serverRow: unknown): Pr
  * QU'APRÈS une collision réelle : créer une série hors ligne ne dépend
  * toujours d'aucun réseau.
  */
+/**
+ * Forme MINIMALE du client réellement utilisée par `fetchTakenSequenceValues`.
+ * Les tables offline sont désignées par leur nom au runtime : les types générés
+ * ne peuvent pas la couvrir. On décrit donc exactement l'appel nécessaire
+ * plutôt que d'élargir à `any`, comme le reste du fichier a dû le faire pour
+ * ses écritures.
+ */
+interface SequenceQueryClient {
+  from(table: string): {
+    select(columns: string): {
+      eq(column: string, value: unknown): PromiseLike<SupabaseResult>;
+    };
+  };
+}
+
 async function fetchTakenSequenceValues(
   supabaseTable: string,
   rule: UniqueSequenceRule,
   scopeValue: unknown,
 ): Promise<number[]> {
   const { data, error } = await withTimeout<SupabaseResult>(
-    (supabase as any)
+    (supabase as unknown as SequenceQueryClient)
       .from(supabaseTable)
       .select(`${rule.scopeColumn},${rule.sequenceColumn}`)
       .eq(rule.scopeColumn, scopeValue),
