@@ -4392,3 +4392,79 @@ qu'avant le chantier (fichiers d'intégration env-gated), aucun ajouté. `npx ts
 `npm run build` OK. `npm run check:offline-contract` OK (19 tables). `npm run check:types` **non
 exécutable dans l'environnement** (CLI Supabase absente) — sans objet ici : aucune migration, aucun
 changement de schéma, `types.ts` non modifié.
+
+## Chantier 8 — A1 : collision d'unicité `exercise_sets` qui retenait la clôture de séance (2026-09-05, branche `claude/session-sync-23505-8awjro`)
+
+### Le défaut, précisément
+`exercise_sets` porte `UNIQUE (exercise_id, set_number)` (contrainte
+`exercise_sets_exercise_id_set_number_key`) et le numéro est attribué **côté client**
+(`useAddExerciseSet` → `max(set_number local) + 1`) — il le faut, une série devant pouvoir être créée
+hors ligne. Deux contextes qui ne partagent pas le même store local choisissent donc le même numéro
+pour deux séries distinctes. À la synchronisation, la seconde échouait en `23505`, code classé
+**nulle part** : l'opération repartait à l'identique, échouait à l'identique, épuisait son budget
+(`MAX_RETRY_ATTEMPTS`) et passait `blocked`. Or `blocked` est une dépendance VIVANTE pour la barrière
+du chantier 1 bis (`LIVE_OPERATION_STATUSES`) : la clôture de la séance, qui déclare cette série dans
+ses `dependsOnRecords`, n'était alors plus jamais envoyée → `award_xp_on_workout_complete` jamais
+déclenché, `useSessionReward` figé sur `syncing`, XP jamais versée.
+
+### Les trois volets, traités ensemble
+1. **Classification de `23505` par CONTRAINTE, jamais par code seul.** Inventaire relevé EN BASE
+   (`bcwfvpwxzlmkxobvbtzp`) des contraintes d'unicité atteignables par la sync queue — trois familles :
+   - `exercise_sets_exercise_id_set_number_key` → **remappable** (numéro d'ordre client) ;
+   - `workouts_one_active_per_user`, `physical_goals_one_active_per_user` → **dépend de l'état
+     serveur** (index partiels `status='active'`, levables par une autre opération de la file — même
+     règle que `23503`) ;
+   - `recipe_collections_user_id_name_key`, `workout_analyses_workout_id_key`,
+     `idx_recipes_user_source_url` → **définitif** (valeur saisie par l'utilisateur ou identité de la
+     ligne : jamais réécrite d'office) → `blocked` immédiat, visible, donnée locale conservée.
+   `23505` est ajouté à `NON_RETRYABLE_PG_ERROR_CODES`, mais `isBlockingSyncError` consulte
+   `classifyUniqueViolation` avant de trancher. Le nom de contrainte est lu dans le message Postgres ;
+   s'il manque, déduction par le schéma (un `create` part en `upsert onConflict:"id"`, la PK ne peut
+   donc pas être en cause).
+2. **`blocked` reste une dépendance vivante** — l'en retirer rouvrirait DISC-01b (trigger XP exécuté
+   une seule fois sur une séance incomplète, irréversible). Ce qui manquait n'était pas une issue
+   (« Réessayer » / « Retirer de la file » existent et ne suppriment jamais la donnée métier) mais le
+   LIEN VISIBLE : nouveau prédicat PUR `listBlockedDependencies(op, ops)` + message dédié dans
+   `SyncQueueSheet` sur l'opération retenue.
+3. **`set_number`** : réservation locale sérialisée par exercice (`allocateSetNumber`) — ferme la
+   collision INTRA-appareil (double tap, restauration de séance : deux mutations lisaient le store
+   avant que la première n'ait écrit). Zéro réseau. La collision INTER-appareils, elle, est résolue à
+   la synchronisation par le remappage.
+
+### Solution retenue pour la collision : REMAPPAGE (jamais blocage, jamais écrasement)
+`syncEngine.remapUniqueSequence` relit les numéros pris (serveur + local), calcule
+`max + 1` (`nextFreeSequenceValue`), réécrit le payload de l'opération ET l'entité locale, et
+reprogramme l'opération en `pending` **sans consommer de tentative**
+(`rescheduleOperationWithPayload`). Nouveau résultat `"remapped"` + compteur `SyncResult.remapped`.
+- **Rien n'est perdu** : ni reps, ni poids, ni exercice, ni l'`id` client (la barrière de la clôture,
+  qui référence cet id, reste valide ; l'idempotence du retry aussi). Seul l'ordre d'affichage bouge.
+- **Terminaison prouvée** : le numéro est STRICTEMENT croissant, donc aucune boucle sur une même
+  valeur ; un nouveau tour exige qu'un autre acteur ait réellement inséré ce numéro. Bornes dures :
+  pas de remappage si le numéro dépasse le `SMALLINT` ou ne progresse pas.
+- Alternatives écartées : `upsert onConflict:(exercise_id,set_number)` (écrase la série de l'autre
+  appareil), abandon de l'opération (perte silencieuse), RPC serveur d'allocation (dépendance réseau
+  pour créer une série — interdit), suppression de la contrainte UNIQUE (destruction d'un invariant,
+  hors périmètre).
+
+### Données existantes auditées (avant toute décision, aucune modification)
+1 785 séries / 563 exercices : **0 doublon `(exercise_id, set_number)`**, 0 `set_number` NULL ou < 1,
+0 série orpheline, 0 incohérence `user_id` série↔exercice, max `set_number` = 6. Sur 524 exercices
+porteurs de séries : 1 ne commence pas à 1, 4 ont un trou (suppression de série au milieu — normal, le
+remappage ne comble jamais un trou). Aucune migration nécessaire, **aucune migration créée**,
+`types.ts` non touché.
+
+### Fichiers
+Nouveaux : `src/lib/offline/uniqueSequenceRemap.ts`, `src/lib/fitness/setNumberAllocation.ts`.
+Modifiés : `src/lib/offline/syncErrors.ts` (classification 23505), `src/lib/offline/syncEngine.ts`
+(remappage + `SyncResult.remapped`), `src/lib/offline/syncQueue.ts`
+(`rescheduleOperationWithPayload`, `listBlockedDependencies`), `src/hooks/use-fitness.ts`
+(`useAddExerciseSet` sérialisé), `src/components/shared/SyncQueueSheet.tsx` (rétention expliquée).
+Tests nouveaux : `exerciseSetUniqueCollision.test.ts` (12), `uniqueViolationClassification.test.ts`
+(21), `blockedDependencies.test.ts` (8), `setNumberAllocation.test.ts` (10).
+
+### Validation
+`npx vitest run` **1873 passed / 63 skipped / 0 échec** (140 fichiers) — les 63 skips sont les deux
+fichiers env-gated habituels, aucun ajouté. `npx tsc --noEmit` 0 erreur. `npm run lint` **0 erreur /
+158 warnings** (aucun ajouté). `npm run build` OK. `npm run check:offline-contract` OK (19 tables).
+E2E `05-offline-sync.spec.ts` **1 passed** (Chromium, backend simulé). Tests RLS non exécutables ici
+(secrets absents) — sans objet : aucune policy ni migration touchée.
