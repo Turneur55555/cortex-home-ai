@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BookOpen, CheckCircle2, Layers, Loader2, MoreVertical, XCircle } from "lucide-react";
 import { Sheet } from "@/components/shared/FormComponents";
 import type { ActiveWorkout } from "@/hooks/use-fitness";
@@ -134,9 +134,19 @@ export function ActiveWorkoutView({
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
 
+  // CHANTIER 9 (F1) — accessibilité fonctionnelle du menu, sans redesign.
+  // Le menu vit dans un Portal : sans rôle ni gestion du focus, un lecteur
+  // d'écran ne l'annonce pas et le clavier reste sur le bouton déclencheur,
+  // hors de la liste d'actions qui vient de s'ouvrir.
+  const menuRef = useRef<HTMLDivElement>(null);
+  const closeMenu = useCallback((restoreFocus = true) => {
+    setMenuOpen(false);
+    if (restoreFocus) menuButtonRef.current?.focus();
+  }, []);
+
   const toggleMenu = () => {
     if (menuOpen) {
-      setMenuOpen(false);
+      closeMenu();
       return;
     }
     const rect = menuButtonRef.current?.getBoundingClientRect();
@@ -145,6 +155,18 @@ export function ActiveWorkoutView({
     }
     setMenuOpen(true);
   };
+
+  // Ouverture : le focus entre dans le menu. Échap : il en ressort et revient
+  // sur le bouton, comportement attendu de tout menu contextuel.
+  useEffect(() => {
+    if (!menuOpen) return;
+    menuRef.current?.querySelector<HTMLButtonElement>("[role='menuitem']")?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeMenu();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [menuOpen, closeMenu]);
 
   // PRs from history (excluding the active workout itself)
   const { prByName, histByName, volByName } = useMemo(
@@ -203,10 +225,24 @@ export function ActiveWorkoutView({
     reorderExercises.mutate(orderedIds);
   };
 
+  // CHANTIER 9 (B1/B2) — la garde qui compte est INTERNE à la mutation
+  // (`runExclusiveSessionClosure`, voir use-fitness.ts) : ces deux drapeaux
+  // ne font que refléter le verrou à l'écran, ils ne le remplacent pas.
+  const closureBusy = finish.isPending || cancel.isPending;
+
   const handleFinish = async () => {
+    if (closureBusy) return;
     // Capture snapshot before invalidation
     const snapshot = workout;
-    await finish.mutateAsync({ ...workout, segments: hybridWorkout?.segments ?? [] });
+    try {
+      await finish.mutateAsync({ ...workout, segments: hybridWorkout?.segments ?? [] });
+    } catch {
+      // L'échec n'est PAS avalé : `useFinishWorkout.onError` en a déjà
+      // affiché le message. On l'attrape uniquement pour ne pas laisser un
+      // rejet de promesse sans gestionnaire, et surtout pour ne pas
+      // enchaîner sur l'écran de récompense d'une séance non close.
+      return;
+    }
     // Analyse muscles des exercices personnalisés en arrière-plan (silent)
     const toResolve = (snapshot.exercises ?? []).map((ex) => ({
       id: ex.id,
@@ -219,8 +255,13 @@ export function ActiveWorkoutView({
   };
 
   const handleCancel = async () => {
+    if (closureBusy) return;
     setConfirmCancel(false);
-    await cancel.mutateAsync(workout.id);
+    try {
+      await cancel.mutateAsync(workout.id);
+    } catch {
+      // Message déjà affiché par `useCancelWorkout.onError` — voir plus haut.
+    }
   };
 
   return (
@@ -250,7 +291,7 @@ export function ActiveWorkoutView({
             <button
               type="button"
               onClick={handleFinish}
-              disabled={finish.isPending}
+              disabled={closureBusy}
               className="flex h-8 items-center gap-1.5 rounded-full bg-gradient-primary px-3 text-[12px] font-semibold text-primary-foreground shadow-glow disabled:opacity-50"
             >
               {finish.isPending ? (
@@ -266,6 +307,8 @@ export function ActiveWorkoutView({
               onClick={toggleMenu}
               className="flex h-8 w-8 items-center justify-center rounded-full bg-white/5 text-muted-foreground transition-all active:scale-90"
               aria-label="Menu séance"
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
             >
               <MoreVertical className="h-4 w-4" />
             </button>
@@ -275,18 +318,23 @@ export function ActiveWorkoutView({
 
       {menuOpen && menuAnchor && (
         <Portal>
-          <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+          <div className="fixed inset-0 z-40" onClick={() => closeMenu()} />
           <div
+            ref={menuRef}
+            role="menu"
+            aria-label="Actions de la séance"
             className="fixed z-50 min-w-[180px] overflow-hidden rounded-2xl border border-border bg-card shadow-elevated animate-in fade-in zoom-in-95 duration-150"
             style={{ top: menuAnchor.top, right: menuAnchor.right }}
           >
             <button
               type="button"
+              role="menuitem"
+              disabled={closureBusy}
               onClick={() => {
-                setMenuOpen(false);
+                closeMenu(false);
                 setConfirmCancel(true);
               }}
-              className="flex w-full items-center gap-3 px-4 py-3 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10"
+              className="flex w-full items-center gap-3 px-4 py-3 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10 disabled:opacity-50"
             >
               <XCircle className="h-4 w-4" />
               Annuler la séance
@@ -315,7 +363,8 @@ export function ActiveWorkoutView({
                 <button
                   type="button"
                   onClick={handleCancel}
-                  className="flex-1 rounded-xl bg-destructive py-2.5 text-sm font-semibold text-destructive-foreground"
+                  disabled={closureBusy}
+                  className="flex-1 rounded-xl bg-destructive py-2.5 text-sm font-semibold text-destructive-foreground disabled:opacity-50"
                 >
                   Annuler
                 </button>

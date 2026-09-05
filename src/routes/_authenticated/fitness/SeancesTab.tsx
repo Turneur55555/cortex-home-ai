@@ -264,7 +264,24 @@ export function SeancesTab({ initialChroniques }: SeancesTabProps = {}) {
     setCoachOpen(true);
   }, []);
 
-  if ((activeLoading || activeGenericLoading) && isLoading) {
+  // CHANTIER 9 (B3) — CE LOADER NE CONCERNE QUE LA SÉANCE ACTIVE.
+  //
+  // Il existe pour une seule raison : tant qu'on ignore s'il y a une séance
+  // en cours, afficher la vue historique (« Choisir une épreuve », les
+  // Chroniques…) serait un contresens, immédiatement remplacé par la séance
+  // active dès la réponse — l'écran clignote.
+  //
+  // La condition était `(activeLoading || activeGenericLoading) && isLoading`
+  // : elle exigeait que l'HISTORIQUE soit AUSSI en cours de chargement pour
+  // couvrir la séance active. Or `isLoading` (useWorkouts) est servi par le
+  // store local et retombe donc à `false` presque tout de suite, y compris
+  // hors ligne : dans le cas courant, le loader disparaissait alors que la
+  // séance active n'était pas encore connue, et c'est précisément le
+  // clignotement qu'il devait éviter.
+  //
+  // L'historique, lui, a déjà son propre indicateur dans la vue (le bloc
+  // `isLoading` plus bas) : le sortir d'ici n'enlève aucun retour visuel.
+  if (activeLoading || activeGenericLoading) {
     return (
       <div className="flex h-40 items-center justify-center">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />

@@ -19,6 +19,8 @@ import { ACTIVE_WORKOUT_CONFLICT_MESSAGE } from "@/lib/fitness/activeWorkoutGuar
 import { OFFLINE_FIRST_QUERY_OPTIONS } from "@/lib/offline/offlineQuery";
 import { collectWorkoutSyncDependencies } from "@/lib/fitness/workoutSyncDependencies";
 import { allocateSetNumber, nextSetNumber } from "@/lib/fitness/setNumberAllocation";
+import { runExclusiveSessionClosure } from "@/lib/fitness/sessionClosure";
+import { summarizeExerciseSetsForHistory } from "@/lib/fitness/sets";
 import { workoutsServerRefreshGate } from "@/lib/offline/workoutsRefreshWindow";
 import { requestSyncFlush } from "@/lib/offline/syncFlush";
 
@@ -208,11 +210,16 @@ export async function refreshWorkoutsFromServer(
  *
  * CE QUI N'EST PAS PERDU : les écrans qui ont besoin d'un historique plus
  * profond que la fenêtre ne lisent pas le store local — ils interrogent le
- * serveur directement (`useExerciseSetHistory`, `useLastExerciseSession`,
- * `useSenseiTrainingHistory`). Et les lignes déjà hydratées lors d'un
- * passage précédent restent en local : la fenêtre borne ce qu'on RAPATRIE,
- * elle ne supprime rien (les seules suppressions locales possibles sont
- * celles, prouvées, de la réconciliation ci-dessous).
+ * serveur directement (`useExerciseSetHistory`, `useSenseiTrainingHistory`).
+ * Et les lignes déjà hydratées lors d'un passage précédent restent en local :
+ * la fenêtre borne ce qu'on RAPATRIE, elle ne supprime rien (les seules
+ * suppressions locales possibles sont celles, prouvées, de la réconciliation
+ * ci-dessous).
+ *
+ * CHANTIER 9 (E1) : `useLastExerciseSession` a QUITTÉ cette liste. Sa
+ * lecture serveur n'était ni bornée ni triée — donc tronquable en silence
+ * par PostgREST — et restait muette hors connexion. Elle lit désormais le
+ * store local, avec la limite de fenêtre documentée dans ce hook.
  */
 
 /**
@@ -1225,116 +1232,143 @@ export function useFinishWorkout() {
   return useMutation({
     mutationFn: async (workout: ActiveWorkout & { segments?: ActiveGenericSegment[] }) => {
       if (!user) throw new Error("Non authentifié");
-      const durationMs = Date.now() - new Date(workout.created_at).getTime();
-      const durationMin = Math.min(600, Math.max(1, Math.round(durationMs / 60_000)));
+      // CHANTIER 9 (B1/B2) — VERROU DE CLÔTURE, INTERNE À LA MUTATION.
+      // « Terminer » et « Annuler » écrivent au même endroit et se
+      // contredisent : la seconde intention engagée est REFUSÉE, quel que
+      // soit le point d'entrée (bandeau, menu, dialogue de confirmation).
+      // Voir `lib/fitness/sessionClosure.ts` pour le détail des courses
+      // réellement possibles avant ce chantier.
+      await runExclusiveSessionClosure(workout.id, "finish", async () => {
+        const durationMs = Date.now() - new Date(workout.created_at).getTime();
+        const durationMin = Math.min(600, Math.max(1, Math.round(durationMs / 60_000)));
 
-      const segments = workout.segments ?? [];
-      let metadataUpdate: Record<string, unknown> | undefined;
-      if (segments.length > 0) {
-        // Lecture de metadata existante — locale (offline-first) : le store
-        // local est déjà à jour, pas besoin d'aller en ligne.
-        const localWorkout = await workoutsRepo.get(workout.id);
-        const existingMetadata = (localWorkout?.metadata ?? {}) as Record<string, unknown>;
+        const segments = workout.segments ?? [];
+        let metadataUpdate: Record<string, unknown> | undefined;
+        if (segments.length > 0) {
+          // Lecture de metadata existante — locale (offline-first) : le store
+          // local est déjà à jour, pas besoin d'aller en ligne.
+          const localWorkout = await workoutsRepo.get(workout.id);
+          const existingMetadata = (localWorkout?.metadata ?? {}) as Record<string, unknown>;
 
-        const formattedSegments = [...segments]
-          .sort((a, b) => a.position - b.position)
-          .map((seg) => {
-            const disciplineId = seg.discipline ?? "autre";
-            const entry = ENGINE_REGISTRY[disciplineId];
-            const engine = entry && isReadyEngine(entry) ? entry : null;
-            const formatted = engine?.formatLiveSegment
-              ? engine.formatLiveSegment({
-                  id: seg.id,
-                  label: seg.label,
-                  metrics: seg.metrics,
-                  metricKey: seg.metricKey,
-                  completed: seg.completed,
-                  position: seg.position,
-                })
-              : { label: seg.label, stats: [], metrics: seg.metrics };
-            return { ...formatted, exerciseId: seg.exerciseId };
-          });
+          const formattedSegments = [...segments]
+            .sort((a, b) => a.position - b.position)
+            .map((seg) => {
+              const disciplineId = seg.discipline ?? "autre";
+              const entry = ENGINE_REGISTRY[disciplineId];
+              const engine = entry && isReadyEngine(entry) ? entry : null;
+              const formatted = engine?.formatLiveSegment
+                ? engine.formatLiveSegment({
+                    id: seg.id,
+                    label: seg.label,
+                    metrics: seg.metrics,
+                    metricKey: seg.metricKey,
+                    completed: seg.completed,
+                    position: seg.position,
+                  })
+                : { label: seg.label, stats: [], metrics: seg.metrics };
+              return { ...formatted, exerciseId: seg.exerciseId };
+            });
 
-        metadataUpdate = {
-          ...existingMetadata,
-          segments: formattedSegments,
-          sessionType: "hybrid",
-        };
-      }
-
-      // CHANTIER 4 (DISC-01) — `neverMergeIntoPendingCreate` : c'est l'arrivée
-      // de `status='completed'` EN BASE qui déclenche
-      // `award_xp_on_workout_complete`, et ce trigger PARCOURT les exercices
-      // et les séries de la séance (records, progression par exercice). Sans
-      // cette option, une séance vécue entièrement hors ligne voyait sa
-      // clôture fusionnée dans son `create` encore en attente : elle arrivait
-      // en INSERT déjà terminée, donc AVANT ses exercices (FIFO), et le
-      // trigger s'exécutait sur une séance vide — XP de record et de
-      // progression jamais versées.
-      //
-      // CHANTIER 1 BIS (DISC-01b) — `dependsOnRecords` complète la précédente :
-      // être enfilée après les enfants ne suffit pas, car la file traite
-      // chaque opération indépendamment et POURSUIT après un échec. Sans
-      // cette barrière, un `create` d'enfant en échec réseau (ou `blocked`)
-      // laissait quand même partir la clôture, et le trigger s'exécutait sur
-      // une séance incomplète — sans jamais se redéclencher ensuite. Les deux
-      // options sont les deux moitiés d'une même garantie.
-      //
-      // Les dépendances sont construites depuis le STORE LOCAL, jamais depuis
-      // le snapshot React reçu en argument : celui-ci vient du cache React
-      // Query et peut porter transitoirement des ids optimistes `tmp-*`
-      // (useAddExerciseSet), qui ne correspondent à aucune opération de la
-      // file — la barrière ne retiendrait alors plus rien.
-      const [localExercises, localSets, localSegments] = await Promise.all([
-        exercisesRepo.list(user.id),
-        exerciseSetsRepo.list(user.id),
-        workoutSegmentsRepo.list(user.id),
-      ]);
-      const dependsOnRecords = collectWorkoutSyncDependencies(workout.id, {
-        exercises: localExercises,
-        exerciseSets: localSets,
-        workoutSegments: localSegments,
-      });
-
-      await workoutsRepo.update(
-        workout.id,
-        user.id,
-        {
-          duration_minutes: durationMin,
-          status: "completed",
-          ...(metadataUpdate ? { metadata: metadataUpdate } : {}),
-        },
-        { neverMergeIntoPendingCreate: true, dependsOnRecords },
-      );
-
-      // H2 : synchronise les colonnes résumé `exercises.sets/reps/weight`
-      // depuis les séries réelles — offline-first au même titre que tout
-      // le reste (exercisesRepo.update écrit local + enfile la sync, aucune
-      // dépendance réseau nécessaire ici).
-      for (const ex of workout.exercises ?? []) {
-        const filled = (ex.exercise_sets ?? []).filter(
-          (st) => st.reps != null && st.weight != null && st.reps > 0 && st.weight > 0,
-        );
-        const done = filled.filter((st) => st.completed);
-        const source = done.length > 0 ? done : filled;
-        if (source.length === 0) continue;
-        const top = source.reduce((best, st) =>
-          (st.weight as number) > (best.weight as number) ||
-          ((st.weight as number) === (best.weight as number) &&
-            (st.reps as number) > (best.reps as number))
-            ? st
-            : best,
-        );
-        try {
-          await exercisesRepo.update(ex.id, user.id, {
-            sets: source.length,
-            reps: top.reps,
-            weight: top.weight,
-          });
-        } catch (e) {
-          console.error("[finishWorkout] sync résumé échoué", ex.name, e);
+          metadataUpdate = {
+            ...existingMetadata,
+            segments: formattedSegments,
+            sessionType: "hybrid",
+          };
         }
-      }
+
+        // CHANTIER 4 (DISC-01) — `neverMergeIntoPendingCreate` : c'est l'arrivée
+        // de `status='completed'` EN BASE qui déclenche
+        // `award_xp_on_workout_complete`, et ce trigger PARCOURT les exercices
+        // et les séries de la séance (records, progression par exercice). Sans
+        // cette option, une séance vécue entièrement hors ligne voyait sa
+        // clôture fusionnée dans son `create` encore en attente : elle arrivait
+        // en INSERT déjà terminée, donc AVANT ses exercices (FIFO), et le
+        // trigger s'exécutait sur une séance vide — XP de record et de
+        // progression jamais versées.
+        //
+        // CHANTIER 1 BIS (DISC-01b) — `dependsOnRecords` complète la précédente :
+        // être enfilée après les enfants ne suffit pas, car la file traite
+        // chaque opération indépendamment et POURSUIT après un échec. Sans
+        // cette barrière, un `create` d'enfant en échec réseau (ou `blocked`)
+        // laissait quand même partir la clôture, et le trigger s'exécutait sur
+        // une séance incomplète — sans jamais se redéclencher ensuite. Les deux
+        // options sont les deux moitiés d'une même garantie.
+        //
+        // Les dépendances sont construites depuis le STORE LOCAL, jamais depuis
+        // le snapshot React reçu en argument : celui-ci vient du cache React
+        // Query et peut porter transitoirement des ids optimistes `tmp-*`
+        // (useAddExerciseSet), qui ne correspondent à aucune opération de la
+        // file — la barrière ne retiendrait alors plus rien.
+        const [localExercises, localSets, localSegments] = await Promise.all([
+          exercisesRepo.list(user.id),
+          exerciseSetsRepo.list(user.id),
+          workoutSegmentsRepo.list(user.id),
+        ]);
+        const dependsOnRecords = collectWorkoutSyncDependencies(workout.id, {
+          exercises: localExercises,
+          exerciseSets: localSets,
+          workoutSegments: localSegments,
+        });
+
+        await workoutsRepo.update(
+          workout.id,
+          user.id,
+          {
+            duration_minutes: durationMin,
+            status: "completed",
+            ...(metadataUpdate ? { metadata: metadataUpdate } : {}),
+          },
+          { neverMergeIntoPendingCreate: true, dependsOnRecords },
+        );
+
+        // H2 : synchronise les colonnes résumé `exercises.sets/reps/weight`
+        // depuis les séries réelles — offline-first au même titre que tout
+        // le reste (exercisesRepo.update écrit local + enfile la sync, aucune
+        // dépendance réseau nécessaire ici).
+        //
+        // CHANTIER 9 (A2) — DEUX CORRECTIONS, AUCUN CHANGEMENT DE RÈGLE :
+        // 1. La source est le STORE LOCAL (`localExercises`/`localSets`, déjà
+        //    lus ci-dessus pour la barrière), plus le snapshot React reçu en
+        //    argument. Ce dernier vient du cache React Query : il peut être en
+        //    retard d'une invalidation (exercice ajouté juste avant la clôture,
+        //    modification de série encore en vol) et faisait alors écrire un
+        //    résumé faux — ou aucun résumé du tout.
+        // 2. Un exercice sans aucune série exploitable voit son résumé remis à
+        //    VIDE au lieu d'être ignoré : l'historique ne peut plus afficher un
+        //    couple reps/charge qui ne correspond à aucune série.
+        // La règle de calcul elle-même est inchangée et vit désormais dans
+        // `lib/fitness/sets.ts` (`summarizeExerciseSetsForHistory`, testée).
+        //
+        // POURQUOI APRÈS la clôture et non avant : `hasLiveDependencies` ne
+        // retient une opération que sur des dépendances ANTÉRIEURES
+        // (`other.createdAt < op.createdAt`). Enfiler ces mises à jour avant la
+        // clôture les ferait entrer dans sa barrière et RETARDERAIT le
+        // versement de l'XP, alors que le trigger serveur ne lit que
+        // `exercise_sets` (vérifié sur `award_xp_on_workout_complete`).
+        const setsByExercise = new Map<string, typeof localSets>();
+        for (const st of localSets) {
+          const bucket = setsByExercise.get(st.exercise_id);
+          if (bucket) bucket.push(st);
+          else setsByExercise.set(st.exercise_id, [st]);
+        }
+        for (const ex of localExercises.filter((e) => e.workout_id === workout.id)) {
+          const summary = summarizeExerciseSetsForHistory(setsByExercise.get(ex.id) ?? []);
+          // Rien à corriger : on n'enfile pas d'opération de synchronisation
+          // pour réécrire les valeurs déjà en place.
+          if (
+            ex.sets === summary.sets &&
+            ex.reps === summary.reps &&
+            ex.weight === summary.weight
+          ) {
+            continue;
+          }
+          try {
+            await exercisesRepo.update(ex.id, user.id, summary);
+          } catch (e) {
+            console.error("[finishWorkout] sync résumé échoué", ex.name, e);
+          }
+        }
+      });
     },
     onSuccess: (_d, workout) => {
       // Pas de toast ici : l'écran de récompense (SessionRewardScreen)
@@ -1373,10 +1407,18 @@ export function useCancelWorkout() {
   return useMutation({
     mutationFn: async (workoutId: string) => {
       if (!user) throw new Error("Non authentifié");
-      // L'XP éventuellement versée est retirée côté serveur avant la
-      // suppression (trigger `trg_reverse_xp_before_workout_delete`).
-      await cascadeDeleteWorkoutChildren(user.id, workoutId);
-      await workoutsRepo.remove(workoutId, user.id);
+      // CHANTIER 9 (B1/B2) — MÊME VERROU QUE `useFinishWorkout`, et c'est le
+      // point essentiel : une annulation engagée pendant une clôture (ou
+      // l'inverse) supprimerait en cascade les séries et exercices que la
+      // clôture est en train de déclarer au serveur. Le refus est immédiat,
+      // jamais mis en attente — différer l'annulation reviendrait à
+      // supprimer la séance que l'utilisateur vient de terminer.
+      await runExclusiveSessionClosure(workoutId, "cancel", async () => {
+        // L'XP éventuellement versée est retirée côté serveur avant la
+        // suppression (trigger `trg_reverse_xp_before_workout_delete`).
+        await cascadeDeleteWorkoutChildren(user.id, workoutId);
+        await workoutsRepo.remove(workoutId, user.id);
+      });
     },
     onSuccess: () => {
       toast.success("Séance annulée");

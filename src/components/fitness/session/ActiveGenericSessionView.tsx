@@ -128,14 +128,34 @@ export function ActiveGenericSessionView({
     });
   };
 
+  // CHANTIER 9 (B1/B2) — reflet à l'écran du verrou interne aux mutations
+  // (`runExclusiveSessionClosure`, voir useGenericActiveSession.ts). Cet
+  // écran expose DEUX déclencheurs de clôture : le bouton principal et
+  // l'entrée « Terminer la séance » du menu. Les deux portent désormais le
+  // même état, et le même verrou.
+  const closureBusy = finish.isPending || cancel.isPending;
+
   const handleFinish = async () => {
-    await finish.mutateAsync(workout);
+    if (closureBusy) return;
+    try {
+      await finish.mutateAsync(workout);
+    } catch {
+      // Message déjà affiché par `useFinishGenericActiveWorkout.onError` :
+      // on n'avale rien, on évite seulement un rejet non géré et l'écran de
+      // récompense d'une séance qui n'est pas close.
+      return;
+    }
     onFinished(workout);
   };
 
   const handleCancel = async () => {
+    if (closureBusy) return;
     setConfirmCancel(false);
-    await cancel.mutateAsync(workout.id);
+    try {
+      await cancel.mutateAsync(workout.id);
+    } catch {
+      // Message déjà affiché par `useCancelGenericActiveWorkout.onError`.
+    }
   };
 
   return (
@@ -179,6 +199,8 @@ export function ActiveGenericSessionView({
                 onClick={() => setMenuOpen((v) => !v)}
                 className="flex h-9 w-9 items-center justify-center rounded-full bg-white/5 text-muted-foreground transition-all active:scale-90"
                 aria-label="Menu séance"
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
               >
                 <MoreVertical className="h-4 w-4" />
               </button>
@@ -231,25 +253,33 @@ export function ActiveGenericSessionView({
           )}
 
           {menuOpen && (
-            <div className="absolute right-4 top-14 z-20 min-w-[180px] overflow-hidden rounded-2xl border border-border bg-card shadow-elevated">
+            <div
+              role="menu"
+              aria-label="Actions de la séance"
+              className="absolute right-4 top-14 z-20 min-w-[180px] overflow-hidden rounded-2xl border border-border bg-card shadow-elevated"
+            >
               <button
                 type="button"
+                role="menuitem"
+                disabled={closureBusy}
                 onClick={() => {
                   setMenuOpen(false);
-                  handleFinish();
+                  void handleFinish();
                 }}
-                className="flex w-full items-center gap-3 px-4 py-3 text-sm font-medium transition-colors hover:bg-primary/10"
+                className="flex w-full items-center gap-3 px-4 py-3 text-sm font-medium transition-colors hover:bg-primary/10 disabled:opacity-50"
               >
                 <CheckCircle2 className="h-4 w-4 text-green-400" />
                 Terminer la séance
               </button>
               <button
                 type="button"
+                role="menuitem"
+                disabled={closureBusy}
                 onClick={() => {
                   setMenuOpen(false);
                   setConfirmCancel(true);
                 }}
-                className="flex w-full items-center gap-3 border-t border-border px-4 py-3 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10"
+                className="flex w-full items-center gap-3 border-t border-border px-4 py-3 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10 disabled:opacity-50"
               >
                 <XCircle className="h-4 w-4" />
                 Annuler la séance
@@ -262,7 +292,7 @@ export function ActiveGenericSessionView({
           <button
             type="button"
             onClick={handleFinish}
-            disabled={finish.isPending}
+            disabled={closureBusy}
             className="inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-primary text-sm font-semibold text-primary-foreground shadow-glow disabled:opacity-50"
           >
             {finish.isPending ? (
@@ -295,7 +325,8 @@ export function ActiveGenericSessionView({
                 <button
                   type="button"
                   onClick={handleCancel}
-                  className="flex-1 rounded-xl bg-destructive py-2.5 text-sm font-semibold text-destructive-foreground"
+                  disabled={closureBusy}
+                  className="flex-1 rounded-xl bg-destructive py-2.5 text-sm font-semibold text-destructive-foreground disabled:opacity-50"
                 >
                   Annuler
                 </button>

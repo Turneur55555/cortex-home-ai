@@ -270,6 +270,7 @@ export function ExerciseCardStatField({
   placeholder,
   unit,
   step,
+  ariaLabel,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -277,14 +278,23 @@ export function ExerciseCardStatField({
   placeholder: string;
   unit: string;
   step?: string;
+  /** CHANTIER 9 (F1) — nom accessible explicite. Sans lui, le seul texte du
+   *  label est l'unité (« kg », « reps ») : un lecteur d'écran annonce donc
+   *  « kg » à l'identique sur chaque série, sans jamais dire laquelle. */
+  ariaLabel?: string;
 }) {
   return (
     <label className="flex h-12 flex-1 flex-col items-center justify-center rounded-[14px] bg-white/[0.05] transition-all focus-within:bg-primary/10 focus-within:ring-1 focus-within:ring-primary/40">
       <input
         type="number"
         inputMode="decimal"
+        // Une valeur négative n'a aucun sens ici (répétitions, charge, allure,
+        // distance) : `min` le dit au navigateur, et la validation métier la
+        // refuse de toute façon (cf. lib/fitness/sets.ts, chantier 9 C1).
+        min="0"
         step={step}
         value={value}
+        aria-label={ariaLabel}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
         onBlur={(e) => onCommit(e.target.value)}

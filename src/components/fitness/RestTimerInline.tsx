@@ -11,6 +11,18 @@ function formatTime(sec: number) {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
+/** CHANTIER 9 (F1) — durée dite en toutes lettres, pour les lecteurs d'écran.
+ *  Les libellés affichés (« 1'30 », « 02:15 ») sont des abréviations
+ *  visuelles : lues telles quelles, elles sont incompréhensibles. */
+function spokenDuration(sec: number): string {
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  const parts: string[] = [];
+  if (m > 0) parts.push(`${m} minute${m > 1 ? "s" : ""}`);
+  if (s > 0 || m === 0) parts.push(`${s} seconde${s > 1 ? "s" : ""}`);
+  return parts.join(" ");
+}
+
 /**
  * Zone de repos intégrée à la carte de l'exercice concerné.
  * Réutilise le store `useRestTimer` existant : aucun second système.
@@ -81,7 +93,18 @@ export function RestTimerInline({ exerciseId }: { exerciseId: string }) {
                     </linearGradient>
                   </defs>
                 </svg>
-                <span className="relative text-[13px] font-bold tabular-nums">
+                {/* CHANTIER 9 (F1) — `role="timer"` nomme la zone sans la
+                    rendre bavarde : une région live qui annoncerait chaque
+                    seconde rendrait l'écran inutilisable au lecteur d'écran.
+                    C'est le STATUT ci-dessous (« Repos » / « En pause » /
+                    « Repos terminé ») qui porte l'annonce, car il ne change
+                    que quelques fois. */}
+                <span
+                  role="timer"
+                  aria-live="off"
+                  aria-label={`Temps de repos restant : ${spokenDuration(t.remaining)}`}
+                  className="relative text-[13px] font-bold tabular-nums"
+                >
                   {formatTime(t.remaining)}
                 </span>
               </div>
@@ -89,14 +112,17 @@ export function RestTimerInline({ exerciseId }: { exerciseId: string }) {
               {/* Libellé + raccourcis */}
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-semibold uppercase tracking-wider text-primary">
+                  <span
+                    aria-live="polite"
+                    className="text-[11px] font-semibold uppercase tracking-wider text-primary"
+                  >
                     {t.finished ? "Repos terminé" : t.isPaused ? "En pause" : "Repos"}
                   </span>
                   <div className="flex items-center gap-1">
                     <button
                       type="button"
                       onClick={() => restTimer.setSound(!t.soundEnabled)}
-                      className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground transition hover:bg-white/5"
+                      className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition hover:bg-white/5"
                       aria-label={t.soundEnabled ? "Désactiver le son" : "Activer le son"}
                     >
                       {t.soundEnabled ? (
@@ -108,7 +134,7 @@ export function RestTimerInline({ exerciseId }: { exerciseId: string }) {
                     <button
                       type="button"
                       onClick={() => restTimer.stop()}
-                      className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
+                      className="flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive"
                       aria-label="Fermer le minuteur"
                     >
                       <X className="h-3.5 w-3.5" />
@@ -123,7 +149,9 @@ export function RestTimerInline({ exerciseId }: { exerciseId: string }) {
                         key={p}
                         type="button"
                         onClick={() => restTimer.start(p, t.exerciseId)}
-                        className={`flex-1 rounded-lg px-1 py-1 text-[11px] font-semibold transition ${
+                        aria-label={`Repos de ${spokenDuration(p)}`}
+                        aria-pressed={t.totalSec === p}
+                        className={`min-h-9 flex-1 rounded-lg px-1 py-1 text-[11px] font-semibold transition ${
                           t.totalSec === p
                             ? "bg-primary/20 text-primary"
                             : "bg-white/5 text-muted-foreground hover:bg-white/10"
@@ -137,7 +165,9 @@ export function RestTimerInline({ exerciseId }: { exerciseId: string }) {
                     <button
                       type="button"
                       onClick={() => setCustomOpen((v) => !v)}
-                      className="rounded-lg bg-white/5 px-2 py-1 text-[11px] font-semibold text-muted-foreground hover:bg-white/10"
+                      aria-label="Durée de repos personnalisée"
+                      aria-expanded={customOpen}
+                      className="min-h-9 rounded-lg bg-white/5 px-2 py-1 text-[11px] font-semibold text-muted-foreground hover:bg-white/10"
                     >
                       Perso
                     </button>
@@ -146,7 +176,7 @@ export function RestTimerInline({ exerciseId }: { exerciseId: string }) {
                       <button
                         type="button"
                         onClick={() => restTimer.resume()}
-                        className="ml-1 flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground"
+                        className="ml-1 flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground"
                         aria-label="Reprendre"
                       >
                         <Play className="h-3.5 w-3.5" />
@@ -155,7 +185,7 @@ export function RestTimerInline({ exerciseId }: { exerciseId: string }) {
                       <button
                         type="button"
                         onClick={() => restTimer.pause()}
-                        className="ml-1 flex h-7 w-7 items-center justify-center rounded-full bg-white/10"
+                        className="ml-1 flex h-9 w-9 items-center justify-center rounded-full bg-white/10"
                         aria-label="Pause"
                       >
                         <Pause className="h-3.5 w-3.5" />
@@ -167,7 +197,7 @@ export function RestTimerInline({ exerciseId }: { exerciseId: string }) {
                     <button
                       type="button"
                       onClick={() => restTimer.restart()}
-                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-primary to-purple-500 px-2 py-1.5 text-[11px] font-semibold text-primary-foreground"
+                      className="flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-lg bg-gradient-to-r from-primary to-purple-500 px-2 py-1.5 text-[11px] font-semibold text-primary-foreground"
                     >
                       <RotateCcw className="h-3 w-3" />
                       Relancer
@@ -180,29 +210,39 @@ export function RestTimerInline({ exerciseId }: { exerciseId: string }) {
             {/* Durée personnalisée */}
             {customOpen && !t.finished && (
               <div className="mt-2 flex items-center gap-2 rounded-xl bg-black/20 px-2 py-2">
+                {/* CHANTIER 9 (F1) — un `placeholder` n'est PAS un libellé : il
+                    disparaît dès la saisie et n'est pas systématiquement lu.
+                    Les deux champs portent donc un vrai nom accessible, et le
+                    « min »/« sec » affiché reste purement visuel. */}
                 <input
                   type="number"
                   min="0"
                   value={customMin}
                   onChange={(e) => setCustomMin(e.target.value)}
-                  className="w-12 rounded-md border border-white/10 bg-white/5 px-1 py-1 text-center text-sm font-semibold tabular-nums outline-none focus:border-primary"
+                  className="h-9 w-12 rounded-md border border-white/10 bg-white/5 px-1 py-1 text-center text-sm font-semibold tabular-nums outline-none focus:border-primary"
                   placeholder="min"
+                  aria-label="Minutes de repos"
                 />
-                <span className="text-xs text-muted-foreground">min</span>
+                <span aria-hidden="true" className="text-xs text-muted-foreground">
+                  min
+                </span>
                 <input
                   type="number"
                   min="0"
                   max="59"
                   value={customSec}
                   onChange={(e) => setCustomSec(e.target.value)}
-                  className="w-12 rounded-md border border-white/10 bg-white/5 px-1 py-1 text-center text-sm font-semibold tabular-nums outline-none focus:border-primary"
+                  className="h-9 w-12 rounded-md border border-white/10 bg-white/5 px-1 py-1 text-center text-sm font-semibold tabular-nums outline-none focus:border-primary"
                   placeholder="sec"
+                  aria-label="Secondes de repos"
                 />
-                <span className="text-xs text-muted-foreground">sec</span>
+                <span aria-hidden="true" className="text-xs text-muted-foreground">
+                  sec
+                </span>
                 <button
                   type="button"
                   onClick={handleCustomStart}
-                  className="ml-auto rounded-lg bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground"
+                  className="ml-auto min-h-9 rounded-lg bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground"
                 >
                   Démarrer
                 </button>

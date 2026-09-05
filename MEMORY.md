@@ -1,7 +1,7 @@
 # Mémoire projet — cortex-home-ai
 
 ## Dernière mise à jour
-2026-08-31
+2026-09-05
 
 ## Chantier 2 — validation complémentaire + intégration du chantier 1 (2026-08-31)
 Demandée par Nathan avant fusion. `main` portait déjà le chantier 1 (`086b84d`) : la compatibilité a
@@ -4469,3 +4469,154 @@ les deux fichiers env-gated habituels, aucun ajouté. `npx tsc --noEmit` 0 erreu
 `npm run build` OK. `npm run check:offline-contract` OK (19 tables).
 E2E `05-offline-sync.spec.ts` **1 passed** (Chromium, backend simulé). Tests RLS non exécutables ici
 (secrets absents) — sans objet : aucune policy ni migration touchée.
+
+## Chantier 9 — Fiabilisation complète du module Séance (2026-09-05, branche `claude/chantier-9-seance-fiabilisation-vz9it4`)
+
+Dernier chantier technique de l'audit du module Séance (fusion des anciens chantiers 9 et 10).
+Parti du `main` validé après le chantier 8 (`9150d99`). Aucun mécanisme du chantier 8 touché.
+
+### B1/B2 — courses entre « Terminer » et « Annuler » (verrou INTERNE aux mutations)
+La seule protection était `disabled={finish.isPending}` sur UN bouton. Trois courses restaient
+ouvertes, toutes atteignables à la main : (1) Terminer puis Annuler → `cascadeDeleteWorkoutChildren`
+supprime les séries/exercices que la clôture vient de déclarer dans ses `dependsOnRecords` (la
+barrière du chantier 1 bis attend alors des lignes qui n'existent plus) ; (2) Annuler puis Terminer →
+`workoutsRepo.update` lève « entité introuvable » ; (3) double « Terminer », dont le SECOND
+déclencheur du menu de la séance générique (`ActiveGenericSessionView`), qui ne portait AUCUN état
+visuel.
+- **Nouveau `src/lib/fitness/sessionClosure.ts` (pur)** : `runExclusiveSessionClosure(workoutId,
+  kind, task)`. Le verrou est posé AVANT le premier `await` (deux appels du même tour de boucle ne
+  peuvent pas passer). La seconde intention est **refusée** (`SessionClosureConflictError`, message
+  français remonté par `onError` → toast), jamais mise en file : enchaîner une annulation derrière
+  une clôture supprimerait la séance qu'on vient de terminer. Un ÉCHEC libère le verrou (une clôture
+  ratée reste réessayable) ; seule une clôture ABOUTIE est définitive. Mémoire des clôtures abouties
+  bornée à 64 entrées (garde d'interface, pas d'historique).
+- Câblé dans les **4 points d'entrée** : `useFinishWorkout`, `useCancelWorkout`,
+  `useFinishGenericActiveWorkout`, `useCancelGenericActiveWorkout`. À l'écran, `closureBusy =
+  finish.isPending || cancel.isPending` désactive désormais AUSSI le « Terminer » du menu, l'entrée
+  « Annuler la séance » et le bouton « Annuler » du dialogue de confirmation. `handleFinish` /
+  `handleCancel` attrapent le rejet (le message est déjà affiché par `onError`) pour ne pas laisser
+  de rejet non géré ni enchaîner sur l'écran de récompense d'une séance non close.
+
+### B3 — loader de `SeancesTab`
+`(activeLoading || activeGenericLoading) && isLoading` exigeait que l'HISTORIQUE soit aussi en
+chargement pour couvrir la séance active. Or `isLoading` (useWorkouts) est servi par le store local
+et retombe presque aussitôt : le loader disparaissait avant qu'on sache s'il y a une séance en cours
+→ la vue historique s'affichait puis était remplacée (clignotement). Corrigé en
+`if (activeLoading || activeGenericLoading)`. Aucun retour visuel perdu : l'historique garde son
+propre indicateur `isLoading` dans la vue.
+
+### C1 — saisie des séries : plus jamais de `NaN` dans la donnée métier
+`const parse = (v) => (v.trim() === "" ? null : Number(v))` transmettait `NaN` tel quel
+(`Number("abc")`, `Number("62,5")`, `Number("-")`). `NaN` survit dans IndexedDB mais devient `null`
+en JSON : le local et le serveur divergeaient en silence, et le champ réaffichait « NaN ».
+- **`parseSetFieldInput(field, raw)` dans `lib/fitness/sets.ts`** — trois issues explicites :
+  `cleared` (champ vide → `null` assumé), `value` (normalisée **comme la colonne** : entier pour
+  `reps` (`smallint`), 2 décimales pour `weight` (`numeric(6,2)`)), `invalid` → **rien n'est écrit**
+  et le champ revient à la valeur enregistrée (surtout pas `null`, qui effacerait une valeur valide).
+  Tolère la virgule française. Refuse le négatif, et le **hors-bornes** : au-delà, PostgREST renvoie
+  `22003`, code classé nulle part → l'opération épuiserait ses tentatives puis passerait `blocked`,
+  statut qui RETIENT la clôture (une faute de frappe pouvait bloquer une séance).
+- `liveE1RM` utilise la même lecture (l'estimation affichée ne peut plus diverger de ce qui sera
+  enregistré). Nouveau `fieldText()` : une valeur `NaN` héritée s'affiche vide, plus « NaN ».
+  `min="0"` ajouté sur `ExerciseCardStatField` (partagé muscu / modèles / segments).
+
+### C2 — intégrité serveur (migration, données auditées AVANT)
+Audit direct sur `bcwfvpwxzlmkxobvbtzp`, 1 801 lignes `exercise_sets` : reps 3 NULL / 0 négative /
+min 1 / max 30 ; weight 156 NULL / **0 négative** / **20 à ZÉRO (poids de corps)** / max 100 ;
+contraintes existantes = PK, 2 FK, `set_number >= 1`, `UNIQUE (exercise_id, set_number)` — **aucune
+contrainte de domaine sur reps/weight**. `0` violerait la contrainte proposée.
+→ `supabase/migrations/20260905090000_exercise_sets_non_negative_reps_weight.sql` :
+`CHECK (reps IS NULL OR reps >= 0)` + `CHECK (weight IS NULL OR weight >= 0)`. `>= 0` et non `> 0`
+(0 kg = poids de corps, donnée réelle). Idempotente (`DROP ... IF EXISTS` avant `ADD`, convention
+`validate:supabase`). **Aucune policy RLS touchée, aucune colonne ajoutée → `types.ts` inchangé.**
+`23514` est déjà non-retryable (`syncErrors.ts`) : une violation passe `blocked` (visible, donnée
+locale conservée), jamais une boucle. **Migration NON appliquée en base par cette session** (c'est
+`migrate.yml` qui applique au merge) — elle reste donc annulable en supprimant le fichier.
+
+### C3 — séance vide : AUCUNE modification (décision produit)
+Terminer une séance sans exercice reste possible et verse l'XP de base (`workout_muscu` du
+`reward_catalog`, trigger `award_xp_on_workout_complete`). Le code n'impose aucun arbitrage : rien
+n'a été touché, aucune règle inventée.
+
+### A2 — résumé `exercises.sets/reps/weight` à la clôture
+Deux corrections, **règle de calcul inchangée** (extraite dans `summarizeExerciseSetsForHistory`,
+`lib/fitness/sets.ts`, testée) : (1) la source est le **store local** (`localExercises`/`localSets`,
+déjà lus pour la barrière) et non le snapshot React, qui peut être en retard d'une invalidation
+(exercice ajouté juste avant « Terminer » → aucun résumé écrit) ; (2) un exercice sans série
+exploitable reçoit un résumé **VIDE** au lieu d'être ignoré. Écriture seulement si la valeur DIFFÈRE
+de la ligne locale → aucune opération de sync inutile. Le bloc reste APRÈS la clôture :
+`hasLiveDependencies` ne retient que sur des dépendances `createdAt` ANTÉRIEURES — le passer avant
+ferait entrer ces mises à jour dans la barrière et retarderait l'XP, alors que
+`award_xp_on_workout_complete` ne lit QUE `exercise_sets` (vérifié sur la définition du trigger).
+
+### E1 — `useLastExerciseSession` : offline-first et borné
+Avant : 3 requêtes Supabase directes dont la première demandait `exercises` **sans `limit` ni
+`order`** (tronquable en silence au-delà du `max-rows` PostgREST — la régression MAJ-08 restée
+ouverte ici), et la query était **mise en pause hors connexion** (la ligne « dernière fois » et le
+pré-remplissage disparaissaient alors que la donnée est sur l'appareil).
+Maintenant : `refreshWorkoutsFromServer` best-effort (fenêtre de fraîcheur PARTAGÉE, donc aucun
+aller-retour supplémentaire) puis lecture des repositories locaux, avec
+`OFFLINE_FIRST_QUERY_OPTIONS`. Règle extraite pure et testée dans
+`lib/fitness/lastExerciseSession.ts` (`selectLastExerciseSessions`) — elle filtre désormais
+explicitement `status === 'completed'` (le store local contient aussi la séance active ; en base :
+635 completed / 1 active, donc strictement équivalent à l'exclusion actuelle).
+**LIMITE ASSUMÉE, documentée dans le hook** : le store local ne porte que les 200 séances les plus
+récentes (`WORKOUTS_HYDRATION_LIMIT`) ; un exercice non pratiqué depuis plus longtemps n'a plus de
+« dernière fois ». Rétablir un historique plus profond demanderait une lecture serveur dédiée et
+bornée (séances terminées récentes → enfants par paquets, comme `fetchChildRowsForParents`) : c'est
+un ajout, pas un correctif — **non entrepris, à arbitrer séparément**.
+
+### E2 — deux polls parallèles pendant `reward pending`
+`session_reward_snapshot` (réseau) et `session_reward_queue` (IndexedDB) relisaient toutes les 1,5 s
+en parallèle. La seconde est désormais `enabled` uniquement EN LIGNE (hors ligne,
+`resolveRewardConfirmation` conclut « syncing » sur le seul `!isOnline` : la boucle tournait sans
+rien décider, et indéfiniment puisque l'instantané serveur est en pause) et **s'arrête dès que la
+file ne porte plus d'opération pour cette séance** (`false` est définitif). Une seule boucle active
+à chaque instant.
+
+### F1 — accessibilité (aucun redesign)
+`RestTimerInline` : les deux champs de durée perso portent enfin un vrai `aria-label` (« Minutes de
+repos » / « Secondes de repos » — un `placeholder` n'est pas un libellé) ; chrono en `role="timer"`
++ `aria-live="off"` avec nom accessible parlé (`spokenDuration`), le STATUT (« Repos » / « En
+pause » / « Repos terminé ») portant seul `aria-live="polite"` — une région live à la seconde
+rendrait l'écran inutilisable ; presets nommés (« Repos de 1 minute 30 ») + `aria-pressed` ;
+« Perso » avec `aria-expanded` ; cibles tactiles des boutons icône 28 → 36 px et `min-h-9` sur les
+presets/actions (taille d'icône et charte inchangées). Menu séance (`ActiveWorkoutView`, Portal) :
+`role="menu"`/`role="menuitem"`, `aria-haspopup`/`aria-expanded`, focus entrant à l'ouverture,
+Échap ferme et rend le focus au bouton. Champs de série : `ariaLabel` explicite (« Charge de la
+série 2 en kilogrammes ») — sans lui, un lecteur d'écran annonçait « kg » à l'identique sur chaque
+série.
+
+### Tests ajoutés (+58, aucun skip ajouté)
+- `lib/fitness/sets.test.ts` (24) — le module n'avait **aucun test** alors que tout le chiffré de la
+  séance en dépend : `isValidSet`/tonnage/1RM/`topSet`/`summarizeSets`, plus `parseSetFieldInput`
+  (régression NaN, virgule, négatif, bornes de colonne, normalisation) et
+  `summarizeExerciseSetsForHistory`.
+- `lib/fitness/sessionClosure.test.ts` (11) — les trois courses réelles, le refus SYNCHRONE, la
+  réessayabilité après échec, la propagation de l'erreur d'origine, l'isolement par séance, la borne
+  de mémoire.
+- `lib/offline/sessionClosureOffline.test.ts` (15) — mêmes scénarios sur les VRAIS repositories +
+  la VRAIE file, hors ligne (tout accès Supabase fait échouer le test) : état des données après
+  course, dépendances de la barrière toujours présentes, cascade d'annulation (segments compris,
+  sans déborder sur une autre séance, sans opération orpheline), ajout/modification/suppression de
+  série, saisie invalide qui n'atteint jamais le store, résumé A2 (exercice hors cache, exercice
+  sans série, absence d'opération inutile).
+- `lib/fitness/lastExerciseSession.test.ts` (8) — séance terminée la plus récente, H3 (série non
+  validée ignorée), exclusion de la séance en cours ET des séances actives, repli sur la séance
+  précédente, identité prioritaire sur le nom.
+
+### Validation
+`npx vitest run` **1931 passed / 63 skipped / 0 échec** (146 fichiers, +58 tests ; les 63 skips sont
+les deux fichiers env-gated habituels, aucun ajouté). `npx tsc --noEmit` 0 erreur. `npm run lint`
+**0 erreur / 157 warnings — chiffre IDENTIQUE au `main` de départ** (mesuré avant toute
+modification). `npx prettier --check .` : 83 fichiers signalés, **identique au départ**, aucun
+fichier du chantier. `npm run build` OK. `npm run check:offline-contract` OK. `npm run
+validate:supabase` : 3 avertissements préexistants, aucun nouveau. E2E `05-offline-sync.spec.ts`
+**1 passed** (Chromium, backend simulé). `npm run check:types` **non exécutable ici** (CLI Supabase
+absente) — sans objet : `types.ts` non modifié, la migration n'ajoute aucune colonne. Tests RLS non
+exécutables (secrets absents) — sans objet : aucune policy touchée.
+
+### Hors périmètre, volontairement non touché
+Chantier 8 / 23505, A3 (reorder séquentiel), A4 (barrière `createdAt`), A5 (vérification de rang
+fire-and-forget), D1 (colonnes XP before/after), architecture offline globale, RLS, design du module
+Séance, système XP/Rang, autres modules.

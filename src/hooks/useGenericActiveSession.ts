@@ -24,6 +24,7 @@ import {
 import { OFFLINE_FIRST_QUERY_OPTIONS } from "@/lib/offline/offlineQuery";
 import { requestSyncFlush } from "@/lib/offline/syncFlush";
 import { collectWorkoutSyncDependencies } from "@/lib/fitness/workoutSyncDependencies";
+import { runExclusiveSessionClosure } from "@/lib/fitness/sessionClosure";
 
 // Phase 3 (exercice-central) — Étape 2, double écriture : résout/crée
 // exercise_id en plus du libellé existant sur workout_segments. Ne doit
@@ -509,69 +510,75 @@ export function useFinishGenericActiveWorkout() {
   return useMutation({
     mutationFn: async (workout: ActiveGenericWorkout) => {
       if (!user) throw new Error("Non authentifié");
-      const durationMs = Date.now() - new Date(workout.created_at).getTime();
-      const durationMin = Math.min(600, Math.max(1, Math.round(durationMs / 60_000)));
+      // CHANTIER 9 (B1/B2) — même verrou que la clôture musculation. Il
+      // compte doublement ici : cet écran expose DEUX déclencheurs de
+      // clôture (le bouton principal et l'entrée « Terminer la séance » du
+      // menu), et le second n'était protégé par AUCUN état visuel.
+      await runExclusiveSessionClosure(workout.id, "finish", async () => {
+        const durationMs = Date.now() - new Date(workout.created_at).getTime();
+        const durationMin = Math.min(600, Math.max(1, Math.round(durationMs / 60_000)));
 
-      const entry = ENGINE_REGISTRY[workout.discipline];
-      const engine = entry && isReadyEngine(entry) ? entry : null;
+        const entry = ENGINE_REGISTRY[workout.discipline];
+        const engine = entry && isReadyEngine(entry) ? entry : null;
 
-      const localWorkout = await workoutsRepo.get(workout.id);
-      const existingMetadata = (localWorkout?.metadata ?? {}) as Record<string, unknown>;
+        const localWorkout = await workoutsRepo.get(workout.id);
+        const existingMetadata = (localWorkout?.metadata ?? {}) as Record<string, unknown>;
 
-      const formattedSegments =
-        engine?.formatLiveSegment != null
-          ? // Étape 0.4 (F4) : `[...segments].sort(...)` — copie avant tri,
-            // `.sort()` mute le tableau en place et `workout.segments`
-            // référence potentiellement le cache React Query (ne jamais
-            // muter une donnée de cache directement).
-            [...workout.segments]
-              .sort((a, b) => a.position - b.position)
-              .map((seg) => ({
-                // Étape 0.4 : contrat du moteur inchangé (RA-1) —
-                // `formatLiveSegment` ne connaît toujours pas exerciseId ;
-                // on le propage après coup dans le snapshot de clôture
-                // (metadata.segments[].exerciseId), SessionSegment le
-                // supporte déjà en optionnel (voir engines/types.ts).
-                ...engine.formatLiveSegment!({
-                  id: seg.id,
-                  label: seg.label,
-                  metrics: seg.metrics,
-                  metricKey: seg.metricKey,
-                  completed: seg.completed,
-                  position: seg.position,
-                }),
-                exerciseId: seg.exerciseId,
-              }))
-          : [];
+        const formattedSegments =
+          engine?.formatLiveSegment != null
+            ? // Étape 0.4 (F4) : `[...segments].sort(...)` — copie avant tri,
+              // `.sort()` mute le tableau en place et `workout.segments`
+              // référence potentiellement le cache React Query (ne jamais
+              // muter une donnée de cache directement).
+              [...workout.segments]
+                .sort((a, b) => a.position - b.position)
+                .map((seg) => ({
+                  // Étape 0.4 : contrat du moteur inchangé (RA-1) —
+                  // `formatLiveSegment` ne connaît toujours pas exerciseId ;
+                  // on le propage après coup dans le snapshot de clôture
+                  // (metadata.segments[].exerciseId), SessionSegment le
+                  // supporte déjà en optionnel (voir engines/types.ts).
+                  ...engine.formatLiveSegment!({
+                    id: seg.id,
+                    label: seg.label,
+                    metrics: seg.metrics,
+                    metricKey: seg.metricKey,
+                    completed: seg.completed,
+                    position: seg.position,
+                  }),
+                  exerciseId: seg.exerciseId,
+                }))
+            : [];
 
-      // CHANTIER 4 (DISC-01) + CHANTIER 1 BIS (DISC-01b) — même raison que
-      // `useFinishWorkout` : la clôture ne doit jamais être fusionnée dans un
-      // `create` encore en attente (sinon le trigger d'XP serveur s'exécute
-      // avant l'arrivée des lignes liées), et `dependsOnRecords` la retient
-      // tant que ces lignes n'ont pas RÉUSSI — un échec n'interrompant pas la
-      // file. Dépendances construites depuis le STORE LOCAL (jamais depuis le
-      // cache React, qui peut porter des ids optimistes `tmp-*`).
-      const [localExercises, localSets, localSegments] = await Promise.all([
-        exercisesRepo.list(user.id),
-        exerciseSetsRepo.list(user.id),
-        workoutSegmentsRepo.list(user.id),
-      ]);
-      const dependsOnRecords = collectWorkoutSyncDependencies(workout.id, {
-        exercises: localExercises,
-        exerciseSets: localSets,
-        workoutSegments: localSegments,
+        // CHANTIER 4 (DISC-01) + CHANTIER 1 BIS (DISC-01b) — même raison que
+        // `useFinishWorkout` : la clôture ne doit jamais être fusionnée dans un
+        // `create` encore en attente (sinon le trigger d'XP serveur s'exécute
+        // avant l'arrivée des lignes liées), et `dependsOnRecords` la retient
+        // tant que ces lignes n'ont pas RÉUSSI — un échec n'interrompant pas la
+        // file. Dépendances construites depuis le STORE LOCAL (jamais depuis le
+        // cache React, qui peut porter des ids optimistes `tmp-*`).
+        const [localExercises, localSets, localSegments] = await Promise.all([
+          exercisesRepo.list(user.id),
+          exerciseSetsRepo.list(user.id),
+          workoutSegmentsRepo.list(user.id),
+        ]);
+        const dependsOnRecords = collectWorkoutSyncDependencies(workout.id, {
+          exercises: localExercises,
+          exerciseSets: localSets,
+          workoutSegments: localSegments,
+        });
+
+        await workoutsRepo.update(
+          workout.id,
+          user.id,
+          {
+            duration_minutes: durationMin,
+            status: "completed",
+            metadata: { ...existingMetadata, segments: formattedSegments },
+          },
+          { neverMergeIntoPendingCreate: true, dependsOnRecords },
+        );
       });
-
-      await workoutsRepo.update(
-        workout.id,
-        user.id,
-        {
-          duration_minutes: durationMin,
-          status: "completed",
-          metadata: { ...existingMetadata, segments: formattedSegments },
-        },
-        { neverMergeIntoPendingCreate: true, dependsOnRecords },
-      );
     },
     onSuccess: (_d, workout) => {
       // Pas de toast ici : l'écran de récompense (SessionRewardScreen)
@@ -603,11 +610,15 @@ export function useCancelGenericActiveWorkout() {
   return useMutation({
     mutationFn: async (workoutId: string) => {
       if (!user) throw new Error("Non authentifié");
-      // L'XP éventuellement versée est retirée côté serveur avant la
-      // suppression (trigger `trg_reverse_xp_before_workout_delete`), dès
-      // que la sync queue pousse ce `delete` au retour du réseau.
-      await cascadeDeleteWorkoutChildren(user.id, workoutId);
-      await workoutsRepo.remove(workoutId, user.id);
+      // CHANTIER 9 (B1/B2) — verrou partagé avec la clôture (voir
+      // `lib/fitness/sessionClosure.ts`).
+      await runExclusiveSessionClosure(workoutId, "cancel", async () => {
+        // L'XP éventuellement versée est retirée côté serveur avant la
+        // suppression (trigger `trg_reverse_xp_before_workout_delete`), dès
+        // que la sync queue pousse ce `delete` au retour du réseau.
+        await cascadeDeleteWorkoutChildren(user.id, workoutId);
+        await workoutsRepo.remove(workoutId, user.id);
+      });
     },
     onSuccess: () => {
       toast.success("Séance annulée");

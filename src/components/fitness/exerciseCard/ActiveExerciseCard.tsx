@@ -61,6 +61,7 @@ import type { LastSession, LastSessionSet } from "@/hooks/useLastExerciseSession
 import type { MuscleId } from "@/lib/fitness/muscleMapping";
 import type { MuscleRecovery } from "@/lib/fitness/recovery";
 import { estimate1RM } from "@/lib/fitness/strength";
+import { parseSetFieldInput } from "@/lib/fitness/sets";
 import type { ActiveGenericSegment } from "@/hooks/useGenericActiveSession";
 import {
   useAddGenericSegment,
@@ -176,6 +177,17 @@ function TrendIcon({ trend }: { trend: "up" | "down" | "equal" | null }) {
   return <Minus className="h-3 w-3 text-muted-foreground/50" aria-label="Identique" />;
 }
 
+/**
+ * CHANTIER 9 (C1) — texte affiché dans un champ de série.
+ * `Number.isFinite` plutôt qu'un simple `!= null` : une valeur `NaN` écrite en
+ * local AVANT ce chantier (IndexedDB conserve `NaN`, contrairement à JSON)
+ * s'affichait littéralement « NaN » dans le champ. Elle apparaît désormais
+ * comme vide, et la première saisie valide la remplace.
+ */
+function fieldText(value: number | null | undefined): string {
+  return Number.isFinite(value) ? String(value) : "";
+}
+
 function SetRow({
   set,
   index,
@@ -193,26 +205,52 @@ function SetRow({
   onUpdate: (field: "reps" | "weight", value: number | null) => void;
   onToggleDone: (done: boolean) => void;
 }) {
-  const [reps, setReps] = useState(set.reps != null ? String(set.reps) : "");
-  const [weight, setWeight] = useState(set.weight != null ? String(set.weight) : "");
+  const [reps, setReps] = useState(() => fieldText(set.reps));
+  const [weight, setWeight] = useState(() => fieldText(set.weight));
   const [confirmDel, setConfirmDel] = useState(false);
 
   useEffect(() => {
-    setReps(set.reps != null ? String(set.reps) : "");
+    setReps(fieldText(set.reps));
   }, [set.reps]);
   useEffect(() => {
-    setWeight(set.weight != null ? String(set.weight) : "");
+    setWeight(fieldText(set.weight));
   }, [set.weight]);
 
-  const parse = (v: string) => (v.trim() === "" ? null : Number(v));
   const trend = compareToLast({ reps: set.reps, weight: set.weight }, lastSet);
   const done = set.completed;
 
+  /**
+   * CHANTIER 9 (C1) — validation d'un champ de série.
+   *
+   * Trois issues, jamais une quatrième :
+   * - champ vide  → `null` assumé (l'utilisateur efface sa valeur) ;
+   * - valeur exploitable → écrite NORMALISÉE (entier pour les répétitions,
+   *   deux décimales pour la charge — exactement ce que la colonne stocke) ;
+   * - saisie inexploitable (« abc », « -5 », « 1e9 ») → RIEN n'est écrit et
+   *   le champ revient à la valeur enregistrée. Surtout pas `null`, qui
+   *   effacerait une valeur valide, ni `NaN`, qui partait auparavant tel quel
+   *   dans la donnée métier (cf. `lib/fitness/sets.ts`).
+   */
+  const commitField = (field: "reps" | "weight", raw: string) => {
+    const stored = field === "reps" ? set.reps : set.weight;
+    const setLocal = field === "reps" ? setReps : setWeight;
+    const parsed = parseSetFieldInput(field, raw);
+    if (parsed.kind === "invalid") {
+      setLocal(fieldText(stored));
+      return;
+    }
+    const value = parsed.kind === "cleared" ? null : parsed.value;
+    setLocal(fieldText(value));
+    onUpdate(field, value);
+  };
+
   const liveE1RM = useMemo(() => {
-    const w = parseFloat(weight);
-    const r = parseFloat(reps);
-    if (!isFinite(w) || !isFinite(r) || w <= 0 || r <= 0) return null;
-    return estimate1RM(w, r);
+    // Même lecture que la validation (virgule française comprise) : l'estimation
+    // affichée ne peut pas diverger de la valeur qui sera enregistrée.
+    const w = parseSetFieldInput("weight", weight);
+    const r = parseSetFieldInput("reps", reps);
+    if (w.kind !== "value" || r.kind !== "value" || w.value <= 0 || r.value <= 0) return null;
+    return estimate1RM(w.value, r.value);
   }, [weight, reps]);
 
   if (confirmDel) {
@@ -269,18 +307,20 @@ function SetRow({
       <ExerciseCardStatField
         value={weight}
         onChange={setWeight}
-        onCommit={(v) => onUpdate("weight", parse(v))}
+        onCommit={(v) => commitField("weight", v)}
         placeholder={weightPh}
         unit="kg"
         step="0.5"
+        ariaLabel={`Charge de la série ${index} en kilogrammes`}
       />
 
       <ExerciseCardStatField
         value={reps}
         onChange={setReps}
-        onCommit={(v) => onUpdate("reps", parse(v))}
+        onCommit={(v) => commitField("reps", v)}
         placeholder={repsPh}
         unit="reps"
+        ariaLabel={`Répétitions de la série ${index}`}
       />
 
       <button

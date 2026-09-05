@@ -1,7 +1,19 @@
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/use-auth";
+import {
+  exerciseSetsRepo,
+  exercisesRepo,
+  refreshWorkoutsFromServer,
+  workoutsRepo,
+} from "@/hooks/use-fitness";
+import { OFFLINE_FIRST_QUERY_OPTIONS } from "@/lib/offline/offlineQuery";
 import { normalize } from "@/lib/fitness/exerciseCatalog";
 import { identityKey } from "@/lib/fitness/recentExercises";
+import {
+  selectLastExerciseSessions,
+  type LastSession,
+  type LastSessionSet,
+} from "@/lib/fitness/lastExerciseSession";
 
 /**
  * Dernières séances terminées par exercice, en excluant la séance active
@@ -17,21 +29,45 @@ import { identityKey } from "@/lib/fitness/recentExercises";
  * avant. Contrat public élargi (l'appelant doit désormais fournir
  * `exerciseReferenceId` en plus du nom — un seul appelant, ActiveWorkoutView).
  *
- * Version groupée : une seule passe de requêtes pour TOUS les exercices de la
- * séance active (3 requêtes au total au lieu de 3 par carte → fin du N+1).
- * Sert à pré-remplir les charges et à afficher le comparatif "dernière séance".
+ * Sert à pré-remplir les charges et à afficher le comparatif « dernière
+ * séance » sur chaque carte d'exercice.
+ *
+ * ────────────────────────────────────────────────────────────────────────
+ * CHANTIER 9 (E1) — CE HOOK LIT DÉSORMAIS LE STORE LOCAL.
+ *
+ * AVANT : trois requêtes Supabase directes, dont la première demandait
+ * `exercises` de l'utilisateur SANS AUCUNE LIMITE NI TRI, puis filtrait en
+ * mémoire. Deux défauts, et le second est une perte silencieuse :
+ * 1. HORS LIGNE, la query était mise en pause par TanStack (`networkMode`
+ *    « online » par défaut) : la ligne « dernière fois » disparaissait et le
+ *    pré-remplissage des charges ne se faisait plus, alors que la donnée est
+ *    sur l'appareil. Une séance hors ligne perdait donc son point de
+ *    comparaison — exactement ce que l'offline-first doit empêcher.
+ * 2. EN LIGNE, une lecture sans `limit` ni `order` est tronquée en SILENCE
+ *    par PostgREST au-delà de `max-rows` (1 000 par défaut). Le jour où le
+ *    compte d'exercices franchit ce plafond, les lignes conservées sont
+ *    arbitraires : la « dernière séance » affichée pourrait être n'importe
+ *    laquelle, sans la moindre erreur. C'est la régression MAJ-08 déjà
+ *    corrigée sur l'hydratation, restée ouverte ici.
+ *
+ * MAINTENANT : rafraîchissement serveur BEST-EFFORT (le même que les autres
+ * écrans fitness — `refreshWorkoutsFromServer` passe par la fenêtre de
+ * fraîcheur partagée, donc aucun aller-retour supplémentaire), puis lecture
+ * du store local, borné et non tronquable par construction. La règle de
+ * sélection vit dans `lib/fitness/lastExerciseSession.ts` (pure, testée).
+ *
+ * LIMITE ASSUMÉE, À ARBITRER SÉPARÉMENT : le store local ne contient que les
+ * `WORKOUTS_HYDRATION_LIMIT` (200) séances les plus récentes. Un exercice
+ * dont la dernière pratique est ANTÉRIEURE à cette fenêtre n'a donc plus de
+ * « dernière fois ». C'était déjà le cas de fait dès que la lecture serveur
+ * était tronquée, mais de façon imprévisible. Rétablir un historique plus
+ * profond demanderait une lecture serveur dédiée et bornée (séances
+ * terminées les plus récentes → leurs exercices → leurs séries, par paquets,
+ * comme `fetchChildRowsForParents`) : c'est un vrai ajout, pas un correctif,
+ * et il n'est pas entrepris ici.
+ * ────────────────────────────────────────────────────────────────────────
  */
-export interface LastSessionSet {
-  set_number: number;
-  reps: number | null;
-  weight: number | null;
-}
-
-export interface LastSession {
-  workoutId: string;
-  date: string;
-  sets: LastSessionSet[];
-}
+export type { LastSession, LastSessionSet };
 
 export interface LastExerciseSessionQuery {
   name: string;
@@ -44,6 +80,9 @@ export function useLastExerciseSessions(
   exercises: LastExerciseSessionQuery[],
   excludeWorkoutId: string | null | undefined,
 ): Map<string, LastSession> {
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
+
   // Dédoublonnage par identité (id en priorité, nom normalisé en filet) ;
   // les entrées sans id ET sans nom exploitable (chaîne vide après trim) ne
   // correspondront jamais à rien en base, on les écarte donc en amont.
@@ -56,82 +95,25 @@ export function useLastExerciseSessions(
   ).sort();
 
   const q = useQuery({
+    // Lecture du store local : la query doit tourner hors connexion (le
+    // rafraîchissement serveur ci-dessous est déjà gardé par `getIsOnline()`).
+    ...OFFLINE_FIRST_QUERY_OPTIONS,
     queryKey: ["fitness", "last_exercise_sessions", keys.join("|"), excludeWorkoutId ?? ""],
-    enabled: keys.length > 0,
+    enabled: !!userId && keys.length > 0,
     staleTime: 60 * 1000,
     queryFn: async (): Promise<Map<string, LastSession>> => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      const result = new Map<string, LastSession>();
-      if (!user) return result;
-
-      // 1. Tous les exercices musculation de l'utilisateur (id + référence +
-      // nom) — le filtrage par identité (id en priorité, nom en filet) se
-      // fait ensuite en mémoire, comme pour les autres hooks migrés.
-      const keySet = new Set(keys);
-      const { data: allExs, error: e1 } = await supabase
-        .from("exercises")
-        .select("id, workout_id, name, exercise_reference_id")
-        .eq("user_id", user.id);
-      if (e1) throw e1;
-      const exs = (allExs ?? [])
-        .map((e) => ({
-          id: e.id,
-          workoutId: e.workout_id,
-          key: identityKey({ name: e.name, exercise_reference_id: e.exercise_reference_id }),
-        }))
-        .filter((e) => keySet.has(e.key) && !!e.workoutId && e.workoutId !== excludeWorkoutId);
-      if (exs.length === 0) return result;
-
-      // 2. Dates des séances concernées
-      const workoutIds = Array.from(new Set(exs.map((e) => e.workoutId as string)));
-      const { data: wks, error: e2 } = await supabase
-        .from("workouts")
-        .select("id, date")
-        .in("id", workoutIds);
-      if (e2) throw e2;
-      const dateByWorkout = new Map((wks ?? []).map((w) => [w.id, w.date]));
-
-      // 3. Toutes les séries de ces exercices en une seule requête
-      const exIds = exs.map((e) => e.id);
-      // H3 : seules les séries validées servent de référence.
-      const { data: sets, error: e3 } = await supabase
-        .from("exercise_sets")
-        .select("exercise_id, set_number, reps, weight")
-        .in("exercise_id", exIds)
-        .eq("completed", true)
-        .order("set_number", { ascending: true });
-      if (e3) throw e3;
-
-      const exById = new Map(exs.map((e) => [e.id, e]));
-      const byKeyWorkout = new Map<string, Map<string, LastSessionSet[]>>();
-      for (const s of sets ?? []) {
-        const ex = exById.get(s.exercise_id);
-        if (!ex || !ex.workoutId) continue;
-        if (!byKeyWorkout.has(ex.key)) byKeyWorkout.set(ex.key, new Map());
-        const wm = byKeyWorkout.get(ex.key)!;
-        const list = wm.get(ex.workoutId) ?? [];
-        list.push({ set_number: s.set_number, reps: s.reps, weight: s.weight });
-        wm.set(ex.workoutId, list);
-      }
-
-      // 4. Pour chaque exercice : séance la plus récente avec ≥ 1 série remplie
-      for (const [key, wm] of byKeyWorkout) {
-        const ordered = Array.from(wm.entries())
-          .map(([wid, rows]) => ({ wid, date: dateByWorkout.get(wid) ?? "", rows }))
-          .filter((x) => x.date)
-          .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
-        for (const { wid, date, rows } of ordered) {
-          const filtered = rows
-            .filter((r) => r.reps != null || r.weight != null)
-            .sort((a, b) => a.set_number - b.set_number);
-          if (filtered.length === 0) continue;
-          result.set(key, { workoutId: wid, date, sets: filtered });
-          break;
-        }
-      }
-      return result;
+      const id = userId as string;
+      await refreshWorkoutsFromServer(id);
+      const [workouts, allExercises, allSets] = await Promise.all([
+        workoutsRepo.list(id),
+        exercisesRepo.list(id),
+        exerciseSetsRepo.list(id),
+      ]);
+      return selectLastExerciseSessions({
+        keys: new Set(keys),
+        excludeWorkoutId,
+        rows: { workouts, exercises: allExercises, exerciseSets: allSets },
+      });
     },
   });
 

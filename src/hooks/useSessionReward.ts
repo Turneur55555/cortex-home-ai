@@ -129,10 +129,26 @@ export function useSessionReward(workoutId: string | null | undefined): SessionR
   // lecture » (attente courte et normale).
   const { data: hasQueuedWorkoutOps = false } = useQuery({
     queryKey: ["session_reward_queue", workoutId, userId],
-    enabled: !!userId && !!workoutId && !confirmed,
-    // Lecture purement locale : elle doit tourner hors connexion.
+    // CHANTIER 9 (E2) — CE SIGNAL NE TOURNE QUE QUAND IL DÉCIDE DE QUELQUE
+    // CHOSE. Deux relectures indépendantes tournaient en parallèle toutes les
+    // 1,5 s tant que la récompense n'était pas confirmée, alors que dans deux
+    // cas sur trois la seconde ne servait à rien :
+    // - HORS LIGNE, `resolveRewardConfirmation` conclut « syncing » sur le
+    //   seul `!isOnline` : la file n'est pas consultée, mais la boucle
+    //   tournait quand même — indéfiniment, puisque l'instantané serveur, lui,
+    //   est en pause hors connexion et ne peut jamais confirmer ;
+    // - UNE FOIS LA CLÔTURE PARTIE (la file ne porte plus d'opération pour
+    //   cette séance), ce signal ne peut plus changer : il ne reste qu'à
+    //   attendre le serveur, ce que fait l'instantané ci-dessus.
+    // Reste donc UNE SEULE boucle active à chaque instant.
+    enabled: !!userId && !!workoutId && !confirmed && isOnline,
+    // Lecture purement locale : elle doit tourner hors connexion (`enabled`
+    // ci-dessus la coupe déjà hors ligne, mais la query ne doit jamais être
+    // mise en PAUSE par TanStack au retour du réseau).
     networkMode: "always",
-    refetchInterval: UNCONFIRMED_POLL_MS,
+    // `false` est définitif pour cette séance : plus aucune opération de
+    // clôture en file ne veut dire qu'elle est partie. On arrête d'y revenir.
+    refetchInterval: (query) => (query.state.data === false ? false : UNCONFIRMED_POLL_MS),
     queryFn: () => hasQueuedOperationsForRecord(userId!, "workouts", workoutId!),
   });
 
