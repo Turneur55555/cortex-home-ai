@@ -1,5 +1,7 @@
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllRows, fetchAllRowsForIds } from "@/lib/supabase/pagedRead";
 import { normalize } from "@/lib/fitness/exerciseCatalog";
 
 // ============================================================
@@ -66,47 +68,112 @@ export interface CatalogMediaEntry {
   hasVideo: boolean;
 }
 
-// ── Médias du catalogue — une seule requête pour toute la bibliothèque
-//    (exercise_media est petit, ~2500 lignes) plutôt qu'une requête par
-//    exercice affiché. Utilisé par ExerciseListBrowser (Catalogue/Picker) ET
-//    ActiveExerciseCard (carte de séance) pour remplacer l'icône générique
-//    par le vrai média du dataset (photo, puis GIF) dès qu'il existe. ──────
+/** Ligne de `exercise_media` telle que lue par les deux hooks ci-dessous. */
+interface MediaSelectRow {
+  exercise_reference_id: string;
+  media_type: string | null;
+  url: string | null;
+  is_primary: boolean | null;
+}
+
+/** Colonnes strictement nécessaires à `CatalogMediaEntry`. */
+const MEDIA_COLUMNS = "exercise_reference_id, media_type, url, is_primary";
+
+/** Agrège les lignes média en une carte `exercise_reference_id → entrée`. */
+function toMediaMap(rows: MediaSelectRow[]): Map<string, CatalogMediaEntry> {
+  const map = new Map<string, CatalogMediaEntry>();
+  for (const row of rows) {
+    const entry = map.get(row.exercise_reference_id) ?? {
+      primaryPhotoUrl: null,
+      primaryGifUrl: null,
+      hasGif: false,
+      hasVideo: false,
+    };
+    if (row.media_type === "image" && row.is_primary && row.url) entry.primaryPhotoUrl = row.url;
+    if (row.media_type === "gif") {
+      entry.hasGif = true;
+      if (row.is_primary && row.url) entry.primaryGifUrl = row.url;
+    }
+    if (row.media_type === "video") entry.hasVideo = true;
+    map.set(row.exercise_reference_id, entry);
+  }
+  return map;
+}
+
+// ── Médias de TOUTE la bibliothèque — pour le Catalogue/Picker, qui parcourt
+//    réellement l'intégralité de `exercise_reference` (liste filtrable). Une
+//    lecture d'ensemble y est légitime ; une lecture par ids ne le serait pas
+//    (le jeu d'ids change à chaque frappe → refetch en rafale).
+//
+//    CHANTIER A (AUD-02) : la lecture était NON BORNÉE sur une table de
+//    2 566 lignes, donc rabotée en silence par `max-rows` — environ la
+//    moitié des exercices perdaient photo et GIF sans que rien ne l'indique.
+//    Elle est désormais paginée avec preuve de complétude. Le contenu de la
+//    carte est inchangé (mêmes colonnes, même agrégation), simplement
+//    COMPLET. ────────────────────────────────────────────────────────────────
+/**
+ * Lecture serveur extraite du hook pour être testable isolément — cf.
+ * `lib/supabase/referentialReadBounds.test.ts`, qui la fait tourner sur une fixture
+ * DÉPASSANT le plafond `max-rows`.
+ */
+export async function fetchCatalogMediaMap(): Promise<Map<string, CatalogMediaEntry>> {
+  // `exercise_media` n'est pas encore dans les types générés : cast local.
+  // `order("id")` : ordre TOTAL, sans lequel deux pages successives peuvent
+  // doublonner une ligne et en omettre une autre.
+  const rows = await fetchAllRows<MediaSelectRow>(
+    () =>
+      (supabase as any)
+        .from("exercise_media")
+        .select(MEDIA_COLUMNS, { count: "exact" })
+        .order("id"),
+    { label: "exercise_media" },
+  );
+  return toMediaMap(rows);
+}
+
 export function useExerciseCatalogMedia() {
   return useQuery({
     queryKey: ["fitness", "exercise-catalog-media"],
     staleTime: 5 * 60 * 1000,
-    queryFn: async (): Promise<Map<string, CatalogMediaEntry>> => {
-      // `exercise_media` n'est pas encore dans les types générés : cast local.
-      const { data, error } = await (supabase as any)
-        .from("exercise_media")
-        .select("exercise_reference_id, media_type, url, is_primary");
-      if (error) throw error;
-      const map = new Map<string, CatalogMediaEntry>();
-      const rows = (data ?? []) as Array<{
-        exercise_reference_id: string;
-        media_type: string | null;
-        url: string | null;
-        is_primary: boolean | null;
-      }>;
-      for (const row of rows) {
-        const entry = map.get(row.exercise_reference_id) ?? {
-          primaryPhotoUrl: null,
-          primaryGifUrl: null,
-          hasGif: false,
-          hasVideo: false,
-        };
-        if (row.media_type === "image" && row.is_primary && row.url)
-          entry.primaryPhotoUrl = row.url;
-        if (row.media_type === "gif") {
-          entry.hasGif = true;
-          if (row.is_primary && row.url) entry.primaryGifUrl = row.url;
-        }
-        if (row.media_type === "video") entry.hasVideo = true;
-        map.set(row.exercise_reference_id, entry);
-      }
-      return map;
-    },
+    queryFn: fetchCatalogMediaMap,
   });
+}
+
+// ── Médias des SEULS exercices affichés — pour un écran qui n'en montre
+//    qu'une poignée (séance en cours). Rapatrier 2 566 lignes pour afficher
+//    six vignettes était le gaspillage central d'AUD-02.
+//
+//    La clé de cache porte les ids TRIÉS et DÉDUPLIQUÉS : deux rendus
+//    présentant le même ensemble d'exercices, quel que soit leur ordre,
+//    partagent la même entrée de cache et ne relancent aucune requête. ─────
+export function useExerciseMediaForExercises(exerciseReferenceIds: readonly (string | null)[]) {
+  const ids = useMemo(
+    () => [...new Set(exerciseReferenceIds.filter((id): id is string => !!id))].sort(),
+    [exerciseReferenceIds],
+  );
+  return useQuery({
+    queryKey: ["fitness", "exercise-media-for", ids],
+    enabled: ids.length > 0,
+    staleTime: 5 * 60 * 1000,
+    queryFn: () => fetchMediaMapForExercises(ids),
+  });
+}
+
+/** Pendant testable de `useExerciseMediaForExercises`. */
+export async function fetchMediaMapForExercises(
+  ids: readonly string[],
+): Promise<Map<string, CatalogMediaEntry>> {
+  const rows = await fetchAllRowsForIds<MediaSelectRow>(
+    ids,
+    (idChunk) =>
+      (supabase as any)
+        .from("exercise_media")
+        .select(MEDIA_COLUMNS, { count: "exact" })
+        .in("exercise_reference_id", idChunk)
+        .order("id"),
+    { label: "exercise_media" },
+  );
+  return toMediaMap(rows);
 }
 
 export function useExerciseCatalogEntry(exerciseName: string | null | undefined) {
@@ -154,39 +221,45 @@ export function useExerciseCatalogEntry(exerciseName: string | null | undefined)
           )
         : [];
 
-      const [mediaResult, variantsResult] = (await Promise.all([
-        (supabase as any)
-          .from("exercise_media")
-          .select("id, media_type, url, is_primary, attribution")
-          .eq("exercise_reference_id", row.id)
-          .order("media_type")
-          .order("sort_order"),
+      // Les deux lectures sont paginées : leur cardinalité (médias d'un
+      // exercice, variantes d'une famille) est faible aujourd'hui mais
+      // n'est bornée par aucune contrainte — s'en remettre au plafond
+      // serveur les rendrait tronquables en silence le jour où elle grandit.
+      const [mediaRows, variantRows] = await Promise.all([
+        fetchAllRows<{
+          id: string;
+          media_type: string | null;
+          url: string | null;
+          is_primary: boolean | null;
+          attribution: string | null;
+        }>(
+          () =>
+            (supabase as any)
+              .from("exercise_media")
+              .select("id, media_type, url, is_primary, attribution", { count: "exact" })
+              .eq("exercise_reference_id", row.id)
+              .order("media_type")
+              .order("sort_order")
+              .order("id"),
+          { label: "exercise_media" },
+        ),
         row.family_id
-          ? (supabase as any)
-              .from("exercise_reference")
-              .select("id, name")
-              .eq("family_id", row.family_id)
-              .eq("is_active", true)
-              .neq("id", row.id)
-              .order("name")
-          : Promise.resolve({ data: [] as Array<{ id: string; name: string }>, error: null }),
-      ])) as [
-        {
-          data: Array<{
-            id: string;
-            media_type: string | null;
-            url: string | null;
-            is_primary: boolean | null;
-            attribution: string | null;
-          }> | null;
-          error: unknown;
-        },
-        { data: Array<{ id: string; name: string }> | null; error: unknown },
-      ];
-      if (mediaResult.error) throw mediaResult.error;
-      if (variantsResult.error) throw variantsResult.error;
+          ? fetchAllRows<{ id: string; name: string }>(
+              () =>
+                (supabase as any)
+                  .from("exercise_reference")
+                  .select("id, name", { count: "exact" })
+                  .eq("family_id", row.family_id)
+                  .eq("is_active", true)
+                  .neq("id", row.id)
+                  .order("name")
+                  .order("id"),
+              { label: "exercise_reference (variantes)" },
+            )
+          : Promise.resolve([] as Array<{ id: string; name: string }>),
+      ]);
 
-      const media: ExerciseMediaItem[] = (mediaResult.data ?? [])
+      const media: ExerciseMediaItem[] = mediaRows
         .filter((m): m is typeof m & { url: string } => !!m.url)
         .map((m) => ({
           id: m.id,
@@ -207,7 +280,7 @@ export function useExerciseCatalogEntry(exerciseName: string | null | undefined)
         instructionSteps,
         origin: deriveOrigin(row),
         media,
-        variants: (variantsResult.data ?? []).map((v) => ({ id: v.id, name: v.name })),
+        variants: variantRows.map((v) => ({ id: v.id, name: v.name })),
       };
     },
   });

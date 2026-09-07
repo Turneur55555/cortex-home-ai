@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchAllRows, fetchAllRowsForIds } from "@/lib/supabase/pagedRead";
 import { useAuth } from "@/hooks/use-auth";
 import { segmentTypeKey, type SegmentInstance } from "@/lib/fitness/segmentStats";
 
@@ -31,43 +32,71 @@ import { segmentTypeKey, type SegmentInstance } from "@/lib/fitness/segmentStats
 // backfill/la résolution n'ont pas 100% couvert les données.
 // ============================================================
 
-/** Toutes les occurrences de segments Course de l'utilisateur (toutes
- *  séances terminées confondues), mises en cache une seule fois par
- *  utilisateur — plusieurs fiches segment ouvertes successivement
- *  partagent ce fetch au lieu de le relancer par type. */
+/**
+ * Toutes les occurrences de segments Course de l'utilisateur (toutes séances
+ * terminées confondues), mises en cache une seule fois par utilisateur —
+ * plusieurs fiches segment ouvertes successivement partagent ce fetch au lieu
+ * de le relancer par type.
+ *
+ * Lecture serveur extraite du hook pour être testable isolément — cf.
+ * `lib/supabase/referentialReadBounds.test.ts`, qui la fait tourner sur des fixtures
+ * DÉPASSANT le plafond `max-rows`.
+ */
+export async function fetchCourseSegmentInstances(userId: string): Promise<SegmentInstance[]> {
+  // CHANTIER A (AUD-03) : les deux lectures étaient NON BORNÉES et donc
+  // tronquables en silence par `max-rows`. Comme côté musculation, c'est
+  // l'HISTORIQUE PROFOND (toutes les séances Course terminées) : on le
+  // pagine intégralement plutôt que de le rétrécir à la fenêtre locale
+  // des 200 séances, qui ne concerne que l'hydratation offline.
+  const workouts = await fetchAllRows<{ id: string; date: string }>(
+    () =>
+      supabase
+        .from("workouts")
+        .select("id, date", { count: "exact" })
+        .eq("user_id", userId)
+        .eq("discipline", "course")
+        .eq("status", "completed")
+        .order("id", { ascending: true }),
+    { label: "workouts" },
+  );
+
+  const ids = workouts.map((w) => w.id);
+  if (ids.length === 0) return [];
+  const dateByWorkout = new Map(workouts.map((w) => [w.id, w.date]));
+
+  const segments = await fetchAllRowsForIds<{
+    workout_id: string;
+    label: string;
+    metrics: unknown;
+    completed: boolean;
+    exercise_id: string | null;
+  }>(
+    ids,
+    (idChunk) =>
+      supabase
+        .from("workout_segments")
+        .select("workout_id, label, metrics, completed, exercise_id", { count: "exact" })
+        .in("workout_id", idChunk)
+        .order("id", { ascending: true }),
+    { label: "workout_segments" },
+  );
+
+  return segments.map((s) => ({
+    workoutId: s.workout_id,
+    date: dateByWorkout.get(s.workout_id) ?? "",
+    label: s.label,
+    metrics: (s.metrics ?? {}) as Record<string, number | string>,
+    completed: s.completed,
+    exerciseId: s.exercise_id,
+  }));
+}
+
 export function useUserCourseSegmentInstances(userId: string | undefined) {
   return useQuery({
     queryKey: ["fitness", "course_segment_instances_raw", userId],
     enabled: !!userId,
     staleTime: 30_000,
-    queryFn: async (): Promise<SegmentInstance[]> => {
-      const { data: workouts, error: e1 } = await supabase
-        .from("workouts")
-        .select("id, date")
-        .eq("user_id", userId!)
-        .eq("discipline", "course")
-        .eq("status", "completed");
-      if (e1) throw e1;
-
-      const ids = (workouts ?? []).map((w) => w.id);
-      if (ids.length === 0) return [];
-      const dateByWorkout = new Map((workouts ?? []).map((w) => [w.id, w.date]));
-
-      const { data: segments, error: e2 } = await supabase
-        .from("workout_segments")
-        .select("workout_id, label, metrics, completed, exercise_id")
-        .in("workout_id", ids);
-      if (e2) throw e2;
-
-      return (segments ?? []).map((s) => ({
-        workoutId: s.workout_id,
-        date: dateByWorkout.get(s.workout_id) ?? "",
-        label: s.label,
-        metrics: (s.metrics ?? {}) as Record<string, number | string>,
-        completed: s.completed,
-        exerciseId: s.exercise_id,
-      }));
-    },
+    queryFn: () => fetchCourseSegmentInstances(userId!),
   });
 }
 

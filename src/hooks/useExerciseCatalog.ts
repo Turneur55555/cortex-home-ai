@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { db } from "@/integrations/supabase/db";
-import { EXERCISE_CATALOG, type CatalogExercise } from "@/lib/fitness/exerciseCatalog";
+import { fetchAllRows } from "@/lib/supabase/pagedRead";
 import type { DisciplineId } from "@/lib/fitness/engines/types";
 
 export type DbCatalogRow = {
@@ -39,27 +39,37 @@ const USER_CATALOG_TABLE = "user_exercise_reference";
 const CACHE_KEY = ["fitness", "exercise-catalog"] as const;
 const FULL_CACHE_KEY = ["fitness", "exercise-catalog-full"] as const;
 
-// ── Catalogue DB (pour le picker) ─────────────────────────────────────────────
-// Filtré sur discipline_id="muscu" : depuis Phase 3 (exercice-central),
-// exercise_reference est un référentiel partagé par toutes les disciplines
-// (voir ExerciseResolutionService) — ce picker reste muscu-only, il ne doit
-// jamais afficher les exercices auto-créés par les autres disciplines.
-export function useExerciseCatalog() {
-  return useQuery({
-    queryKey: CACHE_KEY,
-    queryFn: async (): Promise<DbCatalogRow[]> => {
-      const { data, error } = await supabase
-        .from("exercise_reference")
-        .select("*")
-        .eq("discipline_id", "muscu")
-        .order("category")
-        .order("sort_order")
-        .order("name");
-      if (error) throw error;
-      return (data ?? []) as DbCatalogRow[];
-    },
-    staleTime: 5 * 60 * 1000,
-  });
+/**
+ * CHANTIER A (AUD-01) — COLONNES RÉELLEMENT NÉCESSAIRES AU CATALOGUE.
+ *
+ * `select("*")` rapatriait 2 841 ko pour les 1 477 lignes muscu (mesuré sur
+ * `bcwfvpwxzlmkxobvbtzp`), dont 1 547 ko de `config`, 639 ko de
+ * `description` et 373 ko de `media` — trois colonnes qu'AUCUN consommateur
+ * de ce hook ne lit. Le seul champ utile de `config` est `equipment`
+ * (ExerciseExplorerSheet → `deriveExerciseBadges`), extrait ici côté serveur
+ * via `config->>equipment` puis remis dans la forme `config: { equipment }`
+ * attendue par `DbCatalogRow` — la shape consommée ne change pas.
+ *
+ * Résultat : 2 841 ko → ~100 ko (−96 %).
+ *
+ * `aliases` n'est plus demandé : son unique lecture était `dbRowsToCatalog()`,
+ * supprimée avec `useExerciseCatalog()` (AUD-13, aucun consommateur). Le champ
+ * reste optionnel sur `DbCatalogRow` pour les lignes construites ailleurs.
+ *
+ * L'ORDRE se termine par `id` : `fetchAllRows` pagine, et sans ordre TOTAL
+ * deux pages successives peuvent renvoyer deux fois la même ligne et en
+ * omettre une autre. Le tri affiché (catégorie, sort_order, nom) est
+ * strictement inchangé — `id` ne départage que d'éventuels ex æquo.
+ */
+const CATALOG_COLUMNS = "id, name, category, sort_order, created_at, equipment:config->>equipment";
+
+/** Ligne telle que renvoyée par `CATALOG_COLUMNS` (avant remise en forme). */
+type CatalogSelectRow = Omit<DbCatalogRow, "config"> & { equipment: string | null };
+
+/** Remet la ligne serveur dans la forme `DbCatalogRow` consommée par l'UI. */
+function toCatalogRow(row: CatalogSelectRow, owned: boolean): DbCatalogRow {
+  const { equipment, ...rest } = row;
+  return { ...rest, config: { equipment }, owned };
 }
 
 // ── Catalogue complet = DB + exercices custom (pour la sheet de gestion) ─────
@@ -70,80 +80,103 @@ export function useExerciseCatalog() {
 // muscu-only : cette table ne contient QUE des occurrences musculation
 // (voir exercise-central-architecture.md section 2.3), aucun équivalent
 // pour les autres disciplines à ce jour.
+/**
+ * Lecture serveur du catalogue complet, extraite du hook pour être
+ * testable isolément (cf. `lib/supabase/referentialReadBounds.test.ts`, qui prouve
+ * le comportement AU-DELÀ du plafond `max-rows` — un test qui passerait
+ * avec les seuls volumes actuels ne démontrerait rien).
+ */
+export async function fetchFullExerciseCatalog(
+  discipline: DisciplineId = "muscu",
+): Promise<DbCatalogRow[]> {
+  // Catalogue partagé : lecture seule depuis CTX-06. Paginé : 1 477 lignes
+  // muscu dépassent le plafond `max-rows` de PostgREST, qui tronquait la
+  // réponse SANS erreur — environ un tiers du catalogue n'arrivait jamais.
+  const catalogRows = await fetchAllRows<CatalogSelectRow>(
+    () =>
+      supabase
+        .from("exercise_reference")
+        .select(CATALOG_COLUMNS, { count: "exact" })
+        .eq("discipline_id", discipline)
+        .order("category")
+        .order("sort_order")
+        .order("name")
+        .order("id"),
+    { label: "exercise_reference" },
+  );
+  const rows = catalogRows.map((r) => toCatalogRow(r, false));
+
+  // Catalogue personnel de l'utilisateur (RLS : ses lignes uniquement).
+  // Pas de `config` ici : cette table n'en porte pas, et n'en portait pas
+  // davantage avant ce chantier — forme des lignes inchangée.
+  const ownRows = await fetchAllRows<DbCatalogRow>(
+    () =>
+      db
+        .from(USER_CATALOG_TABLE)
+        .select("id, name, category, sort_order, created_at", { count: "exact" })
+        .eq("discipline_id", discipline)
+        .order("category")
+        .order("sort_order")
+        .order("name")
+        .order("id"),
+    { label: USER_CATALOG_TABLE },
+  );
+
+  const ownNames = new Set<string>();
+  for (const r of ownRows) {
+    ownNames.add(r.name.toLowerCase());
+    rows.push({ ...r, owned: true });
+  }
+
+  if (discipline !== "muscu") return rows;
+
+  // Noms des exercices déjà pratiqués (table `exercises`, RLS
+  // propriétaire) — sert uniquement à proposer « Mes exercices ».
+  // TOLÉRANCE PRÉSERVÉE : avant ce chantier l'erreur de cette 3e requête
+  // n'était pas vérifiée (`customResult.data ?? []`), donc un échec
+  // dégradait la liste sans casser le catalogue. On garde exactement ce
+  // contrat — faire échouer toute la query viderait l'écran sur une
+  // erreur transitoire, ce serait une régression.
+  let customRows: Array<{ name: string }> = [];
+  try {
+    customRows = await fetchAllRows<{ name: string }>(
+      () => supabase.from("exercises").select("name", { count: "exact" }).order("name").order("id"),
+      { label: "exercises" },
+    );
+  } catch {
+    customRows = [];
+  }
+  const catalogNames = new Set(rows.map((r) => r.name.toLowerCase()));
+
+  // Ajoute les exercices créés par l'utilisateur non encore dans le catalogue
+  const seen = new Set<string>(ownNames);
+  for (const ex of customRows) {
+    const key = ex.name.toLowerCase();
+    if (!catalogNames.has(key) && !seen.has(key)) {
+      seen.add(key);
+      rows.push({
+        id: `custom__${ex.name}`,
+        name: ex.name,
+        category: "Mes exercices",
+        sort_order: 999,
+        created_at: "",
+        // Entrée dérivée d'un nom trouvé dans `exercises`, sans ligne de
+        // catalogue : ni partagée, ni personnelle. `isCustom()` la traite
+        // à part (action « Ajouter au catalogue »), jamais Modifier/Supprimer.
+        owned: false,
+      });
+    }
+  }
+
+  return rows;
+}
+
 export function useFullExerciseCatalog(discipline: DisciplineId = "muscu") {
   return useQuery({
     queryKey: [...FULL_CACHE_KEY, discipline],
-    queryFn: async (): Promise<DbCatalogRow[]> => {
-      const catalogResult = await supabase
-        .from("exercise_reference")
-        .select("*")
-        .eq("discipline_id", discipline)
-        .order("category")
-        .order("sort_order")
-        .order("name");
-
-      if (catalogResult.error) throw catalogResult.error;
-
-      // Catalogue partagé : lecture seule depuis CTX-06.
-      const rows = ((catalogResult.data ?? []) as DbCatalogRow[]).map((r) => ({
-        ...r,
-        owned: false,
-      }));
-
-      // Catalogue personnel de l'utilisateur (RLS : ses lignes uniquement).
-      const ownResult = await db
-        .from(USER_CATALOG_TABLE)
-        .select("id, name, category, sort_order, created_at")
-        .eq("discipline_id", discipline)
-        .order("category")
-        .order("sort_order")
-        .order("name");
-      if (ownResult.error) throw ownResult.error;
-
-      const ownNames = new Set<string>();
-      for (const r of (ownResult.data ?? []) as DbCatalogRow[]) {
-        ownNames.add(r.name.toLowerCase());
-        rows.push({ ...r, owned: true });
-      }
-
-      if (discipline !== "muscu") return rows;
-
-      const customResult = await supabase.from("exercises").select("name").order("name");
-      const catalogNames = new Set(rows.map((r) => r.name.toLowerCase()));
-
-      // Ajoute les exercices créés par l'utilisateur non encore dans le catalogue
-      const seen = new Set<string>(ownNames);
-      for (const ex of customResult.data ?? []) {
-        const key = ex.name.toLowerCase();
-        if (!catalogNames.has(key) && !seen.has(key)) {
-          seen.add(key);
-          rows.push({
-            id: `custom__${ex.name}`,
-            name: ex.name,
-            category: "Mes exercices",
-            sort_order: 999,
-            created_at: "",
-            // Entrée dérivée d'un nom trouvé dans `exercises`, sans ligne de
-            // catalogue : ni partagée, ni personnelle. `isCustom()` la traite
-            // à part (action « Ajouter au catalogue »), jamais Modifier/Supprimer.
-            owned: false,
-          });
-        }
-      }
-
-      return rows;
-    },
+    queryFn: () => fetchFullExerciseCatalog(discipline),
     staleTime: 2 * 60 * 1000,
   });
-}
-
-// ── Convertit les lignes DB en CatalogExercise (pour ExercisePicker) ────────
-export function dbRowsToCatalog(rows: DbCatalogRow[]): CatalogExercise[] {
-  return rows.map((r) => ({
-    name: r.name,
-    group: r.category ?? "",
-    ...(r.aliases && r.aliases.length > 0 ? { aliases: r.aliases } : {}),
-  }));
 }
 
 // ── Mutations ─────────────────────────────────────────────────────────────────

@@ -43,3 +43,13 @@ jobs:
       # manquante, pour que l'échec CI soit lisible sans relire le diff.
       - name: Contrat offline (createOfflineRepository)
         run: npm run check:offline-contract
+
+      # Garde-fou des lectures serveur bornées (chantier A) : une lecture
+      # `from(...).select(...)` sans limit/range/single/maybeSingle ni
+      # pagination est tronquée EN SILENCE au-delà du plafond `max-rows` de
+      # PostgREST — c'est ainsi qu'un tiers du catalogue d'exercices et la
+      # moitié des médias n'arrivaient jamais au client. Le script échoue sur
+      # toute NOUVELLE lecture non bornée, et aussi si sa baseline est
+      # périmée (une lecture bornée depuis doit en sortir).
+      - name: Lectures serveur bornées (max-rows)
+        run: npm run check:bounded-reads

@@ -24,6 +24,7 @@
     "gen:types": "supabase gen types typescript --project-id bcwfvpwxzlmkxobvbtzp --schema public > src/integrations/supabase/types.ts",
     "check:types": "node scripts/check-supabase-types.mjs",
     "check:offline-contract": "node scripts/check-offline-repository-contract.mjs",
+    "check:bounded-reads": "node scripts/check-bounded-reads.mjs",
     "audit:drift": "node scripts/audit-migration-drift.mjs",
     "phase4:backfill-segments": "node scripts/phase4_backfill_generic_segments.mjs",
     "phase4:backfill-segments:apply": "node scripts/phase4_backfill_generic_segments.mjs --apply",

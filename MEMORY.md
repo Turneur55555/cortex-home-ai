@@ -4620,3 +4620,98 @@ exécutables (secrets absents) — sans objet : aucune policy touchée.
 Chantier 8 / 23505, A3 (reorder séquentiel), A4 (barrière `createdAt`), A5 (vérification de rang
 fire-and-forget), D1 (colonnes XP before/after), architecture offline globale, RLS, design du module
 Séance, système XP/Rang, autres modules.
+
+## Chantier A — Lectures de référentiel bornées (2026-09-07, branche `claude/bounded-referential-reads-srh4ub`)
+
+Base : `7aaa3d4`. AUD-01/02/03 + AUD-13 de l'audit final, plus un garde-fou de convention.
+
+### Le défaut commun : `max-rows` tronque SANS erreur
+PostgREST plafonne toute réponse à `max-rows` (1 000 par défaut chez Supabase) **en silence**. Une
+lecture `from(...).select(...)` sans `limit`/`range`/`single` ne renvoie donc pas « toutes les
+lignes » mais « les N premières », sans erreur ni indice. Trois pertes de données ACTIVES ont été
+mesurées sur `bcwfvpwxzlmkxobvbtzp` :
+- **AUD-01** `exercise_reference` = 1 477 lignes muscu → ~477 exercices absents du catalogue ;
+- **AUD-02** `exercise_media` = 2 566 lignes → ~la moitié des exercices privés de photo/GIF ;
+- **AUD-03** `exercises` = 572 (sous le plafond aujourd'hui, sans marge et **sans `order`**).
+
+**Le `max-rows` du projet n'a PAS pu être confirmé** (ce n'est pas un GUC de rôle — `pg_roles` ne
+porte que les `statement_timeout` — et l'egress du conteneur bloque le domaine Supabase). C'est
+précisément pourquoi la correction ne repose sur AUCUNE valeur supposée : la complétude est
+**prouvée** par `count: "exact"` (total renvoyé par la base), jamais par « la page est plus courte
+que demandée » — signal qui ne distingue pas « fin du jeu » de « réponse rabotée ».
+
+### `src/lib/supabase/pagedRead.ts` (nouveau)
+`fetchAllRows(buildQuery, { pageSize, label })` et `fetchAllRowsForIds(ids, buildQuery)` — extraction
+réutilisable du motif MAJ-08 déjà éprouvé dans `use-fitness.ts` (`fetchChildRowsForParents`).
+Différence de contrat assumée : ici on **lève** au lieu de renvoyer `complete: false`, les appelants
+étant des `queryFn` React Query (une lecture incomplète doit devenir une erreur réessayable, pas une
+donnée partielle silencieuse). `PAGE_SIZE` 500, `IN_CHUNK_SIZE` 100 (borne la longueur d'URL).
+**Tout appelant doit terminer ses `order(...)` par `order("id")`** : sans ordre TOTAL, deux pages
+successives peuvent doublonner une ligne et en omettre une autre.
+
+### AUD-01 — catalogue
+`useFullExerciseCatalog` : `select("*")` → `id, name, category, sort_order, created_at,
+equipment:config->>equipment`, remis dans la forme `config: { equipment }` (shape `DbCatalogRow`
+INCHANGÉE). Mesuré : **2 841 ko → ~100 ko (−96 %)**. Les colonnes larguées sont `config` (1 547 ko),
+`description` (639 ko) et `media` (373 ko) — **aucun consommateur ne les lisait**. Tri
+(catégorie/sort_order/nom), recherche et fusion « Mes exercices » inchangés. **Tolérance préservée** :
+l'échec de la 3e lecture (`exercises`) dégrade la liste sans casser le catalogue, exactement comme
+avant (son erreur n'était pas vérifiée) — la faire remonter viderait l'écran sur une erreur
+transitoire.
+
+### AUD-02 — médias, en DEUX niveaux (décision structurante)
+- `useExerciseCatalogMedia()` reste une carte COMPLÈTE, désormais paginée : le Catalogue/Picker
+  parcourt réellement toute la bibliothèque, et une clé par ids y provoquerait un refetch à chaque
+  frappe.
+- `useExerciseMediaForExercises(ids)` (nouveau) pour `ActiveWorkoutView` : la séance en cours
+  rapatriait 2 566 lignes pour afficher ~6 vignettes. Clé de cache = ids triés + dédupliqués.
+
+### AUD-03 — historique profond, PAS la fenêtre locale
+`useExerciseSetHistory` (instances + `exercise_sets` + `workouts`) et `useSegmentHistory`
+(`workouts` + `workout_segments`) : paginés et `in(...)` découpé. **Ne jamais confondre avec
+`WORKOUTS_HYDRATION_LIMIT` (200)**, qui borne l'hydratation offline et rien d'autre : ces écrans
+lisent le serveur précisément pour dépasser cette fenêtre.
+
+### AUD-13 — code mort supprimé
+`useExerciseCatalog()` et `dbRowsToCatalog()` : **zéro consommateur** (le seul grep positif sur
+`ExerciseExplorerSheet.tsx` était la ligne de FERMETURE d'import). Supprimés avec l'import
+`EXERCISE_CATALOG`/`CatalogExercise` devenu inutile. Tout le reste du module est conservé.
+
+### Garde-fou `scripts/check-bounded-reads.mjs` (+ `npm run check:bounded-reads`, câblé dans typecheck.yml)
+Analyse lexicale de `src/**` (tests exclus). SÛR = `single`/`maybeSingle`/`limit`/`range`, ou
+`head: true`, ou enveloppé par `fetchAllRows`/`fetchAllRowsForIds`, ou écriture. **Baseline à
+cliquet** (`scripts/bounded-reads-baseline.json`, 31 entrées / 37 lectures hors périmètre) : échoue
+sur une lecture non bornée NOUVELLE **et** sur une entrée PÉRIMÉE — la baseline ne peut que
+décroître, jamais pourrir.
+**Deux pièges rencontrés, corrigés, et testés en régression** : (1) filtrer le *receiver*
+(`supabase`/`db`) faisait rater **16 lectures** en silence (casts `(supabase as any)`, client
+`admin`) — un garde-fou qui saute ce qu'il ne classe pas rouvre le trou qu'il ferme ; (2) l'argument
+de type générique (`fetchAllRows<T>(`) masquait le nom du helper et faisait signaler TOUTES ses
+lectures. Plancher d'auto-cohérence `MIN_EXPECTED_READS` : un analyseur devenu aveugle échoue en
+code 2 au lieu de « réussir ».
+
+### Découvert hors périmètre, NON corrigé (documenté dans la baseline)
+37 lectures non bornées ailleurs (nutrition, dressing, templates, suppléments, `syncEngine`,
+`exportData`). Notamment **`useExerciseAdmin.ts` lit aussi `exercise_media` sans borne** (voisin
+d'AUD-02, mais outillage admin hors des fichiers nommés).
+
+### Tests ajoutés (+81, aucun skip ajouté)
+`lib/supabase/pagedRead.test.ts` (20), `lib/supabase/referentialReadBounds.test.ts` (27 — les VRAIES
+lectures des hooks contre un serveur simulé à plafond silencieux, réglable par table),
+`scripts/check-bounded-reads.test.mjs` (34). **Toutes les fixtures DÉPASSENT délibérément le
+plafond** : un test qui passerait avec les volumes actuels ne démontrerait rien, puisque c'est le
+dépassement qui déclenchait la perte.
+
+### Validation (comparée à `7aaa3d4`, mesurée avant toute modification)
+`npx vitest run` **2012 passed / 63 skipped / 0 échec** (base : 1931/63 — +81, aucun skip ajouté).
+`tsc --noEmit` 0 erreur. `npm run lint` **0 erreur / 157 warnings — IDENTIQUE à la base**.
+`npx prettier --check .` **83 fichiers — IDENTIQUE à la base**, aucun du chantier. `npm run build` OK.
+`check:offline-contract` OK. `check:bounded-reads` OK. `validate:supabase` 3 avertissements
+préexistants, aucun nouveau. E2E `05-offline-sync` **1 passed** (l'image ne fournit que le build
+Chromium 1194 alors que Playwright 1.59 attend le 1223 : alias créé dans `/opt/pw-browsers`, hors
+dépôt). `check:types` **non exécutable** (CLI Supabase absente) — sans objet : `types.ts` non
+modifié, aucune migration.
+
+### Intégrité
+Aucune donnée modifiée en base, aucune migration, aucune policy RLS touchée, moteur offline
+inchangé, XP/Rang inchangé, aucun changement de comportement métier.

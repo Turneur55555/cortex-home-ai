@@ -23,7 +23,7 @@ import { useLastExerciseSessions } from "@/hooks/useLastExerciseSession";
 import { ExerciseSheet } from "./ExerciseSheet";
 import { Portal } from "@/components/Portal";
 import { useUserExercisePhotos, resolveCustomExerciseMuscles } from "@/hooks/useUserExercisePhotos";
-import { useExerciseCatalogMedia } from "@/hooks/useExerciseCatalogEntry";
+import { useExerciseMediaForExercises } from "@/hooks/useExerciseCatalogEntry";
 import { useBodyMeasurements } from "@/hooks/useBodyTracking";
 // Musculation hybride (2026-08-04) — blocs métriques (course/cardio/HYROX/
 // autre) ajoutés à l'intérieur de la séance active Musculation. Réutilise
@@ -114,13 +114,23 @@ export function ActiveWorkoutView({
 
   const { data: userPhotos } = useUserExercisePhotos();
 
-  // Carte de séance V3 (2026-07-29) — deux requêtes batchées (une pour
-  // toute la bibliothèque/l'utilisateur, jamais une par carte) : médias du
-  // dataset (photo/GIF, seule information "catalogue" encore affichée sur
-  // la carte — le reste vit exclusivement dans la fiche détaillée) et poids
-  // de corps pour le rang RPG. Le rang lui-même est calculé en mémoire à
-  // partir de `allWorkouts` (déjà chargé), voir computeRanksByName.
-  const { data: catalogMedia } = useExerciseCatalogMedia();
+  // Carte de séance V3 (2026-07-29) — deux requêtes batchées (jamais une par
+  // carte) : médias du dataset (photo/GIF, seule information "catalogue"
+  // encore affichée sur la carte — le reste vit exclusivement dans la fiche
+  // détaillée) et poids de corps pour le rang RPG. Le rang lui-même est
+  // calculé en mémoire à partir de `allWorkouts` (déjà chargé), voir
+  // computeRanksByName.
+  //
+  // CHANTIER A (AUD-02) : la lecture portait sur TOUTE la table
+  // `exercise_media` (2 566 lignes) pour afficher la poignée d'exercices de
+  // la séance en cours — et se faisait de surcroît raboter en silence par
+  // `max-rows`. Elle ne demande plus que les médias des exercices
+  // réellement affichés ici.
+  const exerciseReferenceIds = useMemo(
+    () => (workout.exercises ?? []).map((ex) => ex.exercise_reference_id ?? null),
+    [workout.exercises],
+  );
+  const { data: catalogMedia } = useExerciseMediaForExercises(exerciseReferenceIds);
   const { data: measurements } = useBodyMeasurements();
 
   // Menu "..." — le bandeau a `backdrop-blur-xl` + `overflow-hidden`, ce qui
