@@ -76,10 +76,17 @@ CORTEX vise à être **le plus beau RPG de progression du fitness**, pas une app
   `deploy-functions.yml`.
 
 ## Avant chaque modification, lire obligatoirement :
-1. MEMORY.md
-2. /docs/architecture.md
-3. /docs/features.md
-4. /docs/bugs.md
+1. **`docs/INVARIANTS.md`** — les règles à ne jamais casser (moteur offline, clôture de séance,
+   barrière XP, lectures bornées). Document COURT, avec pour chaque invariant l'endroit où il est
+   appliqué et le test qui le vérifie. C'est le filet de sécurité : on le relit avant de toucher au
+   moteur, à la séance ou à la récompense.
+2. MEMORY.md — le JOURNAL des chantiers (antichronologique). Il raconte l'histoire, il ne porte pas
+   le règlement : y chercher le contexte d'une décision, pas la règle elle-même.
+3. /docs/architecture.md
+4. /docs/features.md
+5. /docs/bugs.md
+
+Documents datés et clos (rapports d'audit, briefs, points de phase) : `docs/archive/`.
 
 ## Workflow GitHub (CRITIQUE — depuis juin 13)
 - Le dossier Google Drive local est désynchronisé : les fichiers `src/components/fitness/` et `src/hooks/` présents localement peuvent être des versions obsolètes
@@ -107,6 +114,9 @@ Pour le projet Cortex :
 
 ## À la fin de chaque session, mettre à jour :
 - MEMORY.md → ajouter tout nouveau composant, hook, migration, feature, décision d'archi découvert pendant la session
+- `docs/INVARIANTS.md` → **en plus, jamais à la place**, si et seulement si le chantier a établi une
+  règle PERMANENTE et vérifiable. Une règle sans garde-fou exécutable n'est pas un invariant :
+  ajouter le test avec.
 
 ## Stack technique
 - React + TypeScript

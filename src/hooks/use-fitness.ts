@@ -19,6 +19,7 @@ import { ACTIVE_WORKOUT_CONFLICT_MESSAGE } from "@/lib/fitness/activeWorkoutGuar
 import { OFFLINE_FIRST_QUERY_OPTIONS } from "@/lib/offline/offlineQuery";
 import { collectWorkoutSyncDependencies } from "@/lib/fitness/workoutSyncDependencies";
 import { allocateSetNumber, nextSetNumber } from "@/lib/fitness/setNumberAllocation";
+import { startActiveWorkoutExclusively } from "@/lib/fitness/activeWorkoutStart";
 import { runExclusiveSessionClosure } from "@/lib/fitness/sessionClosure";
 import { summarizeExerciseSetsForHistory } from "@/lib/fitness/sets";
 import { workoutsServerRefreshGate } from "@/lib/offline/workoutsRefreshWindow";
@@ -1079,26 +1080,31 @@ export function useStartWorkout() {
   return useMutation({
     mutationFn: async ({ name, gym_location }: { name: string; gym_location: string }) => {
       if (!user) throw new Error("Non authentifié");
-      // Étape 0.1 : garde — même convention que les autres points de
-      // démarrage. L'index unique `workouts_one_active_per_user` reste le
-      // garde-fou final côté serveur (edge case course multi-appareils hors
-      // connexion, assumé — voir assertNoActiveWorkout).
-      await assertNoActiveWorkout(user.id);
-
       const today = localDateYMD();
-      await workoutsRepo.create(user.id, {
-        name,
-        date: today,
-        gym_location,
-        status: "active",
-        discipline: "muscu",
-        metadata: {},
-        duration_minutes: null,
-        notes: null,
-        level_before: null,
-        level_after: null,
-        xp_before: null,
-        xp_after: null,
+      // Étape 0.1 : garde — même convention que les autres points de
+      // démarrage. AUD-06 : la garde et la création forment une SECTION
+      // CRITIQUE (`startActiveWorkoutExclusively`), sinon deux démarrages
+      // rapprochés lisent tous deux l'état d'avant la première écriture et
+      // créent deux séances actives. L'index unique
+      // `workouts_one_active_per_user` reste le garde-fou final côté serveur
+      // (edge case course multi-appareils hors connexion, assumé — voir
+      // assertNoActiveWorkout).
+      await startActiveWorkoutExclusively(user.id, async () => {
+        await assertNoActiveWorkout(user.id);
+        return workoutsRepo.create(user.id, {
+          name,
+          date: today,
+          gym_location,
+          status: "active",
+          discipline: "muscu",
+          metadata: {},
+          duration_minutes: null,
+          notes: null,
+          level_before: null,
+          level_after: null,
+          xp_before: null,
+          xp_after: null,
+        });
       });
     },
     onSuccess: () => {
@@ -1132,22 +1138,25 @@ export function useStartHybridStrengthWorkout() {
       blockDiscipline: DisciplineId;
     }) => {
       if (!user) throw new Error("Non authentifié");
-      await assertNoActiveWorkout(user.id);
 
       const today = localDateYMD();
-      const workout = await workoutsRepo.create(user.id, {
-        name,
-        date: today,
-        gym_location: gym_location ?? "Salle inconnue",
-        discipline: "muscu",
-        status: "active",
-        metadata: {},
-        duration_minutes: null,
-        notes: null,
-        level_before: null,
-        level_after: null,
-        xp_before: null,
-        xp_after: null,
+      // AUD-06 — garde + création en section critique (voir useStartWorkout).
+      const workout = await startActiveWorkoutExclusively(user.id, async () => {
+        await assertNoActiveWorkout(user.id);
+        return workoutsRepo.create(user.id, {
+          name,
+          date: today,
+          gym_location: gym_location ?? "Salle inconnue",
+          discipline: "muscu",
+          status: "active",
+          metadata: {},
+          duration_minutes: null,
+          notes: null,
+          level_before: null,
+          level_after: null,
+          xp_before: null,
+          xp_after: null,
+        });
       });
 
       // Exercices de force — mêmes colonnes/résolution que useAddWorkout,
@@ -1464,22 +1473,25 @@ export function useStartWorkoutFromTemplate() {
   return useMutation({
     mutationFn: async (source: RepeatSourceWorkout) => {
       if (!user) throw new Error("Non authentifié");
-      await assertNoActiveWorkout(user.id);
 
       const today = localDateYMD();
-      const workout = await workoutsRepo.create(user.id, {
-        name: source.name || "Séance",
-        date: today,
-        gym_location: source.gym_location ?? "Salle inconnue",
-        status: "active",
-        discipline: "muscu",
-        metadata: {},
-        duration_minutes: null,
-        notes: null,
-        level_before: null,
-        level_after: null,
-        xp_before: null,
-        xp_after: null,
+      // AUD-06 — garde + création en section critique (voir useStartWorkout).
+      const workout = await startActiveWorkoutExclusively(user.id, async () => {
+        await assertNoActiveWorkout(user.id);
+        return workoutsRepo.create(user.id, {
+          name: source.name || "Séance",
+          date: today,
+          gym_location: source.gym_location ?? "Salle inconnue",
+          status: "active",
+          discipline: "muscu",
+          metadata: {},
+          duration_minutes: null,
+          notes: null,
+          level_before: null,
+          level_after: null,
+          xp_before: null,
+          xp_after: null,
+        });
       });
 
       // Etape 4.6c (2026-07-13) : deduplique par identite (identityKey -

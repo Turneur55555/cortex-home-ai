@@ -583,6 +583,32 @@ export function listBlockedDependencies(
   );
 }
 
+/**
+ * CHANTIER FINAL (AUD-11) — reste-t-il quoi que ce soit qu'une PASSE puisse
+ * faire avancer ?
+ *
+ * `processSyncQueue` ne traite que `pending` et `failed`
+ * (`listPendingOperations`) et ne récupère que les `syncing` orphelines
+ * (`reclaimStaleSyncingOperations`). Une file qui ne contient rien de tout
+ * cela — le cas de très loin le plus fréquent, puisque la file est vide dès
+ * que tout est synchronisé — ne peut donc RIEN produire : le balayage
+ * périodique y consomme deux lectures IndexedDB toutes les 4 secondes et
+ * fait basculer `isSyncing` deux fois, ce qui re-rend inutilement tout ce qui
+ * lit le store partagé.
+ *
+ * Une opération `blocked` ne compte volontairement PAS : elle n'avancera
+ * jamais sans une action explicite de l'utilisateur (« Réessayer quand
+ * même »), et cette action-là repasse l'opération en `pending` — donc
+ * rallume ce prédicat. Rien n'est perdu, rien n'est retardé.
+ */
+export async function hasSyncableOperations(userId: string): Promise<boolean> {
+  const db = await getOfflineDb();
+  const all = await db.getAllFromIndex("syncQueue", "by-user", IDBKeyRange.only(userId));
+  return all.some(
+    (op) => op.status === "pending" || op.status === "failed" || op.status === "syncing",
+  );
+}
+
 export async function countPendingAndFailed(userId: string): Promise<QueueCounts> {
   const ops = await listAllOperations(userId);
   return {

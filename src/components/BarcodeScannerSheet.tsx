@@ -10,7 +10,7 @@ import {
   PackagePlus,
   RotateCcw,
 } from "lucide-react";
-import { BrowserMultiFormatReader } from "@zxing/browser";
+import type { BrowserMultiFormatReader } from "@zxing/browser";
 import type { Result } from "@zxing/library";
 import { toast } from "sonner";
 // useAddStockItem removed: Maison/stocks module deleted.
@@ -108,6 +108,27 @@ function suggestInitialGrams(raw: string | undefined): number {
     default:
       return Math.round(num);
   }
+}
+
+/**
+ * CHANTIER FINAL (AUD-07) — `@zxing` est chargé À LA DEMANDE.
+ *
+ * La bibliothèque de décodage pèse à elle seule ~1,4 Mo de source dans le
+ * graphe : importée statiquement, elle atterrissait dans le chunk d'entrée,
+ * c'est-à-dire dans le SHELL OFFLINE PRÉCACHÉ — donc téléchargée et stockée
+ * sur l'appareil de tout le monde, y compris de qui n'ouvre jamais le
+ * scanner.
+ *
+ * La sortir du précache ne retire AUCUNE capacité hors ligne : ce scanner ne
+ * peut de toute façon pas fonctionner sans réseau, puisque le code-barres
+ * lu est résolu par une edge function (`lookupBarcode`, services/foodCatalog).
+ * Il n'y a donc rien à conserver hors connexion ici, et l'échec de
+ * chargement est traité explicitement ci-dessous plutôt qu'assimilé à un
+ * refus de caméra.
+ */
+async function loadBarcodeReader(): Promise<BrowserMultiFormatReader> {
+  const { BrowserMultiFormatReader: Reader } = await import("@zxing/browser");
+  return new Reader();
 }
 
 // ─── Main component ────────────────────────────────────────────────────────────
@@ -238,6 +259,25 @@ export function BarcodeScannerSheet({ date, onClose }: { date: string; onClose: 
     setProduct(null);
     setNotFoundCode(null);
     setCreatingFood(false);
+
+    // AUD-07 — le décodeur est chargé À LA DEMANDE, et son échec a son PROPRE
+    // message : le confondre avec le `catch` ci-dessous afficherait « Accès
+    // caméra refusé » alors que la caméra n'a même pas été sollicitée. Le seul
+    // cas réaliste d'échec est le démarrage à froid hors connexion, où ce
+    // scanner ne pourrait de toute façon rien résoudre (voir
+    // `loadBarcodeReader`). La saisie manuelle du code, elle, reste offerte.
+    if (!readerRef.current) {
+      try {
+        readerRef.current = await loadBarcodeReader();
+      } catch {
+        setCamStatus("idle");
+        setScanning(false);
+        setError("Scanner indisponible — vérifiez votre connexion");
+        toast.error("Scanner indisponible — vérifiez votre connexion");
+        return;
+      }
+    }
+
     try {
       setCamStatus("active");
       setScanning(true);
@@ -252,7 +292,6 @@ export function BarcodeScannerSheet({ date, onClose }: { date: string; onClose: 
       videoRef.current.srcObject = stream;
       videoRef.current.setAttribute("playsinline", "true");
       await videoRef.current.play();
-      if (!readerRef.current) readerRef.current = new BrowserMultiFormatReader();
       controlsRef.current = await readerRef.current.decodeFromStream(
         stream,
         videoRef.current,
@@ -273,7 +312,10 @@ export function BarcodeScannerSheet({ date, onClose }: { date: string; onClose: 
   }, [fetchProduct, stopCamera]);
 
   useEffect(() => {
-    readerRef.current = new BrowserMultiFormatReader();
+    // AUD-07 : plus d'instanciation à l'ouverture de la fiche — le décodeur
+    // est construit au premier démarrage de caméra (`startCamera`), en même
+    // temps que le chargement paresseux de `@zxing`. Rien d'autre ne change :
+    // le nettoyage au démontage reste identique.
     return () => {
       stopCamera();
       fetchAbortRef.current?.abort(); // Annuler tout fetch en cours au démontage

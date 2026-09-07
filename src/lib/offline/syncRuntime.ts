@@ -1,5 +1,5 @@
 import { listConflicts, processSyncQueue, type SyncResult } from "./syncEngine";
-import { countPendingAndFailed, listAllOperations } from "./syncQueue";
+import { countPendingAndFailed, hasSyncableOperations, listAllOperations } from "./syncQueue";
 import type { ConflictRecord, SyncOperation } from "./types";
 
 /**
@@ -155,26 +155,79 @@ export async function refreshSyncRuntime(userId: string | null): Promise<void> {
   });
 }
 
+/** Résultat d'une passe qui n'avait rien à faire — aucune opération traitable
+ *  dans la file (cf. `runSyncQueueOnce`). */
+function emptyPassResult(): SyncResult {
+  return {
+    succeeded: 0,
+    conflicted: 0,
+    retried: 0,
+    blocked: 0,
+    remapped: 0,
+    skipped: 0,
+    reclaimed: 0,
+  };
+}
+
+/**
+ * Corps d'une passe — TOUJOURS exécuté sous le verrou pris par
+ * `runSyncQueueOnce` (voir ci-dessous pourquoi ce découpage n'est pas
+ * cosmétique).
+ *
+ * CHANTIER FINAL (AUD-11) — quand la file ne contient AUCUNE opération
+ * traitable, on n'appelle pas le moteur : `processSyncQueue` n'aurait rien à
+ * faire, et la bascule `isSyncing` true → false qui l'encadre re-rendrait
+ * pour rien tout ce qui lit ce store, toutes les 4 secondes, indéfiniment.
+ * `isSyncing` n'est donc même pas touché dans ce cas : rien ne se passe, rien
+ * n'est signalé.
+ */
+async function executeSyncPass(
+  userId: string,
+  options: { respectBackoff?: boolean },
+): Promise<SyncResult> {
+  if (!(await hasSyncableOperations(userId))) return emptyPassResult();
+  setSnapshot({ ...snapshot, isSyncing: true });
+  try {
+    return await processSyncQueue(userId, options);
+  } finally {
+    setSnapshot({ ...snapshot, isSyncing: false });
+    await refreshSyncRuntime(userId);
+  }
+}
+
 /**
  * Lance UNE passe de la queue. Si une passe est déjà en vol, on renvoie
  * `null` sans en démarrer une seconde (le déclencheur — poll, retour réseau,
  * bouton « Réessayer » — n'a rien à faire de plus : la passe en cours traite
  * déjà la file, ordre FIFO compris).
+ *
+ * LE VERROU SE PREND SANS AUCUN `await` AVANT LUI. C'est la raison d'être de
+ * `executeSyncPass` : glisser ne serait-ce qu'une lecture IndexedDB entre le
+ * test `if (runningPass)` et l'affectation rend le verrou inopérant — deux
+ * appelants franchissent alors tous deux le test pendant que l'autre attend,
+ * et la seconde affectation écrase la première. Le moteur y survivrait (le
+ * claim est atomique), mais la garantie « une seule passe en vol », elle,
+ * serait perdue : `signOutGuard` s'en sert pour distinguer SA passe de celle
+ * du driver.
+ *
+ * ATTENTION À LA VALEUR DE RETOUR : une file vide renvoie un résultat À ZÉRO,
+ * jamais `null`. Les deux ne veulent pas dire la même chose et un appelant en
+ * dépend — `signOutGuard.ensureFreshSyncPass` lit `null` comme « une passe
+ * tournait déjà, ce n'est pas la mienne » et réessaie jusqu'à dix fois : lui
+ * renvoyer `null` sur une file vide ajouterait une attente de 1,5 s à chaque
+ * déconnexion propre.
  */
 export async function runSyncQueueOnce(
   userId: string,
   options: { respectBackoff?: boolean } = {},
 ): Promise<SyncResult | null> {
   if (runningPass) return null;
-  setSnapshot({ ...snapshot, isSyncing: true });
-  const pass = processSyncQueue(userId, options);
+  const pass = executeSyncPass(userId, options);
   runningPass = pass;
   try {
     return await pass;
   } finally {
     runningPass = null;
-    setSnapshot({ ...snapshot, isSyncing: false });
-    await refreshSyncRuntime(userId);
   }
 }
 

@@ -1,3 +1,3 @@
 {
-  "routeFileIgnorePattern": "(CoachSheet|CorpsTab|SeancesTab|NutritionTab)\\.tsx$"
+  "routeFileIgnorePattern": "((CoachSheet|CorpsTab|SeancesTab|NutritionTab)\\.tsx|\\.(test|spec)\\.tsx?)$"
 }

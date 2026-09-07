@@ -14,6 +14,14 @@ import { registerServiceWorker } from "./registerServiceWorker";
  * plutôt que de dispatcher un vrai event sur `window` (partagé entre tous
  * les tests du fichier jsdom — un dispatch réel accumulerait les listeners
  * des tests précédents et ferait planter les suivants).
+ *
+ * CHANTIER FINAL (AUD-07) — un second défaut, réel et mesuré, est couvert
+ * ici : `registerServiceWorker` est appelée depuis un `useEffect`, donc APRÈS
+ * le rendu. Poser à ce moment-là un écouteur `load` alors que l'événement est
+ * DÉJÀ passé n'enregistre jamais rien : pas de Service Worker, pas de
+ * précache, pas de démarrage hors connexion. Chaque test fixe donc
+ * explicitement `document.readyState` — le laisser au hasard de
+ * l'environnement, c'est tester un cas au lieu de l'autre sans le savoir.
  */
 describe("registerServiceWorker", () => {
   let registerMock: ReturnType<typeof vi.fn>;
@@ -26,11 +34,18 @@ describe("registerServiceWorker", () => {
       value: { register: registerMock },
     });
     addEventListenerSpy = vi.spyOn(window, "addEventListener");
+    // Cas historique de ces tests : la page n'a pas fini de charger, le
+    // Service Worker attend donc `load`.
+    setReadyState("loading");
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
+
+  function setReadyState(state: DocumentReadyState) {
+    Object.defineProperty(document, "readyState", { configurable: true, get: () => state });
+  }
 
   function fireLoad() {
     const call = addEventListenerSpy.mock.calls.find(([event]: [string]) => event === "load");
@@ -64,6 +79,31 @@ describe("registerServiceWorker", () => {
     } finally {
       globalThis.window = originalWindow;
     }
+  });
+
+  it("AUD-07 — document DÉJÀ chargé (`complete`) : inscription IMMÉDIATE, sans attendre `load`", async () => {
+    // Le cas qui échouait : `load` ne sera plus jamais émis, donc un écouteur
+    // posé maintenant ne servirait à rien.
+    setReadyState("complete");
+    registerServiceWorker();
+    await Promise.resolve();
+
+    expect(registerMock).toHaveBeenCalledWith("/sw.js");
+    expect(addEventListenerSpy).not.toHaveBeenCalledWith("load", expect.anything(), {
+      once: true,
+    });
+  });
+
+  it("AUD-07 — l'écouteur `load` est posé en `once` (un seul enregistrement possible)", () => {
+    registerServiceWorker();
+
+    // `fireLoad()` appelle le listener DIRECTEMENT : il court-circuiterait
+    // `once`, qui n'est honoré que par une vraie émission d'événement. On
+    // vérifie donc l'option passée, seule chose que ce test peut réellement
+    // démontrer.
+    expect(addEventListenerSpy).toHaveBeenCalledWith("load", expect.any(Function), {
+      once: true,
+    });
   });
 
   it("journalise sans planter si l'enregistrement échoue", async () => {

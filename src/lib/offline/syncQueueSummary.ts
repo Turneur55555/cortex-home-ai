@@ -58,6 +58,38 @@ function plural(count: number, singular: string, pluralForm: string): string {
 }
 
 /**
+ * CHANTIER FINAL (AUD-05) — libellé du signal discret porté par la barre de
+ * navigation (`BottomNav`, onglet Profil).
+ *
+ * Le point coloré est purement visuel : sans ce texte, un lecteur d'écran
+ * n'annonce RIEN. On réutilise ici les tournures déjà employées par
+ * `summarizeSyncQueue` ci-dessous — un seul vocabulaire, pour que le signal
+ * de la barre et le bloc du Profil ne puissent pas se contredire.
+ *
+ * `null` quand rien n'attend de décision : l'appelant n'affiche alors aucun
+ * signal (et surtout pas un signal « tout va bien », qui serait exactement
+ * l'indicateur permanent retiré par l'audit UI du 01/09/2026).
+ */
+export function describeSyncAttention(input: {
+  conflictCount: number;
+  blockedCount: number;
+}): string | null {
+  const parts: string[] = [];
+  if (input.conflictCount > 0) {
+    parts.push(
+      `${input.conflictCount} ${plural(input.conflictCount, "conflit à résoudre", "conflits à résoudre")}`,
+    );
+  }
+  if (input.blockedCount > 0) {
+    parts.push(
+      `${input.blockedCount} ${plural(input.blockedCount, "action nécessite votre attention", "actions nécessitent votre attention")}`,
+    );
+  }
+  if (parts.length === 0) return null;
+  return `Synchronisation : ${parts.join(", ")}.`;
+}
+
+/**
  * Ordre de priorité repris À L'IDENTIQUE de l'ancien indicateur global
  * (`SyncStatusIndicator`) : ce qui demande une décision d'abord, puis ce qui
  * coince, puis l'état courant. On ne change que le point d'affichage, jamais

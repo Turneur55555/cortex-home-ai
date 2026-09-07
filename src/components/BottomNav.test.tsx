@@ -5,18 +5,19 @@ import { createRoot, type Root } from "react-dom/client";
 import { createRootRoute, createRouter, RouterProvider } from "@tanstack/react-router";
 
 /**
- * CHANTIER 4 (AMEL-04) — le point discret de conflit sur l'onglet Profil.
- * `useConflictIndicator` est mocké : ce test vérifie le RENDU (présence /
- * absence du point), pas la lecture du store partagé (couverte par
- * `hooks/useConflictIndicator.test.ts`).
+ * CHANTIER 4 (AMEL-04), étendu par le CHANTIER FINAL (AUD-05) — le point
+ * discret sur l'onglet Profil. `useSyncAttentionIndicator` est mocké : ce
+ * test vérifie le RENDU (présence / absence du point, et le texte que
+ * l'assistance vocale annonce), pas la lecture du store partagé (couverte
+ * par `hooks/useSyncAttentionIndicator.test.ts`).
  */
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const conflictCount = vi.hoisted(() => ({ current: 0 }));
+const attention = vi.hoisted(() => ({ current: { conflictCount: 0, blockedCount: 0, total: 0 } }));
 
-vi.mock("@/hooks/useConflictIndicator", () => ({
-  useConflictIndicator: () => conflictCount.current,
+vi.mock("@/hooks/useSyncAttentionIndicator", () => ({
+  useSyncAttentionIndicator: () => attention.current,
 }));
 
 import { BottomNav } from "./BottomNav";
@@ -30,7 +31,7 @@ beforeEach(() => {
     unobserve() {}
     disconnect() {}
   } as unknown as typeof ResizeObserver;
-  conflictCount.current = 0;
+  attention.current = { conflictCount: 0, blockedCount: 0, total: 0 };
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -52,16 +53,39 @@ async function render() {
   });
 }
 
-describe("BottomNav — indicateur discret de conflit (AMEL-04)", () => {
-  it("aucun conflit → aucun point sur l'onglet Profil", async () => {
-    conflictCount.current = 0;
+describe("BottomNav — signal discret « une décision vous attend » (AMEL-04 / AUD-05)", () => {
+  it("rien à arbitrer → aucun point sur l'onglet Profil", async () => {
+    attention.current = { conflictCount: 0, blockedCount: 0, total: 0 };
     await render();
-    expect(container.querySelector('[data-testid="nav-conflict-dot"]')).toBeNull();
+    expect(container.querySelector('[data-testid="nav-attention-dot"]')).toBeNull();
   });
 
   it("un conflit → point visible sur l'onglet Profil", async () => {
-    conflictCount.current = 1;
+    attention.current = { conflictCount: 1, blockedCount: 0, total: 1 };
     await render();
-    expect(container.querySelector('[data-testid="nav-conflict-dot"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="nav-attention-dot"]')).not.toBeNull();
+  });
+
+  it("AUD-05 — une opération BLOQUÉE (sans aucun conflit) allume le point", async () => {
+    attention.current = { conflictCount: 0, blockedCount: 1, total: 1 };
+    await render();
+    expect(container.querySelector('[data-testid="nav-attention-dot"]')).not.toBeNull();
+  });
+
+  it("AUD-05 — le point porte un texte annonçable, jamais un signal muet", async () => {
+    attention.current = { conflictCount: 0, blockedCount: 2, total: 2 };
+    await render();
+    const label = container.querySelector(".sr-only");
+    expect(label?.textContent).toBe("Synchronisation : 2 actions nécessitent votre attention.");
+  });
+
+  it("AUD-05 — le signal est porté par l'onglet Profil, et par lui seul", async () => {
+    attention.current = { conflictCount: 1, blockedCount: 1, total: 2 };
+    await render();
+    const profil = container.querySelector('[data-testid="nav-profil"]');
+    expect(profil?.querySelector('[data-testid="nav-attention-dot"]')).not.toBeNull();
+    // Aucune autre entrée de la barre ne porte le signal : la
+    // synchronisation ne s'impose jamais par-dessus l'écran courant.
+    expect(container.querySelectorAll('[data-testid="nav-attention-dot"]')).toHaveLength(1);
   });
 });

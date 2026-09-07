@@ -2,7 +2,8 @@ import { useLayoutEffect, useRef } from "react";
 import { Link, useLocation } from "@tanstack/react-router";
 import { Home, Dumbbell, Apple, User } from "lucide-react";
 import { motion } from "framer-motion";
-import { useConflictIndicator } from "@/hooks/useConflictIndicator";
+import { useSyncAttentionIndicator } from "@/hooks/useSyncAttentionIndicator";
+import { describeSyncAttention } from "@/lib/offline/syncQueueSummary";
 
 const tabs = [
   { to: "/", label: "Accueil", icon: Home },
@@ -14,12 +15,17 @@ const tabs = [
 export function BottomNav() {
   const { pathname } = useLocation();
   const wrapperRef = useRef<HTMLDivElement>(null);
-  // AMEL-04 — un conflit peut survenir pendant n'importe quel écran ; sans ce
-  // point discret sur l'onglet Profil (seul endroit où il se résout), rien
-  // ne le fait découvrir hors de Profil. Volontairement minimal : PAS l'ancien
-  // indicateur global de synchronisation (celui-ci ne réagit qu'aux
-  // conflits, jamais aux opérations en attente/échec).
-  const conflictCount = useConflictIndicator();
+  // AMEL-04, étendu par AUD-05 — un conflit OU une opération bloquée peut
+  // survenir pendant n'importe quel écran ; sans ce point discret sur
+  // l'onglet Profil (seul endroit où ils se résolvent), rien ne les fait
+  // découvrir hors de Profil. Une opération bloquée retient en plus la
+  // clôture de la séance qui en dépend, donc sa récompense XP : c'est
+  // précisément le cas où l'utilisateur DOIT savoir qu'on l'attend.
+  // Volontairement minimal : PAS l'ancien indicateur global de
+  // synchronisation (celui-ci ne réagit jamais aux opérations en
+  // attente/échec, qui se résorbent seules).
+  const attention = useSyncAttentionIndicator();
+  const attentionLabel = describeSyncAttention(attention);
 
   // Publie la hauteur réellement rendue de la barre (safe area incluse, via
   // son propre paddingBottom) dans une variable CSS globale, pour que
@@ -87,12 +93,17 @@ export function BottomNav() {
                     >
                       <Icon className="h-5 w-5" strokeWidth={active ? 2.4 : 1.8} />
                     </motion.span>
-                    {to === "/profil" && conflictCount > 0 && (
-                      <span
-                        aria-hidden
-                        data-testid="nav-conflict-dot"
-                        className="absolute right-1.5 top-0.5 h-1.5 w-1.5 rounded-full bg-destructive"
-                      />
+                    {to === "/profil" && attention.total > 0 && (
+                      <>
+                        <span
+                          aria-hidden
+                          data-testid="nav-attention-dot"
+                          className="absolute right-1.5 top-0.5 h-1.5 w-1.5 rounded-full bg-destructive"
+                        />
+                        {/* Le point est purement visuel : ce texte est le
+                            SEUL contenu qu'un lecteur d'écran peut annoncer. */}
+                        <span className="sr-only">{attentionLabel}</span>
+                      </>
                     )}
                   </span>
                   <span

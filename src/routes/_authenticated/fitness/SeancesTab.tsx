@@ -283,7 +283,10 @@ export function SeancesTab({ initialChroniques }: SeancesTabProps = {}) {
   // `isLoading` plus bas) : le sortir d'ici n'enlève aucun retour visuel.
   if (activeLoading || activeGenericLoading) {
     return (
-      <div className="flex h-40 items-center justify-center">
+      <div
+        className="flex h-40 items-center justify-center"
+        data-testid="seances-active-workout-loading"
+      >
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
       </div>
     );

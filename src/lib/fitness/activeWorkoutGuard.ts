@@ -3,18 +3,22 @@
 // utilisateur propre. Backstop de l'index unique partiel
 // `workouts_one_active_per_user` (voir
 // supabase/migrations/20260714150000_workouts_one_active_per_user.sql) : les
-// 4 points de démarrage de séance font déjà une garde check-then-insert
-// (useStartWorkoutFromTemplate, useStartWorkoutFromSavedTemplate,
-// useStartGenericActiveWorkout) ou n'en faisaient pas du tout
-// (useStartWorkout, corrigé ici) — mais une course entre onglets/appareils
-// peut toujours passer entre le check et l'insert. Sans ce mapping, l'usager
-// verrait l'erreur Postgres brute (23505, nom de contrainte) au lieu d'un
-// message clair.
+// 5 points de démarrage de séance font tous une garde locale
+// (`assertNoActiveWorkout`, use-fitness.ts) — mais une course entre onglets
+// ou entre appareils peut toujours passer entre le check et l'insert. Sans
+// ce mapping, l'usager verrait l'erreur Postgres brute (23505, nom de
+// contrainte) au lieu d'un message clair.
 //
-// Consommateurs (4) : use-fitness.ts (useStartWorkout,
-// useStartWorkoutFromTemplate), useWorkoutTemplates.ts
-// (useStartWorkoutFromSavedTemplate), useGenericActiveSession.ts
-// (useStartGenericActiveWorkout).
+// AUD-06 (chantier final) — la course DANS UN MÊME CONTEXTE, elle, est
+// désormais fermée en amont : garde et création forment une section critique
+// sérialisée par utilisateur (`lib/fitness/activeWorkoutStart.ts`). Ce
+// backstop reste indispensable pour la course que rien de local ne peut
+// couvrir (deux onglets, deux appareils).
+//
+// Consommateurs (5) : use-fitness.ts (useStartWorkout,
+// useStartHybridStrengthWorkout, useStartWorkoutFromTemplate),
+// useWorkoutTemplates.ts (useStartWorkoutFromSavedTemplate),
+// useGenericActiveSession.ts (useStartGenericActiveWorkout).
 
 export const ACTIVE_WORKOUT_CONFLICT_MESSAGE = "Une séance est déjà en cours.";
 

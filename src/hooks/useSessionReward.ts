@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
@@ -12,6 +12,7 @@ import {
   type RewardConfirmation,
   type RewardServerSnapshot,
 } from "@/lib/fitness/rpg/rewardConfirmation";
+import { rewardSnapshotPollIntervalMs } from "@/lib/fitness/rpg/rewardPolling";
 import {
   totalSessionXp,
   buildXpBreakdown,
@@ -48,6 +49,12 @@ export interface SessionRewardData {
  * (l'instantané serveur), pour que l'écran se mette à jour de lui-même dès
  * que la sync queue a poussé la clôture et que le trigger a versé l'XP —
  * y compris au retour du réseau plusieurs minutes plus tard.
+ *
+ * AUD-12 : cette cadence NOMINALE reste celle des premières secondes, mais
+ * la relecture SERVEUR s'espace ensuite (`rewardSnapshotPollIntervalMs`) —
+ * voir `lib/fitness/rpg/rewardPolling.ts`. Le signal LOCAL ci-dessous, lui,
+ * garde la cadence fixe : c'est une lecture IndexedDB sans réseau, et son
+ * `enabled` l'éteint déjà dans les deux cas où il ne décide de rien.
  */
 const UNCONFIRMED_POLL_MS = 1_500;
 
@@ -80,6 +87,17 @@ export function useSessionReward(workoutId: string | null | undefined): SessionR
   const isOnline = useNetworkStatus();
   const { data: userStats, isLoading: statsLoading } = useUserStats();
 
+  // Début de l'attente pour CETTE séance — remis à zéro quand l'écran change
+  // de séance. Sert uniquement à espacer la relecture serveur (AUD-12) ;
+  // aucune décision d'affichage n'en dépend.
+  const pollStartedAt = useRef<{ workoutId: string | null | undefined; at: number }>({
+    workoutId,
+    at: Date.now(),
+  });
+  if (pollStartedAt.current.workoutId !== workoutId) {
+    pollStartedAt.current = { workoutId, at: Date.now() };
+  }
+
   const { data: snapshot, isLoading: snapshotLoading } = useQuery({
     ...SERVER_CONFIRMED_QUERY_OPTIONS,
     queryKey: ["session_reward_snapshot", workoutId],
@@ -88,10 +106,16 @@ export function useSessionReward(workoutId: string | null | undefined): SessionR
     // Tant que le serveur n'a pas déposé ses compteurs, on relit : c'est
     // l'arrivée de la valeur serveur — et rien d'autre — qui fait passer
     // l'écran en état confirmé.
+    //
+    // AUD-12 — la cadence S'ESPACE avec l'attente, elle ne s'arrête jamais
+    // avant confirmation : une clôture qui n'aboutit pas (opération bloquée,
+    // serveur en échec) laissait sinon l'écran interroger le serveur 40 fois
+    // par minute sans fin. `false` reste réservé au SEUL cas où il n'y a
+    // plus rien à lire : la récompense est confirmée.
     refetchInterval: (query) =>
       hasServerRewardSnapshot(query.state.data as RewardServerSnapshot | null | undefined)
         ? false
-        : UNCONFIRMED_POLL_MS,
+        : rewardSnapshotPollIntervalMs(Date.now() - pollStartedAt.current.at),
     queryFn: async (): Promise<RewardServerSnapshot | null> => {
       const { data, error } = await (supabase as any)
         .from("workouts")

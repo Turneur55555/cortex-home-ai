@@ -25,6 +25,7 @@ import { OFFLINE_FIRST_QUERY_OPTIONS } from "@/lib/offline/offlineQuery";
 import { requestSyncFlush } from "@/lib/offline/syncFlush";
 import { collectWorkoutSyncDependencies } from "@/lib/fitness/workoutSyncDependencies";
 import { runExclusiveSessionClosure } from "@/lib/fitness/sessionClosure";
+import { startActiveWorkoutExclusively } from "@/lib/fitness/activeWorkoutStart";
 
 // Phase 3 (exercice-central) — Étape 2, double écriture : résout/crée
 // exercise_id en plus du libellé existant sur workout_segments. Ne doit
@@ -224,7 +225,6 @@ export function useStartGenericActiveWorkout() {
       seedSegments: LiveSegmentSeed[];
     }) => {
       if (!user) throw new Error("Non authentifié");
-      await assertNoActiveWorkout(user.id);
 
       const today = localDateYMD();
       // metadata sans `segments` : les segments live vivent dans
@@ -236,25 +236,32 @@ export function useStartGenericActiveWorkout() {
         unknown
       >;
 
-      const workout = await workoutsRepo.create(user.id, {
-        name: draft.name,
-        date: today,
-        duration_minutes: null,
-        notes: draft.notes ?? null,
-        // Même valeur par défaut que useAddWorkout (use-fitness.ts) pour
-        // toute discipline qui ne pose pas de lieu (course, notamment —
-        // voir commentaire d'en-tête de courseEngine.ts) : la colonne
-        // `gym_location` est NOT NULL en base, comportement déjà existant
-        // pour le parcours non-live (GenericSessionReviewSheet), pas une
-        // régression introduite ici.
-        gym_location: draft.gym_location ?? "Salle inconnue",
-        discipline: draft.discipline,
-        metadata: metadataWithoutSegments,
-        status: "active",
-        level_before: null,
-        level_after: null,
-        xp_before: null,
-        xp_after: null,
+      // AUD-06 — la garde « une seule séance active » et la création forment
+      // une SECTION CRITIQUE : sans elle, deux démarrages rapprochés lisent
+      // tous deux l'état d'avant la première écriture (voir
+      // `lib/fitness/activeWorkoutStart.ts`).
+      const workout = await startActiveWorkoutExclusively(user.id, async () => {
+        await assertNoActiveWorkout(user.id);
+        return workoutsRepo.create(user.id, {
+          name: draft.name,
+          date: today,
+          duration_minutes: null,
+          notes: draft.notes ?? null,
+          // Même valeur par défaut que useAddWorkout (use-fitness.ts) pour
+          // toute discipline qui ne pose pas de lieu (course, notamment —
+          // voir commentaire d'en-tête de courseEngine.ts) : la colonne
+          // `gym_location` est NOT NULL en base, comportement déjà existant
+          // pour le parcours non-live (GenericSessionReviewSheet), pas une
+          // régression introduite ici.
+          gym_location: draft.gym_location ?? "Salle inconnue",
+          discipline: draft.discipline,
+          metadata: metadataWithoutSegments,
+          status: "active",
+          level_before: null,
+          level_after: null,
+          xp_before: null,
+          xp_after: null,
+        });
       });
 
       if (seedSegments.length > 0) {

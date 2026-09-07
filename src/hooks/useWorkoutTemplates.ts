@@ -11,13 +11,14 @@ import { resolveExerciseIdsByLabel } from "@/services/exerciseResolution";
 import type { DisciplineId } from "@/lib/fitness/engines/types";
 import { HYBRID_BLOCKS_KEY } from "@/hooks/useGenericActiveSession";
 import { orderedTemplateItems as orderedTemplateItemsPure } from "@/lib/fitness/workoutTemplates";
-import { ACTIVE_WORKOUT_CONFLICT_MESSAGE } from "@/lib/fitness/activeWorkoutGuard";
 import {
+  assertNoActiveWorkout,
   workoutsRepo,
   exercisesRepo,
   exerciseSetsRepo,
   workoutSegmentsRepo,
 } from "@/hooks/use-fitness";
+import { startActiveWorkoutExclusively } from "@/lib/fitness/activeWorkoutStart";
 import { OFFLINE_FIRST_QUERY_OPTIONS } from "@/lib/offline/offlineQuery";
 
 // ============================================================
@@ -497,27 +498,29 @@ export function useStartWorkoutFromSavedTemplate() {
     mutationFn: async (template: WorkoutTemplateRow) => {
       if (!user) throw new Error("Non authentifié");
 
-      // Garde : une seule séance active à la fois (même convention que
-      // useStartWorkoutFromTemplate / "Refaire en live").
-      const localWorkouts = await workoutsRepo.list(user.id);
-      if (localWorkouts.some((w) => w.status === "active")) {
-        throw new Error(ACTIVE_WORKOUT_CONFLICT_MESSAGE);
-      }
-
       const today = localDateYMD();
-      const workout = await workoutsRepo.create(user.id, {
-        name: template.name,
-        date: today,
-        gym_location: "Salle inconnue",
-        status: "active",
-        discipline: "muscu",
-        metadata: {},
-        duration_minutes: null,
-        notes: null,
-        level_before: null,
-        level_after: null,
-        xp_before: null,
-        xp_after: null,
+      // Garde : une seule séance active à la fois (même convention que
+      // useStartWorkoutFromTemplate / "Refaire en live"). AUD-06 : la garde
+      // passe par `assertNoActiveWorkout` — elle était jusqu'ici RECOPIÉE
+      // ici, un second exemplaire qu'il fallait penser à corriger — et forme
+      // avec la création une SECTION CRITIQUE (voir
+      // `lib/fitness/activeWorkoutStart.ts`).
+      const workout = await startActiveWorkoutExclusively(user.id, async () => {
+        await assertNoActiveWorkout(user.id);
+        return workoutsRepo.create(user.id, {
+          name: template.name,
+          date: today,
+          gym_location: "Salle inconnue",
+          status: "active",
+          discipline: "muscu",
+          metadata: {},
+          duration_minutes: null,
+          notes: null,
+          level_before: null,
+          level_after: null,
+          xp_before: null,
+          xp_after: null,
+        });
       });
 
       const orderedExercises = [...template.exercises].sort((a, b) => a.position - b.position);

@@ -1,7 +1,181 @@
 # Mémoire projet — cortex-home-ai
 
+> ## Comment lire ce fichier (AUD-08, 2026-09-07)
+>
+> **Ceci est le JOURNAL du projet**, pas le règlement. Il raconte les chantiers dans l'ordre
+> antichronologique (le plus récent d'abord) : ce qui a été fait, pourquoi, sur quelle branche, ce
+> qui a été mesuré, et ce qui a été volontairement laissé de côté. Il est **complété**, jamais
+> réécrit — un chantier passé garde sa trace même quand le code a changé depuis.
+>
+> **Les règles à ne jamais casser ne sont PAS ici** : elles vivent dans
+> [`docs/INVARIANTS.md`](docs/INVARIANTS.md), document court, qui indique pour chaque invariant
+> *où il est appliqué* et *quel test le vérifie*. C'est lui qu'on relit avant de toucher au moteur
+> offline, à la clôture de séance, à la récompense ou aux lectures Supabase. Les conventions de
+> travail (piliers RPG, direction artistique, workflow Git) restent dans [`CLAUDE.md`](CLAUDE.md).
+>
+> **En fin de session** : le récit du chantier s'ajoute ici, en tête. Si le chantier a établi une
+> règle *permanente*, elle s'ajoute EN PLUS dans `docs/INVARIANTS.md` — jamais à la place.
+>
+> Les documents ponctuels et clos (rapports d'audit datés, briefs, points d'architecture) sont
+> regroupés sous [`docs/archive/`](docs/archive/).
+
 ## Dernière mise à jour
-2026-09-05
+2026-09-07
+
+## Chantier final — fiabilité, UX et optimisations (2026-09-07, branche `claude/cortex-final-improvements-20b08m`)
+
+Base : `48b2c9b`. AUD-05 à AUD-16 de l'audit final. Aucune migration, aucune donnée touchée,
+aucune policy RLS modifiée.
+
+### AUD-06 — démarrage de séance sécurisé (le plus structurant)
+`assertNoActiveWorkout()` LIT le store, `await`, puis `workoutsRepo.create()` ÉCRIT : entre les
+deux, la boucle d'événements rend la main. Deux démarrages rapprochés (double tap, deux mutations
+non attendues) concluaient tous deux « aucune séance active » et créaient **deux séances actives
+locales** — puis, à la synchronisation, un rejet `23505` sur `workouts_one_active_per_user`, donc
+une opération `blocked`, donc une clôture retenue et une récompense XP jamais versée.
+`src/lib/fitness/activeWorkoutStart.ts` (nouveau) : chaîne de promesses **par utilisateur** —
+même PRINCIPE qu'`allocateSetNumber` (chantier 8), module distinct car la clé de sérialisation
+diffère et `setNumberAllocation.ts` fait partie du périmètre `set_number` gelé. Câblé sur les
+**5** points de démarrage (`useStartWorkout`, `useStartHybridStrengthWorkout`,
+`useStartWorkoutFromTemplate`, `useStartWorkoutFromSavedTemplate`, `useStartGenericActiveWorkout`).
+Au passage, `useWorkoutTemplates.ts` recopiait la garde à la main : il appelle désormais
+`assertNoActiveWorkout` comme les autres. **Strictement local, sans réseau** ; l'index unique reste
+le garde-fou final pour la course entre deux appareils (inchangé).
+
+### AUD-05 — les opérations bloquées deviennent visibles
+`BottomNav` n'allumait son point discret que pour les **conflits**. Une opération `blocked` — celle
+qui retient précisément la clôture d'une séance — restait totalement invisible hors du Profil.
+`useConflictIndicator` → `useSyncAttentionIndicator` (renommé, 4 tests d'origine conservés) :
+conflits **+** `blockedCount`, lus dans le MÊME store partagé (`syncRuntime`), aucune nouvelle
+boucle de poll. `pending`/`failed` restent volontairement exclus (ils se résorbent seuls ; en faire
+un signal global, c'est ramener l'indicateur permanent retiré le 01/09/2026). Ajout d'un texte
+`sr-only` (`describeSyncAttention`, `syncQueueSummary.ts`) : le point seul n'était annonçable par
+aucun lecteur d'écran. **Barrière XP, barrière de dépendance et statut `blocked` inchangés** — on
+rend visible, on ne contourne rien.
+
+### AUD-07 — shell offline : −446 Ko, et un défaut bien plus grave trouvé en validant
+`@zxing/library` + `@zxing/browser` (~1 384 Kio de source) étaient importés **statiquement** par
+`BarcodeScannerSheet`, donc présents dans le chunk d'entrée, donc **précachés chez tout le monde**.
+Or ce scanner ne peut pas fonctionner hors ligne : le code lu est résolu par l'edge function
+`food-lookup`. Chargement à la demande, avec son PROPRE message d'erreur (le confondre avec le
+`catch` caméra afficherait « Accès caméra refusé » alors que la caméra n'a pas été sollicitée).
+**Mesuré, deux builds successifs** : chunk `3 141 487 → 2 695 455 o` (**−446 032 o, −14,2 %**) ;
+gzip `868 678 → 756 402 o` (−12,9 %) ; précache total `3,62 → 3,20 Mio` (−11,7 %). Stratégie
+offline **inchangée** (précache explicite du shell + `navigateFallback`, `CacheFirst` à l'usage
+pour le reste).
+
+**Défaut trouvé en validant, corrigé** : `registerServiceWorker()` est appelée depuis un
+`useEffect`, donc APRÈS le rendu, et posait `window.addEventListener("load", …)`. Si `load` est
+déjà passé, **le Service Worker n'est JAMAIS enregistré** : pas de précache, pas de démarrage hors
+connexion. Mesuré en direct sur le build servi statiquement — `readyState` valait `"complete"`,
+aucune inscription, et un enregistrement manuel marchait aussitôt. C'est une COURSE (gagnée quand
+des ressources sont encore en vol à l'hydratation, perdue sinon), donc intermittente. Correctif :
+tester `document.readyState === "complete"` et s'inscrire tout de suite, sinon écouter `load`
+en `once`.
+
+### AUD-11 — plus de passe de queue à vide
+Le driver appelait `runSyncQueueOnce` toutes les 4 s **même file vide** : deux lectures IndexedDB
+et une bascule `isSyncing` true → false, donc un re-rendu de tout ce qui lit le store partagé,
+quinze fois par minute, indéfiniment. `hasSyncableOperations` (`syncQueue.ts`) court-circuite la
+passe. **Deux pièges, tous deux couverts par un test** : (1) renvoyer `null` sur file vide
+ajouterait 1,5 s à chaque déconnexion propre — `signOutGuard.ensureFreshSyncPass` lit `null` comme
+« la passe n'est pas la mienne » et réessaie dix fois ; on renvoie donc un résultat À ZÉRO ;
+(2) placer la lecture AVANT l'affectation de `runningPass` casse le verrou de passe unique — deux
+appelants franchissent le test pendant que l'autre attend l'IndexedDB. C'est la suite existante
+(`signOutGuard.test.ts`) qui a attrapé cette seconde régression ; d'où `executeSyncPass`, et un
+test de non-régression dédié.
+
+### AUD-12 — plafond au polling de la récompense
+`session_reward_snapshot` était relu toutes les 1,5 s **sans fin** tant que la récompense n'était
+pas confirmée : une clôture qui n'aboutit pas (opération bloquée) faisait interroger le serveur
+40 fois par minute, écran ouvert. `lib/fitness/rpg/rewardPolling.ts` (pur) : 1,5 s (cadence
+nominale, inchangée) → 5 s après 30 s → 20 s après 2 min. **La relecture ne s'arrête JAMAIS** avant
+confirmation : s'arrêter empêcherait une récompense versée plus tard (réseau revenu, opération
+débloquée à la main) de s'afficher. `rewardConfirmation.ts` **n'est pas touché** — seule la cadence
+change, jamais la décision d'afficher.
+
+### AUD-09 — trois tests UI ciblés (+ un défaut d'outillage corrigé)
+1. `SeancesTab.loader.test.tsx` — le loader couvre la séance active. Le premier cas reproduit
+   EXACTEMENT la régression du chantier 9 (`isLoading: false`, `activeLoading: true`) : avec
+   l'ancienne condition `&& isLoading`, il échoue.
+2. `ActiveWorkoutView.closure.test.tsx` — `closureBusy` désactive les TROIS déclencheurs (bandeau,
+   menu ⋮, dialogue) **et** les gestionnaires refusent un clic forcé, pas seulement l'attribut HTML.
+3. `ActiveExerciseCard.setInput.test.tsx` — une saisie invalide n'atteint jamais `useUpdateExerciseSet`
+   et le champ revient à la valeur enregistrée. **Deux pièges rencontrés** : React écoute `focusout`
+   (qui remonte), pas `blur` — dispatcher `blur` faisait passer les tests À VIDE ; et un
+   `<input type="number">` refuse « 82,5 » (la virgule française est couverte par `sets.test.ts`,
+   elle n'est pas atteignable par ce champ).
+   Chaque cas invalide vérifie AUSSI le retour à la valeur enregistrée : sans ça, le test passerait
+   même si rien ne s'était produit.
+
+`tsr.config.json` : `routeFileIgnorePattern` étendu aux fichiers `.test.tsx` — un test posé à côté
+de son écran faisait sinon avertir le plugin de routes à chaque `vite dev`/`vite build`.
+
+### AUD-08 — MEMORY.md : séparer les invariants du journal
+**Aucun contenu déplacé, aucune ligne d'historique réécrite.** `docs/INVARIANTS.md` (nouveau,
+court) rassemble les décisions PERMANENTES — FIFO, `blocked` vivant, claim atomique, unicité de
+séance, `set_number`, verrou de clôture, saisie invalide, autorité serveur sur l'XP, lectures
+bornées, conventions — chacune avec **où elle est appliquée** et **quel test la vérifie**.
+`MEMORY.md` reçoit un en-tête de navigation et reste le journal. `CLAUDE.md` pointe désormais
+d'abord vers `INVARIANTS.md`.
+⚠️ **Piège évité** : un `prettier --write` sur MEMORY.md reformatait **555 lignes d'historique**.
+Le fichier est dans la liste des 83 fichiers non conformes depuis toujours — on l'y laisse, la
+fidélité du journal prime. Idem pour `CLAUDE.md`.
+
+### AUD-15 — archives
+`docs/archive/` (+ son README) : `CLEANUP_AUDIT_REPORT.md`, `MIGRATION_AUDIT_REPORT.md`,
+`COWORK_BRIEF.md` et `point.md` quittent la racine, renommés avec leur date, **contenu inchangé**
+(`git mv`), renvois de MEMORY.md mis à jour. Les deux journaux de backfill restent en place : ils
+sont cités comme justification vivante depuis le code.
+
+### AUD-10 — mots de passe compromis : TOUJOURS DÉSACTIVÉ, action manuelle requise
+Vérifié en direct (advisor Supabase) : `auth_leaked_password_protection` = WARN. **Aucun outil
+disponible ici n'écrit la configuration Auth** — ce n'est ni du SQL ni du code. Action manuelle
+documentée pas à pas dans `docs/supabase-auth-actions-manuelles.md` (Dashboard → Authentication →
+Providers → Email → « Prevent use of leaked passwords » ; disponible à partir du plan Pro). Les
+autres avertissements de l'advisor (8 fonctions `SECURITY DEFINER`, `recipe_import_cache` sans
+policy) y sont documentés comme volontairement non traités : périmètre sécurité gelé.
+
+### AUD-13 / AUD-14 — déjà faits, vérifiés
+AUD-13 : `useExerciseCatalog()`/`dbRowsToCatalog()` supprimés au chantier A, aucun résidu.
+AUD-14 : `purgeUserOfflineData` est bien appelée au `signOut` (`use-auth.tsx`), avec en amont le
+dialogue de garde `SignOutSyncGuardDialog`. **Rien à coder.**
+
+### AUD-16 — laissé volontairement hors chantier
+`hasLiveDependencies` relit la file ET les conflits à chaque opération qui déclare des dépendances.
+C'est **délibéré** : une opération traitée plus tôt dans la MÊME passe modifie la file
+(`rebasePendingOperationsForRecord`, `markConflict`), donc mettre ce résultat en cache
+réintroduirait exactement le bug que la barrière corrige. En pratique le coût est d'une lecture
+supplémentaire par passe (seule la clôture déclare des dépendances). Le rapport bénéfice/risque est
+défavorable, et paralléliser la file est explicitement interdit. **Non corrigé, assumé.**
+
+### Tests ajoutés (+57, aucun skip ajouté)
+`lib/fitness/activeWorkoutStart.test.ts` (5), `lib/offline/activeWorkoutStartOffline.test.ts` (8 —
+dont un test qui reproduit délibérément l'ANCIENNE séquence pour prouver que le défaut existait),
+`lib/offline/syncRuntimeIdlePass.test.ts` (10), `lib/fitness/rpg/rewardPolling.test.ts` (5),
+`routes/_authenticated/fitness/SeancesTab.loader.test.tsx` (5),
+`components/fitness/ActiveWorkoutView.closure.test.tsx` (7),
+`components/fitness/exerciseCard/ActiveExerciseCard.setInput.test.tsx` (8), plus 4 cas dans
+`useSyncAttentionIndicator.test.ts`, 3 dans `BottomNav.test.tsx` et 2 dans
+`registerServiceWorker.test.ts`.
+
+### Validation (comparée à `48b2c9b`, mesurée AVANT toute modification)
+`npx vitest run` **2069 passed / 63 skipped / 0 échec** (base : 2012/63 — +57, aucun skip ajouté).
+`tsc --noEmit` 0 erreur. `npm run lint` **0 erreur / 157 warnings — IDENTIQUE à la base**.
+`npx prettier --check .` **83 fichiers — LISTE IDENTIQUE à la base** (seuls les chemins d'archive
+changent). `npm run build` OK. `check:offline-contract`, `check:bounded-reads` OK.
+`validate:supabase` : 3 avertissements préexistants, **diff vide** avec la base. E2E
+`05-offline-sync.spec.ts` **1 passed**. **Scénario offline RÉEL** sur le build (`.output/public`
+servi statiquement, Chromium) : Service Worker actif ✓, 7 entrées précachées dont le shell ✓,
+**0 chunk `@zxing` précaché** ✓, navigation hors ligne vers `/seances` servie en 200 ✓, application
+rendue ✓, rechargement à froid hors ligne ✓. `check:types` non exécutable (CLI Supabase absente) —
+sans objet : `types.ts` non modifié, aucune migration. Tests RLS non exécutables (secrets absents)
+— sans objet : aucune policy touchée.
+
+### Intégrité
+Aucune migration, aucune donnée modifiée, aucune policy RLS touchée. Remappage 23505, `set_number`,
+`blocked` comme dépendance vivante, barrière XP, confirmation de récompense, verrou Finish/Cancel,
+seuils du moteur offline, XP/Rang et design : **tous inchangés**.
 
 ## Chantier 2 — validation complémentaire + intégration du chantier 1 (2026-08-31)
 Demandée par Nathan avant fusion. `main` portait déjà le chantier 1 (`086b84d`) : la compatibilité a
@@ -959,7 +1133,7 @@ Gemini 2.5 Flash, prose FR 4-6 phrases, CORS/auth/rate-limit (`analyze_exercise`
 - ⚠️ Piège MCP rencontré : un redéploiement échoue avec `import map path does not exist … source/file:///…` si on ne passe pas `import_map_path` explicitement — **toujours fournir `import_map_path: "deno.json"`** lors d'un redéploiement de fonction existante via MCP. MCP aussi instable par moments (déconnexions).
 
 ## Nettoyage complet du code mort (2026-07-05)
-- Rapport détaillé : `CLEANUP_AUDIT_REPORT.md` (racine du repo).
+- Rapport détaillé : `docs/archive/2026-07-05-cleanup-audit-report.md` (déplacé de la racine vers `docs/archive/` le 2026-09-07, AUD-15 — contenu inchangé).
 - Frontend : `src/ui/` supprimé, `src/lib/fitness/index.ts` (façade jamais utilisée) supprimé, `src/components/recipe/` entier supprimé (feature création de recette jamais construite — seule la lecture `useRecipes`/`useRecipe` survit), 30 composants shadcn/ui inutilisés supprimés, `RestTimer.tsx` (remplacé par `RestTimerBar.tsx`+`useRestTimer`), `BodyHighlighterRenderer.tsx` (remplacé par `MuscleMap.tsx`), `HomeDashboard.tsx`, `ReportSummaryWidget.tsx`, `useNutritionCalculator.ts`, `useProgress.ts`, `use-mobile.tsx`, `motion.ts`, `hashing.ts`, `SwipeableExerciseRow.tsx`, `recipeTypes.ts` + son test, `auth-middleware.ts`, `client.server.ts`.
 - npm : 31 dépendances + 1 devDependency supprimées (radix-ui inutilisés, dnd-kit, cmdk, embla-carousel-react, react-hook-form, react-day-picker, input-otp, vaul, react-resizable-panels, @testing-library/react). `vitest` monté en v4 (faille critique corrigée, tests toujours verts). 0 vulnérabilité npm restante.
 - ⚠️ **Rappel projet** : `dossiers, contrats, taches, taches_recurrentes, dossier_documents, cp_*, dsn, echeances, affiliations_mutuelle, historique_imports, imports, regles_analyse, arrets_maladie, ca_praticiens, controle_lignes, silae_sync_logs, stc, profiles, app_settings, activity_log` appartiennent au projet **Contrôle de Paie séparé** qui partage cette base — ne jamais les toucher depuis une session cortex-home-ai. `activity_log` en particulier alimentée par des triggers sur les tables paie (182 lignes), découvert pendant cet audit.
@@ -968,7 +1142,7 @@ Gemini 2.5 Flash, prose FR 4-6 phrases, CORS/auth/rate-limit (`analyze_exercise`
 - **Bug `PROFILE_BASE_QK` confirmé et corrigé (même jour)** : `signOut()` (`use-auth.tsx`) ne vidait aucun cache react-query → fuite de données entre comptes si changement de compte sans rechargement complet. Fix : `queryClient.clear()` dans `signOut()`. `PROFILE_BASE_QK` reste utilisé en interne (clé de repli) mais n'est plus exporté.
 
 ## Audit + reconstruction complète des migrations (2026-07-05)
-- Rapport détaillé : `MIGRATION_AUDIT_REPORT.md` (racine du repo).
+- Rapport détaillé : `docs/archive/2026-07-05-migration-audit-report.md` (déplacé de la racine vers `docs/archive/` le 2026-09-07, AUD-15 — contenu inchangé).
 - `supabase/migrations/` passe de 82 à **141 fichiers** : 58 migrations manquantes reconstruites verbatim depuis `supabase_migrations.schema_migrations.statements` (le SQL exact exécuté en prod, pas une approximation), 2 fichiers renommés à leur vrai timestamp prod, 1 snapshot non-historique ajouté pour 3 tables (`activity_log`, `dossier_documents`, `taches_recurrentes`) dont l'origine est introuvable.
 - **120/120 migrations prod désormais présentes dans le repo avec version+nom identiques.** Aucune modification du schéma de production.
 - ⚠️ Restent non résolus (voir rapport §6) : 20 migrations locales jamais trackées en prod (au moins 5 confirmées jamais appliquées : `calendar_tokens`, `daily_activity`, `compute_level_from_xp`, `award_xp_on_goal_complete`, `award_time_of_day_badges`) ; anomalie `reminders` (dropped par une migration non trackée le 19 juin mais toujours vivante avec son schéma enrichi — origine de la recréation introuvable) ; rejeu complet des 141 migrations jamais testé (pas de Docker/Supabase CLI disponibles dans cette session).
