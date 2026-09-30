@@ -1,16 +1,17 @@
 # Claude Code Rules — cortex-home-ai
 
-## Piliers RPG — règle de conception permanente (validée par Nathan, 17/07/2026)
-Toute nouvelle fonctionnalité doit renforcer **au moins un** de ces quatre piliers :
+## Piliers RPG — règle de conception permanente (validée par Nathan, 17/07/2026 ; révisée le 30/09/2026)
+Toute nouvelle fonctionnalité doit renforcer **au moins un** de ces trois piliers :
 1. donner envie de revenir **aujourd'hui** ;
 2. donner envie de revenir **cette semaine** ;
-3. donner envie **d'aller au bout de la saison** ;
-4. **enrichir les Chroniques** pour qu'on ait envie de les relire des années plus tard.
+3. **enrichir les Chroniques** pour qu'on ait envie de les relire des années plus tard.
 
 Si une fonctionnalité ne renforce aucun de ces piliers, elle n'est probablement pas prioritaire.
-Rappels structurants : la progression vient **toujours** de l'entraînement (muscu-primaire) ; les
-Saisons **racontent** la progression, elles ne donnent aucun avantage de puissance. Vision détaillée :
-`docs/architecture/rpg-vision-et-r1-niveau-personnage.md` et `docs/architecture/rpg-saisons.md`.
+Rappel structurant : la progression vient **toujours** de l'entraînement (muscu-primaire). Vision
+détaillée : `docs/architecture/rpg-vision-et-r1-niveau-personnage.md`.
+
+⚠️ Le pilier « aller au bout de la saison » a été **retiré le 30/09/2026** avec l'abandon définitif
+des Saisons (décision Nathan). Ne pas le réintroduire, sous aucune forme.
 
 ## Standard premium — direction artistique (validé par Nathan, 17/07/2026)
 CORTEX vise à être **le plus beau RPG de progression du fitness**, pas une app de suivi gamifiée.
@@ -21,7 +22,7 @@ CORTEX vise à être **le plus beau RPG de progression du fitness**, pas une app
   `RankIllustration` (`src/components/rpg/RankIllustration.tsx`), qui sélectionne l'image
   `src/assets/ranks/<clé>.webp` du rang courant. Un seul système, aucune autre façon de représenter un
   rang (plus de Disque/Blason/sigils SVG) — réutiliser `RankIllustration` sur TOUS les écrans premium
-  (récompenses, montées de rang, Chroniques, Saisons, Reliques, trophées) pour un univers cohérent.
+  (récompenses, montées de rang, Chroniques) pour un univers cohérent.
   `premium/tokens.ts` reste la source des courbes d'animation/durées partagées.
 - **RankTheme — garde-fou anti-duplication (validé par Nathan, 22/07/2026)** : toute couleur affichée
   pour un RANG (halo, liseré, glow de texte — `boxShadow`/`textShadow` construits à partir de
@@ -30,9 +31,9 @@ CORTEX vise à être **le plus beau RPG de progression du fitness**, pas une app
   chaîne `` `inset 0 0 0 1px ${colors.primary}30, ...` `` à la main dans un composant. Si le helper qui
   manque n'existe pas encore, l'ajouter dans `rankTheme.ts`, pas en inline. Cette règle ne concerne QUE
   le rang par exercice / Titre global (`RANK_TIERS`) — elle ne s'applique jamais aux palettes
-  volontairement distinctes (accent utilisateur `lib/accent.ts`, récompense XP, Saison, rareté des
-  badges/Légendes `rarityVisuals.ts`) : ce sont des domaines produit séparés, pas des doublons du
-  thème de rang, et ils ne doivent pas être migrés vers `rankTheme.ts`.
+  volontairement distinctes (récompense XP, rareté des Légendes `rarityVisuals.ts`) : ce sont des
+  domaines produit séparés, pas des doublons du thème de rang, et ils ne doivent pas être migrés
+  vers `rankTheme.ts`.
 - **Deux questions avant d'ajouter** : (1) renforce-t-elle la boucle entraîner→progresser→récompenser→
   revenir ? (2) crée-t-elle un vrai effet « Waouh » ? Si non aux deux → pas prioritaire.
 - **Test de chaque itération premium** : *« Si un utilisateur ouvrait cet écran pour la première fois,

@@ -1,5 +1,10 @@
 # Features existantes
 
+> ⚠️ **Document partiellement daté (juin 2026).** Il n'a pas suivi l'évolution de l'app et ne doit
+> pas être lu comme un inventaire à jour. Seule la section « Coach IA » ci-dessous a été corrigée le
+> 30/09/2026, parce qu'elle décrivait des systèmes supprimés depuis (périodisation, RPE). Pour
+> l'état réel du produit, lire le code et `MEMORY.md`.
+
 ## Fitness
 - Suivi des séances d'entraînement
 - Carte de récupération musculaire (MuscleMap SVG)
@@ -13,13 +18,15 @@
 - Authentification Supabase
 - Profil utilisateur avec pseudo
 
-## Coach IA V2 (juin 14)
-- Programmes multi-semaines avec périodisation (linéaire / ondulatoire / bloc) et semaines de décharge automatiques
-- Aperçu live de la courbe intensité / RPE cible / volume par semaine
-- Recommandation de charge auto-régulée par le RPE (reps en réserve, Epley inverse) et la récupération musculaire
-- ProgramSheet, ouvert via le bouton « Coach IA » dans l'en-tête Fitness
-- Tables : training_programs, program_weeks, program_sessions, program_exercises
-- Domaine pur : lib/fitness/periodization.ts, lib/fitness/loadRecommendation.ts ; hooks/usePrograms.ts
+## Coach IA — Sensei (corrigé le 30/09/2026)
+- Le Coach IA s'appelle **Sensei** et génère **une séance à la fois**, par discipline, à partir d'un
+  questionnaire déclaré par chaque moteur (`ENGINE_REGISTRY`) — voir `CoachSheet.tsx` et
+  `lib/fitness/engines/`.
+- **Supprimé, ne pas réintroduire** : les programmes multi-semaines à périodisation (linéaire /
+  ondulatoire / bloc), l'aperçu de courbe d'intensité, et toute notion de **RPE / RIR**
+  (voir `docs/INVARIANTS.md` §3.4). `periodization.ts`, `loadRecommendation.ts`, `usePrograms.ts` et
+  `ProgramSheet` n'existent plus ; les tables `training_programs` / `program_weeks` sont droppées par
+  `supabase/migrations/20260930090000_drop_seasons_and_dead_tables.sql`.
 
 ## Nutrition V2 (juin 14)
 - Recettes avec macros calculées depuis les ingrédients (champs *_per_100g de la table items)
@@ -38,4 +45,5 @@
 - Domaine pur : lib/fitness/recoveryAdvice.ts (+ tests). UI : CoachSheet.tsx, SeancesTab.tsx (passe recoveryMap). Edge : supabase/functions/coach-workout (lecture de body.recovery, normalisation des muscles).
 
 ### À venir (V3)
-- Périodisation adaptative (deload auto 4-6 sem), récap narratif IA mensuel, import Apple Health (fichier d'export Santé). Comparaison communauté : abandonnée.
+- Récap narratif IA mensuel. Import Apple Health : livré (fichier d'export Santé, `lib/health/importAppleHealth.ts`).
+- **Abandonnés** : comparaison communauté, périodisation adaptative, RPE, Saisons.

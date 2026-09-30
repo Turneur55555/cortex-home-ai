@@ -130,8 +130,24 @@ qui afficherait « +0 XP » avec une barre figée sur l'XP d'avant la séance.
 
 ### 3.3 La progression vient de l'entraînement
 
-Les Saisons **racontent** la progression, elles ne donnent aucun avantage de puissance.
-→ `docs/architecture/rpg-vision-et-r1-niveau-personnage.md`, `docs/architecture/rpg-saisons.md`
+L'XP ne récompense **que** l'entraînement réellement effectué (muscu-primaire). Le montant vient
+du catalogue serveur, jamais du client — c'est l'invariant 3.1 qui le garantit.
+→ `docs/architecture/rpg-vision-et-r1-niveau-personnage.md`
+
+### 3.4 Deux systèmes abandonnés, jamais réintroduits
+
+- **RPE / RIR** — supprimé le 02/07/2026 (colonne `exercise_sets.rpe` droppée, aucune valeur non
+  nulle). CORTEX ne collecte que charge, répétitions et série validée. Ni champ de saisie, ni
+  entrée de calcul.
+- **Saisons** — abandonnées le 30/09/2026. Points de Saison, paliers et track saisonnier n'ont
+  jamais tourné en production : aucun PS n'a été versé à quiconque. Le pilier RPG « aller au bout
+  de la saison » a été retiré en même temps (`CLAUDE.md` n'en compte plus que trois).
+
+→ `supabase/migrations/20260702100030_seances_status_completed_drop_rpe.sql`,
+`supabase/migrations/20260930090000_drop_seasons_and_dead_tables.sql`
+→ `docs/archive/2026-07-17-rpg-saisons.md` (archive, portant son bandeau d'abandon)
+→ vérifié par `src/lib/fitness/rpg/abandonedSystems.test.ts` (scan du code source : toute
+réintroduction fait échouer la suite)
 
 ---
 

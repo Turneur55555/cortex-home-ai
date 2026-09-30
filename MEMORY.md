@@ -20,7 +20,125 @@
 > regroupés sous [`docs/archive/`](docs/archive/).
 
 ## Dernière mise à jour
-2026-09-07
+2026-09-30
+
+## Abandon des Saisons + nettoyage du code mort (2026-09-30, branche `claude/cortex-product-audit-dexmp2`)
+
+Suite de l'audit produit du 07/09. Décisions de Nathan actées le 30/09 : **les Saisons sont
+définitivement abandonnées**, le **RPE ne sera jamais réintroduit**, et le code mort identifié à
+l'audit part avec. Aucune fonctionnalité vivante n'est touchée.
+
+### Le constat qui a changé le périmètre
+L'audit du 07/09 affirmait que « le trigger verse 100 PS à chaque séance ». **C'était faux**, et la
+vérification en direct sur la base de production l'a montré : la migration
+`20260717130000_rpg_seasons_s0` est bien **inscrite** dans `supabase_migrations.schema_migrations`,
+mais **aucun de ses objets n'existe** — ni `seasons`, ni `sp_events`, ni `user_season_progress`, ni
+`compute_season_tier`, ni `award_season_points` (droppés à la main, ou jamais exécutés). Les Saisons
+n'ont donc **jamais tourné** : aucun Point de Saison n'a été versé à quiconque, et la suppression ne
+détruit aucune donnée utilisateur. Le `SeasonTrackCard` n'était monté nulle part depuis l'épuration
+de l'Accueil : côté joueur, le mot « Saison » n'apparaissait sur aucun écran.
+
+Second constat du même ordre : **le RPE avait déjà été supprimé par Nathan le 02/07/2026**
+(`20260702100030_seances_status_completed_drop_rpe.sql`, colonne `exercise_sets.rpe` droppée, zéro
+valeur non nulle). La proposition C11 de l'audit, qui suggérait de l'ajouter, rouvrait une décision
+déjà prise — elle est annulée.
+
+### Code supprimé (7 fichiers, zéro consommateur vérifié avant suppression)
+- **Saisons** : `components/profile/rpg/SeasonTrackCard.tsx` (97 l., orphelin),
+  `hooks/useActiveSeason.ts` (92 l.), `lib/fitness/rpg/season.ts` (87 l.),
+  `lib/fitness/rpg/season.test.ts` (101 l., 12 tests).
+- **Reward Engine client** : `hooks/useRewardEvent.ts` et `lib/fitness/rpg/rewardSources.ts` —
+  `useAwardRewardEvent` n'avait **aucun appelant**. Le catalogue et la RPC `award_reward_event`
+  restent en base (sécurisés, utilisés par les triggers) : seule la porte d'entrée client part.
+- **`lib/fitness/loadRecommendation.ts`** — aucun appelant non plus (seule une ligne de commentaire
+  le citait). Le moteur de recommandation de charge ne tournait pour personne.
+
+`MasteryBar.tsx` a été **conservé** : `SeasonTrackCard` l'importait, mais `ExerciseRankCard` et
+`SessionRewardScreen` aussi.
+
+### Migration `20260930090000_drop_seasons_and_dead_tables.sql`
+Idempotente. Droppe les 3 tables + 2 fonctions + le trigger `trg_award_sp_on_workout_complete` des
+Saisons (**no-op en production**, ils n'existent pas — la migration couvre toute autre base :
+branche Supabase, preview, restauration d'un dump antérieur), puis les **tables mortes**
+`program_weeks`, `training_programs` (périodisation retirée du code) et `reminders` (module de
+rappels retiré de l'UI). **Comptage vérifié avant écriture : 0 ligne dans les trois.** Ordre imposé
+par l'unique clé étrangère `program_weeks.program_id -> training_programs` : l'enfant d'abord.
+⚠️ Piège évité : la signature réelle est `award_season_points(uuid, uuid, text, integer, uuid)` —
+un `DROP FUNCTION` avec la mauvaise liste d'arguments ne supprime rien, en silence.
+⚠️ Le fichier `20260717130000_rpg_seasons_s0.sql` n'est **pas** supprimé du dépôt : sa version est
+inscrite en base et `audit-migration-drift.mjs` signale précisément les migrations « supprimées dans
+Git mais présentes en base ». On ajoute, on ne réécrit pas l'historique.
+
+### Nouveau garde-fou exécutable — `lib/fitness/rpg/abandonedSystems.test.ts` (19 cas)
+Sans lui, « pas de RPE » et « pas de Saisons » n'auraient été que de la documentation. Le test scanne
+tout `src/` et échoue sur toute réapparition : `\brpe\b`, `\brir\b`, `sp_events`,
+`user_season_progress`, `compute_season_tier`, `award_season_points`, `useActiveSeason`,
+`SeasonTrackCard`, `seasonTierProgress`, « Points de Saison ».
+⚠️ **Volontairement précis, jamais le mot « season » seul** : le Dressing gère de vraies saisons
+vestimentaires (`seasons: string[]` sur un vêtement) qui n'ont aucun rapport avec le RPG. Un test
+plus large aurait cassé une fonctionnalité vivante.
+Un cas de couverture (`files.length > 200`) empêche le scan de passer **à vide** si le chemin ou les
+extensions changent.
+**Le test a immédiatement trouvé une occurrence** : `repositoryContract.test.ts` utilisait la chaîne
+`"RPE 8"` comme valeur de note arbitraire (sans rapport avec la fonctionnalité) → renommée
+« Bonne séance ».
+
+⚠️ **Piège trouvé dans le garde-fou lui-même, au balayage final.** `\b` en JavaScript ne connaît que
+`[A-Za-z0-9_]` : une lettre accentuée compte comme un séparateur, donc `/\brir\b/` matche la fin de
+« gué**rir** », « conqué**rir** », « acqué**rir** » — des mots parfaitement légitimes dans un
+commentaire français (vérifié : `/\brir\b/i.test("guérir") === true`). Le test serait passé au vert
+aujourd'hui puis aurait explosé sans raison compréhensible au premier « guérir » écrit dans `src/`,
+et aurait fini supprimé plutôt que corrigé. Remplacé par des lookarounds `\p{L}` (helper
+`standaloneTerm`, flag `u`), **plus 8 cas qui verrouillent la correction** : « guérir »,
+« conquérir », « acquérir », « s'enquérir », « courir » ne doivent JAMAIS matcher ; « RIR 8 »,
+« cible rir », « rir=2 » doivent matcher. Sans ces cas, un retour à `\b` repasserait inaperçu.
+
+### Références mortes nettoyées au passage
+- `lib/health/exportData.ts` exportait les tables `user_badges` (droppée le 23/07/2026) et
+  `reminders` (droppée ici). Les erreurs étant avalées (`!error && data ? data : []`), l'export
+  produisait silencieusement deux tableaux vides. Les deux entrées sont retirées.
+- Commentaires citant le RPE : `senseiAutoProfile.ts`, `guidedEngine.ts`, `SegmentAnalysisSheet.tsx`
+  (qui citait en plus `loadRecommendation.ts`, désormais supprimé). Prompt de l'edge function
+  `coach-workout` : « RIR plus élevé » → « en gardant des répétitions en réserve ».
+- `components/rpg/premium/tokens.ts` : liste d'écrans premium citant Saisons/Reliques/trophées.
+
+### Documentation
+- **`CLAUDE.md`** : les piliers RPG passent de **quatre à trois** — « aller au bout de la saison »
+  est retiré (décision Nathan : le remplacer par **rien**), avec un avertissement explicite de
+  non-réintroduction. Nettoyage au passage de deux références mortes dans les règles de DA
+  (`lib/accent.ts`, qui n'existe pas ; Saisons/Reliques/trophées dans la liste RankIllustration).
+- **`docs/INVARIANTS.md`** : §3.3 reformulé (il affirmait une règle sur les Saisons) et nouveau
+  §3.4 « Deux systèmes abandonnés », avec son garde-fou exécutable.
+- **`docs/architecture/rpg-saisons.md`** → `docs/archive/2026-07-17-rpg-saisons.md` (`git mv`,
+  corps inchangé) **+ un bandeau d'abandon en tête** — seule exception à la règle « aucun contenu
+  modifié » des archives, notée dans `docs/archive/README.md` : un lecteur qui ouvre le fichier
+  directement ne doit pas prendre une architecture morte pour une architecture prévue.
+- **`rpg-chroniques.md`** et **`rpg-vision-et-r1-niveau-personnage.md`** : bandeaux datés. Le
+  « Panthéon » décrit dans le premier reposait sur les trophées (supprimés le 23/07/2026) **et** les
+  Saisons : il n'existera pas. Le lot **R6 « méta-boucle de saison »** du second est annulé. Les
+  documents ne sont **pas** réécrits — ce sont des documents de conception datés.
+- **`docs/features.md`** : section Coach IA V2 corrigée (elle décrivait périodisation, RPE,
+  `usePrograms`, `ProgramSheet` — tous disparus) + bandeau signalant que le reste date de juin 2026.
+
+### Validation (comparée à `5e85408`, mesurée AVANT toute modification)
+`npx vitest run` **2076 passed / 63 skipped / 0 échec** (base : 2069/63 — **−12 tests Saisons,
++19 tests du nouveau garde-fou**). `tsc --noEmit` **0 erreur**. `npm run lint` **0 erreur /
+154 warnings** (base : 157 — **−3**, tous portés par les fichiers supprimés, qui castaient en
+`any` pour contourner l'absence des tables Saisons dans `types.ts` ; aucun warning ajouté).
+`npm run build` OK. `npx prettier --check .` **83 fichiers non conformes — liste identique à la
+base** : les 7 fichiers que ce chantier modifie et qui y figurent (`CLAUDE.md`, `MEMORY.md`,
+`features.md`, les deux docs d'architecture, l'archive Saisons, `coach-workout/index.ts`) l'étaient
+**déjà à `5e85408`**, vérifié fichier par fichier contre `git show HEAD:`. Le nouveau test, lui, est
+conforme. `node scripts/validate-supabase.mjs` :
+**3 avertissements préexistants, aucun ajouté**. `check:offline-contract` et `check:bounded-reads`
+OK. `check:types` non exécutable (CLI Supabase absente) — sans objet : `types.ts` **n'est pas
+modifié**, conformément à la règle du dépôt (la base fait foi, `migrate.yml` régénère les types
+après le merge, une fois les tables réellement droppées).
+
+### Intégrité
+Aucune donnée utilisateur touchée (les 6 tables droppées sont vides ou inexistantes). Moteur
+offline, `set_number`, remappage 23505, barrière XP, verrou de clôture, moteur de Rang par exercice
+et thème de rang : **tous inchangés**.
 
 ## Chantier final — fiabilité, UX et optimisations (2026-09-07, branche `claude/cortex-final-improvements-20b08m`)
 

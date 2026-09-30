@@ -30,10 +30,9 @@
 // colonnes résumé exercises.reps/weight/sets, même convention que
 // useExerciseSetHistory.ts ("Repli 4bis").
 //
-// NB : le RIR n'entre pas dans le calcul — la colonne exercise_sets.rpe
-// a été supprimée le 02/07/2026 ("pas de RPE dans l'app", voir
-// 20260702100030_seances_status_completed_drop_rpe.sql) : aucune
-// donnée n'existe pour ce signal.
+// NB : aucun ressenti d'effort n'entre dans le calcul — CORTEX ne
+// collecte que charge, répétitions et série validée. Le profil se déduit
+// donc exclusivement de ce qui a été réellement soulevé.
 //
 // Étape 4.6b (2026-07-13) : l'identité interne par exercice
 // (historyByExercise, et donc exerciseProgress/mémoire à long terme)

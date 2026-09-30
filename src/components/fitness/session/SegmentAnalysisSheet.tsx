@@ -52,10 +52,9 @@ import { Portal } from "@/components/Portal";
 //   course. Ajouter cette section nécessiterait soit d'étendre le
 //   moteur de Rang existant, soit d'en construire un nouveau — hors
 //   périmètre "enrichir simplement le pilote".
-// - Recommandation de surcharge progressive : algorithme non encore
-//   écrit pour la course (existe pour la musculation via
-//   loadRecommendation.ts, mais basé sur RPE/1RM, non transposable tel
-//   quel). Affichée ci-dessous comme un emplacement réservé explicite
+// - Recommandation de surcharge progressive : aucun algorithme de ce
+//   type n'existe dans l'app, ni pour la course ni pour la musculation.
+//   Affichée ci-dessous comme un emplacement réservé explicite
 //   ("Bientôt disponible"), jamais avec un chiffre inventé.
 // - "Analyse" : contrairement à ExerciseAnalysisSheet (analyse IA à la
 //   demande via useDeepExerciseAI + edge function), la section Analyse

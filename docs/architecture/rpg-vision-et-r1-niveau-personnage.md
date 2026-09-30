@@ -1,5 +1,13 @@
 # RPG CORTEX — Vision cible & Lot R1 : le Niveau de Personnage
 
+> ## ⚠️ Le lot R6 « méta-boucle de saison » est annulé (mise à jour 30/09/2026)
+>
+> Les Saisons sont **définitivement abandonnées** (décision Nathan, 30/09/2026) : toute mention de
+> saison ci-dessous — dont le lot **R6** de la feuille de route — est caduque. Le pilier RPG
+> « aller au bout de la saison » a été retiré de `CLAUDE.md` en même temps. Le reste du document
+> (Niveau de Personnage, XP muscu-primaire, Rangs et Grades) reste la vision en vigueur.
+> Voir `docs/INVARIANTS.md` §3.4 et l'archive `docs/archive/2026-07-17-rpg-saisons.md`.
+
 > Document de conception. Écrit AVANT toute implémentation, à la demande de Nathan
 > (« je veux une analyse complète avant toute implémentation »).
 > Aucune ligne de code applicatif n'est modifiée par ce document.

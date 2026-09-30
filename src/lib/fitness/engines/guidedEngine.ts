@@ -25,10 +25,9 @@
 // feedsRankEngine=false reste étanche même si le vocabulaire se
 // ressemble en surface.
 //
-// Aucune notion de RPE (ressenti d'effort 1-10) : décision de Nathan
-// du 02/07 (supprimé partout, jamais réintroduit). "Intensité estimée"
-// ci-dessous est un LIBELLÉ FIXE par activité (propriété du cours), pas
-// une auto-évaluation demandée à l'utilisateur.
+// Aucun ressenti d'effort n'est demandé à l'utilisateur : "Intensité
+// estimée" ci-dessous est un LIBELLÉ FIXE par activité (propriété du
+// cours), jamais une auto-évaluation.
 //
 // Calories estimées : formule kcal/min par activité x durée, pour un
 // poids de référence adulte moyen (heuristique déclarée, même esprit

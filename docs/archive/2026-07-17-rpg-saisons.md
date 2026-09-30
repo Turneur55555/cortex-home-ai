@@ -1,5 +1,18 @@
 # RPG CORTEX — Système de Saisons (architecture validée)
 
+> ## ⛔ SYSTÈME ABANDONNÉ — 30/09/2026
+>
+> Les Saisons sont **définitivement supprimées de CORTEX** (décision Nathan, 30/09/2026). Ce
+> document est conservé pour l'histoire du projet ; **il ne décrit plus aucune fonctionnalité
+> existante ni prévue**. Le pilier RPG « aller au bout de la saison » a été retiré de `CLAUDE.md`
+> en même temps : il ne reste que trois piliers. Ne pas réintroduire les Saisons, sous aucune forme.
+>
+> Le code (`season.ts`, `useActiveSeason.ts`, `SeasonTrackCard.tsx`) a été supprimé et les objets
+> de base (`seasons`, `sp_events`, `user_season_progress`, `compute_season_tier`,
+> `award_season_points`) sont droppés par
+> `supabase/migrations/20260930090000_drop_seasons_and_dead_tables.sql`. Ils n'avaient jamais
+> existé en production : aucun Point de Saison n'a jamais été versé à quiconque.
+
 > Document de conception. **Aucun code** — vision validée par Nathan avant implémentation.
 > Suite de `rpg-vision-et-r1-niveau-personnage.md` (R1 Niveau de Personnage, R2 écran de récompense).
 > S'implémente APRÈS validation, en lots S0→S4.

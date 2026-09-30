@@ -606,22 +606,22 @@ describe("CREATE puis UPDATE hors connexion, avant toute synchronisation", () =>
     await processSyncQueue(USER_A);
 
     await workoutsRepo.update(workout.id, USER_A, { name: "Renommée" });
-    await workoutsRepo.update(workout.id, USER_A, { notes: "RPE 8" });
+    await workoutsRepo.update(workout.id, USER_A, { notes: "Bonne séance" });
 
     const ops = await listAllOperations(USER_A);
-    expect(ops.map((o) => o.payload)).toEqual([{ name: "Renommée" }, { notes: "RPE 8" }]);
+    expect(ops.map((o) => o.payload)).toEqual([{ name: "Renommée" }, { notes: "Bonne séance" }]);
 
     await processSyncQueue(USER_A);
 
     // Chaque patch a été appliqué, aucun n'a écrasé l'autre.
     const serverRow = serverStore.get("workouts")?.get(workout.id);
     expect(serverRow?.name).toBe("Renommée");
-    expect(serverRow?.notes).toBe("RPE 8");
+    expect(serverRow?.notes).toBe("Bonne séance");
     // Localement aussi : la réponse partielle du premier patch n'a pas fait
     // « reculer » l'écran pendant que le second attendait son tour.
     const local = await workoutsRepo.get(workout.id);
     expect(local?.name).toBe("Renommée");
-    expect(local?.notes).toBe("RPE 8");
+    expect(local?.notes).toBe("Bonne séance");
     expect((await readEntity("workouts", workout.id))?.syncStatus).toBe("synced");
   });
 

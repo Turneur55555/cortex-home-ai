@@ -228,7 +228,7 @@ function buildTrainingProfileBlock(profile: ParsedTrainingProfile | null): strin
   const lines: string[] = [`Historique analysé : ${profile.sessionsConsidered} séance(s) au total.`];
   if (profile.fatigue.level === "élevée") {
     lines.push(
-      `⚠️ FATIGUE ÉLEVÉE détectée (${profile.fatigue.reasons.join("; ") || "signaux cumulés"}) : réduis le volume total (moins de séries et/ou moins d'exercices), diminue l'intensité (charges un peu plus légères que suggéré, RIR plus élevé), et privilégie des exercices moins exigeants (machines guidées/isolation plutôt que gros polyarticulaires lourds). Traite cette séance comme un deload.`,
+      `⚠️ FATIGUE ÉLEVÉE détectée (${profile.fatigue.reasons.join("; ") || "signaux cumulés"}) : réduis le volume total (moins de séries et/ou moins d'exercices), diminue l'intensité (charges un peu plus légères que suggéré, en gardant des répétitions en réserve), et privilégie des exercices moins exigeants (machines guidées/isolation plutôt que gros polyarticulaires lourds). Traite cette séance comme un deload.`,
     );
   } else if (profile.fatigue.level === "modérée") {
     lines.push(

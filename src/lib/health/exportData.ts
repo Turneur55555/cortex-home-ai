@@ -11,7 +11,6 @@ const TABLES = [
   "nutrition",
   "nutrition_goals",
   "nutrition_favorites",
-  "user_badges",
   "user_stats",
   "user_activity",
   "user_preferences",
@@ -25,7 +24,6 @@ const TABLES = [
   "documents",
   "weekly_reports",
   "workout_analyses",
-  "reminders",
   "shopping_list",
 ] as const;
 

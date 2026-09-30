@@ -1,5 +1,21 @@
 # Les Chroniques — Product Design Document
 
+> ## ⚠️ Deux parties de ce document sont périmées (mise à jour 30/09/2026)
+>
+> Il est conservé pour la conception des Chroniques, qui, elle, a été livrée — mais **le module
+> « Panthéon » décrit plus bas n'existe pas et n'existera pas** : il reposait sur deux systèmes
+> depuis supprimés.
+>
+> | Ce que le document décrit                  | État réel                                            |
+> | ------------------------------------------ | ---------------------------------------------------- |
+> | Trophées, badges, succès, hauts faits      | **supprimés le 23/07/2026** (migration `20260723170000`) |
+> | Saisons, chapitrage par Saison             | **abandonnées le 30/09/2026** (voir `docs/INVARIANTS.md` §3.4) |
+> | Pilier n°4 « finir la saison »             | **retiré** — il ne reste que trois piliers (`CLAUDE.md`) |
+>
+> Les Chroniques livrées comptent **trois modules** : Légendes, Forge, Progression
+> (`src/components/fitness/chronique/`). Toute mention de Saison ou de trophée ci-dessous est une
+> intention d'époque, jamais une fonctionnalité à construire.
+
 > **Nature du document** : conception **produit**, pas technique. Aucune table, aucun
 > composant React, aucune migration ici. On définit *ce que vivent les joueurs* et *pourquoi*.
 > L'implémentation viendra dans un second temps, dans un doc séparé.

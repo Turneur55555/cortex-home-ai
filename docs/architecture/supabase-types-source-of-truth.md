@@ -16,6 +16,8 @@ que le typecheck CI ne tournait que sur des chemins étroits, la casse passait *
 
 Résultat : 3 incidents où `workout_analyses`, `xp_events`, `seasons`, `sp_events`,
 `user_season_progress` ont disparu, cassant la prod, réparés à la main.
+(Récit d'époque : les trois tables de Saisons n'existent plus — système abandonné le 30/09/2026,
+voir `docs/INVARIANTS.md` §3.4. L'incident, lui, reste la raison d'être de cette règle.)
 
 **4ème incident (23/07/2026, commit `238a9db`, `gpt-engineer-app[bot]`) :** malgré le garde-fou
 CI ci-dessous, `types.ts` a régressé vers une version antérieure à ~40 migrations (poussée
