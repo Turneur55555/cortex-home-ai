@@ -2745,53 +2745,6 @@ export type Database = {
         }
         Relationships: []
       }
-      program_weeks: {
-        Row: {
-          created_at: string
-          id: string
-          intensity_pct: number | null
-          is_deload: boolean
-          phase: string
-          program_id: string
-          target_rpe: number | null
-          user_id: string
-          volume_multiplier: number
-          week_number: number
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          intensity_pct?: number | null
-          is_deload?: boolean
-          phase?: string
-          program_id: string
-          target_rpe?: number | null
-          user_id: string
-          volume_multiplier?: number
-          week_number: number
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          intensity_pct?: number | null
-          is_deload?: boolean
-          phase?: string
-          program_id?: string
-          target_rpe?: number | null
-          user_id?: string
-          volume_multiplier?: number
-          week_number?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "program_weeks_program_id_fkey"
-            columns: ["program_id"]
-            isOneToOne: false
-            referencedRelation: "training_programs"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       rank_promotions: {
         Row: {
           created_at: string
@@ -3199,39 +3152,6 @@ export type Database = {
           regles?: Json
           updated_at?: string
           user_id?: string | null
-        }
-        Relationships: []
-      }
-      reminders: {
-        Row: {
-          body: string | null
-          created_at: string
-          done: boolean
-          due_at: string | null
-          id: string
-          title: string
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          body?: string | null
-          created_at?: string
-          done?: boolean
-          due_at?: string | null
-          id?: string
-          title: string
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          body?: string | null
-          created_at?: string
-          done?: boolean
-          due_at?: string | null
-          id?: string
-          title?: string
-          updated_at?: string
-          user_id?: string
         }
         Relationships: []
       }
@@ -3750,51 +3670,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      training_programs: {
-        Row: {
-          created_at: string
-          days_per_week: number | null
-          goal: string
-          id: string
-          name: string
-          notes: string | null
-          periodization_model: string
-          start_date: string | null
-          status: string
-          total_weeks: number
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          days_per_week?: number | null
-          goal?: string
-          id?: string
-          name: string
-          notes?: string | null
-          periodization_model?: string
-          start_date?: string | null
-          status?: string
-          total_weeks?: number
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          days_per_week?: number | null
-          goal?: string
-          id?: string
-          name?: string
-          notes?: string | null
-          periodization_model?: string
-          start_date?: string | null
-          status?: string
-          total_weeks?: number
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
       }
       user_activity: {
         Row: {
