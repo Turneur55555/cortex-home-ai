@@ -41,6 +41,7 @@ import { listEngines } from "@/lib/fitness/engines/registry";
 import type { DisciplineId } from "@/lib/fitness/engines/types";
 import { DisciplineIcon } from "./session/DisciplineIcon";
 import { SegmentAnalysisSheet } from "./session/SegmentAnalysisSheet";
+import { SessionGoalBar } from "./session/SessionGoalBar";
 
 const DEFAULT_BODYWEIGHT_KG = 75;
 
@@ -324,6 +325,9 @@ export function ActiveWorkoutView({
             </button>
           </div>
         </div>
+        {/* C13 — objectif de séance : ne rend rien sans référence (première fois,
+            séance libre). */}
+        <SessionGoalBar name={workout.name} exercises={workout.exercises ?? []} />
       </div>
 
       {menuOpen && menuAnchor && (

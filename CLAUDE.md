@@ -112,6 +112,11 @@ Pour le projet Cortex :
   `main` → push → publication Lovable vérifiée.
 - Ne prétends jamais avoir poussé, fusionné ou publié si l'action correspondante n'a pas réellement
   été effectuée et vérifiée.
+- **Autorisation permanente (Nathan, 01/10/2026)** : une fois un chantier validé (tests, typecheck,
+  lint, build) et la CI verte sur `main`, **publier sur lovable.app (`deploy_project`) sans
+  redemander**, puis **enchaîner sur le chantier suivant de la feuille de route** sans attendre. Ce
+  n'est pas un blanc-seing : un chantier rouge n'est jamais publié, et l'état réel (publié ou non,
+  vérifié ou non) est toujours dit tel quel.
 
 ## À la fin de chaque session, mettre à jour :
 - MEMORY.md → ajouter tout nouveau composant, hook, migration, feature, décision d'archi découvert pendant la session

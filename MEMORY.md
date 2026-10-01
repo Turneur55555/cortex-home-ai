@@ -22,6 +22,76 @@
 ## Dernière mise à jour
 2026-10-01
 
+## C13 « Objectif de séance » — dans le bandeau de la séance en cours (2026-10-01, branche `claude/cortex-product-audit-dexmp2`)
+
+Troisième chantier produit issu de l'audit, bâti sur A01 : sous le nom de la séance, **où en est-on
+par rapport à la dernière séance du même nom**. Validé sur maquette (30/09/2026). Autorisation
+permanente de Nathan (01/10/2026) : publier après chaque chantier validé et enchaîner — inscrite dans
+`CLAUDE.md`.
+
+### La règle vit dans `lib/fitness/sessionGoal.ts` (pure), le composant ne fait qu'afficher
+`resolveSessionGoal` renvoie `null` — et **le bandeau ne rend rien** — sans référence (première fois,
+séance libre, historique pas encore lu). Même une séance sauvegardée connue ne crée PAS d'objectif :
+on n'invente jamais une cible.
+- **Référence** = `lastSameNamedSession` (A01) : dernière séance de muscu TERMINÉE du même nom, chiffres
+  de `buildSessionRecap` — les mêmes que la carte récap de fin de séance et que la Carte du jour.
+- **Séries prévues** = celles de la séance sauvegardée du même nom si elle est **unique et complète**
+  (`setsComplete`) — le même nombre que le plan de la semaine (B06) et la Carte du jour ; sinon celles de
+  la référence. Deux modèles du même nom = ambigu → la référence.
+- **Séries faites** = séries **cochées** (`completed === true`) ; une série saisie mais pas cochée n'est
+  pas faite. **Volume fait** = tonnage des séries cochées et exploitables (`setsTonnage`).
+- **Battu** = volume **strictement** supérieur à celui de la référence (égalité → « à égalité avec ta
+  dernière… », jamais « battu ») ; sans charge dans la référence (poids de corps), l'objectif se réduit
+  aux séries (battu = plus de séries que prévu).
+- **Deux chiffres, deux questions** : la barre = séries cochées / prévues (plafonnée à 100 %) ; le volume
+  dit si tu fais mieux. Conséquence assumée : on peut être « Objectif dépassé » à 10 / 14 séries si le
+  volume bat la référence — la barre dit où tu en es, le libellé dit si tu fais mieux.
+- **Garde-fou** : la cible est un miroir du passé, **jamais une consigne de charge** — aucun verbe à
+  l'impératif, aucun pourcentage (test sur les quatre états).
+
+### Branchement
+`components/fitness/session/SessionGoalBar.tsx`, monté dans le bandeau d'`ActiveWorkoutView` sous la
+ligne nom/timer/Terminer ; il lit lui-même `useWorkouts` + `useWorkoutTemplates` (offline-first).
+`ActiveWorkoutView.closure.test.tsx` en simule le composant (il exige providers et historique, sans
+rapport avec la clôture). Variante « dépassé » : jetons du thème (`primary` suit le Rang).
+**Le bandeau n'est PAS collant** (il ne l'était pas avant) : à la 3ᵉ carte d'exercice l'objectif est
+hors de vue. Le rendre collant est un choix de mise en page (≈ 120 px de l'écran) laissé à Nathan.
+
+### Vibration au dépassement — deux défauts trouvés dans MON code avant livraison
+- **Le réglage « Vibrations » du Profil (`lib/haptics`, `isHapticsEnabled`) était ignoré.** Corrigé : la
+  vibration le respecte (test dédié, vérifié par mutation).
+- **Une vibration de 40 ms se confondait avec le buzz de 50 ms de la validation de série**
+  (`ActiveExerciseCard`) émis quelques millisecondes avant. Remplacée par un double impact `[30, 70, 30]`,
+  distinct. Découvert en comptant les appels réels dans le navigateur (11 vibrations pour 10 séries
+  cochées : 10 de validation + 1 de dépassement).
+- Elle ne vibre qu'à la **transition** « pas battu » → « battu » — jamais à la réouverture d'une séance
+  déjà dépassée, jamais à l'arrivée tardive de l'historique, jamais à chaque série de plus.
+
+### Tests (+49, aucun skip ajouté)
+`sessionGoal.test.ts` (33), `session/SessionGoalBar.test.tsx` (16). **Contrôlés par mutation, 13 fois** :
+`>=` au lieu de `>`, séries non cochées comptées (nombre ET volume), modèle incomplet ou ambigu accepté,
+barre non plafonnée, étiquette jamais « dépassé », note « à égalité » supprimée, vibration au montage /
+à chaque rendu, cadre vide sans référence, absence de garde de support, réglage « Vibrations » ignoré.
+
+### Vérifié en navigateur (spec jetable, supprimé — jamais commité)
+Faux serveur à mémoire, 414×896. Séance démarrée depuis l'Accueil (modèle « Épaules A », 14 séries),
+référence 14 séries · 3 840 kg : « Objectif : 14 séries · 3 840 kg » → **4** cochées « 1 600 kg soulevés ·
+encore 2 240 kg » → **8** « 3 200 kg · encore 640 kg » → **9** « 3 600 kg · encore 240 kg » → **10**
+« **Objectif dépassé** · 4 000 kg · +160 kg au-dessus de ta dernière Épaules A », une seule vibration de
+dépassement. Sans référence : aucun bandeau d'objectif, la séance s'affiche comme avant.
+- Piège de l'outillage : mon faux serveur répondait par un TABLEAU à `user_stats` (`.single()`), ce qui
+  faisait retomber le thème du rang sur le gris après quelques secondes. Artefact du faux serveur, pas de
+  l'app : il respecte maintenant `Accept: application/vnd.pgrst.object+json`.
+
+### Validation (comparée à A01)
+`npx vitest run` **2372 passed / 63 skipped / 0 échec** (base 2323 : **+49**). `tsc --noEmit` 0 erreur.
+`npm run lint` **0 erreur / 154 warnings — identique à la base**. `check:offline-contract` et
+`check:bounded-reads` inchangés. Aucune migration.
+
+### Non fait, volontairement
+Pas de bandeau collant. Pas de suggestion de charge (par conception). Le volume de la référence est celui
+du récap : une série à poids 0 n'y est pas « validée » — écart connu, il se corrigera partout à la fois.
+
 ## A01 « Carte du jour » — l'Accueil dit quoi faire aujourd'hui (2026-10-01, branche `claude/cortex-product-audit-dexmp2`)
 
 Deuxième chantier produit issu de l'audit du 07/09, directement bâti sur B06. Décisions de Nathan

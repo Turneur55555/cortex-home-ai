@@ -73,6 +73,8 @@ vi.mock("./exerciseCard/ActiveExerciseCard", () => ({ ActiveExerciseCard: () => 
 vi.mock("./ExercisePickerSheet", () => ({ ExercisePickerSheet: () => null }));
 vi.mock("./ExerciseSheet", () => ({ ExerciseSheet: () => null }));
 vi.mock("./session/SegmentAnalysisSheet", () => ({ SegmentAnalysisSheet: () => null }));
+// C13 : l'objectif de séance lit l'historique et les modèles — sans rapport avec la clôture testée ici.
+vi.mock("./session/SessionGoalBar", () => ({ SessionGoalBar: () => null }));
 
 import { ActiveWorkoutView } from "./ActiveWorkoutView";
 import type { ActiveWorkout } from "@/hooks/use-fitness";
