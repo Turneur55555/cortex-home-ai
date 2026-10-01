@@ -1,6 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { toPng } from "html-to-image";
 import { Share2, Download, X, Loader2 } from "lucide-react";
 import { RankIllustration } from "@/components/rpg/RankIllustration";
 import {
@@ -14,6 +13,9 @@ import type { RankState } from "@/lib/fitness/exerciseRanks";
 import { gradeName } from "@/lib/fitness/rpg/grade";
 import type { ExerciseBest } from "@/hooks/useExerciseProgression";
 import { Portal } from "@/components/Portal";
+import { ShareWordmark } from "@/components/share/ShareSignature";
+import { useShareImage } from "@/components/share/useShareImage";
+import { rankShareCopy } from "@/lib/share/shareCopy";
 
 /**
  * Carte de partage 2:3 — une affiche de victoire, pas une fiche de stats :
@@ -30,8 +32,9 @@ export function ExerciseRankShareSheet({
   best: ExerciseBest;
   onClose: () => void;
 }) {
-  const captureRef = useRef<HTMLDivElement>(null);
-  const [busy, setBusy] = useState<null | "share" | "download">(null);
+  // La carte capturée est la carte elle-même (2:3), pas un nœud 9:16 : `cacheBust` reste actif ici,
+  // l'illustration vient d'un fichier local (aucune URL signée à préserver).
+  const { exportRef: captureRef, busy, run } = useShareImage();
   const { colors } = rank.rank;
   const grade = gradeName(rank.rank.key, rank.levelInRank);
 
@@ -41,65 +44,14 @@ export function ExerciseRankShareSheet({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  async function generate(): Promise<Blob | null> {
-    if (!captureRef.current) return null;
-    const dataUrl = await toPng(captureRef.current, {
-      pixelRatio: 2,
-      cacheBust: true,
-      backgroundColor: "#050505",
-    });
-    const res = await fetch(dataUrl);
-    return await res.blob();
-  }
-
-  async function handleShare() {
-    setBusy("share");
-    try {
-      const blob = await generate();
-      if (!blob) return;
-      const file = new File([blob], `icortex-${rank.rank.key}.png`, { type: "image/png" });
-      const nav = navigator as Navigator & {
-        canShare?: (d: ShareData) => boolean;
-        share?: (d: ShareData) => Promise<void>;
-      };
-      if (nav.canShare?.({ files: [file] }) && nav.share) {
-        const gradeLabel = `${rank.rank.label} — ${grade}`;
-        await nav.share({
-          files: [file],
-          title: `${gradeLabel} — ${exerciseName}`,
-          text: `Rang ${gradeLabel} sur iCortex 💪`,
-        });
-      } else {
-        // fallback téléchargement
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `icortex-${rank.rank.key}.png`;
-        a.click();
-        URL.revokeObjectURL(url);
-      }
-    } catch {
-      /* silent */
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function handleDownload() {
-    setBusy("download");
-    try {
-      const blob = await generate();
-      if (!blob) return;
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `icortex-${rank.rank.key}.png`;
-      a.click();
-      URL.revokeObjectURL(url);
-    } finally {
-      setBusy(null);
-    }
-  }
+  const copy = rankShareCopy({
+    rankKey: rank.rank.key,
+    rankLabel: rank.rank.label,
+    grade,
+    exerciseName,
+  });
+  const handleShare = () => void run({ ...copy, cacheBust: true });
+  const handleDownload = () => void run({ ...copy, cacheBust: true, mode: "download" });
 
   return (
     <Portal>
@@ -300,6 +252,11 @@ export function ExerciseRankShareSheet({
                     </div>
                   </div>
                 </div>
+
+                {/* Signature — l'affiche circule hors de l'app : elle dit d'où elle vient */}
+                <p className="mt-2 shrink-0 text-center text-[9px] text-white/45">
+                  <ShareWordmark />
+                </p>
               </div>
             </div>
 
@@ -307,7 +264,7 @@ export function ExerciseRankShareSheet({
             <div className="flex w-full gap-2">
               <button
                 onClick={handleShare}
-                disabled={!!busy}
+                disabled={busy !== null}
                 className="flex flex-1 items-center justify-center gap-2 rounded-xl py-3 text-[11px] font-bold uppercase tracking-[0.2em]"
                 style={{
                   background: `linear-gradient(180deg, ${colors.primary}, ${colors.primary}cc)`,
@@ -329,7 +286,7 @@ export function ExerciseRankShareSheet({
               </button>
               <button
                 onClick={handleDownload}
-                disabled={!!busy}
+                disabled={busy !== null}
                 className="flex items-center justify-center gap-2 rounded-xl bg-white/10 px-4 py-3 text-[11px] font-bold uppercase tracking-[0.2em] text-white"
               >
                 {busy === "download" ? (

@@ -22,6 +22,91 @@
 ## Dernière mise à jour
 2026-10-01
 
+## G28 « La carte partagée, signée Cortex » + remise en état de l'affiche de rang (2026-10-01, branche `claude/cortex-product-audit-dexmp2`)
+
+Septième chantier produit issu de l'audit. Décision de Nathan : la carte partagée porte une signature — le seul
+contenu de l'app qui en sort circulait sans dire d'où il venait. La maquette validée : un pied de carte (mot-marque,
+rang du joueur, médaillon découpé dans l'illustration officielle), trois moments partageables.
+
+### ⚠️ Découverte en préparant G28 : l'affiche de rang partagée était cassée en production depuis le 31/07/2026
+`ExerciseRankShareSheet` (l'affiche « Record battu » partagée depuis une carte d'exercice) contenait un **montage de
+diagnostic iOS Safari** laissé sur `main` : `DEBUG_MODE = true` (panneau de mesures `naturalWidth`/`currentSrc`…
+affiché à l'écran), et un bloc « TEST TEMPORAIRE » qui remplaçait `RankIllustration` par **deux `<img>` bruts sur fond
+vert**, dont un chargé depuis **un domaine tiers (`placehold.co`)**. Historique : `53a7a44` (mode DEBUG) → `7e5647d`
+(bissection) → `62e0065` (test temporaire), tous le 31/07/2026, jamais refermés. Rien ne l'a signalé : aucun test ne
+regardait le contenu de l'affiche.
+- **Corrigé** : le fichier est remis dans l'état du commit `56f1149` (« Corrige la vraie cause de la disparition de
+  l'illustration : aspect-ratio + flex-grow imbriqué », juste avant le diagnostic) — la différence entre `56f1149` et
+  `main` ne contenait QUE le montage de diagnostic. `RankIllustration` et les assets n'ont pas changé depuis.
+- **Ce que je n'ai pas pu vérifier** : l'enquête du 31/07 portait sur un appareil iOS réel, et on ignore si la correction
+  de `56f1149` (cale de ratio en `padding-top`, cause confirmée et reproduite sous Chromium) a suffi sur iPhone. **Non
+  vérifié sur iPhone** — à contrôler sur appareil. Vérifié sous Chromium : l'illustration officielle s'affiche, aucune
+  requête externe n'est émise, l'export PNG contient l'affiche complète.
+- **Garde-fou** : `src/lib/shippedDiagnostics.test.ts` (scan de `src/` : `DEBUG_MODE = true`, « MODE DEBUG
+  TEMPORAIRE », « TEST TEMPORAIRE », `placehold.co`, fond `lime`) — **les 5 motifs échouent sur l'ancien état** (vérifié
+  en réinjectant l'ancienne version). Nouvelle ligne dans `docs/INVARIANTS.md` §5.
+
+### Ce que G28 change
+- **`lib/share/shareImage.ts`** — UNE seule capture → partage natif → repli en téléchargement, pour toutes les cartes
+  (la fin de séance et l'affiche en portaient chacune une copie, avec deux comportements divergents). Le résultat dit ce
+  qui s'est passé : `shared` / `downloaded` / `cancelled` / `failed`. Une feuille fermée par l'utilisateur
+  (`AbortError`) ne déclenche JAMAIS de téléchargement ; un autre échec du partage natif (autorisation expirée pendant
+  le rendu) enregistre l'image plutôt que de ne rien faire ; l'URL de téléchargement n'est plus révoquée tout de suite.
+  `cacheBust` désactivé par défaut (il casserait les URLs signées Supabase) ; aucune couleur dans `lib/`.
+- **`components/share/`** — `ShareSignature` (le pied de carte), `ShareExportFrame` (nœud 9:16 hors écran, la signature y
+  est DANS le nœud capturé), `useShareImage` (verrou anti double-appui + retour à l'utilisateur : « Image enregistrée »,
+  « Impossible de créer l'image » — l'ancien comportement taisait les échecs).
+- **Signature** : mot-marque « Cortex » (capitales par la typographie : le texte reste « Cortex » pour un lecteur
+  d'écran), « Rang · Grade », médaillon rond tiré de `RankIllustration` (zoom sur le haut de l'illustration) avec liseré
+  PAR-DESSUS l'image. Couleurs via `rankTheme.ts`. **Aucune adresse** : la carte est identifiable, elle n'amène personne.
+- **Écart assumé avec la maquette** : le rang n'est imprimé dans le pied QUE sur la carte de la semaine. La carte de
+  fin de séance porte déjà un bandeau Rang/Grade (le répéter la doublonnerait) et l'affiche de record porte le rang de
+  l'EXERCICE (le Titre du joueur y mettrait deux rangs différents sur la même image) : pied = mot-marque seul.
+- **« Partager ma semaine »** (F26) : `WeekShareCard` (que des faits du bilan : pas de volume nul, pas de comparaison
+  sans semaine précédente, « X / Y prévues » seulement si vérifiable, au plus 3 records nommés, baisse sobre — jamais en
+  rouge) + `WeekShare` (bouton + nœud d'export) sur la page d'une semaine. **Le rang de la signature n'est jamais
+  inventé** : tant que l'XP est inconnue (chargement, erreur), la carte part signée du mot-marque seul plutôt qu'avec un
+  « rang de départ » faux.
+- **`lib/brand.ts` + `lib/share/shareCopy.ts`** : nom du produit « Cortex » (décision de Nathan) pour les surfaces de
+  partage — titres, textes, noms de fichiers (`cortex-seance.png`, `cortex-semaine-<lundi>.png`, `cortex-<rang>.png`).
+- **Garde-fou** `src/lib/share/singleCapturePath.test.ts` : seul `shareImage.ts` importe `html-to-image` — pas de
+  troisième copie. Ligne dans `docs/INVARIANTS.md` §5.
+
+### Ce qui n'est PAS fait
+- **Le renommage global ICORTEX → Cortex** (titres d'onglet, métadonnées, écran de connexion, assistant) : chantier à
+  part. Seules les surfaces de partage portent « Cortex ».
+- **La montée de Rang n'a pas de bouton de partage propre** : `RankUpOverlay` est une cinématique de 2,8 s qui se ferme
+  seule ; l'affiche de record (`ExerciseRankShareSheet`) reste le moment « rang » partageable. La maquette comptait trois
+  moments : fin de séance, rang, semaine — les trois sont signés, mais le deuxième est l'affiche existante.
+- **La carte de fin de séance n'est pas redessinée** comme la maquette (nom de la séance, durée, « Record du jour ») :
+  la maquette ne demandait qu'un pied de carte.
+- **iPhone / Safari non testés** (voir plus haut). Le partage natif de fichiers n'est pas testable en Chromium sans
+  appareil : couvert par des tests unitaires de `shareImage`, pas par un vrai partage.
+- G27 (carte personnage) reste reporté.
+
+### Tests (+90, aucun skip ajouté)
+`shareCopy.test.ts` (11), `shareImage.test.ts` (12), `ShareSignature.test.tsx` (8), `useShareImage.test.tsx` (8),
+`WeekShareCard.test.tsx` (11), `WeekShare.test.tsx` (7), `WeekReportPage.test.tsx` (+4), `ExerciseRankShareSheet.test.tsx`
+(6), `SessionRecapScreen.test.tsx` (4), `shippedDiagnostics.test.ts` (15), `singleCapturePath.test.ts` (4).
+**Contrôlés par mutation, 18 fois, 18 tuées** : signature hors du nœud capturé, capitales retirées, annulation traitée
+en échec, `cacheBust` actif par défaut, rang fabriqué sans XP, volume nul affiché, rang répété dans le récap, affiche
+sans signature, enregistrer qui ouvre le partage, fichier sans semaine, verrou retiré, révocation immédiate, échec
+silencieux, repli supprimé, mode `download` ignoré, baisse en rouge, plafond de records retiré, « prévues » sans
+vérifiabilité — plus les deux garde-fous, éprouvés sur l'ancien état et sur une copie réintroduite.
+
+### Vérifié en navigateur (banc jetable, supprimé — jamais commité)
+Route jetable rendant les vrais composants, vrai pipeline `html-to-image` sous Chromium, exports téléchargés et LUS :
+carte de la semaine (Guerrier et Titan : mot-marque aux couleurs du rang, « Guerrier · Vétéran », médaillon rond à
+liseré), carte de séance (bandeau de rang intact, pied « Cortex » seul), affiche de record (illustration officielle,
+« Cortex » en pied). **Aucune requête externe** pendant l'export de l'affiche (l'ancien état en émettait une vers
+`placehold.co`).
+- Pièges de l'outillage : en dev, `goto` rend la main AVANT l'hydratation — un clic immédiat est perdu (attendre les
+  props React du bouton) ; `ss` n'existe pas dans le sandbox (un « 0 » après `ss | grep` ne prouve rien).
+
+### Validation
+`npx vitest run` **2653 passed / 63 skipped / 0 échec** (base E19 : 2563, **+90**). `tsc --noEmit` 0 erreur.
+`npm run lint` **0 erreur / 154 warnings — identique à la base**. Aucune migration.
+
 ## E19 « Corps / Santé » — Corps reste dans Profil, mais devient trouvable (2026-10-01, branche `claude/cortex-product-audit-dexmp2`)
 
 Sixième chantier produit issu de l'audit. Décisions de Nathan (30/09/2026) : **Corps reste dans Profil** (aucun

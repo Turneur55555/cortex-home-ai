@@ -1,12 +1,14 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 import { motion } from "framer-motion";
-import { toPng } from "html-to-image";
 import { Loader2, Share2 } from "lucide-react";
 import { Portal } from "@/components/Portal";
 import { SessionRecapCard } from "@/components/fitness/session/SessionRecapCard";
+import { EXPORT_HEIGHT, EXPORT_WIDTH, ShareExportFrame } from "@/components/share/ShareExportFrame";
+import { useShareImage } from "@/components/share/useShareImage";
 import { useUserStats } from "@/hooks/useUserStats";
 import { titleProgressForXp } from "@/lib/fitness/rpg/titleProgress";
 import { formatRecapDate, type SessionRecap } from "@/lib/fitness/rpg/sessionRecap";
+import { sessionShareCopy } from "@/lib/share/shareCopy";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
@@ -21,7 +23,10 @@ const EASE = [0.22, 1, 0.36, 1] as const;
  *
  * Partage : on capture UNIQUEMENT un nœud dédié 9:16 (1080×1920 après
  * pixelRatio 2), rendu hors écran — jamais une capture de l'écran. Repli
- * en téléchargement si le partage natif de fichiers est indisponible.
+ * en téléchargement si le partage natif de fichiers est indisponible
+ * (`lib/share/shareImage.ts`, commun à toutes les cartes). Le pied de carte signé
+ * « Cortex » est ajouté par le cadre d'export ; le rang n'y est pas répété, la
+ * carte porte déjà son bandeau Rang/Grade.
  */
 export function SessionRecapScreen({
   recap,
@@ -37,8 +42,7 @@ export function SessionRecapScreen({
   prCount: number;
   onFinish: () => void;
 }) {
-  const exportRef = useRef<HTMLDivElement>(null);
-  const [busy, setBusy] = useState(false);
+  const { exportRef, busy, run } = useShareImage();
   const { data: stats } = useUserStats();
   const progress = titleProgressForXp(stats?.xp ?? 0);
 
@@ -53,43 +57,8 @@ export function SessionRecapScreen({
     grade: progress.grade,
   };
 
-  async function handleShare() {
-    if (!exportRef.current || busy) return;
-    setBusy(true);
-    try {
-      // cacheBust volontairement désactivé : il ajoute un paramètre d'URL
-      // qui invaliderait la signature des URLs signées Supabase.
-      const dataUrl = await toPng(exportRef.current, {
-        pixelRatio: 2,
-        backgroundColor: "#050505",
-        width: 540,
-        height: 960,
-      });
-      const blob = await (await fetch(dataUrl)).blob();
-      const file = new File([blob], "icortex-seance.png", { type: "image/png" });
-      const nav = navigator as Navigator & {
-        canShare?: (d: ShareData) => boolean;
-        share?: (d: ShareData) => Promise<void>;
-      };
-      if (nav.share && nav.canShare?.({ files: [file] })) {
-        await nav.share({
-          files: [file],
-          title: "Séance terminée — iCortex",
-          text: `${recap.totalSets} séries · ${recap.totalVolumeKg.toLocaleString("fr-FR")} kg 💪`,
-        });
-      } else {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "icortex-seance.png";
-        a.click();
-        URL.revokeObjectURL(url);
-      }
-    } catch {
-      /* partage annulé ou capture impossible — l'écran reste utilisable */
-    } finally {
-      setBusy(false);
-    }
+  function handleShare() {
+    void run({ ...sessionShareCopy(recap), width: EXPORT_WIDTH, height: EXPORT_HEIGHT });
   }
 
   return (
@@ -108,10 +77,14 @@ export function SessionRecapScreen({
             <button
               type="button"
               onClick={handleShare}
-              disabled={busy}
+              disabled={busy !== null}
               className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/[0.06] py-3 text-sm font-semibold text-white disabled:opacity-60"
             >
-              {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />}
+              {busy !== null ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Share2 className="h-4 w-4" />
+              )}
               Partager
             </button>
             <button
@@ -125,22 +98,9 @@ export function SessionRecapScreen({
         </motion.div>
 
         {/* Nœud d'export 9:16 — hors écran, capturé seul (jamais l'écran) */}
-        <div
-          aria-hidden
-          className="pointer-events-none fixed left-[-10000px] top-0"
-          style={{ width: 540, height: 960 }}
-        >
-          <div
-            ref={exportRef}
-            className="flex h-full w-full flex-col items-center justify-center px-8"
-            style={{ background: "linear-gradient(180deg, #0a0908 0%, #050505 100%)" }}
-          >
-            <SessionRecapCard {...cardProps} variant="export" />
-            <p className="mt-6 text-[11px] font-bold uppercase tracking-[0.42em] text-white/35">
-              iCortex
-            </p>
-          </div>
-        </div>
+        <ShareExportFrame exportRef={exportRef}>
+          <SessionRecapCard {...cardProps} variant="export" />
+        </ShareExportFrame>
       </div>
     </Portal>
   );

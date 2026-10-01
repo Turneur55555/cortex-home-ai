@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { ChevronLeft, Trophy } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { WeekShare } from "@/components/week/WeekShare";
 import { useWeekReport } from "@/hooks/useWeekReport";
 import { formatKg } from "@/lib/fitness/todayCard";
 import {
@@ -213,6 +214,8 @@ export function WeekReportPage({ weekStart }: { weekStart: string }) {
               {report.sentence}
             </p>
           )}
+
+          <WeekShare report={report} />
         </article>
       )}
     </main>

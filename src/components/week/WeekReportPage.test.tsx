@@ -30,6 +30,10 @@ vi.mock("@tanstack/react-router", () => ({
   ),
 }));
 
+// G28 : le bouton de partage lit l'XP du joueur (AuthProvider, react-query) — sans rapport avec ce
+// que la page affiche ; il a son propre test (WeekShare.test.tsx).
+vi.mock("./WeekShare", () => ({ WeekShare: () => <div data-testid="stub-WeekShare" /> }));
+
 import { WeekReportPage } from "./WeekReportPage";
 
 function makeReport(over: Partial<WeeklyReport> = {}): WeeklyReport {
@@ -79,6 +83,22 @@ function show(report: WeeklyReport | null, opts: { weekStart?: string; isLoading
 
 const text = () => container.textContent ?? "";
 const region = (name: string) => container.querySelector(`[aria-label="${name}"]`);
+
+describe("WeekReportPage — le partage (G28)", () => {
+  it("un bilan existe : le bouton de partage est proposé", () => {
+    show(makeReport());
+    expect(container.querySelector('[data-testid="stub-WeekShare"]')).not.toBeNull();
+  });
+
+  it.each([
+    ["semaine sans séance", () => show(null)],
+    ["chargement", () => show(null, { isLoading: true })],
+    ["semaine invalide", () => show(null, { weekStart: "n-importe-quoi" })],
+  ])("%s : rien à partager, aucun bouton", (_name, render) => {
+    render();
+    expect(container.querySelector('[data-testid="stub-WeekShare"]')).toBeNull();
+  });
+});
 
 describe("WeekReportPage — états", () => {
   it("pendant le chargement : un squelette, aucun chiffre", () => {

@@ -203,6 +203,15 @@ La base fait foi. Migration → merge → `npm run gen:types` → commit. **Jama
 - Jamais de doublon de composant, jamais de réintroduction d'un composant supprimé.
 - Le rang se représente **uniquement** via `RankIllustration` ; toute couleur de rang passe par
   `rankTheme.ts` (voir `CLAUDE.md` pour le détail et les exceptions explicites).
+- **Aucun échafaudage de diagnostic dans `src/`** : ni mode DEBUG activé en dur, ni bloc « TEST
+  TEMPORAIRE », ni image de contrôle externe (`placehold.co`). Un diagnostic se mène sur une
+  branche ou derrière une variable d'environnement. (Un montage iOS laissé sur `main` le
+  31/07/2026 a circulé deux mois dans l'affiche de rang partagée.)
+  → vérifié par `src/lib/shippedDiagnostics.test.ts`
+- **Une seule capture d'image** : toute carte exportée passe par `lib/share/shareImage.ts`
+  (partage natif, repli en téléchargement, résultat explicite) et son cadre d'export signé
+  (`components/share/ShareExportFrame`). Aucun autre fichier n'importe `html-to-image`.
+  → vérifié par `src/lib/share/singleCapturePath.test.ts`
 - **Aucun test désactivé** hors des deux fichiers d'intégration env-gated
   (`security/rls.test.ts`, `nutrition/nutritionMealCheck.test.ts`) — la CI échoue sinon.
 - Mobile first, toujours.
