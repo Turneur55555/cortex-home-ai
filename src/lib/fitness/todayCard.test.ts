@@ -184,7 +184,11 @@ describe("lastCompletedSession", () => {
     const a = done("2026-09-20", "Dos A");
     const b = done("2026-09-28", "Jambes B");
     const c = done("2026-09-30", "Course", { discipline: "course" });
-    expect(lastCompletedSession([a, b, c])).toEqual({ name: "Jambes B", date: "2026-09-28" });
+    expect(lastCompletedSession([a, b, c])).toEqual({
+      workoutId: b.id,
+      name: "Jambes B",
+      date: "2026-09-28",
+    });
     expect(lastCompletedSession([])).toBeNull();
   });
 });
@@ -444,6 +448,72 @@ describe("resolveTodayCard — états « none » et « free »", () => {
       lastTime: null,
       primary: { label: "Choisir une épreuve", action: { type: "new-session" } },
       secondary: { label: "Planifier ma semaine", action: { type: "edit-plan" } },
+    });
+  });
+
+  describe("aucun plan mais un rythme dans l'historique : la plus ancienne séance habituelle", () => {
+    // Jeudi 1er octobre. « Jambes » : il y a 8 et 17 jours ; « Dos » : 5 et 12 ; « Pecs » : 3 et 10.
+    const rhythm = () => [
+      done("2026-09-24", "Jambes"),
+      done("2026-09-14", "Jambes"),
+      done("2026-09-26", "Dos"),
+      done("2026-09-19", "Dos"),
+      done("2026-09-28", "Pecs"),
+      done("2026-09-21", "Pecs"),
+    ];
+
+    it("la carte dit QUOI faire, au lieu de poser la question", () => {
+      const workouts = rhythm();
+      const jambes = workouts[0];
+      const state = card({ workouts });
+      expect(state).toEqual({
+        kind: "none",
+        kicker: "Jeudi 1 octobre · aujourd'hui",
+        title: "Jambes",
+        subtitle: "La plus ancienne de tes séances habituelles.",
+        lastTime: "La dernière fois : 14 séries · 3\u00a0840 kg · il y a 7 jours",
+        primary: {
+          label: "Refaire cette séance",
+          action: { type: "repeat-session", workoutId: jambes.id },
+        },
+        secondary: { label: "Autre séance", action: { type: "new-session" } },
+      });
+    });
+
+    it("le bouton refait la séance de RÉFÉRENCE (celle qui porte des séries), pas une coquille plus récente", () => {
+      const shell = done("2026-09-25", "Jambes", {}, []); // importée : sans série, plus récente que la référence
+      const base = rhythm();
+      const withData = base[0]; // le 24/09
+      const state = card({ workouts: [shell, ...base] });
+      expect(state.primary?.action).toEqual({ type: "repeat-session", workoutId: withData.id });
+    });
+
+    it("un seul nom d'historique ne fait pas un rythme : retour à l'invitation", () => {
+      const state = card({ workouts: [done("2026-09-28", "Jambes B")] });
+      expect(state.title).toBe("Quoi faire aujourd'hui ?");
+      expect(state.primary).toEqual({
+        label: "Choisir une épreuve",
+        action: { type: "new-session" },
+      });
+    });
+
+    it("un plan existe : la suggestion n'est JAMAIS imposée par-dessus le plan", () => {
+      const state = card({ workouts: rhythm(), plan: planOf({ 1: muscles(1, ["dos"]) }) });
+      expect(state.kind).toBe("free");
+      expect(state.primary?.action.type).toBe("new-session");
+    });
+
+    it("une séance déjà faite aujourd'hui prime : rien n'est suggéré", () => {
+      const state = card({ workouts: [...rhythm(), done("2026-10-01", "Épaules A")] });
+      expect(state.kind).toBe("done");
+    });
+
+    it("une séance en cours prime aussi", () => {
+      const state = card({
+        workouts: rhythm(),
+        activeWorkout: { name: "Ma séance", created_at: "2026-10-01T07:00:00.000Z" },
+      });
+      expect(state.kind).toBe("active");
     });
   });
 

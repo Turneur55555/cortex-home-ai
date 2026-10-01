@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { estimate1RM, exerciseActiveSeconds, setTonnage, workoutActiveSeconds } from "./strength";
+import {
+  estimate1RM,
+  exerciseActiveSeconds,
+  formatTonnage,
+  setTonnage,
+  workoutActiveSeconds,
+} from "./strength";
 
 const SEC_PER_REP = 2.5;
 
@@ -83,5 +89,23 @@ describe("workoutActiveSeconds", () => {
       { exercise_sets: [{ reps: 8, completed: true }] },
     ];
     expect(workoutActiveSeconds(exercises, SEC_PER_REP)).toBe((10 + 8) * SEC_PER_REP);
+  });
+});
+
+describe("formatTonnage — virgule décimale française", () => {
+  it.each([
+    [6300, "6,3 t"],
+    [1000, "1,0 t"],
+    [58500, "58,5 t"],
+    [18420, "18,4 t"],
+    [999, "999 kg"],
+    [0, "0 kg"],
+    [412.4, "412 kg"],
+  ])("%s kg → %s", (kg, expected) => {
+    expect(formatTonnage(kg).replace(/\u00a0|\u202f/g, " ")).toBe(expected);
+  });
+
+  it("jamais de point décimal dans une interface en français", () => {
+    expect(formatTonnage(6300)).not.toContain(".");
   });
 });

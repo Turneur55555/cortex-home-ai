@@ -21,6 +21,10 @@ import { collectWorkoutSyncDependencies } from "@/lib/fitness/workoutSyncDepende
 import { allocateSetNumber, nextSetNumber } from "@/lib/fitness/setNumberAllocation";
 import { startActiveWorkoutExclusively } from "@/lib/fitness/activeWorkoutStart";
 import { runExclusiveSessionClosure } from "@/lib/fitness/sessionClosure";
+import {
+  sessionDurationOnFinish,
+  validatedSetTimesForWorkout,
+} from "@/lib/fitness/sessionDuration";
 import { summarizeExerciseSetsForHistory } from "@/lib/fitness/sets";
 import { workoutsServerRefreshGate } from "@/lib/offline/workoutsRefreshWindow";
 import { requestSyncFlush } from "@/lib/offline/syncFlush";
@@ -1248,9 +1252,6 @@ export function useFinishWorkout() {
       // Voir `lib/fitness/sessionClosure.ts` pour le détail des courses
       // réellement possibles avant ce chantier.
       await runExclusiveSessionClosure(workout.id, "finish", async () => {
-        const durationMs = Date.now() - new Date(workout.created_at).getTime();
-        const durationMin = Math.min(600, Math.max(1, Math.round(durationMs / 60_000)));
-
         const segments = workout.segments ?? [];
         let metadataUpdate: Record<string, unknown> | undefined;
         if (segments.length > 0) {
@@ -1317,6 +1318,16 @@ export function useFinishWorkout() {
           exercises: localExercises,
           exerciseSets: localSets,
           workoutSegments: localSegments,
+        });
+
+        // Durée : `lib/fitness/sessionDuration.ts`. Une séance restée ouverte avant ou après
+        // l'entraînement ne s'enregistre plus au plafond de 600 min — le temps sans série
+        // validée n'est pas de l'entraînement. Lue dans le store LOCAL, comme la barrière
+        // ci-dessus (le snapshot React peut être en retard d'une invalidation).
+        const durationMin = sessionDurationOnFinish({
+          startedAt: workout.created_at,
+          now: new Date(),
+          validatedSetTimes: validatedSetTimesForWorkout(workout.id, localExercises, localSets),
         });
 
         await workoutsRepo.update(

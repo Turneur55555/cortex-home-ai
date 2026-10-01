@@ -39,6 +39,7 @@
 import { addDaysYMD, localDateYMD, localWeekStartYMD } from "@/lib/dates";
 import { computeRecordsBySession, type SessionRecord } from "@/lib/fitness/chronicles";
 import { buildSessionRecap } from "@/lib/fitness/rpg/sessionRecap";
+import { plausibleDurationMinutes } from "@/lib/fitness/sessionDuration";
 import { formatKg, type TodayWorkout } from "@/lib/fitness/todayCard";
 import type { ExerciseLike } from "@/lib/fitness/workoutGrouping";
 import {
@@ -187,6 +188,12 @@ interface WeekTotals {
   sets: number;
   volumeKg: number;
   minutes: number | null;
+  /**
+   * Une séance de la semaine porte une durée IMPLAUSIBLE (le plafond de 600 min d'une séance
+   * restée ouverte, par exemple — `lib/fitness/sessionDuration.ts`). Le total serait alors faux de
+   * plusieurs heures : on n'affiche pas de « Temps » plutôt qu'un « 30 h 40 » inventé.
+   */
+  hasUnknownDuration: boolean;
 }
 
 interface History {
@@ -202,7 +209,14 @@ function prepareHistory(workouts: readonly ReportWorkout[]): History {
     const start = weekStartOf(workout.date);
     let week = byWeek.get(start);
     if (!week) {
-      week = { weekStart: start, workouts: [], sets: 0, volumeKg: 0, minutes: null };
+      week = {
+        weekStart: start,
+        workouts: [],
+        sets: 0,
+        volumeKg: 0,
+        minutes: null,
+        hasUnknownDuration: false,
+      };
       byWeek.set(start, week);
     }
     const recap = buildSessionRecap(workout.exercises ?? []);
@@ -211,7 +225,8 @@ function prepareHistory(workouts: readonly ReportWorkout[]): History {
     week.volumeKg += recap.totalVolumeKg;
     const minutes = workout.duration_minutes;
     if (typeof minutes === "number" && Number.isFinite(minutes) && minutes > 0) {
-      week.minutes = (week.minutes ?? 0) + minutes;
+      if (plausibleDurationMinutes(minutes) === null) week.hasUnknownDuration = true;
+      else week.minutes = (week.minutes ?? 0) + minutes;
     }
   }
   return { byWeek, records: computeRecordsBySession(counted) };
@@ -368,7 +383,7 @@ function reportFrom(
     ...base,
     sets: week.sets,
     volumeKg: week.volumeKg,
-    minutes: week.minutes,
+    minutes: week.hasUnknownDuration ? null : week.minutes,
     previousVolumeKg,
     sentence: sentenceFor(base),
   };

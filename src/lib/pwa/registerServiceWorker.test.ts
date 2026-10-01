@@ -106,6 +106,33 @@ describe("registerServiceWorker", () => {
     });
   });
 
+  function setOnline(online: boolean) {
+    Object.defineProperty(navigator, "onLine", { configurable: true, get: () => online });
+  }
+
+  it("hors connexion, l'échec est ATTENDU : rien n'est journalisé comme une erreur", async () => {
+    setOnline(false);
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    registerMock.mockRejectedValueOnce(new Error("Script load failed"));
+    registerServiceWorker();
+    fireLoad();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(consoleError).not.toHaveBeenCalled();
+    setOnline(true);
+  });
+
+  it("en ligne, l'échec reste une vraie erreur journalisée", async () => {
+    setOnline(true);
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    registerMock.mockRejectedValueOnce(new Error("Script load failed"));
+    registerServiceWorker();
+    fireLoad();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(consoleError).toHaveBeenCalled();
+  });
+
   it("journalise sans planter si l'enregistrement échoue", async () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     registerMock.mockRejectedValueOnce(new Error("registration failed"));

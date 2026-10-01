@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { exerciseIllustration } from "@/lib/fitness/exerciseIllustrations";
+import { plausibleDurationMinutes } from "@/lib/fitness/sessionDuration";
 import { toast } from "sonner";
 import {
   BarChart3,
@@ -180,7 +181,7 @@ export function WorkoutCard({
     // Fallback : on affiche la valeur brute Supabase si écart détecté.
     const safeVolume = volumeMismatch ? rawVolume : volume;
 
-    const duration = w.duration_minutes ?? 0;
+    const duration = plausibleDurationMinutes(w.duration_minutes) ?? 0;
     // Estimation calorique conservatrice basée sur le temps actif des séries
     // validées (cf. src/lib/fitness/eat.ts → estimateSessionCalories) —
     // indépendante de la durée totale de la séance. Conserve null si la

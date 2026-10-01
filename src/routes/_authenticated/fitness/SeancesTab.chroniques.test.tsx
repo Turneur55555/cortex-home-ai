@@ -64,6 +64,7 @@ vi.mock("@/components/fitness/session/ActiveGenericSessionView", () =>
 );
 vi.mock("@/components/fitness/plan/WeekPlanCard", () => stub("WeekPlanCard"));
 vi.mock("@/components/fitness/SeancesStageSwitch", () => stub("SeancesStageSwitch"));
+vi.mock("@/components/fitness/LastSessionRow", () => stub("LastSessionRow"));
 vi.mock("@/components/fitness/SectionReveal", () => ({
   SectionReveal: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));

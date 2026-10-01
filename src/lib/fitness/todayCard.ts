@@ -33,6 +33,7 @@
 
 import { addDaysYMD } from "@/lib/dates";
 import { buildSessionRecap } from "@/lib/fitness/rpg/sessionRecap";
+import { suggestSessionToRepeat } from "@/lib/fitness/sessionSuggestion";
 import {
   DAY_NAMES,
   describeTemplateLoad,
@@ -74,12 +75,14 @@ export interface TodayCardInput {
  * - `resume`         : retourner sur la séance en cours (écran Séances) ;
  * - `start-template` : démarrer la séance sauvegardée `templateId` ;
  * - `new-session`    : ouvrir « Choisir une épreuve » ;
+ * - `repeat-session` : refaire en live la séance `workoutId` (confirmation sur l'écran Séances) ;
  * - `edit-plan`      : ouvrir « Mon rythme ».
  */
 export type TodayAction =
   | { type: "resume" }
   | { type: "start-template"; templateId: string }
   | { type: "new-session" }
+  | { type: "repeat-session"; workoutId: string }
   | { type: "edit-plan" };
 
 export interface TodayButton {
@@ -208,9 +211,9 @@ export function lastSameNamedSession(
 /** La dernière séance de musculation terminée, quel que soit son nom. */
 export function lastCompletedSession(
   workouts: readonly TodayWorkout[],
-): { name: string; date: string } | null {
+): { workoutId: string; name: string; date: string } | null {
   const [latest] = workouts.filter(isCountedWorkout).sort(newestFirst);
-  return latest ? { name: latest.name, date: latest.date } : null;
+  return latest ? { workoutId: latest.id, name: latest.name, date: latest.date } : null;
 }
 
 /** « La dernière fois : 14 séries · 3 840 kg · il y a 8 jours » — jamais un chiffre à zéro. */
@@ -321,8 +324,25 @@ export function resolveTodayCard(input: TodayCardInput): TodayCardState {
     };
   }
 
-  // 3. Aucun plan du tout : une invitation, et un fait — la dernière séance.
+  // 3. Aucun plan du tout : l'historique dit déjà quoi faire. S'il porte un rythme (une séance
+  // habituelle, `lib/fitness/sessionSuggestion.ts`), on propose la plus ancienne — un seul
+  // geste, aucun réglage. Sinon : une invitation, et un fait — la dernière séance.
   if (!hasPlan) {
+    const suggestion = suggestSessionToRepeat(workouts, todayDate);
+    if (suggestion) {
+      return {
+        kind: "none",
+        kicker,
+        title: suggestion.name || "Sans nom",
+        subtitle: "La plus ancienne de tes séances habituelles.",
+        lastTime: describeLastTime(suggestion.reference, todayDate),
+        primary: {
+          label: "Refaire cette séance",
+          action: { type: "repeat-session", workoutId: suggestion.reference.workoutId },
+        },
+        secondary: { label: "Autre séance", action: { type: "new-session" } },
+      };
+    }
     const last = lastCompletedSession(workouts);
     return {
       kind: "none",

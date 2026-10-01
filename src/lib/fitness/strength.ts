@@ -82,10 +82,17 @@ export function workoutTonnage(
 }
 
 /**
- * Formate un tonnage en kg ou tonnes selon la magnitude.
+ * Formate un tonnage en kg ou tonnes selon la magnitude — virgule décimale française (« 6,3 t »),
+ * comme tout le reste de l'app : l'ancien « 6.3 t » détonnait dans une interface en français.
  */
 export function formatTonnage(kg: number): string {
-  if (kg >= 1000) return `${(kg / 1000).toFixed(1)} t`;
+  if (kg >= 1000) {
+    const tonnes = (kg / 1000).toLocaleString("fr-FR", {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    });
+    return `${tonnes} t`;
+  }
   return `${Math.round(kg)} kg`;
 }
 

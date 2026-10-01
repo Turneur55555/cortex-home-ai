@@ -4,6 +4,7 @@ import { SeancesHero } from "@/components/fitness/SeancesHero";
 import { ChoisirEpreuveCard } from "@/components/fitness/ChoisirEpreuveCard";
 import { BodyMap } from "@/components/fitness/BodyMap";
 import { type WorkoutRow } from "@/components/fitness/WorkoutCard";
+import { LastSessionRow } from "@/components/fitness/LastSessionRow";
 import { RepeatLiveConfirmDialog } from "@/components/fitness/RepeatLiveConfirmDialog";
 import { WorkoutSheet } from "@/components/fitness/WorkoutSheet";
 import { GenericSessionReviewSheet } from "@/components/fitness/session/GenericSessionReviewSheet";
@@ -58,13 +59,16 @@ type SeancesTabProps = {
    *  ouvre « Choisir une épreuve » d'office, UNE seule fois, et seulement si
    *  aucune séance n'est en cours (voir l'effet plus bas). */
   initialNewSession?: boolean;
+  /** Deep-link (`?refaire=<id>`) depuis la Carte du jour : ouvre la confirmation « Refaire en
+   *  live » de cette séance, UNE seule fois, et seulement si aucune séance n'est en cours. */
+  initialRepeatWorkoutId?: string;
 } & (
   | { view?: "arene"; chroniques?: undefined }
   | { view: "chroniques"; chroniques: ChroniquesRouting }
 );
 
 export function SeancesTab(props: SeancesTabProps = {}) {
-  const { initialNewSession } = props;
+  const { initialNewSession, initialRepeatWorkoutId } = props;
   const routing = props.view === "chroniques" ? props.chroniques : null;
   const { data, isLoading, error } = useWorkouts();
   const { data: activeWorkout, isLoading: activeLoading } = useActiveWorkout();
@@ -208,6 +212,27 @@ export function SeancesTab(props: SeancesTabProps = {}) {
     },
     [startFromTemplate],
   );
+  // Refaire demandé par la Carte du jour : consommé une seule fois, une fois l'historique ET la
+  // séance en cours CONNUS — décider avant, c'est ouvrir une confirmation derrière une séance
+  // déjà active, ou ne rien trouver dans un historique pas encore lu.
+  const pendingRepeat = useRef(initialRepeatWorkoutId ?? null);
+  useEffect(() => {
+    const wantedId = pendingRepeat.current;
+    if (!wantedId) return;
+    if (isLoading || activeLoading || activeGenericLoading) return;
+    pendingRepeat.current = null;
+    if (activeWorkout || activeGeneric) return;
+    const target = data?.find((w) => w.id === wantedId);
+    if (target) repeatLive(target);
+  }, [
+    isLoading,
+    activeLoading,
+    activeGenericLoading,
+    activeWorkout,
+    activeGeneric,
+    data,
+    repeatLive,
+  ]);
   const confirmRepeatLive = useCallback(() => {
     const w = repeatCandidate;
     setRepeatCandidate(null);
@@ -571,6 +596,9 @@ export function SeancesTab(props: SeancesTabProps = {}) {
 
       {/* ── Nouvelle séance — porte d'entrée unique (Phase A, A.1) ───── */}
       <ChoisirEpreuveCard onClick={() => setNewSessionSheetOpen(true)} />
+
+      {/* ── Dernière séance — l'Arène montre enfin une séance FAITE ──── */}
+      <LastSessionRow workouts={data} />
 
       {/* ── Mon rythme — le plan de la semaine (B06) : ce qui est prévu, ce
           qui est fait, ce qui reste. Porte son propre éditeur. ─────────── */}

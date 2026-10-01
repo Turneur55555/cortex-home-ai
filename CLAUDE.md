@@ -117,6 +117,14 @@ Pour le projet Cortex :
   redemander**, puis **enchaîner sur le chantier suivant de la feuille de route** sans attendre. Ce
   n'est pas un blanc-seing : un chantier rouge n'est jamais publié, et l'état réel (publié ou non,
   vérifié ou non) est toujours dit tel quel.
+- **Autorisation étendue (Nathan, 01/10/2026)** : « je t'autorise à tout, arrête de me poser la
+  question » et « tu peux utiliser Supabase ». Donc : plus de question de validation sur la feuille
+  de route ni sur une décision d'implémentation — choisir, faire, et dire ce qui a été choisi. Les
+  outils Supabase (lecture de la production pour mesurer, migrations selon le workflow ci-dessus)
+  sont autorisés. Même bornes : jamais de chantier rouge publié, jamais d'état annoncé qui n'est
+  pas vérifié, et une opération destructive sur les données de production (suppression, réécriture
+  massive) se vérifie sur la cible avant et se rapporte après — l'autorisation n'est pas un permis
+  d'effacer.
 
 ## À la fin de chaque session, mettre à jour :
 - MEMORY.md → ajouter tout nouveau composant, hook, migration, feature, décision d'archi découvert pendant la session

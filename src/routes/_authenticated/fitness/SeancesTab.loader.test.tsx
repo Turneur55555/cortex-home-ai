@@ -92,6 +92,7 @@ vi.mock("@/components/fitness/chronique/ChroniquesPage", () => stub("ChroniquesP
 // E20 : le sélecteur d'étages est fait de liens, qui exigent un routeur — sans rapport avec la
 // décision d'affichage testée ici (voir SeancesStageSwitch.test.tsx).
 vi.mock("@/components/fitness/SeancesStageSwitch", () => stub("SeancesStageSwitch"));
+vi.mock("@/components/fitness/LastSessionRow", () => stub("LastSessionRow"));
 // B06 : la carte du plan de la semaine lit le plan, les séances et les modèles,
 // et exige un AuthProvider — sans rapport avec la décision d'affichage testée ici.
 vi.mock("@/components/fitness/plan/WeekPlanCard", () => stub("WeekPlanCard"));
@@ -248,5 +249,87 @@ describe("SeancesTab — ouverture d'office de « Choisir une épreuve » (Carte
     };
     render({ initialNewSession: true });
     expect(container.querySelector(SHEET)).toBeNull();
+  });
+});
+
+describe("SeancesTab — « Refaire » demandé par la Carte du jour (?refaire=<id>)", () => {
+  const DIALOG = '[data-testid="stub-RepeatLiveConfirmDialog"]';
+  const past = {
+    id: "w-9",
+    name: "Jambes",
+    date: "2026-09-24",
+    created_at: "2026-09-24T08:00:00Z",
+    exercises: [],
+  };
+  const activeWorkout = {
+    id: "w-1",
+    name: "Push Day",
+    created_at: "2026-09-07T08:00:00Z",
+    exercises: [],
+  };
+
+  it("sans demande, la confirmation n'est jamais ouverte", () => {
+    state.workouts = { data: [past], isLoading: false, error: null };
+    render();
+    expect(container.querySelector(DIALOG)).toBeNull();
+  });
+
+  it("demandée, séance connue et aucune séance en cours → la confirmation s'ouvre", () => {
+    state.workouts = { data: [past], isLoading: false, error: null };
+    render({ initialRepeatWorkoutId: "w-9" });
+    expect(container.querySelector(DIALOG)).not.toBeNull();
+  });
+
+  it("attend que l'historique et la séance active soient CONNUS avant de décider", () => {
+    state.workouts = { data: undefined as unknown as unknown[], isLoading: true, error: null };
+    state.active = { data: null, isLoading: true };
+    render({ initialRepeatWorkoutId: "w-9" });
+    expect(container.querySelector(DIALOG)).toBeNull();
+
+    state.workouts = { data: [past], isLoading: false, error: null };
+    state.active = { data: null, isLoading: false };
+    render({ initialRepeatWorkoutId: "w-9" });
+    expect(container.querySelector(DIALOG)).not.toBeNull();
+  });
+
+  it("séance en cours connue seulement APRÈS le chargement : la demande n'est pas consommée trop tôt", () => {
+    state.workouts = { data: [past], isLoading: false, error: null };
+    state.active = { data: null, isLoading: true };
+    render({ initialRepeatWorkoutId: "w-9" });
+    expect(container.querySelector(DIALOG)).toBeNull();
+
+    state.active = { data: activeWorkout, isLoading: false };
+    render({ initialRepeatWorkoutId: "w-9" });
+    expect(container.querySelector(DIALOG)).toBeNull();
+    expect(container.querySelector('[data-testid="stub-ActiveWorkoutView"]')).not.toBeNull();
+  });
+
+  it("séance en cours : rien ne s'ouvre, et la confirmation ne reste PAS armée pour la clôture", () => {
+    state.workouts = { data: [past], isLoading: false, error: null };
+    state.active = { data: activeWorkout, isLoading: false };
+    render({ initialRepeatWorkoutId: "w-9" });
+    expect(container.querySelector(DIALOG)).toBeNull();
+
+    // La séance se termine : retour à la vue normale, SANS confirmation surgie.
+    state.active = { data: null, isLoading: false };
+    render({ initialRepeatWorkoutId: "w-9" });
+    expect(container.querySelector(DIALOG)).toBeNull();
+  });
+
+  it("identifiant inconnu : on ignore, jamais d'erreur ni de confirmation vide", () => {
+    state.workouts = { data: [past], isLoading: false, error: null };
+    render({ initialRepeatWorkoutId: "n-existe-pas" });
+    expect(container.querySelector(DIALOG)).toBeNull();
+    expect(container.querySelector('[data-testid="stub-SeancesHero"]')).not.toBeNull();
+  });
+
+  it("séance GÉNÉRIQUE en cours : rien ne s'ouvre non plus", () => {
+    state.workouts = { data: [past], isLoading: false, error: null };
+    state.generic = {
+      data: { id: "g-1", name: "Footing", created_at: "2026-09-07T08:00:00Z", segments: [] },
+      isLoading: false,
+    };
+    render({ initialRepeatWorkoutId: "w-9" });
+    expect(container.querySelector(DIALOG)).toBeNull();
   });
 });

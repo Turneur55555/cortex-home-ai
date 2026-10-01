@@ -191,6 +191,65 @@ describe("buildWeeklyReport — les chiffres", () => {
     ).toBeNull();
   });
 
+  describe("« Temps » : jamais une durée implausible (séance restée ouverte, enregistrée au plafond)", () => {
+    it("une séance à 600 min (le plafond de clôture) : pas de Temps, plutôt qu'un total faux de plusieurs heures", () => {
+      const r = report(monday(1), [
+        withVolume(day(1, 0), 500, { duration_minutes: 45 }),
+        withVolume(day(1, 2), 500, { duration_minutes: 600 }),
+      ])!;
+      expect(r.minutes).toBeNull();
+    });
+
+    it("le cas mesuré en production : 4 séances dont 3 au plafond ne donnent pas « 30 h 40 »", () => {
+      const r = report(monday(1), [
+        withVolume(day(1, 0), 500, { duration_minutes: 600 }),
+        withVolume(day(1, 1), 500, { duration_minutes: 40 }),
+        withVolume(day(1, 2), 500, { duration_minutes: 600 }),
+        withVolume(day(1, 3), 500, { duration_minutes: 600 }),
+      ])!;
+      expect(r.minutes).toBeNull();
+    });
+
+    it("l'ordre des séances ne change rien : une durée implausible suivie d'une ordinaire reste inconnue", () => {
+      const r = report(monday(1), [
+        withVolume(day(1, 0), 500, { duration_minutes: 600 }),
+        withVolume(day(1, 2), 500, { duration_minutes: 45 }),
+      ])!;
+      expect(r.minutes).toBeNull();
+    });
+
+    it("la plus longue durée plausible reste comptée telle quelle", () => {
+      const r = report(monday(1), [
+        withVolume(day(1, 0), 500, { duration_minutes: 240 }),
+        withVolume(day(1, 2), 500, { duration_minutes: 60 }),
+      ])!;
+      expect(r.minutes).toBe(300);
+    });
+
+    it("juste au-dessus du seuil : inconnue", () => {
+      expect(
+        report(monday(1), [withVolume(day(1, 0), 500, { duration_minutes: 241 })])!.minutes,
+      ).toBeNull();
+    });
+
+    it("une séance sans durée n'a jamais rendu le Temps inconnu : seule une durée IMPLAUSIBLE le fait", () => {
+      const r = report(monday(1), [
+        withVolume(day(1, 0), 500, { duration_minutes: 50 }),
+        withVolume(day(1, 2), 500, { duration_minutes: null }),
+      ])!;
+      expect(r.minutes).toBe(50);
+    });
+
+    it("une semaine voisine n'est pas contaminée par la séance au plafond d'une autre", () => {
+      const all = [
+        withVolume(day(1, 0), 500, { duration_minutes: 600 }),
+        withVolume(day(2, 0), 500, { duration_minutes: 55 }),
+      ];
+      expect(report(monday(2), all)!.minutes).toBe(55);
+      expect(report(monday(1), all)!.minutes).toBeNull();
+    });
+  });
+
   it("une séance en dehors de la semaine (la veille, le lendemain) n'est pas comptée", () => {
     const r = report(monday(1), [
       withVolume(day(2, 6), 9999), // dimanche d'avant

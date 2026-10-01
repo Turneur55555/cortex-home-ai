@@ -16,6 +16,7 @@
 import { buildGroups, sessionMuscleActivation } from "./workoutGrouping";
 import type { ExerciseLike } from "./workoutGrouping";
 import { estimateSessionCalories } from "./eat";
+import { plausibleDurationMinutes } from "./sessionDuration";
 import { formatTonnage } from "./strength";
 import { MUSCLE_META, type MuscleId } from "./muscleMapping";
 
@@ -142,7 +143,8 @@ export function computeHallOfFame(
   }
 
   for (const w of workouts) {
-    const minutes = w.duration_minutes ?? 0;
+    // Une durée implausible (plafond de clôture d'une séance restée ouverte) n'est pas un record.
+    const minutes = plausibleDurationMinutes(w.duration_minutes) ?? 0;
     if (minutes > 0 && (longestSession == null || minutes > longestSession.minutes)) {
       longestSession = { minutes, date: w.date, workoutName: w.name || "Séance" };
     }
@@ -168,7 +170,7 @@ export function computeHallOfFame(
     if (volume > 0 && (bestTonnage == null || volume > bestTonnage.value)) {
       bestTonnage = { value: Math.round(volume), date: w.date, workoutName: name };
     }
-    const minutes = w.duration_minutes ?? 0;
+    const minutes = plausibleDurationMinutes(w.duration_minutes) ?? 0;
     const estimate = estimateSessionCalories(
       { ...w, duration_minutes: w.duration_minutes ?? null },
       bodyWeightKg,

@@ -57,6 +57,9 @@ export function TodayCard() {
       case "new-session":
         void navigate({ to: "/seances", search: { demarrer: "nouvelle" } });
         return;
+      case "repeat-session":
+        void navigate({ to: "/seances", search: { refaire: action.workoutId } });
+        return;
       case "edit-plan":
         setPlanOpen(true);
         return;

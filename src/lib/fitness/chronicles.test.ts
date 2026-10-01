@@ -57,6 +57,13 @@ describe("computeHallOfFame", () => {
     expect(hof.career.prCount).toBe(2); // DC 90 puis 100
   });
 
+  it("la plus longue séance ignore une durée implausible (plafond d'une séance restée ouverte)", () => {
+    const capped = HISTORY.map((w, i) => (i === 0 ? { ...w, duration_minutes: 600 } : w));
+    const hof = computeHallOfFame(capped, 75);
+    expect(hof.longestSession!.minutes).not.toBe(600);
+    expect(hof.longestSession!.minutes).toBeLessThanOrEqual(240);
+  });
+
   it("masque (null) ce qui n'existe pas", () => {
     const hof = computeHallOfFame([], null);
     expect(hof.bestTonnage).toBeNull();

@@ -22,6 +22,60 @@
 ## Dernière mise à jour
 2026-10-01
 
+## Analyse produit de l'onglet Séances + correctifs issus des mesures (2026-10-01, branche `claude/cortex-product-audit-dexmp2`)
+
+Demande de Nathan : une analyse produit de l'onglet Séances après tous les chantiers, puis tout ce qu'on peut
+améliorer — avec « je t'autorise à tout, arrête de me poser la question » et « tu peux utiliser Supabase »
+(consigné dans `CLAUDE.md`). **L'analyse complète, avec ses chiffres, est dans
+`docs/archive/2026-10-01-analyse-produit-seances.md`** ; ici, ce qui a changé dans le code.
+
+### Mesures de production (lecture seule) qui ont orienté le lot
+- Saisie live : 54 séances en juillet → 24 en août → 7 en septembre, aucune depuis le 16/09, alors que les
+  repas sont logués chaque jour. Cause inconnue, rien ne la mesure.
+- **4 séances sur 7 de septembre enregistrées à 600 min** (le plafond de clôture) pour une fenêtre réelle de ~20 min.
+- 537 séances importées en août : sans exercice ni série. 540 attributions d'XP (77 % de l'XP du joueur
+  principal) le 06/08 : le trigger serveur verse 100 XP à toute séance `completed`, même sans série validée.
+
+### Code
+- `lib/fitness/sessionDuration.ts` : durée à la clôture (le temps inactif > 90 min avant la première ou après la
+  dernière série validée n'est pas compté) + `plausibleDurationMinutes` (> 240 min = inconnue). Branché dans
+  `useFinishWorkout` (horodatages des séries validées lus dans le store local) ; affichage : Chronique,
+  `WorkoutCard`, bilan de semaine (pas de « Temps » si une durée est implausible — il aurait écrit « 30 h 40 »),
+  « record de durée ». La donnée stockée n'est pas réécrite : règle dérivée, rétroactive.
+- Chronique honnête : plus d'heure inventée (« 00h00 »), plus d'intensité ni de comparaison pour une séance sans
+  exercice, phrase factuelle, moyennes sur les séances qui portent la valeur, `formatTonnage` en virgule française.
+- `lib/fitness/sessionSuggestion.ts` : la plus ancienne des séances habituelles (≥ 2 fois en 8 semaines, pas faite
+  depuis ≥ 2 jours, avec une référence qui porte des séries). Carte du jour sans plan : « Refaire cette séance » →
+  `/seances?refaire=<id>` → confirmation « Refaire en live » (consommée UNE fois, après chargement de l'historique
+  et de la séance active, comme `?demarrer=`). `LastSessionRow` : « Dernière séance » dans l'Arène.
+- `registerServiceWorker` : l'échec hors connexion (attendu) n'est plus journalisé comme erreur.
+- `lastCompletedSession` renvoie aussi `workoutId`.
+
+### Tests (+92, aucun skip ajouté) et mutations
+`sessionDuration` (23), `sessionSuggestion` (21), `ChroniquePage` (8), `LastSessionRow` (6), cas ajoutés à
+`weeklyReport`, `strength`, `chronicles`, `todayCard`, `TodayCard`, `SeancesTab.loader`, `registerServiceWorker`.
+Mutations : 14 sur la durée / la Chronique (2 survivantes d'abord, dues à des tests faibles — ordre des séances
+et assertion sur la cellule du jour —, corrigées puis tuées) et 12 sur la suggestion / le lien Refaire (11 tuées,
+1 équivalente : l'exclusion d'aujourd'hui est doublée par la garde « pas de suggestion pour ce qui date de moins
+de 2 jours »).
+
+### Vérifié en navigateur (spec jetable, supprimé)
+Historique simulé réaliste : Accueil → « Jambes » proposée avec sa dernière fois → « Refaire cette séance » →
+confirmation « Refaire « Jambes » en live ? » → séance démarrée avec les 5 exercices de la référence et son
+objectif (15 séries · 18 030 kg) → l'URL est nettoyée, le rechargement ne rouvre rien. Arène : « Dernière séance »
+→ Chronique. Chronique d'une séance à 600 min : durée « — », « 3,5 t », pas d'heure ; séance importée : phrase
+factuelle, pas de comparaison. Bilan de semaine : pas de « Temps ».
+
+### Ce qui n'est PAS fait (voir le document d'analyse)
+Funnel de mesure des Séances ; plan déduit du rythme ; rappel de séance restée ouverte ; règle d'XP d'une séance sans
+série (trigger serveur — invariant 3.1, migration testée requise) ; économie d'XP au sommet ; enrichissement des 537
+coquilles ; diagnostic de `/sw.js` en production (injoignable depuis le sandbox) ; l'ancien « Planifier ma semaine »
+n'est plus sur la Carte du jour quand une suggestion existe (il reste dans l'Arène).
+
+### Validation
+`npx vitest run` **2745 passed / 63 skipped / 0 échec** (base G28 : 2653, **+92**). `tsc --noEmit` 0 erreur.
+`npm run lint` **0 erreur / 154 warnings — identique à la base**. Build OK. Aucune migration.
+
 ## G28 « La carte partagée, signée Cortex » + remise en état de l'affiche de rang (2026-10-01, branche `claude/cortex-product-audit-dexmp2`)
 
 Septième chantier produit issu de l'audit. Décision de Nathan : la carte partagée porte une signature — le seul

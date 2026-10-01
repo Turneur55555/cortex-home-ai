@@ -32,6 +32,11 @@ export function registerServiceWorker(): void {
 
   const register = () => {
     navigator.serviceWorker.register("/sw.js").catch((err) => {
+      // Hors connexion, le script ne peut pas être chargé : c'est ATTENDU, pas une erreur. Le
+      // journaliser noyait les vraies erreurs — 71 des 240 lignes de `error_logs` sur 60 jours
+      // étaient ce message, en salle comme sur ordinateur. En ligne, c'est un vrai défaut :
+      // il reste journalisé.
+      if (typeof navigator.onLine === "boolean" && !navigator.onLine) return;
       console.error("[pwa] échec de l'enregistrement du Service Worker", err);
     });
   };

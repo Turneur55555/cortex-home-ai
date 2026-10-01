@@ -320,3 +320,52 @@ describe("TodayCard — les boutons", () => {
     expect(navigate).toHaveBeenCalledWith({ to: "/seances", search: { demarrer: "nouvelle" } });
   });
 });
+
+describe("TodayCard — la séance proposée par l'historique (aucun plan, un rythme connu)", () => {
+  const session = (id: string, date: string, name: string): TodayWorkout =>
+    ({
+      id,
+      date,
+      name,
+      status: "completed",
+      discipline: "muscu",
+      created_at: `${date}T18:00:00.000Z`,
+      exercises: [
+        {
+          id: `e-${id}`,
+          name: "Exo",
+          exercise_sets: [{ reps: 8, weight: 60 }],
+        },
+      ],
+    }) as unknown as TodayWorkout;
+
+  const rhythm = () => [
+    session("j1", "2026-09-24", "Jambes"),
+    session("j0", "2026-09-14", "Jambes"),
+    session("d1", "2026-09-26", "Dos"),
+    session("d0", "2026-09-19", "Dos"),
+  ];
+
+  it("affiche le nom de la séance, sans pourcentage, avec la dernière fois", () => {
+    show(stateFor(emptyWeeklyPlan(), { workouts: rhythm() }));
+    const text = section()?.textContent ?? "";
+    expect(text).toContain("Jambes");
+    expect(text).toContain("La plus ancienne de tes séances habituelles.");
+    expect(text).toContain("La dernière fois");
+    expect(text).not.toMatch(/%|prêt/i);
+  });
+
+  it("« Refaire cette séance » rejoint les Séances avec LA séance de référence, sans rien démarrer ici", async () => {
+    show(stateFor(emptyWeeklyPlan(), { workouts: rhythm() }));
+    await click(button("Refaire cette séance"));
+    expect(navigate).toHaveBeenCalledWith({ to: "/seances", search: { refaire: "j1" } });
+    // La confirmation et le démarrage vivent sur l'écran Séances : aucune séance n'est lancée d'ici.
+    expect(mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("« Autre séance » garde l'accès à « Choisir une épreuve »", async () => {
+    show(stateFor(emptyWeeklyPlan(), { workouts: rhythm() }));
+    await click(button("Autre séance"));
+    expect(navigate).toHaveBeenCalledWith({ to: "/seances", search: { demarrer: "nouvelle" } });
+  });
+});

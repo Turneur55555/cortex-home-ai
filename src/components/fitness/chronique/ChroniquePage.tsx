@@ -49,6 +49,7 @@ import { buildGroups, sessionMuscleActivation } from "@/lib/fitness/workoutGroup
 import { computeRecordsBySession } from "@/lib/fitness/chronicles";
 import { formatTonnage, workoutTonnage } from "@/lib/fitness/strength";
 import { deriveIntensity, formatEstimatedKcal } from "@/lib/fitness/calories";
+import { plausibleDurationMinutes } from "@/lib/fitness/sessionDuration";
 import { estimateSessionCalories } from "@/lib/fitness/eat";
 import { MUSCLE_META, type MuscleId } from "@/lib/fitness/muscleMapping";
 import type { MuscleRecovery } from "@/lib/fitness/recovery";
@@ -64,9 +65,16 @@ const INTENSITY_LABEL: Record<string, string> = {
   cardio: "Cardio",
 };
 
+function intensityLabel(m: { volume: number; duration: number; intensity: string }): string {
+  if (m.volume <= 0 || m.duration <= 0) return "—";
+  return INTENSITY_LABEL[m.intensity] ?? m.intensity;
+}
+
 function metricOf(w: WorkoutRow, bodyWeightKg: number | null) {
   const volume = Math.round(workoutTonnage(w.exercises ?? []));
-  const duration = w.duration_minutes ?? 0;
+  // Durée INCONNUE (0) quand elle est absente ou implausible — le plafond de 600 min d'une séance
+  // restée ouverte n'est pas un fait (`lib/fitness/sessionDuration.ts`).
+  const duration = plausibleDurationMinutes(w.duration_minutes) ?? 0;
   // Calories : temps actif des séries validées, indépendant de la durée
   // totale (voir eat.ts → estimateSessionCalories). L'indicateur "intensité"
   // ci-dessous reste dérivé du tonnage/minute — c'est une stat de
@@ -209,10 +217,17 @@ export function ChroniquePage({
     if (prs.length > 0) {
       parts.push(prs.length === 1 ? "Un record est tombé." : `${prs.length} records sont tombés.`);
     }
-    if (parts.length === 0)
-      parts.push("Chaque série compte. Cette séance fait partie de ta légende.");
+    if (parts.length === 0) {
+      // Aucun exercice enregistré (séance importée) : on le dit, plutôt qu'une phrase qui
+      // célèbre une séance dont on ne sait rien.
+      parts.push(
+        agg.exoCount === 0
+          ? "Aucun exercice enregistré pour cette séance : seuls sa date et son nom sont connus."
+          : "Chaque série compte. Cette séance fait partie de ta légende.",
+      );
+    }
     return parts.join(" ");
-  }, [analysis, primaryMuscle, agg.volume, agg.duration, prs.length]);
+  }, [analysis, primaryMuscle, agg.volume, agg.duration, agg.exoCount, prs.length]);
 
   // Progression : on cible les exercices de CETTE séance qui ont au moins 2
   // points d'historique (le composant existant ignore les autres).
@@ -231,12 +246,23 @@ export function ChroniquePage({
       m: metricOf(w, bodyWeightKg ?? null),
       records: (recordsBySession.get(w.id) ?? []).filter((r) => !r.isNew).length,
     }));
-    const n = metrics.length || 1;
+    // Moyennes sur les séances qui PORTENT la valeur : une séance importée (sans exercice) ou dont
+    // la durée est inconnue n'est pas une séance « à zéro » — la compter tirerait toute la moyenne
+    // vers le bas.
+    const mean = (values: number[], decimals = 0) => {
+      if (values.length === 0) return 0;
+      const factor = 10 ** decimals;
+      return Math.round((values.reduce((s, v) => s + v, 0) / values.length) * factor) / factor;
+    };
+    const withData = metrics.filter((x) => x.m.volume > 0);
     const avg = {
-      volume: Math.round(metrics.reduce((s, x) => s + x.m.volume, 0) / n),
-      calories: Math.round(metrics.reduce((s, x) => s + (x.m.calories ?? 0), 0) / n),
-      duration: Math.round(metrics.reduce((s, x) => s + x.m.duration, 0) / n),
-      records: Math.round((metrics.reduce((s, x) => s + x.records, 0) / n) * 10) / 10,
+      volume: mean(withData.map((x) => x.m.volume)),
+      calories: mean(metrics.flatMap((x) => (x.m.calories != null ? [x.m.calories] : []))),
+      duration: mean(metrics.filter((x) => x.m.duration > 0).map((x) => x.m.duration)),
+      records: mean(
+        withData.map((x) => x.records),
+        1,
+      ),
     };
     // Meilleure séance = plus gros volume de tout l'historique muscu.
     let best: WorkoutRow | null = null;
@@ -265,7 +291,6 @@ export function ChroniquePage({
 
   const dateLong = format(parseISO(workout.date), "EEEE d MMMM", { locale: fr });
   const dateShort = format(parseISO(workout.date), "d MMM", { locale: fr });
-  const timeLabel = format(parseISO(workout.date), "HH'h'mm", { locale: fr });
 
   const heroTiles: StatTileSpec[] = [
     {
@@ -340,7 +365,7 @@ export function ChroniquePage({
           />
           <div className="relative p-6">
             <p className="flex flex-wrap items-center gap-2 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground/80">
-              {dateLong} • {timeLabel}
+              {dateLong}
               <DisciplineBadge
                 icon={ENGINE_REGISTRY.muscu.icon}
                 label={ENGINE_REGISTRY.muscu.label}
@@ -603,87 +628,88 @@ export function ChroniquePage({
         </SectionReveal>
       )}
 
-      {/* ── COMPARAISON ───────────────────────────────────────────────── */}
-      <SectionReveal>
-        <div>
-          <SectionTitle icon={<Layers className="h-4 w-4" />}>Comparaison</SectionTitle>
-          <GlassCard>
-            <div className="p-4">
-              <div className="grid grid-cols-[1.1fr_1fr_1fr_1fr] gap-2 border-b border-white/[0.06] pb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-                <span />
-                <span className="text-center text-primary">Aujourd'hui</span>
-                <span className="text-center">Moy. 30j</span>
-                <span className="text-center">Record</span>
+      {/* ── COMPARAISON ─── masquée pour une séance sans exercice : un tableau de « — » ne dit rien. */}
+      {agg.exoCount > 0 && (
+        <SectionReveal>
+          <div>
+            <SectionTitle icon={<Layers className="h-4 w-4" />}>Comparaison</SectionTitle>
+            <GlassCard>
+              <div className="p-4">
+                <div className="grid grid-cols-[1.1fr_1fr_1fr_1fr] gap-2 border-b border-white/[0.06] pb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                  <span />
+                  <span className="text-center text-primary">Aujourd'hui</span>
+                  <span className="text-center">Moy. 30j</span>
+                  <span className="text-center">Record</span>
+                </div>
+                {[
+                  {
+                    label: "Volume",
+                    today: agg.volume > 0 ? formatTonnage(agg.volume) : "—",
+                    avg: comparison.avg.volume > 0 ? formatTonnage(comparison.avg.volume) : "—",
+                    best:
+                      comparison.bestMetric && comparison.bestMetric.volume > 0
+                        ? formatTonnage(comparison.bestMetric.volume)
+                        : "—",
+                  },
+                  {
+                    label: "Calories",
+                    today: agg.calories != null ? formatEstimatedKcal(agg.calories) : "—",
+                    avg:
+                      comparison.avg.calories > 0
+                        ? formatEstimatedKcal(comparison.avg.calories)
+                        : "—",
+                    best:
+                      comparison.bestMetric?.calories != null
+                        ? formatEstimatedKcal(comparison.bestMetric.calories)
+                        : "—",
+                  },
+                  {
+                    label: "Intensité",
+                    // Une intensité se dérive du tonnage PAR MINUTE : sans tonnage ou sans durée connue,
+                    // « Légère » serait un verdict sans fait.
+                    today: intensityLabel(agg),
+                    avg: "—",
+                    best: comparison.bestMetric ? intensityLabel(comparison.bestMetric) : "—",
+                  },
+                  {
+                    label: "Records",
+                    today: `${prs.length}`,
+                    avg: `${comparison.avg.records}`,
+                    best: `${comparison.bestRecords}`,
+                  },
+                  {
+                    label: "Temps",
+                    today: agg.duration > 0 ? `${agg.duration} min` : "—",
+                    avg: comparison.avg.duration > 0 ? `${comparison.avg.duration} min` : "—",
+                    best:
+                      comparison.bestMetric && comparison.bestMetric.duration > 0
+                        ? `${comparison.bestMetric.duration} min`
+                        : "—",
+                  },
+                ].map((row) => (
+                  <div
+                    key={row.label}
+                    className="grid grid-cols-[1.1fr_1fr_1fr_1fr] items-center gap-2 border-b border-white/[0.04] py-2.5 text-sm last:border-0"
+                  >
+                    <span className="text-xs font-medium text-muted-foreground">{row.label}</span>
+                    <span className="text-center font-bold tabular-nums text-primary">
+                      {row.today}
+                    </span>
+                    <span className="text-center tabular-nums text-white/70">{row.avg}</span>
+                    <span className="text-center tabular-nums text-white/70">{row.best}</span>
+                  </div>
+                ))}
+                {comparison.isBest && (
+                  <div className="mt-3 flex items-center justify-center gap-1.5 rounded-xl bg-amber-400/10 py-2 text-[11px] font-semibold text-amber-400">
+                    <Trophy className="h-3.5 w-3.5" />
+                    Ta meilleure séance en volume
+                  </div>
+                )}
               </div>
-              {[
-                {
-                  label: "Volume",
-                  today: agg.volume > 0 ? formatTonnage(agg.volume) : "—",
-                  avg: comparison.avg.volume > 0 ? formatTonnage(comparison.avg.volume) : "—",
-                  best:
-                    comparison.bestMetric && comparison.bestMetric.volume > 0
-                      ? formatTonnage(comparison.bestMetric.volume)
-                      : "—",
-                },
-                {
-                  label: "Calories",
-                  today: agg.calories != null ? formatEstimatedKcal(agg.calories) : "—",
-                  avg:
-                    comparison.avg.calories > 0
-                      ? formatEstimatedKcal(comparison.avg.calories)
-                      : "—",
-                  best:
-                    comparison.bestMetric?.calories != null
-                      ? formatEstimatedKcal(comparison.bestMetric.calories)
-                      : "—",
-                },
-                {
-                  label: "Intensité",
-                  today: INTENSITY_LABEL[agg.intensity] ?? agg.intensity,
-                  avg: "—",
-                  best: comparison.bestMetric
-                    ? (INTENSITY_LABEL[comparison.bestMetric.intensity] ??
-                      comparison.bestMetric.intensity)
-                    : "—",
-                },
-                {
-                  label: "Records",
-                  today: `${prs.length}`,
-                  avg: `${comparison.avg.records}`,
-                  best: `${comparison.bestRecords}`,
-                },
-                {
-                  label: "Temps",
-                  today: agg.duration > 0 ? `${agg.duration} min` : "—",
-                  avg: comparison.avg.duration > 0 ? `${comparison.avg.duration} min` : "—",
-                  best:
-                    comparison.bestMetric && comparison.bestMetric.duration > 0
-                      ? `${comparison.bestMetric.duration} min`
-                      : "—",
-                },
-              ].map((row) => (
-                <div
-                  key={row.label}
-                  className="grid grid-cols-[1.1fr_1fr_1fr_1fr] items-center gap-2 border-b border-white/[0.04] py-2.5 text-sm last:border-0"
-                >
-                  <span className="text-xs font-medium text-muted-foreground">{row.label}</span>
-                  <span className="text-center font-bold tabular-nums text-primary">
-                    {row.today}
-                  </span>
-                  <span className="text-center tabular-nums text-white/70">{row.avg}</span>
-                  <span className="text-center tabular-nums text-white/70">{row.best}</span>
-                </div>
-              ))}
-              {comparison.isBest && (
-                <div className="mt-3 flex items-center justify-center gap-1.5 rounded-xl bg-amber-400/10 py-2 text-[11px] font-semibold text-amber-400">
-                  <Trophy className="h-3.5 w-3.5" />
-                  Ta meilleure séance en volume
-                </div>
-              )}
-            </div>
-          </GlassCard>
-        </div>
-      </SectionReveal>
+            </GlassCard>
+          </div>
+        </SectionReveal>
+      )}
 
       {/* ── HISTORIQUE — chronique précédente / suivante ──────────────── */}
       <SectionReveal>
