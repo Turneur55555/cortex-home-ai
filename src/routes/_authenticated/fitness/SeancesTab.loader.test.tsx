@@ -90,6 +90,9 @@ vi.mock("@/components/fitness/session/SessionRecapScreen", () => stub("SessionRe
 vi.mock("@/components/fitness/chronique/ChroniquePage", () => stub("ChroniquePage"));
 vi.mock("@/components/fitness/chronique/ChroniquesEntryCard", () => stub("ChroniquesEntryCard"));
 vi.mock("@/components/fitness/chronique/ChroniquesPage", () => stub("ChroniquesPage"));
+// B06 : la carte du plan de la semaine lit le plan, les séances et les modèles,
+// et exige un AuthProvider — sans rapport avec la décision d'affichage testée ici.
+vi.mock("@/components/fitness/plan/WeekPlanCard", () => stub("WeekPlanCard"));
 vi.mock("@/components/fitness/SectionReveal", () => ({
   SectionReveal: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));

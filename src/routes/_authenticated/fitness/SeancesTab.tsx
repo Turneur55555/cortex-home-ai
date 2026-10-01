@@ -22,6 +22,7 @@ import { ChroniquePage } from "@/components/fitness/chronique/ChroniquePage";
 import { ChroniquesEntryCard } from "@/components/fitness/chronique/ChroniquesEntryCard";
 import { ChroniquesPage } from "@/components/fitness/chronique/ChroniquesPage";
 import { SectionReveal } from "@/components/fitness/SectionReveal";
+import { WeekPlanCard } from "@/components/fitness/plan/WeekPlanCard";
 import {
   useExerciseImageUrls,
   useWorkouts,
@@ -485,6 +486,10 @@ export function SeancesTab({ initialChroniques }: SeancesTabProps = {}) {
 
       {/* ── Nouvelle séance — porte d'entrée unique (Phase A, A.1) ───── */}
       <ChoisirEpreuveCard onClick={() => setNewSessionSheetOpen(true)} />
+
+      {/* ── Mon rythme — le plan de la semaine (B06) : ce qui est prévu, ce
+          qui est fait, ce qui reste. Porte son propre éditeur. ─────────── */}
+      <WeekPlanCard />
 
       {error && !isLoading && (
         <div className="rounded-2xl border border-destructive/50 bg-destructive/10 p-4">

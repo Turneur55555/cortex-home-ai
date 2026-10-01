@@ -66,6 +66,31 @@ jamais par-dessus l'écran courant.
 React Query. Avant cela, l'utilisateur est averti s'il reste du travail non synchronisé.
 → `src/hooks/use-auth.tsx`, `src/lib/offline/signOutGuard.ts`
 
+### 1.7 Le plan de la semaine : jamais d'UNIQUE, jamais d'état stocké
+
+`weekly_plan_days` (le plan « Mon rythme ») est branchée sur `createOfflineRepository`, donc un
+jour peut être créé hors ligne sur deux appareils. Deux règles en découlent :
+
+- **Aucune contrainte `UNIQUE (user_id, day_of_week)`.** Une violation d'unicité que le moteur ne
+  connaît pas est classée _définitive_ (`classifyUniqueViolation`) : l'opération passerait `blocked`
+  et allumerait le point d'attention du Profil pour un simple changement de planning. Le doublon se
+  départage **à la lecture** (`resolveWeeklyPlan` : la ligne valide la plus récente gagne) et
+  l'écriture le nettoie au passage.
+- **L'état fait / à faire n'est jamais stocké.** Il se dérive à la lecture des séances de
+  musculation terminées de la semaine (`buildWeekView`) : rien à réconcilier, rien qui puisse
+  diverger de la réalité.
+
+Corollaire : `template_id` est `ON DELETE SET NULL` et **aucun `CHECK` n'exige qu'il soit non nul**,
+sinon supprimer un modèle serait bloqué par le planning.
+Une écriture de jour envoie toujours les trois champs de contenu (`kind`, `muscle_groups`,
+`template_id`) dans le même patch, sans quoi le `CHECK` de cohérence refuserait un « repos » portant
+encore un `template_id` — encore une opération `blocked`.
+→ `supabase/migrations/20260930120000_weekly_plan_days.sql`, `src/lib/fitness/weeklyPlan.ts`,
+`src/hooks/useWeeklyPlan.ts` (`writePlanDay`)
+→ vérifié par `weeklyPlan.test.ts` (scan de la migration : ni `UNIQUE`, ni colonne d'état, ni
+`CHECK` exigeant `template_id`), `hooks/useWeeklyPlan.test.ts` (patch complet, doublon nettoyé,
+écritures simultanées d'un même jour)
+
 ---
 
 ## 2. Séance : unicité, numérotation, clôture

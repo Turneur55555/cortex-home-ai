@@ -137,7 +137,8 @@ Les enfants d'une séance prouvée supprimée sont inclus dans le périmètre
 Toutes les autres hydratations (`recipes`, `recipe_ingredients`, `nutrition`,
 `shopping_list`, `meal_plans`, `saved_meals`, `nutrition_favorites`,
 `food_custom_foods`, `supplements`, `physical_goals`, `recipe_collections`,
-`workout_templates` et ses enfants, `workout_analyses`) restent **additives**.
+`workout_templates` et ses enfants, `workout_analyses`, `weekly_plan_days` — cette
+dernière plafonnée à `limit(100)`, très au-dessus de ses 7 lignes) restent **additives**.
 Leur requête n'est pas paginée explicitement : elle peut donc être tronquée
 en silence par `max-rows`, et « absent de la réponse » n'y est pas une preuve
 de suppression. Les rendre réconciliables demanderait d'abord de les paginer

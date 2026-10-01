@@ -20,7 +20,138 @@
 > regroupés sous [`docs/archive/`](docs/archive/).
 
 ## Dernière mise à jour
-2026-09-30
+2026-10-01
+
+## B06 « Mon rythme » — le plan de la semaine (2026-10-01, branche `claude/cortex-product-audit-dexmp2`)
+
+Premier chantier produit issu de l'audit du 07/09, après les maquettes validées par Nathan : un
+**plan hebdomadaire récurrent**. Pour chaque jour de la semaine : repos, des groupes musculaires, ou
+**une séance sauvegardée avec son nombre de séries**. Visible sur l'écran Séances (bande de la
+semaine : fait / aujourd'hui / à venir / manqué / repos / libre), modifiable en deux appuis.
+Les maquettes A01 (Accueil), C13 (objectif de séance), F26 (rapport hebdo) et G28 (signature) en
+dépendent et **ne sont pas encore codées** ; la bande de la semaine est conçue pour être remontée telle
+quelle sur l'Accueil.
+
+### Livraison en DEUX temps, imposée par la règle des types
+Une table branchée sur `createOfflineRepository` casse `tsc` (`OfflineCompatibleTableName`) et
+`check:offline-contract` tant qu'elle est absente de `types.ts` — que la règle du dépôt interdit
+d'éditer à la main. Donc : **(1)** la migration seule, poussée sur `main` → `migrate.yml` crée la
+table puis régénère `types.ts` (commit CI `09bf7bd`, +41 lignes) ; **(2)** seulement ensuite le code.
+Pendant l'attente de la CI, la logique pure (qui n'a besoin d'aucun type de base) a été écrite.
+
+### Pourquoi une table, et pas `user_preferences`
+`useUserPreferences` n'est **pas offline-first** (requête Supabase directe qui échoue hors ligne). Y
+ranger le plan aurait cassé la Carte du jour en salle sans réseau. Le plan est donc une vraie table
+`weekly_plan_days` (au plus 7 lignes/utilisateur) sur `createOfflineRepository`, écrite en local
+d'abord, comme `physical_goals`.
+
+### Décisions d'architecture (verrouillées par l'invariant **1.7**, `docs/INVARIANTS.md`)
+- **Aucune contrainte `UNIQUE (user_id, day_of_week)`.** Vérifié dans `syncErrors.ts` : un 23505
+  inconnu du moteur est classé *définitif* → opération `blocked` → point d'attention du Profil pour
+  un simple changement de planning. Deux appareils qui créent le même jour hors ligne produisent donc
+  un doublon **toléré**, départagé à la lecture (`resolveWeeklyPlan` : la ligne *valide* la plus
+  récente gagne, une ligne illisible plus récente ne masque jamais une valide) et nettoyé à l'écriture.
+- **L'état fait / à faire n'est jamais stocké** : dérivé à la lecture des séances de musculation
+  *terminées* (`buildWeekView`). Règle choisie par Nathan : n'importe quelle séance de musculation
+  valide le jour — pas « une séance touchant le bon groupe », qui créerait des jours à moitié validés.
+  Une séance sur un jour de repos ou libre est un **bonus** (`extraDays`), jamais un manque.
+- **`template_id` en `ON DELETE SET NULL`, sans `CHECK` qui l'exige** : supprimer un modèle ne doit
+  jamais être bloqué par le planning. Le jour reste un jour d'entraînement, affiché « Séance
+  supprimée » — jamais effacé en silence.
+- **Un patch d'écriture porte toujours les trois champs de contenu** (`kind`, `muscle_groups`,
+  `template_id`). Passer de « séance » à « repos » doit effacer `template_id` dans le même patch, sinon
+  le `CHECK` de cohérence refuserait un repos portant encore un modèle (→ `blocked`).
+- **Honnêteté du chiffre** : « N séries prévues » n'est annoncé que si TOUS les jours d'entraînement
+  ont un nombre de séries connu (`PlannedLoad.complete`) ; sinon « au moins N séries ». Un modèle dont
+  un exercice n'a pas de séries affiche « 12+ séries », jamais un total inventé.
+- **« Modèles pas encore chargés » ≠ « modèle supprimé »** : `templatesById = null` affiche « … ».
+  Sans cette distinction, un chargement lent accusait à tort « séance supprimée » à chaque ouverture.
+
+### Fichiers
+`supabase/migrations/20260930120000_weekly_plan_days.sql` ; `lib/fitness/weeklyPlan.ts` (domaine
+pur : résolution, validation, `planDayWrite`, `buildWeekView`, `summarizeWeek`, `plannedWeeklyLoad`,
+`describePlanDay`…) ; `lib/exclusiveByKey.ts` (exclusion mutuelle par clé — **même principe** que
+`activeWorkoutStart.ts`/`setNumberAllocation.ts`, volontairement un module à part : ces deux-là sont
+gelés, et une table de chaînes partagée ferait attendre une écriture de planning derrière le
+démarrage d'une séance) ; `hooks/useWeeklyPlan.ts` (repository, requête offline-first, `writePlanDay`,
+`useSetPlanDay`) ; `hooks/useWeekPlanView.ts` (composition plan + séances + modèles) ;
+`hooks/useLocalToday.ts` ; `components/fitness/plan/` (`WeekStrip`, `WeekPlanCard`, `WeeklyPlanSheet`).
+`SeancesTab.tsx` monte `WeekPlanCard` sous « Choisir une épreuve ».
+Le hook de requête vit dans le même fichier que le repository : `offlineQueryConvention.test.ts`
+exige que le marqueur offline-first ne se trouve que dans un module à store local (TEST 3).
+
+### Pièges rencontrés
+- **Mon propre test de migration a d'abord échoué à tort** : `now()` est figé pendant une
+  transaction, donc `updated_at` ne peut pas « avancer » dans un test qui s'exécute en une seule
+  transaction. L'assertion était défectueuse, pas la migration (`set_updated_at()` = `NEW.updated_at =
+  now()`, lu dans la définition réelle). Corrigé en insérant un `updated_at` ancien avant l'`UPDATE`.
+- **Défaut trouvé à la relecture de mon propre code** : `contentOf` ramenait un `kind` inconnu à
+  « repos ». Si un jour portait une ligne illisible et que le joueur choisissait « Repos », la
+  comparaison disait « inchangé », rien n'était écrit, et le jour restait invisible pour toujours.
+  Une ligne illisible n'est désormais jamais « inchangée » (test de non-régression dédié).
+- **Un test d'interface a échoué pour de mauvaises raisons, par quatre fois** : sélecteurs
+  `buttonNamed("Épaules")` attrapant la séance « Épaules A » avant la pastille de groupe ; un
+  `slice(0, 8)` sur « LundiLibre… » ; un second rendu dans la même racine qui laissait le jour ouvert.
+  Corrigés dans les tests, **jamais en affaiblissant le composant**.
+- **`advanceTimersByTime` fait aussi avancer l'horloge factice** : un test « le jour ne change pas »
+  partant de 23:59:50 changeait réellement de jour au bout de 3 minutes. Diagnostic d'abord erroné
+  (j'avais cru à un rendu parasite de `setState`, et réécrit `useLocalToday` avec une `ref` — version
+  conservée, car elle garantit *par construction* aucun `setState` inutile).
+- `SeancesTab.loader.test.tsx` simule les enfants lourds : `WeekPlanCard` y a été ajoutée à la liste
+  des marqueurs inertes (elle exige un `AuthProvider`, sans rapport avec la décision testée).
+
+### Tests (+155, aucun skip ajouté)
+`weeklyPlan.test.ts` (85, dont 3 de l'invariant 1.7 et 1 qui verrouille le vocabulaire des familles à
+**trois endroits** : `SPECIALIZATION_GROUPS`, le `CHECK` de la migration, `PLAN_GROUP_IDS`),
+`exclusiveByKey.test.ts` (8), `hooks/useWeeklyPlan.test.ts` (14, sur le banc fausse-IndexedDB /
+faux-Supabase : patch complet, doublon nettoyé, écritures simultanées, isolation entre utilisateurs),
+`hooks/useLocalToday.test.tsx` (5), `plan/WeekStrip.test.tsx` (11), `plan/WeeklyPlanSheet.test.tsx`
+(23), `plan/WeekPlanCard.test.tsx` (9) — décomptes mesurés fichier par fichier ; leur somme (155) est
+exactement l'écart avec la base.
+**Contrôlés par mutation, pas seulement au vert** : neutraliser le verrou d'écriture fait échouer
+exactement le test des écritures simultanées (2 lignes au lieu d'1) ; ajouter un `UNIQUE`, une colonne
+`done` et un `CHECK` exigeant `template_id` à la migration fait échouer les trois tests de
+l'invariant 1.7.
+
+### Migration testée AVANT push sur le schéma réel
+Transaction à rollback volontaire (bloc `DO` terminé par une exception) : 12 vérifications — cas
+valides, 6 refus de `CHECK`, doublon toléré, suppression de modèle → `SET NULL`, trigger
+`updated_at`, RLS. Vérifié ensuite : table absente, aucun modèle de test résiduel. Après push :
+table présente, RLS active, migration inscrite, 0 ligne.
+
+### Validation (comparée à `9a25d87`)
+`npx vitest run` **2231 passed / 63 skipped / 0 échec** (base 2076/63 : **+155**, aucun skip ajouté).
+`tsc --noEmit` 0 erreur. `npm run lint` **0 erreur / 154 warnings — identique à la base**.
+`npm run build` OK. `check:offline-contract` : **20 tables** (dont `weekly_plan_days`).
+`check:bounded-reads` : 82 lectures, 45 bornées, aucune hors baseline (la nôtre est bornée par
+`limit(100)`). `validate:supabase` : 3 avertissements préexistants, aucun ajouté. Prettier : les
+fichiers touchés sont conformes ; `MEMORY.md`/`CLAUDE.md` restent hors liste depuis toujours.
+
+### Non fait, volontairement
+A01 (Carte du jour sur l'Accueil), C13 (objectif de séance), F26 (rapport hebdo), E20 (routes
+Chroniques), G28 (signature de la carte partagée) : chacun est un chantier à part. Le **décalage d'un
+jour** (« reporter à demain ») des maquettes n'est pas livré. Aucun spec e2e **commité** pour l'écran
+(le sandbox ne joint pas Lovable, et les specs du dépôt tapent la production sauf `05`) : l'interface
+est couverte au niveau composant dans le dépôt, et vérifiée en navigateur par un spec jetable (ci-dessous).
+
+### Vérification en vrai navigateur (spec jetable, supprimé — jamais commité)
+Chromium + vrai CSS + backend Supabase **simulé** (`e2e/supabase-stub.ts`), mobile 414×896 : invitation
+« Planifie ta semaine » → éditeur « Mon rythme » → Lundi Dos+Pectoraux, Mardi Épaules, Mercredi repos →
+**hors ligne** : Jeudi Jambes enregistré localement, **zéro** requête serveur → retour réseau : 4 `POST`
+(`day_of_week` 1..4, contenu exact), les 4 lignes passent `pending` → `synced` → bande « Ta semaine » de
+7 cases (`aria-label` « Lundi : Dos + Pectoraux, manqué »…) → **rechargement : le plan persiste** →
+`blocked` vide, aucune erreur JS. Rendu visuel conforme à la maquette validée (manqué atténué et barré,
+aujourd'hui en couleur de rang).
+- **Piège du stub e2e — à corriger un jour dans `e2e/supabase-stub.ts`** : il ignore l'en-tête
+  `Accept: application/vnd.pgrst.object+json` posé par `.single()` et répond toujours par un
+  **tableau**, là où PostgREST répond par un objet. `createOfflineRepository` relit alors un tableau comme
+  s'il s'agissait de la ligne : les données locales sont corrompues après synchronisation. Le spec jetable
+  a contourné le défaut pour sa seule table ; aucune table existante n'est touchée par un spec commité, donc
+  rien n'est cassé aujourd'hui — mais le premier spec e2e qui synchronisera une création y tombera.
+- Le serveur de dev ne sert pas `sw.js` : l'enregistrement du service worker y échoue en 404. Bruit de
+  console normal en dev, à filtrer dans tout spec qui asserte « aucune erreur console ».
+- Lancer Playwright ici demande `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/opt/pw-browsers/chromium-1194/chrome-linux/chrome`
+  (la version de Playwright attend un autre numéro de build que celui préinstallé).
 
 ## Abandon des Saisons + nettoyage du code mort (2026-09-30, branche `claude/cortex-product-audit-dexmp2`)
 
