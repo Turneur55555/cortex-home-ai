@@ -14,6 +14,9 @@ import { createRoot, type Root } from "react-dom/client";
 vi.mock("@/components/home/TodayCard", () => ({
   TodayCard: () => <section data-testid="today-card" />,
 }));
+vi.mock("@/components/week/WeekReportTeaser", () => ({
+  WeekReportTeaser: () => <a data-testid="week-teaser" href="/semaine" />,
+}));
 vi.mock("@/components/fitness/plan/WeekPlanCard", () => ({
   WeekPlanCard: ({ hideInvitation }: { hideInvitation?: boolean }) => (
     <section data-testid="week-card" data-hide-invitation={String(hideInvitation === true)} />
@@ -56,9 +59,16 @@ const order = () =>
   );
 
 describe("Accueil — l'action d'abord, puis le Rang", () => {
-  it("Carte du jour → semaine → illustration du Titre → progression → raccourci Corps", () => {
+  it("Carte du jour → bandeau de la semaine → semaine → illustration du Titre → progression → Corps", () => {
     renderHome();
-    expect(order()).toEqual(["today-card", "week-card", "hero-card", "progression", "corps-tile"]);
+    expect(order()).toEqual([
+      "today-card",
+      "week-teaser",
+      "week-card",
+      "hero-card",
+      "progression",
+      "corps-tile",
+    ]);
   });
 
   it("la semaine n'y répète pas l'invitation à planifier (la Carte du jour s'en charge)", () => {

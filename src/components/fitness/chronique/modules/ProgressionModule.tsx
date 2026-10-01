@@ -14,7 +14,16 @@
 // ============================================================
 
 import { useMemo } from "react";
-import { Heart, History, Hourglass, Sparkles, TrendingUp } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import {
+  CalendarRange,
+  ChevronRight,
+  Heart,
+  History,
+  Hourglass,
+  Sparkles,
+  TrendingUp,
+} from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
 
@@ -128,6 +137,23 @@ export function ProgressionModule({
             </div>
           </div>
         </div>
+      </SectionReveal>
+
+      {/* ── Tes semaines (F26) : le bilan de chaque semaine, rattaché au livre ── */}
+      <SectionReveal>
+        <Link
+          to="/semaine"
+          className="flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-4 active:scale-[0.99]"
+        >
+          <CalendarRange aria-hidden className="h-5 w-5 shrink-0 text-amber-300" />
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-bold text-white">Tes semaines</span>
+            <span className="mt-0.5 block text-xs text-white/55">
+              Le bilan de chaque semaine d'entraînement : séances, volume, records.
+            </span>
+          </span>
+          <ChevronRight aria-hidden className="h-4 w-4 shrink-0 text-white/50" />
+        </Link>
       </SectionReveal>
 
       {/* ── Techniques oubliées ────────────────────────────────────────── */}

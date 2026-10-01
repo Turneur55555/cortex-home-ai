@@ -22,6 +22,97 @@
 ## Dernière mise à jour
 2026-10-01
 
+## F26 « Ta semaine » — le bilan hebdomadaire, rattaché aux Chroniques (2026-10-01, branche `claude/cortex-product-audit-dexmp2`)
+
+Quatrième chantier produit issu de l'audit. Validé sur maquette (30/09/2026) : bandeau « Ta semaine est
+prête » sur l'Accueil le lundi, page de bilan, archive dans les Chroniques. Décision de Nathan : le bilan
+vit dans les Chroniques, pas dans la liste `/rapports`.
+
+### Correction de MA propre hypothèse — le mécanisme change, pas le produit
+La maquette disait : « le contenu est déjà généré chaque lundi par une fonction planifiée ». **C'est faux,
+vérifié sur la production** (lecture seule) : `weekly_reports` ne contient que **3 lignes, 1 utilisateur,
+toutes `ready`, de la semaine du 22/06 à celle du 03/08** — et aucune ligne vide « generating » depuis.
+`scheduled-weekly-report` ne crée de toute façon que des lignes VIDES (« l'utilisateur déclenchera la
+génération »), exige un `CRON_SECRET` et une planification à régler à la main dans le tableau de bord
+Supabase : elle n'a manifestement jamais tourné. S'y appuyer aurait livré un bilan qui n'arrive jamais.
+**Le bilan est donc DÉRIVÉ à la lecture des séances** (`lib/fitness/weeklyReport.ts`, pure) : offline-first,
+immédiat, **rétroactif** (toute l'histoire chargée a ses semaines), impossible à désynchroniser des
+séances — le même principe que le plan (B06). Aucune migration, aucune table, aucune fonction, aucun appel IA.
+**Le système existant n'est PAS touché** : `/rapports`, `weekly_reports`, `generate-weekly-report`,
+`scheduled-weekly-report` restent tels quels (bilan IA à la demande, avec nutrition et corps — un autre
+produit). Décision à prendre un jour par Nathan : garder ou retirer la fonction planifiée morte.
+
+### Ce que dit le bilan — des faits, jamais une estimation
+- **Une semaine sans séance n'a pas de bilan** (ni bandeau, ni ligne dans l'archive) : on ne célèbre rien et
+  on ne culpabilise pas. **La semaine en cours n'est pas dans l'archive** : un bilan se lit quand elle est finie.
+- **Séances, séries, volume** : `buildSessionRecap` — les mêmes chiffres que la carte récap de fin de séance
+  et la Carte du jour. **Temps** : somme des durées connues ; aucune durée → **pas de tuile** (jamais « 0 min »).
+- **Volume vs semaine précédente** : variation en % **arrondie** (+49,5 → +50), sobre quand elle baisse
+  (gris, jamais rouge). Sans semaine précédente exploitable (vide, ou sans aucune charge), pas de comparaison.
+- **Records** : `computeRecordsBySession`, premiers exercices exclus (`isNew`), **un par exercice** (le plus
+  lourd de la semaine) — le même compte que la Chronique immersive (`ChroniquePage`) et le récap de carrière.
+  Observation, non corrigée : la liste Chronologie affiche un chip « nouveau record » pour un exercice fait
+  pour la première fois ; le bilan, lui, ne le compte pas comme record.
+- **Titre** : « Ta première semaine » / « Ta meilleure semaine » / « Ta meilleure semaine depuis juin » (la
+  dernière semaine aussi forte date d'au moins **4 semaines** ; l'année est précisée si elle diffère) /
+  « Ta semaine » (neutre). Une semaine sans charge n'est jamais « meilleure ».
+- **Phrase** (voix du Sensei, mais fondée sur des faits, jamais une félicitation générique) : rythme tenu +
+  records / rythme tenu / records / hausse de volume ≥ 5 % ; sinon **aucune phrase**. Jamais générée par une IA :
+  un test garantit qu'un rythme non tenu sans autre fait ne produit rien (on ne culpabilise pas).
+- **« X / Y prévues » seulement quand c'est VÉRIFIABLE** : le plan (B06) est un état courant, pas un
+  historique. On ne compare à la semaine que si **toutes** les lignes du plan ont été modifiées pour la dernière
+  fois **avant le lundi** de cette semaine (`planWasInForce`) — le plan actuel est alors sans doute celui qui
+  était en vigueur. Dimanche prévu et non tenu compte comme non tenu (la semaine est finie). Une séance sur un
+  jour non prévu est un bonus (comptée dans les séances, pas dans le rythme). **Trou connu** : effacer un jour du
+  plan supprime sa ligne, ce que rien ne trahit après coup — le « Y » d'une vieille semaine peut alors être
+  sous-estimé.
+- **Limite héritée, non introduite** : l'historique chargé est borné (60 séances les plus récentes, `useWorkouts`),
+  donc un record peut être surestimé si une charge plus lourde existe au-delà.
+
+### Les écrans
+- **Bandeau** `week/WeekReportTeaser` : sur l'Accueil, **le lundi et le mardi (48 h)**, sous la Carte du jour
+  (l'action reste en premier) ; ne rend rien en chargement ni sans bilan.
+- **Page** `/semaine/$weekStart` (`week/WeekReportPage`) : en-tête, quatre tuiles, comparaison de volume,
+  records (5 puis « et N autres »), phrase. Identifiant invalide ou non-lundi → « Cette semaine n'existe pas »
+  (le hook n'est pas interrogé). Semaine vide → « Pas de bilan pour cette semaine ».
+- **Archive** `/semaine` (`week/WeekReportList`), **entrée « Tes semaines » dans le module Progression** des
+  Chroniques (pas un quatrième module : la règle « trois modules pairs » est respectée ; E20 réorganisera).
+- `src/routeTree.gen.ts` régénéré par le build (+44 lignes) et commité.
+- **Chiffres en dur, pas `AnimatedNumber`** : ce composant écrit « 0 » dans le DOM tant qu'il n'est pas à
+  l'écran — un lecteur d'écran, ou un observateur qui ne se déclenche pas, lirait « 0 séance » sur un bilan.
+- Retiré après coup : un pied de page qui répétait l'en-tête et exposait « fin le 2026-09-27 » (date ISO) aux
+  lecteurs d'écran ; un test verrouille désormais l'absence de date technique.
+
+### Non fait, volontairement
+**Le bouton « Partager ma semaine »** : il appartient à G28 (carte partagée signée), pas à ce chantier.
+Aucune navigation semaine précédente / suivante sur la page. Aucune notification push le lundi.
+
+### Tests (+92, aucun skip ajouté)
+`weeklyReport.test.ts` (55), `week/WeekReportPage.test.tsx` (21), `week/WeekReportList.test.tsx` (5),
+`week/WeekReportTeaser.test.tsx` (3), `hooks/useWeekReport.test.tsx` (8) ; `index.test.tsx` verrouille la place du
+bandeau dans l'ordre de l'Accueil. **Contrôlés par mutation, 22 fois** : plan « jusqu'au lundi », premier
+exercice compté comme record, « depuis » trop tôt, rythme tenu à un près, semaine en cours dans l'archive,
+bandeau le mercredi, dimanche non tenu compté fait, durée 0 connue, pourcentage tronqué, record non maximal,
+mauvaise semaine précédente, semaine vide qui a un bilan, tuile Temps sans durée, records non plafonnés, baisse
+en vert, identifiant invalide transmis, phrase / « prévues » inventées, volume 0, bandeau et liste pendant le
+chargement. La mutation « horodatage illisible » n'est pas détectable : `NaN-NaN-NaN` n'est jamais « avant »
+une date, la garde explicite est redondante (comportement couvert).
+
+### Vérifié en navigateur (spec jetable, supprimé — jamais commité)
+Faux serveur à mémoire, 414×896, horloge fixée au **lundi 05/10/2026** : bandeau « Ta semaine est prête ·
+Semaine 40 · 3 séances, 2 records » → page (« Ta meilleure semaine », 3 / 3 prévues, 6 520 kg, 12 séries,
+2 h 45, +240 %, records Squat 110 kg +10 / Rowing 65 kg +5, « Rythme tenu : 3 séances sur 3, et 2 records
+battus. ») → liste de 3 semaines → entrée depuis les Chroniques → **le mercredi, plus de bandeau** → semaine
+vide et identifiant invalide. Aucune erreur JavaScript. **Mise en page corrigée** après vision : « Cette
+semaine » et « 6 520 kg » passaient sur deux lignes dans la comparaison de volume.
+- Piège de l'outillage : l'animation d'entrée des Chroniques est très lente en mode dev dans le sandbox
+  (opacité 0 à 1,5 s, 0,93 à 3 s) — une capture trop tôt est noire sans que ce soit un défaut.
+
+### Validation (comparée à C13)
+`npx vitest run` **2464 passed / 63 skipped / 0 échec** (base 2372 : **+92**). `tsc --noEmit` 0 erreur.
+`npm run lint` **0 erreur / 154 warnings — identique à la base**. `check:offline-contract` et
+`check:bounded-reads` inchangés. **Aucune migration.**
+
 ## C13 « Objectif de séance » — dans le bandeau de la séance en cours (2026-10-01, branche `claude/cortex-product-audit-dexmp2`)
 
 Troisième chantier produit issu de l'audit, bâti sur A01 : sous le nom de la séance, **où en est-on
