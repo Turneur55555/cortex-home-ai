@@ -275,7 +275,9 @@ Génère le rapport structuré via tool calling.`;
     // ── Validation du payload ──────────────────────────────────────────────────
     const workout = body.workout as {
       name: string;
-      duration_minutes: number;
+      // `null` = durée inconnue (séance restée ouverte, enregistrée au plafond) : jamais un chiffre
+      // inventé dans le prompt.
+      duration_minutes: number | null;
       exercises: Array<{
         name: string;
         muscles: string[];
@@ -332,7 +334,11 @@ Génère le rapport structuré via tool calling.`;
     const prompt = `Tu es un coach sportif expert. Analyse cette séance d'entraînement et génère un rapport complet en FRANÇAIS.
 
 SÉANCE : "${workout.name}"
-- Durée : ${workout.duration_minutes} min
+- Durée : ${
+  typeof workout.duration_minutes === "number" && workout.duration_minutes > 0
+    ? `${Math.round(workout.duration_minutes)} min`
+    : "non renseignée (ne commente pas la durée)"
+}
 - Tonnage total : ${Math.round(tonnage)} kg
 - Séries : ${completedSets}/${totalSets} validées
 - Exercices :

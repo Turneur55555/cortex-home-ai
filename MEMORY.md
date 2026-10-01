@@ -51,8 +51,8 @@ améliorer — avec « je t'autorise à tout, arrête de me poser la question »
 - `registerServiceWorker` : l'échec hors connexion (attendu) n'est plus journalisé comme erreur.
 - `lastCompletedSession` renvoie aussi `workoutId`.
 
-### Tests (+92, aucun skip ajouté) et mutations
-`sessionDuration` (23), `sessionSuggestion` (21), `ChroniquePage` (8), `LastSessionRow` (6), cas ajoutés à
+### Tests (+96, aucun skip ajouté) et mutations
+`sessionDuration` (23), `sessionSuggestion` (21), `ChroniquePage` (8), `LastSessionRow` (6), `PostWorkoutAnalysisSheet` (4, éprouvé en réinjectant l'ancien calcul), cas ajoutés à
 `weeklyReport`, `strength`, `chronicles`, `todayCard`, `TodayCard`, `SeancesTab.loader`, `registerServiceWorker`.
 Mutations : 14 sur la durée / la Chronique (2 survivantes d'abord, dues à des tests faibles — ordre des séances
 et assertion sur la cellule du jour —, corrigées puis tuées) et 12 sur la suggestion / le lien Refaire (11 tuées,
@@ -66,6 +66,21 @@ objectif (15 séries · 18 030 kg) → l'URL est nettoyée, le rechargement ne r
 → Chronique. Chronique d'une séance à 600 min : durée « — », « 3,5 t », pas d'heure ; séance importée : phrase
 factuelle, pas de comparaison. Bilan de semaine : pas de « Temps ».
 
+### Bilan IA post-séance (découvert en vérifiant les consommateurs de la durée)
+- `PostWorkoutAnalysisSheet` envoyait à l'IA `maintenant − début` (une séance restée ouverte une nuit = « 1 440 min »,
+  commentée puis PERSISTÉE dans `workout_analyses`). Elle lit maintenant la durée enregistrée dans le store local et
+  envoie `null` si elle est implausible ; `analyze-workout` écrit « non renseignée (ne commente pas la durée) ».
+- **Défaut de production trouvé au passage : le bilan IA des disciplines non-musculation ne marche pas.** 0 bilan pour
+  9 séances guidées / HYROX / cardio terminées depuis juillet (contre 22 pour 73 séances de musculation). Cause : la
+  fonction déployée `analyze-workout` est la **v2 du 02/07** ; la branche générique du dépôt date du 15/07 et n'a jamais
+  été déployée, car `analyze-workout` n'était pas dans la liste de `deploy-functions.yml` (déploiement « Lovable »
+  jamais rejoué). Un `generic_workout` sans `workout` donne « Séance vide » (400). **Corrigé** : `analyze-workout` est
+  ajoutée à `deploy-functions.yml` — le push déploie la version du dépôt. À vérifier après déploiement : version > 2
+  (`list_edge_functions`).
+- Neuf fonctions du dépôt ne sont dans aucun déploiement CI (`analyze-exercise`, `analyze-exercise-muscles`,
+  `analyze-wardrobe-item`, `estimate-body-fat-photo`, `food-lookup`, `nutrition-analysis`, `scan-exercise`,
+  `verify-exercise-rank`) : même risque de dérive, **non audité**.
+
 ### Ce qui n'est PAS fait (voir le document d'analyse)
 Funnel de mesure des Séances ; plan déduit du rythme ; rappel de séance restée ouverte ; règle d'XP d'une séance sans
 série (trigger serveur — invariant 3.1, migration testée requise) ; économie d'XP au sommet ; enrichissement des 537
@@ -73,7 +88,7 @@ coquilles ; diagnostic de `/sw.js` en production (injoignable depuis le sandbox)
 n'est plus sur la Carte du jour quand une suggestion existe (il reste dans l'Arène).
 
 ### Validation
-`npx vitest run` **2745 passed / 63 skipped / 0 échec** (base G28 : 2653, **+92**). `tsc --noEmit` 0 erreur.
+`npx vitest run` **2749 passed / 63 skipped / 0 échec** (base G28 : 2653, **+96**). `tsc --noEmit` 0 erreur.
 `npm run lint` **0 erreur / 154 warnings — identique à la base**. Build OK. Aucune migration.
 
 ## G28 « La carte partagée, signée Cortex » + remise en état de l'affiche de rang (2026-10-01, branche `claude/cortex-product-audit-dexmp2`)

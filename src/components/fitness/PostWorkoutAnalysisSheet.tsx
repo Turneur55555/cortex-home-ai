@@ -12,9 +12,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import type { ActiveWorkout } from "@/hooks/use-fitness";
+import { workoutsRepo, type ActiveWorkout } from "@/hooks/use-fitness";
 import type { MuscleId } from "@/lib/fitness/muscleMapping";
 import { exerciseToMuscles } from "@/lib/fitness/muscleMapping";
+import { plausibleDurationMinutes } from "@/lib/fitness/sessionDuration";
 import type { MuscleRecovery } from "@/lib/fitness/recovery";
 import { WORKOUT_ANALYSES_QUERY_ROOT } from "@/hooks/useWorkoutAnalyses";
 import {
@@ -77,10 +78,12 @@ export function PostWorkoutAnalysisSheet({
           };
         });
 
-        const durationMin = Math.max(
-          1,
-          Math.round((Date.now() - new Date(workout.created_at).getTime()) / 60_000),
-        );
+        // La durée ENREGISTRÉE à la clôture (`lib/fitness/sessionDuration.ts`), lue dans le store
+        // local — plus `maintenant − début`, qui envoyait « 1 440 min » à l'IA pour une séance
+        // restée ouverte une nuit (et l'IA le commentait). Implausible ou absente : `null`, la
+        // fonction Edge écrit « non renseignée » plutôt qu'un chiffre inventé.
+        const stored = await workoutsRepo.get(workoutId);
+        const durationMin = plausibleDurationMinutes(stored?.duration_minutes);
 
         const { data, error: fnErr } = await supabase.functions.invoke("analyze-workout", {
           body: {

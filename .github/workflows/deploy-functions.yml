@@ -28,6 +28,7 @@ jobs:
         run: |
           supabase functions deploy \
             analyze-pdf \
+            analyze-workout \
             chat \
             cleanup-pdfs \
             coach-workout \
