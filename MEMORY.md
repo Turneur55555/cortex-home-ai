@@ -75,8 +75,10 @@ factuelle, pas de comparaison. Bilan de semaine : pas de « Temps ».
   fonction déployée `analyze-workout` est la **v2 du 02/07** ; la branche générique du dépôt date du 15/07 et n'a jamais
   été déployée, car `analyze-workout` n'était pas dans la liste de `deploy-functions.yml` (déploiement « Lovable »
   jamais rejoué). Un `generic_workout` sans `workout` donne « Séance vide » (400). **Corrigé** : `analyze-workout` est
-  ajoutée à `deploy-functions.yml` — le push déploie la version du dépôt. À vérifier après déploiement : version > 2
-  (`list_edge_functions`).
+  ajoutée à `deploy-functions.yml`. **Vérifié le 01/10 à 10:03 UTC** : run 36846592199 vert, `list_edge_functions` →
+  `analyze-workout` **version 3**, entrypoint = le fichier du dépôt au commit `24e7b96`. Non testé : un vrai bilan IA
+  d'une séance hors musculation (aucune n'a eu lieu depuis le déploiement). Un déploiement CI précédent (01/10 05:01)
+  avait échoué sur `docker: toomanyrequests` (limite ECR) — transitoire.
 - Neuf fonctions du dépôt ne sont dans aucun déploiement CI (`analyze-exercise`, `analyze-exercise-muscles`,
   `analyze-wardrobe-item`, `estimate-body-fat-photo`, `food-lookup`, `nutrition-analysis`, `scan-exercise`,
   `verify-exercise-rank`) : même risque de dérive, **non audité**.
