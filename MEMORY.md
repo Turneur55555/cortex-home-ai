@@ -22,6 +22,80 @@
 ## Dernière mise à jour
 2026-10-01
 
+## E19 « Corps / Santé » — Corps reste dans Profil, mais devient trouvable (2026-10-01, branche `claude/cortex-product-audit-dexmp2`)
+
+Sixième chantier produit issu de l'audit. Décisions de Nathan (30/09/2026) : **Corps reste dans Profil** (aucun
+onglet de plus), **« Santé nutritionnelle » est absorbée comme 3ᵉ sous-onglet de Corps**, l'objectif physique
+remonte sur la carte d'entrée. Avant : deux portes vers le corps (une carte dans Profil, un lien « Santé
+nutritionnelle » perdu dans « Mes espaces »), l'objectif enterré dans la page Santé.
+
+### Ce qui change
+- **Écran Corps à trois onglets : Objectif | Mesures | Santé** (`components/corps/CorpsScreen.tsx`). Chaque onglet est
+  un LIEN `/corps?onglet=` (retour arrière, lien direct, rechargement) ; basculer REMPLACE l'historique (pairs).
+  L'onglet Profil de la barre reste allumé sur `/corps` (`navigationTabs.ts`).
+- **Onglet par défaut** (`lib/fitness/corpsTabs.ts`, pur) : demandé dans l'URL → celui-là ; sinon « Objectif » si un
+  objectif est actif, « Mesures » sinon (on n'impose pas un écran de configuration vide à qui n'a pas d'objectif).
+  Sans onglet demandé, l'écran attend de connaître l'objectif (squelette) : pas de « Mesures » qui clignote avant
+  de basculer. Valeur invalide ignorée (`.catch(undefined)`).
+- **`SanteView`** (`components/corps/SanteView.tsx`) : l'ancienne page `/sante-nutritionnelle`, déplacée
+  MÉCANIQUEMENT (`git mv`) et coupée en deux parties — `part="sante"` (tout le contenu santé) et `part="objectif"`
+  (la section « Objectif physique » + sa feuille). `/sante-nutritionnelle` redirige (avant rendu) vers
+  `/corps?onglet=sante` : un lien existant ne casse jamais.
+- **Carte « Mon corps » du Profil** (`BodyStatusCard`) : avec un objectif actif elle passe EN TÊTE — « Perte de gras ·
+  depuis 7 semaines », gros écart signé (−4,2 kg), « sur −6 kg », barre de progression, dernier poids et âge de la
+  pesée. **Uniquement des faits** (`lib/fitness/physicalGoalSummary.ts`, pur) : poids de départ, cible, dernière
+  pesée, date de début. AUCUNE projection (elles dépendent du TDEE adaptatif et restent dans l'onglet Objectif).
+  `progress` vaut `null` (pas de barre) sans départ / cible / pesée, pour un objectif de maintien, ou si cible = départ ;
+  bornée 0..1 (« dans le mauvais sens » = 0, jamais une barre négative), arrondie au millième (−4,2 / −6 donnait
+  0,7000000000000001).
+- **Tuile Corps de l'Accueil** : « −4,2 kg depuis 7 semaines » avec un objectif, sinon dernier poids + date.
+- **« Mes espaces » réduit** à Préférences alim. et Dressing (liens Santé nutritionnelle et Rapports hebdo retirés
+  du Profil). Le lien « Bilan IA de la semaine » (`/rapports`) est déplacé dans l'archive « Tes semaines » (`/semaine`)
+  — il n'a pas disparu ; le retour de cette archive pointe sur `/chroniques?module=progression`.
+
+### Un défaut préexistant corrigé au passage
+Hors connexion, la carte Corps du Profil affichait « Aucune mesure enregistrée » : `useBodyMeasurements` n'est PAS
+offline-first, la requête échoue et `data` reste vide — la carte prenait une erreur pour une absence de données. Elle
+dit maintenant « Voir mes mesures » (avec un objectif : l'objectif reste affiché, aucun poids n'est inventé).
+Même règle déjà appliquée à la tuile de l'Accueil (A01).
+
+### Défaut d'accessibilité trouvé à la vérification navigateur (A01, corrigé ici)
+`CorpsShortcutTile` portait `aria-label="Corps"` : le nom accessible écrasait le texte, donc un lecteur d'écran
+n'annonçait jamais « −4,2 kg depuis 7 semaines ». Retiré (l'icône est déjà `aria-hidden`) ; un test verrouille
+l'absence d'`aria-label`.
+
+### Ce qui n'est PAS fait / limites
+- `SanteView` est un déplacement mécanique : son contenu interne n'a pas de test unitaire propre (couvert par le test
+  de `CorpsScreen` qui vérifie quelle PARTIE est rendue, et par la vérification navigateur). Le coupage en deux
+  parties n'a pas modifié ses sous-composants.
+- L'onglet « Santé » ouvre sur un petit bloc « Objectif » (héritage de la page d'origine) qui répète l'onglet Objectif ;
+  non touché pour ne pas retoucher le contenu déplacé.
+- `docs/features.md` / `docs/architecture.md` non mis à jour (ils ne décrivent pas ces écrans).
+
+### Tests (+56, aucun skip ajouté)
+`physicalGoalSummary.test.ts` (18), `corpsTabs.test.ts`, `CorpsScreen.test.tsx`, `BodyStatusCard.test.tsx`,
+`CorpsShortcutTile.test.tsx` (cas objectif + nom accessible), `BottomNav.test.tsx` (`/corps` → Profil, `/rapports`
+aucun), `navigationTabs.test.ts`. **Contrôlés par mutation, 18 fois, 18 tuées** : défaut inversé, onglet demandé
+ignoré, schéma fatal, clamp bas / haut retirés, arrondi retiré, maintien avec cible, signe moins ASCII, « 0 semaine »,
+pluriel, `/corps` hors de Profil, écran qui n'attend pas l'objectif (et variante qui attend toujours),
+`aria-current` mal conditionné, Santé qui rend l'Objectif, erreur sur la carte à objectif retirée, barre sans
+progression, `aria-label` remis sur la tuile.
+
+### Vérifié en navigateur (spec jetable, supprimé — jamais commité)
+414×896, faux serveur à mémoire, objectif + 2 pesées semés. Profil : « Perte de gras · depuis 7 semaines — −4,2 kg
+sur −6 kg — 77,8 kg · pesée il y a 2 jours », barre à 70 %, « Mes espaces » réduit. Accueil : tuile
+« −4,2 kg depuis 7 semaines ». Carte → `/corps` (Objectif par défaut, onglet Profil allumé) → Mesures → Santé
+(URL et `aria-current` suivent) → **rechargement : Santé conservée** → **retour arrière depuis Santé : le Profil**
+(bascules remplacées) → `/sante-nutritionnelle` redirigé → onglet inconnu : Objectif. Sans objectif : carte « Aucune
+mesure enregistrée » → Mesures par défaut → Objectif (état vide). Aucune erreur JavaScript.
+- Piège de l'outillage : `innerText` applique `text-transform: uppercase` (« DEPUIS 7 SEMAINES ») — comparer en
+  minuscules ou lire `textContent`. `pkill -f "vite --host …"` tue aussi le shell qui le contient (code 144).
+
+### Validation
+`npx vitest run` **2563 passed / 63 skipped / 0 échec** (base E20 : 2507, **+56**). `tsc --noEmit` 0 erreur.
+`npm run lint` **0 erreur / 154 warnings — identique à la base**. Build OK (`src/routeTree.gen.ts` régénéré et
+commité). Aucune migration.
+
 ## E20 « Séances à deux étages » — Arène | Chroniques, chacun une vraie route (2026-10-01, branche `claude/cortex-product-audit-dexmp2`)
 
 Cinquième chantier produit issu de l'audit. Décision de Nathan (30/09/2026) : « Séances » gagne deux

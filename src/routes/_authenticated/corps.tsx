@@ -1,30 +1,24 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { CorpsTab } from "./fitness/CorpsTab";
+import { CorpsScreen } from "@/components/corps/CorpsScreen";
+import { corpsSearchSchema } from "@/lib/fitness/corpsTabs";
 
+// Corps : trois onglets (Objectif | Mesures | Santé, E19) dans l'URL (`?onglet=`). Santé nutritionnelle,
+// autrefois une page à part, en est le troisième onglet.
 export const Route = createFileRoute("/_authenticated/corps")({
   head: () => ({
     meta: [
       { title: "Corps — ICORTEX" },
       {
         name: "description",
-        content: "Suivi de ta composition corporelle et de tes mensurations.",
+        content: "Ton objectif, ta composition corporelle, tes mensurations et ta santé.",
       },
     ],
   }),
+  validateSearch: corpsSearchSchema,
   component: CorpsPage,
 });
 
 function CorpsPage() {
-  return (
-    <main className="flex flex-1 flex-col px-5 pb-6 pt-[max(2.75rem,calc(env(safe-area-inset-top)+0.75rem))]">
-      <header className="mb-6">
-        <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground">
-          Module
-        </p>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight">Corps</h1>
-      </header>
-
-      <CorpsTab />
-    </main>
-  );
+  const { onglet } = Route.useSearch();
+  return <CorpsScreen onglet={onglet} />;
 }

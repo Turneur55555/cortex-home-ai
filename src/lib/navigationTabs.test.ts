@@ -36,10 +36,16 @@ describe("isTabActive — quel onglet est allumé", () => {
     expect(activeTabs("/profil/reglages")).toEqual(["/profil"]);
   });
 
-  it("un écran qui n'est dans aucun onglet n'en allume aucun (Corps, Rapports…)", () => {
-    expect(activeTabs("/corps")).toEqual([]);
+  it("Corps appartient à Profil (E19) : l'onglet Profil reste allumé pendant toute la visite", () => {
+    expect(activeTabs("/corps")).toEqual(["/profil"]);
+    expect(activeTabs("/corps/quelque-chose")).toEqual(["/profil"]);
+    expect(activeTabs("/corpsX")).toEqual([]); // jamais un simple préfixe de texte
+  });
+
+  it("un écran qui n'est dans aucun onglet n'en allume aucun (Rapports, Documents…)", () => {
     expect(activeTabs("/rapports")).toEqual([]);
     expect(activeTabs("/rapports/abc")).toEqual([]);
+    expect(activeTabs("/documents")).toEqual([]);
   });
 
   it("l'accueil n'est allumé QUE sur « / »", () => {

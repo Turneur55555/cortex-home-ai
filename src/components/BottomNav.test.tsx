@@ -111,7 +111,8 @@ describe("BottomNav — l'onglet allumé (E20 : Séances porte deux étages)", (
     ["/semaine/2026-09-28", ["nav-seances"]],
     ["/nutrition", ["nav-nutrition"]],
     ["/profil", ["nav-profil"]],
-    ["/corps", []],
+    ["/corps?onglet=sante", ["nav-profil"]], // Corps est rangé dans Profil (E19)
+    ["/rapports", []],
   ])("sur %s : %j", async (path, expected) => {
     await render(path);
     expect(current()).toEqual(expected);

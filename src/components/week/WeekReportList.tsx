@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { BarChart3, ChevronLeft, ChevronRight } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useWeekReportList } from "@/hooks/useWeekReport";
 import { formatKg } from "@/lib/fitness/todayCard";
@@ -70,6 +70,22 @@ export function WeekReportList() {
           ))}
         </ul>
       )}
+
+      {/* Le bilan IA hebdomadaire (nutrition, corps — à la demande) n'est plus dans « Mes espaces » de
+          Profil : tous les bilans de semaine ont la même porte. Rien n'est supprimé. */}
+      <Link
+        to="/rapports"
+        className="mt-5 flex items-center gap-3 rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 active:scale-[0.99]"
+      >
+        <BarChart3 aria-hidden className="h-5 w-5 shrink-0 text-muted-foreground" />
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-bold">Bilan IA de la semaine</span>
+          <span className="mt-0.5 block text-xs text-muted-foreground">
+            Analyse détaillée avec nutrition et corps, générée à la demande.
+          </span>
+        </span>
+        <ChevronRight aria-hidden className="h-4 w-4 shrink-0 text-muted-foreground" />
+      </Link>
     </main>
   );
 }
