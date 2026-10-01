@@ -3991,6 +3991,47 @@ export type Database = {
         }
         Relationships: []
       }
+      weekly_plan_days: {
+        Row: {
+          created_at: string
+          day_of_week: number
+          id: string
+          kind: string
+          muscle_groups: string[]
+          template_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          day_of_week: number
+          id?: string
+          kind: string
+          muscle_groups?: string[]
+          template_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          day_of_week?: number
+          id?: string
+          kind?: string
+          muscle_groups?: string[]
+          template_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "weekly_plan_days_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "workout_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       weekly_reports: {
         Row: {
           ai_analysis: Json
