@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Dumbbell, Loader2, AlertCircle } from "lucide-react";
 import { SeancesHero } from "@/components/fitness/SeancesHero";
 import { ChoisirEpreuveCard } from "@/components/fitness/ChoisirEpreuveCard";
@@ -58,9 +58,13 @@ interface SeancesTabProps {
    *  le module concerné au lieu de laisser l'utilisateur retomber sur
    *  l'écran Séances sans contexte. */
   initialChroniques?: "legendes" | "forge" | "progression";
+  /** Deep-link (`?demarrer=nouvelle`) depuis la Carte du jour de l'Accueil :
+   *  ouvre « Choisir une épreuve » d'office, UNE seule fois, et seulement si
+   *  aucune séance n'est en cours (voir l'effet plus bas). */
+  initialNewSession?: boolean;
 }
 
-export function SeancesTab({ initialChroniques }: SeancesTabProps = {}) {
+export function SeancesTab({ initialChroniques, initialNewSession }: SeancesTabProps = {}) {
   const { data, isLoading, error } = useWorkouts();
   const { data: activeWorkout, isLoading: activeLoading } = useActiveWorkout();
   // Phase pilote Course (2026-07-09) : séance active générique (segments
@@ -87,6 +91,18 @@ export function SeancesTab({ initialChroniques }: SeancesTabProps = {}) {
   // disciplines (voir NewSessionSheet.tsx). NewSessionChoiceSheet.tsx
   // n'est pas supprimé (A.7), simplement plus monté depuis cet écran.
   const [newSessionSheetOpen, setNewSessionSheetOpen] = useState(false);
+  // Ouverture demandée par la Carte du jour de l'Accueil : consommée une seule
+  // fois, une fois la séance active CONNUE. Ouvrir la feuille d'office à l'état
+  // initial la laisserait « armée » derrière la séance en cours, et elle
+  // surgirait à la clôture. Si une séance est en cours, on n'ouvre rien : c'est
+  // elle qui s'affiche.
+  const pendingAutoOpen = useRef(initialNewSession === true);
+  useEffect(() => {
+    if (!pendingAutoOpen.current) return;
+    if (activeLoading || activeGenericLoading) return;
+    pendingAutoOpen.current = false;
+    if (!activeWorkout && !activeGeneric) setNewSessionSheetOpen(true);
+  }, [activeLoading, activeGenericLoading, activeWorkout, activeGeneric]);
   const [savedTemplatesOpen, setSavedTemplatesOpen] = useState(false);
   const [open, setOpen] = useState(false);
   // C2 : le snapshot de la séance clôturée vit ici pour que la fiche d'analyse

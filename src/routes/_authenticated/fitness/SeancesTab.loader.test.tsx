@@ -120,9 +120,9 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-function render() {
+function render(props: React.ComponentProps<typeof SeancesTab> = {}) {
   act(() => {
-    root.render(<SeancesTab />);
+    root.render(<SeancesTab {...props} />);
   });
 }
 
@@ -178,5 +178,73 @@ describe("SeancesTab — le loader couvre la séance active (AUD-09, test 1)", (
     render();
 
     expect(container.querySelector(LOADER)).toBeNull();
+  });
+});
+
+describe("SeancesTab — ouverture d'office de « Choisir une épreuve » (Carte du jour, A01)", () => {
+  const SHEET = '[data-testid="stub-NewSessionSheet"]';
+  const activeWorkout = {
+    id: "w-1",
+    name: "Push Day",
+    created_at: "2026-09-07T08:00:00Z",
+    exercises: [],
+  };
+
+  it("sans demande, la feuille n'est jamais ouverte", () => {
+    render();
+    expect(container.querySelector(SHEET)).toBeNull();
+  });
+
+  it("demandée et aucune séance en cours → la feuille s'ouvre", () => {
+    render({ initialNewSession: true });
+    expect(container.querySelector(SHEET)).not.toBeNull();
+  });
+
+  it("attend que la séance active soit CONNUE avant de décider", () => {
+    state.active = { data: null, isLoading: true };
+    render({ initialNewSession: true });
+    expect(container.querySelector(SHEET)).toBeNull();
+
+    state.active = { data: null, isLoading: false };
+    render({ initialNewSession: true });
+    expect(container.querySelector(SHEET)).not.toBeNull();
+  });
+
+  it("séance en cours connue seulement APRÈS le chargement : la demande n'est pas consommée trop tôt", () => {
+    // Pendant le chargement `data` vaut encore `null` : décider à ce moment-là
+    // « aucune séance en cours » armerait la feuille alors qu'une séance existe.
+    state.active = { data: null, isLoading: true };
+    render({ initialNewSession: true });
+
+    state.active = { data: activeWorkout, isLoading: false };
+    render({ initialNewSession: true });
+    expect(container.querySelector('[data-testid="stub-ActiveWorkoutView"]')).not.toBeNull();
+    expect(container.querySelector(SHEET)).toBeNull();
+
+    state.active = { data: null, isLoading: false };
+    render({ initialNewSession: true });
+    expect(container.querySelector(SHEET)).toBeNull();
+  });
+
+  it("séance en cours → rien ne s'ouvre, et la feuille ne reste PAS armée pour la clôture", () => {
+    state.active = { data: activeWorkout, isLoading: false };
+    render({ initialNewSession: true });
+    expect(container.querySelector(SHEET)).toBeNull();
+    expect(container.querySelector('[data-testid="stub-ActiveWorkoutView"]')).not.toBeNull();
+
+    // La séance se termine : l'écran revient à la vue normale, SANS feuille surgie.
+    state.active = { data: null, isLoading: false };
+    render({ initialNewSession: true });
+    expect(container.querySelector(SHEET)).toBeNull();
+    expect(container.querySelector('[data-testid="stub-SeancesHero"]')).not.toBeNull();
+  });
+
+  it("séance GÉNÉRIQUE en cours → rien ne s'ouvre non plus", () => {
+    state.generic = {
+      data: { id: "g-1", name: "Footing", created_at: "2026-09-07T08:00:00Z", segments: [] },
+      isLoading: false,
+    };
+    render({ initialNewSession: true });
+    expect(container.querySelector(SHEET)).toBeNull();
   });
 });

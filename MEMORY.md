@@ -22,6 +22,102 @@
 ## Dernière mise à jour
 2026-10-01
 
+## A01 « Carte du jour » — l'Accueil dit quoi faire aujourd'hui (2026-10-01, branche `claude/cortex-product-audit-dexmp2`)
+
+Deuxième chantier produit issu de l'audit du 07/09, directement bâti sur B06. Décisions de Nathan
+appliquées : **l'action d'abord, puis le Rang** ; le raccourci **Corps est gardé** ; **aucun
+pourcentage** (« épaules prêtes à 94 % » est abandonné pour toujours — c'était une estimation
+présentée comme une mesure).
+
+Ordre de l'Accueil : **Carte du jour → ta semaine → illustration du Titre → progression RPG →
+raccourci Corps**. `ProfileHeroCard` et `RPGProgressionSection` sont **inchangés** (la carte de
+personnage gravée G27 est reportée). L'identité (avatar + pseudo) reste sur Profil uniquement,
+comme avant : la maquette ne la ramenait pas, et le code de l'Accueil dit pourquoi.
+
+### La règle vit dans `lib/fitness/todayCard.ts` (pure), le composant n'exécute que
+`resolveTodayCard` décide du TEXTE et de l'ACTION de chaque bouton (`TodayAction` : `resume`,
+`start-template`, `new-session`, `edit-plan`). Six états, par priorité : **`active`** (séance en
+cours : prime sur tout) → **`done`** (une séance de muscu terminée aujourd'hui, y compris sur un jour
+de repos : c'est un bonus) → **`none`** (aucun plan) → **`free`** (plan sans le jour) → **`rest`** →
+**`planned`**. `loading` n'est pas un état du joueur : c'est « la séance sauvegardée du jour n'est pas
+encore chargée » (squelette — jamais « supprimée », même distinction que B06).
+- Des **faits**, jamais une estimation : le jour, la séance prévue et ses séries (`describeTemplateLoad`,
+  donc « 12+ séries » quand c'est un minimum), la prochaine séance prévue (`nextTrainingAfter` : le plan
+  est récurrent, après dimanche on repart sur lundi ; même jour à 7 jours = « jeudi prochain »), et
+  « la dernière fois : 14 séries · 3 840 kg · il y a 8 jours ».
+- **« La dernière fois »** = `lastSameNamedSession` : dernière séance de muscu TERMINÉE du même nom,
+  chiffres de `buildSessionRecap` — donc **identiques à la carte récap de fin de séance** (une série à
+  poids 0 n'y est pas « validée » : voir l'écart connu ci-dessous). Rien d'affiché sans référence.
+  **C13 (objectif de séance) réutilisera ce même helper.**
+- **Séance en cours** : « Démarrée à 18:42 » plutôt qu'un « 42 min » qui exigerait un minuteur : un
+  fait qui ne vieillit pas.
+- Le fait de la maquette « tu n'as pas entraîné le dos depuis 9 jours » **n'est pas livré** : il exige
+  une correspondance exercice → groupe fiable que les séances brutes ne garantissent pas
+  (`exercises.muscle_groups` est nullable ; je n'ai pas mesuré à quel point il est renseigné). Sans plan, la carte dit « Dernière séance : « Jambes B » · il y a 3 jours ».
+
+### Démarrer depuis l'Accueil — le parcours de séance n'est PAS dupliqué
+La séance (clôture, récompense, récap) vit tout entière dans `SeancesTab`. L'Accueil ne fait que :
+- **démarrer une séance sauvegardée** via `useStartWorkoutFromSavedTemplate` (offline-first, garde
+  « une seule séance active » inchangée), puis `navigate('/seances')` — **sans navigation si le démarrage
+  échoue** (la mutation affiche déjà son erreur) ;
+- renvoyer vers `/seances` (« Reprendre ») ou `/seances?demarrer=nouvelle` (« Choisir une épreuve »).
+**`?demarrer=nouvelle`** : lu une fois par `seances.tsx`, retiré de l'URL. `SeancesTab` ouvre la
+feuille **une seule fois, après avoir su s'il y a une séance en cours** (`pendingAutoOpen`). Ouvrir à
+l'état initial laisserait la feuille « armée » derrière la séance active : elle surgirait à la
+clôture. Deux tests le verrouillent (séance connue seulement après le chargement ; séance qui se
+termine ensuite).
+
+### Pièges rencontrés
+- **Tuile Corps : `useBodyMeasurements` n'est PAS offline-first** (lit `body_tracking` en direct). Hors
+  ligne la requête échoue et `data` reste vide : ma première version disait « Ajoute ta première mesure »
+  à quelqu'un qui en a cent. Trouvé en préparant la vérification navigateur, pas par un test. Corrigé :
+  en erreur, la tuile dit « Voir mes mesures ». `BodyStatusCard` (Profil) a le même défaut, **non touché**.
+- La flamme de série (`useActivityStreak`, RPC serveur, pas offline-first non plus) n'est affichée qu'à
+  partir de **2 jours** : hors ligne la requête vaut 0, et « 0 » serait un faux fait.
+- `useWeekPlanView` expose maintenant **`today`** : la carte lit la date de la semaine, jamais son propre
+  `useLocalToday` (deux minuteurs pourraient basculer à des instants différents autour de minuit).
+- `WeekPlanCard` gagne `hideInvitation` : sur l'Accueil, sans plan, elle ne dit rien (la Carte du jour
+  porte déjà l'invitation à planifier) ; sur Séances elle est inchangée.
+- Mutation : un de mes tests était trop faible (la demande d'ouverture « n'attend pas le chargement »
+  survivait). Ajout du cas qui compte (séance en cours connue après le chargement).
+
+### Tests (+92, aucun skip ajouté)
+`todayCard.test.ts` (48), `home/TodayCard.test.tsx` (18), `home/CorpsShortcutTile.test.tsx` (7),
+`hooks/useTodayCard.test.tsx` (7), `routes/_authenticated/index.test.tsx` (2 : l'ORDRE de l'Accueil est
+verrouillé), `WeekPlanCard.test.tsx` (+4), `SeancesTab.loader.test.tsx` (+6). Un test parcourt les sept
+états et vérifie qu'**aucun texte ne contient « % », « prêt », « récupér… »**.
+Contrôlés par mutation (chaque règle cassée volontairement fait échouer le test attendu) : priorité de
+la séance en cours, filtre de statut de la référence, `nextTrainingAfter` démarrant à aujourd'hui, repos
+sans bouton, séance supprimée qui démarre un modèle, pourcentage glissé dans un texte, filtre de date,
+jour de repos non reconnu comme fait, navigation après démarrage / après échec, garde « modèle
+introuvable », seuil de la flamme, boutons non désactivés, feuille armée à l'état initial, attente du
+chargement, erreur de mesures, `hideInvitation`, ordre de l'Accueil.
+
+### Vérifié en navigateur (spec jetable, supprimé — jamais commité)
+Chromium, vrai CSS, 414×896 et 360×700, faux serveur **à mémoire** (les écritures sont retenues et
+resservies — sans cela, la séance démarrée disparaissait au rechargement : défaut du faux serveur, pas de
+l'app). Cinq scénarios : aucun plan, séance sauvegardée du jour (+ dernière fois + flamme + Corps),
+repos, groupes musculaires, séance faite — puis **démarrer → écran Séances → retour Accueil : « Reprendre
+ma séance »**, et « Choisir une épreuve » → feuille ouverte, paramètre retiré de l'URL. Rendu aux
+couleurs du rang (bronze pour Guerrier). **Mise en page** : deux boutons trop longs cassaient un libellé
+sur deux lignes ; `flex-wrap` — côte à côte quand la place le permet (« Démarrer la séance » + « Changer »),
+empilés pleine largeur sinon.
+- Pièges de l'outillage : le stub e2e du dépôt répond par un tableau là où `.single()` attend un objet
+  (déjà noté plus bas, B06) ; `useBodyMeasurements` lit la table **`body_tracking`**, pas
+  `body_measurements` ; le fondu d'entrée (0,45 s) donne une capture « atténuée » si on la prend trop vite.
+
+### Validation (comparée à B06)
+`npx vitest run` **2323 passed / 63 skipped / 0 échec** (base 2231 : **+92**). `tsc --noEmit` 0 erreur.
+`npm run lint` **0 erreur / 154 warnings — identique à la base**. `check:offline-contract` et
+`check:bounded-reads` inchangés (aucune table ni lecture ajoutée : A01 ne crée aucune migration).
+
+### Non fait, volontairement
+C13 (objectif de séance), F26 (rapport hebdo), E20 (routes Chroniques + « Arène | Chroniques »), G28
+(signature de la carte partagée), G27 (reportée). **La tuile « Chroniques » de la maquette n'est pas
+livrée** : ouvrir le hub des Chroniques sans module exige les routes d'E20 — la brancher maintenant
+aurait été un lien provisoire. L'écart « série à poids 0 non comptée » (poids de corps) est celui du récap
+de fin de séance : il se corrigera aux deux endroits à la fois, jamais d'un seul.
+
 ## B06 « Mon rythme » — le plan de la semaine (2026-10-01, branche `claude/cortex-product-audit-dexmp2`)
 
 Premier chantier produit issu de l'audit du 07/09, après les maquettes validées par Nathan : un

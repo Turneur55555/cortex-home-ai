@@ -38,10 +38,12 @@ export function makeWeekPlanView(
   const loaded = options.templates === undefined ? [] : options.templates;
   const templates = (loaded ?? []).map(summarizeTemplate);
   const templatesById = loaded === null ? null : new Map(templates.map((t) => [t.id, t] as const));
-  const week = buildWeekView(plan, options.workouts ?? [], options.today ?? TEST_TODAY);
+  const today = options.today ?? TEST_TODAY;
+  const week = buildWeekView(plan, options.workouts ?? [], today);
 
   return {
     isLoading: options.isLoading ?? false,
+    today,
     plan,
     hasPlan: ISO_DAYS.some((day) => plan[day] !== null),
     week,

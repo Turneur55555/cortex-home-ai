@@ -20,6 +20,13 @@ import {
 export interface WeekPlanView {
   /** Le plan (ou les séances) n'est pas encore lu depuis le store local. */
   isLoading: boolean;
+  /**
+   * La date locale (yyyy-MM-dd) avec laquelle `week` a été construite. Les
+   * consommateurs qui ont besoin d'« aujourd'hui » doivent LIRE celle-ci plutôt
+   * que d'appeler leur propre `useLocalToday` : deux minuteurs indépendants
+   * pourraient, autour de minuit, ne pas basculer au même instant.
+   */
+  today: string;
   plan: WeeklyPlan;
   /** Au moins un jour est planifié (repos compris). */
   hasPlan: boolean;
@@ -79,6 +86,7 @@ export function useWeekPlanView(): WeekPlanView {
 
   return {
     isLoading: rowsQuery.isLoading,
+    today,
     plan,
     hasPlan,
     week,

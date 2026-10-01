@@ -23,10 +23,17 @@ function describeProgress(summary: WeekSummary): string {
  *
  * Elle porte son propre état d'ouverture : l'écran qui la monte n'a rien à
  * gérer.
+ *
+ * `hideInvitation` (Accueil) : sans plan, ne rien afficher — la Carte du jour
+ * porte déjà l'invitation à planifier, un second appel identique l'une sous
+ * l'autre serait du bruit. Pendant le chargement, la carte du jour a son propre
+ * squelette : pas de second ici.
  */
-export function WeekPlanCard() {
+export function WeekPlanCard({ hideInvitation = false }: { hideInvitation?: boolean } = {}) {
   const view = useWeekPlanView();
   const [open, setOpen] = useState(false);
+
+  if (hideInvitation && (view.isLoading || !view.hasPlan)) return null;
 
   if (view.isLoading) {
     return <Skeleton className="h-[116px] w-full rounded-2xl" aria-busy="true" />;

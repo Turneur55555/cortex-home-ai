@@ -41,9 +41,12 @@ afterEach(() => {
   container.remove();
 });
 
-function show(view: ReturnType<typeof makeWeekPlanView>) {
+function show(
+  view: ReturnType<typeof makeWeekPlanView>,
+  props: React.ComponentProps<typeof WeekPlanCard> = {},
+) {
   holder.view = view;
-  act(() => root.render(<WeekPlanCard />));
+  act(() => root.render(<WeekPlanCard {...props} />));
 }
 
 const sheet = () => container.querySelector('[data-testid="plan-sheet"]');
@@ -135,5 +138,30 @@ describe("WeekPlanCard", () => {
       const current = container.querySelector('li[aria-current="date"]');
       expect(current?.getAttribute("aria-label")).toContain("Mercredi");
     });
+  });
+});
+
+describe("WeekPlanCard — sur l'Accueil (hideInvitation)", () => {
+  const plan = { 1: { dayOfWeek: 1, kind: "rest" } as const };
+
+  it("sans plan : rien du tout (la Carte du jour porte déjà l'invitation)", () => {
+    show(makeWeekPlanView(), { hideInvitation: true });
+    expect(container.innerHTML).toBe("");
+  });
+
+  it("pendant le chargement : rien non plus (la Carte du jour a son propre squelette)", () => {
+    show(makeWeekPlanView({ isLoading: true }), { hideInvitation: true });
+    expect(container.innerHTML).toBe("");
+  });
+
+  it("avec un plan : la semaine s'affiche comme sur l'écran Séances", () => {
+    show(makeWeekPlanView({ plan }), { hideInvitation: true });
+    expect(container.querySelector('[aria-label="Ta semaine"]')).not.toBeNull();
+    expect(button("Modifier")).toBeDefined();
+  });
+
+  it("par défaut (écran Séances), l'invitation reste affichée sans plan", () => {
+    show(makeWeekPlanView());
+    expect(button("Planifie ta semaine")).toBeDefined();
   });
 });

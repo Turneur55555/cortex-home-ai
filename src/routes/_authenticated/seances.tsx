@@ -11,6 +11,10 @@ import { SeancesTab } from "./fitness/SeancesTab";
 // un domicile unique sans jamais casser un lien existant.
 const chroniquesModuleSchema = z.enum(["legendes", "forge", "progression"]);
 
+// `?demarrer=nouvelle` : la Carte du jour de l'Accueil renvoie ici pour ouvrir
+// « Choisir une épreuve » (le parcours de séance vit tout entier sur cet écran).
+const demarrerSchema = z.literal("nouvelle");
+
 export const Route = createFileRoute("/_authenticated/seances")({
   head: () => ({
     meta: [
@@ -18,25 +22,31 @@ export const Route = createFileRoute("/_authenticated/seances")({
       { name: "description", content: "Tes séances d'entraînement et ton Coach IA." },
     ],
   }),
-  validateSearch: z.object({ chroniques: chroniquesModuleSchema.optional() }),
+  validateSearch: z.object({
+    chroniques: chroniquesModuleSchema.optional(),
+    demarrer: demarrerSchema.optional(),
+  }),
   component: SeancesPage,
 });
 
 function SeancesPage() {
-  const { chroniques } = Route.useSearch();
+  const { chroniques, demarrer } = Route.useSearch();
   const navigate = useNavigate({ from: Route.fullPath });
   // Capturé une seule fois au premier rendu : un deep-link (`/trophees`,
   // `/progression`) ne doit ouvrir le module concerné qu'à cette entrée-là,
   // jamais "coller" à chaque réouverture manuelle des Chroniques ensuite.
   const [initialChroniques] = useState(chroniques);
+  // Même principe pour `?demarrer=` : lu une fois, retiré de l'URL (un
+  // rafraîchissement ne rouvre pas la feuille).
+  const [initialNewSession] = useState(demarrer === "nouvelle");
   useEffect(() => {
-    if (chroniques) navigate({ search: {}, replace: true });
+    if (chroniques || demarrer) navigate({ search: {}, replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
     <main className="flex flex-1 flex-col px-5 pb-6 pt-[max(2.5rem,env(safe-area-inset-top))]">
-      <SeancesTab initialChroniques={initialChroniques} />
+      <SeancesTab initialChroniques={initialChroniques} initialNewSession={initialNewSession} />
     </main>
   );
 }
