@@ -19,8 +19,9 @@ import { GenericPostWorkoutAnalysisSheet } from "@/components/fitness/session/Ge
 import { SessionRewardScreen } from "@/components/fitness/session/SessionRewardScreen";
 import { SessionRecapScreen } from "@/components/fitness/session/SessionRecapScreen";
 import { ChroniquePage } from "@/components/fitness/chronique/ChroniquePage";
-import { ChroniquesEntryCard } from "@/components/fitness/chronique/ChroniquesEntryCard";
 import { ChroniquesPage } from "@/components/fitness/chronique/ChroniquesPage";
+import type { ChroniquesRouting } from "@/lib/fitness/chroniquesRouting";
+import { SeancesStageSwitch } from "@/components/fitness/SeancesStageSwitch";
 import { SectionReveal } from "@/components/fitness/SectionReveal";
 import { WeekPlanCard } from "@/components/fitness/plan/WeekPlanCard";
 import {
@@ -52,19 +53,19 @@ import { computeRecordsBySession } from "@/lib/fitness/chronicles";
 
 // ── Composant principal ─────────────────────────────────────────────────────────
 
-interface SeancesTabProps {
-  /** Deep-link (`?chroniques=`) depuis une route redirigée vers le domicile
-   *  unique des Chroniques (`/trophees`, `/progression`) — ouvre directement
-   *  le module concerné au lieu de laisser l'utilisateur retomber sur
-   *  l'écran Séances sans contexte. */
-  initialChroniques?: "legendes" | "forge" | "progression";
+type SeancesTabProps = {
   /** Deep-link (`?demarrer=nouvelle`) depuis la Carte du jour de l'Accueil :
    *  ouvre « Choisir une épreuve » d'office, UNE seule fois, et seulement si
    *  aucune séance n'est en cours (voir l'effet plus bas). */
   initialNewSession?: boolean;
-}
+} & (
+  | { view?: "arene"; chroniques?: undefined }
+  | { view: "chroniques"; chroniques: ChroniquesRouting }
+);
 
-export function SeancesTab({ initialChroniques, initialNewSession }: SeancesTabProps = {}) {
+export function SeancesTab(props: SeancesTabProps = {}) {
+  const { initialNewSession } = props;
+  const routing = props.view === "chroniques" ? props.chroniques : null;
   const { data, isLoading, error } = useWorkouts();
   const { data: activeWorkout, isLoading: activeLoading } = useActiveWorkout();
   // Phase pilote Course (2026-07-09) : séance active générique (segments
@@ -137,18 +138,35 @@ export function SeancesTab({ initialChroniques, initialNewSession }: SeancesTabP
   const [coachInitialDiscipline, setCoachInitialDiscipline] = useState<DisciplineId | undefined>(
     undefined,
   );
-  // Refonte Chroniques (23/07/2026) : troisième pilier de la page, ouvert
-  // par la Hero Card unique. Page plein écran (early-return, même système
-  // qu'ActiveWorkoutView) composée de trois modules pairs — Légendes,
-  // Forge, Progression (voir docs/architecture/rpg-chroniques.md). La
-  // Forge n'a plus de porte d'entrée séparée sur cet écran : elle vit
-  // désormais comme un module des Chroniques.
-  const [chroniquesOpen, setChroniquesOpen] = useState(!!initialChroniques);
-  // LOT C1 — module immersif « Chronique » : toucher une chronique de
-  // musculation (désormais depuis la Chronologie du module Progression)
-  // ouvre une page plein écran dédiée (ChroniquePage).
-  const [chronicleWorkout, setChronicleWorkout] = useState<WorkoutRow | null>(null);
-  const openChronicle = useCallback((w: WorkoutRow) => setChronicleWorkout(w), []);
+  // Les Chroniques sont une VRAIE ROUTE (`/chroniques`, E20) : ni état local « ouvert / fermé »,
+  // ni Chronique ouverte retenue en mémoire — tout vient de l'URL, via `routing`. Le retour
+  // arrière du navigateur, le lien direct et la reprise après rechargement fonctionnent donc.
+  // Refonte Chroniques (23/07/2026) : troisième pilier de la page, trois modules pairs — Légendes,
+  // Forge, Progression (voir docs/architecture/rpg-chroniques.md).
+  const chroniquesView = routing !== null;
+  const chronicleId = routing?.chronicleId;
+  // LOT C1 — module immersif « Chronique » : toucher une chronique de musculation (depuis la
+  // Chronologie du module Progression) ouvre une page plein écran dédiée (ChroniquePage).
+  const chronicleWorkout = useMemo(
+    () => (chronicleId ? ((data ?? []).find((w) => w.id === chronicleId) ?? null) : null),
+    [chronicleId, data],
+  );
+  // Le contrat de routage est relu à travers une ref : la route le reconstruit à chaque rendu, et
+  // l'effet ci-dessous ne doit pas se relancer pour autant (il pourrait naviguer deux fois).
+  const routingRef = useRef(routing);
+  routingRef.current = routing;
+  const openChronicle = useCallback(
+    (w: WorkoutRow) => routingRef.current?.onChronicleOpen(w.id, "push"),
+    [],
+  );
+  // Un identifiant de Chronique qui ne correspond à aucune séance (séance supprimée, lien périmé) :
+  // on retombe sur la liste des Chroniques plutôt que de rester sur un écran vide. On attend que
+  // l'historique soit lu — sinon chaque chargement fermerait la Chronique qu'on vient d'ouvrir.
+  useEffect(() => {
+    if (!chronicleId || isLoading || !data) return;
+    if (data.some((w) => w.id === chronicleId)) return;
+    routingRef.current?.onChronicleClose({ replace: true });
+  }, [chronicleId, isLoading, data]);
   // Partagé entre le module Forge (Chroniques) et l'accès pendant une
   // séance active (ActiveWorkoutView) — une seule porte pour le catalogue
   // musculation, quel que soit le point d'entrée.
@@ -163,10 +181,10 @@ export function SeancesTab({ initialChroniques, initialNewSession }: SeancesTabP
   // Chroniques sont ouvertes (même optimisation que l'ancien accordéon déplié).
   const allImagePaths = useMemo(
     () =>
-      chroniquesOpen
+      chroniquesView
         ? (data ?? []).flatMap((w) => (w.exercises ?? []).map((ex) => ex.image_path))
         : [],
-    [data, chroniquesOpen],
+    [data, chroniquesView],
   );
   const { data: listImageUrls } = useExerciseImageUrls(allImagePaths);
   const latestDate = useMemo(() => data?.[0]?.date ?? "", [data]);
@@ -431,18 +449,85 @@ export function SeancesTab({ initialChroniques, initialNewSession }: SeancesTabP
     );
   }
 
-  // ── VUE « LES CHRONIQUES » (refonte 23/07/2026) ─────────────────────────────
-  // Ouverte par la Hero Card unique. Vraie page plein écran (early-return,
-  // même système qu'ActiveWorkoutView) — trois modules pairs (Légendes,
-  // Forge, Progression) derrière un sélecteur segmenté, plus la Chronique
-  // immersive en drill-down. Vérifiée AVANT la Chronique : ouvrir une
-  // chronique se fait depuis Progression, on doit donc pouvoir revenir aux
-  // Chroniques, pas à la page Séances.
-  if (chroniquesOpen && !chronicleWorkout) {
+  // ── BLOCS PARTAGÉS PAR LES DEUX ÉTAGES ─────────────────────────────────────
+  // Feuilles déclenchées depuis l'historique (« Refaire en live », « Enregistrer comme séance
+  // passée », « Enregistrer comme séance sauvegardée ») et écrans de récompense de fin de séance.
+  // Les Chroniques les déclenchent aussi : montés SEULEMENT dans l'Arène, un appui sur « Refaire »
+  // depuis les Chroniques ne montrait rien (mesuré : 0 dialogue visible) — et une séance terminée
+  // depuis `/chroniques` aurait perdu son écran de récompense en changeant de vue.
+  const sharedSheets = (
+    <>
+      {open && (
+        <WorkoutSheet
+          template={template}
+          priorPRs={prByName}
+          onClose={() => {
+            setOpen(false);
+            setTemplate(null);
+          }}
+        />
+      )}
+
+      {templateSeed && (
+        <TemplateEditorSheet
+          seedName={templateSeed.name}
+          seedExercises={templateSeed.exercises}
+          onClose={() => setTemplateSeed(null)}
+        />
+      )}
+
+      {/* Phase C, lot V1 (P1-6) : confirmation "Refaire en live" custom,
+          partagée avec GenericHistoryCard — plus aucun window.confirm. */}
+      {repeatCandidate && (
+        <RepeatLiveConfirmDialog
+          workoutName={repeatCandidate.name || "cette séance"}
+          onConfirm={confirmRepeatLive}
+          onCancel={() => setRepeatCandidate(null)}
+        />
+      )}
+
+      {/* R2 : écran de récompense puis bilan IA opt-in — rendus aussi hors
+          séance active (survit à la transition active → historique). */}
+      {muscuPostClose}
+      {genericPostClose}
+    </>
+  );
+
+  // ── VUE CHRONIQUE IMMERSIVE (LOT C1) ────────────────────────────────────────
+  // Ouverte depuis la Chronologie du module Progression (`/chroniques?seance=`). Vraie page plein
+  // écran. « Retour » referme (retour arrière du navigateur), précédent / suivant remplace.
+  // Vérifiée AVANT la liste : tant que l'historique charge ou que l'identifiant n'est pas résolu,
+  // on affiche un chargement, jamais la liste qui clignoterait avant la Chronique.
+  if (routing && chronicleId) {
+    if (!chronicleWorkout) {
+      return (
+        <div className="flex h-40 items-center justify-center" data-testid="chronique-loading">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      );
+    }
+    return (
+      <ChroniquePage
+        workout={chronicleWorkout}
+        allWorkouts={data ?? []}
+        prByName={prByName}
+        histByName={histByName}
+        nameByKey={nameByKey}
+        onBack={() => routing.onChronicleClose()}
+        onNavigate={(w) => routing.onChronicleOpen(w.id, "replace")}
+      />
+    );
+  }
+
+  // ── VUE « LES CHRONIQUES » — second étage de Séances (`/chroniques`) ────────
+  // Trois modules pairs (Légendes, Forge, Progression) derrière un sélecteur segmenté, sous le
+  // sélecteur d'étages « Arène | Chroniques ».
+  if (routing) {
     return (
       <section className="flex flex-col gap-4">
         <ChroniquesPage
-          initialModule={initialChroniques}
+          module={routing.module}
+          onModuleChange={routing.onModuleChange}
           workouts={data ?? []}
           prByName={prByName}
           histByName={histByName}
@@ -458,7 +543,6 @@ export function SeancesTab({ initialChroniques, initialNewSession }: SeancesTabP
           onSaveAsTemplate={saveAsTemplate}
           onOpenChronicle={openChronicle}
           onOpenCatalog={() => setCatalogOpen(true)}
-          onBack={() => setChroniquesOpen(false)}
         />
         {/* Le catalogue musculation (module Forge) partage la même porte que
             l'accès pendant une séance active — un seul ExerciseCatalogSheet
@@ -471,32 +555,17 @@ export function SeancesTab({ initialChroniques, initialNewSession }: SeancesTabP
             prByName={prByName}
           />
         )}
+        {sharedSheets}
       </section>
-    );
-  }
-
-  // ── VUE CHRONIQUE IMMERSIVE (LOT C1) ────────────────────────────────────────
-  // Ouverte depuis la Chronologie du module Progression. Rendue comme une
-  // vraie page (early-return, même pattern qu'ActiveWorkoutView) : aucun
-  // modal, aucun drawer. « Retour » revient aux Chroniques (chroniquesOpen
-  // reste vrai), prev/next navigue.
-  if (chronicleWorkout) {
-    return (
-      <ChroniquePage
-        workout={chronicleWorkout}
-        allWorkouts={data ?? []}
-        prByName={prByName}
-        histByName={histByName}
-        nameByKey={nameByKey}
-        onBack={() => setChronicleWorkout(null)}
-        onNavigate={setChronicleWorkout}
-      />
     );
   }
 
   // ── VUE HISTORIQUE ─────────────────────────────────────────────────────────
   return (
     <section className="flex flex-col gap-5">
+      {/* ── Les deux étages de Séances : Arène | Chroniques (E20) ─────── */}
+      <SeancesStageSwitch active="arene" />
+
       {/* ── Hero — respiration d'ambiance ───────────────────────────── */}
       <SeancesHero />
 
@@ -525,15 +594,6 @@ export function SeancesTab({ initialChroniques, initialNewSession }: SeancesTabP
         <div className="flex h-32 items-center justify-center">
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
-      )}
-
-      {/* ── LES CHRONIQUES — troisième pilier : une seule Hero Card (au
-          même poids visuel que l'Arène) ouvre le livre plein écran, qui
-          héberge désormais aussi La Forge en tant que module. ─────────── */}
-      {data && !isLoading && (
-        <SectionReveal delay={0.1}>
-          <ChroniquesEntryCard onClick={() => setChroniquesOpen(true)} />
-        </SectionReveal>
       )}
 
       {data && data.length === 0 && !isLoading && (
@@ -571,25 +631,6 @@ export function SeancesTab({ initialChroniques, initialNewSession }: SeancesTabP
         />
       )}
 
-      {open && (
-        <WorkoutSheet
-          template={template}
-          priorPRs={prByName}
-          onClose={() => {
-            setOpen(false);
-            setTemplate(null);
-          }}
-        />
-      )}
-
-      {templateSeed && (
-        <TemplateEditorSheet
-          seedName={templateSeed.name}
-          seedExercises={templateSeed.exercises}
-          onClose={() => setTemplateSeed(null)}
-        />
-      )}
-
       {coachOpen && (
         <CoachSheet
           onClose={() => {
@@ -618,20 +659,7 @@ export function SeancesTab({ initialChroniques, initialNewSession }: SeancesTabP
         />
       )}
 
-      {/* Phase C, lot V1 (P1-6) : confirmation "Refaire en live" custom,
-          partagée avec GenericHistoryCard — plus aucun window.confirm. */}
-      {repeatCandidate && (
-        <RepeatLiveConfirmDialog
-          workoutName={repeatCandidate.name || "cette séance"}
-          onConfirm={confirmRepeatLive}
-          onCancel={() => setRepeatCandidate(null)}
-        />
-      )}
-
-      {/* R2 : écran de récompense puis bilan IA opt-in — rendus aussi hors
-          séance active (survit à la transition active → historique). */}
-      {muscuPostClose}
-      {genericPostClose}
+      {sharedSheets}
     </section>
   );
 }

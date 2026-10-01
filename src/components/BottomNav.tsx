@@ -4,6 +4,7 @@ import { Home, Dumbbell, Apple, User } from "lucide-react";
 import { motion } from "framer-motion";
 import { useSyncAttentionIndicator } from "@/hooks/useSyncAttentionIndicator";
 import { describeSyncAttention } from "@/lib/offline/syncQueueSummary";
+import { isTabActive } from "@/lib/navigationTabs";
 
 const tabs = [
   { to: "/", label: "Accueil", icon: Home },
@@ -62,12 +63,15 @@ export function BottomNav() {
         />
         <ul className="relative flex items-center justify-between">
           {tabs.map(({ to, label, icon: Icon }) => {
-            const active = to === "/" ? pathname === "/" : pathname.startsWith(to);
+            // « Séances » reste actif sur ses deux étages (Arène, Chroniques) et sur les bilans
+            // de semaine — voir lib/navigationTabs.ts.
+            const active = isTabActive(to, pathname);
             return (
               <li key={to} className="flex-1">
                 <Link
                   to={to}
                   data-testid={`nav-${to === "/" ? "home" : to.replace("/", "")}`}
+                  aria-current={active ? "page" : undefined}
                   className="group relative flex flex-col items-center gap-0.5 rounded-2xl px-2 py-1.5"
                 >
                   <span className="relative flex h-9 w-12 items-center justify-center">

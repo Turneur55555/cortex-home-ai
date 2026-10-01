@@ -25,6 +25,7 @@ import { Route as AuthenticatedPreferencesAlimentairesRouteImport } from './rout
 import { Route as AuthenticatedNutritionRouteImport } from './routes/_authenticated/nutrition'
 import { Route as AuthenticatedDocumentsRouteImport } from './routes/_authenticated/documents'
 import { Route as AuthenticatedCorpsRouteImport } from './routes/_authenticated/corps'
+import { Route as AuthenticatedChroniquesRouteImport } from './routes/_authenticated/chroniques'
 import { Route as AuthenticatedSemaineIndexRouteImport } from './routes/_authenticated/semaine/index'
 import { Route as AuthenticatedRapportsIndexRouteImport } from './routes/_authenticated/rapports/index'
 import { Route as AuthenticatedFitnessIndexRouteImport } from './routes/_authenticated/fitness/index'
@@ -120,6 +121,11 @@ const AuthenticatedCorpsRoute = AuthenticatedCorpsRouteImport.update({
   path: '/corps',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedChroniquesRoute = AuthenticatedChroniquesRouteImport.update({
+  id: '/chroniques',
+  path: '/chroniques',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedSemaineIndexRoute =
   AuthenticatedSemaineIndexRouteImport.update({
     id: '/semaine/',
@@ -192,6 +198,7 @@ export interface FileRoutesByFullPath {
   '/index': typeof Char91indexChar93Route
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/chroniques': typeof AuthenticatedChroniquesRoute
   '/corps': typeof AuthenticatedCorpsRoute
   '/documents': typeof AuthenticatedDocumentsRoute
   '/nutrition': typeof AuthenticatedNutritionRoute
@@ -219,6 +226,7 @@ export interface FileRoutesByTo {
   '/index': typeof Char91indexChar93Route
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/chroniques': typeof AuthenticatedChroniquesRoute
   '/corps': typeof AuthenticatedCorpsRoute
   '/documents': typeof AuthenticatedDocumentsRoute
   '/nutrition': typeof AuthenticatedNutritionRoute
@@ -249,6 +257,7 @@ export interface FileRoutesById {
   '/index': typeof Char91indexChar93Route
   '/login': typeof LoginRoute
   '/reset-password': typeof ResetPasswordRoute
+  '/_authenticated/chroniques': typeof AuthenticatedChroniquesRoute
   '/_authenticated/corps': typeof AuthenticatedCorpsRoute
   '/_authenticated/documents': typeof AuthenticatedDocumentsRoute
   '/_authenticated/nutrition': typeof AuthenticatedNutritionRoute
@@ -280,6 +289,7 @@ export interface FileRouteTypes {
     | '/index'
     | '/login'
     | '/reset-password'
+    | '/chroniques'
     | '/corps'
     | '/documents'
     | '/nutrition'
@@ -307,6 +317,7 @@ export interface FileRouteTypes {
     | '/index'
     | '/login'
     | '/reset-password'
+    | '/chroniques'
     | '/corps'
     | '/documents'
     | '/nutrition'
@@ -336,6 +347,7 @@ export interface FileRouteTypes {
     | '/index'
     | '/login'
     | '/reset-password'
+    | '/_authenticated/chroniques'
     | '/_authenticated/corps'
     | '/_authenticated/documents'
     | '/_authenticated/nutrition'
@@ -482,6 +494,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedCorpsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/chroniques': {
+      id: '/_authenticated/chroniques'
+      path: '/chroniques'
+      fullPath: '/chroniques'
+      preLoaderRoute: typeof AuthenticatedChroniquesRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/semaine/': {
       id: '/_authenticated/semaine/'
       path: '/semaine'
@@ -563,6 +582,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedRouteChildren {
+  AuthenticatedChroniquesRoute: typeof AuthenticatedChroniquesRoute
   AuthenticatedCorpsRoute: typeof AuthenticatedCorpsRoute
   AuthenticatedDocumentsRoute: typeof AuthenticatedDocumentsRoute
   AuthenticatedNutritionRoute: typeof AuthenticatedNutritionRoute
@@ -588,6 +608,7 @@ interface AuthenticatedRouteChildren {
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
+  AuthenticatedChroniquesRoute: AuthenticatedChroniquesRoute,
   AuthenticatedCorpsRoute: AuthenticatedCorpsRoute,
   AuthenticatedDocumentsRoute: AuthenticatedDocumentsRoute,
   AuthenticatedNutritionRoute: AuthenticatedNutritionRoute,

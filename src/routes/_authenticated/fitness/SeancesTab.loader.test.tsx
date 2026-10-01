@@ -88,8 +88,10 @@ vi.mock("@/components/fitness/session/GenericPostWorkoutAnalysisSheet", () =>
 vi.mock("@/components/fitness/session/SessionRewardScreen", () => stub("SessionRewardScreen"));
 vi.mock("@/components/fitness/session/SessionRecapScreen", () => stub("SessionRecapScreen"));
 vi.mock("@/components/fitness/chronique/ChroniquePage", () => stub("ChroniquePage"));
-vi.mock("@/components/fitness/chronique/ChroniquesEntryCard", () => stub("ChroniquesEntryCard"));
 vi.mock("@/components/fitness/chronique/ChroniquesPage", () => stub("ChroniquesPage"));
+// E20 : le sélecteur d'étages est fait de liens, qui exigent un routeur — sans rapport avec la
+// décision d'affichage testée ici (voir SeancesStageSwitch.test.tsx).
+vi.mock("@/components/fitness/SeancesStageSwitch", () => stub("SeancesStageSwitch"));
 // B06 : la carte du plan de la semaine lit le plan, les séances et les modèles,
 // et exige un AuthProvider — sans rapport avec la décision d'affichage testée ici.
 vi.mock("@/components/fitness/plan/WeekPlanCard", () => stub("WeekPlanCard"));

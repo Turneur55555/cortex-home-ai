@@ -25,11 +25,12 @@ export function WeekReportList() {
   return (
     <main className="flex flex-1 flex-col px-5 pb-8 pt-[max(1.25rem,calc(env(safe-area-inset-top)+0.375rem))]">
       <Link
-        to="/seances"
+        to="/chroniques"
+        search={{ module: "progression" }}
         className="mb-4 flex w-fit items-center gap-1.5 rounded-full bg-white/[0.06] py-2 pl-2.5 pr-4 text-sm font-semibold text-white/90 active:scale-95"
       >
         <ChevronLeft aria-hidden className="h-4 w-4" />
-        Séances
+        Chroniques
       </Link>
 
       <header className="mb-4">

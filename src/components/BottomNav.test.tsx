@@ -2,7 +2,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { createRootRoute, createRouter, RouterProvider } from "@tanstack/react-router";
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRouter,
+  RouterProvider,
+} from "@tanstack/react-router";
 
 /**
  * CHANTIER 4 (AMEL-04), étendu par le CHANTIER FINAL (AUD-05) — le point
@@ -43,9 +48,12 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-async function render() {
+async function render(initialPath = "/") {
   const rootRoute = createRootRoute({ component: BottomNav });
-  const router = createRouter({ routeTree: rootRoute, history: undefined });
+  const router = createRouter({
+    routeTree: rootRoute,
+    history: createMemoryHistory({ initialEntries: [initialPath] }),
+  });
   await router.load();
   await act(async () => {
     root.render(<RouterProvider router={router} />);
@@ -87,5 +95,25 @@ describe("BottomNav — signal discret « une décision vous attend » (AMEL-04 
     // Aucune autre entrée de la barre ne porte le signal : la
     // synchronisation ne s'impose jamais par-dessus l'écran courant.
     expect(container.querySelectorAll('[data-testid="nav-attention-dot"]')).toHaveLength(1);
+  });
+});
+
+describe("BottomNav — l'onglet allumé (E20 : Séances porte deux étages)", () => {
+  const current = () =>
+    Array.from(container.querySelectorAll('[aria-current="page"]')).map((el) =>
+      el.getAttribute("data-testid"),
+    );
+
+  it.each([
+    ["/", ["nav-home"]],
+    ["/seances", ["nav-seances"]],
+    ["/chroniques?module=forge", ["nav-seances"]],
+    ["/semaine/2026-09-28", ["nav-seances"]],
+    ["/nutrition", ["nav-nutrition"]],
+    ["/profil", ["nav-profil"]],
+    ["/corps", []],
+  ])("sur %s : %j", async (path, expected) => {
+    await render(path);
+    expect(current()).toEqual(expected);
   });
 });

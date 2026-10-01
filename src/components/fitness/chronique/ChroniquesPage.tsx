@@ -14,23 +14,26 @@
 // tap, contenu échangé en place) au lieu d'un long scroll — le pouce reste
 // toujours à portée du sélecteur.
 //
-// Vraie page plein écran (early-return dans SeancesTab, même système
-// qu'ActiveWorkoutView) : aucun modal, aucun drawer pour la navigation
-// entre modules.
+// Vraie page plein écran, désormais une VRAIE ROUTE (`/chroniques`, E20) :
+// le module actif vit dans l'URL (`?module=`), donc retour arrière du
+// navigateur, lien direct et reprise après rechargement fonctionnent. Aucun
+// modal, aucun drawer pour la navigation entre modules. Le sélecteur
+// d'étages « Arène | Chroniques » remplace l'ancien bouton « Retour ».
 // ============================================================
 
-import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, Crown, Hammer, TrendingUp } from "lucide-react";
+import { Crown, Hammer, TrendingUp } from "lucide-react";
 
 import type { WorkoutRow } from "@/components/fitness/WorkoutCard";
+import { SeancesStageSwitch } from "@/components/fitness/SeancesStageSwitch";
+import type { ChroniquesModuleKey } from "@/lib/fitness/chroniquesModules";
 import { ProfileRPGData } from "@/components/profile/rpg/ProfileRPGData";
 import { EASE_OUT } from "@/components/rpg/premium/tokens";
 import { LegendesModule } from "./modules/LegendesModule";
 import { ForgeModule } from "./modules/ForgeModule";
 import { ProgressionModule } from "./modules/ProgressionModule";
 
-type ModuleKey = "legendes" | "forge" | "progression";
+type ModuleKey = ChroniquesModuleKey;
 
 const MODULES: Array<{
   key: ModuleKey;
@@ -62,7 +65,8 @@ const MODULES: Array<{
 ];
 
 export function ChroniquesPage({
-  initialModule,
+  module: active,
+  onModuleChange,
   workouts,
   prByName,
   histByName,
@@ -78,11 +82,10 @@ export function ChroniquesPage({
   onSaveAsTemplate,
   onOpenChronicle,
   onOpenCatalog,
-  onBack,
 }: {
-  /** Module à ouvrir directement (deep-link depuis `/progression`,
-   *  désormais redirigée vers ce domicile unique). */
-  initialModule?: ModuleKey;
+  /** Le module actif — vit dans l'URL (`/chroniques?module=`), jamais dans un état local. */
+  module: ModuleKey;
+  onModuleChange: (module: ModuleKey) => void;
   workouts: WorkoutRow[];
   prByName: Map<string, number>;
   histByName: Map<string, Array<{ date: string; weight: number }>>;
@@ -98,13 +101,7 @@ export function ChroniquesPage({
   onSaveAsTemplate: (w: WorkoutRow) => void;
   onOpenChronicle: (w: WorkoutRow) => void;
   onOpenCatalog: () => void;
-  onBack: () => void;
 }) {
-  // Ouvre directement sur Les Légendes — le module le plus identitaire et le
-  // plus "capturable" (illustrations de rang), jamais sur un lanceur de
-  // cartes ni sur des graphiques (règle DA : le Rang est la star) — sauf
-  // deep-link explicite depuis une route redirigée vers son nouveau domicile.
-  const [active, setActive] = useState<ModuleKey>(initialModule ?? "legendes");
   const activeModule = MODULES.find((m) => m.key === active)!;
 
   return (
@@ -116,20 +113,7 @@ export function ChroniquesPage({
     >
       {/* ── Couverture du livre + sélecteur segmenté — collants ─────────── */}
       <div className="sticky top-0 z-30 -mx-1 flex flex-col gap-3 bg-background/80 px-1 pb-3 pt-2 backdrop-blur-xl">
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={onBack}
-            className="flex items-center gap-1.5 rounded-full bg-white/[0.06] py-2 pl-2.5 pr-4 text-sm font-semibold text-white/90 transition-all active:scale-95 hover:bg-white/[0.1]"
-            aria-label="Retour aux Séances"
-          >
-            <ChevronLeft className="h-4 w-4" />
-            Retour
-          </button>
-          <span className="truncate font-serif text-[14px] font-semibold italic text-white/70">
-            Les Chroniques
-          </span>
-        </div>
+        <SeancesStageSwitch active="chroniques" />
 
         <div className="flex gap-1 rounded-full border border-white/[0.08] bg-white/[0.03] p-1">
           {MODULES.map((m) => {
@@ -138,16 +122,16 @@ export function ChroniquesPage({
               <button
                 key={m.key}
                 type="button"
-                onClick={() => setActive(m.key)}
+                onClick={() => onModuleChange(m.key)}
                 className={
                   "relative flex flex-1 items-center justify-center gap-1.5 rounded-full py-2 text-[12px] font-semibold transition-colors " +
-                  (isActive ? "text-black" : "text-white/60 hover:text-white/85")
+                  (isActive ? "text-white" : "text-white/55 hover:text-white/85")
                 }
               >
                 {isActive && (
                   <motion.span
                     layoutId="chroniques-segment"
-                    className="absolute inset-0 rounded-full bg-white"
+                    className="absolute inset-0 rounded-full bg-white/[0.14]"
                     transition={{ type: "spring", stiffness: 400, damping: 34 }}
                   />
                 )}

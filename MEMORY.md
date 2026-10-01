@@ -22,6 +22,85 @@
 ## Dernière mise à jour
 2026-10-01
 
+## E20 « Séances à deux étages » — Arène | Chroniques, chacun une vraie route (2026-10-01, branche `claude/cortex-product-audit-dexmp2`)
+
+Cinquième chantier produit issu de l'audit. Décision de Nathan (30/09/2026) : « Séances » gagne deux
+étages — la barre du bas reste à **quatre onglets** et garde son nom. Les Chroniques étaient un
+early-return dans `SeancesTab` : pas d'URL, pas de retour arrière, pas de reprise après rechargement.
+
+### Ce qui change
+- **Deux routes** : `/seances` (Arène) et **`/chroniques`** (`routes/_authenticated/chroniques.tsx`). Le module
+  actif vit dans l'URL (`?module=legendes|forge|progression`) et la Chronique immersive aussi
+  (`?seance=<id>`) : retour arrière du navigateur, lien direct, rechargement — tout fonctionne.
+- **`SeancesStageSwitch`** (liens, `aria-current`, jamais des boutons) : en tête de l'Arène, et dans l'en-tête
+  collant des Chroniques **à la place** du bouton « Retour » (devenu inutile). Les deux niveaux de sélecteur sont
+  différenciés : l'étage en blanc plein, les modules en teinte discrète.
+- **`ChroniquesEntryCard` supprimée** (carte d'entrée dorée) : la maquette validée n'en montre pas, le sélecteur
+  est la porte. Elle reste dans l'historique git.
+- **Onglet « Séances » allumé sur `/chroniques` et `/semaine`** (`lib/navigationTabs.ts`, `isTabActive`,
+  segment par segment — jamais un simple préfixe de texte : `/seancesX` n'est pas `/seances`). `aria-current="page"`
+  ajouté sur l'onglet actif de la barre du bas (il manquait).
+- **Ancien lien `/seances?chroniques=<module>`** : redirigé avant rendu (`beforeLoad` + `redirect`) vers
+  `/chroniques?module=…`. Un lien existant ne casse jamais.
+- Le bilan « Tes semaines » (F26) ramène désormais à `/chroniques?module=progression`.
+
+### Les choix de navigation sont dans `lib/fitness/chroniquesRouting.ts` (pure, testée)
+La route ne fournit que les trois effets (`setSearch`, `canGoBack`, `goBack`) ; le module décide :
+- **changer de module REMPLACE l'entrée d'historique** (les trois modules sont des pairs : le retour arrière ne
+  doit pas rejouer chaque bascule d'onglet) et **referme la Chronique ouverte** (la clé `seance` doit être posée
+  à `undefined` dans le correctif — la route fusionne `{ ...previous, ...patch }`) ;
+- **ouvrir une Chronique = `push`** (le retour arrière la referme) ; **précédent / suivant = `replace`** ;
+- **fermer** : retour arrière si l'écran a été atteint depuis les Chroniques ; sinon (lien direct, rechargement)
+  **remplacement de l'URL** — un retour arrière sortirait de l'application ; `replace: true` force le
+  remplacement (identifiant devenu introuvable) ;
+- **valeur invalide ignorée, jamais fatale** (`.catch(undefined)`) : un module inconnu → Légendes ; un
+  identifiant vide ou inconnu → liste des Chroniques.
+
+### Deux défauts qui existaient AVANT et que cette restructuration corrige
+1. **« Refaire cette séance (live) » depuis les Chroniques n'affichait rien.** Mesuré sur le code d'avant
+   (navigateur) : **0 dialogue visible** après le clic. La confirmation, `WorkoutSheet` et `TemplateEditorSheet`
+   n'étaient montés que dans la vue Arène : la demande restait en mémoire et la confirmation surgissait au retour
+   sur l'Arène. Les trois sont maintenant dans un bloc partagé (`sharedSheets`), monté par les deux étages.
+2. **Risque évité à la conversion, pas un défaut préexistant** : les écrans de récompense de fin de séance
+   (`muscuPostClose` / `genericPostClose`) n'étaient montés que dans l'Arène « pour survivre à la transition
+   active → historique ». Avec une URL `/chroniques`, une séance terminée là aurait perdu sa récompense. Ils sont
+   dans le même bloc partagé, avec un test qui rejoue exactement cette transition.
+
+### Ce qui n'est PAS fait, volontairement
+**La séance active n'est pas devenue une route** (et la Chronique immersive passe par `?seance=`, pas par une
+route à part). La maquette mentionnait ce « gain technique » ; le parcours de séance (clôture, récompense, récap,
+catalogue) est un graphe d'états de `SeancesTab` dont chaque pièce partage ces états. Le déplacer est un chantier
+à part, à risque, sans lien avec les étages. Conséquence assumée : **la séance en cours prime sur les deux
+étages** (sur `/chroniques` comme sur `/seances`, c'est la séance qui s'affiche) ; le retour arrière Android en
+pleine séance n'est donc pas encore amélioré.
+
+### Tests (+43, aucun skip ajouté)
+`navigationTabs.test.ts` (6), `BottomNav.test.tsx` (+7, via un historique mémoire), `SeancesStageSwitch.test.tsx`
+(3), `SeancesTab.chroniques.test.tsx` (15), `chroniquesRouting.test.ts` (12). **Contrôlés par mutation, 17 fois** :
+feuilles partagées absentes des Chroniques, récompense retirée du bloc partagé, identifiant
+jugé introuvable pendant le chargement, précédent / suivant qui empile, fermeture sans remplacement forcé, liste
+qui clignote avant la Chronique, Chronique ignorée, Séances éteint sur `/chroniques`, préfixe de texte,
+bascule de module qui empile, drapeau de remplacement inversé, retour arrière jamais / toujours / sans historique,
+option `replace` ignorée, schéma fatal, `aria-current` retiré. **Une de ces 17 a d'abord survécu, puis a été tuée** : « changer
+de module garde la Chronique ouverte » — `toHaveBeenCalledWith` ignore les propriétés `undefined`, alors que la
+fusion de la route dépend de la présence de la clé ; le test utilise désormais `toStrictEqual`.
+
+### Vérifié en navigateur (spec jetable, supprimé — jamais commité)
+414×896, faux serveur à mémoire. Arène (sélecteur, plus de carte dorée, onglet allumé) → un tap → `/chroniques`
+(onglet toujours allumé) → Forge dans l'URL → **rechargement : Forge conservée** → ouvrir une Chronique →
+`?seance=` → **retour arrière : la liste** → lien direct sur une Chronique → « Retour » : l'URL est remplacée →
+identifiant inconnu : retour à la liste → module invalide : Légendes → ancien lien redirigé → **« Refaire » :
+la confirmation s'affiche** → `/semaine` : onglet Séances allumé, retour aux Chroniques. Aucune erreur JavaScript.
+Rejoué après l'extraction de la logique de navigation (même résultat).
+- Piège de l'outillage : `getByRole("button", { name: /Forge/ })` attrape aussi « Forgeron des Bras » — utiliser
+  `exact: true`.
+- Doc : `docs/architecture/rpg-chroniques.md` porte une note datée sur l'ouverture des Chroniques.
+
+### Validation (comparée à F26)
+`npx vitest run` **2507 passed / 63 skipped / 0 échec** (base 2464 : **+43**). `tsc --noEmit` 0 erreur.
+`npm run lint` **0 erreur / 154 warnings — identique à la base**. `src/routeTree.gen.ts` régénéré par le build
+(+21 lignes) et commité. Aucune migration.
+
 ## F26 « Ta semaine » — le bilan hebdomadaire, rattaché aux Chroniques (2026-10-01, branche `claude/cortex-product-audit-dexmp2`)
 
 Quatrième chantier produit issu de l'audit. Validé sur maquette (30/09/2026) : bandeau « Ta semaine est

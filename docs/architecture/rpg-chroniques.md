@@ -15,6 +15,12 @@
 > Les Chroniques livrées comptent **trois modules** : Légendes, Forge, Progression
 > (`src/components/fitness/chronique/`). Toute mention de Saison ou de trophée ci-dessous est une
 > intention d'époque, jamais une fonctionnalité à construire.
+>
+> **Où vivent les Chroniques (E20, 01/10/2026).** Elles ne s'ouvrent plus par une carte d'entrée de
+> l'écran Séances : « Séances » porte deux étages, **Arène | Chroniques**, chacun une vraie route
+> (`/seances`, `/chroniques`). Le module actif (`?module=`) et la Chronique immersive ouverte
+> (`?seance=`) vivent dans l'URL — retour arrière, lien direct et rechargement fonctionnent. Les bilans
+> de semaine (F26) s'y rattachent via « Tes semaines » (`/semaine`), dans le module Progression.
 
 > **Nature du document** : conception **produit**, pas technique. Aucune table, aucun
 > composant React, aucune migration ici. On définit *ce que vivent les joueurs* et *pourquoi*.
