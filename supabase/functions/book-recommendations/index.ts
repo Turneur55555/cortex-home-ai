@@ -17,9 +17,9 @@ function buildCors(req: Request) {
   };
 }
 
-// eslint-disable-next-line no-control-regex -- plage de contrôle volontaire (anti-injection de prompt)
+const CONTROL_CHARS = /[\u0000-\u001F\u007F<>]/g; // eslint-disable-line no-control-regex -- anti-injection de prompt
 const clean = (v: unknown, max: number): string =>
-  typeof v === "string" ? v.replace(/[\u0000-\u001F\u007F<>]/g, " ").trim().slice(0, max) : "";
+  typeof v === "string" ? v.replace(CONTROL_CHARS, " ").trim().slice(0, max) : "";
 
 Deno.serve(async (req) => {
   const corsHeaders = buildCors(req);
