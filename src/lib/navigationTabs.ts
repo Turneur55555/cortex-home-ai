@@ -15,7 +15,7 @@ const OWNED_ROUTES: Record<TabRoute, readonly string[]> = {
   "/seances": ["/seances", "/chroniques", "/semaine"],
   "/nutrition": ["/nutrition"],
   // Corps est rangé dans Profil (E19) : l'onglet Profil reste allumé pendant toute la visite.
-  "/profil": ["/profil", "/corps"],
+  "/profil": ["/profil", "/corps", "/livres"],
 };
 
 /** Vrai si `pathname` est `route` ou une sous-page de `route` (jamais un simple préfixe de texte). */

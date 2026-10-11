@@ -15,6 +15,8 @@
 - Suivi des macros alimentaires
 
 ## Profil
+
+- **Bibliothèque** (`/livres`) : livres lus / en cours / à lire avec couverture (Open Library ou photo perso), note, dates, avis, stats de lecture, et idées de lecture par IA. Espace indépendant, sans XP.
 - Authentification Supabase
 - Profil utilisateur avec pseudo
 

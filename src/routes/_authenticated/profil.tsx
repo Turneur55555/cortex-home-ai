@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Apple, ChevronRight, Shirt } from "lucide-react";
+import { Apple, BookOpen, ChevronRight, Shirt } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useProfile } from "@/hooks/useProfile";
 import { ProfileIdentityStrip } from "@/components/profile/ProfileIdentityStrip";
@@ -64,6 +64,7 @@ function ProfilPage() {
             label="Préférences alim."
           />
           <SpaceLink to="/dressing" icon={<Shirt className="h-4 w-4" />} label="Dressing" />
+          <SpaceLink to="/livres" icon={<BookOpen className="h-4 w-4" />} label="Bibliothèque" />
         </div>
       </Section>
 

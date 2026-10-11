@@ -20,7 +20,24 @@
 > regroupés sous [`docs/archive/`](docs/archive/).
 
 ## Dernière mise à jour
-2026-10-01
+2026-10-11
+
+## Bibliothèque — espace livres indépendant (2026-10-11, `main`)
+Nouvel espace **autonome** (aucun lien avec l'XP, le RPG ni les Chroniques — demande explicite de
+Nathan), accessible depuis Profil → « Mes espaces » → Bibliothèque (`/livres`, `/livres/$id`).
+- **Base** : `books` (migration `20261011120000_books.sql`, RLS par `user_id`, offline-first) + bucket
+  privé `book-covers` (photos perso, dossier `{user_id}/`). Action de rate-limit `book_recommendations`
+  (migration `20261011121000`).
+- **Domaine pur** `src/lib/books/` (validation, stats de lecture, profil de goûts, parseurs Open Library
+  et IA) ; tests `books.test.ts`.
+- **Hooks** : `useBooks` (repository offline `books`, couvertures signées, upload réduit côté client),
+  `useBookSearch` (Open Library, sans clé, en ligne), `useBookRecommendations`.
+- **IA** : edge function `book-recommendations` (Gemini `gemini-2.5-flash`, 15 demandes/h), ajoutée à
+  `deploy-functions.yml`. Les suggestions déjà possédées sont retirées côté client, puis enrichies d'une
+  couverture Open Library ; un tap = ajout à « À lire ».
+- **UI** : `src/components/books/` (étagère de couvertures, fiche, éditeur avec recherche + photo, idées).
+- Choix : couverture automatique Open Library + photo perso optionnelle ; hors ligne la photo perso
+  retombe sur la couverture Open Library ou un visuel de remplacement.
 
 ## Analyse produit de l'onglet Séances + correctifs issus des mesures (2026-10-01, branche `claude/cortex-product-audit-dexmp2`)
 
