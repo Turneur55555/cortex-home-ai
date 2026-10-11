@@ -353,57 +353,69 @@ export type Database = {
           cover_path: string | null
           cover_url: string | null
           created_at: string
+          description: string | null
           external_id: string | null
           finished_on: string | null
           genre: string | null
           id: string
           isbn: string | null
           pages: number | null
+          published_year: number | null
           rating: number | null
           review: string | null
+          series: string | null
           started_on: string | null
           status: string
           title: string
           updated_at: string
           user_id: string
+          volume: number | null
         }
         Insert: {
           author?: string | null
           cover_path?: string | null
           cover_url?: string | null
           created_at?: string
+          description?: string | null
           external_id?: string | null
           finished_on?: string | null
           genre?: string | null
           id?: string
           isbn?: string | null
           pages?: number | null
+          published_year?: number | null
           rating?: number | null
           review?: string | null
+          series?: string | null
           started_on?: string | null
           status?: string
           title: string
           updated_at?: string
           user_id: string
+          volume?: number | null
         }
         Update: {
           author?: string | null
           cover_path?: string | null
           cover_url?: string | null
           created_at?: string
+          description?: string | null
           external_id?: string | null
           finished_on?: string | null
           genre?: string | null
           id?: string
           isbn?: string | null
           pages?: number | null
+          published_year?: number | null
           rating?: number | null
           review?: string | null
+          series?: string | null
           started_on?: string | null
           status?: string
           title?: string
           updated_at?: string
           user_id?: string
+          volume?: number | null
         }
         Relationships: []
       }
