@@ -38,12 +38,17 @@ export function parseOpenLibrary(raw: unknown): BookSearchResult[] {
     const isbns = Array.isArray(d.isbn) ? d.isbn : [];
     out.push({
       externalId: typeof d.key === "string" ? d.key : d.title,
+      source: "openlibrary",
       title: d.title.trim(),
       author: typeof authors[0] === "string" ? authors[0] : null,
       year: typeof d.first_publish_year === "number" ? d.first_publish_year : null,
       pages: typeof d.number_of_pages_median === "number" ? d.number_of_pages_median : null,
       isbn: typeof isbns[0] === "string" ? isbns[0] : null,
-      coverUrl: typeof d.cover_i === "number" ? openLibraryCoverUrl(d.cover_i) : null,
+      coverUrl: typeof d.cover_i === "number" ? openLibraryCoverUrl(d.cover_i, "L") : null,
+      series: null,
+      volume: null,
+      genre: null,
+      description: null,
     });
   }
   return out;

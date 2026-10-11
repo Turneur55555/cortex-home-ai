@@ -2,13 +2,13 @@ import { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { BookOpen, ChevronLeft, Plus, Search } from "lucide-react";
 import { useBooks } from "@/hooks/useBooks";
+import { groupBySeries } from "@/lib/books/series";
 import { BOOK_STATUS_LABEL } from "@/lib/books/types";
 import type { BookStatus } from "@/lib/books/types";
 import { BookCard } from "@/components/books/BookCard";
-import { BookEditor } from "@/components/books/BookEditor";
+import { NowReading } from "@/components/books/NowReading";
 import { ReadingStats } from "@/components/books/ReadingStats";
 import { RecommendationsPanel } from "@/components/books/RecommendationsPanel";
-import { AppSheet } from "@/components/profile/AppSheet";
 
 export const Route = createFileRoute("/_authenticated/livres/")({
   head: () => ({
@@ -35,7 +35,6 @@ function LivresPage() {
   const { data: books = [], isLoading } = useBooks();
   const [tab, setTab] = useState<TabKey>("read");
   const [query, setQuery] = useState("");
-  const [adding, setAdding] = useState(false);
 
   const counts = useMemo(
     () => ({
@@ -45,23 +44,34 @@ function LivresPage() {
     }),
     [books],
   );
+  const reading = useMemo(() => books.filter((b) => b.status === "reading"), [books]);
 
-  const visible = useMemo(() => {
-    if (tab === "ideas") return [];
+  const grouped = useMemo(() => {
+    if (tab === "ideas") return { series: [], standalone: [] };
     const q = query.trim().toLowerCase();
-    return books.filter(
+    const visible = books.filter(
       (b) =>
         b.status === tab &&
-        (!q || b.title.toLowerCase().includes(q) || (b.author ?? "").toLowerCase().includes(q)),
+        (!q ||
+          b.title.toLowerCase().includes(q) ||
+          (b.author ?? "").toLowerCase().includes(q) ||
+          (b.series ?? "").toLowerCase().includes(q)),
     );
+    return groupBySeries(visible);
   }, [books, tab, query]);
 
+  const empty = grouped.series.length === 0 && grouped.standalone.length === 0;
+
   return (
-    <main className="flex flex-1 flex-col px-5 pb-32 pt-[max(2.5rem,env(safe-area-inset-top))]">
-      <header className="mb-5">
+    <main className="relative isolate flex flex-1 flex-col px-5 pb-32 pt-[max(1.25rem,env(safe-area-inset-top))]">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-72 bg-[radial-gradient(ellipse_at_50%_0%,var(--primary-glow-soft),transparent_70%)]"
+      />
+      <header className="mb-6">
         <Link
           to="/profil"
-          className="mb-3 inline-flex items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+          className="mb-4 inline-flex items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
         >
           <ChevronLeft className="h-3.5 w-3.5" />
           Profil
@@ -71,22 +81,25 @@ function LivresPage() {
             <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
               Lecture
             </p>
-            <h1 className="mt-1 text-2xl font-bold tracking-tight">Ma bibliothèque</h1>
+            <h1 className="mt-1 font-serif text-[30px] font-semibold italic leading-none">
+              Ma bibliothèque
+            </h1>
           </div>
-          <button
-            type="button"
-            onClick={() => setAdding(true)}
-            className="flex h-11 items-center gap-2 rounded-2xl bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-card active:opacity-80"
+          <Link
+            to="/livres/ajouter"
+            search={{ statut: tab === "ideas" ? undefined : tab }}
+            aria-label="Ajouter un livre"
+            className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-[0_10px_30px_-10px_var(--primary)] active:scale-95"
           >
-            <Plus className="h-4 w-4" strokeWidth={2.5} />
-            Ajouter
-          </button>
+            <Plus className="h-5 w-5" strokeWidth={2.5} />
+          </Link>
         </div>
       </header>
 
+      <NowReading books={reading} />
       <ReadingStats books={books} />
 
-      <div className="-mx-5 mb-4 overflow-x-auto px-5">
+      <div className="-mx-5 mb-5 overflow-x-auto px-5 [scrollbar-width:none]">
         <div className="flex gap-2">
           {TABS.map((t) => {
             const active = tab === t.key;
@@ -96,10 +109,10 @@ function LivresPage() {
                 key={t.key}
                 type="button"
                 onClick={() => setTab(t.key)}
-                className={`shrink-0 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors ${
+                className={`shrink-0 rounded-full border px-4 py-2 text-xs font-semibold transition-colors ${
                   active
-                    ? "border-primary/40 bg-primary/15 text-primary"
-                    : "border-border bg-card text-muted-foreground"
+                    ? "border-primary/50 bg-primary/15 text-primary"
+                    : "border-white/10 bg-card/60 text-muted-foreground"
                 }`}
               >
                 {t.label}
@@ -114,57 +127,75 @@ function LivresPage() {
         <RecommendationsPanel books={books} />
       ) : (
         <>
-          {books.length > 5 && (
-            <div className="relative mb-4">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          {books.length > 8 && (
+            <div className="relative mb-5">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Filtrer par titre ou auteur"
-                className="h-11 w-full rounded-xl border border-border bg-card pl-9 pr-3 text-sm outline-none focus:border-primary/50"
+                placeholder="Titre, auteur ou saga"
+                className="h-11 w-full rounded-xl border border-white/10 bg-card/60 pl-10 pr-3 text-sm outline-none focus:border-primary/50"
               />
             </div>
           )}
+
           {isLoading ? (
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 gap-x-3 gap-y-5">
               {Array.from({ length: 6 }).map((_, i) => (
-                <div key={i} className="aspect-[2/3] animate-pulse rounded-xl bg-card" />
+                <div key={i} className="aspect-[2/3] animate-pulse rounded-[6px] bg-white/5" />
               ))}
             </div>
-          ) : visible.length === 0 ? (
-            <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-border px-6 py-12 text-center">
+          ) : empty ? (
+            <div className="flex flex-col items-center gap-3 rounded-3xl border border-dashed border-white/15 px-6 py-14 text-center">
               <BookOpen className="h-8 w-8 text-primary/70" />
-              <p className="text-sm text-muted-foreground">
-                {query ? "Aucun livre ne correspond." : "Rien ici pour le moment."}
+              <p className="font-serif text-lg italic">
+                {query ? "Aucun livre ne correspond." : "Une étagère à remplir."}
               </p>
               {!query && (
-                <button
-                  type="button"
-                  onClick={() => setAdding(true)}
-                  className="rounded-full border border-primary/40 bg-primary/10 px-4 py-1.5 text-xs font-medium text-primary"
+                <Link
+                  to="/livres/ajouter"
+                  search={{ statut: tab }}
+                  className="mt-1 rounded-full bg-primary px-5 py-2 text-xs font-semibold text-primary-foreground"
                 >
                   Ajouter un livre
-                </button>
+                </Link>
               )}
             </div>
           ) : (
-            <div className="grid grid-cols-3 gap-3">
-              {visible.map((b) => (
-                <BookCard key={b.id} book={b} />
+            <div className="space-y-8">
+              {grouped.series.map((s) => (
+                <section key={s.name}>
+                  <div className="mb-3 flex items-baseline justify-between px-0.5">
+                    <h2 className="truncate font-serif text-lg font-semibold italic">{s.name}</h2>
+                    <span className="shrink-0 pl-3 text-xs text-muted-foreground">
+                      {s.books.length} tomes
+                    </span>
+                  </div>
+                  <div className="-mx-5 flex gap-3 overflow-x-auto px-5 pb-1 [scrollbar-width:none]">
+                    {s.books.map((b) => (
+                      <BookCard key={b.id} book={b} className="w-[6.5rem] shrink-0" />
+                    ))}
+                  </div>
+                </section>
               ))}
+              {grouped.standalone.length > 0 && (
+                <section>
+                  {grouped.series.length > 0 && (
+                    <h2 className="mb-3 px-0.5 font-serif text-lg font-semibold italic">
+                      Autres livres
+                    </h2>
+                  )}
+                  <div className="grid grid-cols-3 gap-x-3 gap-y-5">
+                    {grouped.standalone.map((b) => (
+                      <BookCard key={b.id} book={b} />
+                    ))}
+                  </div>
+                </section>
+              )}
             </div>
           )}
         </>
       )}
-
-      <AppSheet open={adding} onOpenChange={setAdding} title="Ajouter un livre">
-        <div className="max-h-[78vh] overflow-y-auto px-5 pb-4">
-          <BookEditor
-            defaultStatus={tab === "ideas" ? "read" : tab}
-            onDone={() => setAdding(false)}
-          />
-        </div>
-      </AppSheet>
     </main>
   );
 }

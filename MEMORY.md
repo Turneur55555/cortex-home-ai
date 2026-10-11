@@ -22,6 +22,30 @@
 ## Dernière mise à jour
 2026-10-11
 
+## Bibliothèque v2 — tomes, recherche Google Books, refonte visuelle (2026-10-11, `main`)
+Retour de Nathan sur la v1 (captures iPhone) : trois résultats « The Primal Hunter » identiques
+(pas de tomes), statut « Lus » au pluriel dans la fiche, écran jugé moche (feuille qui déborde,
+dates vides sur iOS).
+- **Tomes** : colonnes `series`, `volume` (numeric 5,1 → tome 2,5 possible), `description`,
+  `published_year` (migration `20261011140000`). Détection pure `src/lib/books/series.ts` :
+  motifs explicites (« Tome 2 », « T03 », « Vol. 2 », « (Saga, #2) ») fiables seuls ; numéro final
+  (« The Primal Hunter 2 ») accepté SEULEMENT s'il est corroboré (même base vue ailleurs, ou
+  `seriesInfo` Google) — sinon « Catch 22 » deviendrait une saga.
+- **Recherche** : Google Books + Open Library en parallèle (`Promise.allSettled`), fusion
+  `searchMerge.ts` (tomes d'une saga regroupés et ordonnés, doublons Open Library écartés).
+  Google apporte tome, genre, résumé ; une source en panne n'empêche pas l'autre.
+  ⚠️ Google Books anonyme : quota par IP, épuisé depuis le bac à sable (429) — normal côté
+  téléphone ; Open Library reste le secours.
+- **Écrans** : ajout en pleine page `/livres/ajouter` (recherche au fil de la frappe → fiche),
+  modification `/livres/$id/modifier`, fiche `/livres/$id` (couverture floutée en fond, saga et
+  tuile « Tome suivant » qui pré-remplit la recherche). Statuts au singulier (`BOOK_STATUS_SINGULAR`).
+  Dates : texte lisible + champ natif invisible par-dessus (iOS affiche une case vide sinon).
+  Étagère : encart « En ce moment », sagas en rangées horizontales.
+- **Vérifié visuellement** (Playwright 414×896, backend simulé `e2e/supabase-stub.ts`, script
+  temporaire non commité). Piège du stub : il renvoie un TABLEAU même quand le client demande un
+  objet (`Accept: vnd.pgrst.object`) → le moteur de sync stocke `[{…}]` ; et ses GET renvoient
+  `[]` → l'hydratation retire les lignes synchronisées. Artefacts du stub, pas de l'appli.
+
 ## Bibliothèque — espace livres indépendant (2026-10-11, `main`)
 Nouvel espace **autonome** (aucun lien avec l'XP, le RPG ni les Chroniques — demande explicite de
 Nathan), accessible depuis Profil → « Mes espaces » → Bibliothèque (`/livres`, `/livres/$id`).

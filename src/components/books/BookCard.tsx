@@ -2,24 +2,33 @@ import { Link } from "@tanstack/react-router";
 import { Star } from "lucide-react";
 import type { BookWithCover } from "@/hooks/useBooks";
 import { BookCover } from "./BookCover";
+import { volumeBadge } from "./bookLabels";
 
-export function BookCard({ book }: { book: BookWithCover }) {
+export function BookCard({ book, className }: { book: BookWithCover; className?: string }) {
   return (
     <Link
       to="/livres/$id"
       params={{ id: book.id }}
-      className="group flex flex-col gap-1.5 transition-opacity active:opacity-80"
+      className={`group flex flex-col gap-2 transition-transform active:scale-[0.97] ${className ?? ""}`}
     >
-      <BookCover src={book.coverSrc} title={book.title} />
+      <BookCover
+        src={book.coverSrc}
+        title={book.title}
+        author={book.author}
+        badge={volumeBadge(book.volume)}
+      />
       <div className="px-0.5">
-        <p className="line-clamp-2 text-xs font-semibold leading-tight">{book.title}</p>
+        <p className="line-clamp-2 font-serif text-[13px] font-semibold leading-tight">
+          {book.title}
+        </p>
         {book.author && (
-          <p className="line-clamp-1 text-[11px] text-muted-foreground">{book.author}</p>
+          <p className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground">{book.author}</p>
         )}
-        {book.rating != null && (
-          <p className="mt-0.5 flex items-center gap-0.5 text-[11px] text-primary">
-            <Star className="h-3 w-3 fill-current" />
-            <span className="tabular-nums">{book.rating}/5</span>
+        {book.status === "read" && book.rating != null && (
+          <p className="mt-1 flex items-center gap-0.5" aria-label={`Note ${book.rating} sur 5`}>
+            {Array.from({ length: book.rating }).map((_, i) => (
+              <Star key={i} className="h-2.5 w-2.5 fill-primary text-primary" />
+            ))}
           </p>
         )}
       </div>

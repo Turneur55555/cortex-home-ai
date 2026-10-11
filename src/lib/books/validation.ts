@@ -33,6 +33,16 @@ export function normalizeBookInput(input: BookInput): BookInput {
     cover_url: trimOrNull(input.cover_url, 1000),
     cover_path: trimOrNull(input.cover_path, 500),
     external_id: trimOrNull(input.external_id, 100),
+    series: trimOrNull(input.series, 300),
+    volume:
+      input.volume != null && Number.isFinite(input.volume) && input.volume >= 0
+        ? Math.min(9999, Math.round(input.volume * 10) / 10)
+        : null,
+    description: trimOrNull(input.description, 5000),
+    published_year:
+      input.published_year != null && input.published_year > 0 && input.published_year <= 2100
+        ? Math.round(input.published_year)
+        : null,
   };
 }
 

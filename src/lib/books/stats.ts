@@ -39,8 +39,8 @@ export function computeReadingStats(books: readonly Book[]): ReadingStats {
 /** Tri de l'étagère : lus par date de fin récente, sinon par ajout récent. */
 export function sortBooks(books: readonly Book[]): Book[] {
   return [...books].sort((a, b) => {
-    const da = a.finished_on ?? a.created_at;
-    const db = b.finished_on ?? b.created_at;
+    const da = a.finished_on ?? a.created_at ?? "";
+    const db = b.finished_on ?? b.created_at ?? "";
     return db.localeCompare(da);
   });
 }

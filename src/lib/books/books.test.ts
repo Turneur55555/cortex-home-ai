@@ -21,6 +21,10 @@ const mk = (o: Partial<Book>): Book => ({
   cover_url: null,
   cover_path: null,
   external_id: null,
+  series: null,
+  volume: null,
+  description: null,
+  published_year: null,
   created_at: "2026-01-01T00:00:00Z",
   updated_at: "2026-01-01T00:00:00Z",
   ...o,
@@ -135,7 +139,7 @@ describe("openLibrary", () => {
     });
     expect(r).toHaveLength(1);
     expect(r[0]).toMatchObject({ title: "Dune", author: "Frank Herbert", year: 1965, pages: 412 });
-    expect(r[0].coverUrl).toBe("https://covers.openlibrary.org/b/id/123-M.jpg");
+    expect(r[0].coverUrl).toBe("https://covers.openlibrary.org/b/id/123-L.jpg");
   });
   it("encode la requête", () => {
     expect(openLibrarySearchUrl("le petit prince")).toContain("q=le+petit+prince");

@@ -33,12 +33,14 @@ import { Route as AuthenticatedFitnessIndexRouteImport } from './routes/_authent
 import { Route as AuthenticatedDressingIndexRouteImport } from './routes/_authenticated/dressing/index'
 import { Route as AuthenticatedSemaineWeekStartRouteImport } from './routes/_authenticated/semaine/$weekStart'
 import { Route as AuthenticatedRapportsIdRouteImport } from './routes/_authenticated/rapports/$id'
-import { Route as AuthenticatedLivresIdRouteImport } from './routes/_authenticated/livres/$id'
+import { Route as AuthenticatedLivresAjouterRouteImport } from './routes/_authenticated/livres/ajouter'
 import { Route as AuthenticatedDressingImportRouteImport } from './routes/_authenticated/dressing/import'
 import { Route as AuthenticatedDressingGenererRouteImport } from './routes/_authenticated/dressing/generer'
 import { Route as AuthenticatedDressingAjouterRouteImport } from './routes/_authenticated/dressing/ajouter'
 import { Route as AuthenticatedDressingItemIdRouteImport } from './routes/_authenticated/dressing/$itemId'
 import { Route as AuthenticatedAdminExercisesRouteImport } from './routes/_authenticated/admin/exercises'
+import { Route as AuthenticatedLivresIdIndexRouteImport } from './routes/_authenticated/livres/$id/index'
+import { Route as AuthenticatedLivresIdModifierRouteImport } from './routes/_authenticated/livres/$id/modifier'
 
 const Char91indexChar93Route = Char91indexChar93RouteImport.update({
   id: '/index',
@@ -169,11 +171,12 @@ const AuthenticatedRapportsIdRoute = AuthenticatedRapportsIdRouteImport.update({
   path: '/rapports/$id',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
-const AuthenticatedLivresIdRoute = AuthenticatedLivresIdRouteImport.update({
-  id: '/livres/$id',
-  path: '/livres/$id',
-  getParentRoute: () => AuthenticatedRoute,
-} as any)
+const AuthenticatedLivresAjouterRoute =
+  AuthenticatedLivresAjouterRouteImport.update({
+    id: '/livres/ajouter',
+    path: '/livres/ajouter',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedDressingImportRoute =
   AuthenticatedDressingImportRouteImport.update({
     id: '/dressing/import',
@@ -204,6 +207,18 @@ const AuthenticatedAdminExercisesRoute =
     path: '/admin/exercises',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedLivresIdIndexRoute =
+  AuthenticatedLivresIdIndexRouteImport.update({
+    id: '/livres/$id/',
+    path: '/livres/$id/',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedLivresIdModifierRoute =
+  AuthenticatedLivresIdModifierRouteImport.update({
+    id: '/livres/$id/modifier',
+    path: '/livres/$id/modifier',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -227,7 +242,7 @@ export interface FileRoutesByFullPath {
   '/dressing/ajouter': typeof AuthenticatedDressingAjouterRoute
   '/dressing/generer': typeof AuthenticatedDressingGenererRoute
   '/dressing/import': typeof AuthenticatedDressingImportRoute
-  '/livres/$id': typeof AuthenticatedLivresIdRoute
+  '/livres/ajouter': typeof AuthenticatedLivresAjouterRoute
   '/rapports/$id': typeof AuthenticatedRapportsIdRoute
   '/semaine/$weekStart': typeof AuthenticatedSemaineWeekStartRoute
   '/dressing/': typeof AuthenticatedDressingIndexRoute
@@ -235,6 +250,8 @@ export interface FileRoutesByFullPath {
   '/livres/': typeof AuthenticatedLivresIndexRoute
   '/rapports/': typeof AuthenticatedRapportsIndexRoute
   '/semaine/': typeof AuthenticatedSemaineIndexRoute
+  '/livres/$id/modifier': typeof AuthenticatedLivresIdModifierRoute
+  '/livres/$id/': typeof AuthenticatedLivresIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/confidentialite': typeof ConfidentialiteRoute
@@ -258,7 +275,7 @@ export interface FileRoutesByTo {
   '/dressing/ajouter': typeof AuthenticatedDressingAjouterRoute
   '/dressing/generer': typeof AuthenticatedDressingGenererRoute
   '/dressing/import': typeof AuthenticatedDressingImportRoute
-  '/livres/$id': typeof AuthenticatedLivresIdRoute
+  '/livres/ajouter': typeof AuthenticatedLivresAjouterRoute
   '/rapports/$id': typeof AuthenticatedRapportsIdRoute
   '/semaine/$weekStart': typeof AuthenticatedSemaineWeekStartRoute
   '/dressing': typeof AuthenticatedDressingIndexRoute
@@ -266,6 +283,8 @@ export interface FileRoutesByTo {
   '/livres': typeof AuthenticatedLivresIndexRoute
   '/rapports': typeof AuthenticatedRapportsIndexRoute
   '/semaine': typeof AuthenticatedSemaineIndexRoute
+  '/livres/$id/modifier': typeof AuthenticatedLivresIdModifierRoute
+  '/livres/$id': typeof AuthenticatedLivresIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -291,7 +310,7 @@ export interface FileRoutesById {
   '/_authenticated/dressing/ajouter': typeof AuthenticatedDressingAjouterRoute
   '/_authenticated/dressing/generer': typeof AuthenticatedDressingGenererRoute
   '/_authenticated/dressing/import': typeof AuthenticatedDressingImportRoute
-  '/_authenticated/livres/$id': typeof AuthenticatedLivresIdRoute
+  '/_authenticated/livres/ajouter': typeof AuthenticatedLivresAjouterRoute
   '/_authenticated/rapports/$id': typeof AuthenticatedRapportsIdRoute
   '/_authenticated/semaine/$weekStart': typeof AuthenticatedSemaineWeekStartRoute
   '/_authenticated/dressing/': typeof AuthenticatedDressingIndexRoute
@@ -299,6 +318,8 @@ export interface FileRoutesById {
   '/_authenticated/livres/': typeof AuthenticatedLivresIndexRoute
   '/_authenticated/rapports/': typeof AuthenticatedRapportsIndexRoute
   '/_authenticated/semaine/': typeof AuthenticatedSemaineIndexRoute
+  '/_authenticated/livres/$id/modifier': typeof AuthenticatedLivresIdModifierRoute
+  '/_authenticated/livres/$id/': typeof AuthenticatedLivresIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -324,7 +345,7 @@ export interface FileRouteTypes {
     | '/dressing/ajouter'
     | '/dressing/generer'
     | '/dressing/import'
-    | '/livres/$id'
+    | '/livres/ajouter'
     | '/rapports/$id'
     | '/semaine/$weekStart'
     | '/dressing/'
@@ -332,6 +353,8 @@ export interface FileRouteTypes {
     | '/livres/'
     | '/rapports/'
     | '/semaine/'
+    | '/livres/$id/modifier'
+    | '/livres/$id/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/confidentialite'
@@ -355,7 +378,7 @@ export interface FileRouteTypes {
     | '/dressing/ajouter'
     | '/dressing/generer'
     | '/dressing/import'
-    | '/livres/$id'
+    | '/livres/ajouter'
     | '/rapports/$id'
     | '/semaine/$weekStart'
     | '/dressing'
@@ -363,6 +386,8 @@ export interface FileRouteTypes {
     | '/livres'
     | '/rapports'
     | '/semaine'
+    | '/livres/$id/modifier'
+    | '/livres/$id'
   id:
     | '__root__'
     | '/_authenticated'
@@ -387,7 +412,7 @@ export interface FileRouteTypes {
     | '/_authenticated/dressing/ajouter'
     | '/_authenticated/dressing/generer'
     | '/_authenticated/dressing/import'
-    | '/_authenticated/livres/$id'
+    | '/_authenticated/livres/ajouter'
     | '/_authenticated/rapports/$id'
     | '/_authenticated/semaine/$weekStart'
     | '/_authenticated/dressing/'
@@ -395,6 +420,8 @@ export interface FileRouteTypes {
     | '/_authenticated/livres/'
     | '/_authenticated/rapports/'
     | '/_authenticated/semaine/'
+    | '/_authenticated/livres/$id/modifier'
+    | '/_authenticated/livres/$id/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -575,11 +602,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedRapportsIdRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    '/_authenticated/livres/$id': {
-      id: '/_authenticated/livres/$id'
-      path: '/livres/$id'
-      fullPath: '/livres/$id'
-      preLoaderRoute: typeof AuthenticatedLivresIdRouteImport
+    '/_authenticated/livres/ajouter': {
+      id: '/_authenticated/livres/ajouter'
+      path: '/livres/ajouter'
+      fullPath: '/livres/ajouter'
+      preLoaderRoute: typeof AuthenticatedLivresAjouterRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/dressing/import': {
@@ -617,6 +644,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminExercisesRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/livres/$id/': {
+      id: '/_authenticated/livres/$id/'
+      path: '/livres/$id'
+      fullPath: '/livres/$id/'
+      preLoaderRoute: typeof AuthenticatedLivresIdIndexRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/livres/$id/modifier': {
+      id: '/_authenticated/livres/$id/modifier'
+      path: '/livres/$id/modifier'
+      fullPath: '/livres/$id/modifier'
+      preLoaderRoute: typeof AuthenticatedLivresIdModifierRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
   }
 }
 
@@ -638,7 +679,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedDressingAjouterRoute: typeof AuthenticatedDressingAjouterRoute
   AuthenticatedDressingGenererRoute: typeof AuthenticatedDressingGenererRoute
   AuthenticatedDressingImportRoute: typeof AuthenticatedDressingImportRoute
-  AuthenticatedLivresIdRoute: typeof AuthenticatedLivresIdRoute
+  AuthenticatedLivresAjouterRoute: typeof AuthenticatedLivresAjouterRoute
   AuthenticatedRapportsIdRoute: typeof AuthenticatedRapportsIdRoute
   AuthenticatedSemaineWeekStartRoute: typeof AuthenticatedSemaineWeekStartRoute
   AuthenticatedDressingIndexRoute: typeof AuthenticatedDressingIndexRoute
@@ -646,6 +687,8 @@ interface AuthenticatedRouteChildren {
   AuthenticatedLivresIndexRoute: typeof AuthenticatedLivresIndexRoute
   AuthenticatedRapportsIndexRoute: typeof AuthenticatedRapportsIndexRoute
   AuthenticatedSemaineIndexRoute: typeof AuthenticatedSemaineIndexRoute
+  AuthenticatedLivresIdModifierRoute: typeof AuthenticatedLivresIdModifierRoute
+  AuthenticatedLivresIdIndexRoute: typeof AuthenticatedLivresIdIndexRoute
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
@@ -667,7 +710,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedDressingAjouterRoute: AuthenticatedDressingAjouterRoute,
   AuthenticatedDressingGenererRoute: AuthenticatedDressingGenererRoute,
   AuthenticatedDressingImportRoute: AuthenticatedDressingImportRoute,
-  AuthenticatedLivresIdRoute: AuthenticatedLivresIdRoute,
+  AuthenticatedLivresAjouterRoute: AuthenticatedLivresAjouterRoute,
   AuthenticatedRapportsIdRoute: AuthenticatedRapportsIdRoute,
   AuthenticatedSemaineWeekStartRoute: AuthenticatedSemaineWeekStartRoute,
   AuthenticatedDressingIndexRoute: AuthenticatedDressingIndexRoute,
@@ -675,6 +718,8 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedLivresIndexRoute: AuthenticatedLivresIndexRoute,
   AuthenticatedRapportsIndexRoute: AuthenticatedRapportsIndexRoute,
   AuthenticatedSemaineIndexRoute: AuthenticatedSemaineIndexRoute,
+  AuthenticatedLivresIdModifierRoute: AuthenticatedLivresIdModifierRoute,
+  AuthenticatedLivresIdIndexRoute: AuthenticatedLivresIdIndexRoute,
 }
 
 const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
