@@ -9,23 +9,29 @@ export function BookSearch({ onPick }: { onPick: (r: BookSearchResult) => void }
   const [q, setQ] = useState("");
   const search = useBookSearch();
 
-  const run = (e: React.FormEvent) => {
-    e.preventDefault();
-    search.mutate(q);
-  };
+  // Pas de <form> ici : BookSearch vit DANS le formulaire de BookEditor, et un submit imbriqué
+  // remonte (React) au formulaire parent — la recherche déclenchait alors l'enregistrement du livre.
+  const run = () => search.mutate(q);
 
   return (
     <div className="mb-4">
-      <form onSubmit={run} className="flex gap-2">
+      <div className="flex gap-2">
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              if (q.trim().length >= 2 && !search.isPending) run();
+            }
+          }}
           placeholder="Chercher un titre, un auteur, un ISBN…"
           className="h-11 min-w-0 flex-1 rounded-xl border border-border bg-card px-3 text-sm outline-none focus:border-primary/50"
           enterKeyHint="search"
         />
         <button
-          type="submit"
+          type="button"
+          onClick={run}
           disabled={search.isPending || q.trim().length < 2}
           aria-label="Rechercher"
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground disabled:opacity-50"
@@ -36,7 +42,7 @@ export function BookSearch({ onPick }: { onPick: (r: BookSearchResult) => void }
             <Search className="h-4 w-4" />
           )}
         </button>
-      </form>
+      </div>
       {search.isError && (
         <p className="mt-2 text-xs text-destructive">
           Recherche indisponible (hors ligne ?). Tu peux saisir le livre à la main ci-dessous.
