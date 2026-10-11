@@ -347,6 +347,66 @@ export type Database = {
           },
         ]
       }
+      books: {
+        Row: {
+          author: string | null
+          cover_path: string | null
+          cover_url: string | null
+          created_at: string
+          external_id: string | null
+          finished_on: string | null
+          genre: string | null
+          id: string
+          isbn: string | null
+          pages: number | null
+          rating: number | null
+          review: string | null
+          started_on: string | null
+          status: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          author?: string | null
+          cover_path?: string | null
+          cover_url?: string | null
+          created_at?: string
+          external_id?: string | null
+          finished_on?: string | null
+          genre?: string | null
+          id?: string
+          isbn?: string | null
+          pages?: number | null
+          rating?: number | null
+          review?: string | null
+          started_on?: string | null
+          status?: string
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          author?: string | null
+          cover_path?: string | null
+          cover_url?: string | null
+          created_at?: string
+          external_id?: string | null
+          finished_on?: string | null
+          genre?: string | null
+          id?: string
+          isbn?: string | null
+          pages?: number | null
+          rating?: number | null
+          review?: string | null
+          started_on?: string | null
+          status?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       ca_praticiens: {
         Row: {
           ca: number | null
