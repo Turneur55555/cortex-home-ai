@@ -23,8 +23,8 @@ import {
   Plus,
   ShoppingCart,
   Sparkles,
-  Star,
   Target,
+  Trash2,
   Utensils,
   Wheat,
   X,
@@ -45,7 +45,6 @@ import {
   useUpdateNutrition,
 } from "@/hooks/use-fitness";
 import { useNutritionTotals } from "@/hooks/useNutritionTotals";
-import { useAddFavorite } from "@/hooks/use-nutrition-favorites";
 import { useSupplements, useToggleSupplementLog } from "@/hooks/use-supplements";
 import { MealActionMenu } from "@/components/fitness/MealActionMenu";
 import { WorkoutDeleteDialog } from "@/components/fitness/WorkoutDeleteDialog";
@@ -125,7 +124,6 @@ export function NutritionTab() {
   const del = useDeleteNutrition();
   const readd = useAddNutrition();
   const update = useUpdateNutrition();
-  const addFav = useAddFavorite();
   const copyDay = useCopyNutritionDay();
   const copyMeal = useCopyNutritionMeal();
   const deleteMeal = useDeleteNutritionMeal();
@@ -185,24 +183,6 @@ export function NutritionTab() {
     }
     return result;
   }, [data]);
-
-  const saveAsFavorite = (m: {
-    name: string | null;
-    meal: string | null;
-    calories: number | null;
-    proteins: number | null;
-    carbs: number | null;
-    fats: number | null;
-  }) => {
-    addFav.mutate({
-      name: m.name ?? "Repas",
-      meal: m.meal,
-      calories: m.calories,
-      proteins: m.proteins,
-      carbs: m.carbs,
-      fats: m.fats,
-    });
-  };
 
   const saveGroupAsMeal = (g: (typeof grouped)[number]) => {
     const mealSlug = isMealSlug(g.key) ? g.key : null;
@@ -674,13 +654,13 @@ export function NutritionTab() {
                                       type="button"
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        saveAsFavorite(m);
+                                        handleDelete(m);
                                       }}
-                                      disabled={addFav.isPending}
-                                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-muted-foreground active:bg-muted active:text-foreground disabled:opacity-60"
-                                      aria-label="Ajouter aux favoris"
+                                      disabled={del.isPending}
+                                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-muted-foreground active:bg-destructive/15 active:text-destructive disabled:opacity-60"
+                                      aria-label="Supprimer"
                                     >
-                                      <Star className="h-4 w-4" />
+                                      <Trash2 className="h-4 w-4" />
                                     </motion.button>
                                     <MoveMealMenu
                                       currentMeal={m.meal}
