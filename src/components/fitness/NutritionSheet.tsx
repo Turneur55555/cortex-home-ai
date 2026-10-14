@@ -231,7 +231,11 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
         consumed_unit: "g",
         consumed_grams_per_unit: null,
       });
-      if (manualWithGrams && per100) void saveCustomFood(form.name.trim(), per100);
+      // Tout aliment saisi à la main est enregistré dans « Mes aliments ». Sans poids,
+      // les valeurs saisies servent de référence (même convention que base_* ci-dessus).
+      if (!baseFood) {
+        void saveCustomFood(form.name.trim(), per100 ?? { calories, proteins, carbs, fats });
+      }
       return true;
     } catch {
       return false;
@@ -285,7 +289,7 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
         <MealSelect value={form.meal} onChange={(meal) => setForm({ ...form, meal })} />
         {!baseFood && (
           <Field
-            label="Poids total (g) — optionnel, pour enregistrer l'aliment"
+            label="Poids total (g) — optionnel, pour calculer les valeurs /100 g"
             type="text"
             value={manualGrams}
             onChange={(v) => setManualGrams(v)}
