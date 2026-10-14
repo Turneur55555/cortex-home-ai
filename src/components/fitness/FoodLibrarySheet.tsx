@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Apple, Loader2, Plus, Search, Star, Trash2, X } from "lucide-react";
+import { Apple, Loader2, Pencil, Plus, Search, Star, Trash2, X } from "lucide-react";
 import { FullscreenSheet } from "@/components/shared/FormComponents";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { WeightSelector } from "@/components/fitness/WeightSelector";
@@ -7,7 +7,8 @@ import { MealSelect } from "@/components/fitness/MealSelect";
 import { NutritionSheet } from "@/components/fitness/NutritionSheet";
 import { SavedMealsList } from "@/components/fitness/SavedMealsList";
 import { useFoodSearch, getRecentFoods } from "@/hooks/useFoodSearch";
-import { useUsedFoods } from "@/hooks/useUsedFoods";
+import { useUsedFoods, useUsedFoodsSearch } from "@/hooks/useUsedFoods";
+import { EditFoodSheet } from "@/components/fitness/EditFoodSheet";
 import { useCustomFoods } from "@/hooks/useCustomFoods";
 import {
   useNutritionFavorites,
@@ -65,10 +66,36 @@ export function FoodLibrarySheet({ date, onClose }: FoodLibrarySheetProps) {
   // USDA + aliments personnalisés déjà présents dans `foods`) prend le relais
   // et remplace la liste ; elle redevient la liste des aliments utilisés dès
   // que la recherche est vidée.
+  // Recherche aussi dans tout l'historique du journal (aliment saisi il y a
+  // longtemps, absent de la fenêtre récente de `usedFoods`).
+  const { data: usedMatches, isLoading: usedSearchLoading } = useUsedFoodsSearch(query);
+
+  // Un aliment modifié/enregistré dans « Mes aliments » prime sur sa version
+  // issue de l'historique (même nom).
+  const customByName = useMemo(() => {
+    const m = new Map<string, FoodSuggestion>();
+    for (const f of customFoods ?? []) m.set(f.name.trim().toLowerCase(), f);
+    return m;
+  }, [customFoods]);
+
   const allFoods = useMemo<FoodSuggestion[]>(() => {
-    if (q.length >= 2) return searchResults;
-    return usedFoods ?? [];
-  }, [q, usedFoods, searchResults]);
+    const dedupe = (list: FoodSuggestion[]) => {
+      const seen = new Set<string>();
+      const out: FoodSuggestion[] = [];
+      for (const f of list) {
+        const key = f.name.trim().toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(f.id.startsWith("used:") ? (customByName.get(key) ?? f) : f);
+      }
+      return out;
+    };
+    if (q.length >= 2) {
+      const mineMatches = (customFoods ?? []).filter((f) => f.name.toLowerCase().includes(q));
+      return dedupe([...mineMatches, ...(usedMatches ?? []), ...searchResults]);
+    }
+    return dedupe(usedFoods ?? []);
+  }, [q, usedFoods, usedMatches, searchResults, customFoods, customByName]);
 
   // "Mes aliments" : créés par l'utilisateur (foods.user_id) + récents locaux.
   const mineFoods = useMemo<FoodSuggestion[]>(() => {
@@ -139,7 +166,7 @@ export function FoodLibrarySheet({ date, onClose }: FoodLibrarySheetProps) {
             <FoodItemList
               date={date}
               foods={allFoods}
-              loading={q.length >= 2 ? searchLoading : usedLoading}
+              loading={q.length >= 2 ? searchLoading || usedSearchLoading : usedLoading}
               emptyLabel={
                 q.length >= 2
                   ? "Aucun aliment trouvé"
@@ -190,6 +217,7 @@ function FoodItemList({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [weightText, setWeightText] = useState("");
   const [meal, setMeal] = useState<MealSlug>(detectMealFromHour());
+  const [editing, setEditing] = useState<FoodSuggestion | null>(null);
   const addFood = useAddNutrition();
   const addFav = useAddFavorite();
 
@@ -268,65 +296,78 @@ function FoodItemList({
   }
 
   return (
-    <ul className="space-y-2">
-      {foods.map((food) => {
-        const expanded = expandedId === food.id;
-        return (
-          <li key={food.id} className="rounded-xl border border-border bg-card p-3">
-            <button
-              type="button"
-              onClick={() => toggle(food)}
-              className="flex w-full items-center gap-3 text-left"
-            >
-              <div className="h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-border bg-white">
-                {food.image ? (
-                  <img src={food.image} alt="" className="h-full w-full object-contain" />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center bg-muted">
-                    <Apple className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium">{food.name}</p>
-                <p className="truncate text-[10px] text-muted-foreground">
-                  {food.brand ? `${food.brand} · ` : ""}
-                  {food.calories ?? "?"} kcal · L{food.fats ?? "?"} G{food.carbs ?? "?"} P
-                  {food.proteins ?? "?"} /100g
-                </p>
-              </div>
-            </button>
-
-            {expanded && (
-              <div className="mt-3 space-y-3 border-t border-border/50 pt-3">
-                <WeightSelector food={food} value={weightText} onChange={setWeightText} />
-                <MealSelect value={meal} onChange={setMeal} />
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={handleFavorite}
-                    disabled={addFav.isPending || grams == null}
-                    className="inline-flex h-11 items-center justify-center gap-1.5 rounded-xl border border-border px-3 text-xs font-semibold text-foreground disabled:opacity-60"
-                  >
-                    <Star className="h-3.5 w-3.5" />
-                    Favoris
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleAdd}
-                    disabled={addFood.isPending || grams == null}
-                    className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-foreground text-sm font-semibold text-background disabled:opacity-60"
-                  >
-                    {addFood.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                    Ajouter au journal
-                  </button>
+    <>
+      <ul className="space-y-2">
+        {foods.map((food) => {
+          const expanded = expandedId === food.id;
+          return (
+            <li key={food.id} className="rounded-xl border border-border bg-card p-3">
+              <button
+                type="button"
+                onClick={() => toggle(food)}
+                className="flex w-full items-center gap-3 text-left"
+              >
+                <div className="h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-border bg-white">
+                  {food.image ? (
+                    <img src={food.image} alt="" className="h-full w-full object-contain" />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center bg-muted">
+                      <Apple className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  )}
                 </div>
-              </div>
-            )}
-          </li>
-        );
-      })}
-    </ul>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium">{food.name}</p>
+                  <p className="truncate text-[10px] text-muted-foreground">
+                    {food.brand ? `${food.brand} · ` : ""}
+                    {food.calories ?? "?"} kcal · L{food.fats ?? "?"} G{food.carbs ?? "?"} P
+                    {food.proteins ?? "?"} /100g
+                  </p>
+                </div>
+              </button>
+
+              {expanded && (
+                <div className="mt-3 space-y-3 border-t border-border/50 pt-3">
+                  <WeightSelector food={food} value={weightText} onChange={setWeightText} />
+                  <MealSelect value={meal} onChange={setMeal} />
+                  <div className="flex gap-2">
+                    {food.source === "custom" && (
+                      <button
+                        type="button"
+                        onClick={() => setEditing(food)}
+                        className="inline-flex h-11 items-center justify-center gap-1.5 rounded-xl border border-border px-3 text-xs font-semibold text-foreground"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                        Modifier
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleFavorite}
+                      disabled={addFav.isPending || grams == null}
+                      className="inline-flex h-11 items-center justify-center gap-1.5 rounded-xl border border-border px-3 text-xs font-semibold text-foreground disabled:opacity-60"
+                    >
+                      <Star className="h-3.5 w-3.5" />
+                      Favoris
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleAdd}
+                      disabled={addFood.isPending || grams == null}
+                      className="flex h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-foreground text-sm font-semibold text-background disabled:opacity-60"
+                    >
+                      {addFood.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                      Ajouter au journal
+                    </button>
+                  </div>
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {editing && <EditFoodSheet food={editing} onClose={() => setEditing(null)} />}
+    </>
   );
 }
 
