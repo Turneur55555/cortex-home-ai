@@ -1,14 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Apple, BookOpen, ChevronRight, Shirt } from "lucide-react";
+import { Apple, BookOpen, ChevronRight, FileText, Shirt } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useProfile } from "@/hooks/useProfile";
 import { ProfileIdentityStrip } from "@/components/profile/ProfileIdentityStrip";
 import { EditPseudoSheet } from "@/components/profile/EditPseudoSheet";
 import { BodyStatusCard } from "@/components/profile/BodyStatusCard";
-import { DisciplineBreakdownCard } from "@/components/profile/DisciplineBreakdownCard";
-import { DocumentsSummaryCard } from "@/components/profile/DocumentsSummaryCard";
 import { PersonalizationPanel } from "@/components/profile/PersonalizationPanel";
 import { SecurityPanel } from "@/components/profile/SecurityPanel";
 import { HealthDataPanel } from "@/components/profile/HealthDataPanel";
@@ -52,10 +50,6 @@ function ProfilPage() {
 
       <BodyStatusCard />
 
-      <DisciplineBreakdownCard />
-
-      <DocumentsSummaryCard />
-
       <Section title="Mes espaces">
         <div className="grid grid-cols-2 gap-2">
           <SpaceLink
@@ -64,6 +58,7 @@ function ProfilPage() {
             label="Préférences alim."
           />
           <SpaceLink to="/dressing" icon={<Shirt className="h-4 w-4" />} label="Dressing" />
+          <SpaceLink to="/documents" icon={<FileText className="h-4 w-4" />} label="Documents" />
           <SpaceLink to="/livres" icon={<BookOpen className="h-4 w-4" />} label="Bibliothèque" />
         </div>
       </Section>

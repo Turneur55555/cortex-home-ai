@@ -22,6 +22,9 @@
 ## Dernière mise à jour
 2026-10-11
 
+## Profil — retrait « Répartition par discipline », Documents dans « Mes espaces » (2026-10-18, `main`)
+- `DisciplineBreakdownCard.tsx` supprimé (demande Nathan) ; `DocumentsSummaryCard.tsx` supprimé : Documents devient un `SpaceLink` (→ `/documents`) dans « Mes espaces » de `profil.tsx`. L'import direct (`/documents?upload=1`) reste disponible depuis la page Documents.
+
 ## Bibliothèque v2 — tomes, recherche Google Books, refonte visuelle (2026-10-11, `main`)
 Retour de Nathan sur la v1 (captures iPhone) : trois résultats « The Primal Hunter » identiques
 (pas de tomes), statut « Lus » au pluriel dans la fiche, écran jugé moche (feuille qui déborde,
