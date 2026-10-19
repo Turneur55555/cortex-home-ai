@@ -20,7 +20,34 @@
 > regroupés sous [`docs/archive/`](docs/archive/).
 
 ## Dernière mise à jour
-2026-10-11
+2026-10-19
+
+## Dressing — « Générer une tenue » réparé + semaine, tenue du jour, journal (2026-10-19)
+**Cause de la panne** (mesurée en prod) : le dressing de Nathan = 22 hauts + 11 bas, **0 chaussure**.
+`generateStandardOutfits` exigeait haut + bas + chaussures → tous les contextes refusaient (`outfits` = 0
+ligne). Corrigé : seuls haut + bas sont indispensables ; une tenue sans chaussures est proposée avec
+`missing: ["chaussures"]` (badge « Sans chaussures », score catégorie 0,8).
+- **Moteur** (`lib/wardrobe/outfitEngine.ts`, toujours déterministe) : nouvelles options
+  `currentSeason` (pièce hors saison écartée si sa catégorie a une alternative, pénalisée sinon),
+  `daysSinceWorn` (rotation), `likedPairs` (bonus paires des tenues 👍, `itemPairKey`),
+  `forgottenItemIds`, `excludeItemIds`. Breakdown + `inSeason`/`freshness`/`affinity`. Couleurs
+  canonicalisées (`canonicalWardrobeColor` : « Blanche »→blanc, « Verte »→vert, majuscules).
+- **Taxonomie** : `canonicalWardrobeColor`, `canonicalWardrobeSubcategory` (« shorts »→short…),
+  `seasonForDate`, type `WardrobeSeason`. Appliqués à l'écriture (`createWardrobeItemRecord`,
+  `updateWardrobeItemRecord`). Prod : 7 pièces normalisées à la main (couleurs, 1 « shorts »).
+- **Nouveaux modules purs** : `wearHistory.ts` (rotation, paires aimées, pièces oubliées — rien
+  conclu avant 30 j de suivi —, journal), `missingPieces.ts` (pièces à ajouter, chiffrées en tenues
+  débloquées), `weeklyOutfits.ts` (`planWeek` : 7 jours, aucun haut/bas répété tant qu'une pièce de
+  saison reste, jamais deux fois la même association, jours prévus comptés dans la rotation).
+- **Planning jamais stocké** : recalculé à la lecture (dressing + `outfits.worn_at`) ; seules les
+  préférences de confort (contexte du jour, « Autre tenue ») vivent en `localStorage`
+  (`cortex:dressing-week:<lundi>`). Aucune migration.
+- **Hooks** `useWardrobeInsights.ts` : `useOutfitHistory` (120 j, `limit 300`), `useLikedOutfitItems`
+  (`limit 300`), `useWardrobePersonalization`, `useWeeklyOutfits`. `saveOutfitRecord` accepte `wornAt`.
+- **UI** : routes `/dressing/semaine` (Mes tenues de la semaine) et `/dressing/historique` (journal :
+  stats 30 j, pièce fétiche, pièces oubliées) ; `components/wardrobe/OutfitThumbnails` (vignettes
+  partagées) et `MissingPiecesCard` ; tuile `components/home/TodayOutfitTile` en fin d'Accueil
+  (invisible si dressing vide). Météo non branchée (pas de source) : la saison fait office.
 
 ## Profil — « Mes paramètres » en tuiles (2026-10-19, `main`)
 - Sous « Mes espaces », nouvelle section « Mes paramètres » : 4 tuiles identiques aux espaces (Personnalisation, Compte & sécurité, Données, Synchronisation). Les 3 premières ouvrent leur panneau dans un `AppSheet` (`SettingsSheetTile`) ; Synchronisation ouvre `SyncQueueSheet` (inchangé). Tuile commune : `SpaceTile.tsx` (`SpaceLink`/`SpaceButton`). `SettingsGroup` supprimé. `SyncStatusCard` devient une tuile (même logique/hook, garde-fous de placement intacts).

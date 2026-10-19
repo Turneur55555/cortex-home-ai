@@ -31,6 +31,9 @@ vi.mock("@/components/profile/rpg/RPGProgressionSection", () => ({
 vi.mock("@/components/home/CorpsShortcutTile", () => ({
   CorpsShortcutTile: () => <a data-testid="corps-tile" href="/corps" />,
 }));
+vi.mock("@/components/home/TodayOutfitTile", () => ({
+  TodayOutfitTile: () => <section data-testid="outfit-tile" />,
+}));
 
 import { Route } from "./index";
 
@@ -59,7 +62,7 @@ const order = () =>
   );
 
 describe("Accueil — l'action d'abord, puis le Rang", () => {
-  it("Carte du jour → bandeau de la semaine → semaine → illustration du Titre → progression → Corps", () => {
+  it("Carte du jour → bandeau de la semaine → semaine → illustration du Titre → progression → Corps → Tenue du jour", () => {
     renderHome();
     expect(order()).toEqual([
       "today-card",
@@ -68,6 +71,7 @@ describe("Accueil — l'action d'abord, puis le Rang", () => {
       "hero-card",
       "progression",
       "corps-tile",
+      "outfit-tile",
     ]);
   });
 

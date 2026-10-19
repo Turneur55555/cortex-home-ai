@@ -239,3 +239,125 @@ const SIZE_CONFIG_BY_CATEGORY: Record<WardrobeUiCategory, WardrobeSizeConfig> = 
 export function getSizeConfig(category: WardrobeUiCategory): WardrobeSizeConfig {
   return SIZE_CONFIG_BY_CATEGORY[category];
 }
+
+// ─── Normalisation des saisies libres (couleur, type précis) ───────────────
+
+function foldText(value: string): string {
+  return value.normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/**
+ * Couleurs canoniques — même vocabulaire que `COLOR_ENUM` (useWardrobe.ts),
+ * stockées avec leurs accents. Clé = forme repliée (sans accent, minuscule).
+ */
+const CANONICAL_COLORS: Record<string, string> = {
+  "gris fonce": "gris foncé",
+  "gris clair": "gris clair",
+  "bleu marine": "bleu marine",
+  "bleu clair": "bleu clair",
+  noir: "noir",
+  blanc: "blanc",
+  gris: "gris",
+  bleu: "bleu",
+  beige: "beige",
+  marron: "marron",
+  vert: "vert",
+  rouge: "rouge",
+  jaune: "jaune",
+  orange: "orange",
+  rose: "rose",
+  violet: "violet",
+  bordeaux: "bordeaux",
+};
+
+/** Accords et synonymes observés en saisie réelle ou renvoyés par Cortex Vision. */
+const COLOR_ALIASES: Record<string, string> = {
+  noire: "noir",
+  noirs: "noir",
+  blanche: "blanc",
+  blancs: "blanc",
+  ecru: "beige",
+  creme: "beige",
+  sable: "beige",
+  grise: "gris",
+  "grise foncee": "gris foncé",
+  "gris anthracite": "gris foncé",
+  anthracite: "gris foncé",
+  "grise claire": "gris clair",
+  bleue: "bleu",
+  marine: "bleu marine",
+  "bleu fonce": "bleu marine",
+  "bleue marine": "bleu marine",
+  "bleue claire": "bleu clair",
+  "bleu ciel": "bleu clair",
+  ciel: "bleu clair",
+  verte: "vert",
+  kaki: "vert",
+  olive: "vert",
+  "vert kaki": "vert",
+  "vert olive": "vert",
+  camel: "marron",
+  chocolat: "marron",
+  brun: "marron",
+  brune: "marron",
+  violette: "violet",
+  mauve: "violet",
+  rousse: "orange",
+};
+
+/**
+ * Ramène une couleur saisie librement (« Blanche », « Verte », « Noir ») à la
+ * valeur canonique du dressing. Une couleur inconnue est conservée, repliée
+ * en minuscules — jamais remplacée par une couleur inventée.
+ */
+export function canonicalWardrobeColor(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const folded = foldText(raw);
+  if (!folded) return null;
+  return CANONICAL_COLORS[folded] ?? COLOR_ALIASES[folded] ?? raw.trim().toLowerCase();
+}
+
+const SUBCATEGORY_ALIASES: Record<string, string> = {
+  shorts: "short",
+  "t-shirt": "tshirt",
+  "tee-shirt": "tshirt",
+  tee: "tshirt",
+  tshirts: "tshirt",
+  jeans: "jean",
+  pantalons: "pantalon",
+  chinos: "chino",
+  joggings: "jogging",
+  sneaker: "sneakers",
+  baskets: "sneakers",
+  basket: "sneakers",
+  chemises: "chemise",
+  polos: "polo",
+  sweats: "sweat",
+  hoodie: "sweat",
+  pulls: "pull",
+};
+
+/** Ramène un type précis à sa valeur canonique (« shorts » → « short »). */
+export function canonicalWardrobeSubcategory(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const folded = foldText(raw);
+  if (!folded) return null;
+  if (findSubcategory(folded)) return folded;
+  return SUBCATEGORY_ALIASES[folded] ?? raw.trim();
+}
+
+// ─── Saisons ─────────────────────────────────────────────────────────────
+
+export type WardrobeSeason = "printemps" | "ete" | "automne" | "hiver";
+
+/**
+ * Saison météorologique (hémisphère nord) d'une date locale `YYYY-MM-DD` :
+ * mars-mai printemps, juin-août été, septembre-novembre automne, sinon hiver.
+ */
+export function seasonForDate(isoDate: string): WardrobeSeason {
+  const month = Number(isoDate.slice(5, 7));
+  if (month >= 3 && month <= 5) return "printemps";
+  if (month >= 6 && month <= 8) return "ete";
+  if (month >= 9 && month <= 11) return "automne";
+  return "hiver";
+}

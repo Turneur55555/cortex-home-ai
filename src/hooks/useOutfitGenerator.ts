@@ -24,6 +24,7 @@ import {
   type OutfitContext,
   type OutfitScoringItem,
 } from "@/lib/wardrobe/outfitEngine";
+import { canonicalWardrobeSubcategory } from "@/lib/wardrobe/taxonomy";
 import type { Json } from "@/integrations/supabase/types";
 
 /**
@@ -39,7 +40,7 @@ export function mapWardrobeItemToScoringItem(item: WardrobeItemView): OutfitScor
   return {
     id: item.id,
     category: item.category as OutfitCategory,
-    subcategory: item.subcategory,
+    subcategory: canonicalWardrobeSubcategory(item.subcategory),
     primary_color: item.primary_color,
     secondary_colors: item.secondary_colors,
     pattern: item.pattern,
@@ -85,6 +86,8 @@ export interface SaveOutfitInput {
   context: OutfitContext;
   /** "Utiliser cette tenue" (§8) — marque la tenue comme portée maintenant. */
   wornNow?: boolean;
+  /** Date de port explicite (ISO) — « Je l'ai portée » sur un jour de la semaine. Prioritaire sur `wornNow`. */
+  wornAt?: string;
 }
 
 /**
@@ -106,7 +109,7 @@ export async function saveOutfitRecord(
     score: input.outfit.score,
     score_breakdown: input.outfit.breakdown as unknown as Json,
     ai_explanation: input.outfit.explanation,
-    worn_at: input.wornNow ? new Date().toISOString() : null,
+    worn_at: input.wornAt ?? (input.wornNow ? new Date().toISOString() : null),
   });
   if (outfitError) throw outfitError;
 
@@ -140,6 +143,7 @@ export function useSaveOutfit() {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["outfits", user?.id] });
+      void queryClient.invalidateQueries({ queryKey: ["outfit-history", user?.id] });
     },
     onError: (error: Error) => {
       toast.error(error.message || "Impossible d'enregistrer cette tenue.");
@@ -167,6 +171,9 @@ export async function saveOutfitFeedbackRecord(
 }
 
 export function useOutfitFeedback() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: async (input: SaveOutfitFeedbackInput) => {
       const {
@@ -174,6 +181,9 @@ export function useOutfitFeedback() {
       } = await supabase.auth.getUser();
       if (!authUser) throw new Error("Non authentifié.");
       await saveOutfitFeedbackRecord(authUser.id, input);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["outfit-liked", user?.id] });
     },
     onError: (error: Error) => {
       toast.error(error.message || "Impossible d'enregistrer ton avis.");

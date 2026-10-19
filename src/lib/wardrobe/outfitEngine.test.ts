@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { colorPairScore, generateOutfits, type OutfitScoringItem } from "./outfitEngine";
+import {
+  colorPairScore,
+  generateOutfits,
+  itemPairKey,
+  type OutfitScoringItem,
+} from "./outfitEngine";
 
 function makeItem(overrides: Partial<OutfitScoringItem> & { id: string }): OutfitScoringItem {
   return {
@@ -248,12 +253,35 @@ describe("generateOutfits — compatibilité de catégorie", () => {
     expect(result.reason).toMatch(/haut/);
   });
 
-  it("aucune chaussure disponible => message clair", () => {
+  it("aucune chaussure => tenue haut + bas quand même, qui signale les chaussures manquantes", () => {
     const noShoes = FULL_WARDROBE.filter((i) => i.category !== "shoes");
     const result = generateOutfits(noShoes, "quotidien");
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    for (const outfit of result.outfits) {
+      const categories = outfit.items.map((i) => i.category);
+      expect(categories).toContain("top");
+      expect(categories).toContain("bottom");
+      expect(categories).not.toContain("shoes");
+      expect(outfit.missing).toEqual(["chaussures"]);
+    }
+  });
+
+  it("une tenue sans chaussures est moins bien notée que la même tenue avec chaussures", () => {
+    const withShoes = generateOutfits([TSHIRT_NOIR, JEAN_BLEU, SNEAKERS_BLANCHES], "quotidien");
+    const without = generateOutfits([TSHIRT_NOIR, JEAN_BLEU], "quotidien");
+    expect(withShoes.ok && without.ok).toBe(true);
+    if (!withShoes.ok || !without.ok) return;
+    expect(withShoes.outfits[0].missing).toEqual([]);
+    expect(without.outfits[0].score).toBeLessThan(withShoes.outfits[0].score);
+  });
+
+  it("aucun bas disponible => message clair (un haut seul n'est jamais une tenue)", () => {
+    const noBottoms = FULL_WARDROBE.filter((i) => i.category !== "bottom");
+    const result = generateOutfits(noBottoms, "quotidien");
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.reason).toMatch(/chaussures/);
+    expect(result.reason).toMatch(/bas/);
   });
 
   it("dressing complètement vide => message clair, jamais de crash", () => {
@@ -367,5 +395,215 @@ describe("generateOutfits — build outfit around this item (anchorItemId)", () 
     // Le running est hard-exclu du contexte Soirée : pas de résultat halluciné.
     const result = generateOutfits(FULL_WARDROBE, "soiree", { anchorItemId: RUNNING.id });
     expect(result.ok).toBe(false);
+  });
+});
+
+describe("colorPairScore — saisies au féminin et en majuscules", () => {
+  it("« Blanche » est reconnue comme le neutre blanc", () => {
+    expect(colorPairScore("Blanche", "vert")).toBe(colorPairScore("blanc", "vert"));
+  });
+
+  it("« Verte » et « vert » sont la même couleur", () => {
+    expect(colorPairScore("Verte", "vert")).toBe(1);
+  });
+
+  it("« Noir » en majuscule reste un neutre", () => {
+    expect(colorPairScore("Noir", "rose")).toBe(0.95);
+  });
+});
+
+describe("generateOutfits — saison courante", () => {
+  const SHORT_ETE = makeItem({
+    id: "bottom-short",
+    category: "bottom",
+    subcategory: "short",
+    primary_color: "noir",
+    formality: "casual",
+    usage: ["quotidien"],
+    seasons: ["printemps", "ete"],
+  });
+  const PANTALON_HIVER = makeItem({
+    id: "bottom-pantalon",
+    category: "bottom",
+    subcategory: "pantalon",
+    primary_color: "noir",
+    formality: "casual",
+    usage: ["quotidien"],
+    seasons: ["automne", "hiver"],
+  });
+
+  it("écarte une pièce hors saison quand une alternative de saison existe", () => {
+    const result = generateOutfits([TSHIRT_NOIR, SHORT_ETE, PANTALON_HIVER], "quotidien", {
+      currentSeason: "automne",
+      maxResults: 9,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const ids = result.outfits.flatMap((o) => o.items.map((i) => i.id));
+    expect(ids).toContain("bottom-pantalon");
+    expect(ids).not.toContain("bottom-short");
+  });
+
+  it("garde la pièce hors saison (pénalisée) s'il n'y a aucune alternative", () => {
+    const inSeason = generateOutfits([TSHIRT_NOIR, PANTALON_HIVER], "quotidien", {
+      currentSeason: "automne",
+    });
+    const outOfSeason = generateOutfits([TSHIRT_NOIR, SHORT_ETE], "quotidien", {
+      currentSeason: "automne",
+    });
+    expect(inSeason.ok && outOfSeason.ok).toBe(true);
+    if (!inSeason.ok || !outOfSeason.ok) return;
+    expect(outOfSeason.outfits[0].breakdown.inSeason).toBeLessThan(1);
+    expect(outOfSeason.outfits[0].score).toBeLessThan(inSeason.outfits[0].score);
+  });
+});
+
+describe("generateOutfits — rotation, goûts, oubliées, exclusions", () => {
+  const TSHIRT_BLANC = makeItem({
+    id: "top-blanc",
+    category: "top",
+    subcategory: "tshirt",
+    primary_color: "blanc",
+    pattern: "uni",
+    formality: "casual",
+    usage: ["quotidien"],
+  });
+
+  it("une pièce portée hier recule derrière une pièce équivalente non portée", () => {
+    const base = generateOutfits([TSHIRT_NOIR, TSHIRT_BLANC, JEAN_BLEU], "quotidien");
+    expect(base.ok).toBe(true);
+    if (!base.ok) return;
+    const firstTop = base.outfits[0].items[0].id;
+    const rotated = generateOutfits([TSHIRT_NOIR, TSHIRT_BLANC, JEAN_BLEU], "quotidien", {
+      daysSinceWorn: new Map([[firstTop, 1]]),
+    });
+    expect(rotated.ok).toBe(true);
+    if (!rotated.ok) return;
+    expect(rotated.outfits[0].items[0].id).not.toBe(firstTop);
+    expect(rotated.outfits[0].breakdown.freshness).toBe(1);
+  });
+
+  it("une paire aimée 👍 remonte en tête et est expliquée", () => {
+    const result = generateOutfits([TSHIRT_NOIR, TSHIRT_BLANC, JEAN_BLEU], "quotidien", {
+      likedPairs: new Set([itemPairKey("top-blanc", "bottom-1")]),
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.outfits[0].items.map((i) => i.id)).toContain("top-blanc");
+    expect(result.outfits[0].breakdown.affinity).toBeGreaterThan(0);
+    expect(result.outfits[0].explanation).toMatch(/aimée/);
+  });
+
+  it("une pièce oubliée est signalée dans la tenue", () => {
+    const result = generateOutfits([TSHIRT_NOIR, JEAN_BLEU], "quotidien", {
+      forgottenItemIds: new Set(["top-1"]),
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.outfits[0].forgottenItemIds).toEqual(["top-1"]);
+    expect(result.outfits[0].explanation).toMatch(/oubliée/);
+  });
+
+  it("excludeItemIds n'utilise jamais une pièce exclue", () => {
+    const result = generateOutfits([TSHIRT_NOIR, TSHIRT_BLANC, JEAN_BLEU], "quotidien", {
+      excludeItemIds: new Set(["top-1"]),
+      maxResults: 9,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    for (const outfit of result.outfits) {
+      expect(outfit.items.map((i) => i.id)).not.toContain("top-1");
+    }
+  });
+
+  it("itemPairKey ne dépend pas de l'ordre", () => {
+    expect(itemPairKey("a", "b")).toBe(itemPairKey("b", "a"));
+  });
+});
+
+describe("generateOutfits — dressing réel sans chaussures (régression du 19/10/2026)", () => {
+  // Reproduction du dressing de production qui ne générait AUCUNE tenue :
+  // uniquement des hauts et des bas, pas une paire de chaussures.
+  const REAL: OutfitScoringItem[] = [
+    makeItem({
+      id: "t-chemise-noire",
+      category: "top",
+      subcategory: "chemise",
+      primary_color: "noir",
+      formality: "casual",
+      usage: ["quotidien"],
+      seasons: ["printemps", "automne", "hiver"],
+    }),
+    makeItem({
+      id: "t-sweat-beige",
+      category: "top",
+      subcategory: "sweat",
+      primary_color: "beige",
+      pattern: "logo",
+      formality: "casual",
+      usage: ["quotidien"],
+      seasons: ["printemps", "automne", "hiver"],
+    }),
+    makeItem({
+      id: "t-tshirt-blanche",
+      category: "top",
+      subcategory: "tshirt",
+      primary_color: "Blanche",
+      usage: ["quotidien"],
+    }),
+    makeItem({
+      id: "t-polo-verte",
+      category: "top",
+      subcategory: "polo",
+      primary_color: "Verte",
+      formality: "smart_casual",
+      usage: ["quotidien"],
+      seasons: ["printemps", "ete"],
+    }),
+    makeItem({
+      id: "b-jogging-noir",
+      category: "bottom",
+      subcategory: "jogging",
+      primary_color: "noir",
+      formality: "casual",
+      usage: ["quotidien", "sport"],
+      seasons: ["printemps", "automne", "hiver"],
+    }),
+    makeItem({
+      id: "b-pantalon-beige",
+      category: "bottom",
+      subcategory: "pantalon",
+      primary_color: "beige",
+      formality: "casual",
+      usage: ["quotidien"],
+      seasons: ["printemps", "ete", "automne"],
+    }),
+    makeItem({
+      id: "b-short-noir",
+      category: "bottom",
+      subcategory: "short",
+      primary_color: "noir",
+      formality: "casual",
+      usage: ["quotidien"],
+      seasons: ["printemps", "ete"],
+    }),
+  ];
+
+  it.each(["quotidien", "travail", "soiree", "sport", "vacances"] as const)(
+    "contexte %s : au moins une tenue est proposée",
+    (context) => {
+      const result = generateOutfits(REAL, context, { currentSeason: "automne" });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.outfits.length).toBeGreaterThan(0);
+    },
+  );
+
+  it("en automne, le short d'été n'est pas proposé (des bas de saison existent)", () => {
+    const result = generateOutfits(REAL, "quotidien", { currentSeason: "automne", maxResults: 9 });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const ids = result.outfits.flatMap((o) => o.items.map((i) => i.id));
+    expect(ids).not.toContain("b-short-noir");
   });
 });

@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
+  CalendarDays,
   ChevronLeft,
+  History,
   ImageOff,
   Images,
   Loader2,
@@ -16,6 +18,8 @@ import {
   type WardrobeFilterKey,
   type WardrobeItemView,
 } from "@/hooks/useWardrobe";
+import { useWardrobePersonalization } from "@/hooks/useWardrobeInsights";
+import { MissingPiecesCard } from "@/components/wardrobe/MissingPiecesCard";
 
 export const Route = createFileRoute("/_authenticated/dressing/")({
   head: () => ({
@@ -40,6 +44,7 @@ export const Route = createFileRoute("/_authenticated/dressing/")({
 function DressingPage() {
   const { data, isLoading, isError, refetch, isFetching } = useWardrobeItems();
   const [filter, setFilter] = useState<WardrobeFilterKey>("all");
+  const { suggestions, forgottenItemIds } = useWardrobePersonalization();
 
   const items = useMemo<WardrobeItemView[]>(() => data ?? [], [data]);
   const visible = useMemo(
@@ -89,13 +94,40 @@ function DressingPage() {
           Importer plusieurs pièces
         </Link>
         <Link
-          to="/dressing/generer"
-          className="flex items-center justify-center gap-2 rounded-2xl border border-border bg-card px-4 py-3.5 text-sm font-semibold text-foreground transition-opacity active:opacity-80 sm:col-span-2"
+          to="/dressing/semaine"
+          className="flex items-center justify-center gap-2 rounded-2xl border border-primary/40 bg-card px-4 py-3.5 text-sm font-semibold text-foreground transition-opacity active:opacity-80 sm:col-span-2"
         >
-          <Sparkles className="h-4 w-4" />
-          Générer une tenue
+          <CalendarDays className="h-4 w-4 text-primary" />
+          Mes tenues de la semaine
         </Link>
+        <div className="grid grid-cols-2 gap-2 sm:col-span-2">
+          <Link
+            to="/dressing/generer"
+            className="flex items-center justify-center gap-2 rounded-2xl border border-border bg-card px-3 py-3.5 text-sm font-semibold text-foreground transition-opacity active:opacity-80"
+          >
+            <Sparkles className="h-4 w-4" />
+            Générer
+          </Link>
+          <Link
+            to="/dressing/historique"
+            className="relative flex items-center justify-center gap-2 rounded-2xl border border-border bg-card px-3 py-3.5 text-sm font-semibold text-foreground transition-opacity active:opacity-80"
+          >
+            <History className="h-4 w-4" />
+            Journal
+            {forgottenItemIds.length > 0 && (
+              <span className="absolute -right-1 -top-1 rounded-full bg-primary px-1.5 py-0.5 text-[9px] font-bold tabular-nums text-primary-foreground">
+                {forgottenItemIds.length}
+              </span>
+            )}
+          </Link>
+        </div>
       </div>
+
+      {!isLoading && items.length > 0 && (
+        <div className="mb-5">
+          <MissingPiecesCard suggestions={suggestions} limit={2} />
+        </div>
+      )}
 
       {/* Filtres catégories */}
       <div className="-mx-5 mb-4 overflow-x-auto px-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">

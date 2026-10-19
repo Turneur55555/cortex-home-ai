@@ -46,8 +46,20 @@ function makeOutfit(items: OutfitScoringItem[]): GeneratedOutfit {
   return {
     items,
     score: 87,
-    breakdown: { category: 1, usage: 0.9, formality: 0.8, color: 0.85, pattern: 1, season: 1 },
+    breakdown: {
+      category: 1,
+      usage: 0.9,
+      formality: 0.8,
+      color: 0.85,
+      pattern: 1,
+      season: 1,
+      inSeason: 1,
+      freshness: 1,
+      affinity: 0,
+    },
     explanation: "Palette cohérente et pièces adaptées au contexte quotidien.",
+    missing: [],
+    forgottenItemIds: [],
   };
 }
 

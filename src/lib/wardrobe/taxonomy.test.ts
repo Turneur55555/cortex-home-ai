@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  canonicalWardrobeColor,
+  canonicalWardrobeSubcategory,
+  seasonForDate,
   WARDROBE_DB_CATEGORY_BY_UI,
   WARDROBE_SLEEVE_LENGTH_OPTIONS,
   WARDROBE_SUBCATEGORIES,
@@ -94,5 +97,33 @@ describe("WARDROBE_SUBCATEGORIES — pas de doublons", () => {
   it("chaque valeur de sous-catégorie est unique", () => {
     const values = WARDROBE_SUBCATEGORIES.map((s) => s.value);
     expect(new Set(values).size).toBe(values.length);
+  });
+});
+
+describe("normalisation des saisies libres", () => {
+  it("ramène les couleurs au féminin / en majuscules à la valeur canonique", () => {
+    expect(canonicalWardrobeColor("Blanche")).toBe("blanc");
+    expect(canonicalWardrobeColor("Verte")).toBe("vert");
+    expect(canonicalWardrobeColor("Noir")).toBe("noir");
+    expect(canonicalWardrobeColor("gris fonce")).toBe("gris foncé");
+    expect(canonicalWardrobeColor("  ")).toBeNull();
+  });
+
+  it("conserve une couleur inconnue (jamais remplacée par une couleur inventée)", () => {
+    expect(canonicalWardrobeColor("Turquoise")).toBe("turquoise");
+  });
+
+  it("ramène les types précis à leur valeur canonique", () => {
+    expect(canonicalWardrobeSubcategory("shorts")).toBe("short");
+    expect(canonicalWardrobeSubcategory("T-shirt")).toBe("tshirt");
+    expect(canonicalWardrobeSubcategory("polo")).toBe("polo");
+    expect(canonicalWardrobeSubcategory(null)).toBeNull();
+  });
+
+  it("donne la saison d'une date locale", () => {
+    expect(seasonForDate("2026-10-19")).toBe("automne");
+    expect(seasonForDate("2026-01-05")).toBe("hiver");
+    expect(seasonForDate("2026-07-14")).toBe("ete");
+    expect(seasonForDate("2026-04-01")).toBe("printemps");
   });
 });

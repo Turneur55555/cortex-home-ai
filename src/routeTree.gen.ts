@@ -34,7 +34,9 @@ import { Route as AuthenticatedDressingIndexRouteImport } from './routes/_authen
 import { Route as AuthenticatedSemaineWeekStartRouteImport } from './routes/_authenticated/semaine/$weekStart'
 import { Route as AuthenticatedRapportsIdRouteImport } from './routes/_authenticated/rapports/$id'
 import { Route as AuthenticatedLivresAjouterRouteImport } from './routes/_authenticated/livres/ajouter'
+import { Route as AuthenticatedDressingSemaineRouteImport } from './routes/_authenticated/dressing/semaine'
 import { Route as AuthenticatedDressingImportRouteImport } from './routes/_authenticated/dressing/import'
+import { Route as AuthenticatedDressingHistoriqueRouteImport } from './routes/_authenticated/dressing/historique'
 import { Route as AuthenticatedDressingGenererRouteImport } from './routes/_authenticated/dressing/generer'
 import { Route as AuthenticatedDressingAjouterRouteImport } from './routes/_authenticated/dressing/ajouter'
 import { Route as AuthenticatedDressingItemIdRouteImport } from './routes/_authenticated/dressing/$itemId'
@@ -177,10 +179,22 @@ const AuthenticatedLivresAjouterRoute =
     path: '/livres/ajouter',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
+const AuthenticatedDressingSemaineRoute =
+  AuthenticatedDressingSemaineRouteImport.update({
+    id: '/dressing/semaine',
+    path: '/dressing/semaine',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedDressingImportRoute =
   AuthenticatedDressingImportRouteImport.update({
     id: '/dressing/import',
     path: '/dressing/import',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
+const AuthenticatedDressingHistoriqueRoute =
+  AuthenticatedDressingHistoriqueRouteImport.update({
+    id: '/dressing/historique',
+    path: '/dressing/historique',
     getParentRoute: () => AuthenticatedRoute,
   } as any)
 const AuthenticatedDressingGenererRoute =
@@ -241,7 +255,9 @@ export interface FileRoutesByFullPath {
   '/dressing/$itemId': typeof AuthenticatedDressingItemIdRoute
   '/dressing/ajouter': typeof AuthenticatedDressingAjouterRoute
   '/dressing/generer': typeof AuthenticatedDressingGenererRoute
+  '/dressing/historique': typeof AuthenticatedDressingHistoriqueRoute
   '/dressing/import': typeof AuthenticatedDressingImportRoute
+  '/dressing/semaine': typeof AuthenticatedDressingSemaineRoute
   '/livres/ajouter': typeof AuthenticatedLivresAjouterRoute
   '/rapports/$id': typeof AuthenticatedRapportsIdRoute
   '/semaine/$weekStart': typeof AuthenticatedSemaineWeekStartRoute
@@ -274,7 +290,9 @@ export interface FileRoutesByTo {
   '/dressing/$itemId': typeof AuthenticatedDressingItemIdRoute
   '/dressing/ajouter': typeof AuthenticatedDressingAjouterRoute
   '/dressing/generer': typeof AuthenticatedDressingGenererRoute
+  '/dressing/historique': typeof AuthenticatedDressingHistoriqueRoute
   '/dressing/import': typeof AuthenticatedDressingImportRoute
+  '/dressing/semaine': typeof AuthenticatedDressingSemaineRoute
   '/livres/ajouter': typeof AuthenticatedLivresAjouterRoute
   '/rapports/$id': typeof AuthenticatedRapportsIdRoute
   '/semaine/$weekStart': typeof AuthenticatedSemaineWeekStartRoute
@@ -309,7 +327,9 @@ export interface FileRoutesById {
   '/_authenticated/dressing/$itemId': typeof AuthenticatedDressingItemIdRoute
   '/_authenticated/dressing/ajouter': typeof AuthenticatedDressingAjouterRoute
   '/_authenticated/dressing/generer': typeof AuthenticatedDressingGenererRoute
+  '/_authenticated/dressing/historique': typeof AuthenticatedDressingHistoriqueRoute
   '/_authenticated/dressing/import': typeof AuthenticatedDressingImportRoute
+  '/_authenticated/dressing/semaine': typeof AuthenticatedDressingSemaineRoute
   '/_authenticated/livres/ajouter': typeof AuthenticatedLivresAjouterRoute
   '/_authenticated/rapports/$id': typeof AuthenticatedRapportsIdRoute
   '/_authenticated/semaine/$weekStart': typeof AuthenticatedSemaineWeekStartRoute
@@ -344,7 +364,9 @@ export interface FileRouteTypes {
     | '/dressing/$itemId'
     | '/dressing/ajouter'
     | '/dressing/generer'
+    | '/dressing/historique'
     | '/dressing/import'
+    | '/dressing/semaine'
     | '/livres/ajouter'
     | '/rapports/$id'
     | '/semaine/$weekStart'
@@ -377,7 +399,9 @@ export interface FileRouteTypes {
     | '/dressing/$itemId'
     | '/dressing/ajouter'
     | '/dressing/generer'
+    | '/dressing/historique'
     | '/dressing/import'
+    | '/dressing/semaine'
     | '/livres/ajouter'
     | '/rapports/$id'
     | '/semaine/$weekStart'
@@ -411,7 +435,9 @@ export interface FileRouteTypes {
     | '/_authenticated/dressing/$itemId'
     | '/_authenticated/dressing/ajouter'
     | '/_authenticated/dressing/generer'
+    | '/_authenticated/dressing/historique'
     | '/_authenticated/dressing/import'
+    | '/_authenticated/dressing/semaine'
     | '/_authenticated/livres/ajouter'
     | '/_authenticated/rapports/$id'
     | '/_authenticated/semaine/$weekStart'
@@ -609,11 +635,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedLivresAjouterRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/dressing/semaine': {
+      id: '/_authenticated/dressing/semaine'
+      path: '/dressing/semaine'
+      fullPath: '/dressing/semaine'
+      preLoaderRoute: typeof AuthenticatedDressingSemaineRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/dressing/import': {
       id: '/_authenticated/dressing/import'
       path: '/dressing/import'
       fullPath: '/dressing/import'
       preLoaderRoute: typeof AuthenticatedDressingImportRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/dressing/historique': {
+      id: '/_authenticated/dressing/historique'
+      path: '/dressing/historique'
+      fullPath: '/dressing/historique'
+      preLoaderRoute: typeof AuthenticatedDressingHistoriqueRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/dressing/generer': {
@@ -678,7 +718,9 @@ interface AuthenticatedRouteChildren {
   AuthenticatedDressingItemIdRoute: typeof AuthenticatedDressingItemIdRoute
   AuthenticatedDressingAjouterRoute: typeof AuthenticatedDressingAjouterRoute
   AuthenticatedDressingGenererRoute: typeof AuthenticatedDressingGenererRoute
+  AuthenticatedDressingHistoriqueRoute: typeof AuthenticatedDressingHistoriqueRoute
   AuthenticatedDressingImportRoute: typeof AuthenticatedDressingImportRoute
+  AuthenticatedDressingSemaineRoute: typeof AuthenticatedDressingSemaineRoute
   AuthenticatedLivresAjouterRoute: typeof AuthenticatedLivresAjouterRoute
   AuthenticatedRapportsIdRoute: typeof AuthenticatedRapportsIdRoute
   AuthenticatedSemaineWeekStartRoute: typeof AuthenticatedSemaineWeekStartRoute
@@ -709,7 +751,9 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedDressingItemIdRoute: AuthenticatedDressingItemIdRoute,
   AuthenticatedDressingAjouterRoute: AuthenticatedDressingAjouterRoute,
   AuthenticatedDressingGenererRoute: AuthenticatedDressingGenererRoute,
+  AuthenticatedDressingHistoriqueRoute: AuthenticatedDressingHistoriqueRoute,
   AuthenticatedDressingImportRoute: AuthenticatedDressingImportRoute,
+  AuthenticatedDressingSemaineRoute: AuthenticatedDressingSemaineRoute,
   AuthenticatedLivresAjouterRoute: AuthenticatedLivresAjouterRoute,
   AuthenticatedRapportsIdRoute: AuthenticatedRapportsIdRoute,
   AuthenticatedSemaineWeekStartRoute: AuthenticatedSemaineWeekStartRoute,

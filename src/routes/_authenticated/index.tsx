@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { CorpsShortcutTile } from "@/components/home/CorpsShortcutTile";
 import { TodayCard } from "@/components/home/TodayCard";
+import { TodayOutfitTile } from "@/components/home/TodayOutfitTile";
 import { WeekReportTeaser } from "@/components/week/WeekReportTeaser";
 import { WeekPlanCard } from "@/components/fitness/plan/WeekPlanCard";
 import { ProfileHeroCard } from "@/components/profile/ProfileHeroCard";
@@ -18,7 +19,7 @@ export const Route = createFileRoute("/_authenticated/")({
 
 // Accueil : l'ACTION D'ABORD (décision de Nathan, 30/09/2026), puis le Rang.
 //   Carte du jour → (bandeau « Ta semaine est prête », lundi et mardi) → ta semaine →
-//   illustration du Titre → progression → Corps.
+//   illustration du Titre → progression → Corps → Tenue du jour (Dressing, invisible si vide).
 // La Carte du jour dit quoi faire aujourd'hui, uniquement par des faits (voir
 // lib/fitness/todayCard.ts) ; la semaine n'apparaît que si un plan existe (sans
 // plan, c'est la Carte du jour qui invite à en créer un).
@@ -38,6 +39,7 @@ function HomePage() {
       <ProfileHeroCard />
       <RPGProgressionSection />
       <CorpsShortcutTile />
+      <TodayOutfitTile />
     </main>
   );
 }

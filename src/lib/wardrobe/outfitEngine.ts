@@ -18,12 +18,21 @@
  * toute correction utilisateur (Part A — édition d'une pièce) est déjà la
  * seule valeur vue ici, sans distinction avec la valeur Vision d'origine.
  *
- * Extensibilité (§10, non implémenté ici) : la météo/température, l'heure
- * précise, les préférences personnelles fines, la rotation des pièces et le
- * mode "valise voyage" pourront s'ajouter comme critères supplémentaires
- * dans `scoreCombo` (nouveau poids + nouvelle fonction de score), sans
- * changer la forme de `generateOutfits`.
+ * Personnalisation (19/10/2026) — toujours déterministe, toujours à partir de
+ * faits lus en base, passés en options :
+ *   - saison courante : une pièce hors saison est écartée quand sa catégorie
+ *     a une alternative de saison, et pénalisée sinon (pas de short en hiver) ;
+ *   - rotation : une pièce portée ces derniers jours recule (`daysSinceWorn`) ;
+ *   - goûts : une paire de pièces déjà présente dans une tenue aimée 👍
+ *     rapporte un bonus (`likedPairs`) ;
+ *   - pièces oubliées : légère priorité (`forgottenItemIds`) ;
+ *   - exclusions : le planning de la semaine évite de répéter une pièce
+ *     (`excludeItemIds`).
+ * Les chaussures ne sont plus obligatoires : un haut + un bas suffisent,
+ * la tenue signale alors ce qui manque (`missing`) au lieu d'être refusée.
  */
+
+import { canonicalWardrobeColor, type WardrobeSeason } from "./taxonomy";
 
 export type OutfitCategory = "top" | "bottom" | "outerwear" | "shoes" | "accessory";
 
@@ -37,6 +46,10 @@ export const OUTFIT_CONTEXTS: Array<{ value: OutfitContext; label: string }> = [
   { value: "vacances", label: "Vacances" },
   { value: "baignade", label: "Baignade" },
 ];
+
+export function isOutfitContext(value: unknown): value is OutfitContext {
+  return OUTFIT_CONTEXTS.some((c) => c.value === value);
+}
 
 /** Vue pure d'une pièce du dressing — sous-ensemble typé de `wardrobe_items`. */
 export interface OutfitScoringItem {
@@ -60,6 +73,12 @@ export interface OutfitScoreBreakdown {
   color: number;
   pattern: number;
   season: number;
+  /** Adéquation à la saison courante (1 sans saison courante fournie). */
+  inSeason: number;
+  /** 1 = aucune pièce portée récemment, 0 = tout porté hier. */
+  freshness: number;
+  /** 0-1, part des paires de la tenue déjà vues dans une tenue aimée. */
+  affinity: number;
 }
 
 export interface GeneratedOutfit {
@@ -69,6 +88,10 @@ export interface GeneratedOutfit {
   breakdown: OutfitScoreBreakdown;
   /** Phrase courte, générée à partir des faits ci-dessus — jamais un essai verbeux. */
   explanation: string;
+  /** Catégories absentes du dressing qui compléteraient la tenue (ex. « chaussures »). */
+  missing: string[];
+  /** Pièces de la tenue signalées comme oubliées (non portées depuis longtemps). */
+  forgottenItemIds: string[];
 }
 
 export type GenerateOutfitsResult =
@@ -168,11 +191,16 @@ function normalizeText(value: string): string {
     .toLowerCase();
 }
 
+/** Couleur repliée (sans accent) APRÈS canonicalisation : « Blanche » → « blanc ». */
+function colorKey(value: string): string {
+  return normalizeText(canonicalWardrobeColor(value) ?? value);
+}
+
 /** Score de compatibilité entre deux couleurs — simple, pas de théorie complète des couleurs. */
 export function colorPairScore(a: string | null, b: string | null): number {
   if (!a || !b) return 0.8;
-  const na = normalizeText(a);
-  const nb = normalizeText(b);
+  const na = colorKey(a);
+  const nb = colorKey(b);
   if (na === nb) return 1;
   if (COLOR_NEUTRALS.has(na) || COLOR_NEUTRALS.has(nb)) return 0.95;
   const fa = COLOR_FAMILIES[na];
@@ -287,7 +315,79 @@ function passesHardFilters(item: OutfitScoringItem, rule: ContextRule): boolean 
   return true;
 }
 
-function singleItemScore(item: OutfitScoringItem, rule: ContextRule): number {
+// ─── Personnalisation : saison, rotation, goûts ─────────────────────────────
+
+/** Clé stable d'une paire de pièces, indépendante de l'ordre. */
+export function itemPairKey(a: string, b: string): string {
+  return a < b ? `${a}|${b}` : `${b}|${a}`;
+}
+
+interface Personalization {
+  currentSeason: WardrobeSeason | null;
+  daysSinceWorn: ReadonlyMap<string, number>;
+  likedPairs: ReadonlySet<string>;
+  forgotten: ReadonlySet<string>;
+}
+
+const EMPTY_MAP: ReadonlyMap<string, number> = new Map();
+const EMPTY_SET: ReadonlySet<string> = new Set();
+
+/** Une pièce sans saison renseignée est considérée « de saison » (jamais exclue à tort). */
+function isInSeason(item: OutfitScoringItem, season: WardrobeSeason | null): boolean {
+  if (!season || item.seasons.length === 0) return true;
+  return item.seasons.includes(season);
+}
+
+function itemSeasonFit(item: OutfitScoringItem, season: WardrobeSeason | null): number {
+  if (!season) return 1;
+  if (item.seasons.length === 0) return 0.8;
+  return item.seasons.includes(season) ? 1 : 0.2;
+}
+
+function inSeasonScore(items: OutfitScoringItem[], p: Personalization): number {
+  if (items.length === 0) return 1;
+  return items.reduce((sum, i) => sum + itemSeasonFit(i, p.currentSeason), 0) / items.length;
+}
+
+/** 0 = portée aujourd'hui/hier, remonte à 1 au bout d'une semaine. */
+function itemFreshness(item: OutfitScoringItem, p: Personalization): number {
+  const days = p.daysSinceWorn.get(item.id);
+  if (days === undefined) return 1;
+  if (days <= 1) return 0;
+  if (days <= 3) return 0.4;
+  if (days <= 6) return 0.7;
+  return 1;
+}
+
+function freshnessScore(items: OutfitScoringItem[], p: Personalization): number {
+  if (items.length === 0) return 1;
+  return items.reduce((sum, i) => sum + itemFreshness(i, p), 0) / items.length;
+}
+
+function affinityScore(items: OutfitScoringItem[], p: Personalization): number {
+  if (p.likedPairs.size === 0 || items.length < 2) return 0;
+  let liked = 0;
+  let pairs = 0;
+  for (let i = 0; i < items.length; i++) {
+    for (let j = i + 1; j < items.length; j++) {
+      pairs++;
+      if (p.likedPairs.has(itemPairKey(items[i].id, items[j].id))) liked++;
+    }
+  }
+  return pairs > 0 ? liked / pairs : 0;
+}
+
+/**
+ * Écarte les pièces hors saison d'une catégorie SI elle a au moins une
+ * alternative de saison — sinon on garde tout (le score pénalisera).
+ */
+function preferInSeason(list: OutfitScoringItem[], p: Personalization): OutfitScoringItem[] {
+  if (!p.currentSeason) return list;
+  const inSeason = list.filter((i) => isInSeason(i, p.currentSeason));
+  return inSeason.length > 0 ? inSeason : list;
+}
+
+function singleItemScore(item: OutfitScoringItem, rule: ContextRule, p: Personalization): number {
   let s = 0;
   if (item.usage.length === 0) s += 0.5;
   else if (item.usage.some((u) => rule.preferredUsage.includes(u))) s += 1;
@@ -298,59 +398,133 @@ function singleItemScore(item: OutfitScoringItem, rule: ContextRule): number {
   else if (item.formality && rule.preferredFormality.includes(item.formality)) s += 1;
   else s += 0.3;
 
+  s += itemSeasonFit(item, p.currentSeason) * 0.6;
+  s += itemFreshness(item, p) * 0.8;
+  if (p.forgotten.has(item.id)) s += 0.3;
+
   return s;
 }
 
 const CANDIDATE_CAP = 6;
 const DEFAULT_MAX_RESULTS = 3;
 
-function rankAndCap(list: OutfitScoringItem[], rule: ContextRule): OutfitScoringItem[] {
-  return [...list]
-    .sort((a, b) => singleItemScore(b, rule) - singleItemScore(a, rule) || a.id.localeCompare(b.id))
+function rankAndCap(
+  list: OutfitScoringItem[],
+  rule: ContextRule,
+  p: Personalization,
+): OutfitScoringItem[] {
+  return [...preferInSeason(list, p)]
+    .sort(
+      (a, b) =>
+        singleItemScore(b, rule, p) - singleItemScore(a, rule, p) || a.id.localeCompare(b.id),
+    )
     .slice(0, CANDIDATE_CAP);
 }
 
-function pickBest(list: OutfitScoringItem[], rule: ContextRule): OutfitScoringItem | null {
-  const ranked = rankAndCap(list, rule);
+function pickBest(
+  list: OutfitScoringItem[],
+  rule: ContextRule,
+  p: Personalization,
+): OutfitScoringItem | null {
+  const ranked = rankAndCap(list, rule, p);
   return ranked[0] ?? null;
 }
 
-function buildExplanation(scores: OutfitScoreBreakdown, context: OutfitContext): string {
+function joinParts(parts: string[]): string {
+  return parts.length === 1
+    ? parts[0]
+    : `${parts.slice(0, -1).join(", ")} et ${parts[parts.length - 1]}`;
+}
+
+function buildExplanation(
+  scores: OutfitScoreBreakdown,
+  context: OutfitContext,
+  forgottenCount: number,
+  hasCurrentSeason: boolean,
+): string {
   const parts: string[] = [];
+  if (scores.affinity > 0) parts.push("une association que tu as aimée");
   if (scores.color >= 0.75) parts.push("palette cohérente");
   if (scores.formality >= 0.75) parts.push("niveau de formalité compatible");
   if (scores.usage >= 0.75) {
     parts.push(`pièces adaptées au contexte ${CONTEXT_RULES[context].label}`);
   }
+  if (hasCurrentSeason && scores.inSeason >= 0.9) parts.push("pièces de saison");
   if (scores.pattern >= 0.9) parts.push("motifs sobres");
-  if (scores.season >= 0.9) parts.push("saisons compatibles");
+  if (!hasCurrentSeason && scores.season >= 0.9) parts.push("saisons compatibles");
   if (parts.length === 0) parts.push("combinaison possible mais perfectible");
 
-  const sentence =
-    parts.length === 1
-      ? parts[0]
-      : `${parts.slice(0, -1).join(", ")} et ${parts[parts.length - 1]}`;
-  return sentence.charAt(0).toUpperCase() + sentence.slice(1) + ".";
+  // On garde la phrase courte : au plus quatre arguments.
+  const sentence = joinParts(parts.slice(0, 4));
+  let text = sentence.charAt(0).toUpperCase() + sentence.slice(1) + ".";
+  if (forgottenCount > 0) {
+    text +=
+      forgottenCount > 1
+        ? " Remet en avant des pièces oubliées."
+        : " Remet en avant une pièce oubliée.";
+  }
+  return text;
 }
+
+/** Bonus maximal (en points) d'une tenue dont toutes les paires ont déjà été aimées. */
+const AFFINITY_BONUS = 6;
+/** Une tenue sans chaussures reste proposée, mais moins bien notée qu'une tenue complète. */
+const CATEGORY_SCORE_WITHOUT_SHOES = 0.8;
 
 function scoreCombo(
   pieces: OutfitScoringItem[],
   rule: ContextRule,
   context: OutfitContext,
+  p: Personalization,
+  missing: string[],
 ): GeneratedOutfit {
   const usage = usageScore(pieces, rule);
   const formality = formalityScore(pieces, rule);
   const color = colorCoherenceScore(pieces);
   const pattern = patternCoherenceScore(pieces);
   const season = seasonCoherenceScore(pieces);
-  const category = 1;
+  const inSeason = inSeasonScore(pieces, p);
+  const freshness = freshnessScore(pieces, p);
+  const affinity = affinityScore(pieces, p);
+  const category = missing.length > 0 ? CATEGORY_SCORE_WITHOUT_SHOES : 1;
 
-  const breakdown: OutfitScoreBreakdown = { category, usage, formality, color, pattern, season };
+  const breakdown: OutfitScoreBreakdown = {
+    category,
+    usage,
+    formality,
+    color,
+    pattern,
+    season,
+    inSeason,
+    freshness,
+    affinity,
+  };
   const total =
-    category * 20 + usage * 25 + formality * 20 + color * 20 + pattern * 10 + season * 5;
+    category * 15 +
+    usage * 20 +
+    formality * 15 +
+    color * 20 +
+    pattern * 8 +
+    season * 4 +
+    inSeason * 10 +
+    freshness * 8 +
+    affinity * AFFINITY_BONUS;
   const score = Math.round(Math.max(0, Math.min(100, total)));
+  const forgottenItemIds = pieces.filter((i) => p.forgotten.has(i.id)).map((i) => i.id);
 
-  return { items: pieces, score, breakdown, explanation: buildExplanation(breakdown, context) };
+  return {
+    items: pieces,
+    score,
+    breakdown,
+    explanation: buildExplanation(
+      breakdown,
+      context,
+      forgottenItemIds.length,
+      p.currentSeason !== null,
+    ),
+    missing,
+    forgottenItemIds,
+  };
 }
 
 function comboKey(outfit: GeneratedOutfit): string {
@@ -390,40 +564,44 @@ function generateStandardOutfits(
   context: OutfitContext,
   anchor: OutfitScoringItem | null,
   maxResults: number,
+  p: Personalization,
 ): GenerateOutfitsResult {
-  let tops = rankAndCap(byCategory.top, rule);
-  let bottoms = rankAndCap(byCategory.bottom, rule);
-  let shoes = rankAndCap(byCategory.shoes, rule);
+  let tops = rankAndCap(byCategory.top, rule, p);
+  let bottoms = rankAndCap(byCategory.bottom, rule, p);
+  let shoes = rankAndCap(byCategory.shoes, rule, p);
 
   if (anchor?.category === "top") tops = [anchor];
   if (anchor?.category === "bottom") bottoms = [anchor];
   if (anchor?.category === "shoes") shoes = [anchor];
 
+  // Seuls un haut et un bas sont indispensables : sans chaussures, la tenue
+  // est proposée quand même et signale ce qui la compléterait.
   const missing: string[] = [];
   if (tops.length === 0) missing.push(MISSING_LABELS.top);
   if (bottoms.length === 0) missing.push(MISSING_LABELS.bottom);
-  if (shoes.length === 0) missing.push(MISSING_LABELS.shoes);
   if (missing.length > 0) {
     return { ok: false, reason: buildMissingReason(missing), missingCategories: missing };
   }
+  const comboMissing = shoes.length === 0 ? [MISSING_LABELS.shoes] : [];
+  const shoeOptions: Array<OutfitScoringItem | null> = shoes.length > 0 ? shoes : [null];
 
   const bestOuterwear =
-    anchor?.category === "outerwear" ? anchor : pickBest(byCategory.outerwear, rule);
+    anchor?.category === "outerwear" ? anchor : pickBest(byCategory.outerwear, rule, p);
   const bestAccessory =
-    anchor?.category === "accessory" ? anchor : pickBest(byCategory.accessory, rule);
+    anchor?.category === "accessory" ? anchor : pickBest(byCategory.accessory, rule, p);
 
   const combos: GeneratedOutfit[] = [];
   for (const top of tops) {
     for (const bottom of bottoms) {
-      for (const shoe of shoes) {
+      for (const shoe of shoeOptions) {
         const pieces = [
           top,
           bottom,
-          shoe,
+          ...(shoe ? [shoe] : []),
           ...(bestOuterwear ? [bestOuterwear] : []),
           ...(bestAccessory ? [bestAccessory] : []),
         ];
-        combos.push(scoreCombo(pieces, rule, context));
+        combos.push(scoreCombo(pieces, rule, context, p, comboMissing));
       }
     }
   }
@@ -437,14 +615,15 @@ function generateBaignadeOutfits(
   rule: ContextRule,
   anchor: OutfitScoringItem | null,
   maxResults: number,
+  p: Personalization,
 ): GenerateOutfitsResult {
   const swimTops = byCategory.top.filter((i) => i.usage.includes("baignade"));
   const swimBottoms = byCategory.bottom.filter((i) => i.usage.includes("baignade"));
   const onePieces = swimTops.filter((i) => i.subcategory === "maillot_une_piece");
   const bikiniTops = swimTops.filter((i) => i.subcategory !== "maillot_une_piece");
 
-  const bestShoes = pickBest(byCategory.shoes, rule);
-  const bestAccessory = pickBest(byCategory.accessory, rule);
+  const bestShoes = pickBest(byCategory.shoes, rule, p);
+  const bestAccessory = pickBest(byCategory.accessory, rule, p);
 
   let bases: OutfitScoringItem[][] = [];
   for (const top of onePieces) bases.push([top]);
@@ -477,6 +656,8 @@ function generateBaignadeOutfits(
       [...base, ...(bestShoes ? [bestShoes] : []), ...(bestAccessory ? [bestAccessory] : [])],
       rule,
       "baignade",
+      p,
+      [],
     ),
   );
 
@@ -487,13 +668,23 @@ export interface GenerateOutfitsOptions {
   /** "Créer une tenue avec cette pièce" (§7) — filtre le moteur autour d'une pièce fixée. */
   anchorItemId?: string;
   maxResults?: number;
+  /** Saison courante : écarte/pénalise les pièces hors saison. */
+  currentSeason?: WardrobeSeason | null;
+  /** Rotation : pièce → nombre de jours depuis son dernier port (0 = aujourd'hui). */
+  daysSinceWorn?: ReadonlyMap<string, number>;
+  /** Paires de pièces (`itemPairKey`) présentes dans des tenues aimées 👍. */
+  likedPairs?: ReadonlySet<string>;
+  /** Pièces oubliées, légèrement prioritaires. */
+  forgottenItemIds?: ReadonlySet<string>;
+  /** Pièces à ne pas utiliser (planning : pas deux fois la même pièce dans la semaine). */
+  excludeItemIds?: ReadonlySet<string>;
 }
 
 /**
  * Génère jusqu'à `maxResults` tenues compatibles pour un contexte donné, à
  * partir UNIQUEMENT des pièces passées en entrée (jamais de pièce
- * hallucinée). Déterministe : mêmes pièces + même contexte => mêmes tenues,
- * mêmes scores, dans le même ordre.
+ * hallucinée). Déterministe : mêmes pièces + même contexte + mêmes options
+ * => mêmes tenues, mêmes scores, dans le même ordre.
  */
 export function generateOutfits(
   allItems: OutfitScoringItem[],
@@ -502,8 +693,17 @@ export function generateOutfits(
 ): GenerateOutfitsResult {
   const rule = CONTEXT_RULES[context];
   const maxResults = options.maxResults ?? DEFAULT_MAX_RESULTS;
+  const p: Personalization = {
+    currentSeason: options.currentSeason ?? null,
+    daysSinceWorn: options.daysSinceWorn ?? EMPTY_MAP,
+    likedPairs: options.likedPairs ?? EMPTY_SET,
+    forgotten: options.forgottenItemIds ?? EMPTY_SET,
+  };
+  const exclude = options.excludeItemIds ?? EMPTY_SET;
 
-  const filtered = allItems.filter((i) => passesHardFilters(i, rule));
+  const filtered = allItems.filter(
+    (i) => passesHardFilters(i, rule) && (i.id === options.anchorItemId || !exclude.has(i.id)),
+  );
 
   if (options.anchorItemId) {
     const anchorExists = filtered.some((i) => i.id === options.anchorItemId);
@@ -528,7 +728,7 @@ export function generateOutfits(
   };
 
   if (context === "baignade") {
-    return generateBaignadeOutfits(byCategory, rule, anchor, maxResults);
+    return generateBaignadeOutfits(byCategory, rule, anchor, maxResults, p);
   }
-  return generateStandardOutfits(byCategory, rule, context, anchor, maxResults);
+  return generateStandardOutfits(byCategory, rule, context, anchor, maxResults, p);
 }
