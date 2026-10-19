@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { AlertTriangle, Check, ChevronRight, CloudUpload, Loader2, WifiOff } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { AlertTriangle, Check, CloudUpload, Loader2, WifiOff } from "lucide-react";
+import { SpaceButton } from "./SpaceTile";
 import { useOfflineSync } from "@/hooks/useOfflineSync";
 import { SyncQueueSheet } from "@/components/shared/SyncQueueSheet";
 import { summarizeSyncQueue, type SyncSummaryTone } from "@/lib/offline/syncQueueSummary";
@@ -65,47 +65,21 @@ export function SyncStatusCard() {
 
   return (
     <>
-      {/* Le titre « Synchronisation » est porté par le `SettingsGroup` qui
-          enveloppe ce bloc dans Profil — pas de second en-tête ici. */}
-      <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-2 backdrop-blur-xl">
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          aria-label={`Synchronisation : ${summary.label}. Voir les détails`}
-          className="flex w-full items-center justify-between gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-white/[0.04]"
-        >
-          <div className="flex min-w-0 items-center gap-3">
-            <span
-              className={cn(
-                "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
-                tone.className,
-              )}
-            >
-              {tone.icon}
-            </span>
-            <div className="min-w-0">
-              <p className="truncate text-sm font-medium">{summary.label}</p>
-              {summary.detail && (
-                <p className="truncate text-xs text-muted-foreground">{summary.detail}</p>
-              )}
-            </div>
-          </div>
-          <span className="flex shrink-0 items-center gap-1.5">
-            {/* Indication discrète, jamais une notification permanente :
-                une pastille sur ce bloc, uniquement quand une intervention
-                est réellement nécessaire. */}
-            {summary.needsAttention && (
-              <span
-                aria-hidden
-                data-testid="sync-attention-dot"
-                className="h-1.5 w-1.5 rounded-full bg-destructive"
-              />
-            )}
-            <span className="text-xs text-muted-foreground">Voir les détails</span>
-            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-          </span>
-        </button>
-      </div>
+      <SpaceButton
+        icon={tone.icon}
+        iconClassName={tone.className}
+        label="Synchronisation"
+        subtitle={
+          <>
+            {summary.label}
+            {summary.detail ? ` · ${summary.detail}` : ""}
+          </>
+        }
+        srHint="Voir les détails"
+        attention={summary.needsAttention}
+        ariaLabel={`Synchronisation : ${summary.label}. Voir les détails`}
+        onClick={() => setOpen(true)}
+      />
 
       {open && <SyncQueueSheet onClose={() => setOpen(false)} sync={sync} />}
     </>

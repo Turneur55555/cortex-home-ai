@@ -1,7 +1,15 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Apple, BookOpen, ChevronRight, FileText, Shirt } from "lucide-react";
+import {
+  Apple,
+  BookOpen,
+  Database,
+  FileText,
+  Shirt,
+  ShieldCheck,
+  SlidersHorizontal,
+} from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useProfile } from "@/hooks/useProfile";
 import { ProfileIdentityStrip } from "@/components/profile/ProfileIdentityStrip";
@@ -10,7 +18,8 @@ import { BodyStatusCard } from "@/components/profile/BodyStatusCard";
 import { PersonalizationPanel } from "@/components/profile/PersonalizationPanel";
 import { SecurityPanel } from "@/components/profile/SecurityPanel";
 import { HealthDataPanel } from "@/components/profile/HealthDataPanel";
-import { SettingsGroup } from "@/components/profile/SettingsGroup";
+import { SettingsSheetTile } from "@/components/profile/SettingsSheetTile";
+import { SpaceLink } from "@/components/profile/SpaceTile";
 import { SyncStatusCard } from "@/components/profile/SyncStatusCard";
 
 export const Route = createFileRoute("/_authenticated/profil")({
@@ -63,19 +72,22 @@ function ProfilPage() {
         </div>
       </Section>
 
-      <Section title="Paramètres">
-        <SettingsGroup title="Personnalisation">
-          <PersonalizationPanel />
-        </SettingsGroup>
-        <SettingsGroup title="Compte & sécurité">
-          <SecurityPanel />
-        </SettingsGroup>
-        <SettingsGroup title="Données">
-          <HealthDataPanel />
-        </SettingsGroup>
-        <SettingsGroup title="Synchronisation">
+      <Section title="Mes paramètres">
+        <div className="grid grid-cols-2 gap-2">
+          <SettingsSheetTile
+            icon={<SlidersHorizontal className="h-4 w-4" />}
+            label="Personnalisation"
+          >
+            <PersonalizationPanel />
+          </SettingsSheetTile>
+          <SettingsSheetTile icon={<ShieldCheck className="h-4 w-4" />} label="Compte & sécurité">
+            <SecurityPanel />
+          </SettingsSheetTile>
+          <SettingsSheetTile icon={<Database className="h-4 w-4" />} label="Données">
+            <HealthDataPanel />
+          </SettingsSheetTile>
           <SyncStatusCard />
-        </SettingsGroup>
+        </div>
       </Section>
     </main>
   );
@@ -89,22 +101,5 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       </h2>
       {children}
     </section>
-  );
-}
-
-function SpaceLink({ to, icon, label }: { to: string; icon: React.ReactNode; label: string }) {
-  return (
-    <Link
-      to={to}
-      className="flex items-center justify-between gap-2 rounded-2xl border border-white/5 bg-gradient-to-b from-card/95 to-card/70 px-3 py-3 shadow-card backdrop-blur-xl transition-colors hover:border-primary/40"
-    >
-      <span className="flex items-center gap-2">
-        <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/15 text-primary">
-          {icon}
-        </span>
-        <span className="text-xs font-semibold">{label}</span>
-      </span>
-      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-    </Link>
   );
 }

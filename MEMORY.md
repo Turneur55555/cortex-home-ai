@@ -22,6 +22,9 @@
 ## Dernière mise à jour
 2026-10-11
 
+## Profil — « Mes paramètres » en tuiles (2026-10-19, `main`)
+- Sous « Mes espaces », nouvelle section « Mes paramètres » : 4 tuiles identiques aux espaces (Personnalisation, Compte & sécurité, Données, Synchronisation). Les 3 premières ouvrent leur panneau dans un `AppSheet` (`SettingsSheetTile`) ; Synchronisation ouvre `SyncQueueSheet` (inchangé). Tuile commune : `SpaceTile.tsx` (`SpaceLink`/`SpaceButton`). `SettingsGroup` supprimé. `SyncStatusCard` devient une tuile (même logique/hook, garde-fous de placement intacts).
+
 ## Profil — retrait « Répartition par discipline », Documents dans « Mes espaces » (2026-10-18, `main`)
 - `DisciplineBreakdownCard.tsx` supprimé (demande Nathan) ; `DocumentsSummaryCard.tsx` supprimé : Documents devient un `SpaceLink` (→ `/documents`) dans « Mes espaces » de `profil.tsx`. L'import direct (`/documents?upload=1`) reste disponible depuis la page Documents.
 
