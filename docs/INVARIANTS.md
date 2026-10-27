@@ -91,6 +91,17 @@ encore un `template_id` — encore une opération `blocked`.
 `CHECK` exigeant `template_id`), `hooks/useWeeklyPlan.test.ts` (patch complet, doublon nettoyé,
 écritures simultanées d'un même jour)
 
+### 1.8 Le Service Worker part dans le dossier PUBLIÉ
+
+Sur Lovable, le site est construit dans `dist/client` ; en local et en CI, dans `.output/public`.
+Les étapes post-build (shell `offline.html`, `sw.js`) ne codent **jamais** ce dossier en dur : elles
+passent par `resolvePublicDir()`, alignée sur la détection du paquet `@lovable.dev/vite-tanstack-config`.
+Sinon le build reste vert et `/sw.js` répond 404 en production (constaté jusqu'en octobre 2026 :
+aucun démarrage hors connexion possible). `generate-sw` échoue si le dossier visé ne contient pas le
+site construit.
+→ `scripts/build-output.mjs`, `scripts/generate-sw.mjs`, `vite.offline-shell.config.ts`
+→ vérifié par `scripts/build-output.test.mjs` (dont l'alignement sur le source du paquet Lovable)
+
 ---
 
 ## 2. Séance : unicité, numérotation, clôture

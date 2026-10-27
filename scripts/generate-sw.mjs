@@ -10,11 +10,15 @@
 // fichiers statiques et zéro JS/CSS applicatif (bug diagnostiqué : le shell
 // offline n'était jamais servable hors connexion). Exécuter `workbox-build`
 // ici, après coup, cible directement le vrai répertoire déployé.
+//
+// ⚠️ Le dossier n'est PAS toujours `.output/public` : sur Lovable, c'est
+// `dist/client` (voir scripts/build-output.mjs). Ne jamais le coder en dur.
 import { generateSW } from "workbox-build";
-import { readFile, writeFile } from "node:fs/promises";
+import { access, readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { resolvePublicDir } from "./build-output.mjs";
 
-export const PUBLIC_DIR = resolve(import.meta.dirname, "../.output/public");
+export const PUBLIC_DIR = resolvePublicDir();
 export const SW_DEST = resolve(PUBLIC_DIR, "sw.js");
 
 /** Extrait les chemins des <script src> / <link href> injectés par Vite dans le shell offline. */
@@ -89,6 +93,14 @@ export function buildSwOptions({ publicDir, swDest, shellUrls, now = Date.now() 
 }
 
 async function main() {
+  // Le build principal doit avoir peuplé CE dossier : sinon on écrirait un
+  // SW dans un répertoire qui ne sera pas publié — échec bruyant plutôt
+  // qu'un build vert sans Service Worker (le bug d'origine).
+  await access(resolve(PUBLIC_DIR, "manifest.webmanifest")).catch(() => {
+    throw new Error(
+      `${PUBLIC_DIR} ne contient pas le site construit (manifest.webmanifest absent)`,
+    );
+  });
   const offlineShellPath = resolve(PUBLIC_DIR, "offline.html");
   const shellUrls = await shellAssetUrls(offlineShellPath);
 
