@@ -189,6 +189,11 @@
     font-family: var(--font-sans, system-ui, sans-serif);
     color-scheme: dark;
     min-height: 100%;
+    /* iPhone : pas de grossissement auto du texte (rotation, réglages) ni de
+       flash gris au toucher — l'app répond comme une app native. */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
   }
 
   body {
@@ -200,6 +205,20 @@
     -webkit-font-smoothing: antialiased;
     min-height: 100vh;
     min-height: 100dvh;
+    /* Pas d'élastique vertical de toute la page : la barre de nav et le halo
+       fixes ne « décrochent » plus en tirant le haut ou le bas de l'écran. */
+    overscroll-behavior-y: none;
+  }
+
+  /* Supprime le délai du double-tap-zoom sur tout ce qui se touche. */
+  a,
+  button,
+  input,
+  label,
+  select,
+  textarea,
+  [role="button"] {
+    touch-action: manipulation;
   }
 
   /* La racine React doit toujours occuper la hauteur visible et rester en flex.
@@ -259,8 +278,13 @@
      Opt-in : tout composant premium, présent ou futur, hérite du même
      rythme en appliquant simplement cette classe. */
   @keyframes rank-breathe {
-    0%, 100% { opacity: 0.5; }
-    50%      { opacity: 0.85; }
+    0%,
+    100% {
+      opacity: 0.5;
+    }
+    50% {
+      opacity: 0.85;
+    }
   }
   .animate-rank-breathe {
     animation: rank-breathe var(--rank-halo-duration) ease-in-out infinite;
@@ -288,10 +312,20 @@
    * six effets distincts. transform+opacity uniquement (GPU, pas de reflow).
    */
   @keyframes rank-glint {
-    0%   { transform: translateX(-140%) skewX(-18deg); opacity: 0; }
-    6%   { opacity: 1; }
-    16%  { opacity: 0; }
-    100% { transform: translateX(240%) skewX(-18deg); opacity: 0; }
+    0% {
+      transform: translateX(-140%) skewX(-18deg);
+      opacity: 0;
+    }
+    6% {
+      opacity: 1;
+    }
+    16% {
+      opacity: 0;
+    }
+    100% {
+      transform: translateX(240%) skewX(-18deg);
+      opacity: 0;
+    }
   }
   .rank-glint-layer {
     background: linear-gradient(
@@ -318,11 +352,67 @@
 
 @layer utilities {
   @keyframes wiggle {
-    0%, 100% { transform: rotate(-0.8deg); }
-    50%      { transform: rotate(0.8deg); }
+    0%,
+    100% {
+      transform: rotate(-0.8deg);
+    }
+    50% {
+      transform: rotate(0.8deg);
+    }
   }
   .animate-wiggle {
     animation: wiggle 0.22s ease-in-out infinite;
     transform-origin: center;
+  }
+}
+
+/*
+ * iOS (iPhone 17 Pro et tous les iPhone) — Safari zoome automatiquement sur
+ * tout champ dont la police est < 16px dès qu'il prend le focus, et ne
+ * dézoome pas ensuite : la page reste agrandie et décalée. Une soixantaine de
+ * champs de l'app sont en text-sm / text-xs. Plutôt que de bloquer le zoom
+ * (maximum-scale, mauvais pour l'accessibilité), on porte ces champs à 16px
+ * UNIQUEMENT sur iOS tactile. Hors calque (unlayered) pour primer sur les
+ * utilitaires Tailwind ; les champs volontairement grands
+ * (text-lg et plus, text-[16px] et plus) ne sont pas touchés.
+ */
+@supports (-webkit-touch-callout: none) {
+  @media (pointer: coarse) {
+    :is(
+      input:not(
+        [type="checkbox"],
+        [type="radio"],
+        [type="range"],
+        [type="color"],
+        [type="file"],
+        [type="button"],
+        [type="submit"],
+        [type="reset"],
+        [type="image"]
+      ),
+      textarea,
+      select
+    ):not(
+      [class*="text-lg"],
+      [class*="text-xl"],
+      [class*="text-2xl"],
+      [class*="text-3xl"],
+      [class*="text-4xl"],
+      [class*="text-5xl"],
+      [class*="text-6xl"],
+      [class*="text-[16"],
+      [class*="text-[17"],
+      [class*="text-[18"],
+      [class*="text-[19"],
+      [class*="text-[2"],
+      [class*="text-[3"],
+      [class*="text-[4"],
+      [class*="text-[5"],
+      [class*="text-[6"]
+    ) {
+      /* max(…, 1em) : un champ sans taille propre qui hérite d'un parent
+         plus grand (gros chiffres de séance) garde la taille du parent. */
+      font-size: max(16px, 1em);
+    }
   }
 }

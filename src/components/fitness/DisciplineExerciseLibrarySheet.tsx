@@ -80,7 +80,7 @@ export function DisciplineExerciseLibrarySheet({
         onClick={onClose}
       >
         <div
-          className="flex h-[85vh] w-full max-w-[430px] flex-col rounded-t-3xl border-t border-border bg-card p-5 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-elevated"
+          className="flex h-[85dvh] w-full max-w-[430px] flex-col rounded-t-3xl border-t border-border bg-card p-5 pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-elevated"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="mb-3 flex shrink-0 items-center justify-between gap-2">

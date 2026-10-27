@@ -44,7 +44,7 @@ function SupplementsPage() {
   const takenCount = (todayList ?? []).filter((s) => s.taken).length;
 
   return (
-    <main className="flex flex-1 flex-col px-5 pb-32 pt-[max(2.5rem,env(safe-area-inset-top))]">
+    <main className="flex flex-1 flex-col px-5 pb-32 pt-[max(2.5rem,calc(env(safe-area-inset-top)+0.5rem))]">
       <header className="mb-4">
         <Link
           to="/nutrition"

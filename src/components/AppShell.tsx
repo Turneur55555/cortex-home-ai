@@ -22,7 +22,7 @@ interface AppShellProps {
  */
 export function AppShell({ children }: AppShellProps) {
   return (
-    <div className="relative min-h-screen w-full bg-background">
+    <div className="relative min-h-dvh w-full bg-background">
       {/* Ambient top glow — respire au rythme du rang (RANK_AMBIANCE.haloDuration) */}
       <div
         aria-hidden
@@ -37,7 +37,7 @@ export function AppShell({ children }: AppShellProps) {
         <div className="absolute -inset-y-1/4 -inset-x-1/2 rank-glint-layer" />
       </div>
       <div
-        className="relative mx-auto flex min-h-screen w-full max-w-[430px] flex-col"
+        className="relative mx-auto flex min-h-dvh w-full max-w-[430px] flex-col"
         style={{
           // Hauteur réelle de la barre de nav (publiée par BottomNav via
           // ResizeObserver, safe area déjà incluse) + marge pour qu'aucun

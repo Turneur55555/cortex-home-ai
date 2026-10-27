@@ -39,7 +39,7 @@ function LivrePage() {
 
   if (!book) {
     return (
-      <main className="flex flex-1 flex-col px-5 pt-[max(1.25rem,env(safe-area-inset-top))]">
+      <main className="flex flex-1 flex-col px-5 pt-[max(1.25rem,calc(env(safe-area-inset-top)+0.5rem))]">
         <Link to="/livres" className="mb-4 text-xs text-muted-foreground">
           ← Bibliothèque
         </Link>
@@ -62,7 +62,7 @@ function LivrePage() {
   ].filter(Boolean);
 
   return (
-    <main className="relative isolate flex flex-1 flex-col px-5 pb-32 pt-[max(1.25rem,env(safe-area-inset-top))]">
+    <main className="relative isolate flex flex-1 flex-col px-5 pb-32 pt-[max(1.25rem,calc(env(safe-area-inset-top)+0.5rem))]">
       <BookBackdrop src={book.coverSrc} />
 
       <div className="mb-4 flex items-center justify-between">

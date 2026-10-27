@@ -692,7 +692,7 @@ export function NutritionTab() {
         type="button"
         onClick={() => setCommandCenterOpen(true)}
         className="pointer-events-auto fixed inset-x-0 z-30 mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-gradient-primary text-primary-foreground shadow-glow"
-        style={{ bottom: "calc(6.5rem + env(safe-area-inset-bottom))" }}
+        style={{ bottom: "calc(var(--bottom-nav-height, 5.75rem) + 1.25rem)" }}
         aria-label="Ouvrir le centre de commandes"
       >
         <Plus className="h-6 w-6" />
@@ -1125,7 +1125,7 @@ function NutritionCommandCenter({
               onDragEnd={(_, info) => {
                 if (info.offset.y > 120 || info.velocity.y > 600) onClose();
               }}
-              className="fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[80vh] w-full max-w-[430px] flex-col rounded-t-3xl border-t border-border bg-card shadow-elevated"
+              className="fixed inset-x-0 bottom-0 z-50 mx-auto flex max-h-[80dvh] w-full max-w-[430px] flex-col rounded-t-3xl border-t border-border bg-card shadow-elevated"
             >
               <div
                 className="flex shrink-0 cursor-grab touch-none flex-col items-center pb-2 pt-3 active:cursor-grabbing"

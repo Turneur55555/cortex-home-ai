@@ -6,7 +6,9 @@ export function FabAdd({ onClick, label }: { onClick: () => void; label: string 
   return (
     <div
       className="pointer-events-none fixed inset-x-0 z-30 mx-auto flex w-full max-w-[430px] justify-center px-4"
-      style={{ bottom: "calc(5.5rem + env(safe-area-inset-bottom))" }}
+      // Ancré sur la hauteur réelle de la barre de nav (safe area incluse,
+      // publiée par BottomNav) plutôt que sur une estimation figée.
+      style={{ bottom: "calc(var(--bottom-nav-height, 5.75rem) + 0.75rem)" }}
     >
       <button
         type="button"
@@ -33,10 +35,12 @@ export function Sheet({
     <Portal>
       <div
         className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm"
+        // Remonte la feuille au-dessus du clavier iPhone (voir keyboardInset.ts).
+        style={{ paddingBottom: "var(--keyboard-inset, 0px)" }}
         onClick={onClose}
       >
         <div
-          className="max-h-[92vh] w-full max-w-[430px] overflow-y-auto rounded-t-3xl border-t border-border bg-card p-5 shadow-elevated"
+          className="max-h-[calc(92dvh_-_var(--keyboard-inset,0px))] w-full max-w-[430px] overflow-y-auto overscroll-contain rounded-t-3xl border-t border-border bg-card p-5 shadow-elevated"
           style={{ paddingBottom: "calc(1.25rem + env(safe-area-inset-bottom))" }}
           onClick={(e) => e.stopPropagation()}
         >

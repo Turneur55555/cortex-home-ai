@@ -12,6 +12,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { Suspense, useEffect, useState } from "react";
 import { installErrorLogger, logError } from "@/lib/error-logger";
 import { registerServiceWorker } from "@/lib/pwa/registerServiceWorker";
+import { installKeyboardInsetVariable } from "@/lib/pwa/keyboardInset";
 import { GlobalErrorBoundary } from "@/components/global-error-boundary";
 import { LoadingScreen } from "@/components/loading-screen";
 
@@ -19,7 +20,7 @@ import appCss from "../styles.css?url";
 
 function NotFoundComponent() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+    <div className="flex min-h-dvh items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
         <h1 className="text-7xl font-bold text-foreground">404</h1>
         <h2 className="mt-4 text-xl font-semibold text-foreground">Page not found</h2>
@@ -56,7 +57,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   }, [error]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+    <div className="flex min-h-dvh items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
         <h1 className="text-xl font-semibold tracking-tight text-foreground">
           This page didn't load
@@ -98,6 +99,13 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
     </div>
   );
 }
+
+const IOS_SPLASH_SCREENS = [
+  { width: 402, height: 874 },
+  { width: 440, height: 956 },
+  { width: 420, height: 912 },
+  { width: 393, height: 852 },
+] as const;
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   head: () => ({
@@ -147,6 +155,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { rel: "icon", type: "image/png", href: "/favicon.png" },
       { rel: "apple-touch-icon", href: "/icons/apple-touch-icon.png" },
       { rel: "manifest", href: "/manifest.webmanifest" },
+      // Écrans de démarrage de la PWA installée (écran d'accueil iOS) : sans
+      // eux, iOS affiche un écran vide le temps du chargement. Un par
+      // résolution logique (iPhone 17 / 17 Pro, 17 Pro Max, Air, 15–16 Pro).
+      ...IOS_SPLASH_SCREENS.map(({ width, height }) => ({
+        rel: "apple-touch-startup-image",
+        href: `/splash/iphone-${width}x${height}.png`,
+        media: `(device-width: ${width}px) and (device-height: ${height}px) and (-webkit-device-pixel-ratio: 3) and (orientation: portrait)`,
+      })),
     ],
   }),
   shellComponent: RootShell,
@@ -195,6 +211,9 @@ function RootComponent() {
   useEffect(() => {
     installErrorLogger();
     registerServiceWorker();
+    // iPhone : publie la hauteur du clavier (--keyboard-inset) pour que les
+    // feuilles du bas remontent au-dessus de lui au lieu d'être masquées.
+    return installKeyboardInsetVariable();
   }, []);
 
   return (

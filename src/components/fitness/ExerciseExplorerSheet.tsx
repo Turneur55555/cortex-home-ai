@@ -542,7 +542,7 @@ export function ExerciseExplorerSheet({
         <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
 
         <div
-          className="relative flex h-[92vh] w-full max-w-[430px] flex-col rounded-t-3xl border-t border-border bg-card shadow-elevated"
+          className="relative flex h-[92dvh] w-full max-w-[430px] flex-col rounded-t-3xl border-t border-border bg-card shadow-elevated"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Handle */}

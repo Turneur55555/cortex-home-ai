@@ -131,7 +131,7 @@ export function AnalysisSheetShell({
       <div className="fixed inset-0 z-50 flex items-end justify-center">
         <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
 
-        <div className="relative flex h-[92vh] w-full max-w-[430px] flex-col rounded-t-3xl border-t border-border bg-card shadow-elevated animate-in slide-in-from-bottom-4 duration-300">
+        <div className="relative flex h-[92dvh] w-full max-w-[430px] flex-col rounded-t-3xl border-t border-border bg-card shadow-elevated animate-in slide-in-from-bottom-4 duration-300">
           {/* Handle */}
           <div className="flex shrink-0 justify-center pb-1 pt-3">
             <div className="h-1 w-10 rounded-full bg-white/20" />

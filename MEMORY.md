@@ -20,7 +20,28 @@
 > regroupés sous [`docs/archive/`](docs/archive/).
 
 ## Dernière mise à jour
-2026-10-19
+2026-10-27
+
+## iPhone 17 Pro — optimisation iOS/PWA (2026-10-27, `main`)
+Cible : iPhone 17 / 17 Pro (402×874 pt @3x, Dynamic Island), aussi 17 Pro Max (440×956), Air (420×912).
+- **Clavier iOS** : nouveau module pur `lib/pwa/keyboardInset.ts` (`computeKeyboardInset`, seuil 120 px
+  pour ignorer le repli des barres Safari ; `installKeyboardInsetVariable` publie `--keyboard-inset` sur
+  `<html>` via `visualViewport`), monté une fois dans `__root.tsx`. `AppSheet` et `Sheet`
+  (`FormComponents`) remontent au-dessus du clavier et retirent sa hauteur de leur `max-h`.
+- **`AppSheet`** : flex-col, corps `min-h-0 flex-1 overflow-y-auto overscroll-contain` dans les DEUX
+  tailles (bug : en `compact`, un contenu trop haut était coupé sans défilement) ; bouton Fermer 44 px.
+- **vh → dvh** sur toutes les feuilles (`h-[92vh]`, `max-h-[85vh]`…) et `min-h-screen` → `min-h-dvh` :
+  `vh` iOS dépasse la zone visible quand les barres de Safari sont affichées.
+- **Dynamic Island** : `pt-[max(2.5rem|1.25rem, env(safe-area-inset-top))]` (titre collé sous l'île en
+  PWA) → `+0.5rem` d'air, harmonisé sur ~20 écrans.
+- **FAB** (`FabAdd`, bouton flottant Nutrition) ancrés sur `--bottom-nav-height` au lieu d'une estimation.
+- **`styles.css`** : règle iOS hors calque — champs < 16px portés à `max(16px, 1em)` sur iOS tactile
+  (supprime le zoom auto au focus ; ~60 champs en text-sm/xs ; text-lg+ et text-[16px]+ exclus, ex. la
+  saisie de charge text-[26px] de `ActiveExerciseCard`). `text-size-adjust`, tap-highlight transparent,
+  `touch-action: manipulation`, `overscroll-behavior-y: none` sur body.
+- **Écrans de démarrage PWA** : `public/splash/iphone-<w>x<h>.png` (fond #0d0d14 + halo + icône),
+  liens `apple-touch-startup-image` par media query dans `__root.tsx` (`IOS_SPLASH_SCREENS`). Non
+  précachés par le SW (périmètre `generate-sw.mjs` inchangé).
 
 ## Dressing — « Générer une tenue » réparé + semaine, tenue du jour, journal (2026-10-19)
 **Cause de la panne** (mesurée en prod) : le dressing de Nathan = 22 hauts + 11 bas, **0 chaussure**.

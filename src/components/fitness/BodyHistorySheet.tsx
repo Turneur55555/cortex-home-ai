@@ -50,7 +50,7 @@ export function BodyHistorySheet({ onClose }: { onClose: () => void }) {
         onClick={onClose}
       >
         <div
-          className="flex max-h-[92vh] w-full max-w-[430px] flex-col rounded-t-3xl border-t border-border bg-card shadow-elevated"
+          className="flex max-h-[92dvh] w-full max-w-[430px] flex-col rounded-t-3xl border-t border-border bg-card shadow-elevated"
           style={{ paddingBottom: "calc(0.5rem + env(safe-area-inset-bottom))" }}
           onClick={(e) => e.stopPropagation()}
         >

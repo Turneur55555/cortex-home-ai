@@ -10,7 +10,7 @@ interface AppSheetProps {
   title: string;
   description?: string;
   children: ReactNode;
-  /** Compact (auto height) vs full (90vh). */
+  /** Compact (hauteur auto, ≤ 80dvh) vs full (≤ 92dvh). */
   size?: "compact" | "full";
 }
 
@@ -46,10 +46,16 @@ export function AppSheet({
                 exit={{ y: "100%" }}
                 transition={{ type: "spring", damping: 32, stiffness: 320 }}
                 className={cn(
-                  "fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-[430px] overflow-hidden rounded-t-[32px] border-t border-white/10 bg-background/95 shadow-elevated backdrop-blur-2xl",
-                  size === "full" ? "max-h-[92vh]" : "max-h-[80vh]",
+                  "fixed inset-x-0 bottom-0 z-50 mx-auto flex w-full max-w-[430px] flex-col overflow-hidden rounded-t-[32px] border-t border-white/10 bg-background/95 shadow-elevated backdrop-blur-2xl",
+                  // dvh (et non vh) : sur iPhone, 100vh dépasse la zone
+                  // visible quand les barres de Safari sont affichées. Le
+                  // clavier (--keyboard-inset) est retiré de la hauteur.
+                  size === "full"
+                    ? "max-h-[calc(92dvh_-_var(--keyboard-inset,0px))]"
+                    : "max-h-[calc(80dvh_-_var(--keyboard-inset,0px))]",
                 )}
                 style={{
+                  bottom: "var(--keyboard-inset, 0px)",
                   paddingBottom: "max(1.5rem, env(safe-area-inset-bottom))",
                 }}
               >
@@ -64,11 +70,11 @@ export function AppSheet({
                 />
 
                 {/* drag handle */}
-                <div className="relative flex justify-center pb-2 pt-3">
+                <div className="relative flex shrink-0 justify-center pb-2 pt-3">
                   <span className="h-1.5 w-10 rounded-full bg-white/20" />
                 </div>
 
-                <div className="relative flex items-start justify-between px-6 pb-3">
+                <div className="relative flex shrink-0 items-start justify-between px-6 pb-3">
                   <div className="min-w-0 flex-1 pr-4">
                     <Dialog.Title className="text-lg font-bold tracking-tight">
                       {title}
@@ -80,20 +86,17 @@ export function AppSheet({
                     )}
                   </div>
                   <Dialog.Close
-                    className="flex h-8 w-8 items-center justify-center rounded-full bg-white/5 text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground"
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/5 text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground"
                     aria-label="Fermer"
                   >
                     <X className="h-4 w-4" />
                   </Dialog.Close>
                 </div>
 
-                <div
-                  className={cn(
-                    "relative overflow-y-auto px-6 pb-2",
-                    size === "full" ? "max-h-[calc(92vh-7rem)]" : "",
-                  )}
-                  style={{ WebkitOverflowScrolling: "touch" }}
-                >
+                {/* Corps défilant dans les deux tailles : en « compact », un
+                    contenu plus haut que la feuille était auparavant coupé
+                    sans pouvoir défiler (overflow-hidden du parent). */}
+                <div className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 pb-2">
                   {children}
                 </div>
               </motion.div>

@@ -124,7 +124,7 @@ export function SegmentAnalysisSheet({
         onClick={onClose}
       >
         <div
-          className="flex max-h-[92vh] w-full max-w-[430px] flex-col rounded-t-3xl border-t border-border bg-card p-5 pb-[calc(2rem+env(safe-area-inset-bottom))] shadow-elevated"
+          className="flex max-h-[92dvh] w-full max-w-[430px] flex-col rounded-t-3xl border-t border-border bg-card p-5 pb-[calc(2rem+env(safe-area-inset-bottom))] shadow-elevated"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}

@@ -97,7 +97,7 @@ export function ChatBot() {
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm">
-      <div className="flex h-[85vh] w-full max-w-[430px] flex-col rounded-t-3xl border-t border-border bg-card shadow-elevated">
+      <div className="flex h-[85dvh] w-full max-w-[430px] flex-col rounded-t-3xl border-t border-border bg-card shadow-elevated">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
           <div className="flex items-center gap-3">

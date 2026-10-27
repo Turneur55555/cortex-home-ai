@@ -271,14 +271,14 @@ function MediaLightbox({
               {current ? (
                 <MediaFrame
                   item={current}
-                  className="max-h-[80vh] w-full object-contain"
+                  className="max-h-[80dvh] w-full object-contain"
                   autoPlayVideo
                 />
               ) : (
                 <img
                   src={fallbackImageUrl ?? undefined}
                   alt={exerciseName}
-                  className="max-h-[80vh] w-full object-contain"
+                  className="max-h-[80dvh] w-full object-contain"
                 />
               )}
             </motion.div>

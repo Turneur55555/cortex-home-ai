@@ -18,7 +18,7 @@ function ModifierLivrePage() {
   const [confirming, setConfirming] = useState(false);
 
   return (
-    <main className="relative isolate flex flex-1 flex-col px-5 pb-32 pt-[max(1.25rem,env(safe-area-inset-top))]">
+    <main className="relative isolate flex flex-1 flex-col px-5 pb-32 pt-[max(1.25rem,calc(env(safe-area-inset-top)+0.5rem))]">
       <Link
         to="/livres/$id"
         params={{ id }}

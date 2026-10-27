@@ -49,7 +49,7 @@ export function SyncQueueSheet({ onClose, sync }: { onClose: () => void; sync: O
 
   return (
     <Sheet open onOpenChange={(next) => !next && onClose()}>
-      <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto rounded-t-2xl">
+      <SheetContent side="bottom" className="max-h-[85dvh] overflow-y-auto rounded-t-2xl">
         <SheetHeader>
           <SheetTitle>Synchronisation</SheetTitle>
           <SheetDescription>

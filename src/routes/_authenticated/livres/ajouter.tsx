@@ -17,7 +17,7 @@ function AjouterLivrePage() {
   const { statut, q } = Route.useSearch();
   const navigate = useNavigate();
   return (
-    <main className="relative isolate flex flex-1 flex-col px-5 pb-32 pt-[max(1.25rem,env(safe-area-inset-top))]">
+    <main className="relative isolate flex flex-1 flex-col px-5 pb-32 pt-[max(1.25rem,calc(env(safe-area-inset-top)+0.5rem))]">
       <Link
         to="/livres"
         className="mb-5 inline-flex w-fit items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"

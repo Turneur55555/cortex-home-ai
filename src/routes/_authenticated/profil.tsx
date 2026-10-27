@@ -39,7 +39,7 @@ function ProfilPage() {
   const [editOpen, setEditOpen] = useState(false);
 
   return (
-    <main className="relative flex flex-1 flex-col overflow-hidden px-5 pb-32 pt-[max(2.5rem,env(safe-area-inset-top))]">
+    <main className="relative flex flex-1 flex-col overflow-hidden px-5 pb-32 pt-[max(2.5rem,calc(env(safe-area-inset-top)+0.5rem))]">
       <ProfileIdentityStrip
         pseudo={pseudo}
         avatarUrl={avatarUrl}

@@ -51,7 +51,7 @@ function SeancesPage() {
   }, []);
 
   return (
-    <main className="flex flex-1 flex-col px-5 pb-6 pt-[max(2.5rem,env(safe-area-inset-top))]">
+    <main className="flex flex-1 flex-col px-5 pb-6 pt-[max(2.5rem,calc(env(safe-area-inset-top)+0.5rem))]">
       <SeancesTab
         initialNewSession={initialNewSession}
         initialRepeatWorkoutId={initialRepeatWorkoutId}

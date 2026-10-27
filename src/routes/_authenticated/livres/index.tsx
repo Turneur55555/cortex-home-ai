@@ -63,7 +63,7 @@ function LivresPage() {
   const empty = grouped.series.length === 0 && grouped.standalone.length === 0;
 
   return (
-    <main className="relative isolate flex flex-1 flex-col px-5 pb-32 pt-[max(1.25rem,env(safe-area-inset-top))]">
+    <main className="relative isolate flex flex-1 flex-col px-5 pb-32 pt-[max(1.25rem,calc(env(safe-area-inset-top)+0.5rem))]">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-72 bg-[radial-gradient(ellipse_at_50%_0%,var(--primary-glow-soft),transparent_70%)]"
