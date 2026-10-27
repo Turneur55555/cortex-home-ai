@@ -22,6 +22,33 @@
 ## Dernière mise à jour
 2026-10-27
 
+## Analyse produit globale + service worker enfin publié (2026-10-27, `main`)
+Demande de Nathan : « une vraie analyse » (la première version, générique, a été jugée « pas ouf »).
+**L'analyse complète est dans `docs/archive/2026-10-27-analyse-produit-globale.md`** (version
+illustrée : https://claude.ai/artifact/ToTXWzLd1wGXj5M7AqA5bG). Points clés mesurés en production :
+séances 45 (juillet) → 4 (octobre), les deux dernières **saisies après coup en < 75 s** (durée
+enregistrée « 1 min ») ; dîner saisi 5 jours sur 19 → moyenne affichée 1 104 kcal pour 1 800 ;
+plan à 5 séances/semaine tenu à 27 % ; aucune visite du 22 au 27/10 ; Sensei, bilan IA, scan
+d'exercice, PDF, objectif physique, tenues, planning de repas : morts ou jamais utilisés.
+- **Défaut critique corrigé** : `/sw.js` répondait **404 en production** (47 échecs iPhone, 27
+  ordinateur, 15/09 → 21/10). Dans le bac à sable Lovable, Nitro écrit le site dans `dist/client`
+  (`@lovable.dev/vite-tanstack-config`, `isSandboxEnvironment`), mais `generate-sw.mjs` et
+  `vite.offline-shell.config.ts` écrivaient en dur dans `.output/public`. Nouveau
+  `scripts/build-output.mjs` (`resolvePublicDir`, même détection que le paquet) ; `generate-sw`
+  échoue si le dossier ne contient pas le site. Test `scripts/build-output.test.mjs` (dont
+  l'alignement sur le source du paquet). INVARIANTS §1.8. Vérifié : `LOVABLE_SANDBOX=1 npm run
+  build` → `dist/client/sw.js`, `offline.html`, workbox, `_headers` no-cache. **Non vérifié sur le
+  site publié** (injoignable depuis le bac à sable) : contrôler l'absence de nouvelles erreurs
+  `sw.js` dans `error_logs`.
+- **Banc d'audit visuel** (non commité, à recréer au besoin) : mini-PostgREST en mémoire pour
+  Playwright (filtres, tri, `Range`, `count`, objet unique, quelques imbrications) + base simulée
+  calibrée sur les agrégats de prod + robot qui mesure cibles < 44 pt, textes < 11 px, contraste
+  (couleurs `oklch` converties via canvas), hauteur de défilement. Leçon : le stub e2e historique
+  renvoie `[]` à toute lecture, inutilisable pour juger un écran.
+- Sécurité vérifiée : la base héberge aussi une application de paie (mêmes comptes, trigger
+  `handle_new_user` → `profiles`) ; `authenticated` n'a aucun droit UPDATE sur `profiles` → pas
+  d'élévation vers `is_paie_staff()`. Risque structurel signalé, rien modifié.
+
 ## iPhone 17 Pro — optimisation iOS/PWA (2026-10-27, `main`)
 Cible : iPhone 17 / 17 Pro (402×874 pt @3x, Dynamic Island), aussi 17 Pro Max (440×956), Air (420×912).
 - **Clavier iOS** : nouveau module pur `lib/pwa/keyboardInset.ts` (`computeKeyboardInset`, seuil 120 px

@@ -22,6 +22,7 @@ le code porte encore, et parce qu'aucune trace du projet ne doit disparaître.
 | `2026-06-29-cowork-brief-deploiement-fatigue.md`  | ~2026-06-29 | brief de déploiement d'une branche depuis fusionnée (migration + edge functions fatigue/analyse/photos) — anciennement `COWORK_BRIEF.md` |
 | `2026-05-14-point-architecture-module-fitness.md` | 2026-05-14  | point d'architecture sur la modularisation de `SeancesTab` — anciennement `point.md`                                                     |
 | `2026-07-17-rpg-saisons.md`                       | 2026-07-17  | architecture du système de Saisons — **abandonné le 30/09/2026**, anciennement `docs/architecture/rpg-saisons.md`                        |
+| `2026-10-27-analyse-produit-globale.md`           | 2026-10-27  | analyse globale mesurée (usage réel, audit iPhone 17 Pro, défauts, 10 recommandations) — service worker absent en production découvert   |
 
 Les quatre premiers ont été déplacés depuis la racine du dépôt le 2026-09-07 (AUD-15). **Aucun
 contenu n'a été modifié** : seuls les chemins ont changé, et les renvois depuis `MEMORY.md` ont été
