@@ -140,7 +140,10 @@ jobs:
   # e2e/README.md).
   e2e-offline:
     name: Scénario offline (Playwright)
-    runs-on: ubuntu-latest
+    # Épinglé : ubuntu-latest est passé à 26.04, que Playwright 1.60 ne sait
+    # pas équiper (« does not support chromium on ubuntu26.04-x64 »). À
+    # remonter quand Playwright supportera la nouvelle image.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
