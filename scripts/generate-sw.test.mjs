@@ -83,46 +83,42 @@ describe("génération du précache (bug : le SW précachait 4 fichiers statique
   });
 });
 
-describe("présence du shell servi comme navigation fallback", () => {
-  it("registre une NavigationRoute liée à /offline.html", async () => {
+describe("navigations : réseau d'abord, shell offline seulement en secours", () => {
+  // Régression du 27/10/2026 : `navigateFallback` servait offline.html depuis le précache pour
+  // TOUTE navigation, même en ligne — l'app réelle n'était plus jamais chargée, les modules
+  // devenaient inaccessibles dès que sw.js a enfin été publié.
+  it("n'utilise jamais navigateFallback (NavigationRoute qui court-circuite le réseau)", async () => {
     tmpDir = await makeFixturePublicDir();
     const shellUrls = await shellAssetUrls(join(tmpDir, "offline.html"));
+    const options = buildSwOptions({ publicDir: tmpDir, swDest: "", shellUrls, now: 1 });
+    expect(options.navigateFallback).toBeUndefined();
     const swDest = join(tmpDir, "sw.js");
-    await generateSW(buildSwOptions({ publicDir: tmpDir, swDest, shellUrls, now: 1 }));
-
+    await generateSW({ ...options, swDest });
     const sw = await readFile(swDest, "utf8");
-    expect(sw).toContain("NavigationRoute");
-    expect(sw).toContain('createHandlerBoundToURL("/offline.html")');
+    expect(sw).not.toContain("createHandlerBoundToURL");
+    expect(sw).toContain("NetworkOnly");
+    expect(sw).toContain("PrecacheFallbackPlugin");
+    expect(sw).toContain('fallbackURL:"/offline.html"');
   });
-});
 
-describe("exclusion des endpoints API/server functions du fallback navigation", () => {
-  it("la config expose un denylist qui exclut /_serverFn/* et /api/* mais pas les routes internes", () => {
+  it("la règle de navigation couvre les routes internes mais jamais /_serverFn ni /api", () => {
     const options = buildSwOptions({
       publicDir: "/unused",
       swDest: "/unused/sw.js",
       shellUrls: ["/offline.html"],
       now: 1,
     });
-    const [serverFnRe, apiRe] = options.navigateFallbackDenylist;
-    expect(serverFnRe.test("/_serverFn/getUser")).toBe(true);
-    expect(apiRe.test("/api/anything")).toBe(true);
-    // Les routes internes de l'app ne doivent JAMAIS être exclues du fallback.
-    for (const route of ["/nutrition", "/fitness", "/recipes", "/"]) {
-      expect(serverFnRe.test(route)).toBe(false);
-      expect(apiRe.test(route)).toBe(false);
+    const [nav] = options.runtimeCaching;
+    expect(nav.handler).toBe("NetworkOnly");
+    expect(nav.options.precacheFallback.fallbackURL).toBe("/offline.html");
+    const match = (mode, path) =>
+      nav.urlPattern({ request: { mode }, url: new URL(path, "https://x.test") });
+    for (const route of ["/", "/nutrition", "/fitness", "/recipes"]) {
+      expect(match("navigate", route)).toBe(true);
     }
-  });
-
-  it("le SW généré contient bien ce denylist", async () => {
-    tmpDir = await makeFixturePublicDir();
-    const shellUrls = await shellAssetUrls(join(tmpDir, "offline.html"));
-    const swDest = join(tmpDir, "sw.js");
-    await generateSW(buildSwOptions({ publicDir: tmpDir, swDest, shellUrls, now: 1 }));
-
-    const sw = await readFile(swDest, "utf8");
-    expect(sw).toContain("_serverFn");
-    expect(sw).toContain("denylist");
+    expect(match("navigate", "/_serverFn/getUser")).toBe(false);
+    expect(match("navigate", "/api/anything")).toBe(false);
+    expect(match("cors", "/nutrition")).toBe(false);
   });
 });
 

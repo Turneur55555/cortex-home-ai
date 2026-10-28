@@ -102,6 +102,15 @@ site construit.
 → `scripts/build-output.mjs`, `scripts/generate-sw.mjs`, `vite.offline-shell.config.ts`
 → vérifié par `scripts/build-output.test.mjs` (dont l'alignement sur le source du paquet Lovable)
 
+### 1.9 Le Service Worker ne remplace jamais l'app en ligne
+
+Les navigations passent **par le réseau d'abord** ; `offline.html` n'est servi qu'en secours, quand
+le réseau échoue. Jamais de `navigateFallback` Workbox : il sert le shell précaché pour TOUTE
+navigation, même en ligne — le jour où `sw.js` a enfin été publié (27/10/2026), plus aucun module
+n'était accessible. Les navigations vers `/_serverFn/*` et `/api/*` ne reçoivent jamais le shell.
+→ `scripts/generate-sw.mjs` (première règle de `runtimeCaching` : `NetworkOnly` + `precacheFallback`)
+→ vérifié par `scripts/generate-sw.test.mjs` (« navigations : réseau d'abord… »)
+
 ---
 
 ## 2. Séance : unicité, numérotation, clôture

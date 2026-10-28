@@ -20,7 +20,18 @@
 > regroupés sous [`docs/archive/`](docs/archive/).
 
 ## Dernière mise à jour
-2026-10-27
+2026-10-28
+
+## Correctif urgent : modules inaccessibles à cause du Service Worker (2026-10-28, `main`)
+Signalement de Nathan : « je ne peux pas accéder au module ». Cause : le correctif du 27/10 a enfin
+publié `sw.js`, dont la config utilisait `navigateFallback: "/offline.html"`. Workbox le branche sur
+une NavigationRoute qui sert le shell précaché pour **toute** navigation, même en ligne : l'app SSR
+n'était plus jamais chargée, chaque page passait par le shell offline (build séparé). Reproduit dans
+Chromium (ancien SW : en ligne `/fitness` → shell offline). Correctif : navigations en
+`NetworkOnly` + `precacheFallback` vers `/offline.html` (shell seulement si le réseau échoue),
+`/_serverFn` et `/api` exclus. Vérifié dans Chromium : en ligne → vraie app, hors ligne → shell.
+INVARIANTS §1.9, tests dans `scripts/generate-sw.test.mjs`. Les appareils ayant l'ancien SW le
+remplacent à la visite suivante (`sw.js` en no-cache, `skipWaiting` + `clientsClaim`).
 
 ## Analyse produit globale + service worker enfin publié (2026-10-27, `main`)
 Demande de Nathan : « une vraie analyse » (la première version, générique, a été jugée « pas ouf »).

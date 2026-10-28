@@ -51,20 +51,32 @@ export function buildSwOptions({ publicDir, swDest, shellUrls, now = Date.now() 
       "/icons/icon-512.png",
       "/icons/apple-touch-icon.png",
     ].map((url) => ({ url, revision: `${now}` })),
-    // Le shell offline sert de secours pour TOUTE navigation (route
-    // interne comprise, ex. /nutrition, /fitness, /recipes) quand aucune
-    // réponse n'est disponible en cache — une fois chargé, le routeur
+    // ⚠️ PAS de `navigateFallback` : Workbox le branche sur une
+    // NavigationRoute qui sert `offline.html` depuis le précache pour
+    // TOUTE navigation, même en ligne. Le jour où `sw.js` a enfin été
+    // publié (27/10/2026), l'app réelle (SSR) n'était plus jamais chargée :
+    // chaque page passait par le shell offline et les modules devenaient
+    // inaccessibles. Les navigations vont donc au RÉSEAU d'abord ; le shell
+    // offline n'est servi qu'en secours, quand le réseau échoue (voir la
+    // première règle de `runtimeCaching`). Une fois chargé, le routeur
     // client (src/offline-client.tsx) rend la vraie route demandée.
-    navigateFallback: "/offline.html",
-    // Jamais de fallback shell pour les endpoints serveur (server
-    // functions TanStack Start, edge functions Supabase proxées côté
-    // origine si un jour ajoutées) — ces requêtes doivent échouer
-    // normalement hors connexion, pas recevoir un document HTML.
-    navigateFallbackDenylist: [/^\/_serverFn\//, /^\/api\//],
     cleanupOutdatedCaches: true,
     skipWaiting: true,
     clientsClaim: true,
     runtimeCaching: [
+      // Navigations : réseau d'abord, shell offline précaché en secours.
+      // Jamais pour les endpoints serveur (server functions TanStack Start,
+      // /api) — ces requêtes doivent échouer normalement hors connexion, pas
+      // recevoir un document HTML. La fonction est sérialisée dans sw.js :
+      // elle ne doit dépendre d'aucune variable de ce module.
+      {
+        urlPattern: ({ request, url }) =>
+          request.mode === "navigate" && !/^\/(?:_serverFn|api)\//.test(url.pathname),
+        handler: "NetworkOnly",
+        options: {
+          precacheFallback: { fallbackURL: "/offline.html" },
+        },
+      },
       // NetworkFirst pour les requêtes Supabase (API/DB) — comportement
       // online inchangé (repris tel quel de l'ancienne config vite-plugin-pwa).
       {
