@@ -32,6 +32,15 @@ Chromium (ancien SW : en ligne `/fitness` → shell offline). Correctif : naviga
 `/_serverFn` et `/api` exclus. Vérifié dans Chromium : en ligne → vraie app, hors ligne → shell.
 INVARIANTS §1.9, tests dans `scripts/generate-sw.test.mjs`. Les appareils ayant l'ancien SW le
 remplacent à la visite suivante (`sw.js` en no-cache, `skipWaiting` + `clientsClaim`).
+- **Deuxième cause (« je ne peux pas aller sur nutrition »)** : le shell offline lui-même figeait
+  Nutrition. Monté sur `#offline-root` (div dans `<body>`) alors que la route racine rend
+  `<html>/<body>` (singletons React), le `Portal` vers `document.body` (menu ⋮ des repas) faisait
+  boucler `dispatchEventForPluginEventSystem` à l'infini. Diagnostiqué avec le vrai serveur de
+  production en local (`wrangler dev` sur `.output`) + shell injecté + pause CDP sur le thread figé.
+  Correctif : `createRoot(document)` dans `src/offline-client.tsx` ; vérifié : `/`, `/nutrition`,
+  `/fitness` s'affichent dans le shell et la page reste réactive après un clic. Test
+  `src/offline-client.test.ts`, INVARIANTS §1.9. Écran Nutrition rejoué aussi avec les vraies
+  données du jour (lecture seule) : aucune erreur.
 
 ## Analyse produit globale + service worker enfin publié (2026-10-27, `main`)
 Demande de Nathan : « une vraie analyse » (la première version, générique, a été jugée « pas ouf »).

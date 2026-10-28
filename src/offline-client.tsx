@@ -19,7 +19,11 @@ import "./styles.css";
  * `offline.html` en `navigateFallback` (réseau indisponible).
  */
 const router = getRouter();
-const container = document.getElementById("offline-root");
-if (container) {
-  createRoot(container).render(<RouterProvider router={router} />);
-}
+// La racine est montée sur `document`, comme l'app normale (hydratée sur
+// `document` par TanStack Start) — JAMAIS sur une div : la route racine rend
+// elle-même <html>/<body>, que React s'approprie comme singletons. Montée
+// dans une div placée DANS <body>, la racine se retrouvait contenue dans son
+// propre <body> : tout `createPortal(…, document.body)` (menu ⋮ de
+// Nutrition, feuilles) faisait boucler à l'infini la remontée des événements
+// React et figeait la page (constaté le 28/10/2026 : Nutrition inaccessible).
+createRoot(document).render(<RouterProvider router={router} />);

@@ -111,6 +111,12 @@ n'était accessible. Les navigations vers `/_serverFn/*` et `/api/*` ne reçoive
 → `scripts/generate-sw.mjs` (première règle de `runtimeCaching` : `NetworkOnly` + `precacheFallback`)
 → vérifié par `scripts/generate-sw.test.mjs` (« navigations : réseau d'abord… »)
 
+Le shell offline monte sa racine React sur `document`, **jamais** sur une div du `<body>` : la route
+racine rend elle-même `<html>/<body>` (singletons React) ; montée dans `#offline-root`, la racine
+était contenue dans son propre `<body>` et tout portail vers `document.body` figeait la page en
+boucle infinie (Nutrition inaccessible le 28/10/2026).
+→ `src/offline-client.tsx` → vérifié par `src/offline-client.test.ts`
+
 ---
 
 ## 2. Séance : unicité, numérotation, clôture
