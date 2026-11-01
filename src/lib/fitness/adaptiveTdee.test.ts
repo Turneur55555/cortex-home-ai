@@ -206,6 +206,55 @@ describe("computeAdaptiveTdee — prise de poids", () => {
   });
 });
 
+describe("computeAdaptiveTdee — journées nutrition incomplètes (completeDates)", () => {
+  // Le cas mesuré en production le 01/11/2026 : journées complètes à 1 800 kcal,
+  // journées sans dîner à ~950 kcal. Le dîner manquant n'est pas un déficit.
+  const start = addDays(TODAY, -20);
+  const weightSamples = genLinearWeightSeries(start, 21, 80, 0);
+  const completeIdx = Array.from({ length: 21 }, (_, i) => i).filter((i) => i % 3 === 0);
+  const nutritionLogs: NutritionLogInput[] = Array.from({ length: 21 }, (_, i) => ({
+    date: addDays(start, i),
+    calories: completeIdx.includes(i) ? 1800 : 950,
+  }));
+  const completeDates = new Set(completeIdx.map((i) => addDays(start, i)));
+
+  it("sans completeDates : comportement historique, les journées incomplètes tirent la moyenne vers le bas", () => {
+    const result = computeAdaptiveTdee({
+      weightSamples,
+      nutritionLogs,
+      modeledTdeeKcal: 2000,
+      today: TODAY,
+    });
+    expect(result.nutrition.loggedDays).toBe(21);
+    expect(result.nutrition.averageCalories).toBeLessThan(1300);
+  });
+
+  it("avec completeDates : une journée incomplète est une absence de donnée, jamais une sous-consommation", () => {
+    const result = computeAdaptiveTdee({
+      weightSamples,
+      nutritionLogs,
+      modeledTdeeKcal: 2000,
+      today: TODAY,
+      completeDates,
+    });
+    expect(result.nutrition.loggedDays).toBe(completeIdx.length);
+    expect(result.nutrition.averageCalories).toBe(1800);
+  });
+
+  it("trop peu de journées complètes → données insuffisantes plutôt qu'un TDEE faux", () => {
+    const result = computeAdaptiveTdee({
+      weightSamples,
+      nutritionLogs,
+      modeledTdeeKcal: 2000,
+      today: TODAY,
+      completeDates: new Set([addDays(start, 0), addDays(start, 3)]),
+    });
+    expect(result.nutrition.loggedDays).toBe(2);
+    expect(result.status).toBe("insufficient_data");
+    expect(result.observedTdeeKcal).toBeNull();
+  });
+});
+
 describe("computeAdaptiveTdee — qualité des données", () => {
   it("jours alimentaires manquants n'entrent jamais dans la moyenne comme 0 kcal", () => {
     const start = addDays(TODAY, -20);

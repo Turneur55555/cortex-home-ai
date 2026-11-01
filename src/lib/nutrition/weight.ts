@@ -233,6 +233,26 @@ export function loadSavedWeight(food: Parameters<typeof keyFor>[0]): number | nu
   }
 }
 
+/**
+ * Poids pré-rempli quand on choisit un aliment. Par ordre de priorité :
+ *   1. la quantité habituelle tirée de l'historique en base
+ *      (`lib/nutrition/habits.ts::computeTypicalGrams`) — la même sur tous les
+ *      appareils ;
+ *   2. la dernière quantité saisie SUR CET APPAREIL (`localStorage`) — utile
+ *      tant que l'historique n'est pas chargé, ou pour un aliment jamais
+ *      journalisé ;
+ *   3. la portion usuelle du catalogue ou de l'heuristique, sinon 100 g.
+ */
+export function startingGrams(
+  food: Pick<FoodSuggestion, "id" | "name" | "default_serving">,
+  typicalGrams: number | null | undefined,
+): number {
+  if (typicalGrams != null && Number.isFinite(typicalGrams) && typicalGrams > 0) {
+    return typicalGrams;
+  }
+  return loadSavedWeight(food) ?? buildGramPresets(food)[1]?.grams ?? 100;
+}
+
 export function saveLastWeight(food: Parameters<typeof keyFor>[0], grams: number): void {
   if (typeof window === "undefined") return;
   try {

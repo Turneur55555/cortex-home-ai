@@ -20,7 +20,51 @@
 > regroupés sous [`docs/archive/`](docs/archive/).
 
 ## Dernière mise à jour
-2026-10-28
+2026-11-01
+
+## Nutrition — saisir en un appui + journée bouclée (2026-11-01, `main`)
+Demande de Nathan : « fais les recommandations 1-2-3 et 4 » (propositions du jour, fondées sur 60 j
+de production : 27 jours saisis, **dîner 7 jours sur 27** ; jours avec dîner 1 600-1 900 kcal /
+150-230 g de protéines, sans dîner 700-1 100 ; 80 % des aliments saisis par lots, pic 16-17 h ;
+riz 30 g + poulet 150 g au déjeuner 17 jours, caséine + Monster au petit-déjeuner 14-16 jours).
+- **1. Les 5 repas toujours visibles + repas habituel en un appui.** Nouveau module pur
+  `lib/nutrition/habits.ts` (`computeHabitualMeals` : sur les 10 dernières journées où le repas a
+  été saisi, aliments présents ≥ 50 % des jours et ≥ 3 fois ; quantité = médiane des 5 dernières
+  prises ; macros recalculés depuis le /100 g, sinon dernière prise reprise telle quelle ; la
+  journée affichée est exclue). Hook `useNutritionHabits` (lecture serveur bornée : 90 j,
+  `limit 1000`, du plus récent au plus ancien). `NutritionTab` : créneau vide = carte
+  « D'habitude · N kcal » + pastilles des aliments + « Ajouter » (via `useAddNutritionBatch`,
+  désormais `{ silent }`, renvoie les lignes créées → toast « Annuler ») + loupe (bibliothèque sur
+  ce repas). Sans habitude : « Rien de saisi » + « Ajouter ». Rien proposé pour un jour futur.
+  Bouton « + Aliment » aussi dans le détail d'un repas rempli.
+- **2. Le « + » ajoute directement.** Il ouvre `FoodLibrarySheet` (titre « Ajouter un aliment »,
+  nouvelles props `initialMeal` et `onQuickAction` : raccourcis Photo / Code-barres / Voix / Créer).
+  L'ancien « Centre de commandes » devient « Outils Nutrition », ouvert par le bouton « ⋯ Outils »
+  à côté de « Mes repas » — **aucune action retirée**.
+- **3. Quantité habituelle sur tous les appareils.** `lib/nutrition/weight.ts::startingGrams` :
+  médiane de l'historique en base (`computeTypicalGrams`) → sinon dernière saisie de l'appareil
+  (`localStorage`) → sinon portion usuelle. Branché dans `FoodLibrarySheet` et `NutritionSheet`.
+- **4. Journée bouclée.** Migration `20261101120000_nutrition_day_closures.sql` (poussée seule
+  d'abord, appliquée par migrate.yml, types régénérés par la CI ; vérifiée en prod : 5 colonnes,
+  RLS, trigger, policy). Sans UNIQUE (INVARIANTS §1.7). Hook `useNutritionDayClosures`
+  (offline-first, réconciliation seulement si `count: exact` prouve la lecture complète,
+  `writeNutritionDayClosure` sérialisé). Module pur `lib/nutrition/dayCompletion.ts` : complète =
+  bouclée OU dîner saisi. Carte en bas des repas : « Tu as fini de manger ? » / « Journée
+  incomplète » (bouton Boucler) / « Journée bouclée » (Rouvrir) / « Journée complète » (dîner).
+  **Moyennes 7/30 j** (`NutritionHistorySheet`) et **TDEE observé** (`SanteView` →
+  `computeAdaptiveTdee({ completeDates })`) ne comptent plus que les journées complètes
+  (INVARIANTS §6.1). « Copier hier » copie la veille du jour AFFICHÉ (comme la copie d'un repas)
+  et prévient si elle est incomplète. Conséquence attendue : le TDEE observé de Nathan peut passer
+  en « données insuffisantes » tant qu'il y a peu de journées complètes — c'est voulu.
+- Au passage : graphique de l'historique — couleurs `hsl(var(--…))` invalides avec les jetons
+  `oklch` (barres noires) remplacées par `var(--…)`, ligne d'objectif toujours dans l'échelle,
+  libellés d'axes 11 px. `pb-24` sous le contenu Nutrition (le « + » flottant ne masque plus rien).
+- **Vérifié** : tsc, lint (0 erreur), Vitest complet (2 880 tests), build, garde-fous lectures
+  bornées / contrat offline ; banc visuel Playwright jetable (iPhone 17 Pro 402×874, backend
+  simulé avec historique réaliste) : dîner habituel ajouté en un appui → « Journée complète »,
+  veille sans dîner → « Journée incomplète », riz pré-rempli à 30 g, historique lisible.
+- **Laissé de côté** : « Petit-déj… » tronqué dans la carte d'un repas rempli (antérieur), doublons
+  de la bibliothèque (« Harissa »), rappel du soir (notifications PWA), nutrition sur l'Accueil.
 
 ## Correctif urgent : modules inaccessibles à cause du Service Worker (2026-10-28, `main`)
 Signalement de Nathan : « je ne peux pas accéder au module ». Cause : le correctif du 27/10 a enfin

@@ -18,7 +18,7 @@ import {
   Wheat,
   Zap,
 } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useBodyMeasurements, useWorkouts } from "@/hooks/use-fitness";
 import { useLatestBodyWeight } from "@/hooks/useLatestBodyWeight";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
@@ -30,6 +30,8 @@ import {
 import { useMetabolicProfile } from "@/hooks/useMetabolicProfile";
 import { evaluateSystemicRecovery } from "@/lib/fitness/systemicRecovery";
 import { useNutrition, useNutritionRange } from "@/hooks/useNutritionData";
+import { useClosedNutritionDates } from "@/hooks/useNutritionDayClosures";
+import { completeDates } from "@/lib/nutrition/dayCompletion";
 import {
   useApplyCalorieGoal,
   useApplyMacroGoal,
@@ -173,6 +175,13 @@ export function SanteView({ part }: { part: "objectif" | "sante" }) {
     adaptiveWindowStart,
     today,
   );
+  // Seules les journées complètes (bouclées, ou dîner saisi) entrent dans le
+  // TDEE observé : un dîner non noté n'est pas un déficit.
+  const { closedDates } = useClosedNutritionDates();
+  const nutritionCompleteDates = useMemo(
+    () => completeDates(nutritionRangeRows ?? [], closedDates),
+    [nutritionRangeRows, closedDates],
+  );
 
   const { data: workouts, isLoading: workoutsLoading } = useWorkouts();
   const { data: activity } = useLatestActivity();
@@ -227,6 +236,7 @@ export function SanteView({ part }: { part: "objectif" | "sante" }) {
     nutritionLogs: nutritionRangeRows ?? [],
     modeledTdeeKcal: dailyTDEE.totalKcal,
     today,
+    completeDates: nutritionCompleteDates,
   });
 
   const adaptiveTdeeCalibration = computeAdaptiveTdeeCalibration({

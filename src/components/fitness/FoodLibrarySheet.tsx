@@ -1,5 +1,17 @@
 import { useMemo, useState } from "react";
-import { Apple, Loader2, Pencil, Plus, Search, Star, Trash2, X } from "lucide-react";
+import {
+  Apple,
+  Barcode,
+  Camera,
+  Loader2,
+  Mic,
+  Pencil,
+  Plus,
+  Search,
+  Star,
+  Trash2,
+  X,
+} from "lucide-react";
 import { FullscreenSheet } from "@/components/shared/FormComponents";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { WeightSelector } from "@/components/fitness/WeightSelector";
@@ -18,23 +30,44 @@ import {
 } from "@/hooks/use-nutrition-favorites";
 import { useSavedMeals, type SavedMeal } from "@/hooks/use-saved-meals";
 import { useAddNutrition } from "@/hooks/use-fitness";
+import { useTypicalGrams } from "@/hooks/useNutritionHabits";
 import {
-  buildGramPresets,
   calculateNutritionFromGrams,
   formatDecimal,
-  loadSavedWeight,
   per100FromFood,
   saveLastWeight,
+  startingGrams,
 } from "@/lib/nutrition/weight";
-import { detectMealFromHour, isMealSlug, type MealSlug } from "@/lib/nutrition/meals";
+import { foodKey } from "@/lib/nutrition/habits";
+import { detectMealFromHour, isMealSlug, MEAL_LABELS, type MealSlug } from "@/lib/nutrition/meals";
 import type { FoodSuggestion } from "@/services/foodSuggestion";
 
 type LibraryTab = "all" | "mine" | "favorites" | "meals";
 
+/** Les autres façons d'ajouter, proposées en raccourci en tête de la bibliothèque. */
+export type LibraryQuickAction = "scan" | "barcode" | "voice";
+
 interface FoodLibrarySheetProps {
   date: string;
   onClose: () => void;
+  /**
+   * Repas pré-sélectionné (ouverture depuis un créneau précis, ex. « Dîner »).
+   * Absent : le repas est déduit de l'heure.
+   */
+  initialMeal?: MealSlug;
+  /** Raccourcis photo / code-barres / voix — absents si non fournis. */
+  onQuickAction?: (action: LibraryQuickAction) => void;
 }
+
+const QUICK_ACTIONS: Array<{
+  action: LibraryQuickAction;
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+}> = [
+  { action: "scan", icon: Camera, label: "Photo" },
+  { action: "barcode", icon: Barcode, label: "Code-barres" },
+  { action: "voice", icon: Mic, label: "Voix" },
+];
 
 /**
  * Bibliothèque d'aliments — point d'entrée principal du parcours "Ajouter un
@@ -44,7 +77,12 @@ interface FoodLibrarySheetProps {
  * (favoris, repas enregistrés, recherche catalogue) — aucune logique
  * métier dupliquée.
  */
-export function FoodLibrarySheet({ date, onClose }: FoodLibrarySheetProps) {
+export function FoodLibrarySheet({
+  date,
+  onClose,
+  initialMeal,
+  onQuickAction,
+}: FoodLibrarySheetProps) {
   const [tab, setTab] = useState<LibraryTab>("all");
   const [query, setQuery] = useState("");
   const [manualOpen, setManualOpen] = useState(false);
@@ -121,7 +159,11 @@ export function FoodLibrarySheet({ date, onClose }: FoodLibrarySheetProps) {
   }, [savedMeals, q]);
 
   return (
-    <FullscreenSheet title="Mes aliments" subtitle="Bibliothèque d'aliments" onClose={onClose}>
+    <FullscreenSheet
+      title="Ajouter un aliment"
+      subtitle={initialMeal ? `Repas : ${MEAL_LABELS[initialMeal]}` : "Bibliothèque d'aliments"}
+      onClose={onClose}
+    >
       <div className="space-y-4 pb-6">
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -145,14 +187,30 @@ export function FoodLibrarySheet({ date, onClose }: FoodLibrarySheetProps) {
           )}
         </div>
 
-        <button
-          type="button"
-          onClick={() => setManualOpen(true)}
-          className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border py-2.5 text-sm font-semibold text-muted-foreground hover:border-primary/50 hover:text-foreground"
-        >
-          <Plus className="h-4 w-4" />
-          Créer un aliment manuellement
-        </button>
+        <div className={`grid gap-2 ${onQuickAction ? "grid-cols-4" : "grid-cols-1"}`}>
+          {onQuickAction &&
+            QUICK_ACTIONS.map(({ action, icon: Icon, label }) => (
+              <button
+                key={action}
+                type="button"
+                onClick={() => onQuickAction(action)}
+                className="flex min-h-[3.5rem] flex-col items-center justify-center gap-1 rounded-xl border border-border bg-card px-1 py-2 text-[11px] font-semibold text-foreground active:bg-muted"
+              >
+                <Icon className="h-4 w-4 text-primary" />
+                {label}
+              </button>
+            ))}
+          <button
+            type="button"
+            onClick={() => setManualOpen(true)}
+            className={`flex min-h-[3.5rem] items-center justify-center gap-1 rounded-xl border border-dashed border-border px-1 py-2 font-semibold text-muted-foreground hover:border-primary/50 hover:text-foreground ${
+              onQuickAction ? "flex-col text-[11px]" : "gap-2 text-sm"
+            }`}
+          >
+            <Plus className="h-4 w-4" />
+            {onQuickAction ? "Créer" : "Créer un aliment manuellement"}
+          </button>
+        </div>
 
         <Tabs value={tab} onValueChange={(v) => setTab(v as LibraryTab)}>
           <TabsList className="grid w-full grid-cols-4">
@@ -165,6 +223,7 @@ export function FoodLibrarySheet({ date, onClose }: FoodLibrarySheetProps) {
           <TabsContent value="all">
             <FoodItemList
               date={date}
+              initialMeal={initialMeal}
               foods={allFoods}
               loading={q.length >= 2 ? searchLoading || usedSearchLoading : usedLoading}
               emptyLabel={
@@ -178,6 +237,7 @@ export function FoodLibrarySheet({ date, onClose }: FoodLibrarySheetProps) {
           <TabsContent value="mine">
             <FoodItemList
               date={date}
+              initialMeal={initialMeal}
               foods={mineFoods}
               loading={customLoading}
               emptyLabel="Aucun aliment personnel pour l'instant"
@@ -205,18 +265,21 @@ export function FoodLibrarySheet({ date, onClose }: FoodLibrarySheetProps) {
 
 function FoodItemList({
   date,
+  initialMeal,
   foods,
   loading,
   emptyLabel,
 }: {
   date: string;
+  initialMeal?: MealSlug;
   foods: FoodSuggestion[];
   loading: boolean;
   emptyLabel: string;
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [weightText, setWeightText] = useState("");
-  const [meal, setMeal] = useState<MealSlug>(detectMealFromHour());
+  const [meal, setMeal] = useState<MealSlug>(() => initialMeal ?? detectMealFromHour());
+  const typicalGrams = useTypicalGrams();
   const [editing, setEditing] = useState<FoodSuggestion | null>(null);
   const addFood = useAddNutrition();
   const addFav = useAddFavorite();
@@ -229,10 +292,8 @@ function FoodItemList({
       return;
     }
     setExpandedId(food.id);
-    const saved = loadSavedWeight(food);
-    const presets = buildGramPresets(food);
-    setWeightText(formatDecimal(saved ?? presets[1]?.grams ?? 100));
-    setMeal(detectMealFromHour());
+    setWeightText(formatDecimal(startingGrams(food, typicalGrams.get(foodKey(food.name)))));
+    setMeal(initialMeal ?? detectMealFromHour());
   };
 
   const calc = expandedFood

@@ -4,6 +4,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -14,12 +15,18 @@ import { format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
 import { FullscreenSheet as Sheet } from "@/components/shared/FormComponents";
 import { useNutritionGoals } from "@/hooks/use-fitness";
-import { averageOverTrackedDays, useNutritionHistory } from "@/hooks/use-nutrition-history";
+import { useNutritionHistory } from "@/hooks/use-nutrition-history";
+import { useClosedNutritionDates } from "@/hooks/useNutritionDayClosures";
+import {
+  averageOverCompleteDays,
+  completeDatesFromSeries,
+  type CompleteDaysAverage,
+} from "@/lib/nutrition/dayCompletion";
 
 type Metric = "kcal" | "proteins" | "carbs" | "fats";
 
 const METRICS: { key: Metric; label: string; color: string; unit: string }[] = [
-  { key: "kcal", label: "Calories", color: "hsl(var(--primary))", unit: "kcal" },
+  { key: "kcal", label: "Calories", color: "var(--primary)", unit: "kcal" },
   { key: "fats", label: "Lipides", color: "hsl(0 84% 60%)", unit: "g" },
   { key: "carbs", label: "Glucides", color: "hsl(38 92% 50%)", unit: "g" },
   { key: "proteins", label: "Protéines", color: "hsl(142 76% 36%)", unit: "g" },
@@ -29,33 +36,45 @@ interface Props {
   onClose: () => void;
 }
 
+const plural = (n: number, word: string) => `${n} ${word}${n > 1 ? "s" : ""}`;
+
 function AvgCard({
   title,
   avg,
   goalCal,
 }: {
   title: string;
-  avg: { calories: number; proteins: number; carbs: number; fats: number; trackedDays: number };
+  avg: CompleteDaysAverage;
   goalCal: number | null | undefined;
 }) {
+  const hasAverage = avg.completeDays > 0;
   return (
     <div className="flex-1 rounded-2xl border border-border bg-surface p-3">
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
         {title}
       </p>
       <p className="mt-1 text-xl font-bold text-primary">
-        {avg.calories}
-        <span className="ml-1 text-[10px] font-normal text-muted-foreground">
-          kcal/j{goalCal ? ` · cible ${goalCal}` : ""}
+        {hasAverage ? avg.calories.toLocaleString("fr-FR") : "—"}
+        <span className="ml-1 text-[11px] font-normal text-muted-foreground">
+          kcal/j{goalCal ? ` · cible ${goalCal.toLocaleString("fr-FR")}` : ""}
         </span>
       </p>
-      <p className="mt-1 text-[11px] text-muted-foreground">
-        L{avg.fats} · G{avg.carbs} · P{avg.proteins}
+      {hasAverage && (
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          L {avg.fats} g · G {avg.carbs} g · P {avg.proteins} g
+        </p>
+      )}
+      <p className="mt-0.5 text-[11px] text-muted-foreground">
+        {hasAverage
+          ? `${plural(avg.completeDays, "journée")} complète${avg.completeDays > 1 ? "s" : ""}`
+          : "Aucune journée complète"}
       </p>
-      <p className="mt-0.5 text-[10px] text-muted-foreground">
-        {avg.trackedDays} jour{avg.trackedDays > 1 ? "s" : ""} suivi
-        {avg.trackedDays > 1 ? "s" : ""}
-      </p>
+      {avg.excludedDays > 0 && (
+        <p className="mt-0.5 text-[11px] text-muted-foreground">
+          {plural(avg.excludedDays, "journée")} incomplète{avg.excludedDays > 1 ? "s" : ""} exclue
+          {avg.excludedDays > 1 ? "s" : ""}
+        </p>
+      )}
     </div>
   );
 }
@@ -65,8 +84,21 @@ export function NutritionHistorySheet({ onClose }: Props) {
   const { data: goals } = useNutritionGoals();
   const [metric, setMetric] = useState<Metric>("kcal");
 
-  const avg7 = useMemo(() => averageOverTrackedDays(series ?? [], 7), [series]);
-  const avg30 = useMemo(() => averageOverTrackedDays(series ?? [], 30), [series]);
+  const { closedDates } = useClosedNutritionDates();
+  // Seules les journées complètes (bouclées, ou dîner saisi) comptent dans les
+  // moyennes : une journée sans dîner n'est pas un déficit, c'est un repas non noté.
+  const completeDays = useMemo(
+    () => completeDatesFromSeries(series ?? [], closedDates),
+    [series, closedDates],
+  );
+  const avg7 = useMemo(
+    () => averageOverCompleteDays(series ?? [], 7, completeDays),
+    [series, completeDays],
+  );
+  const avg30 = useMemo(
+    () => averageOverCompleteDays(series ?? [], 30, completeDays),
+    [series, completeDays],
+  );
 
   const chartData = useMemo(
     () =>
@@ -77,8 +109,9 @@ export function NutritionHistorySheet({ onClose }: Props) {
         proteins: Math.round(d.proteins * 10) / 10,
         carbs: Math.round(d.carbs * 10) / 10,
         fats: Math.round(d.fats * 10) / 10,
+        complete: completeDays.has(d.date),
       })),
-    [series],
+    [series, completeDays],
   );
 
   const hasData = (series ?? []).some((d) => d.calories > 0);
@@ -135,29 +168,33 @@ export function NutritionHistorySheet({ onClose }: Props) {
               </div>
               <div className="h-48 w-full rounded-2xl border border-border bg-surface p-2">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartData} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
-                    <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="hsl(var(--border))"
-                      vertical={false}
-                    />
+                  <BarChart data={chartData} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                     <XAxis
                       dataKey="label"
-                      tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }}
+                      tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
                       interval={4}
                       tickLine={false}
                       axisLine={false}
                     />
                     <YAxis
-                      tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }}
+                      // L'objectif reste toujours visible, même au-dessus de la plus haute barre.
+                      domain={[
+                        0,
+                        (dataMax: number) =>
+                          metric === "kcal" && goals?.calories
+                            ? Math.max(dataMax, Number(goals.calories))
+                            : dataMax,
+                      ]}
+                      tick={{ fontSize: 11, fill: "var(--muted-foreground)" }}
                       tickLine={false}
                       axisLine={false}
-                      width={36}
+                      width={40}
                     />
                     <Tooltip
                       contentStyle={{
-                        background: "hsl(var(--card))",
-                        border: "1px solid hsl(var(--border))",
+                        background: "var(--card)",
+                        border: "1px solid var(--border)",
                         borderRadius: 12,
                         fontSize: 12,
                       }}
@@ -167,19 +204,29 @@ export function NutritionHistorySheet({ onClose }: Props) {
                     {metric === "kcal" && goals?.calories ? (
                       <ReferenceLine
                         y={goals.calories}
-                        stroke="hsl(var(--primary))"
+                        stroke="var(--primary)"
                         strokeDasharray="4 4"
+                        ifOverflow="extendDomain"
                       />
                     ) : null}
-                    <Bar dataKey={metric} fill={activeMetric.color} radius={[3, 3, 0, 0]} />
+                    <Bar dataKey={metric} fill={activeMetric.color} radius={[3, 3, 0, 0]}>
+                      {chartData.map((d) => (
+                        <Cell
+                          key={d.date}
+                          fill={activeMetric.color}
+                          fillOpacity={d.complete ? 1 : 0.3}
+                        />
+                      ))}
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-              {metric === "kcal" && goals?.calories ? (
-                <p className="mt-1 text-center text-[10px] text-muted-foreground">
-                  Ligne pointillée = objectif ({goals.calories} kcal)
-                </p>
-              ) : null}
+              <p className="mt-1 text-center text-[11px] text-muted-foreground">
+                {metric === "kcal" && goals?.calories
+                  ? `Ligne pointillée = objectif (${goals.calories.toLocaleString("fr-FR")} kcal). `
+                  : ""}
+                Barres pâles = journées incomplètes, hors moyennes.
+              </p>
             </div>
           </>
         )}

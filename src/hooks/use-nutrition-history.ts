@@ -1,17 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
 import { format, subDays } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
+import { DAY_COMPLETING_MEAL, type DayTotals } from "@/lib/nutrition/dayCompletion";
 
 // Historique nutritionnel agrégé par jour (pour tendances & moyennes).
-export type DayNutrition = {
-  date: string;
-  calories: number;
-  proteins: number;
-  carbs: number;
-  fats: number;
+// Les moyennes ne comptent que les journées COMPLÈTES : voir
+// `lib/nutrition/dayCompletion.ts::averageOverCompleteDays`.
+export type DayNutrition = DayTotals & {
+  /** Au moins un aliment saisi au dîner ce jour-là (journée complète d'office). */
+  hasDinner: boolean;
 };
 
-const ZERO = { calories: 0, proteins: 0, carbs: 0, fats: 0 };
+const ZERO = { calories: 0, proteins: 0, carbs: 0, fats: 0, hasDinner: false };
 
 /**
  * Renvoie une série continue des `days` derniers jours calendaires
@@ -25,7 +25,7 @@ export function useNutritionHistory(days = 30) {
       const from = format(subDays(new Date(), days - 1), "yyyy-MM-dd");
       const { data, error } = await supabase
         .from("nutrition")
-        .select("date, calories, proteins, carbs, fats")
+        .select("date, meal, calories, proteins, carbs, fats")
         .gte("date", from)
         .order("date", { ascending: true });
       if (error) throw error;
@@ -39,6 +39,7 @@ export function useNutritionHistory(days = 30) {
         cur.proteins += Number(r.proteins ?? 0);
         cur.carbs += Number(r.carbs ?? 0);
         cur.fats += Number(r.fats ?? 0);
+        if (r.meal === DAY_COMPLETING_MEAL) cur.hasDinner = true;
         map.set(d, cur);
       }
 
@@ -50,27 +51,4 @@ export function useNutritionHistory(days = 30) {
       return series;
     },
   });
-}
-
-/** Moyenne sur les jours RÉELLEMENT suivis (calories > 0) dans la fenêtre. */
-export function averageOverTrackedDays(series: DayNutrition[], n: number) {
-  const tracked = series.slice(-n).filter((d) => d.calories > 0);
-  if (tracked.length === 0) return { ...ZERO, trackedDays: 0 };
-  const sum = tracked.reduce(
-    (a, d) => ({
-      calories: a.calories + d.calories,
-      proteins: a.proteins + d.proteins,
-      carbs: a.carbs + d.carbs,
-      fats: a.fats + d.fats,
-    }),
-    { ...ZERO },
-  );
-  const k = tracked.length;
-  return {
-    calories: Math.round(sum.calories / k),
-    proteins: Math.round(sum.proteins / k),
-    carbs: Math.round(sum.carbs / k),
-    fats: Math.round(sum.fats / k),
-    trackedDays: k,
-  };
 }

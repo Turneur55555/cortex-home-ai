@@ -19,8 +19,11 @@ import {
   Loader2,
   Link2,
   Mic,
+  Moon,
+  MoreHorizontal,
   Pill,
   Plus,
+  Search,
   ShoppingCart,
   Sparkles,
   Target,
@@ -36,6 +39,7 @@ import { fr } from "date-fns/locale";
 import { Link } from "@tanstack/react-router";
 import {
   useAddNutrition,
+  useAddNutritionBatch,
   useCopyNutritionDay,
   useCopyNutritionMeal,
   useDeleteNutrition,
@@ -45,6 +49,16 @@ import {
   useUpdateNutrition,
 } from "@/hooks/use-fitness";
 import { useNutritionTotals } from "@/hooks/useNutritionTotals";
+import { useNutritionHabits } from "@/hooks/useNutritionHabits";
+import { useClosedNutritionDates, useSetNutritionDayClosed } from "@/hooks/useNutritionDayClosures";
+import {
+  DAY_COMPLETING_MEAL,
+  dayCompletion,
+  shouldWarnBeforeCopying,
+  type DayCompletion,
+} from "@/lib/nutrition/dayCompletion";
+import type { HabitualMeal } from "@/lib/nutrition/habits";
+import { isHapticsEnabled } from "@/lib/haptics";
 import { useSupplements, useToggleSupplementLog } from "@/hooks/use-supplements";
 import { MealActionMenu } from "@/components/fitness/MealActionMenu";
 import { WorkoutDeleteDialog } from "@/components/fitness/WorkoutDeleteDialog";
@@ -119,14 +133,34 @@ const CARD = "rounded-3xl border border-border bg-card shadow-sm";
 export function NutritionTab() {
   const today = format(new Date(), "yyyy-MM-dd");
   const [date, setDate] = useState(today);
+  const previousDate = format(subDays(parseISO(date), 1), "yyyy-MM-dd");
   const { data, isLoading } = useNutrition(date);
+  // La veille du jour affiché : sa complétude décide si « Copier hier » doit
+  // prévenir, et sa lecture hydrate le store local que la copie relit.
+  const { data: previousData } = useNutrition(previousDate);
   const { data: goals } = useNutritionGoals();
   const del = useDeleteNutrition();
   const readd = useAddNutrition();
+  const addBatch = useAddNutritionBatch({ silent: true });
   const update = useUpdateNutrition();
   const copyDay = useCopyNutritionDay();
   const copyMeal = useCopyNutritionMeal();
   const deleteMeal = useDeleteNutritionMeal();
+  const { habitualMeals } = useNutritionHabits(date);
+  const { closedDates } = useClosedNutritionDates();
+  const setDayClosed = useSetNutritionDayClosed();
+
+  const isFuture = date > today;
+  const completion = dayCompletion({
+    hasEntries: (data?.length ?? 0) > 0,
+    hasDinner: (data ?? []).some((r) => r.meal === DAY_COMPLETING_MEAL),
+    closed: closedDates.has(date),
+  });
+  const previousCompletion = dayCompletion({
+    hasEntries: (previousData?.length ?? 0) > 0,
+    hasDinner: (previousData ?? []).some((r) => r.meal === DAY_COMPLETING_MEAL),
+    closed: closedDates.has(previousDate),
+  });
 
   const handleMoveMeal = (item: NonNullable<typeof data>[number], target: MealSlug) => {
     if (item.meal === target) return;
@@ -143,7 +177,8 @@ export function NutritionTab() {
   const [copyOpen, setCopyOpen] = useState(false);
   const [copyFrom, setCopyFrom] = useState(() => format(subDays(new Date(), 1), "yyyy-MM-dd"));
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [libraryOpen, setLibraryOpen] = useState(false);
+  // Bibliothèque d'aliments : `meal` présent quand on l'ouvre depuis un créneau.
+  const [library, setLibrary] = useState<{ meal?: MealSlug } | null>(null);
   const [goalsOpen, setGoalsOpen] = useState(false);
   const [planOpen, setPlanOpen] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
@@ -183,6 +218,22 @@ export function NutritionTab() {
     }
     return result;
   }, [data]);
+
+  // Les 5 créneaux sont TOUJOURS affichés, remplis ou non : un dîner vide doit
+  // se voir (mesure du 01/11/2026 : dîner saisi 7 jours sur 27). Les repas hors
+  // créneaux standards suivent, tels quels.
+  const slots = useMemo(() => {
+    const byKey = new Map(grouped.map((g) => [g.key, g]));
+    const standard = MEAL_SLUGS.map((slug) => ({
+      key: slug as string,
+      slug: slug as MealSlug | null,
+      group: byKey.get(slug) ?? null,
+    }));
+    const extra = grouped
+      .filter((g) => !isMealSlug(g.key))
+      .map((g) => ({ key: g.key, slug: null as MealSlug | null, group: g }));
+    return [...standard, ...extra];
+  }, [grouped]);
 
   const saveGroupAsMeal = (g: (typeof grouped)[number]) => {
     const mealSlug = isMealSlug(g.key) ? g.key : null;
@@ -248,10 +299,267 @@ export function NutritionTab() {
     });
   };
 
+  /** Le repas habituel du créneau, en un appui — annulable. */
+  const addHabitualMeal = (slot: MealSlug) => {
+    const habit = habitualMeals[slot];
+    if (!habit) return;
+    addBatch.mutate(
+      habit.items.map((it) => ({ date, meal: slot, ...it.entry })),
+      {
+        onSuccess: (created) => {
+          vibrate(30);
+          const n = created.length;
+          toast.success(
+            `${MEAL_LABELS[slot]} : ${n} aliment${n > 1 ? "s" : ""} ajouté${n > 1 ? "s" : ""}`,
+            {
+              action: {
+                label: "Annuler",
+                onClick: () => created.forEach((row) => del.mutate(row.id)),
+              },
+              duration: 6000,
+            },
+          );
+        },
+      },
+    );
+  };
+
+  const copyPreviousDay = () => copyDay.mutate({ from: previousDate, to: date });
+
+  const toggleDayClosed = (closed: boolean) => {
+    setDayClosed.mutate(
+      { date, closed },
+      {
+        onSuccess: (result) => {
+          if (result !== "created") return;
+          vibrate([20, 40, 20]);
+          toast.success("Journée bouclée", {
+            description: "Elle compte dans tes moyennes.",
+          });
+        },
+      },
+    );
+  };
+
   const dateLabel = format(parseISO(date), "d MMMM yyyy", { locale: fr });
 
+  const renderMealCard = (g: (typeof grouped)[number], idx: number) => {
+    const gTotals = g.items.reduce(
+      (acc, m) => ({
+        calories: acc.calories + (m.calories ?? 0),
+        proteins: acc.proteins + (m.proteins ?? 0),
+        carbs: acc.carbs + (m.carbs ?? 0),
+        fats: acc.fats + (m.fats ?? 0),
+      }),
+      { calories: 0, proteins: 0, carbs: 0, fats: 0 },
+    );
+    const visual = MEAL_VISUALS[g.key] ?? DEFAULT_VISUAL;
+    const Icon = visual.icon;
+    const expanded = expandedMeal === g.key;
+    return (
+      <motion.div
+        key={g.key}
+        layout
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ ...TRANSITION, delay: idx * 0.04 }}
+        className={`relative overflow-hidden ${CARD}`}
+      >
+        <motion.button
+          initial="rest"
+          whileTap="pressed"
+          variants={{ rest: { scale: 1 }, pressed: PRESS_LARGE }}
+          type="button"
+          onClick={() => setExpandedMeal(expanded ? null : g.key)}
+          className="relative flex w-full items-center gap-3 p-3.5 text-left"
+        >
+          <motion.span
+            aria-hidden
+            variants={{ rest: { opacity: 0 }, pressed: { opacity: 1 } }}
+            transition={{ duration: 0.15 }}
+            className="pointer-events-none absolute inset-0 rounded-[inherit] bg-primary/5"
+          />
+          <div
+            className={`relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br shadow-sm ring-1 ring-white/10 ${visual.gradient}`}
+          >
+            <Icon className={`h-6 w-6 ${visual.accent}`} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-base font-bold leading-tight">{g.label}</p>
+            <p className="text-[11px] text-muted-foreground">
+              {g.items.length} aliment{g.items.length > 1 ? "s" : ""}
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2.5">
+            <div className="grid grid-cols-3 gap-2">
+              <MacroChip color="text-rose-400" label="L" value={gTotals.fats} />
+              <MacroChip color="text-amber-400" label="G" value={gTotals.carbs} />
+              <MacroChip color="text-emerald-400" label="P" value={gTotals.proteins} />
+            </div>
+            <div className="text-right">
+              <p className="text-sm font-bold leading-none">{Math.round(gTotals.calories)}</p>
+              <p className="text-[11px] text-muted-foreground">kcal</p>
+            </div>
+            <ChevronRight
+              className={`h-4 w-4 text-muted-foreground transition-transform ${expanded ? "rotate-90" : ""}`}
+            />
+          </div>
+        </motion.button>
+
+        <AnimatePresence initial={false}>
+          {expanded && (
+            <motion.div
+              initial={{ height: 0, opacity: 0, scale: 0.98 }}
+              animate={{ height: "auto", opacity: 1, scale: 1 }}
+              exit={{ height: 0, opacity: 0, scale: 0.98 }}
+              transition={TRANSITION}
+              className="overflow-hidden"
+            >
+              <div className="border-t border-border/60 px-3 pb-3 pt-2">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">
+                    Détail
+                  </p>
+                  <div className="flex items-center gap-1">
+                    {isMealSlug(g.key) && (
+                      <motion.button
+                        whileTap={PRESS_SMALL}
+                        type="button"
+                        onClick={() => setLibrary({ meal: g.key as MealSlug })}
+                        className="inline-flex h-8 items-center gap-1 rounded-full border border-border px-2.5 text-[11px] font-semibold text-foreground"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        Aliment
+                      </motion.button>
+                    )}
+                    <MealActionMenu
+                      mealLabel={g.label}
+                      onAction={(action) => {
+                        if (action === "copy-yesterday") {
+                          copyMeal.mutate({ from: previousDate, to: date, meal: g.key });
+                        } else if (action === "save-as-template") {
+                          setSaveGroupName(g.label);
+                          setSaveGroupKey((k) => (k === g.key ? null : g.key));
+                        } else if (action === "delete") {
+                          setConfirmDeleteMeal({ key: g.key, label: g.label });
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {saveGroupKey === g.key && (
+                  <div className="mb-2 flex items-center gap-2 rounded-xl border border-border bg-surface p-2">
+                    <input
+                      type="text"
+                      value={saveGroupName}
+                      onChange={(e) => setSaveGroupName(e.target.value)}
+                      placeholder="Nom du repas"
+                      className="min-w-0 flex-1 rounded-lg border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none focus:border-primary/60"
+                    />
+                    <motion.button
+                      whileTap={PRESS_SMALL}
+                      type="button"
+                      disabled={createSavedMeal.isPending}
+                      onClick={() => saveGroupAsMeal(g)}
+                      className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground disabled:opacity-60"
+                    >
+                      {createSavedMeal.isPending && (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      )}
+                      Enregistrer
+                    </motion.button>
+                  </div>
+                )}
+
+                <ul className="space-y-1.5">
+                  {g.items.map((m) => {
+                    const badge = getWeightBadge(m);
+                    return (
+                      <SwipeableNutritionItem
+                        key={m.id}
+                        onDelete={() => handleDelete(m)}
+                        onTap={() => setWeightEditItem(m)}
+                      >
+                        <div className="flex items-center gap-1 p-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              <p className="truncate text-sm font-medium">{m.name}</p>
+                              {badge && (
+                                <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                                  {badge}
+                                </span>
+                              )}
+                            </div>
+                            <p className="mt-0.5 text-xs text-muted-foreground">
+                              {m.calories ?? 0} kcal · L{m.fats ?? 0} G{m.carbs ?? 0} P
+                              {m.proteins ?? 0}
+                            </p>
+                          </div>
+                          <motion.button
+                            whileTap={PRESS_SMALL}
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              readd.mutate({
+                                date,
+                                name: m.name ?? "",
+                                meal: m.meal ?? "collation",
+                                calories: m.calories,
+                                proteins: m.proteins,
+                                carbs: m.carbs,
+                                fats: m.fats,
+                                base_calories: m.base_calories ?? m.calories,
+                                base_proteins: m.base_proteins ?? m.proteins ?? null,
+                                base_carbs: m.base_carbs ?? m.carbs ?? null,
+                                base_fats: m.base_fats ?? m.fats ?? null,
+                                serving_count: m.serving_count ?? 1,
+                                percentage_consumed: 100,
+                                consumed_quantity: m.consumed_quantity ?? null,
+                                consumed_unit: m.consumed_unit ?? null,
+                                consumed_grams_per_unit: m.consumed_grams_per_unit ?? null,
+                              });
+                            }}
+                            disabled={readd.isPending}
+                            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-muted-foreground active:bg-muted active:text-foreground disabled:opacity-60"
+                            aria-label="Re-ajouter"
+                          >
+                            <Plus className="h-4 w-4" />
+                          </motion.button>
+                          <motion.button
+                            whileTap={PRESS_SMALL}
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDelete(m);
+                            }}
+                            disabled={del.isPending}
+                            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-muted-foreground active:bg-destructive/15 active:text-destructive disabled:opacity-60"
+                            aria-label="Supprimer"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </motion.button>
+                          <MoveMealMenu
+                            currentMeal={m.meal}
+                            onMove={(target) => handleMoveMeal(m, target)}
+                            disabled={update.isPending}
+                          />
+                        </div>
+                      </SwipeableNutritionItem>
+                    );
+                  })}
+                </ul>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
+    );
+  };
+
   return (
-    <section className="flex flex-col gap-5">
+    // pb-24 : le bouton « + » flottant ne masque jamais le bas de la page.
+    <section className="flex flex-col gap-5 pb-24">
       {/* ─── Barre date premium ─────────────────────────────────────────── */}
       <div className="grid grid-cols-[auto_1fr_auto] items-center gap-2">
         <motion.button
@@ -451,249 +759,71 @@ export function NutritionTab() {
           </div>
         )}
 
-      {/* ─── Mes repas ──────────────────────────────────────────────────── */}
+      {/* ─── Mes repas — les 5 créneaux, toujours visibles ─────────────── */}
       <section>
         <div className="mb-2 flex items-center justify-between">
           <h2 className="text-base font-bold tracking-tight">Mes repas</h2>
+          <motion.button
+            whileTap={PRESS_SMALL}
+            type="button"
+            onClick={() => setCommandCenterOpen(true)}
+            className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-xs font-semibold text-muted-foreground transition-colors hover:text-foreground"
+            aria-label="Outils nutrition"
+          >
+            <MoreHorizontal className="h-4 w-4" />
+            Outils
+          </motion.button>
         </div>
 
-        {isLoading && (
+        {isLoading ? (
           <div className="flex h-20 items-center justify-center">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
-        )}
-
-        {!isLoading && grouped.length === 0 && (
-          <div className="rounded-3xl border border-dashed border-border p-8 text-center">
-            <Apple className="mx-auto h-8 w-8 text-muted-foreground" />
-            <p className="mt-3 text-sm font-medium">Aucun repas aujourd'hui</p>
-            <p className="mt-1 text-xs leading-snug text-muted-foreground">
-              Ajoute un aliment pour suivre tes macros.
-            </p>
+        ) : (
+          <div className="space-y-2.5">
+            <AnimatePresence initial={false}>
+              {slots.map((slot, idx) =>
+                slot.group ? (
+                  renderMealCard(slot.group, idx)
+                ) : slot.slug ? (
+                  <EmptyMealSlot
+                    key={slot.key}
+                    index={idx}
+                    label={MEAL_LABELS[slot.slug]}
+                    visual={MEAL_VISUALS[slot.slug] ?? DEFAULT_VISUAL}
+                    habit={isFuture ? undefined : habitualMeals[slot.slug]}
+                    pending={addBatch.isPending}
+                    onAddHabit={() => slot.slug && addHabitualMeal(slot.slug)}
+                    onChoose={() => slot.slug && setLibrary({ meal: slot.slug })}
+                  />
+                ) : null,
+              )}
+            </AnimatePresence>
           </div>
         )}
-
-        <div className="space-y-2.5">
-          <AnimatePresence initial={false}>
-            {grouped.map((g, idx) => {
-              const gTotals = g.items.reduce(
-                (acc, m) => ({
-                  calories: acc.calories + (m.calories ?? 0),
-                  proteins: acc.proteins + (m.proteins ?? 0),
-                  carbs: acc.carbs + (m.carbs ?? 0),
-                  fats: acc.fats + (m.fats ?? 0),
-                }),
-                { calories: 0, proteins: 0, carbs: 0, fats: 0 },
-              );
-              const visual = MEAL_VISUALS[g.key] ?? DEFAULT_VISUAL;
-              const Icon = visual.icon;
-              const expanded = expandedMeal === g.key;
-              return (
-                <motion.div
-                  key={g.key}
-                  layout
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ ...TRANSITION, delay: idx * 0.04 }}
-                  className={`relative overflow-hidden ${CARD}`}
-                >
-                  <motion.button
-                    initial="rest"
-                    whileTap="pressed"
-                    variants={{ rest: { scale: 1 }, pressed: PRESS_LARGE }}
-                    type="button"
-                    onClick={() => setExpandedMeal(expanded ? null : g.key)}
-                    className="relative flex w-full items-center gap-3 p-3.5 text-left"
-                  >
-                    <motion.span
-                      aria-hidden
-                      variants={{ rest: { opacity: 0 }, pressed: { opacity: 1 } }}
-                      transition={{ duration: 0.15 }}
-                      className="pointer-events-none absolute inset-0 rounded-[inherit] bg-primary/5"
-                    />
-                    <div
-                      className={`relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br shadow-sm ring-1 ring-white/10 ${visual.gradient}`}
-                    >
-                      <Icon className={`h-6 w-6 ${visual.accent}`} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-base font-bold leading-tight">{g.label}</p>
-                      <p className="text-[10px] text-muted-foreground">
-                        {g.items.length} aliment{g.items.length > 1 ? "s" : ""}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2.5">
-                      <div className="grid grid-cols-3 gap-2">
-                        <MacroChip color="text-rose-400" label="L" value={gTotals.fats} />
-                        <MacroChip color="text-amber-400" label="G" value={gTotals.carbs} />
-                        <MacroChip color="text-emerald-400" label="P" value={gTotals.proteins} />
-                      </div>
-                      <div className="text-right">
-                        <p className="text-sm font-bold leading-none">
-                          {Math.round(gTotals.calories)}
-                        </p>
-                        <p className="text-[10px] text-muted-foreground">kcal</p>
-                      </div>
-                      <ChevronRight
-                        className={`h-4 w-4 text-muted-foreground transition-transform ${expanded ? "rotate-90" : ""}`}
-                      />
-                    </div>
-                  </motion.button>
-
-                  <AnimatePresence initial={false}>
-                    {expanded && (
-                      <motion.div
-                        initial={{ height: 0, opacity: 0, scale: 0.98 }}
-                        animate={{ height: "auto", opacity: 1, scale: 1 }}
-                        exit={{ height: 0, opacity: 0, scale: 0.98 }}
-                        transition={TRANSITION}
-                        className="overflow-hidden"
-                      >
-                        <div className="border-t border-border/60 px-3 pb-3 pt-2">
-                          <div className="mb-2 flex items-center justify-between">
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-                              Détail
-                            </p>
-                            <MealActionMenu
-                              mealLabel={g.label}
-                              onAction={(action) => {
-                                if (action === "copy-yesterday") {
-                                  const from = format(subDays(parseISO(date), 1), "yyyy-MM-dd");
-                                  copyMeal.mutate({ from, to: date, meal: g.key });
-                                } else if (action === "save-as-template") {
-                                  setSaveGroupName(g.label);
-                                  setSaveGroupKey((k) => (k === g.key ? null : g.key));
-                                } else if (action === "delete") {
-                                  setConfirmDeleteMeal({ key: g.key, label: g.label });
-                                }
-                              }}
-                            />
-                          </div>
-
-                          {saveGroupKey === g.key && (
-                            <div className="mb-2 flex items-center gap-2 rounded-xl border border-border bg-surface p-2">
-                              <input
-                                type="text"
-                                value={saveGroupName}
-                                onChange={(e) => setSaveGroupName(e.target.value)}
-                                placeholder="Nom du repas"
-                                className="min-w-0 flex-1 rounded-lg border border-border bg-transparent px-2.5 py-1.5 text-sm outline-none focus:border-primary/60"
-                              />
-                              <motion.button
-                                whileTap={PRESS_SMALL}
-                                type="button"
-                                disabled={createSavedMeal.isPending}
-                                onClick={() => saveGroupAsMeal(g)}
-                                className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground disabled:opacity-60"
-                              >
-                                {createSavedMeal.isPending && (
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                )}
-                                Enregistrer
-                              </motion.button>
-                            </div>
-                          )}
-
-                          <ul className="space-y-1.5">
-                            {g.items.map((m) => {
-                              const badge = getWeightBadge(m);
-                              return (
-                                <SwipeableNutritionItem
-                                  key={m.id}
-                                  onDelete={() => handleDelete(m)}
-                                  onTap={() => setWeightEditItem(m)}
-                                >
-                                  <div className="flex items-center gap-1 p-3">
-                                    <div className="min-w-0 flex-1">
-                                      <div className="flex items-center gap-1.5">
-                                        <p className="truncate text-sm font-medium">{m.name}</p>
-                                        {badge && (
-                                          <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                                            {badge}
-                                          </span>
-                                        )}
-                                      </div>
-                                      <p className="mt-0.5 text-xs text-muted-foreground">
-                                        {m.calories ?? 0} kcal · L{m.fats ?? 0} G{m.carbs ?? 0} P
-                                        {m.proteins ?? 0}
-                                      </p>
-                                    </div>
-                                    <motion.button
-                                      whileTap={PRESS_SMALL}
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        readd.mutate({
-                                          date,
-                                          name: m.name ?? "",
-                                          meal: m.meal ?? "collation",
-                                          calories: m.calories,
-                                          proteins: m.proteins,
-                                          carbs: m.carbs,
-                                          fats: m.fats,
-                                          base_calories: m.base_calories ?? m.calories,
-                                          base_proteins: m.base_proteins ?? m.proteins ?? null,
-                                          base_carbs: m.base_carbs ?? m.carbs ?? null,
-                                          base_fats: m.base_fats ?? m.fats ?? null,
-                                          serving_count: m.serving_count ?? 1,
-                                          percentage_consumed: 100,
-                                          consumed_quantity: m.consumed_quantity ?? null,
-                                          consumed_unit: m.consumed_unit ?? null,
-                                          consumed_grams_per_unit:
-                                            m.consumed_grams_per_unit ?? null,
-                                        });
-                                      }}
-                                      disabled={readd.isPending}
-                                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-muted-foreground active:bg-muted active:text-foreground disabled:opacity-60"
-                                      aria-label="Re-ajouter"
-                                    >
-                                      <Plus className="h-4 w-4" />
-                                    </motion.button>
-                                    <motion.button
-                                      whileTap={PRESS_SMALL}
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleDelete(m);
-                                      }}
-                                      disabled={del.isPending}
-                                      className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-muted-foreground active:bg-destructive/15 active:text-destructive disabled:opacity-60"
-                                      aria-label="Supprimer"
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </motion.button>
-                                    <MoveMealMenu
-                                      currentMeal={m.meal}
-                                      onMove={(target) => handleMoveMeal(m, target)}
-                                      disabled={update.isPending}
-                                    />
-                                  </div>
-                                </SwipeableNutritionItem>
-                              );
-                            })}
-                          </ul>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </motion.div>
-              );
-            })}
-          </AnimatePresence>
-        </div>
       </section>
+
+      {/* ─── Journée bouclée — seules les journées complètes font les moyennes ─ */}
+      {!isLoading && !isFuture && completion !== "empty" && (
+        <DayClosureCard
+          completion={completion}
+          isToday={date === today}
+          pending={setDayClosed.isPending}
+          onSetClosed={toggleDayClosed}
+        />
+      )}
 
       {/* ─── Compléments — strip horizontal ─────────────────────────────── */}
       <SupplementsStrip date={date} />
 
-      {/* ─── Bouton "+" — ouvre le centre de commandes ───────────────────── */}
+      {/* ─── Bouton "+" — ajoute un aliment, directement ────────────────── */}
       <motion.button
         whileTap={PRESS_SMALL}
         type="button"
-        onClick={() => setCommandCenterOpen(true)}
+        onClick={() => setLibrary({})}
         className="pointer-events-auto fixed inset-x-0 z-30 mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-gradient-primary text-primary-foreground shadow-glow"
         style={{ bottom: "calc(var(--bottom-nav-height, 5.75rem) + 1.25rem)" }}
-        aria-label="Ouvrir le centre de commandes"
+        aria-label="Ajouter un aliment"
       >
         <Plus className="h-6 w-6" />
       </motion.button>
@@ -703,7 +833,7 @@ export function NutritionTab() {
         onClose={() => setCommandCenterOpen(false)}
         onAction={(action) => {
           setCommandCenterOpen(false);
-          if (action === "manual") setLibraryOpen(true);
+          if (action === "manual") setLibrary({});
           else if (action === "scan") setScanOpen(true);
           else if (action === "barcode") setBarcodeOpen(true);
           else if (action === "voice") setVoiceOpen(true);
@@ -714,13 +844,33 @@ export function NutritionTab() {
           else if (action === "history") setHistoryOpen(true);
           else if (action === "plan") setPlanOpen(true);
           else if (action === "goals") setGoalsOpen(true);
-          else if (action === "copy-yesterday")
-            copyDay.mutate({ from: format(subDays(new Date(), 1), "yyyy-MM-dd"), to: date });
-          else if (action === "copy-day") setCopyOpen(true);
+          else if (action === "copy-yesterday") {
+            // Une veille incomplète (sans dîner ni clôture) recopiée fabriquerait
+            // une seconde journée incomplète : on prévient d'abord.
+            if (shouldWarnBeforeCopying(previousCompletion)) {
+              toast.warning("La veille est incomplète", {
+                description: "Pas de dîner saisi : la copier reproduirait une journée incomplète.",
+                action: { label: "Copier quand même", onClick: copyPreviousDay },
+                duration: 8000,
+              });
+            } else copyPreviousDay();
+          } else if (action === "copy-day") setCopyOpen(true);
         }}
       />
 
-      {libraryOpen && <FoodLibrarySheet date={date} onClose={() => setLibraryOpen(false)} />}
+      {library && (
+        <FoodLibrarySheet
+          date={date}
+          initialMeal={library.meal}
+          onClose={() => setLibrary(null)}
+          onQuickAction={(action) => {
+            setLibrary(null);
+            if (action === "scan") setScanOpen(true);
+            else if (action === "barcode") setBarcodeOpen(true);
+            else if (action === "voice") setVoiceOpen(true);
+          }}
+        />
+      )}
       {goalsOpen && <GoalsSheet current={goals ?? null} onClose={() => setGoalsOpen(false)} />}
       {planOpen && <MealPlanSheet onClose={() => setPlanOpen(false)} />}
       {historyOpen && <NutritionHistorySheet onClose={() => setHistoryOpen(false)} />}
@@ -863,6 +1013,230 @@ function MacroChip({ color, label, value }: { color: string; label: string; valu
         {Math.round(value)}g
       </p>
     </div>
+  );
+}
+
+/** Vibration courte de confirmation — respecte le réglage « Vibrations » du profil. */
+function vibrate(pattern: number | number[]) {
+  if (!isHapticsEnabled()) return;
+  try {
+    navigator.vibrate?.(pattern);
+  } catch {
+    /* non pris en charge */
+  }
+}
+
+/** « 150 g », « 4,5 g » — format français. */
+function formatGrams(g: number): string {
+  return `${g.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} g`;
+}
+
+// ─── Créneau de repas vide ────────────────────────────────────────────────
+// Un créneau sans aliment reste visible. S'il a une habitude claire (calculée
+// sur l'historique, lib/nutrition/habits.ts), on la propose en un appui ;
+// sinon, un seul bouton ouvre la bibliothèque sur ce repas.
+function EmptyMealSlot({
+  index,
+  label,
+  visual,
+  habit,
+  pending,
+  onAddHabit,
+  onChoose,
+}: {
+  index: number;
+  label: string;
+  visual: (typeof MEAL_VISUALS)[string];
+  habit: HabitualMeal | undefined;
+  pending: boolean;
+  onAddHabit: () => void;
+  onChoose: () => void;
+}) {
+  const Icon = visual.icon;
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ ...TRANSITION, delay: index * 0.04 }}
+      className={`relative overflow-hidden ${CARD} ${habit ? "" : "border-dashed"}`}
+    >
+      <div className="flex items-center gap-3 p-3">
+        <div
+          className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br opacity-70 ring-1 ring-white/10 ${visual.gradient}`}
+        >
+          <Icon className={`h-5 w-5 ${visual.accent}`} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-bold leading-tight">{label}</p>
+          <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+            {habit ? (
+              <>
+                D'habitude ·{" "}
+                <span className="font-semibold text-foreground/80">
+                  {habit.totals.calories.toLocaleString("fr-FR")} kcal
+                </span>
+              </>
+            ) : (
+              "Rien de saisi"
+            )}
+          </p>
+        </div>
+        {habit ? (
+          <>
+            <motion.button
+              whileTap={PRESS_SMALL}
+              type="button"
+              onClick={onAddHabit}
+              disabled={pending}
+              className="inline-flex h-10 shrink-0 items-center gap-1 rounded-full bg-gradient-primary px-3.5 text-xs font-bold text-primary-foreground shadow-glow disabled:opacity-60"
+              aria-label={`Ajouter le repas habituel : ${label}`}
+            >
+              {pending ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Plus className="h-3.5 w-3.5" />
+              )}
+              Ajouter
+            </motion.button>
+            <motion.button
+              whileTap={PRESS_SMALL}
+              type="button"
+              onClick={onChoose}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground"
+              aria-label={`Choisir un aliment : ${label}`}
+            >
+              <Search className="h-4 w-4" />
+            </motion.button>
+          </>
+        ) : (
+          <motion.button
+            whileTap={PRESS_SMALL}
+            type="button"
+            onClick={onChoose}
+            className="inline-flex h-10 shrink-0 items-center gap-1 rounded-full border border-border px-3.5 text-xs font-semibold text-foreground"
+            aria-label={`Ajouter un aliment : ${label}`}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Ajouter
+          </motion.button>
+        )}
+      </div>
+      {habit && (
+        // Ce qui sera ajouté, en clair et en entier : on n'ajoute rien à l'aveugle.
+        <ul className="flex flex-wrap gap-1.5 px-3 pb-3 pl-[4.25rem]">
+          {habit.items.map((it) => (
+            <li
+              key={it.key}
+              className="max-w-full truncate rounded-full bg-muted/60 px-2.5 py-1 text-[11px] font-medium text-muted-foreground"
+            >
+              {it.entry.name}
+              {it.grams != null && (
+                <span className="text-foreground/70"> · {formatGrams(it.grams)}</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </motion.div>
+  );
+}
+
+// ─── Journée bouclée ──────────────────────────────────────────────────────
+// Rituel de fin de journée : « j'ai fini pour aujourd'hui ». Seules les
+// journées complètes (bouclées, ou dîner saisi) entrent dans les moyennes et
+// le TDEE observé — lib/nutrition/dayCompletion.ts.
+function DayClosureCard({
+  completion,
+  isToday,
+  pending,
+  onSetClosed,
+}: {
+  completion: Exclude<DayCompletion, "empty">;
+  isToday: boolean;
+  pending: boolean;
+  onSetClosed: (closed: boolean) => void;
+}) {
+  const done = completion === "closed" || completion === "dinner";
+  const title =
+    completion === "closed"
+      ? "Journée bouclée"
+      : completion === "dinner"
+        ? "Journée complète"
+        : isToday
+          ? "Tu as fini de manger ?"
+          : "Journée incomplète";
+  const text =
+    completion === "closed"
+      ? "Elle compte dans tes moyennes."
+      : completion === "dinner"
+        ? "Dîner saisi : elle compte dans tes moyennes."
+        : isToday
+          ? "Boucle ta journée pour qu'elle compte dans tes moyennes."
+          : "Pas de dîner saisi : elle est exclue de tes moyennes. Tu n'as pas dîné ? Boucle-la.";
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={TRANSITION}
+      className={`flex items-center gap-3 p-3.5 ${CARD} ${done ? "border-emerald-500/30 bg-emerald-500/5" : ""}`}
+    >
+      <span
+        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${
+          done ? "bg-emerald-500/15 text-emerald-500" : "bg-primary/10 text-primary"
+        }`}
+      >
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.span
+            key={done ? "done" : "open"}
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0, opacity: 0 }}
+            transition={POP_SPRING}
+          >
+            {done ? (
+              <Check className="h-5 w-5" strokeWidth={3} />
+            ) : isToday ? (
+              <Moon className="h-5 w-5" />
+            ) : (
+              <AlertTriangle className="h-5 w-5" />
+            )}
+          </motion.span>
+        </AnimatePresence>
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-bold leading-tight">{title}</p>
+        <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">{text}</p>
+      </div>
+      {completion === "open" && (
+        <motion.button
+          whileTap={PRESS_SMALL}
+          type="button"
+          disabled={pending}
+          onClick={() => onSetClosed(true)}
+          className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full bg-gradient-primary px-3.5 text-xs font-bold text-primary-foreground shadow-glow disabled:opacity-60"
+        >
+          {pending ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Check className="h-3.5 w-3.5" />
+          )}
+          Boucler
+        </motion.button>
+      )}
+      {completion === "closed" && (
+        <motion.button
+          whileTap={PRESS_SMALL}
+          type="button"
+          disabled={pending}
+          onClick={() => onSetClosed(false)}
+          className="inline-flex h-10 shrink-0 items-center rounded-full border border-border px-3.5 text-xs font-semibold text-muted-foreground disabled:opacity-60"
+        >
+          Rouvrir
+        </motion.button>
+      )}
+    </motion.div>
   );
 }
 
@@ -1067,7 +1441,7 @@ const COMMAND_SECTIONS: CommandSection[] = [
         action: "copy-yesterday",
         icon: Copy,
         title: "Copier hier",
-        description: "Reproduire les repas d'hier sur ce jour.",
+        description: "Reproduire les repas de la veille sur ce jour.",
       },
       {
         action: "copy-day",
@@ -1134,7 +1508,7 @@ function NutritionCommandCenter({
                 <span className="h-1.5 w-10 rounded-full bg-muted" />
                 <div className="mt-2.5 flex w-full items-center justify-between px-5">
                   <div>
-                    <p className="text-base font-bold tracking-tight">Centre de commandes</p>
+                    <p className="text-base font-bold tracking-tight">Outils Nutrition</p>
                     <p className="text-xs leading-snug text-muted-foreground">
                       Toutes les actions Nutrition, au même endroit.
                     </p>

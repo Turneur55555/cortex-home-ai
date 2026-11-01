@@ -91,6 +91,14 @@ encore un `template_id` — encore une opération `blocked`.
 `CHECK` exigeant `template_id`), `hooks/useWeeklyPlan.test.ts` (patch complet, doublon nettoyé,
 écritures simultanées d'un même jour)
 
+Même règle pour `nutrition_day_closures` (la « journée bouclée », 01/11/2026) : branchée sur le
+moteur offline, **sans `UNIQUE (user_id, date)`** et **sans colonne d'état** — « au moins une ligne »
+= bouclée, rouvrir = supprimer les lignes de la date.
+→ `supabase/migrations/20261101120000_nutrition_day_closures.sql`,
+`src/hooks/useNutritionDayClosures.ts` (`writeNutritionDayClosure`, écriture sérialisée)
+→ vérifié par `lib/nutrition/dayCompletion.test.ts` (scan de la migration),
+`hooks/useNutritionDayClosures.test.ts` (hors ligne, doublon, réouverture)
+
 ### 1.8 Le Service Worker part dans le dossier PUBLIÉ
 
 Sur Lovable, le site est construit dans `dist/client` ; en local et en CI, dans `.output/public`.
@@ -241,6 +249,23 @@ La base fait foi. Migration → merge → `npm run gen:types` → commit. **Jama
 - **Aucun test désactivé** hors des deux fichiers d'intégration env-gated
   (`security/rls.test.ts`, `nutrition/nutritionMealCheck.test.ts`) — la CI échoue sinon.
 - Mobile first, toujours.
+
+---
+
+## 6. Nutrition
+
+### 6.1 Une journée incomplète n'entre dans aucune moyenne
+
+Une journée nutrition ne compte dans une moyenne (historique 7 / 30 j) ni dans le TDEE observé
+que si elle est **complète** : bouclée par le joueur, ou dîner saisi. Une journée entamée sans
+l'un ni l'autre est une **absence de donnée, jamais une sous-consommation** (mesure du 01/11/2026 :
+dîner saisi 7 jours sur 27, moyenne affichée 1 091 kcal pour des journées réelles à ~1 800). Une
+journée vide n'est jamais comptée comme « 0 kcal ». La complétude se dérive à la lecture, elle
+n'est jamais stockée.
+→ `src/lib/nutrition/dayCompletion.ts` (`dayCompletion`, `completeDates`,
+`averageOverCompleteDays`), `src/lib/fitness/adaptiveTdee.ts` (`completeDates`)
+→ vérifié par `lib/nutrition/dayCompletion.test.ts`, `lib/fitness/adaptiveTdee.test.ts`
+(« journées nutrition incomplètes »)
 
 ---
 

@@ -156,6 +156,15 @@ export interface AdaptiveTdeeInput {
   modeledTdeeKcal: number | null;
   /** Date "aujourd'hui" (YYYY-MM-DD) — fournie par l'appelant pour un moteur pur et testable. */
   today: string;
+  /**
+   * Journées nutrition COMPLÈTES (bouclées par le joueur, ou dîner saisi —
+   * `lib/nutrition/dayCompletion.ts::completeDates`). Fourni : un jour entamé
+   * mais incomplet est traité comme une absence de donnée, exactement comme un
+   * jour sans aucune ligne — sinon un dîner non noté se lirait comme un déficit
+   * de 700 kcal et ferait chuter le TDEE observé d'autant. Absent :
+   * comportement historique (tout jour avec au moins une ligne compte).
+   */
+  completeDates?: ReadonlySet<string>;
 }
 
 // ---------------------------------------------------------------------
@@ -354,12 +363,15 @@ function computeNutritionCoverage(
   startDate: string,
   endDate: string,
   calendarDays: number,
+  completeDates?: ReadonlySet<string>,
 ): AdaptiveTdeeNutrition {
   const totalsByDay = new Map<string, number>();
   const daysWithLog = new Set<string>();
 
   for (const log of logs) {
     if (!isValidDateString(log.date) || log.date < startDate || log.date > endDate) continue;
+    // Journée incomplète = absence de donnée (voir AdaptiveTdeeInput.completeDates).
+    if (completeDates && !completeDates.has(log.date)) continue;
     daysWithLog.add(log.date);
     const calories =
       typeof log.calories === "number" && Number.isFinite(log.calories) && log.calories >= 0
@@ -529,7 +541,13 @@ export function computeAdaptiveTdee(input: AdaptiveTdeeInput): AdaptiveTdeeResul
   const calendarDays = daysBetweenISO(startDate, endDate) + 1;
 
   const weight = computeWeightTrend(input.weightSamples, startDate, endDate);
-  const nutrition = computeNutritionCoverage(input.nutritionLogs, startDate, endDate, calendarDays);
+  const nutrition = computeNutritionCoverage(
+    input.nutritionLogs,
+    startDate,
+    endDate,
+    calendarDays,
+    input.completeDates,
+  );
 
   const { status, reason } = determineStatus(calendarDays, weight, nutrition);
   const confidence = determineConfidence(status, calendarDays, weight.measurementCount, nutrition);

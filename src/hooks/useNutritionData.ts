@@ -89,7 +89,9 @@ export function useNutritionRange(startDate: string, endDate: string) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("nutrition")
-        .select("date, calories")
+        // `meal` : la complétude d'une journée (dîner saisi) en dépend —
+        // lib/nutrition/dayCompletion.ts.
+        .select("date, meal, calories")
         .gte("date", startDate)
         .lte("date", endDate);
       if (error) throw error;
@@ -120,25 +122,44 @@ export function useAddNutrition() {
   });
 }
 
-export function useAddNutritionBatch() {
+/**
+ * Ajoute plusieurs aliments d'un coup et renvoie les lignes créées (pour
+ * permettre « Annuler »). `silent` : pas de toast de succès générique —
+ * l'appelant affiche le sien.
+ */
+export function useAddNutritionBatch(options: { silent?: boolean } = {}) {
   const qc = useQueryClient();
   const { user } = useAuth();
+  const silent = options.silent ?? false;
   return useMutation({
-    mutationFn: async (inputs: Array<Omit<TablesInsert<"nutrition">, "user_id">>) => {
-      if (inputs.length === 0) return;
+    mutationFn: async (
+      inputs: Array<Omit<TablesInsert<"nutrition">, "user_id">>,
+    ): Promise<NutritionRow[]> => {
+      if (inputs.length === 0) return [];
       if (!user) throw new Error("Non authentifié");
+      const created: NutritionRow[] = [];
       for (const input of inputs) {
-        await nutritionRepo.create(
-          user.id,
-          input as unknown as Omit<NutritionRow, "id" | "user_id" | "created_at" | "updated_at">,
+        created.push(
+          await nutritionRepo.create(
+            user.id,
+            input as unknown as Omit<NutritionRow, "id" | "user_id" | "created_at" | "updated_at">,
+          ),
         );
       }
+      return created;
     },
     onSuccess: (_d, vars) => {
       const n = vars.length;
-      toast.success(`${n} aliment${n > 1 ? "s" : ""} ajouté${n > 1 ? "s" : ""}`);
+      if (!silent) toast.success(`${n} aliment${n > 1 ? "s" : ""} ajouté${n > 1 ? "s" : ""}`);
       const date = vars[0]?.date as string | undefined;
-      if (date) qc.invalidateQueries({ queryKey: ["nutrition", date] });
+      if (date) {
+        logActivity("meal", `${n} aliment${n > 1 ? "s" : ""} ajouté${n > 1 ? "s" : ""}`, {
+          date,
+        });
+        qc.invalidateQueries({ queryKey: ["nutrition", date] });
+      }
+      qc.invalidateQueries({ queryKey: ["user_activity"] });
+      qc.invalidateQueries({ queryKey: ["activity_streak"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });

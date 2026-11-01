@@ -13,11 +13,12 @@ import {
   parseDecimal,
   formatDecimal,
   saveLastWeight,
-  loadSavedWeight,
-  buildGramPresets,
+  startingGrams,
   calculateNutritionFromGrams,
   per100FromFood,
 } from "@/lib/nutrition/weight";
+import { foodKey } from "@/lib/nutrition/habits";
+import { useTypicalGrams } from "@/hooks/useNutritionHabits";
 import { calculateCaloriesFromMacros } from "@/lib/nutrition/macros";
 
 import { detectMealFromHour, isMealSlug, type MealSlug } from "@/lib/nutrition/meals";
@@ -95,6 +96,7 @@ interface NutritionSheetProps {
 
 export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) {
   const add = useAddNutrition();
+  const typicalGrams = useTypicalGrams();
 
   // Aliment de référence sélectionné (autocomplete).
   const [baseFood, setBaseFood] = useState<FoodSuggestion | null>(null);
@@ -160,12 +162,10 @@ export function NutritionSheet({ date, onClose, prefill }: NutritionSheetProps) 
     (food: FoodSuggestion) => {
       setBaseFood(food);
       setForm((f) => ({ ...f, name: food.name }));
-      const saved = loadSavedWeight(food);
-      const presets = buildGramPresets(food);
-      const startGrams = saved ?? presets[1]?.grams ?? 100;
+      const startGrams = startingGrams(food, typicalGrams.get(foodKey(food.name)));
       applyWeightText(formatDecimal(startGrams), food);
     },
-    [applyWeightText],
+    [applyWeightText, typicalGrams],
   );
 
   // Poids courant dérivé du texte saisi — jamais stocké séparément.
