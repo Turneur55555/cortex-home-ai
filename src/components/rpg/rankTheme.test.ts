@@ -1,8 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { readdirSync, readFileSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { RANK_TIERS, type RankKey } from "@/lib/fitness/exerciseRanks";
 import {
   MATERIAL_GRAIN,
   RANK_AMBIANCE,
+  applyRankTheme,
+  rankButtonGlowShadow,
   rankGlowShadow,
   rankRelief,
   rankRingInset,
@@ -45,15 +49,198 @@ describe("rankRingInset", () => {
   });
 });
 
+/**
+ * Lecture d'une valeur `box-shadow` selon la grammaire CSS (`inset? && <length>{2,4} && <color>?`,
+ * calques séparés par des virgules hors parenthèses). Renvoie `null` si un calque est invalide —
+ * exactement le cas où le navigateur ignore la propriété ENTIÈRE.
+ */
+interface ShadowLayer {
+  inset: boolean;
+  lengths: number[];
+  color: string | null;
+}
+
+function splitTopLevel(value: string, separator: "," | " "): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let current = "";
+  for (const char of value) {
+    if (char === "(") depth += 1;
+    if (char === ")") depth -= 1;
+    const isSeparator = separator === " " ? /\s/.test(char) : char === separator;
+    if (isSeparator && depth === 0) {
+      if (current.trim()) parts.push(current.trim());
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  if (current.trim()) parts.push(current.trim());
+  return parts;
+}
+
+const LENGTH = /^(-?(?:\d+\.?\d*|\.\d+))(px)?$/;
+
+function parseBoxShadow(value: string): ShadowLayer[] | null {
+  const layers: ShadowLayer[] = [];
+  for (const raw of splitTopLevel(value, ",")) {
+    const layer: ShadowLayer = { inset: false, lengths: [], color: null };
+    for (const token of splitTopLevel(raw, " ")) {
+      const length = LENGTH.exec(token);
+      if (token === "inset" && !layer.inset) {
+        layer.inset = true;
+      } else if (length) {
+        // Une longueur non nulle exige son unité ; les longueurs forment un bloc contigu.
+        const n = Number(length[1]);
+        if (n !== 0 && !length[2]) return null;
+        if (layer.color !== null && layer.lengths.length === 0) return null;
+        layer.lengths.push(n);
+      } else if (layer.color === null) {
+        layer.color = token;
+      } else {
+        return null;
+      }
+    }
+    if (layer.lengths.length < 2 || layer.lengths.length > 4) return null;
+    // Le flou (3e longueur) ne peut jamais être négatif.
+    if (layer.lengths.length >= 3 && layer.lengths[2] < 0) return null;
+    layers.push(layer);
+  }
+  return layers.length > 0 ? layers : null;
+}
+
+describe("parseBoxShadow (outil du test)", () => {
+  it("rejette l'ancienne sortie à trois longueurs avec un étalement négatif (flou négatif)", () => {
+    expect(parseBoxShadow("0px 24px -12px rgba(0,0,0,0.5)")).toBeNull();
+  });
+
+  it("rejette toute la déclaration quand un seul calque est invalide", () => {
+    expect(parseBoxShadow("inset 0 0 0 1px #fff, 0px 22px -10px red")).toBeNull();
+  });
+
+  it("accepte une ombre à quatre longueurs avec un étalement négatif", () => {
+    expect(parseBoxShadow("0 -10px 60px -28px rgba(239,68,68,0.55)")).toEqual([
+      { inset: false, lengths: [0, -10, 60, -28], color: "rgba(239,68,68,0.55)" },
+    ]);
+  });
+});
+
 describe("rankGlowShadow", () => {
-  it("assemble y/blur/spread autour de la couleur de halo", () => {
+  it("produit quatre longueurs : décalage x nul, puis y, flou, étalement", () => {
     expect(rankGlowShadow("rgba(239,68,68,0.55)", 10, 28, -14)).toBe(
-      "10px 28px -14px rgba(239,68,68,0.55)",
+      "0 10px 28px -14px rgba(239,68,68,0.55)",
     );
   });
 
-  it("supporte un spread positif ou nul", () => {
-    expect(rankGlowShadow("red", 0, 16, 0)).toBe("0px 16px 0px red");
+  it("garde une ombre VALIDE quand l'étalement est négatif (régression du 02/11/2026)", () => {
+    const layers = parseBoxShadow(rankGlowShadow("rgba(239,68,68,0.55)", -20, 80, -24));
+    expect(layers).not.toBeNull();
+    expect(layers![0].lengths).toEqual([0, -20, 80, -24]);
+    expect(layers![0].color).toBe("rgba(239,68,68,0.55)");
+  });
+
+  it("reste valide une fois concaténée à un liseré (le liseré ne disparaît plus avec elle)", () => {
+    const value = `${rankRingInset("#b91c1c", "55")}, ${rankGlowShadow("red", 0, 22, -10)}`;
+    expect(parseBoxShadow(value)).toHaveLength(2);
+  });
+
+  it("supporte un étalement positif ou nul", () => {
+    expect(rankGlowShadow("red", 0, 16, 0)).toBe("0 0px 16px 0px red");
+    expect(parseBoxShadow(rankGlowShadow("red", 0, 16, 6))).not.toBeNull();
+  });
+
+  it("borne un flou négatif à 0 au lieu de produire une déclaration invalide", () => {
+    const value = rankGlowShadow("red", 0, -8, -4);
+    expect(value).toBe("0 0px 0px -4px red");
+    expect(parseBoxShadow(value)).not.toBeNull();
+  });
+});
+
+describe("applyRankTheme — ombres injectées dans les variables CSS", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it.each(RANK_TIERS.map((tier) => tier.key))(
+    "%s : --shadow-glow, --shadow-card et --shadow-elevated sont des box-shadow valides",
+    (key) => {
+      const props = new Map<string, string>();
+      vi.stubGlobal("document", {
+        documentElement: {
+          style: { setProperty: (name: string, v: string) => props.set(name, v) },
+        },
+      });
+
+      applyRankTheme(key);
+
+      for (const name of ["--shadow-glow", "--shadow-card", "--shadow-elevated"]) {
+        expect(props.get(name), name).toBeDefined();
+        expect(parseBoxShadow(props.get(name)!), `${name} = ${props.get(name)}`).not.toBeNull();
+      }
+      // Le halo partagé (`.shadow-glow`) suit la forme de la valeur par défaut de styles.css :
+      // `0 0 <flou> <étalement> <couleur>`.
+      expect(props.get("--shadow-glow")).toBe(rankButtonGlowShadow(key));
+      expect(parseBoxShadow(props.get("--shadow-glow")!)![0].lengths.slice(0, 2)).toEqual([0, 0]);
+    },
+  );
+});
+
+describe("rankButtonGlowShadow — lueur des boutons principaux", () => {
+  it("garde le halo d'ambiance des rangs jusqu'à l'Olympien", () => {
+    for (const key of ["mortel", "guerrier", "heros", "colosse", "olympien"] as const) {
+      const { shadowBlur, shadowSpread } = RANK_AMBIANCE[key];
+      expect(rankButtonGlowShadow(key)).toBe(
+        rankGlowShadow(rankThemeByKey(key).glow, 0, shadowBlur, shadowSpread),
+      );
+    }
+  });
+
+  it("borne Titan au halo le plus large des autres rangs (pas de voile blanc sous les boutons)", () => {
+    const [titan] = parseBoxShadow(rankButtonGlowShadow("titan"))!;
+    const others = (["mortel", "guerrier", "heros", "colosse", "olympien"] as const).map(
+      (key) => parseBoxShadow(rankButtonGlowShadow(key))![0].lengths,
+    );
+    expect(titan.lengths[2]).toBe(Math.max(...others.map((l) => l[2])));
+    expect(titan.lengths[3]).toBe(Math.max(...others.map((l) => l[3])));
+    expect(titan.lengths[2]).toBeLessThan(RANK_AMBIANCE.titan.shadowBlur);
+    expect(titan.color).toBe(rankThemeByKey("titan").glow);
+  });
+});
+
+describe("rankGlowShadow — appels dans src/", () => {
+  // Avant le 02/11/2026, la sortie à trois longueurs décalait la lecture d'un cran :
+  // `rankGlowShadow(glow, 0, 0, 12)` se lisait « flou 12 » et `rankGlowShadow(glow, 0, 14, 32)`
+  // « y 14, flou 32 ». Relus avec la signature réelle, ces appels deviennent un anneau plein ou un
+  // étalement de 32 px. Signature commune : un étalement positif, que les halos de rang n'utilisent
+  // jamais. Un halo doux s'écrit `rankGlowShadow(glow, 0, 12, 0)`, une ombre portée
+  // `rankGlowShadow(glow, 14, 32, 0)`.
+  const SRC = resolve(process.cwd(), "src");
+
+  function sourceFiles(dir: string): string[] {
+    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const path = join(dir, entry.name);
+      if (entry.isDirectory()) return sourceFiles(path);
+      return /\.tsx?$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name) ? [path] : [];
+    });
+  }
+
+  it("aucun appel ne passe un étalement positif (ancienne lecture à trois longueurs)", () => {
+    const offenders: string[] = [];
+    for (const file of sourceFiles(SRC)) {
+      const source = readFileSync(file, "utf8");
+      for (const match of source.matchAll(/rankGlowShadow\(([^()]*(?:\([^()]*\)[^()]*)*)\)/g)) {
+        const args = splitTopLevel(match[1], ",");
+        if (args.length !== 4) continue;
+        const blur = args[2].trim();
+        const spread = args[3].trim();
+        const positiveLiteral = /^\d*\.?\d+$/.test(spread) && Number(spread) > 0;
+        const spreadWithoutBlur = blur === "0" && spread !== "0" && !spread.startsWith("-");
+        if (positiveLiteral || spreadWithoutBlur) {
+          offenders.push(`${relative(SRC, file)} : ${match[0]}`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
   });
 });
 
@@ -61,14 +248,21 @@ describe("rankSurfaceShadow", () => {
   it("combine liseré (alpha par défaut) et halo", () => {
     const theme = { primary: "#2563eb", glow: "rgba(234,179,8,0.6)" };
     expect(rankSurfaceShadow(theme, { y: 10, blur: 40, spread: -20 })).toBe(
-      "inset 0 0 0 1px #2563eb30, 10px 40px -20px rgba(234,179,8,0.6)",
+      "inset 0 0 0 1px #2563eb30, 0 10px 40px -20px rgba(234,179,8,0.6)",
     );
   });
 
   it("respecte un ringAlpha personnalisé", () => {
     const theme = { primary: "#2563eb", glow: "rgba(234,179,8,0.6)" };
     expect(rankSurfaceShadow(theme, { ringAlpha: "55", y: 6, blur: 22, spread: -12 })).toBe(
-      "inset 0 0 0 1px #2563eb55, 6px 22px -12px rgba(234,179,8,0.6)",
+      "inset 0 0 0 1px #2563eb55, 0 6px 22px -12px rgba(234,179,8,0.6)",
+    );
+  });
+
+  it("reste une déclaration valide (liseré + halo) avec un étalement négatif", () => {
+    const theme = { primary: "#2563eb", glow: "rgba(234,179,8,0.6)" };
+    expect(parseBoxShadow(rankSurfaceShadow(theme, { y: 30, blur: 80, spread: -30 }))).toHaveLength(
+      2,
     );
   });
 

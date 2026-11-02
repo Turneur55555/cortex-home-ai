@@ -182,7 +182,7 @@ function ProgressionPage() {
               style={{
                 width: `${clampedPercent}%`,
                 background: theme.gradient,
-                boxShadow: `${rankGlowShadow(theme.glow, 0, 0, 12)}, inset 0 1px 0 rgba(255,255,255,0.55), inset 0 -2px 4px rgba(0,0,0,0.4)`,
+                boxShadow: `${rankGlowShadow(theme.glow, 0, 12, 0)}, inset 0 1px 0 rgba(255,255,255,0.55), inset 0 -2px 4px rgba(0,0,0,0.4)`,
               }}
             />
           </div>

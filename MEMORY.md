@@ -22,6 +22,34 @@
 ## Dernière mise à jour
 2026-11-02
 
+## Halos de rang : `rankGlowShadow` produisait une ombre invalide (2026-11-02)
+`rankGlowShadow(glow, y, blur, spread)` renvoyait `${y}px ${blur}px ${spread}px ${glow}` : **trois**
+longueurs, que le CSS lit `offset-x offset-y flou`. Dès que le 4e argument (« étalement ») était négatif,
+le flou devenait négatif : déclaration `box-shadow` invalide, le navigateur ignorait **toute** la
+propriété, liseré `rankRingInset` et ombres concaténées compris. Constaté sur la carte de force de
+l'Accueil, puis mesuré dans Chromium (Playwright) : `box-shadow: none` sur la carte de récompense, la
+carte récap, son médaillon de rang et **tous les boutons `.shadow-glow`** (la variable `--shadow-glow`
+posée par `applyRankTheme` était invalide depuis son introduction : `0px 42px -8px` pour l'Olympien).
+- **Correctif** : `0 ${y}px ${max(0, blur)}px ${spread}px ${glow}` (décalage x nul, flou borné à 0).
+  Les appels écrits pour l'ancienne lecture gardent leur rendu exact : `(glow, 0, 0, N)` (lu « flou N »)
+  devient `(glow, 0, N, 0)` dans `ClassCard` et `progression.tsx` ; dans la carte de force de
+  l'Accueil (`ProfileHeroCard`, réécrite le même jour), `(glow, 0, 14, 32)` et `(glow, 0, 6, 18)`
+  (lus « y 14, flou 32 » et « y 6, flou 18 ») deviennent `(glow, 14, 32, 0)` et `(glow, 6, 18, 0)`.
+  Les autres appels (étalement négatif) retrouvent le halo prévu : `RankIllustration` (repli),
+  `PromotionHistoryTimeline`, `ShareSignature`, `WeekShareCard`, `livreParts` (`RankPill`),
+  `ExerciseRankBadge`, `SessionRewardScreen`, `SessionRecapCard` (×2), et tous les
+  `rankSurfaceShadow` (`ExerciseRankCard`, `ExerciseRankShareSheet`).
+- **Vérifié à l'écran** (iPhone 402×874, séance réelle « Dos » du 02/11, 20 séries, +100 XP, rang
+  Olympien) : halo doré mesuré au-dessus de la carte de récompense, halo discret sur la carte récap et
+  sous le médaillon. Contrôle des extrêmes (Mortel, Titan) : Titan (flou 60, étalement −4, blanc 0,75)
+  laissait un voile blanc sous les boutons principaux. **Décision** : nouveau
+  `rankButtonGlowShadow(key)` qui alimente `--shadow-glow`, plafonné à flou ≤ 46 / étalement ≤ −8 ;
+  seul Titan change (46/−8), les cinq autres rangs gardent leur ambiance. Les halos de carte ne sont
+  pas plafonnés.
+- **Garde-fous** (`rankTheme.test.ts`) : analyse de la valeur selon la grammaire `box-shadow` (2 à 4
+  longueurs, flou ≥ 0, un calque invalide invalide tout) appliquée au helper, à `rankSurfaceShadow` et
+  aux trois variables d'ombre posées par `applyRankTheme` pour les 6 rangs ; scan de `src/` qui refuse
+  le retour de l'ancien contournement `rankGlowShadow(x, y, 0, N>0)` (anneau plein sans flou).
 ## Accueil — la carte de force (« carte obsidienne »), sous « Ton rythme » (2026-11-02, `main`)
 Choix de Nathan sur maquettes (3 cartes, puis 3 placements, en images) : la carte n°3, sur
 l'Accueil, **sous « Ton rythme »** (« oui je le vois bien mais en dessous de ton rythme »).

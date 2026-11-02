@@ -78,7 +78,7 @@ export function ProfileHeroCard() {
         className="relative overflow-hidden rounded-[24px] p-3.5"
         style={{
           background: surface,
-          boxShadow: `${rankRingInset(theme.primary, "8c")}, ${rankGlowShadow(theme.glow, 0, 14, 32)}`,
+          boxShadow: `${rankRingInset(theme.primary, "8c")}, ${rankGlowShadow(theme.glow, 14, 32, 0)}`,
         }}
       >
         <Link
@@ -102,7 +102,7 @@ export function ProfileHeroCard() {
             className="relative w-[92px] shrink-0 overflow-hidden rounded-xl"
             style={{
               aspectRatio: "4 / 5",
-              boxShadow: `${rankRingOutset(theme.secondary, "b3")}, ${rankGlowShadow(theme.glow, 0, 6, 18)}`,
+              boxShadow: `${rankRingOutset(theme.secondary, "b3")}, ${rankGlowShadow(theme.glow, 6, 18, 0)}`,
             }}
           >
             <RankIllustration

@@ -78,7 +78,7 @@ export function ClassCard({ workouts, rankAggregate }: Props) {
     "0 6px 14px -10px rgba(0,0,0,0.5)",
     rankRelief(theme, amb.reliefAlpha),
     rankRingInset(theme.secondary, "45"),
-    rankGlowShadow(theme.glow, 0, 0, Math.round(amb.shadowBlur * 0.6)),
+    rankGlowShadow(theme.glow, 0, Math.round(amb.shadowBlur * 0.6), 0),
   ].join(", ");
 
   if (!result) return null;

@@ -61,9 +61,21 @@ export function rankGrooveShadow(secondary: string): string {
   return `inset 0 2px 6px rgba(0,0,0,0.78), inset 0 -1px 0 ${secondary}22`;
 }
 
-/** Ombre portée diffuse, teintée par le halo du rang (élévation "précieuse"). */
+/**
+ * Ombre portée diffuse, teintée par le halo du rang (élévation "précieuse").
+ *
+ * Produit TOUJOURS les quatre longueurs de `box-shadow` : `0 y flou étalement` (aucun décalage
+ * horizontal). Avec trois longueurs seulement, le navigateur lit `offset-x offset-y flou` : un
+ * étalement négatif devient alors un flou négatif, la déclaration est invalide et le navigateur
+ * ignore TOUTE la propriété — liseré `rankRingInset` et autres ombres concaténées compris (bug
+ * corrigé le 02/11/2026). Le flou est borné à 0 pour la même raison : un flou négatif n'est
+ * jamais valide.
+ *
+ * Un halo doux s'écrit avec un flou (`0, 12, 0`), jamais avec un étalement sans flou
+ * (`0, 0, 12`), qui dessinerait un anneau plein.
+ */
 export function rankGlowShadow(glow: string, y: number, blur: number, spread: number): string {
-  return `${y}px ${blur}px ${spread}px ${glow}`;
+  return `0 ${y}px ${Math.max(0, blur)}px ${spread}px ${glow}`;
 }
 
 /** Combine liseré + halo — le habillage de surface le plus fréquent (cartes, boutons). */
@@ -222,6 +234,28 @@ export const RANK_AMBIANCE: Record<RankKey, RankAmbiance> = {
   },
 };
 
+/**
+ * Plafond de la lueur partagée des boutons (`--shadow-glow`, utilitaire `.shadow-glow` porté par
+ * les boutons principaux de toute l'app) : le flou le plus large (Colosse) et l'étalement le plus
+ * ouvert (Olympien) des cinq premiers rangs, qui restent donc inchangés. Seul Titan est borné : son
+ * halo d'ambiance (flou 60, étalement −4, blanc à 0,75) convient à une carte, mais sous un bouton
+ * de 48 px il forme un voile blanc qui déborde largement (constaté à l'écran le 02/11/2026, quand
+ * ces halos sont redevenus visibles).
+ */
+const BUTTON_GLOW_MAX_BLUR = 46;
+const BUTTON_GLOW_MAX_SPREAD = -8;
+
+/** Lueur des boutons principaux pour un rang (valeur de `--shadow-glow`). */
+export function rankButtonGlowShadow(key: RankKey): string {
+  const ambiance = RANK_AMBIANCE[key];
+  return rankGlowShadow(
+    rankThemeByKey(key).glow,
+    0,
+    Math.min(ambiance.shadowBlur, BUTTON_GLOW_MAX_BLUR),
+    Math.min(ambiance.shadowSpread, BUTTON_GLOW_MAX_SPREAD),
+  );
+}
+
 /** Bevel/relief haut de surface, teinté par le texte du rang (clair), intensité par ambiance. */
 export function rankRelief(theme: RankTheme, alpha: number): string {
   return `inset 0 1px 0 ${theme.text}${Math.round(alpha * 255)
@@ -268,10 +302,7 @@ export function applyRankTheme(key: RankKey): void {
     "--gradient-glow",
     `radial-gradient(circle at 50% 0%, ${theme.glow}, transparent 60%)`,
   );
-  root.style.setProperty(
-    "--shadow-glow",
-    rankGlowShadow(theme.glow, 0, ambiance.shadowBlur, ambiance.shadowSpread),
-  );
+  root.style.setProperty("--shadow-glow", rankButtonGlowShadow(key));
 
   // Matériaux : surfaces/cartes/bordures/séparateurs — intensité (surfaceMix/
   // borderMix) propre au rang, pour que le matériau se voie (plus de cartes
