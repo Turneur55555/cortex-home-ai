@@ -40,6 +40,16 @@ CORTEX vise à être **le plus beau RPG de progression du fitness**, pas une app
   aurait-il envie d'en faire une capture d'écran et de la partager ? »* Si non, on continue d'itérer.
   Mieux vaut plusieurs itérations sur un écran exceptionnel qu'un écran « correct ».
 
+## Propositions — toujours en images (demande de Nathan, 02/11/2026)
+- **Toute proposition d'écran, de design ou d'évolution visuelle se montre en images** : des captures
+  d'écran au format iPhone (rendu réel, données réelles), jamais une simple liste de texte. Nathan a
+  besoin de voir pour comprendre et choisir. Le texte n'accompagne que l'image (une ligne par idée).
+- Proposer **plusieurs variantes côte à côte** (3 par défaut), en partant de l'écran actuel quand il
+  le préfère, et en citant les apps de référence quand il en donne (Life Reset, RepFlow, Basalt Lab,
+  HY AI… — novembre 2026).
+- Données réelles uniquement, et **rien d'antérieur à février 2026** (demande de Nathan,
+  02/11/2026 : l'historique importé 2018 → janvier 2026 ne sert de base à aucune proposition).
+
 ## Types Supabase — la base est la source de vérité (validé par Nathan, 17/07/2026)
 - **Ne JAMAIS éditer `src/integrations/supabase/types.ts` à la main.** C'est un artefact généré.
 - Pour ajouter/modifier une table : écrire une migration → merger (migrate.yml applique) → régénérer

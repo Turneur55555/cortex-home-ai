@@ -22,6 +22,25 @@
 ## Dernière mise à jour
 2026-11-02
 
+## Accueil — propositions en images, références App Store (2026-11-02, `main`)
+Après « Je l'ai faite » et la fiche de personnage, Nathan a refusé trois séries de propositions
+texte (retouches, puis « L'Ombre / Ta Légende depuis 2018 / Atlas… », puis trois maquettes
+radicales : Sanctuaire, Fresque, Manifeste) : il **préfère son Accueil actuel**. Il a donné ses
+références : **Life Reset** (66 jours, quêtes, noir/orange façon anime), **RepFlow – Suivi
+Musculation** (FR, carte de force Bronze → Élite, coach « Spot » qui prépare la charge), **Basalt
+Lab – Carnet Musculation** (noir/orange, étiquettes mono, « ta séance précédente rejouée »), **HY AI**
+(Hyrox, photo du tableau). « ZTC » introuvable. Captures App Store regardées (catalogue `itunes.apple.com`
++ images `mzstatic`, accès réseau ouvert par Nathan ; l'outil WebFetch gardait l'ancien refus, `curl` passait).
+- **Deux règles permanentes ajoutées à `CLAUDE.md`** : toute proposition de design se montre **en
+  images** (captures iPhone, données réelles, 3 variantes) ; **rien d'antérieur à février 2026**
+  (l'historique importé 2018 → janvier ne sert de base à aucune proposition).
+- Trois écrans livrés en images (non construits dans l'app) : **Le Coach** (façon RepFlow : « C'est
+  jour d'Épaule, Nathan. », « À battre : 60 kg × 10 », carte de joueur PEC 70 · DOS 80 · ÉPA 60 · BRAS 25),
+  **Le Labo** (façon Basalt : séance détaillée « dernière fois », tuiles, régularité depuis février
+  = 120 jours, ce qui monte / stagne), **La Quête** (façon Life Reset : « SÉANCE 2 / 5 », quêtes du
+  jour, barre segmentée, records par groupe ▲). Faits utilisés : série 5 semaines, écarté vis-à-vis
+  9,1 → 17,5 kg depuis juin, tirage vertical serré 70 kg sur 21 séances, Éternel à 1 191 XP.
+- Maquettes HTML jetables (scratchpad), non commitées. En attente du choix de Nathan.
 ## Séries en suspens de l'historique — comptées ET cochées (2026-11-02, production)
 Décision de Nathan sur la question ouverte de l'audit ci-dessous : « compte les séries et coche
 les cases ». Les séries saisies mais non cochées des séances passées COMPTENT (aucun chiffre passé
