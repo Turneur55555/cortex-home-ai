@@ -41,6 +41,7 @@ describe("MAJ-08 — la progression RPG est rafraîchie après une synchronisati
     ["src/hooks/useUserStats.ts", "XP / Niveau (source du Rang affiché)"],
     ["src/hooks/useRankPromotions.ts", "historique des promotions de Rang"],
     ["src/hooks/useSessionReward.ts", "récompense de fin de séance"],
+    ["src/hooks/useWeeklyXp.ts", "XP de la semaine (fiche de personnage)"],
   ] as const;
 
   it.each(RPG_SERVER_QUERIES)("%s porte le marqueur server-confirmed (%s)", (file) => {

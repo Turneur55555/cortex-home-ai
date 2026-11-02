@@ -5,7 +5,6 @@ import { TodayOutfitTile } from "@/components/home/TodayOutfitTile";
 import { WeekReportTeaser } from "@/components/week/WeekReportTeaser";
 import { WeekPlanCard } from "@/components/fitness/plan/WeekPlanCard";
 import { ProfileHeroCard } from "@/components/profile/ProfileHeroCard";
-import { RPGProgressionSection } from "@/components/profile/rpg/RPGProgressionSection";
 
 export const Route = createFileRoute("/_authenticated/")({
   head: () => ({
@@ -18,8 +17,11 @@ export const Route = createFileRoute("/_authenticated/")({
 });
 
 // Accueil : l'ACTION D'ABORD (décision de Nathan, 30/09/2026), puis le Rang.
-//   Carte du jour → (bandeau « Ta semaine est prête », lundi et mardi) → ta semaine →
-//   illustration du Titre → progression → Corps → Tenue du jour (Dressing, invisible si vide).
+//   Carte du jour → (bandeau « Ta semaine est prête », lundi et mardi) → fiche de personnage →
+//   ta semaine → Corps → Tenue du jour (Dressing, invisible si vide).
+// La fiche de personnage (01/11/2026) fond l'illustration du Titre et la carte de progression
+// en un seul objet, placé JUSTE sous la Carte du jour pour être vu sans défiler : avant, la
+// barre « Plus que X XP avant … » tombait sous la ligne de flottaison d'un iPhone.
 // La Carte du jour dit quoi faire aujourd'hui, uniquement par des faits (voir
 // lib/fitness/todayCard.ts) ; la semaine n'apparaît que si un plan existe (sans
 // plan, c'est la Carte du jour qui invite à en créer un).
@@ -33,11 +35,10 @@ function HomePage() {
     <main className="flex flex-1 flex-col px-5 pb-4 pt-[max(1.25rem,calc(env(safe-area-inset-top)+0.375rem))]">
       <TodayCard />
       <WeekReportTeaser />
-      <div className="mb-4 empty:hidden">
+      <ProfileHeroCard />
+      <div className="empty:hidden">
         <WeekPlanCard hideInvitation />
       </div>
-      <ProfileHeroCard />
-      <RPGProgressionSection />
       <CorpsShortcutTile />
       <TodayOutfitTile />
     </main>

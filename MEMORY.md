@@ -22,6 +22,66 @@
 ## Dernière mise à jour
 2026-11-02
 
+## Accueil — « Je l'ai faite » (saisie après coup) + fiche de personnage (2026-11-02, `main`)
+Demande de Nathan : « J'adore la 1 et la 2, fais-le » (propositions d'amélioration de l'Accueil,
+fondées sur la production : semaine du 26/10 tenue à **5/5**, mais **6 séances sur 7 saisies après
+coup** depuis le 19/10 — 26 et 27/10 rattrapées le 29 à 16 h 29 via « Enregistrer comme séance
+passée » (0 série détaillée, durée nulle), 28 et 29/10 démarrées en direct puis cochées en 1-2 min
+(durée « 1 min ») ; seule celle du 30/10 vécue en direct (39 min). Titre : 71 909 XP, **1 291 XP
+avant Éternel**, +745 XP la semaine dernière dont 200 d'une montée de rang d'exercice SANS séance).
+- **N°1 « Je l'ai faite »** — module pur `lib/fitness/doneSession.ts` : pré-remplissage avec les
+  séries COCHÉES de la dernière séance terminée du même nom (sinon les défauts de la séance
+  sauvegardée ; sinon `null` → aucun bouton), conventions de « Refaire en live » pour l'ancien
+  format, durée proposée = dernière durée réelle (≥ 10 min, plausible) du même nom, sinon de la
+  dernière séance, arrondie à 5 (jamais enregistrée sans être vue), validation via
+  `parseSetFieldInput` (charge vide = à compléter, 0 = poids du corps ; ligne vide ignorée),
+  champs au format français (« 62,5 »). Mutation **`useLogDoneWorkout`** (`use-fitness.ts`) :
+  séance créée ACTIVE (garde §2.1), exercices + séries cochées (résumé historique écrit à la
+  création avec `summarizeExerciseSetsForHistory`), PUIS clôture sous `runExclusiveSessionClosure`
+  avec `neverMergeIntoPendingCreate` + `dependsOnRecords` — le trigger d'XP voit les séries
+  (INVARIANTS §3.5). Feuille `components/fitness/session/DoneSessionSheet.tsx` (AppSheet : exercices
+  dépliables, case « pas fait cette fois », puces de durée, pied collant « Valider · N séries · X kg
+  · N min ») ; flux `components/home/DoneSessionFlow.tsx` → **le même écran de récompense et la
+  même carte récap qu'en direct** (une séance après coup n'avait jusqu'ici qu'un toast).
+  `SessionRewardScreen.onViewAnalysis` devient facultatif (il n'était plus lu).
+- **Carte du jour** (`todayCard.ts`) : action `log-done` ; jour prévu = « Démarrer la séance » +
+  « Je l'ai faite » (si pré-remplissable), « Changer » passe en icône crayon dans l'en-tête
+  (`corner`, libellé lu à voix haute — le texte tronquait la date). **Rattrapage** (`catchUp`,
+  `resolveCatchUp`) : le jour prévu le plus récent, passé sans séance, dans les 3 derniers jours de
+  la SEMAINE EN COURS (« Hier · Épaule — Pas encore enregistrée » + « Je l'ai faite », enregistrée
+  à SA date) ; jamais pendant une séance en cours, jamais une liste.
+- **N°2 fiche de personnage** : `ProfileHeroCard` fond l'illustration plein écran (≈ 420 pt, barre
+  sous la ligne de flottaison) et `RPGProgressionSection` (**supprimé**, sa matière forgée est
+  reprise telle quelle) : vitrine 4:5 exacte (`clamp(184px, 27dvh, 260px)`), grade, barre,
+  « Plus que X XP avant [grade] », et l'XP de la semaine (sinon de la précédente, jamais « +0 »).
+  Lecture `useWeeklyXp` (`xp_events`, bornée `limit 1000` + `count: exact` : total tronqué → rien),
+  règle pure `lib/fitness/rpg/weeklyXp.ts`. Nouveau helper `rankGrooveShadow` (rankTheme.ts) pour
+  le sillon de la barre. **Ordre de l'Accueil** : Carte du jour → bandeau semaine → fiche → Ton
+  rythme → Corps → Tenue (fiche visible sans défiler sur iPhone 17 Pro).
+- **Défaut antérieur corrigé** (trouvé au banc) : après une clôture, l'XP affichée ailleurs restait
+  figée — `requestSyncFlush` pousse la file hors de l'invalidation post-synchro de
+  `useOfflineSync`, et l'invalidation de `onSuccess` relisait le serveur AVANT le trigger.
+  `useSessionReward` invalide `user_stats` et `weekly_xp` dès que la récompense est confirmée
+  (une fois par séance). Vaut aussi pour la clôture en direct.
+- **Vérifié** : tsc, lint 0 erreur (154 warnings = base), Vitest **2 953 passed / 63 skipped**
+  (base 2 880 : +73), `check:bounded-reads`, `check:offline-contract`, build (avec
+  `NODE_OPTIONS=--max-old-space-size=6144` : le build par défaut manque de mémoire dans ce
+  conteneur, **`main` d'avant compris** — limite d'environnement, pas une régression). Banc
+  Playwright jetable (402×874, mini-PostgREST en mémoire + trigger d'XP simulé) : Je l'ai faite →
+  séance `completed`, 10 séries, durée 35, trigger après les séries → récompense « Encore 1 821 XP
+  avant Éternel » → récap → fiche rafraîchie (+215 XP, 1 821). Piège du banc : `clock.install` /
+  `setFixedTime` figent les animations framer-motion au premier chargement (cartes invisibles) —
+  artefact, vérifié sans horloge factice.
+- **Articulation avec le chantier Séance du même jour** (commit `0281e2b`, rebasé dessous) : là-bas,
+  « J'ai fait ma séance » côté module Séance n'avait pas été retenu et le récap de clôture en direct
+  propose une durée corrigeable (« Saisie après coup ? ») ; ici, Nathan a EXPLICITEMENT demandé
+  « Je l'ai faite » sur l'Accueil (« J'adore la 1 et la 2, fais-le »). Les deux coexistent : le
+  récap corrige une séance démarrée en direct, « Je l'ai faite » évite de la démarrer.
+- **Laissé de côté** : « Enregistrer comme séance passée » (`WorkoutSheet` → `useAddWorkout`) garde
+  l'INSERT déjà terminé (exception documentée en §3.5, à migrer sur `useLogDoneWorkout`) ; l'écart
+  « série au poids du corps non comptée » du récap (la feuille dit 10 séries, le récap 7 — même
+  écart qu'en direct, à corriger aux deux endroits à la fois) ; nutrition sur l'Accueil.
+
 ## Séance — clôture honnête, repos audible sur iPhone, Rang en direct, page allégée (2026-11-02, `main`)
 Demande de Nathan : propositions pour le module séance, puis « la 2, la 3, la 4 et la 6 » (la 5,
 barre « prochaine série » fixe, non retenue ; la 1, « J'ai fait ma séance », non retenue).

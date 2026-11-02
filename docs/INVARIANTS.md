@@ -231,6 +231,23 @@ du catalogue serveur, jamais du client — c'est l'invariant 3.1 qui le garantit
 → vérifié par `src/lib/fitness/rpg/abandonedSystems.test.ts` (scan du code source : toute
 réintroduction fait échouer la suite)
 
+### 3.5 Une séance saisie après coup suit le chemin d'une séance en direct
+
+Jamais un INSERT déjà `completed` : le trigger d'XP s'exécuterait AVANT l'arrivée des exercices
+et des séries (FIFO), sans jamais se redéclencher (garde `OLD.status IS DISTINCT FROM
+'completed'`) — XP de record et de progression perdues, historique sans série détaillée (mesuré :
+séances rattrapées des 26 et 27/10/2026). `useLogDoneWorkout` (« Je l'ai faite ») crée la séance
+ACTIVE sous la garde §2.1, écrit exercices et séries cochées, puis clôt par une opération SÉPARÉE
+(`neverMergeIntoPendingCreate`) retenue par `dependsOnRecords` sur tous ses enfants — la même
+garantie que `useFinishWorkout`. Corollaire : quand le serveur confirme la récompense,
+`useSessionReward` invalide l'XP affichée ailleurs (`user_stats`, `weekly_xp`).
+**Exception connue, à migrer** : le formulaire historique « Enregistrer comme séance passée »
+(`WorkoutSheet` → `useAddWorkout`) insère encore la séance déjà terminée.
+→ `src/hooks/use-fitness.ts` (`useLogDoneWorkout`), `src/lib/fitness/doneSession.ts`,
+`src/hooks/useSessionReward.ts`
+→ vérifié par `lib/offline/logDoneWorkoutOffline.test.tsx` (ordre et forme de la file),
+`hooks/useSessionReward.test.tsx`
+
 ---
 
 ## 4. Lectures Supabase

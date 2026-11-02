@@ -1,13 +1,15 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { Check, Flame, Moon, Swords } from "lucide-react";
+import { Check, Flame, History, Moon, Pencil, Swords } from "lucide-react";
 import { toast } from "sonner";
 import { WeeklyPlanSheet } from "@/components/fitness/plan/WeeklyPlanSheet";
+import { DoneSessionFlow } from "@/components/home/DoneSessionFlow";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useActivityStreak } from "@/hooks/useActivityStreak";
 import { useTodayCard } from "@/hooks/useTodayCard";
 import { useStartWorkoutFromSavedTemplate, useWorkoutTemplates } from "@/hooks/useWorkoutTemplates";
+import type { DoneSessionTarget } from "@/lib/fitness/doneSession";
 import type { TodayAction, TodayButton, TodayCardKind } from "@/lib/fitness/todayCard";
 import { cn } from "@/lib/utils";
 
@@ -30,9 +32,10 @@ function KindIcon({ kind }: { kind: TodayCardKind }) {
  *   - démarrer une séance sauvegardée se fait ICI (la mutation existe, offline-
  *     first, avec sa garde « une seule séance active »), puis on rejoint l'écran
  *     Séances où la séance en cours s'affiche ;
+ *   - « Je l'ai faite » (saisie après coup) ouvre ICI sa feuille de confirmation,
+ *     puis l'écran de récompense et la carte récap partagés (`DoneSessionFlow`) ;
  *   - les autres boutons renvoient vers l'écran Séances, qui porte tout le
- *     parcours de séance (clôture, récompense, récap) — ce parcours n'est PAS
- *     dupliqué sur l'Accueil.
+ *     parcours de séance en direct — ce parcours n'est PAS dupliqué sur l'Accueil.
  *
  * Aucune estimation affichée : jamais de pourcentage de récupération.
  * Couleurs : uniquement les jetons du thème (`primary` suit le Rang courant).
@@ -44,6 +47,7 @@ export function TodayCard() {
   const startTemplate = useStartWorkoutFromSavedTemplate();
   const streak = useActivityStreak();
   const [planOpen, setPlanOpen] = useState(false);
+  const [doneTarget, setDoneTarget] = useState<DoneSessionTarget | null>(null);
 
   if (isLoading || state.kind === "loading") {
     return <Skeleton className="mb-4 h-[188px] w-full rounded-[26px]" aria-busy="true" />;
@@ -62,6 +66,9 @@ export function TodayCard() {
         return;
       case "edit-plan":
         setPlanOpen(true);
+        return;
+      case "log-done":
+        setDoneTarget(action.target);
         return;
       case "start-template": {
         if (startTemplate.isPending) return;
@@ -123,16 +130,34 @@ export function TodayCard() {
             <KindIcon kind={state.kind} />
             <span className="truncate">{state.kicker}</span>
           </p>
-          {showStreak && (
-            <span
-              role="img"
-              aria-label={`${streak.current} jours d'activité d'affilée`}
-              className="flex shrink-0 items-center gap-1 rounded-full bg-orange-500/[0.12] px-2.5 py-1 text-[11.5px] font-bold tabular-nums text-orange-300 ring-1 ring-orange-400/30"
-            >
-              <Flame aria-hidden className="h-3.5 w-3.5" />
-              {streak.current}
-            </span>
-          )}
+          <div className="flex shrink-0 items-center gap-2">
+            {showStreak && (
+              <span
+                role="img"
+                aria-label={`${streak.current} jours d'activité d'affilée`}
+                className="flex shrink-0 items-center gap-1 rounded-full bg-orange-500/[0.12] px-2.5 py-1 text-[11.5px] font-bold tabular-nums text-orange-300 ring-1 ring-orange-400/30"
+              >
+                <Flame aria-hidden className="h-3.5 w-3.5" />
+                {streak.current}
+              </span>
+            )}
+            {state.corner && (
+              // Icône seule : la date de l'en-tête garde sa place sur un iPhone (le libellé
+              // « Changer » tronquait « Dimanche 1 novembre »). Le libellé reste lu à voix haute.
+              <button
+                type="button"
+                disabled={busy}
+                title={state.corner.label}
+                onClick={() => void run(state.corner!.action)}
+                className="-m-2 flex h-11 w-11 items-center justify-center rounded-full active:scale-95 disabled:opacity-60"
+              >
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-white/[0.07] text-foreground">
+                  <Pencil aria-hidden className="h-3.5 w-3.5" />
+                </span>
+                <span className="sr-only">{state.corner.label}</span>
+              </button>
+            )}
+          </div>
         </div>
 
         <h2 className="mt-2 line-clamp-2 break-words font-serif text-[28px] font-semibold italic leading-[1.1] tracking-wide text-foreground">
@@ -153,9 +178,32 @@ export function TodayCard() {
         {state.lastTime && (
           <p className="mt-3 text-[11px] leading-snug text-muted-foreground">{state.lastTime}</p>
         )}
+
+        {state.catchUp && (
+          <div className="mt-4 flex items-center gap-3 border-t border-white/[0.07] pt-3.5">
+            <History aria-hidden className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <p className="min-w-0 flex-1">
+              <span className="block truncate text-[13px] font-semibold text-foreground">
+                {state.catchUp.label}
+              </span>
+              <span className="block text-[11px] text-muted-foreground">
+                {state.catchUp.detail}
+              </span>
+            </p>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void run(state.catchUp!.button.action)}
+              className="min-h-[44px] shrink-0 whitespace-nowrap rounded-2xl bg-white/[0.07] px-3.5 text-[12.5px] font-semibold text-foreground active:scale-[0.98] disabled:opacity-60"
+            >
+              {state.catchUp.button.label}
+            </button>
+          </div>
+        )}
       </motion.section>
 
       {planOpen && <WeeklyPlanSheet onClose={() => setPlanOpen(false)} />}
+      {doneTarget && <DoneSessionFlow target={doneTarget} onClose={() => setDoneTarget(null)} />}
     </>
   );
 }

@@ -45,6 +45,14 @@ export function rankRingInset(primary: string, alphaHex = "30"): string {
   return `inset 0 0 0 1px ${primary}${alphaHex}`;
 }
 
+/**
+ * Sillon gravé dans la plaque (fond d'une barre de progression) : creux sombre + arête basse
+ * qui accroche la lumière secondaire du rang.
+ */
+export function rankGrooveShadow(secondary: string): string {
+  return `inset 0 2px 6px rgba(0,0,0,0.78), inset 0 -1px 0 ${secondary}22`;
+}
+
 /** Ombre portée diffuse, teintée par le halo du rang (élévation "précieuse"). */
 export function rankGlowShadow(glow: string, y: number, blur: number, spread: number): string {
   return `${y}px ${blur}px ${spread}px ${glow}`;

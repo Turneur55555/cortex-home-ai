@@ -5,8 +5,9 @@ import { createRoot, type Root } from "react-dom/client";
 
 /**
  * L'ordre de l'Accueil est une décision produit (Nathan, 30/09/2026) : l'ACTION
- * D'ABORD, puis le Rang. Ce test verrouille l'ordre, pas le contenu des cartes
- * (chacune a ses propres tests).
+ * D'ABORD, puis le Rang. Depuis le 01/11/2026, la fiche de personnage (illustration du
+ * Titre + progression, fusionnées) vient juste sous la Carte du jour, pour être vue sans
+ * défiler. Ce test verrouille l'ordre, pas le contenu des cartes (chacune a ses propres tests).
  */
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -23,10 +24,7 @@ vi.mock("@/components/fitness/plan/WeekPlanCard", () => ({
   ),
 }));
 vi.mock("@/components/profile/ProfileHeroCard", () => ({
-  ProfileHeroCard: () => <header data-testid="hero-card" />,
-}));
-vi.mock("@/components/profile/rpg/RPGProgressionSection", () => ({
-  RPGProgressionSection: () => <section data-testid="progression" />,
+  ProfileHeroCard: () => <section data-testid="character-sheet" />,
 }));
 vi.mock("@/components/home/CorpsShortcutTile", () => ({
   CorpsShortcutTile: () => <a data-testid="corps-tile" href="/corps" />,
@@ -62,14 +60,13 @@ const order = () =>
   );
 
 describe("Accueil — l'action d'abord, puis le Rang", () => {
-  it("Carte du jour → bandeau de la semaine → semaine → illustration du Titre → progression → Corps → Tenue du jour", () => {
+  it("Carte du jour → bandeau de la semaine → fiche de personnage → semaine → Corps → Tenue du jour", () => {
     renderHome();
     expect(order()).toEqual([
       "today-card",
       "week-teaser",
+      "character-sheet",
       "week-card",
-      "hero-card",
-      "progression",
       "corps-tile",
       "outfit-tile",
     ]);

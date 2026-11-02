@@ -1482,6 +1482,148 @@ export function useFinishWorkout() {
   });
 }
 
+/**
+ * « Je l'ai faite » (Accueil) — enregistre APRÈS COUP une séance de musculation déjà faite, en
+ * un geste, à partir d'un brouillon confirmé (`lib/fitness/doneSession.ts`).
+ *
+ * Le chemin d'écriture est CELUI D'UNE SÉANCE VÉCUE EN DIRECT, jamais un INSERT déjà terminé
+ * (le défaut de `useAddWorkout`, mesuré en production : séances rattrapées sans aucune série
+ * détaillée, XP de record impossible puisque le trigger s'exécute avant l'arrivée des séries) :
+ *   1. séance créée ACTIVE, sous la garde « une seule séance active » (INVARIANTS §2.1) ;
+ *   2. exercices et séries écrits, séries COCHÉES, numérotées 1..n dans un exercice tout neuf
+ *      (aucune collision possible avec un autre contexte — §2.2) ;
+ *   3. clôture sous le verrou de clôture (§2.3), avec `neverMergeIntoPendingCreate` et
+ *      `dependsOnRecords` construits depuis le store LOCAL — exactement comme `useFinishWorkout` :
+ *      c'est l'arrivée de `status='completed'` en base, après les séries, qui déclenche l'XP
+ *      (§3.1), et l'écran de récompense attend les compteurs serveur (§3.2).
+ * La durée est celle que le joueur a confirmée, jamais « maintenant − début ».
+ * Offline-first de bout en bout : tout passe par les repositories.
+ */
+export function useLogDoneWorkout() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  return useMutation({
+    mutationFn: async (input: {
+      name: string;
+      date: string;
+      durationMinutes: number;
+      exercises: Array<{
+        name: string;
+        imagePath: string | null;
+        exerciseReferenceId: string | null;
+        sets: Array<{ reps: number; weight: number }>;
+      }>;
+    }): Promise<{ workoutId: string }> => {
+      if (!user) throw new Error("Non authentifié");
+      if (input.date > localDateYMD()) {
+        throw new Error("On ne peut pas enregistrer une séance à venir.");
+      }
+      if (!isValidWorkoutDurationMinutes(input.durationMinutes)) {
+        throw new Error("Durée de séance invalide.");
+      }
+      const exercises = input.exercises.filter((e) => e.name.trim() && e.sets.length > 0);
+      if (exercises.length === 0) throw new Error("Aucune série à enregistrer.");
+
+      const workout = await startActiveWorkoutExclusively(user.id, async () => {
+        await assertNoActiveWorkout(user.id);
+        return workoutsRepo.create(user.id, {
+          name: input.name.trim() || "Séance",
+          date: input.date,
+          gym_location: "Salle inconnue",
+          status: "active",
+          discipline: "muscu",
+          metadata: {},
+          duration_minutes: null,
+          notes: null,
+          level_before: null,
+          level_after: null,
+          xp_before: null,
+          xp_after: null,
+        });
+      });
+
+      const unresolved = exercises.filter((e) => !e.exerciseReferenceId).map((e) => e.name);
+      const idsByName =
+        unresolved.length > 0
+          ? await resolveExerciseIdsByLabel("muscu", unresolved)
+          : new Map<string, string>();
+
+      for (let i = 0; i < exercises.length; i++) {
+        const e = exercises[i];
+        // Le résumé `exercises.sets/reps/weight` est écrit dès la création, avec la règle de la
+        // clôture (`summarizeExerciseSetsForHistory`) : aucune mise à jour à enfiler ensuite.
+        const summary = summarizeExerciseSetsForHistory(
+          e.sets.map((s) => ({ reps: s.reps, weight: s.weight, completed: true })),
+        );
+        const createdEx = await exercisesRepo.create(user.id, {
+          workout_id: workout.id,
+          name: e.name.trim(),
+          sets: summary.sets,
+          reps: summary.reps,
+          weight: summary.weight,
+          image_path: e.imagePath,
+          exercise_reference_id: e.exerciseReferenceId ?? idsByName.get(e.name) ?? null,
+          position: i,
+          notes: null,
+          superset_group: null,
+          muscle_groups: null,
+        });
+        for (let j = 0; j < e.sets.length; j++) {
+          await exerciseSetsRepo.create(user.id, {
+            exercise_id: createdEx.id,
+            set_number: j + 1,
+            reps: e.sets[j].reps,
+            weight: e.sets[j].weight,
+            completed: true,
+            rest_seconds: null,
+            notes: null,
+            tempo: null,
+          });
+        }
+      }
+
+      await runExclusiveSessionClosure(workout.id, "finish", async () => {
+        const [localExercises, localSets, localSegments] = await Promise.all([
+          exercisesRepo.list(user.id),
+          exerciseSetsRepo.list(user.id),
+          workoutSegmentsRepo.list(user.id),
+        ]);
+        const dependsOnRecords = collectWorkoutSyncDependencies(workout.id, {
+          exercises: localExercises,
+          exerciseSets: localSets,
+          workoutSegments: localSegments,
+        });
+        await workoutsRepo.update(
+          workout.id,
+          user.id,
+          { duration_minutes: input.durationMinutes, status: "completed" },
+          { neverMergeIntoPendingCreate: true, dependsOnRecords },
+        );
+      });
+
+      return { workoutId: workout.id };
+    },
+    onSuccess: (_result, input) => {
+      logActivity("workout", `Séance enregistrée après coup : ${input.name}`, {
+        date: input.date,
+      });
+      qc.invalidateQueries({ queryKey: ["fitness"] });
+      qc.invalidateQueries({ queryKey: ["user_activity"] });
+      qc.invalidateQueries({ queryKey: ["activity_streak"] });
+      qc.invalidateQueries({ queryKey: ["user_stats"] });
+      qc.invalidateQueries({ queryKey: ["weekly_xp"] });
+      requestSyncFlush(user?.id);
+      verifyExerciseRanksForSession(
+        input.exercises.map((e) => ({
+          name: e.name,
+          exercise_reference_id: e.exerciseReferenceId,
+        })),
+      );
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+}
+
 /** Annule (supprime) la séance active et tout son contenu. */
 export function useCancelWorkout() {
   const qc = useQueryClient();

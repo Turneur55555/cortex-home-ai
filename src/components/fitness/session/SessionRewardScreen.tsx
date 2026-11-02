@@ -87,7 +87,8 @@ export function SessionRewardScreen({
   workoutId: string;
   title: string;
   onContinue: () => void;
-  onViewAnalysis: () => void;
+  /** Bilan IA détaillé — facultatif : la séance enregistrée après coup depuis l'Accueil n'en a pas. */
+  onViewAnalysis?: () => void;
 }) {
   const { totalXp, breakdown, level, hasXp, confirmation } = useSessionReward(workoutId);
   // CHANTIER 4 (CRIT-03) : tant que le serveur n'a pas versé l'XP de CETTE

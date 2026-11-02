@@ -309,7 +309,15 @@ describe("resolveTodayCard — état « planned » (entraînement prévu aujourd
         label: "Démarrer la séance",
         action: { type: "start-template", templateId: EPAULES_A.id },
       },
-      secondary: { label: "Changer", action: { type: "edit-plan" } },
+      secondary: {
+        label: "Je l'ai faite",
+        action: {
+          type: "log-done",
+          target: { date: THURSDAY, name: "Épaules A", templateId: EPAULES_A.id },
+        },
+      },
+      corner: { label: "Changer", action: { type: "edit-plan" } },
+      catchUp: null,
     });
   });
 
@@ -372,7 +380,10 @@ describe("resolveTodayCard — état « planned » (entraînement prévu aujourd
       subtitle: "Prévu dans ton rythme",
       lastTime: null,
       primary: { label: "Démarrer la séance", action: { type: "new-session" } },
-      secondary: { label: "Changer", action: { type: "edit-plan" } },
+      // Rien à pré-remplir (aucune séance « Dos + Pectoraux » dans l'historique) : pas de
+      // « Je l'ai faite » ; « Changer » reste accessible dans l'en-tête.
+      secondary: null,
+      corner: { label: "Changer", action: { type: "edit-plan" } },
     });
   });
 
@@ -393,6 +404,8 @@ describe("resolveTodayCard — état « rest »", () => {
       lastTime: null,
       primary: null,
       secondary: { label: "M'entraîner quand même", action: { type: "new-session" } },
+      corner: null,
+      catchUp: null,
     });
   });
 
@@ -448,6 +461,8 @@ describe("resolveTodayCard — états « none » et « free »", () => {
       lastTime: null,
       primary: { label: "Choisir une épreuve", action: { type: "new-session" } },
       secondary: { label: "Planifier ma semaine", action: { type: "edit-plan" } },
+      corner: null,
+      catchUp: null,
     });
   });
 
@@ -477,6 +492,8 @@ describe("resolveTodayCard — états « none » et « free »", () => {
           action: { type: "repeat-session", workoutId: jambes.id },
         },
         secondary: { label: "Autre séance", action: { type: "new-session" } },
+        corner: null,
+        catchUp: null,
       });
     });
 
@@ -560,6 +577,10 @@ describe("la carte ne dit QUE des faits : jamais un pourcentage, jamais de « pr
       state.lastTime,
       state.primary?.label,
       state.secondary?.label,
+      state.corner?.label,
+      state.catchUp?.label,
+      state.catchUp?.detail,
+      state.catchUp?.button.label,
     ].filter((t): t is string => typeof t === "string");
     for (const text of texts) {
       expect(text).not.toMatch(/%|\bprêt|\bprête|récupér|\bforme\b/i);
@@ -569,5 +590,130 @@ describe("la carte ne dit QUE des faits : jamais un pourcentage, jamais de « pr
   it("chaque état produit bien l'état attendu (le test ci-dessus ne passe pas à vide)", () => {
     const kinds = scenarios.map(([, over]) => (card(over) as TodayCardState).kind);
     expect(kinds).toEqual(["active", "planned", "planned", "rest", "done", "none", "free"]);
+  });
+});
+
+describe("« Je l'ai faite » — la saisie après coup d'une séance prévue aujourd'hui", () => {
+  const plan = planOf({ 4: tpl(4, EPAULES_A.id) });
+  const logDone = (date: string, name: string, templateId: string | null) => ({
+    label: "Je l'ai faite",
+    action: { type: "log-done", target: { date, name, templateId } },
+  });
+
+  it("une séance sauvegardée connue suffit à pré-remplir, même sans historique", () => {
+    expect(card({ plan }).secondary).toEqual(logDone(THURSDAY, "Épaules A", EPAULES_A.id));
+  });
+
+  it("séance sauvegardée sans exercice et sans historique : rien à pré-remplir, pas de bouton", () => {
+    const bare = template("tpl-b", "Séance vide", { exerciseCount: 0, sets: 0 });
+    const state = card({
+      plan: planOf({ 4: tpl(4, "tpl-b") }),
+      templatesById: new Map([["tpl-b", bare]]),
+    });
+    expect(state.secondary).toBeNull();
+    expect(state.corner).toEqual({ label: "Changer", action: { type: "edit-plan" } });
+  });
+
+  it("groupes musculaires : proposé dès qu'une séance du même nom existe dans l'historique", () => {
+    const state = card({
+      plan: planOf({ 4: muscles(4, ["dos", "pecs"]) }),
+      workouts: [done("2026-09-24", "Dos + Pectoraux")],
+    });
+    expect(state.secondary).toEqual(logDone(THURSDAY, "Dos + Pectoraux", null));
+  });
+
+  it("séance sauvegardée supprimée : on ne pré-remplit rien d'imaginaire", () => {
+    expect(card({ plan: planOf({ 4: tpl(4, "tpl-inconnu") }) }).secondary).toBeNull();
+  });
+
+  it("une séance du même nom faite AUJOURD'HUI n'est pas une référence : la journée est faite", () => {
+    expect(card({ plan, workouts: [done(THURSDAY, "Épaules A")] }).kind).toBe("done");
+  });
+});
+
+describe("rattrapage — une séance prévue ces derniers jours, pas encore enregistrée", () => {
+  // Jeudi 01/10 : lundi 28/09 (J-3), mardi 29/09 (J-2), mercredi 30/09 (J-1).
+  const tue = tpl(2, EPAULES_A.id);
+  const thu = tpl(4, EPAULES_A.id);
+
+  it("mardi manqué : « Mardi · Épaules A », un geste pour l'enregistrer à SA date", () => {
+    const state = card({ plan: planOf({ 2: tue, 4: thu }) });
+    expect(state.catchUp).toEqual({
+      label: "Mardi · Épaules A",
+      detail: "Pas encore enregistrée",
+      button: {
+        label: "Je l'ai faite",
+        action: {
+          type: "log-done",
+          target: { date: "2026-09-29", name: "Épaules A", templateId: EPAULES_A.id },
+        },
+      },
+    });
+  });
+
+  it("la veille s'appelle « Hier »", () => {
+    const state = card({ plan: planOf({ 3: tpl(3, EPAULES_A.id) }) });
+    expect(state.catchUp?.label).toBe("Hier · Épaules A");
+    expect(state.catchUp?.button.action).toMatchObject({ target: { date: "2026-09-30" } });
+  });
+
+  it("plusieurs jours manqués : le plus RÉCENT d'abord, un seul à la fois", () => {
+    const state = card({ plan: planOf({ 1: tpl(1, EPAULES_A.id), 2: tue }) });
+    expect(state.catchUp?.label).toBe("Mardi · Épaules A");
+  });
+
+  it("au-delà de 3 jours, ou la semaine précédente : plus rien — jamais une liste de reproches", () => {
+    // Dimanche 04/10 : lundi 28/09 est à 6 jours.
+    expect(card({ plan: planOf({ 1: tpl(1, EPAULES_A.id) }), today: "2026-10-04" }).catchUp).toBe(
+      null,
+    );
+    // Lundi 05/10 : dimanche 04/10 appartient à la semaine d'avant (la semaine affichée repart).
+    expect(card({ plan: planOf({ 7: tpl(7, EPAULES_A.id) }), today: "2026-10-05" }).catchUp).toBe(
+      null,
+    );
+    // J-3 exactement (lundi 28/09 depuis jeudi 01/10) : encore proposé.
+    expect(card({ plan: planOf({ 1: tpl(1, EPAULES_A.id) }) }).catchUp?.label).toBe(
+      "Lundi · Épaules A",
+    );
+  });
+
+  it("un jour où une séance a été enregistrée n'est pas à rattraper", () => {
+    const state = card({ plan: planOf({ 2: tue }), workouts: [done("2026-09-29", "Autre chose")] });
+    expect(state.catchUp).toBeNull();
+  });
+
+  it("un jour de repos manqué n'existe pas", () => {
+    expect(card({ plan: planOf({ 2: rest(2) }) }).catchUp).toBeNull();
+  });
+
+  it("une séance en cours prime : on ne propose pas d'en enregistrer une autre", () => {
+    const state = card({
+      plan: planOf({ 2: tue }),
+      activeWorkout: { name: "X", created_at: "2026-10-01T07:00:00.000Z" },
+    });
+    expect(state.kind).toBe("active");
+    expect(state.catchUp).toBeNull();
+  });
+
+  it("modèles pas encore chargés : rien (jamais « supprimée »)", () => {
+    expect(card({ plan: planOf({ 2: tue }), templatesById: null }).catchUp).toBeNull();
+  });
+
+  it("présent quel que soit l'état du jour : prévu, fait, repos, libre", () => {
+    const missedTue = { 2: tue };
+    expect(card({ plan: planOf({ ...missedTue, 4: thu }) }).kind).toBe("planned");
+    const doneToday = card({
+      plan: planOf({ ...missedTue, 4: thu }),
+      workouts: [done(THURSDAY, "Épaules A")],
+    });
+    expect([doneToday.kind, doneToday.catchUp?.label]).toEqual(["done", "Mardi · Épaules A"]);
+    const restToday = card({ plan: planOf({ ...missedTue, 4: rest(4) }) });
+    expect([restToday.kind, restToday.catchUp?.label]).toEqual(["rest", "Mardi · Épaules A"]);
+    const freeToday = card({ plan: planOf(missedTue) });
+    expect([freeToday.kind, freeToday.catchUp?.label]).toEqual(["free", "Mardi · Épaules A"]);
+  });
+
+  it("sans plan, pas de rattrapage (rien n'était prévu)", () => {
+    expect(card({ workouts: [done("2026-09-28", "Jambes B")] }).catchUp).toBeNull();
   });
 });

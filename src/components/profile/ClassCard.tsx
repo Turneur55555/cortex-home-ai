@@ -49,9 +49,9 @@ interface Props {
  * cohérent, entièrement reforgé dans la même matière.
  *
  * NB (dette assumée) : les formules de matière ci-dessous reprennent celles de
- * `RPGProgressionSection` — elles seront unifiées dans le composant
- * réutilisable (`ForgedCard`) une fois la direction validée. Progression RPG
- * n'est volontairement pas touchée pour l'instant.
+ * l'ancienne carte « Progression RPG », fondue le 01/11/2026 dans la fiche de
+ * personnage de l'Accueil (`ProfileHeroCard`) — elles seront unifiées dans un
+ * composant réutilisable (`ForgedCard`) une fois la direction validée.
  */
 export function ClassCard({ workouts, rankAggregate }: Props) {
   const [open, setOpen] = useState(false);

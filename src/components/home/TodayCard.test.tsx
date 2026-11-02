@@ -60,6 +60,22 @@ vi.mock("@/components/fitness/plan/WeeklyPlanSheet", () => ({
   ),
 }));
 
+vi.mock("@/components/home/DoneSessionFlow", () => ({
+  DoneSessionFlow: ({
+    target,
+    onClose,
+  }: {
+    target: { date: string; name: string; templateId: string | null };
+    onClose: () => void;
+  }) => (
+    <div data-testid="done-flow" data-date={target.date} data-name={target.name}>
+      <button type="button" onClick={onClose}>
+        fermer la confirmation
+      </button>
+    </div>
+  ),
+}));
+
 import { TodayCard } from "./TodayCard";
 
 const EPAULES = {
@@ -367,5 +383,54 @@ describe("TodayCard — la séance proposée par l'historique (aucun plan, un ry
     show(stateFor(emptyWeeklyPlan(), { workouts: rhythm() }));
     await click(button("Autre séance"));
     expect(navigate).toHaveBeenCalledWith({ to: "/seances", search: { demarrer: "nouvelle" } });
+  });
+});
+
+describe("TodayCard — « Je l'ai faite » (saisie après coup)", () => {
+  const flow = () => container.querySelector('[data-testid="done-flow"]');
+
+  it("ouvre la confirmation de la séance du jour, ICI — rien n'est démarré, aucune navigation", async () => {
+    show(plannedTemplate());
+    expect(flow()).toBeNull();
+    await click(button("Je l'ai faite"));
+    expect(flow()?.getAttribute("data-date")).toBe(THURSDAY);
+    expect(flow()?.getAttribute("data-name")).toBe("Épaules A");
+    expect(mutateAsync).not.toHaveBeenCalled();
+    expect(navigate).not.toHaveBeenCalled();
+    await click(button("fermer la confirmation"));
+    expect(flow()).toBeNull();
+  });
+
+  it("jour prévu : « Démarrer » et « Je l'ai faite » côte à côte, « Changer » dans l'en-tête", () => {
+    show(plannedTemplate());
+    const labels = Array.from(container.querySelectorAll("button")).map((b) => b.textContent);
+    expect(labels).toEqual(["Changer", "Démarrer la séance", "Je l'ai faite"]);
+  });
+
+  it("rattrapage : « Mardi · Épaules A — pas encore enregistrée », enregistrée à SA date", async () => {
+    const tpl = (dayOfWeek: 2 | 4) =>
+      ({ dayOfWeek, kind: "template", templateId: EPAULES.id }) as PlanDay;
+    show(stateFor(planOf({ 2: tpl(2), 4: tpl(4) })));
+    const text = container.textContent ?? "";
+    expect(text).toContain("Mardi · Épaules A");
+    expect(text).toContain("Pas encore enregistrée");
+    const buttons = Array.from(container.querySelectorAll("button")).filter(
+      (b) => b.textContent === "Je l'ai faite",
+    );
+    expect(buttons).toHaveLength(2);
+    await click(buttons[1]);
+    expect(flow()?.getAttribute("data-date")).toBe("2026-09-29");
+  });
+
+  it("séance en cours : ni « Je l'ai faite » ni rattrapage", () => {
+    const tpl = (dayOfWeek: 2 | 4) =>
+      ({ dayOfWeek, kind: "template", templateId: EPAULES.id }) as PlanDay;
+    show(
+      stateFor(planOf({ 2: tpl(2), 4: tpl(4) }), {
+        activeWorkout: { name: "Épaules A", created_at: "2026-10-01T07:00:00.000Z" },
+      }),
+    );
+    expect(button("Je l'ai faite")).toBeUndefined();
+    expect(container.textContent).not.toContain("Pas encore enregistrée");
   });
 });

@@ -32,6 +32,11 @@
  */
 
 import { addDaysYMD } from "@/lib/dates";
+import {
+  canPrefillDoneSession,
+  oldestCatchUpDate,
+  type DoneSessionTarget,
+} from "@/lib/fitness/doneSession";
 import { buildSessionRecap } from "@/lib/fitness/rpg/sessionRecap";
 import { suggestSessionToRepeat } from "@/lib/fitness/sessionSuggestion";
 import {
@@ -76,14 +81,17 @@ export interface TodayCardInput {
  * - `start-template` : démarrer la séance sauvegardée `templateId` ;
  * - `new-session`    : ouvrir « Choisir une épreuve » ;
  * - `repeat-session` : refaire en live la séance `workoutId` (confirmation sur l'écran Séances) ;
- * - `edit-plan`      : ouvrir « Mon rythme ».
+ * - `edit-plan`      : ouvrir « Mon rythme » ;
+ * - `log-done`       : « Je l'ai faite » — confirmer après coup la séance `target`
+ *                      (pré-remplie, voir `lib/fitness/doneSession.ts`).
  */
 export type TodayAction =
   | { type: "resume" }
   | { type: "start-template"; templateId: string }
   | { type: "new-session" }
   | { type: "repeat-session"; workoutId: string }
-  | { type: "edit-plan" };
+  | { type: "edit-plan" }
+  | { type: "log-done"; target: DoneSessionTarget };
 
 export interface TodayButton {
   label: string;
@@ -91,6 +99,19 @@ export interface TodayButton {
 }
 
 export type TodayCardKind = "loading" | "active" | "done" | "none" | "free" | "rest" | "planned";
+
+/**
+ * « Hier · Épaule — pas encore enregistrée » : une séance PRÉVUE ces derniers jours, sans
+ * séance enregistrée ce jour-là. Dit comme une possibilité (la rattraper en un geste), jamais
+ * comme un reproche : pas de compteur, pas de croix, et seulement sur les `CATCH_UP_DAYS`
+ * derniers jours de la semaine en cours (mesure : rattrapages faits à J+2 et J+3).
+ */
+export interface TodayCatchUp {
+  /** « Hier · Épaule », « Lundi · Dos ». */
+  label: string;
+  detail: string;
+  button: TodayButton;
+}
 
 export interface TodayCardState {
   kind: TodayCardKind;
@@ -102,6 +123,10 @@ export interface TodayCardState {
   lastTime: string | null;
   primary: TodayButton | null;
   secondary: TodayButton | null;
+  /** Petit bouton dans l'en-tête de la carte (« Changer » un jour prévu). */
+  corner: TodayButton | null;
+  /** Une séance prévue récemment, à rattraper. Jamais pendant une séance en cours. */
+  catchUp: TodayCatchUp | null;
 }
 
 // ── Dates ───────────────────────────────────────────────────────────────
@@ -273,6 +298,68 @@ export function describeNextTraining(
   return `Prochaine séance : ${whenLabel(next)} · ${what}`;
 }
 
+// ── « Je l'ai faite » et le rattrapage ──────────────────────────────────
+
+const DONE_LABEL = "Je l'ai faite";
+
+function doneButton(target: DoneSessionTarget): TodayButton {
+  return { label: DONE_LABEL, action: { type: "log-done", target } };
+}
+
+/**
+ * La séance qu'un jour prévu demande, si on sait la pré-remplir. `null` pour un jour de repos
+ * ou libre, une séance sauvegardée pas encore chargée (jamais confondue avec « supprimée »), ou
+ * une séance sans aucune source de pré-remplissage.
+ */
+export function doneTargetForDay(
+  day: WeekDayView,
+  templatesById: ReadonlyMap<string, TemplateSummary> | null,
+  workouts: readonly TodayWorkout[],
+): DoneSessionTarget | null {
+  const plan = day.plan;
+  if (plan === null || plan.kind === "rest") return null;
+  const description = describePlanDay(plan, templatesById);
+  if (description.ref === "pending") return null;
+  const templateId = plan.kind === "template" && description.ref === "ok" ? plan.templateId : null;
+  const target: DoneSessionTarget = { date: day.date, name: description.full, templateId };
+  const templateExerciseCount =
+    templateId !== null ? (templatesById?.get(templateId)?.exerciseCount ?? null) : null;
+  return canPrefillDoneSession({ target, workouts, templateExerciseCount }) ? target : null;
+}
+
+/** « Hier », sinon le nom du jour (« Lundi »). */
+function catchUpDayLabel(dateYMD: string, todayDate: string): string {
+  if (daysBetweenYMD(dateYMD, todayDate) === 1) return "Hier";
+  return DAY_NAMES[isoDayOf(dateYMD)];
+}
+
+/**
+ * Le jour prévu le plus RÉCENT, dans les `CATCH_UP_DAYS` derniers jours de la semaine en cours,
+ * passé sans séance — et qu'on sait pré-remplir. Un seul à la fois : une fois rattrapé, le
+ * précédent prend sa place s'il y en a un.
+ */
+export function resolveCatchUp(
+  week: readonly WeekDayView[],
+  todayDate: string,
+  templatesById: ReadonlyMap<string, TemplateSummary> | null,
+  workouts: readonly TodayWorkout[],
+): TodayCatchUp | null {
+  const oldest = oldestCatchUpDate(todayDate);
+  const missed = week
+    .filter((d) => d.state === "missed" && d.date < todayDate && d.date >= oldest)
+    .sort((a, b) => b.date.localeCompare(a.date));
+  for (const day of missed) {
+    const target = doneTargetForDay(day, templatesById, workouts);
+    if (!target) continue;
+    return {
+      label: `${catchUpDayLabel(day.date, todayDate)} · ${target.name}`,
+      detail: "Pas encore enregistrée",
+      button: doneButton(target),
+    };
+  }
+  return null;
+}
+
 // ── La carte ────────────────────────────────────────────────────────────
 
 const EDIT_PLAN: TodayButton = { label: "Planifier ma semaine", action: { type: "edit-plan" } };
@@ -290,7 +377,8 @@ export function resolveTodayCard(input: TodayCardInput): TodayCardState {
   const dateLine = longDayLabel(todayDate);
   const kicker = `${dateLine} · aujourd'hui`;
 
-  // 1. Une séance en cours prime sur tout le reste.
+  // 1. Une séance en cours prime sur tout le reste — y compris le rattrapage : on ne propose
+  // pas d'enregistrer une autre séance pendant qu'on s'entraîne.
   if (activeWorkout) {
     const startedAt = startedAtLabel(activeWorkout.created_at);
     return {
@@ -301,6 +389,8 @@ export function resolveTodayCard(input: TodayCardInput): TodayCardState {
       lastTime: null,
       primary: { label: "Reprendre ma séance", action: { type: "resume" } },
       secondary: null,
+      corner: null,
+      catchUp: null,
     };
   }
 
@@ -308,6 +398,7 @@ export function resolveTodayCard(input: TodayCardInput): TodayCardState {
   const hasPlan = week.some((d) => d.plan !== null);
   const next = hasPlan ? nextTrainingAfter(week, todayDate) : null;
   const nextLine = next ? describeNextTraining(next, templatesById) : null;
+  const catchUp = hasPlan ? resolveCatchUp(week, todayDate, templatesById, workouts) : null;
 
   // 2. Une séance est déjà faite aujourd'hui (plan ou non : sur un jour de repos, c'est un bonus).
   if (today && today.state === "done") {
@@ -321,6 +412,8 @@ export function resolveTodayCard(input: TodayCardInput): TodayCardState {
       lastTime: null,
       primary: null,
       secondary: { label: "M'entraîner encore", action: { type: "new-session" } },
+      corner: null,
+      catchUp,
     };
   }
 
@@ -341,6 +434,8 @@ export function resolveTodayCard(input: TodayCardInput): TodayCardState {
           action: { type: "repeat-session", workoutId: suggestion.reference.workoutId },
         },
         secondary: { label: "Autre séance", action: { type: "new-session" } },
+        corner: null,
+        catchUp: null,
       };
     }
     const last = lastCompletedSession(workouts);
@@ -354,6 +449,8 @@ export function resolveTodayCard(input: TodayCardInput): TodayCardState {
       lastTime: null,
       primary: NEW_SESSION,
       secondary: EDIT_PLAN,
+      corner: null,
+      catchUp: null,
     };
   }
 
@@ -367,6 +464,8 @@ export function resolveTodayCard(input: TodayCardInput): TodayCardState {
       lastTime: null,
       primary: NEW_SESSION,
       secondary: null,
+      corner: null,
+      catchUp,
     };
   }
 
@@ -380,6 +479,8 @@ export function resolveTodayCard(input: TodayCardInput): TodayCardState {
       lastTime: null,
       primary: null,
       secondary: { label: "M'entraîner quand même", action: { type: "new-session" } },
+      corner: null,
+      catchUp,
     };
   }
 
@@ -394,11 +495,17 @@ export function resolveTodayCard(input: TodayCardInput): TodayCardState {
       lastTime: null,
       primary: null,
       secondary: null,
+      corner: null,
+      catchUp: null,
     };
   }
 
   const planned = today.plan;
+  // « Changer » quitte les deux boutons pour l'en-tête : la place revient à « Je l'ai faite »,
+  // le geste réel de six séances sur sept (saisie après coup, production oct. 2026).
   const changeButton: TodayButton = { label: "Changer", action: { type: "edit-plan" } };
+  const doneTarget = doneTargetForDay(today, templatesById, workouts);
+  const secondary = doneTarget ? doneButton(doneTarget) : null;
 
   if (planned.kind === "template" && description.ref === "ok" && planned.templateId !== null) {
     const summary = templatesById?.get(planned.templateId);
@@ -414,7 +521,9 @@ export function resolveTodayCard(input: TodayCardInput): TodayCardState {
         label: "Démarrer la séance",
         action: { type: "start-template", templateId: planned.templateId },
       },
-      secondary: changeButton,
+      secondary,
+      corner: changeButton,
+      catchUp,
     };
   }
 
@@ -427,7 +536,9 @@ export function resolveTodayCard(input: TodayCardInput): TodayCardState {
       subtitle: "Prévu dans ton rythme · cette séance sauvegardée n'existe plus",
       lastTime: null,
       primary: { label: "Choisir une épreuve", action: { type: "new-session" } },
-      secondary: changeButton,
+      secondary,
+      corner: changeButton,
+      catchUp,
     };
   }
 
@@ -439,6 +550,8 @@ export function resolveTodayCard(input: TodayCardInput): TodayCardState {
     subtitle: "Prévu dans ton rythme",
     lastTime: null,
     primary: { label: "Démarrer la séance", action: { type: "new-session" } },
-    secondary: changeButton,
+    secondary,
+    corner: changeButton,
+    catchUp,
   };
 }
