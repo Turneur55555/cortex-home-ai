@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 /**
  * Quand le serveur confirme l'XP d'une séance, l'XP affichée AILLEURS (fiche de personnage de
- * l'Accueil : XP globale, XP de la semaine) doit se relire. Mesuré sur le banc visuel du
+ * l'Accueil : l'XP globale) doit se relire. Mesuré sur le banc visuel du
  * 01/11/2026 : après « Je l'ai faite », l'écran de récompense disait « Encore 1 821 XP avant
  * Éternel » et la fiche, restée montée, « Plus que 1 936 XP » — la clôture part par
  * `requestSyncFlush`, hors de l'invalidation post-synchronisation de `useOfflineSync`.
@@ -84,14 +84,13 @@ const invalidatedKeys = (spy: { mock: { calls: unknown[][] } }): string[] =>
   spy.mock.calls.map((call) => JSON.stringify((call[0] as { queryKey?: unknown })?.queryKey));
 
 describe("useSessionReward — la confirmation serveur rafraîchit l'XP affichée ailleurs", () => {
-  it("confirmée : XP globale et XP de la semaine invalidées, une seule fois par séance", async () => {
+  it("confirmée : l'XP globale est invalidée, une seule fois par séance", async () => {
     holder.snapshot = { xp_before: 71264, xp_after: 71379, level_before: 30, level_after: 30 };
     const spy = vi.spyOn(client, "invalidateQueries");
     await mount();
     expect(latest?.confirmation).toBe("confirmed");
     const keys = invalidatedKeys(spy);
     expect(keys.filter((k) => k === '["user_stats"]')).toHaveLength(1);
-    expect(keys.filter((k) => k === '["weekly_xp"]')).toHaveLength(1);
 
     await mount(); // nouveau rendu, même séance : rien de plus
     expect(invalidatedKeys(spy).filter((k) => k === '["user_stats"]')).toHaveLength(1);

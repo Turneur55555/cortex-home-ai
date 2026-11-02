@@ -1611,7 +1611,6 @@ export function useLogDoneWorkout() {
       qc.invalidateQueries({ queryKey: ["user_activity"] });
       qc.invalidateQueries({ queryKey: ["activity_streak"] });
       qc.invalidateQueries({ queryKey: ["user_stats"] });
-      qc.invalidateQueries({ queryKey: ["weekly_xp"] });
       requestSyncFlush(user?.id);
       verifyExerciseRanksForSession(
         input.exercises.map((e) => ({

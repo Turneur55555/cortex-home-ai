@@ -182,8 +182,8 @@ export function useSessionReward(workoutId: string | null | undefined): SessionR
     isOnline,
   });
 
-  // Le serveur vient de confirmer l'XP de CETTE séance : l'XP globale et l'XP de la semaine
-  // affichées ailleurs (fiche de personnage de l'Accueil) sont désormais périmées. Sans cela,
+  // Le serveur vient de confirmer l'XP de CETTE séance : l'XP globale affichée ailleurs (carte
+  // de force de l'Accueil) est désormais périmée. Sans cela,
   // elles restaient figées sur la valeur d'avant : la clôture part par `requestSyncFlush`, qui
   // pousse la file sans passer par l'invalidation post-synchronisation de `useOfflineSync`, et
   // l'invalidation faite à la clôture (`onSuccess`) relisait le serveur AVANT le trigger.
@@ -193,7 +193,6 @@ export function useSessionReward(workoutId: string | null | undefined): SessionR
     if (confirmation !== "confirmed" || !workoutId || refreshedFor.current === workoutId) return;
     refreshedFor.current = workoutId;
     void queryClient.invalidateQueries({ queryKey: ["user_stats"] });
-    void queryClient.invalidateQueries({ queryKey: ["weekly_xp"] });
   }, [confirmation, workoutId, queryClient]);
 
   return useMemo(() => {

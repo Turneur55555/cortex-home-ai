@@ -22,6 +22,40 @@
 ## Dernière mise à jour
 2026-11-02
 
+## Accueil — la carte de force (« carte obsidienne »), sous « Ton rythme » (2026-11-02, `main`)
+Choix de Nathan sur maquettes (3 cartes, puis 3 placements, en images) : la carte n°3, sur
+l'Accueil, **sous « Ton rythme »** (« oui je le vois bien mais en dessous de ton rythme »).
+Ordre : Carte du jour → bandeau semaine → Ton rythme → **Ta carte** → Corps → Tenue.
+- **Règle pure `lib/fitness/rpg/strengthCard.ts`** : une ligne par groupe (PEC · DOS · ÉPAULES ·
+  BRAS · JAMBES) = l'exercice CHARGÉ au record le plus lourd, fait ≥ 3 fois (une saisie isolée
+  n'est pas un phare), sur une fenêtre glissante de 6 mois **jamais avant le 01/02/2026** ;
+  record = charge max d'une série cochée (répétitions > 0, charge > 0), à défaut colonnes résumé ;
+  progression = record − charge max de la première séance de la fenêtre (jamais négative).
+  Groupe = `exercise_reference.category` (Pectoraux, Dos, Épaules, Biceps/Triceps/Avant-bras →
+  BRAS, Jambes/Fessiers/Mollets → JAMBES), repli par mots-clés du nom pour les ~25 références
+  sans catégorie (curl inversé, pushdown corde…). Poids du corps (tractions, dips : charge vide)
+  exclus — pas de record en kg. Chiffres de Nathan : PEC 75 (chest press debout, stable), DOS 80
+  (tirage horizontal ▲10), ÉPAULES 60 (shoulder press ▲10), BRAS 25 (curl marteau corde ▲5).
+  NB : la maquette montrait PEC 70 ▲15 (chest press) — la règle « record le plus lourd » retient 75.
+- **Hook `useStrengthCard`** : séances du STORE LOCAL (200 plus récentes hydratées → 6 mois couverts,
+  marche hors ligne), catégories lues une fois pour les seules références utilisées
+  (`fetchAllRowsForIds`, bornée) + cache `localStorage` (`cortex.referenceCategories.v1:`).
+- **`ProfileHeroCard` réécrit** (carte obsidienne : illustration 4:5 cerclée, Titre, grade, XP avant
+  le grade suivant en barre de 20 segments, lignes de records, « ▲ progression depuis juin »).
+  Toutes les couleurs de rang via `rankTheme.ts` ; nouveau helper `rankRingOutset` (liseré
+  extérieur, l'illustration recouvrait le liseré intérieur). **L'XP de la semaine est retirée**
+  (absente de la maquette choisie) : `useWeeklyXp`, `lib/fitness/rpg/weeklyXp.ts` et leurs tests
+  supprimés, invalidation `weekly_xp` retirée de `useSessionReward`/`useLogDoneWorkout`.
+- **Défaut existant trouvé, non corrigé ici (tâche proposée)** : `rankGlowShadow(glow, y, blur,
+  spread)` produit `y blur spread` = 3 longueurs lues comme `x y flou` ; un 3e argument négatif rend
+  TOUTE la `box-shadow` invalide (halo et liserés concaténés ignorés) — 9 appels concernés
+  (écran de récompense, carte récap, partage, Chroniques…). La carte de force passe des valeurs
+  valides.
+- **Vérifié** : tsc, lint 0 erreur (154 warnings = base), Vitest **3 058 passés / 63 ignorés**,
+  `check:bounded-reads`, `check:offline-contract`, build (`NODE_OPTIONS=--max-old-space-size=6144`).
+  Banc Playwright jetable (402×874, historique enrichi + référentiel simulé) : carte rendue comme
+  la maquette, aucune erreur de page.
+
 ## Accueil — propositions en images, références App Store (2026-11-02, `main`)
 Après « Je l'ai faite » et la fiche de personnage, Nathan a refusé trois séries de propositions
 texte (retouches, puis « L'Ombre / Ta Légende depuis 2018 / Atlas… », puis trois maquettes

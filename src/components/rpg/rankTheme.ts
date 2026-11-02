@@ -46,6 +46,14 @@ export function rankRingInset(primary: string, alphaHex = "30"): string {
 }
 
 /**
+ * Liseré EXTÉRIEUR teinté par le rang — pour un cadre dont le contenu (une illustration plein
+ * cadre) recouvrirait un liseré intérieur (`rankRingInset`).
+ */
+export function rankRingOutset(color: string, alphaHex = "b3", width = 1.5): string {
+  return `0 0 0 ${width}px ${color}${alphaHex}`;
+}
+
+/**
  * Sillon gravé dans la plaque (fond d'une barre de progression) : creux sombre + arête basse
  * qui accroche la lumière secondaire du rang.
  */

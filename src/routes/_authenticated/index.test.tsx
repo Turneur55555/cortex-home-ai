@@ -5,9 +5,9 @@ import { createRoot, type Root } from "react-dom/client";
 
 /**
  * L'ordre de l'Accueil est une décision produit (Nathan, 30/09/2026) : l'ACTION
- * D'ABORD, puis le Rang. Depuis le 01/11/2026, la fiche de personnage (illustration du
- * Titre + progression, fusionnées) vient juste sous la Carte du jour, pour être vue sans
- * défiler. Ce test verrouille l'ordre, pas le contenu des cartes (chacune a ses propres tests).
+ * D'ABORD, puis le Rang. Depuis le 02/11/2026, la carte de force (Titre + records par groupe)
+ * vient SOUS « Ton rythme », à la demande de Nathan. Ce test verrouille l'ordre, pas le contenu
+ * des cartes (chacune a ses propres tests).
  */
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -60,13 +60,13 @@ const order = () =>
   );
 
 describe("Accueil — l'action d'abord, puis le Rang", () => {
-  it("Carte du jour → bandeau de la semaine → fiche de personnage → semaine → Corps → Tenue du jour", () => {
+  it("Carte du jour → bandeau de la semaine → semaine → carte de force → Corps → Tenue du jour", () => {
     renderHome();
     expect(order()).toEqual([
       "today-card",
       "week-teaser",
-      "character-sheet",
       "week-card",
+      "character-sheet",
       "corps-tile",
       "outfit-tile",
     ]);

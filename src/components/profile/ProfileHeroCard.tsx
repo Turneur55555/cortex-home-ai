@@ -4,56 +4,46 @@ import { Link } from "@tanstack/react-router";
 import { RankIllustration } from "@/components/rpg/RankIllustration";
 import { EASE_OUT } from "@/components/rpg/premium/tokens";
 import {
-  RANK_AMBIANCE,
   rankGlowShadow,
-  rankGrooveShadow,
-  rankRelief,
   rankRingInset,
+  rankRingOutset,
   rankTextGlow,
   rankThemeByKey,
 } from "@/components/rpg/rankTheme";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useStrengthCard } from "@/hooks/useStrengthCard";
 import { useUserStats } from "@/hooks/useUserStats";
-import { useWeeklyXp } from "@/hooks/useWeeklyXp";
 import { formatXp } from "@/lib/fitness/rpg/grade";
+import { describeSince, formatKgFr } from "@/lib/fitness/rpg/strengthCard";
 import { nextGradeLabel, titleProgressForXp } from "@/lib/fitness/rpg/titleProgress";
-import { weeklyXpLine } from "@/lib/fitness/rpg/weeklyXp";
 
-/** Hauteur de la vitrine : la fiche entière tient sous la Carte du jour sur un iPhone. */
-const VITRINE_HEIGHT = "clamp(184px, 27dvh, 260px)";
+/** Segments de la barre d'XP (un segment = 5 % du palier). */
+const SEGMENTS = 20;
 
 /**
- * Fiche de Personnage — pièce maîtresse de l'Accueil (01/11/2026).
+ * La carte de force — fiche de personnage de l'Accueil (« carte obsidienne », validée sur
+ * maquette par Nathan le 02/11/2026, placée SOUS « Ton rythme »).
  *
- * Fusion de l'ancienne illustration plein écran (≈ 420 pt sur iPhone, la barre de progression
- * repoussée sous la ligne de flottaison) et de la carte « Progression RPG » : UN objet forgé dans
- * la matière du Titre courant, visible sans défiler, qui dit qui l'on est ET combien il reste.
+ * - **Le Rang reste la star** : l'illustration officielle (`RankIllustration`) sertie dans un cadre
+ *   au ratio 4:5 EXACT (`assets/ranks/FORMAT.md` : jamais rognée, aucun texte par-dessus), le Titre
+ *   et le grade gravés à côté, l'XP restante avant le grade suivant sur une barre segmentée.
+ * - **Tes records** : une ligne par groupe musculaire — exercice phare, record de charge, ce qu'il
+ *   a gagné (règle pure : `lib/fitness/rpg/strengthCard.ts`, des faits, jamais une projection).
+ * - **La matière** passe par `rankTheme.ts` : changer de Titre reteinte la carte entière.
  *
- * - **Le Rang reste la star** : l'illustration officielle (`RankIllustration`), sertie comme une
- *   relique dans une vitrine au ratio 4:5 EXACT (`assets/ranks/FORMAT.md` : jamais rognée, aucun
- *   texte superposé — le nom du grade s'affiche SOUS l'illustration).
- * - **La plaque gravée** : grade actuel, barre du palier, « Plus que X XP avant [grade] », et un
- *   FAIT de rythme — l'XP versée cette semaine (sinon la semaine dernière). Jamais de projection.
- * - **La matière** (surface, relief, liseré, halo, grain, respiration, reflet) passe entièrement
- *   par `rankTheme.ts` / `RANK_AMBIANCE` : passer de Guerrier à Colosse reforge l'objet.
- *
- * Aucune logique métier ici : le Titre vient de `titleProgress` (XP GLOBALE uniquement, jamais le
- * Rang par exercice) ; l'XP de la semaine de `lib/fitness/rpg/weeklyXp.ts`. Toucher la fiche ouvre
- * la page Progression.
+ * Toucher la carte ouvre la page Progression.
  */
 export function ProfileHeroCard() {
   const { data: userStats } = useUserStats();
-  const { summary } = useWeeklyXp();
+  const { isLoading: strengthLoading, card } = useStrengthCard();
 
   // `useUserStats` sert le dernier rang confirmé (cache local) dès le premier rendu ; `userStats`
-  // n'est `undefined` que pour un tout premier lancement sans cache — dans ce seul cas, ne rien
-  // inventer : un squelette de la même emprise le temps que la vraie valeur arrive.
+  // n'est `undefined` que pour un tout premier lancement sans cache : un squelette, rien d'inventé.
   if (!userStats) {
     return (
-      <div
-        aria-busy="true"
-        className="mb-4 w-full animate-pulse rounded-[26px] bg-white/5 p-4"
-        style={{ minHeight: `calc(${VITRINE_HEIGHT} + 150px)` }}
-      />
+      <section aria-busy="true">
+        <Skeleton className="h-[300px] w-full rounded-[24px]" />
+      </section>
     );
   }
 
@@ -66,181 +56,153 @@ export function ProfileHeroCard() {
   const percent = progress.isMax
     ? 100
     : Math.max(0, Math.min(100, ((progress.xp - progress.xpCurrentThreshold) / span) * 100));
-  const weekly = weeklyXpLine(summary);
-
-  // ── Matière du Titre courant : couleurs (RankTheme) + profil de matériau (RANK_AMBIANCE).
+  const filled = Math.round((percent / 100) * SEGMENTS);
   const rankKey = progress.title.key;
   const theme = rankThemeByKey(rankKey);
-  const amb = RANK_AMBIANCE[rankKey];
-  const mix = amb.surfaceMix;
-  const plateSurface =
-    `radial-gradient(120% 70% at 50% -12%, color-mix(in oklch, ${theme.secondary} 40%, transparent), transparent 60%),` +
-    `linear-gradient(162deg,` +
-    ` color-mix(in oklch, ${theme.primary} ${mix + 20}%, oklch(0.2 0 0)) 0%,` +
-    ` color-mix(in oklch, ${theme.primary} ${mix + 8}%, oklch(0.14 0 0)) 55%,` +
-    ` color-mix(in oklch, ${theme.primary} ${Math.max(mix - 6, 0)}%, oklch(0.09 0 0)) 100%)`;
-  const plateShadow = [
-    "0 24px 54px -22px rgba(0,0,0,0.8)",
-    "0 8px 18px -12px rgba(0,0,0,0.55)",
-    rankRelief(theme, amb.reliefAlpha),
-    rankRingInset(theme.secondary, "45"),
-    rankGlowShadow(theme.glow, 0, 0, Math.round(amb.shadowBlur * 0.7)),
-  ].join(", ");
+  const since = describeSince(card?.since ?? null);
+
+  const surface =
+    `radial-gradient(120% 60% at 15% 0%, color-mix(in oklch, ${theme.secondary} 22%, transparent), transparent 60%),` +
+    `linear-gradient(160deg, color-mix(in oklch, ${theme.primary} 12%, oklch(0.17 0 0)), oklch(0.11 0 0))`;
 
   return (
-    <motion.section
-      aria-label="Ta fiche de personnage"
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      whileTap={{ scale: 0.99 }}
-      transition={{ duration: 0.55, ease: EASE_OUT }}
-      className="relative mb-4 overflow-hidden rounded-[26px] p-4"
-      style={{ background: plateSurface, boxShadow: plateShadow }}
-    >
-      <Link
-        to="/progression"
-        className="absolute inset-0 z-10 rounded-[26px]"
-        aria-label={`${progress.title.label} ${progress.grade} — ouvrir la progression`}
-      />
-      {/* Grain martelé, respiration de la lumière et reflet forgé du Titre courant. */}
-      <div aria-hidden className="bg-rank-grain pointer-events-none absolute inset-0" />
-      <div
-        aria-hidden
-        className="animate-rank-breathe pointer-events-none absolute inset-0"
+    <section aria-label="Ta carte">
+      <h2 className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        Ta carte
+      </h2>
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        whileTap={{ scale: 0.99 }}
+        transition={{ duration: 0.5, ease: EASE_OUT }}
+        className="relative overflow-hidden rounded-[24px] p-3.5"
         style={{
-          background: "radial-gradient(90% 55% at 50% 0%, rgba(255,255,255,0.1), transparent 62%)",
+          background: surface,
+          boxShadow: `${rankRingInset(theme.primary, "8c")}, ${rankGlowShadow(theme.glow, 0, 14, 32)}`,
         }}
-      />
-      <div
-        aria-hidden
-        className="rank-glint-layer pointer-events-none absolute inset-0 opacity-40"
-      />
-
-      <div className="relative flex flex-col items-center">
-        {/* Halo derrière la relique : la lumière du rang, pas une couleur inventée. */}
+      >
+        <Link
+          to="/progression"
+          className="absolute inset-0 z-10 rounded-[24px]"
+          aria-label={`${progress.title.label} ${progress.grade} — ouvrir la progression`}
+        />
+        {/* Liseré intérieur gravé et reflet : décor, jamais de contenu. */}
         <div
           aria-hidden
-          className="animate-rank-breathe pointer-events-none absolute left-1/2 top-[38%] h-[70%] w-[78%] -translate-x-1/2 -translate-y-1/2 rounded-full blur-2xl"
-          style={{
-            background: `radial-gradient(closest-side, ${theme.glow}, transparent)`,
-            opacity: 0.55,
-          }}
+          className="pointer-events-none absolute inset-[5px] rounded-[20px]"
+          style={{ boxShadow: rankRingInset(theme.primary, "38") }}
         />
-        {/* La vitrine — ratio 4:5 exact, illustration entière. */}
         <div
-          className="relative overflow-hidden rounded-[20px] bg-black"
-          style={{
-            aspectRatio: "4 / 5",
-            height: VITRINE_HEIGHT,
-            boxShadow: `${rankRingInset(theme.secondary, "55")}, ${rankGlowShadow(theme.glow, 0, 16, -8)}, 0 18px 32px -18px rgba(0,0,0,0.9)`,
-          }}
-        >
-          <RankIllustration
-            rankKey={rankKey}
-            label={progress.title.label}
-            className="absolute inset-0 h-full w-full"
-          />
-        </div>
+          aria-hidden
+          className="rank-glint-layer pointer-events-none absolute inset-0 opacity-30"
+        />
 
-        {/* La plaque gravée, en creux dans le métal. */}
-        <div
-          className="relative mt-3.5 w-full rounded-[18px] px-4 pb-3.5 pt-3"
-          style={{
-            background: "rgba(0,0,0,0.2)",
-            boxShadow: `inset 0 3px 10px -3px rgba(0,0,0,0.7), inset 0 1px 0 rgba(0,0,0,0.4), ${rankRingInset(theme.primary, "22")}`,
-          }}
-        >
-          <div className="flex items-end justify-between gap-3">
-            <div className="min-w-0">
-              <p
-                className="text-[11px] font-semibold uppercase tracking-[0.24em]"
-                style={{ color: "rgba(255,255,255,0.6)", textShadow: "0 1px 1px rgba(0,0,0,0.6)" }}
-              >
-                Grade actuel
-              </p>
-              <p
-                className="mt-1 break-words text-[22px] font-black uppercase leading-none tracking-[0.1em]"
-                style={{
-                  color: theme.text,
-                  textShadow: rankTextGlow(theme.glow, 14, "0 1px 0 rgba(0,0,0,0.55)"),
-                }}
-              >
-                {progress.grade}
-              </p>
-            </div>
-            {weekly && (
-              <p
-                className="shrink-0 text-right text-[11px] font-semibold leading-tight"
-                style={{ color: "rgba(255,255,255,0.66)", textShadow: "0 1px 1px rgba(0,0,0,0.5)" }}
-              >
-                <span
-                  className="block text-[15px] font-black tabular-nums"
-                  style={{ color: theme.secondary }}
-                >
-                  +{formatXp(weekly.amount)} XP
-                </span>
-                {weekly.when}
-              </p>
-            )}
-          </div>
-
+        <div className="relative flex items-center gap-3.5">
           <div
-            className="relative mt-3 h-3 overflow-hidden rounded-full"
-            role="progressbar"
-            aria-label={nextGrade ? `Progression vers ${nextGrade}` : "Grade suprême atteint"}
-            aria-valuenow={Math.round(percent)}
-            aria-valuemin={0}
-            aria-valuemax={100}
+            className="relative w-[92px] shrink-0 overflow-hidden rounded-xl"
             style={{
-              background: "linear-gradient(180deg, rgba(0,0,0,0.5), rgba(0,0,0,0.34))",
-              boxShadow: rankGrooveShadow(theme.secondary),
+              aspectRatio: "4 / 5",
+              boxShadow: `${rankRingOutset(theme.secondary, "b3")}, ${rankGlowShadow(theme.glow, 0, 6, 18)}`,
             }}
           >
-            <div
-              className="relative h-full rounded-full transition-[width] duration-700 ease-out"
-              style={{
-                width: `${percent}%`,
-                background: theme.gradient,
-                boxShadow: `${rankGlowShadow(theme.glow, 0, 0, 12)}, inset 0 1px 0 rgba(255,255,255,0.55), inset 0 -2px 4px rgba(0,0,0,0.4)`,
-              }}
+            <RankIllustration
+              rankKey={rankKey}
+              label={progress.title.label}
+              className="absolute inset-0 h-full w-full"
+            />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[10px] font-extrabold uppercase tracking-[0.26em] text-white/60">
+              {progress.title.label}
+            </p>
+            <p
+              className="mt-1 break-words text-[30px] font-black uppercase leading-none tracking-[0.06em]"
+              style={{ color: theme.text, textShadow: rankTextGlow(theme.glow, 16) }}
             >
-              {percent > 4 && percent < 100 && (
-                <span
-                  aria-hidden
-                  className="animate-rank-breathe absolute inset-y-0 right-0 w-6 rounded-full"
-                  style={{
-                    background:
-                      "radial-gradient(circle at 100% 50%, rgba(255,255,255,0.9), transparent 70%)",
-                  }}
-                />
+              {progress.grade}
+            </p>
+            <p className="mt-1.5 text-[12px] font-semibold text-white/80">
+              {progress.isMax || !nextGrade ? (
+                <span style={{ color: theme.secondary }}>Grade suprême atteint</span>
+              ) : (
+                <>
+                  <b className="font-extrabold tabular-nums" style={{ color: theme.secondary }}>
+                    {formatXp(progress.xpToNext)} XP
+                  </b>{" "}
+                  avant {nextGrade}
+                </>
               )}
+            </p>
+            <div
+              className="mt-2 flex gap-[2.5px]"
+              role="progressbar"
+              aria-label={nextGrade ? `Progression vers ${nextGrade}` : "Grade suprême atteint"}
+              aria-valuenow={Math.round(percent)}
+              aria-valuemin={0}
+              aria-valuemax={100}
+            >
+              {Array.from({ length: SEGMENTS }, (_, i) => (
+                <span
+                  key={i}
+                  className="h-1.5 flex-1 rounded-[2px]"
+                  style={{ background: i < filled ? theme.gradient : "rgba(255,255,255,0.09)" }}
+                />
+              ))}
             </div>
           </div>
-
-          <p
-            className="mt-2.5 text-center text-[12.5px] font-semibold"
-            style={{ color: "rgba(255,255,255,0.7)", textShadow: "0 1px 1px rgba(0,0,0,0.5)" }}
-          >
-            {progress.isMax || !nextGrade ? (
-              <span style={{ color: theme.secondary }}>Grade suprême atteint</span>
-            ) : (
-              <>
-                Plus que{" "}
-                <span className="font-black tabular-nums" style={{ color: theme.secondary }}>
-                  {formatXp(progress.xpToNext)} XP
-                </span>{" "}
-                avant{" "}
-                <span
-                  className="font-black uppercase tracking-wider"
-                  style={{ color: theme.secondary }}
-                >
-                  {nextGrade}
-                </span>
-              </>
-            )}
-          </p>
         </div>
-      </div>
-    </motion.section>
+
+        <div className="relative mt-3">
+          {strengthLoading && !card ? (
+            <div className="space-y-2.5" aria-busy="true">
+              <Skeleton className="h-6 w-full rounded-lg" />
+              <Skeleton className="h-6 w-full rounded-lg" />
+              <Skeleton className="h-6 w-full rounded-lg" />
+            </div>
+          ) : card && card.rows.length > 0 ? (
+            <ul className="space-y-2">
+              {card.rows.map((row) => (
+                <li
+                  key={row.group}
+                  className="grid grid-cols-[104px_minmax(0,1fr)_54px_34px] items-center gap-2"
+                >
+                  <span className="min-w-0">
+                    <span className="block text-[10px] font-extrabold tracking-[0.14em] text-white/85">
+                      {row.label}
+                    </span>
+                    <span className="block truncate text-[10px] text-white/50">
+                      {row.exerciseName}
+                    </span>
+                  </span>
+                  <span className="h-1.5 overflow-hidden rounded-full bg-white/[0.08]">
+                    <span
+                      className="block h-full rounded-full"
+                      style={{
+                        width: `${Math.round(row.barRatio * 100)}%`,
+                        background: theme.gradient,
+                      }}
+                    />
+                  </span>
+                  <span className="text-right text-[15px] font-black tabular-nums text-white">
+                    {formatKgFr(row.recordKg)}
+                    <span className="ml-0.5 text-[9.5px] font-bold text-white/50">kg</span>
+                  </span>
+                  <span className="text-right text-[10.5px] font-black tabular-nums text-emerald-400">
+                    {row.progressionKg > 0 ? `▲${formatKgFr(row.progressionKg)}` : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-[12px] leading-snug text-white/60">
+              Tes records apparaîtront ici dès qu'un exercice chargé aura été fait trois fois.
+            </p>
+          )}
+          {card && card.rows.some((r) => r.progressionKg > 0) && since && (
+            <p className="mt-2.5 text-right text-[10.5px] text-white/50">▲ {since}</p>
+          )}
+        </div>
+      </motion.div>
+    </section>
   );
 }

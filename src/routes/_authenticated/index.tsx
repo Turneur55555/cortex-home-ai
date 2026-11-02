@@ -17,11 +17,11 @@ export const Route = createFileRoute("/_authenticated/")({
 });
 
 // Accueil : l'ACTION D'ABORD (décision de Nathan, 30/09/2026), puis le Rang.
-//   Carte du jour → (bandeau « Ta semaine est prête », lundi et mardi) → fiche de personnage →
-//   ta semaine → Corps → Tenue du jour (Dressing, invisible si vide).
-// La fiche de personnage (01/11/2026) fond l'illustration du Titre et la carte de progression
-// en un seul objet, placé JUSTE sous la Carte du jour pour être vu sans défiler : avant, la
-// barre « Plus que X XP avant … » tombait sous la ligne de flottaison d'un iPhone.
+//   Carte du jour → (bandeau « Ta semaine est prête », lundi et mardi) → ta semaine →
+//   ta carte (de force) → Corps → Tenue du jour (Dressing, invisible si vide).
+// La carte de force (« carte obsidienne », choisie sur maquette par Nathan le 02/11/2026) porte
+// le Titre, l'XP avant le grade suivant et les records par groupe musculaire ; Nathan l'a voulue
+// SOUS « Ton rythme » : d'abord quoi faire aujourd'hui et cette semaine, puis où l'on en est.
 // La Carte du jour dit quoi faire aujourd'hui, uniquement par des faits (voir
 // lib/fitness/todayCard.ts) ; la semaine n'apparaît que si un plan existe (sans
 // plan, c'est la Carte du jour qui invite à en créer un).
@@ -35,10 +35,10 @@ function HomePage() {
     <main className="flex flex-1 flex-col px-5 pb-4 pt-[max(1.25rem,calc(env(safe-area-inset-top)+0.375rem))]">
       <TodayCard />
       <WeekReportTeaser />
-      <ProfileHeroCard />
-      <div className="empty:hidden">
+      <div className="mb-4 empty:hidden">
         <WeekPlanCard hideInvitation />
       </div>
+      <ProfileHeroCard />
       <CorpsShortcutTile />
       <TodayOutfitTile />
     </main>

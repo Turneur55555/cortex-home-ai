@@ -240,7 +240,7 @@ séances rattrapées des 26 et 27/10/2026). `useLogDoneWorkout` (« Je l'ai fait
 ACTIVE sous la garde §2.1, écrit exercices et séries cochées, puis clôt par une opération SÉPARÉE
 (`neverMergeIntoPendingCreate`) retenue par `dependsOnRecords` sur tous ses enfants — la même
 garantie que `useFinishWorkout`. Corollaire : quand le serveur confirme la récompense,
-`useSessionReward` invalide l'XP affichée ailleurs (`user_stats`, `weekly_xp`).
+`useSessionReward` invalide l'XP affichée ailleurs (`user_stats`).
 **Exception connue, à migrer** : le formulaire historique « Enregistrer comme séance passée »
 (`WorkoutSheet` → `useAddWorkout`) insère encore la séance déjà terminée.
 → `src/hooks/use-fitness.ts` (`useLogDoneWorkout`), `src/lib/fitness/doneSession.ts`,
