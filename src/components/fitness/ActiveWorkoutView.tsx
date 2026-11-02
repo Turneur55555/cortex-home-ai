@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BookOpen, CheckCircle2, Layers, Loader2, MoreVertical, XCircle } from "lucide-react";
+import {
+  BookOpen,
+  CheckCircle2,
+  Layers,
+  Loader2,
+  MoreVertical,
+  Trophy,
+  XCircle,
+} from "lucide-react";
+import { toast } from "sonner";
 import { Sheet } from "@/components/shared/FormComponents";
 import type { ActiveWorkout } from "@/hooks/use-fitness";
 import {
@@ -42,8 +51,37 @@ import type { DisciplineId } from "@/lib/fitness/engines/types";
 import { DisciplineIcon } from "./session/DisciplineIcon";
 import { SegmentAnalysisSheet } from "./session/SegmentAnalysisSheet";
 import { SessionGoalBar } from "./session/SessionGoalBar";
+import { SessionClosureSheet } from "./session/SessionClosureSheet";
+import { useScreenWakeLock } from "@/hooks/useScreenWakeLock";
+import { useAuth } from "@/hooks/use-auth";
+import { toRankState } from "@/hooks/useExerciseProgression";
+import { localDateYMD } from "@/lib/dates";
+import { DEFAULT_RANK_ENGINE_CONFIG } from "@/lib/fitness/rank/config";
+import {
+  describeNextRank,
+  detectSessionHighlight,
+  evaluateLiveRank,
+  rankHistoryByExercise,
+  tierLabel,
+  type ExerciseLiveSnapshot,
+  type LiveRank,
+} from "@/lib/fitness/rank/liveRank";
+import type { SessionInput, SessionSetInput } from "@/lib/fitness/rank/types";
+import type { RankState } from "@/lib/fitness/exerciseRanks";
+import { loadSeenRankTier, saveSeenRankTier } from "@/lib/fitness/rpg/rankUpSeen";
+import { RankUpOverlay } from "./RankUpOverlay";
+import { applyClosureDecision, type ClosureDecision } from "@/lib/fitness/closureReview";
 
 const DEFAULT_BODYWEIGHT_KG = 75;
+const EMPTY_HISTORY: SessionInput[] = [];
+
+interface LiveRankCacheEntry {
+  history: SessionInput[];
+  setsSignature: string;
+  bodyweightKg: number;
+  date: string;
+  value: LiveRank;
+}
 
 // ─── Main view ───────────────────────────────────────────────────────────────
 
@@ -62,6 +100,9 @@ export function ActiveWorkoutView({
    *  fourni par SeancesTab pour le rendre accessible même en séance active. */
   onOpenCatalog?: () => void;
 }) {
+  // Écran allumé pendant toute la séance : sans cela, iPhone verrouillé, le minuteur de repos
+  // ne sonne ni ne s'affiche (voir useScreenWakeLock).
+  useScreenWakeLock(true);
   const finish = useFinishWorkout();
   const cancel = useCancelWorkout();
   const addExercise = useAddExerciseToActiveWorkout();
@@ -191,6 +232,113 @@ export function ActiveWorkoutView({
     [allWorkouts, bodyweightKg],
   );
 
+  // ── Rang pendant la séance (`lib/fitness/rank/liveRank.ts`) ───────────────
+  // Le VRAI moteur de rang tourne sur l'historique (séance en cours exclue) PLUS les séries
+  // validées du jour : le fanion de la carte suit la séance, la carte dit ce qui sépare du
+  // grade suivant, et une montée de grade se célèbre au moment où elle se produit. Purement
+  // visuel : la promotion officielle et son XP restent arbitrées côté serveur à la clôture.
+  const { user } = useAuth();
+  const rankHistory = useMemo(
+    () => rankHistoryByExercise(allWorkouts, workout.id),
+    [allWorkouts, workout.id],
+  );
+  const sessionDate = useMemo(
+    () => localDateYMD(new Date(workout.created_at)),
+    [workout.created_at],
+  );
+  // Cache par exercice : seul l'exercice dont une série vient de changer est recalculé.
+  const liveRankCache = useRef(new Map<string, LiveRankCacheEntry>());
+  const live = useMemo(() => {
+    const byKey = new Map<string, { name: string; sets: SessionSetInput[] }>();
+    for (const ex of workout.exercises ?? []) {
+      const key = identityKey(ex);
+      const entry = byKey.get(key) ?? { name: ex.name, sets: [] };
+      for (const s of ex.exercise_sets ?? []) {
+        if (s.completed) entry.sets.push({ reps: s.reps, weight: s.weight });
+      }
+      byKey.set(key, entry);
+    }
+    const ranks = new Map<string, LiveRank>();
+    const bestWeight = new Map<string, number | null>();
+    const validatedCount = new Map<string, number>();
+    const names = new Map<string, string>();
+    for (const [key, { name, sets }] of byKey) {
+      names.set(key, name);
+      validatedCount.set(key, sets.length);
+      const weights = sets
+        .filter((s) => (s.reps ?? 0) > 0)
+        .map((s) => s.weight ?? 0)
+        .filter((w) => w > 0);
+      bestWeight.set(key, weights.length > 0 ? Math.max(...weights) : null);
+      const history = rankHistory.get(key) ?? EMPTY_HISTORY;
+      const setsSignature = JSON.stringify(sets);
+      const cached = liveRankCache.current.get(key);
+      if (
+        cached &&
+        cached.history === history &&
+        cached.setsSignature === setsSignature &&
+        cached.bodyweightKg === bodyweightKg &&
+        cached.date === sessionDate
+      ) {
+        ranks.set(key, cached.value);
+        continue;
+      }
+      const value = evaluateLiveRank({
+        config: DEFAULT_RANK_ENGINE_CONFIG,
+        exerciseName: name,
+        history,
+        currentSets: sets,
+        bodyweightKg,
+        today: sessionDate,
+      });
+      liveRankCache.current.set(key, {
+        history,
+        setsSignature,
+        bodyweightKg,
+        date: sessionDate,
+        value,
+      });
+      ranks.set(key, value);
+    }
+    return { ranks, bestWeight, validatedCount, names };
+  }, [workout.exercises, rankHistory, bodyweightKg, sessionDate]);
+
+  // Célébrations : au plus une à la fois, jamais au premier calcul (reprise de séance), jamais
+  // avant que l'historique soit chargé (sinon tout paraîtrait « nouveau »).
+  const [rankUp, setRankUp] = useState<RankState | null>(null);
+  const highlightBaseline = useRef<Map<string, ExerciseLiveSnapshot> | null>(null);
+  useEffect(() => {
+    if (!allWorkouts) return;
+    const next = new Map<string, ExerciseLiveSnapshot>();
+    const seen = new Map<string, number | null>();
+    for (const [key, lr] of live.ranks) {
+      next.set(key, {
+        tierIndex: lr.tierIndex,
+        promoted: lr.promoted,
+        bestWeight: live.bestWeight.get(key) ?? null,
+      });
+      const name = live.names.get(key);
+      seen.set(key, user && name ? loadSeenRankTier(user.id, name) : null);
+    }
+    const highlight = detectSessionHighlight(highlightBaseline.current, next, {
+      priorRecordByKey: prByName,
+      seenTierByKey: seen,
+    });
+    highlightBaseline.current = next;
+    if (!highlight) return;
+    const name = live.names.get(highlight.key) ?? "";
+    if (highlight.kind === "rankUp") {
+      const lr = live.ranks.get(highlight.key);
+      setRankUp(toRankState(highlight.tierIndex, lr?.masteryPercent ?? 0));
+      if (user && name) saveSeenRankTier(user.id, name, highlight.tierIndex);
+    } else {
+      toast.success(`Nouveau record · ${name}`, {
+        description: `${highlight.weight.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} kg`,
+        icon: <Trophy className="h-4 w-4 text-warning" />,
+      });
+    }
+  }, [live, allWorkouts, prByName, user]);
+
   // Dernières séances de TOUS les exercices (groupé : fin du N+1).
   // Étape 4.5 : identité (exercise_reference_id) transmise en plus du nom,
   // pour une correspondance par id en priorité côté hook.
@@ -241,12 +389,25 @@ export function ActiveWorkoutView({
   // ne font que refléter le verrou à l'écran, ils ne le remplacent pas.
   const closureBusy = finish.isPending || cancel.isPending;
 
-  const handleFinish = async () => {
+  // Récap de clôture (`lib/fitness/closureReview.ts`) : « Terminer » ouvre d'abord le récap —
+  // séries saisies mais pas cochées, durée confirmable. La clôture part du récap.
+  const [closureReviewOpen, setClosureReviewOpen] = useState(false);
+  const openClosureReview = () => {
     if (closureBusy) return;
-    // Capture snapshot before invalidation
-    const snapshot = workout;
+    setClosureReviewOpen(true);
+  };
+
+  const handleFinish = async (decision: ClosureDecision, durationMinutes: number | undefined) => {
+    if (closureBusy) return;
+    // Instantané de fin, décision appliquée : la carte récap et le bilan lisent les séries
+    // telles qu'elles viennent d'être enregistrées (comptées cochées, retirées absentes).
+    const snapshot = applyClosureDecision(workout, decision);
     try {
-      await finish.mutateAsync({ ...workout, segments: hybridWorkout?.segments ?? [] });
+      await finish.mutateAsync({
+        ...workout,
+        segments: hybridWorkout?.segments ?? [],
+        closure: { ...decision, durationMinutes },
+      });
     } catch {
       // L'échec n'est PAS avalé : `useFinishWorkout.onError` en a déjà
       // affiché le message. On l'attrape uniquement pour ne pas laisser un
@@ -254,6 +415,7 @@ export function ActiveWorkoutView({
       // enchaîner sur l'écran de récompense d'une séance non close.
       return;
     }
+    setClosureReviewOpen(false);
     // Analyse muscles des exercices personnalisés en arrière-plan (silent)
     const toResolve = (snapshot.exercises ?? []).map((ex) => ({
       id: ex.id,
@@ -273,6 +435,21 @@ export function ActiveWorkoutView({
     } catch {
       // Message déjà affiché par `useCancelWorkout.onError` — voir plus haut.
     }
+  };
+
+  const liveRankState = (key: string): RankState | null => {
+    const lr = live.ranks.get(key);
+    if (!lr) return null;
+    // Jamais un « Mortel » inventé : sans historique ni série validée, pas de fanion.
+    if (lr.beforeTierIndex === null && (live.validatedCount.get(key) ?? 0) === 0) return null;
+    return toRankState(lr.tierIndex, lr.masteryPercent);
+  };
+  const nextRankLine = (key: string) => {
+    const lr = live.ranks.get(key);
+    const text = describeNextRank(lr?.next ?? null);
+    if (!lr?.next || !text) return null;
+    const label = tierLabel(lr.next.tierIndex);
+    return { ...text, rankKey: label.rankKey, rankLabel: label.rankLabel };
   };
 
   return (
@@ -301,7 +478,7 @@ export function ActiveWorkoutView({
             <WorkoutTimer createdAt={workout.created_at} />
             <button
               type="button"
-              onClick={handleFinish}
+              onClick={openClosureReview}
               disabled={closureBusy}
               className="flex h-8 items-center gap-1.5 rounded-full bg-gradient-primary px-3 text-[12px] font-semibold text-primary-foreground shadow-glow disabled:opacity-50"
             >
@@ -355,6 +532,15 @@ export function ActiveWorkoutView({
             </button>
           </div>
         </Portal>
+      )}
+
+      {closureReviewOpen && (
+        <SessionClosureSheet
+          workout={workout}
+          busy={closureBusy}
+          onConfirm={handleFinish}
+          onClose={() => setClosureReviewOpen(false)}
+        />
       )}
 
       {/* ── Confirm cancel ── */}
@@ -413,7 +599,8 @@ export function ActiveWorkoutView({
                 imageUrl={exImage}
                 datasetPhotoUrl={datasetEntry?.primaryPhotoUrl ?? null}
                 datasetGifUrl={datasetEntry?.primaryGifUrl ?? null}
-                rank={ranksByName.get(identityKey(ex)) ?? null}
+                rank={liveRankState(identityKey(ex)) ?? ranksByName.get(identityKey(ex)) ?? null}
+                nextRank={nextRankLine(identityKey(ex))}
                 lastSession={lastSessions.get(identityKey(ex)) ?? null}
                 pr={prByName.get(identityKey(ex)) ?? null}
                 recoveryMap={recoveryMap}
@@ -548,6 +735,9 @@ export function ActiveWorkoutView({
           onClose={() => setPickerOpen(false)}
         />
       )}
+
+      {/* Montée de grade pendant la séance — même cinématique que la fiche d'exercice. */}
+      <RankUpOverlay rank={rankUp} onDone={() => setRankUp(null)} />
 
       {/* Fiche détaillée exercice */}
       {statsTarget && (

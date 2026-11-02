@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
+import { DeferredPart } from "@/components/shared/DeferredPart";
+import { lazyWithPreload, preloadWhenIdle } from "@/components/shared/lazyWithPreload";
 import { Dumbbell, Loader2, AlertCircle } from "lucide-react";
 import { SeancesHero } from "@/components/fitness/SeancesHero";
 import { ChoisirEpreuveCard } from "@/components/fitness/ChoisirEpreuveCard";
@@ -6,17 +8,12 @@ import { BodyMap } from "@/components/fitness/BodyMap";
 import { type WorkoutRow } from "@/components/fitness/WorkoutCard";
 import { LastSessionRow } from "@/components/fitness/LastSessionRow";
 import { RepeatLiveConfirmDialog } from "@/components/fitness/RepeatLiveConfirmDialog";
-import { WorkoutSheet } from "@/components/fitness/WorkoutSheet";
-import { GenericSessionReviewSheet } from "@/components/fitness/session/GenericSessionReviewSheet";
 import { StartWorkoutSheet } from "@/components/fitness/StartWorkoutSheet";
 import { NewSessionSheet } from "@/components/fitness/templates/NewSessionSheet";
 import { SavedTemplatesSheet } from "@/components/fitness/templates/SavedTemplatesSheet";
 import { TemplateEditorSheet } from "@/components/fitness/templates/TemplateEditorSheet";
 import { ActiveWorkoutView } from "@/components/fitness/ActiveWorkoutView";
 import { ActiveGenericSessionView } from "@/components/fitness/session/ActiveGenericSessionView";
-import { ExerciseCatalogSheet } from "@/components/fitness/ExerciseCatalogSheet";
-import { PostWorkoutAnalysisSheet } from "@/components/fitness/PostWorkoutAnalysisSheet";
-import { GenericPostWorkoutAnalysisSheet } from "@/components/fitness/session/GenericPostWorkoutAnalysisSheet";
 import { SessionRewardScreen } from "@/components/fitness/session/SessionRewardScreen";
 import { SessionRecapScreen } from "@/components/fitness/session/SessionRecapScreen";
 import { ChroniquePage } from "@/components/fitness/chronique/ChroniquePage";
@@ -40,7 +37,7 @@ import {
 } from "@/hooks/useGenericActiveSession";
 import { useRecoveryMap } from "@/hooks/useRecoveryMap";
 
-import { CoachSheet, type WorkoutTemplate } from "./CoachSheet";
+import type { WorkoutTemplate } from "./CoachSheet";
 import { computePRs } from "@/utils/fitness/exercise-stats";
 import { ENGINE_REGISTRY } from "@/lib/fitness/engines/registry";
 import {
@@ -51,6 +48,96 @@ import {
 import { workoutToTemplateSeed, type TemplateSeedExercise } from "@/lib/fitness/workoutTemplates";
 import { buildGenericSessionRecap, buildSessionRecap } from "@/lib/fitness/rpg/sessionRecap";
 import { computeRecordsBySession } from "@/lib/fitness/chronicles";
+
+// ── Chargement différé (`components/shared/DeferredPart.tsx`) ─────────────────
+// Feuilles ouvertes à la demande, dont plusieurs n'ont de sens qu'en ligne (Sensei, bilan IA) :
+// elles ne partent plus avec la page. Le parcours de séance (démarrer, saisir, terminer,
+// récompense) reste chargé immédiatement — il doit marcher même si le réseau tombe.
+const LazyCoachSheet = lazyWithPreload(() =>
+  import("./CoachSheet").then((m) => ({ default: m.CoachSheet })),
+);
+const LazyPostWorkoutAnalysisSheet = lazyWithPreload(() =>
+  import("@/components/fitness/PostWorkoutAnalysisSheet").then((m) => ({
+    default: m.PostWorkoutAnalysisSheet,
+  })),
+);
+const LazyGenericPostWorkoutAnalysisSheet = lazyWithPreload(() =>
+  import("@/components/fitness/session/GenericPostWorkoutAnalysisSheet").then((m) => ({
+    default: m.GenericPostWorkoutAnalysisSheet,
+  })),
+);
+const LazyExerciseCatalogSheet = lazyWithPreload(() =>
+  import("@/components/fitness/ExerciseCatalogSheet").then((m) => ({
+    default: m.ExerciseCatalogSheet,
+  })),
+);
+const LazyWorkoutSheet = lazyWithPreload(() =>
+  import("@/components/fitness/WorkoutSheet").then((m) => ({ default: m.WorkoutSheet })),
+);
+const LazyGenericSessionReviewSheet = lazyWithPreload(() =>
+  import("@/components/fitness/session/GenericSessionReviewSheet").then((m) => ({
+    default: m.GenericSessionReviewSheet,
+  })),
+);
+
+function CoachSheet(props: ComponentProps<typeof LazyCoachSheet>) {
+  return (
+    <DeferredPart>
+      <LazyCoachSheet {...props} />
+    </DeferredPart>
+  );
+}
+function PostWorkoutAnalysisSheet(props: ComponentProps<typeof LazyPostWorkoutAnalysisSheet>) {
+  return (
+    <DeferredPart>
+      <LazyPostWorkoutAnalysisSheet {...props} />
+    </DeferredPart>
+  );
+}
+function GenericPostWorkoutAnalysisSheet(
+  props: ComponentProps<typeof LazyGenericPostWorkoutAnalysisSheet>,
+) {
+  return (
+    <DeferredPart>
+      <LazyGenericPostWorkoutAnalysisSheet {...props} />
+    </DeferredPart>
+  );
+}
+function ExerciseCatalogSheet(props: ComponentProps<typeof LazyExerciseCatalogSheet>) {
+  return (
+    <DeferredPart>
+      <LazyExerciseCatalogSheet {...props} />
+    </DeferredPart>
+  );
+}
+function WorkoutSheet(props: ComponentProps<typeof LazyWorkoutSheet>) {
+  return (
+    <DeferredPart>
+      <LazyWorkoutSheet {...props} />
+    </DeferredPart>
+  );
+}
+function GenericSessionReviewSheet(props: ComponentProps<typeof LazyGenericSessionReviewSheet>) {
+  return (
+    <DeferredPart>
+      <LazyGenericSessionReviewSheet {...props} />
+    </DeferredPart>
+  );
+}
+
+/** Après le premier affichage : tout ce qui est différé est chargé pendant un temps mort (et mis
+ *  en cache par le Service Worker), pour rester disponible si le réseau tombe ensuite. */
+const DEFERRED_PRELOADS: ReadonlyArray<() => Promise<unknown>> = [
+  LazyExerciseCatalogSheet.preload,
+  LazyWorkoutSheet.preload,
+  LazyCoachSheet.preload,
+  LazyPostWorkoutAnalysisSheet.preload,
+  LazyGenericPostWorkoutAnalysisSheet.preload,
+  LazyGenericSessionReviewSheet.preload,
+  () => import("@/components/fitness/exercise-sheet/ExerciseProgressionSection"),
+  () => import("@/components/fitness/WorkoutProgressCharts"),
+  () => import("@/components/fitness/session/SegmentMetricChart"),
+];
 
 // ── Composant principal ─────────────────────────────────────────────────────────
 
@@ -90,6 +177,11 @@ export function SeancesTab(props: SeancesTabProps = {}) {
   const recordsBySession = useMemo(() => computeRecordsBySession(muscuWorkouts), [muscuWorkouts]);
 
   const [startOpen, setStartOpen] = useState(false);
+  // Chargement différé : préchargement en tâche de fond une fois la page affichée (hors tests).
+  useEffect(() => {
+    if (import.meta.env.MODE === "test") return;
+    return preloadWhenIdle(DEFERRED_PRELOADS);
+  }, []);
   // Phase A (15/07/2026) — porte d'entrée unique "Nouvelle séance" :
   // remplace l'ancien choix "Choisir une épreuve" (NewSessionChoiceSheet,
   // musculation uniquement) par un écran discipline -> mode couvrant les 6

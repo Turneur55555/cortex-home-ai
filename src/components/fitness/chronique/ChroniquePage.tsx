@@ -39,7 +39,8 @@ import { fr } from "date-fns/locale";
 import type { WorkoutRow } from "@/components/fitness/WorkoutCard";
 import { SectionReveal } from "@/components/fitness/SectionReveal";
 import { BodyMap } from "@/components/fitness/BodyMap";
-import { WorkoutProgressCharts } from "@/components/fitness/WorkoutProgressCharts";
+import { DeferredPart } from "@/components/shared/DeferredPart";
+import { lazyWithPreload } from "@/components/shared/lazyWithPreload";
 import { StatTileRow, type StatTileSpec } from "@/components/fitness/StatTileRow";
 import { DisciplineBadge } from "@/components/fitness/session/DisciplineIcon";
 import { ENGINE_REGISTRY } from "@/lib/fitness/engines/registry";
@@ -55,6 +56,13 @@ import { MUSCLE_META, type MuscleId } from "@/lib/fitness/muscleMapping";
 import type { MuscleRecovery } from "@/lib/fitness/recovery";
 import { useLatestBodyWeight } from "@/hooks/useLatestBodyWeight";
 import { useStoredWorkoutAnalysis } from "@/hooks/useWorkoutAnalyses";
+
+// Graphiques (recharts) chargés quand la Chronique les affiche, jamais avec la page Séances.
+const WorkoutProgressCharts = lazyWithPreload(() =>
+  import("@/components/fitness/WorkoutProgressCharts").then((m) => ({
+    default: m.WorkoutProgressCharts,
+  })),
+);
 
 // ── Helpers de présentation ───────────────────────────────────────────────────
 
@@ -481,12 +489,16 @@ export function ChroniquePage({
         <SectionReveal>
           <div>
             <SectionTitle icon={<TrendingUp className="h-4 w-4" />}>Progression</SectionTitle>
-            <WorkoutProgressCharts
-              topExercises={sessionExerciseKeys}
-              histByName={histByName}
-              prByName={prByName}
-              nameByKey={nameByKey}
-            />
+            <DeferredPart
+              fallback={<div className="h-48 animate-pulse rounded-2xl bg-white/[0.03]" />}
+            >
+              <WorkoutProgressCharts
+                topExercises={sessionExerciseKeys}
+                histByName={histByName}
+                prByName={prByName}
+                nameByKey={nameByKey}
+              />
+            </DeferredPart>
           </div>
         </SectionReveal>
       )}

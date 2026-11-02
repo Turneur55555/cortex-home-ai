@@ -85,7 +85,7 @@ import {
   parseMetricInput,
   toDisplayString,
 } from "../session/ActiveSegmentCard";
-import type { RankState } from "@/lib/fitness/exerciseRanks";
+import type { RankKey, RankState } from "@/lib/fitness/exerciseRanks";
 import { RankFlag } from "@/components/rpg/RankFlag";
 import {
   ExerciseCardConfirmDelete,
@@ -108,8 +108,11 @@ type MuscuCardProps = {
   /** Photo/GIF du dataset — priorité sur `imageUrl` (voir ExercisePhotoTile). */
   datasetPhotoUrl?: string | null;
   datasetGifUrl?: string | null;
-  /** Rang RPG déjà calculé (voir computeRanksByName) — jamais recalculé ici. */
+  /** Rang RPG déjà calculé (rang EN DIRECT, voir `lib/fitness/rank/liveRank.ts`) — jamais
+   *  recalculé ici. */
   rank?: RankState | null;
+  /** Ce qui sépare du grade suivant, déjà formulé (`describeNextRank`) — carte dépliée seulement. */
+  nextRank?: { title: string; detail: string; rankKey: RankKey; rankLabel: string } | null;
   lastSession: LastSession | null;
   pr: number | null;
   recoveryMap?: Map<MuscleId, MuscleRecovery>;
@@ -357,6 +360,7 @@ function MuscuExerciseCard({
   datasetPhotoUrl,
   datasetGifUrl,
   rank,
+  nextRank,
   lastSession,
   pr,
   onOpenStats,
@@ -560,6 +564,24 @@ function MuscuExerciseCard({
               {doneCount} / {sortedSets.length} série{sortedSets.length > 1 ? "s" : ""}
             </span>
           )}
+        </div>
+      )}
+
+      {!collapsed && nextRank && (
+        <div className="mt-2 flex items-center gap-3 rounded-xl bg-white/[0.03] px-3 py-2">
+          <RankFlag
+            rankKey={nextRank.rankKey}
+            label={nextRank.rankLabel}
+            className="h-6 max-w-[96px] shrink-0"
+          />
+          <div className="min-w-0">
+            <p className="text-[12px] font-semibold leading-snug text-foreground">
+              {nextRank.title}
+            </p>
+            <p className="text-[12px] leading-snug text-muted-foreground tabular-nums">
+              {nextRank.detail}
+            </p>
+          </div>
         </div>
       )}
 

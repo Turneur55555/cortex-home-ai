@@ -2,15 +2,6 @@ import { useMemo, useState } from "react";
 import { format, parseISO } from "date-fns";
 import { fr } from "date-fns/locale";
 import { CalendarClock, Repeat, Sparkles, Target, TrendingUp, Trophy, X } from "lucide-react";
-import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { useSegmentHistory } from "@/hooks/useSegmentHistory";
 import { useDisciplineSegmentHistory } from "@/hooks/useDisciplineSegmentHistory";
 import type { DisciplineId } from "@/lib/fitness/engines/types";
@@ -22,6 +13,13 @@ import {
 } from "@/lib/fitness/segmentStats";
 import { SectionCard, StatTileMini, TrendIcon } from "../ExerciseAnalysisPrimitives";
 import { Portal } from "@/components/Portal";
+import { DeferredPart } from "@/components/shared/DeferredPart";
+import { lazyWithPreload } from "@/components/shared/lazyWithPreload";
+
+// La courbe (recharts) se charge à l'ouverture de la fiche, jamais avec l'écran de séance.
+const SegmentMetricChart = lazyWithPreload(() =>
+  import("./SegmentMetricChart").then((m) => ({ default: m.SegmentMetricChart })),
+);
 
 // ============================================================
 // Fiche détaillée d'un EXERCICE de course (ex. "400m allure 5 km",
@@ -179,48 +177,16 @@ export function SegmentAnalysisSheet({
 
                 {/* Graphique — un point par séance (répétitions déjà agrégées) */}
                 {chartData.length > 1 ? (
-                  <ResponsiveContainer width="100%" height={160}>
-                    <LineChart data={chartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-                      <CartesianGrid
-                        stroke="var(--color-border)"
-                        strokeDasharray="3 3"
-                        vertical={false}
-                      />
-                      <XAxis
-                        dataKey="date"
-                        tick={{ fontSize: 9, fill: "var(--color-muted-foreground)" }}
-                        axisLine={false}
-                        tickLine={false}
-                      />
-                      <YAxis
-                        tick={{ fontSize: 9, fill: "var(--color-muted-foreground)" }}
-                        axisLine={false}
-                        tickLine={false}
-                        domain={["dataMin", "dataMax"]}
-                        width={32}
-                        reversed={activeMetric?.key === "pace_min_per_km"}
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          background: "var(--color-popover)",
-                          border: "1px solid var(--color-border)",
-                          borderRadius: 8,
-                          fontSize: 11,
-                        }}
-                        formatter={(v: number) => [
-                          activeMetric ? formatMetricValue(activeMetric.key, v) : v,
-                          activeMetric?.label ?? "",
-                        ]}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="value"
-                        stroke="var(--color-primary)"
-                        strokeWidth={2}
-                        dot={{ r: 3, fill: "var(--color-primary)" }}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
+                  <DeferredPart fallback={<div className="h-40" />}>
+                    <SegmentMetricChart
+                      data={chartData}
+                      reversed={activeMetric?.key === "pace_min_per_km"}
+                      label={activeMetric?.label ?? ""}
+                      formatValue={(v) =>
+                        activeMetric ? formatMetricValue(activeMetric.key, v) : v
+                      }
+                    />
+                  </DeferredPart>
                 ) : (
                   <p className="py-4 text-center text-[11px] text-muted-foreground">
                     Encore trop peu de séances pour un graphique — reviens après ta prochaine

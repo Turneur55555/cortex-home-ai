@@ -1,4 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
+import { playRestChime, primeRestChime } from "@/lib/pwa/restChime";
 
 // ─── Persistent rest-timer store ─────────────────────────────────────────────
 // Timestamp-based (no setInterval drift). Persisted in localStorage so the
@@ -110,6 +111,27 @@ function ensureTick() {
   }, 250);
 }
 
+async function notifyRestFinished(): Promise<void> {
+  try {
+    if (typeof document !== "undefined" && document.visibilityState === "visible") return;
+    if (!("Notification" in window) || Notification.permission !== "granted") return;
+    const options: NotificationOptions = {
+      body: "C'est reparti, prochaine série !",
+      icon: "/icons/icon-192.png",
+      silent: !settings.soundEnabled,
+      tag: "rest-timer",
+    };
+    const registration = await navigator.serviceWorker?.getRegistration?.();
+    if (registration) {
+      await registration.showNotification("Repos terminé", options);
+      return;
+    }
+    new Notification("Repos terminé", options);
+  } catch {
+    /* ignore — notification facultative */
+  }
+}
+
 function onFinish() {
   stopTick();
   setState({ finished: true, endAt: null });
@@ -119,58 +141,13 @@ function onFinish() {
   } catch {
     /* ignore */
   }
-  // Sound
-  if (settings.soundEnabled) {
-    try {
-      const Ctx =
-        (
-          window as unknown as {
-            AudioContext?: typeof AudioContext;
-            webkitAudioContext?: typeof AudioContext;
-          }
-        ).AudioContext ||
-        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-      if (Ctx) {
-        const ctx = new Ctx();
-        const playAt = (when: number, freq: number) => {
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-          osc.type = "sine";
-          osc.frequency.value = freq;
-          gain.gain.setValueAtTime(0.0001, ctx.currentTime + when);
-          gain.gain.exponentialRampToValueAtTime(0.4, ctx.currentTime + when + 0.01);
-          gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + when + 0.3);
-          osc.connect(gain).connect(ctx.destination);
-          osc.start(ctx.currentTime + when);
-          osc.stop(ctx.currentTime + when + 0.35);
-        };
-        playAt(0, 880);
-        playAt(0.35, 1175);
-        // Browsers cap the number of concurrent AudioContext instances (this
-        // fires once per rest-timer completion) — close it once the two
-        // beeps have finished playing so it doesn't leak for the rest of
-        // the session.
-        const CLOSE_DELAY_MS = 750; // last beep starts at 0.35s and lasts 0.35s + margin
-        setTimeout(() => {
-          ctx.close().catch(() => {});
-        }, CLOSE_DELAY_MS);
-      }
-    } catch {
-      /* ignore */
-    }
-  }
-  // Local notification
-  try {
-    if ("Notification" in window && Notification.permission === "granted") {
-      new Notification("Repos terminé", {
-        body: "C'est reparti, prochaine série !",
-        icon: "/icons/icon-192.png",
-        silent: !settings.soundEnabled,
-      });
-    }
-  } catch {
-    /* ignore */
-  }
+  // Son — contexte audio partagé, déverrouillé au toucher qui a lancé le repos
+  // (`lib/pwa/restChime.ts`) : un contexte neuf créé ici, hors geste, restait muet sur iPhone.
+  if (settings.soundEnabled) playRestChime();
+  // Notification — seulement quand la page n'est pas à l'écran (sinon le minuteur suffit).
+  // `ServiceWorkerRegistration.showNotification` d'abord : le constructeur `Notification` est
+  // refusé par Chrome Android et absent des apps iOS installées.
+  void notifyRestFinished();
 }
 
 // ─── Actions ─────────────────────────────────────────────────────────────────
@@ -190,6 +167,9 @@ export const restTimer = {
       finished: false,
     });
     ensureTick();
+    // Toujours appelé depuis un geste (valider une série, relancer) : seul moment où iOS
+    // accepte de démarrer la sortie audio qui sonnera la fin du repos.
+    primeRestChime();
     // Ask notification permission lazily
     try {
       if ("Notification" in window && Notification.permission === "default") {
@@ -214,6 +194,7 @@ export const restTimer = {
   },
   resume() {
     if (state.pausedRemaining == null) return;
+    primeRestChime();
     setState({
       endAt: Date.now() + state.pausedRemaining * 1000,
       pausedRemaining: null,

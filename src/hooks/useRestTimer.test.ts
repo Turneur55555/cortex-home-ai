@@ -16,8 +16,14 @@ import { createElement } from "react";
  * navigateurs plafonnent le nombre de contextes audio concurrents).
  *
  * Ces tests verrouillent la correction : l'intervalle est créé/détruit en
- * miroir de la vie réelle du décompte (start/pause/resume/stop/fin), et
- * l'AudioContext ouvert au son de fin est fermé peu après avoir joué.
+ * miroir de la vie réelle du décompte (start/pause/resume/stop/fin).
+ *
+ * 01/11/2026 — le remède audio de MAJ-09 (un contexte NEUF à chaque fin de
+ * repos, refermé ensuite) rendait le signal MUET sur iPhone : créé hors geste,
+ * dans un rappel de minuterie, le contexte restait `suspended`. Désormais UN
+ * SEUL contexte pour toute la page (`lib/pwa/restChime.ts`), créé et repris
+ * pendant le geste qui lance le repos, puis réutilisé : toujours aucune fuite
+ * (une instance, jamais deux), et un son qui part vraiment.
  *
  * React 19 : sans ce drapeau, `act()` avertit à chaque rendu.
  */
@@ -47,20 +53,32 @@ class FakeAudioContext {
   static instances: FakeAudioContext[] = [];
   currentTime = 0;
   destination = {};
-  closed = false;
-  closeCalls = 0;
+  state: "suspended" | "running" | "closed" = "suspended";
+  resumeCalls = 0;
+  oscillators = 0;
   constructor() {
     FakeAudioContext.instances.push(this);
   }
   createOscillator() {
+    this.oscillators += 1;
     return new FakeOscillator();
   }
   createGain() {
     return new FakeGain();
   }
+  createBuffer() {
+    return {};
+  }
+  createBufferSource() {
+    return { buffer: null as unknown, connect: () => undefined, start: () => undefined };
+  }
+  resume() {
+    this.resumeCalls += 1;
+    this.state = "running";
+    return Promise.resolve();
+  }
   close() {
-    this.closed = true;
-    this.closeCalls += 1;
+    this.state = "closed";
     return Promise.resolve();
   }
 }
@@ -150,45 +168,85 @@ describe("useRestTimer — cycle de vie du timer module-level (MAJ-09)", () => {
     expect(clearIntervalSpy).toHaveBeenCalledTimes(2);
   });
 
-  it("le son de fin ouvre un AudioContext et le referme peu après (pas de fuite)", async () => {
+  it("le contexte audio est créé et repris PENDANT le geste qui lance le repos (iPhone)", async () => {
     const { restTimer } = await freshRestTimer();
     restTimer.setSound(true);
 
     restTimer.start(1, "ex-1");
+    // Avant même la fin du repos : le contexte existe déjà et a été repris dans le geste.
+    expect(FakeAudioContext.instances).toHaveLength(1);
+    const ctx = FakeAudioContext.instances[0];
+    expect(ctx.resumeCalls).toBeGreaterThanOrEqual(1);
+    expect(ctx.state).toBe("running");
+
     act(() => {
       vi.advanceTimersByTime(1_100); // déclenche onFinish()
     });
-
+    // Le son de fin réutilise CE contexte (deux bips), sans en créer un autre.
     expect(FakeAudioContext.instances).toHaveLength(1);
-    const ctx = FakeAudioContext.instances[0];
-    expect(ctx.closed).toBe(false);
-
-    act(() => {
-      vi.advanceTimersByTime(800); // laisse le délai de fermeture s'écouler
-    });
-    expect(ctx.closed).toBe(true);
-    expect(ctx.closeCalls).toBe(1);
+    expect(ctx.oscillators).toBe(2);
   });
 
-  it("des minuteurs successifs ne s'accumulent pas : chaque AudioContext est fermé avant/à la fin du suivant", async () => {
+  it("des repos successifs partagent UN seul contexte (aucune fuite, aucun plafond atteint)", async () => {
     const { restTimer } = await freshRestTimer();
     restTimer.setSound(true);
 
+    for (const id of ["ex-1", "ex-2", "ex-3"]) {
+      restTimer.start(1, id);
+      act(() => {
+        vi.advanceTimersByTime(1_100);
+      });
+    }
+    expect(FakeAudioContext.instances).toHaveLength(1);
+    expect(FakeAudioContext.instances[0].oscillators).toBe(6);
+    expect(FakeAudioContext.instances[0].state).not.toBe("closed");
+  });
+
+  it("son désactivé : aucun bip à la fin du repos", async () => {
+    const { restTimer } = await freshRestTimer();
+    restTimer.setSound(false);
     restTimer.start(1, "ex-1");
     act(() => {
       vi.advanceTimersByTime(1_100);
-      vi.advanceTimersByTime(800);
     });
-    expect(FakeAudioContext.instances).toHaveLength(1);
-    expect(FakeAudioContext.instances[0].closed).toBe(true);
+    expect(FakeAudioContext.instances.every((c) => c.oscillators === 0)).toBe(true);
+  });
 
-    restTimer.start(1, "ex-2");
-    act(() => {
-      vi.advanceTimersByTime(1_100);
-      vi.advanceTimersByTime(800);
+  it("page en arrière-plan : la fin du repos passe par le service worker (Chrome Android, iOS installé)", async () => {
+    const showNotification = vi.fn(
+      async (_title: string, _options?: NotificationOptions) => undefined,
+    );
+    const NotificationCtor = vi.fn();
+    Object.assign(NotificationCtor, { permission: "granted" });
+    vi.stubGlobal("Notification", NotificationCtor);
+    Object.defineProperty(navigator, "serviceWorker", {
+      configurable: true,
+      value: { getRegistration: async () => ({ showNotification }) },
     });
-    expect(FakeAudioContext.instances).toHaveLength(2);
-    expect(FakeAudioContext.instances.every((c) => c.closed)).toBe(true);
+    const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+
+    const { restTimer } = await freshRestTimer();
+    restTimer.start(1, "ex-1");
+    await act(async () => {
+      vi.advanceTimersByTime(1_100);
+    });
+    await Promise.resolve();
+    expect(showNotification).toHaveBeenCalledTimes(1);
+    expect(showNotification.mock.calls[0]?.[0]).toBe("Repos terminé");
+    // Jamais le constructeur, refusé par Chrome Android : le service worker suffit.
+    expect(NotificationCtor).not.toHaveBeenCalled();
+
+    // Page à l'écran : le minuteur visible suffit, aucune notification en plus.
+    visibility.mockReturnValue("visible");
+    restTimer.start(1, "ex-2");
+    await act(async () => {
+      vi.advanceTimersByTime(1_100);
+    });
+    await Promise.resolve();
+    expect(showNotification).toHaveBeenCalledTimes(1);
+
+    vi.unstubAllGlobals();
+    Reflect.deleteProperty(navigator, "serviceWorker");
   });
 
   it("démontage d'un composant consommateur : plusieurs instances de useRestTimer partagent le même minuteur, et le nettoyage local (re-render 1s) se fait bien au unmount", async () => {

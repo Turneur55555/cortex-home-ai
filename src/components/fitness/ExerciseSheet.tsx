@@ -13,7 +13,15 @@ import { ExercisePresentationCard } from "./exercise-sheet/ExercisePresentation"
 import { ExerciseTechniqueCard, ExerciseMistakesCard } from "./exercise-sheet/ExerciseTechnique";
 import { ExerciseMuscleSection } from "./exercise-sheet/ExerciseMuscleSection";
 import { ExercisePhysicalImpactCard } from "./exercise-sheet/ExercisePhysicalImpact";
-import { ExerciseProgressionSection } from "./exercise-sheet/ExerciseProgressionSection";
+import { DeferredPart } from "@/components/shared/DeferredPart";
+import { lazyWithPreload } from "@/components/shared/lazyWithPreload";
+
+// Graphiques de progression (recharts) chargés à l'ouverture de l'onglet, jamais avec la page.
+const ExerciseProgressionSection = lazyWithPreload(() =>
+  import("./exercise-sheet/ExerciseProgressionSection").then((m) => ({
+    default: m.ExerciseProgressionSection,
+  })),
+);
 import {
   ExerciseVariantsCard,
   ExerciseSimilarCard,
@@ -293,13 +301,17 @@ export function ExerciseSheet({
 
               <TabsContent value="progression" className="mt-4 space-y-4">
                 {sessionCount > 0 ? (
-                  <ExerciseProgressionSection
-                    exerciseName={exerciseName}
-                    weightHistory={weightHistory}
-                    volumeHistory={volumeHistory}
-                    pr={pr}
-                    analysis={analysis}
-                  />
+                  <DeferredPart
+                    fallback={<div className="h-48 animate-pulse rounded-2xl bg-white/[0.03]" />}
+                  >
+                    <ExerciseProgressionSection
+                      exerciseName={exerciseName}
+                      weightHistory={weightHistory}
+                      volumeHistory={volumeHistory}
+                      pr={pr}
+                      analysis={analysis}
+                    />
+                  </DeferredPart>
                 ) : (
                   <div className="rounded-2xl border border-border bg-surface/60 p-4 text-center text-xs text-muted-foreground">
                     Pas encore pratiqué — lance-toi pour débloquer la progression et les records.

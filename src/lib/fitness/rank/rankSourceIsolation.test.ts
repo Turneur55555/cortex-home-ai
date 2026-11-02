@@ -15,6 +15,7 @@ import { describe, expect, it } from "vitest";
 const RANK_ENGINE_SOURCES = [
   "src/lib/fitness/rank/engine.ts",
   "src/lib/fitness/rank/config.ts",
+  "src/lib/fitness/rank/liveRank.ts",
   "src/utils/fitness/exercise-stats.ts",
 ];
 

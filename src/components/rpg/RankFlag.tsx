@@ -35,6 +35,11 @@ export function RankFlag({ rankKey, label, className }: RankFlagProps) {
       decoding="async"
       className={cn("h-10 w-auto object-contain", className)}
       style={{ filter: rankFlagGlow(glow, 2) }}
+      // Image indisponible (hors connexion, jamais mise en cache) : silence, comme un rang sans
+      // fanion — jamais le texte de repli du navigateur au milieu de la carte.
+      onError={(event) => {
+        event.currentTarget.style.display = "none";
+      }}
     />
   );
 }

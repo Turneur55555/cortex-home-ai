@@ -20,7 +20,69 @@
 > regroupés sous [`docs/archive/`](docs/archive/).
 
 ## Dernière mise à jour
-2026-11-01
+2026-11-02
+
+## Séance — clôture honnête, repos audible sur iPhone, Rang en direct, page allégée (2026-11-02, `main`)
+Demande de Nathan : propositions pour le module séance, puis « la 2, la 3, la 4 et la 6 » (la 5,
+barre « prochaine série » fixe, non retenue ; la 1, « J'ai fait ma séance », non retenue).
+**Mesures de production (lecture seule, 75 j)** : depuis le 09/10, 9 séances — 3 en direct (vers 8 h,
+36-77 min), 4 « Refaire en live » validées en < 70 s (durée « 1 min »), 2 saisies le 29/10 via la
+saisie rétroactive (`WorkoutSheet`, mode simple) **sans aucune série** (résumé seulement : ni rang,
+ni tonnage, ni « dernière fois », mais 215 XP). En direct, 1 à 3 séries saisies non cochées par
+séance (15/18 le 30/10). Supersets et notes de série : jamais utilisés.
+- **2. Récap de clôture** — « Terminer » ouvre `SessionClosureSheet` (règle pure
+  `lib/fitness/closureReview.ts`) : séries validées + tonnage, durée préremplie (aperçu
+  `useClosureDurationPreview`, même calcul que la clôture ; vide si implausible ; corrigeable
+  « 45 », « 1h10 » ; indice « Saisie après coup ? » si 1-2 min avec ≥ 3 séries), séries en suspens
+  listées → « Les compter et terminer » / « Terminer sans elles » ; séries vides retirées.
+  `useFinishWorkout` reçoit `closure: { validateSetIds, removeSetIds, durationMinutes }`, écrit les
+  décisions SOUS le verrou avant toute lecture locale (INVARIANTS §2.3 bis). L'instantané de fin
+  (`applyClosureDecision`) reflète la décision pour la carte récap.
+- **3. Repos audible sur iPhone** — cause : `AudioContext` neuf créé dans le rappel de fin de repos
+  (hors geste) → `suspended` sur iOS ; pas de vibration ni de `new Notification` sur iPhone. Nouveau
+  `lib/pwa/restChime.ts` : UN contexte partagé, créé/repris dans le geste qui lance le repos
+  (`primeRestChime` dans `restTimer.start/resume`), réutilisé à la fin (`playRestChime`), jamais
+  fermé. Notification via `ServiceWorkerRegistration.showNotification` (le constructeur est refusé
+  par Chrome Android), seulement page en arrière-plan. **Écran gardé allumé** pendant la séance :
+  `hooks/useScreenWakeLock.ts` (Wake Lock, redemandé au retour à l'écran), monté dans
+  `ActiveWorkoutView` et `ActiveGenericSessionView`. Le mode silencieux de l'iPhone coupe toujours le
+  son. **Non vérifié sur un vrai iPhone.**
+- **4. Rang en direct** — `lib/fitness/rank/liveRank.ts` fait tourner le VRAI moteur
+  (`computeRankState`) sur l'historique (séance en cours exclue, `rankHistoryByExercise`) + les
+  séries validées du jour. Le fanion de la carte suit la séance ; carte dépliée : ligne « Prochain
+  grade : Glorieux Héros · à 42 kg × 10 » = plus petite série qui fait franchir le grade, trouvée par
+  SIMULATION dans le moteur (pas 2,5 kg puis 0,5 kg, ≤ +60 %, répétitions au poids du corps). Quand
+  la confirmation Olympien/Titan bloque, on dit ce qui manque : expérience (« se confirme après 10
+  séances (5 faites) »), séances au niveau (« 1/3 · aujourd'hui dès 72,5 kg × 10 » / « aujourd'hui
+  compte »), ou étalement sur 30/60 j. Célébration immédiate (`detectSessionHighlight`) : montée de
+  grade → `RankUpOverlay` (cinématique existante), sinon record → toast ; jamais à la reprise d'une
+  séance ni avant le chargement de l'historique ; registre « déjà célébré » partagé avec la fiche
+  exercice (`lib/fitness/rpg/rankUpSeen.ts`, sorti de `ExerciseRankCard`). Purement visuel : la
+  promotion officielle et son XP restent serveur. Mesuré au banc : 50 kg × 10 au Chest press
+  (historique 40 kg) → « Vous êtes devenu Colossal ». `liveRank.ts` ajouté au garde-fou
+  `rankSourceIsolation.test.ts`. `RankFlag` : image indisponible → masquée (plus de texte de repli).
+- **6. Page allégée** — **défaut trouvé** : Rollup rangeait `clsx`/`tailwind-merge` (utilisés par
+  `cn()`) DANS `vendor-charts` → recharts (~109 Ko gzip) chargé par **toutes** les pages. Règle
+  `manualChunks` ajoutée (`vite.config.ts`, → `vendor-ui`). Graphiques différés à 3 points :
+  `ExerciseSheet` (onglet progression), `ChroniquePage` (`WorkoutProgressCharts`),
+  `SegmentAnalysisSheet` (courbe sortie dans `SegmentMetricChart.tsx`). `SeancesTab` diffère Sensei,
+  bilans IA, catalogue, saisie rétroactive, relecture générique ; préchargement en temps mort
+  (`preloadWhenIdle`, mis en cache par le SW). `components/shared/lazyWithPreload.ts` (échec non
+  mémorisé) + `DeferredPart.tsx` (repli local). Route Séances : **591 → 482 Ko gzip** chargés
+  d'emblée ; Profil, Chroniques, Compléments ne chargent plus recharts (Corps, Nutrition, Rapports
+  l'affichent dès l'ouverture : inchangés). Parcours de séance jamais différé (INVARIANTS §1.10).
+- **Vérifié** : tsc, lint (0 erreur ; 154 avertissements, comme avant), Vitest
+  complet **2 976 tests** (63 ignorés, inchangé), build complet, garde-fous lectures bornées /
+  contrat offline. Banc visuel Playwright jetable (non commité, iPhone 17 Pro 402×874, backend
+  simulé, séance « Refaire » puis **réseau coupé**) : ligne prochain grade, cinématique, « Nouveau
+  record », récap à 3 séries en suspens, aucune erreur de page. Constat du banc : avec le faux
+  backend EN LIGNE, les exercices d'une séance « Refaire » disparaissent après la première
+  validation — **reproduit à l'identique sur le code d'avant ce chantier**, artefact probable du
+  stub (la production montre des séances « Refaire » à 15 séries validées) ; non creusé.
+- **Laissé de côté** : la saisie rétroactive en mode simple crée toujours des séances sans séries
+  (proposition 1 non retenue) ; XP d'une séance sans série validée (décision produit, trigger) ;
+  `NutritionHistorySheet`/`CorpsTab` chargent encore recharts à l'ouverture de leur page ; build
+  local qui dépasse le tas Node par défaut (`NODE_OPTIONS=--max-old-space-size=6144`).
 
 ## Nutrition — saisir en un appui + journée bouclée (2026-11-01, `main`)
 Demande de Nathan : « fais les recommandations 1-2-3 et 4 » (propositions du jour, fondées sur 60 j

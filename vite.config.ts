@@ -45,6 +45,13 @@ export default defineConfig({
               if (id.includes("@radix-ui") || id.includes("lucide-react")) {
                 return "vendor-ui";
               }
+              // Petits utilitaires partagés par recharts ET par toute l'UI (`cn()` → clsx) :
+              // sans règle, Rollup les range DANS vendor-charts, et chaque page qui stylise un
+              // composant tirait recharts entier (~110 Ko gzip), graphique affiché ou non
+              // (constaté le 01/11/2026). Ils vivent avec l'UI.
+              if (/[\\/]node_modules[\\/](clsx|tailwind-merge)[\\/]/.test(id)) {
+                return "vendor-ui";
+              }
               // Charts — recharts (d3 non présent en dépendance directe)
               if (id.includes("recharts")) {
                 return "vendor-charts";

@@ -26,8 +26,9 @@ import { createRoot, type Root } from "react-dom/client";
 const mutations = vi.hoisted(() => ({
   finishPending: false,
   cancelPending: false,
-  finish: vi.fn(async () => undefined),
+  finish: vi.fn(async (_input?: unknown) => undefined),
   cancel: vi.fn(async () => undefined),
+  previewMinutes: 39 as number | undefined,
 }));
 
 const emptyQuery = vi.hoisted(() => () => ({ data: undefined }));
@@ -52,6 +53,7 @@ vi.mock("@/hooks/use-fitness", () => ({
   useReorderActiveExercises: emptyMutation,
   useExerciseImageUrls: emptyQuery,
   useWorkouts: emptyQuery,
+  useClosureDurationPreview: () => ({ data: mutations.previewMinutes }),
 }));
 
 vi.mock("@/hooks/useGenericActiveSession", () => ({
@@ -60,13 +62,14 @@ vi.mock("@/hooks/useGenericActiveSession", () => ({
   useAddGenericSegment: emptyMutation,
 }));
 
-vi.mock("@/hooks/useLastExerciseSession", () => ({ useLastExerciseSessions: emptyQuery }));
+vi.mock("@/hooks/useLastExerciseSession", () => ({ useLastExerciseSessions: () => new Map() }));
 vi.mock("@/hooks/useUserExercisePhotos", () => ({
   useUserExercisePhotos: emptyQuery,
   resolveCustomExerciseMuscles: async () => undefined,
 }));
 vi.mock("@/hooks/useExerciseCatalogEntry", () => ({ useExerciseMediaForExercises: emptyQuery }));
 vi.mock("@/hooks/useBodyTracking", () => ({ useBodyMeasurements: emptyQuery }));
+vi.mock("@/hooks/use-auth", () => ({ useAuth: () => ({ user: { id: "u-1" } }) }));
 
 // Enfants lourds hors sujet — le flux de clôture ne dépend d'aucun d'eux.
 vi.mock("./exerciseCard/ActiveExerciseCard", () => ({ ActiveExerciseCard: () => <div /> }));
@@ -95,6 +98,7 @@ beforeEach(() => {
   mutations.cancelPending = false;
   mutations.finish.mockClear();
   mutations.cancel.mockClear();
+  mutations.previewMinutes = 39;
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -220,5 +224,151 @@ describe("ActiveWorkoutView — verrou de clôture reflété à l'écran (AUD-09
     });
 
     expect(mutations.cancel).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Récap de clôture (01/11/2026) ──────────────────────────────────────────
+// « Terminer » n'enregistre plus directement : il ouvre le récap (séries saisies mais pas
+// cochées, durée confirmable) et c'est le récap qui clôt. La règle est dans
+// `lib/fitness/closureReview.ts` (testée à part) ; ici, le branchement et le reflet du verrou.
+
+const WORKOUT_WITH_SETS: ActiveWorkout = {
+  ...WORKOUT,
+  exercises: [
+    {
+      id: "e-1",
+      name: "Pushdown corde",
+      image_path: null,
+      sets: null,
+      reps: null,
+      weight: null,
+      exercise_sets: [
+        { id: "s-1", set_number: 1, reps: 10, weight: 20, completed: true },
+        { id: "s-2", set_number: 2, reps: 10, weight: 20, completed: false },
+        { id: "s-3", set_number: 3, reps: null, weight: null, completed: false },
+      ],
+    } as ActiveWorkout["exercises"][number],
+  ],
+};
+
+function renderWith(workout: ActiveWorkout, onFinished: (w: ActiveWorkout) => void = () => {}) {
+  act(() => {
+    root.render(<ActiveWorkoutView workout={workout} onFinished={onFinished} />);
+  });
+}
+
+function openReview() {
+  act(() => {
+    finishButton()?.click();
+  });
+}
+
+function typeDuration(value: string) {
+  const input = document.querySelector<HTMLInputElement>("#closure-duration");
+  if (!input) throw new Error("champ durée absent");
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  act(() => {
+    setter?.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+describe("ActiveWorkoutView — récap de clôture", () => {
+  it("« Terminer » ouvre le récap, sans rien enregistrer", () => {
+    renderWith(WORKOUT);
+    openReview();
+    expect(document.body.textContent).toContain("Terminer la séance");
+    expect(mutations.finish).not.toHaveBeenCalled();
+  });
+
+  it("sans série en suspens : clôture avec la durée affichée", async () => {
+    const onFinished = vi.fn();
+    renderWith(WORKOUT, onFinished);
+    openReview();
+    expect(document.querySelector<HTMLInputElement>("#closure-duration")?.value).toBe("39");
+    await act(async () => {
+      buttonByText("Terminer la séance")?.click();
+    });
+    expect(mutations.finish).toHaveBeenCalledTimes(1);
+    expect(mutations.finish.mock.calls[0]?.[0]).toMatchObject({
+      id: "w-1",
+      closure: { validateSetIds: [], removeSetIds: [], durationMinutes: 39 },
+    });
+    expect(onFinished).toHaveBeenCalledTimes(1);
+  });
+
+  it("« Les compter et terminer » : la série en suspens est validée, la vide retirée", async () => {
+    const onFinished = vi.fn();
+    renderWith(WORKOUT_WITH_SETS, onFinished);
+    openReview();
+    expect(document.body.textContent).toContain("1 série saisie mais pas cochée");
+    expect(document.body.textContent).toContain("20 kg × 10");
+    await act(async () => {
+      buttonByText("Les compter et terminer")?.click();
+    });
+    expect(mutations.finish.mock.calls[0]?.[0]).toMatchObject({
+      closure: { validateSetIds: ["s-2"], removeSetIds: ["s-3"] },
+    });
+    // L'écran de fin lit l'instantané TRANCHÉ : s-2 cochée, s-3 absente.
+    const snapshot = onFinished.mock.calls[0]?.[0] as ActiveWorkout;
+    expect(snapshot.exercises[0].exercise_sets.map((s) => [s.id, s.completed])).toEqual([
+      ["s-1", true],
+      ["s-2", true],
+    ]);
+  });
+
+  it("« Terminer sans elles » : la série en suspens et la vide sont retirées", async () => {
+    renderWith(WORKOUT_WITH_SETS);
+    openReview();
+    await act(async () => {
+      buttonByText("Terminer sans elles")?.click();
+    });
+    expect(mutations.finish.mock.calls[0]?.[0]).toMatchObject({
+      closure: { validateSetIds: [], removeSetIds: ["s-2", "s-3"] },
+    });
+  });
+
+  it("durée corrigée (« 1h10 ») transmise ; durée illisible = clôture impossible", async () => {
+    renderWith(WORKOUT);
+    openReview();
+    typeDuration("abc");
+    expect(buttonByText("Terminer la séance")?.disabled).toBe(true);
+    typeDuration("1h10");
+    await act(async () => {
+      buttonByText("Terminer la séance")?.click();
+    });
+    expect(mutations.finish.mock.calls[0]?.[0]).toMatchObject({
+      closure: { durationMinutes: 70 },
+    });
+  });
+
+  it("durée implausible (séance restée ouverte) : champ vide, la clôture calcule elle-même", async () => {
+    mutations.previewMinutes = 600;
+    renderWith(WORKOUT);
+    openReview();
+    expect(document.querySelector<HTMLInputElement>("#closure-duration")?.value).toBe("");
+    await act(async () => {
+      buttonByText("Terminer la séance")?.click();
+    });
+    const input = mutations.finish.mock.calls[0]?.[0] as { closure: { durationMinutes?: number } };
+    expect(input.closure.durationMinutes).toBeUndefined();
+  });
+
+  it("clôture en vol : les boutons du récap sont désactivés ET refusent un clic forcé", () => {
+    renderWith(WORKOUT_WITH_SETS);
+    openReview();
+    act(() => {
+      mutations.finishPending = true;
+      root.render(<ActiveWorkoutView workout={WORKOUT_WITH_SETS} onFinished={() => undefined} />);
+    });
+    for (const label of ["Les compter et terminer", "Terminer sans elles"]) {
+      const button = buttonByText(label);
+      expect(button?.disabled).toBe(true);
+      button?.removeAttribute("disabled");
+      act(() => {
+        button?.click();
+      });
+    }
+    expect(mutations.finish).not.toHaveBeenCalled();
   });
 });

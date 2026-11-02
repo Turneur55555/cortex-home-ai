@@ -10,24 +10,10 @@ import { useAuth } from "@/hooks/use-auth";
 import { useExerciseProgression } from "@/hooks/useExerciseProgression";
 import type { RankState } from "@/lib/fitness/exerciseRanks";
 import { gradeName } from "@/lib/fitness/rpg/grade";
-
-const STORAGE_PREFIX = "exrank:seen:";
-
-function loadSeen(userId: string, exerciseName: string): number | null {
-  try {
-    const v = localStorage.getItem(STORAGE_PREFIX + userId + ":" + exerciseName);
-    return v == null ? null : parseInt(v, 10);
-  } catch {
-    return null;
-  }
-}
-function saveSeen(userId: string, exerciseName: string, tierIndex: number) {
-  try {
-    localStorage.setItem(STORAGE_PREFIX + userId + ":" + exerciseName, String(tierIndex));
-  } catch {
-    /* noop */
-  }
-}
+import {
+  loadSeenRankTier as loadSeen,
+  saveSeenRankTier as saveSeen,
+} from "@/lib/fitness/rpg/rankUpSeen";
 
 /**
  * Tuile "trophée" — un chiffre monumental + unité + label.

@@ -58,6 +58,7 @@ import { useFitnessStreak } from "@/hooks/useFitnessStreak";
 import { useWorkouts } from "@/hooks/use-fitness";
 import { DisciplineExerciseLibrarySheet } from "../DisciplineExerciseLibrarySheet";
 import { Portal } from "@/components/Portal";
+import { useScreenWakeLock } from "@/hooks/useScreenWakeLock";
 
 export function ActiveGenericSessionView({
   workout,
@@ -69,6 +70,9 @@ export function ActiveGenericSessionView({
    *  bilan IA survive au démontage de cette vue (voir SeancesTab). */
   onFinished: (finished: ActiveGenericWorkout) => void;
 }) {
+  // Écran allumé pendant toute la séance : sans cela, iPhone verrouillé, le minuteur de repos
+  // ne sonne ni ne s'affiche (voir useScreenWakeLock).
+  useScreenWakeLock(true);
   const entry = ENGINE_REGISTRY[workout.discipline];
 
   const addSegment = useAddGenericSegment();

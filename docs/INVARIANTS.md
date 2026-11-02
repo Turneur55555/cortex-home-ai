@@ -125,6 +125,16 @@ racine rend elle-même `<html>/<body>` (singletons React) ; montée dans `#offli
 boucle infinie (Nutrition inaccessible le 28/10/2026).
 → `src/offline-client.tsx` → vérifié par `src/offline-client.test.ts`
 
+### 1.10 Le parcours de séance n'est jamais chargé en différé
+
+Les morceaux lourds (graphiques, feuilles IA, catalogue) se chargent à la demande
+(`lazyWithPreload` + `DeferredPart`), puis sont préchargés pendant un temps mort pour que le Service
+Worker les mette en cache. Mais un morceau différé jamais encore chargé est introuvable si le réseau
+tombe : démarrer, saisir, se reposer, terminer et voir sa récompense restent dans le paquet initial.
+Un morceau différé qui ne charge pas affiche un repli **local**, jamais l'écran d'erreur global.
+→ `src/components/shared/lazyWithPreload.ts`, `src/components/shared/DeferredPart.tsx`
+→ vérifié par `components/fitness/sessionPathEager.test.ts`, `components/shared/DeferredPart.test.tsx`
+
 ---
 
 ## 2. Séance : unicité, numérotation, clôture
@@ -160,6 +170,19 @@ quel que soit le point d'entrée. Les `disabled` à l'écran ne font que **refl�
 ne le remplacent jamais.
 → `src/lib/fitness/sessionClosure.ts`
 → vérifié par `sessionClosure.test.ts`, `components/fitness/ActiveWorkoutView.closure.test.tsx`
+
+### 2.3 bis Le récap de clôture écrit SOUS le verrou, avant toute lecture
+
+« Terminer » ouvre un récap (`lib/fitness/closureReview.ts`) : les séries saisies mais non
+cochées sont tranchées par le joueur (« les compter » → validées, « terminer sans elles » →
+retirées ; une série sans répétitions est toujours retirée), et la durée affichée est celle qui sera
+enregistrée (corrigeable, 1-240 min). Ces écritures passent **dans** `runExclusiveSessionClosure`,
+**avant** la lecture du store local : la barrière `dependsOnRecords` retient donc la clôture
+derrière les séries comptées, et le trigger XP les voit. Jamais de choix silencieux à la place du
+joueur.
+→ `src/hooks/use-fitness.ts` (`useFinishWorkout`, option `closure`), `SessionClosureSheet.tsx`
+→ vérifié par `closureReview.test.ts`, `offline/sessionClosureOffline.test.ts` (« Récap de
+clôture »), `ActiveWorkoutView.closure.test.tsx` (« récap de clôture »)
 
 ### 2.4 Une saisie invalide n'atteint jamais la donnée métier
 

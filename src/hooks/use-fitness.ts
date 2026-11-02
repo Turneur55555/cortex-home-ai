@@ -22,9 +22,11 @@ import { allocateSetNumber, nextSetNumber } from "@/lib/fitness/setNumberAllocat
 import { startActiveWorkoutExclusively } from "@/lib/fitness/activeWorkoutStart";
 import { runExclusiveSessionClosure } from "@/lib/fitness/sessionClosure";
 import {
+  FINISH_DURATION_CAP_MINUTES,
   sessionDurationOnFinish,
   validatedSetTimesForWorkout,
 } from "@/lib/fitness/sessionDuration";
+import type { ClosureDecision } from "@/lib/fitness/closureReview";
 import { summarizeExerciseSetsForHistory } from "@/lib/fitness/sets";
 import { workoutsServerRefreshGate } from "@/lib/offline/workoutsRefreshWindow";
 import { requestSyncFlush } from "@/lib/offline/syncFlush";
@@ -1239,11 +1241,47 @@ export function useStartHybridStrengthWorkout() {
 /** Termine la séance active : calcule la durée et la sauvegarde — écriture
  *  de donnée pure, offline-first (voir doc en tête de fichier pour le
  *  trigger XP serveur). */
+/**
+ * Récap de clôture — la durée que la clôture enregistrerait MAINTENANT, calculée exactement
+ * comme `useFinishWorkout` (même règle, mêmes horodatages lus dans le store LOCAL). Affichée
+ * dans le récap, puis renvoyée telle quelle (ou corrigée) à la clôture : ce que le joueur voit
+ * est ce qui est enregistré.
+ */
+export function useClosureDurationPreview(workout: Pick<ActiveWorkout, "id" | "created_at">) {
+  const { user } = useAuth();
+  return useQuery({
+    ...OFFLINE_FIRST_QUERY_OPTIONS,
+    queryKey: ["fitness", "closure_duration_preview", workout.id],
+    enabled: !!user,
+    staleTime: 0,
+    gcTime: 0,
+    queryFn: async (): Promise<number> => {
+      const id = (user as { id: string }).id;
+      const [localExercises, localSets] = await Promise.all([
+        exercisesRepo.list(id),
+        exerciseSetsRepo.list(id),
+      ]);
+      return sessionDurationOnFinish({
+        startedAt: workout.created_at,
+        now: new Date(),
+        validatedSetTimes: validatedSetTimesForWorkout(workout.id, localExercises, localSets),
+      });
+    },
+  });
+}
+
 export function useFinishWorkout() {
   const qc = useQueryClient();
   const { user } = useAuth();
   return useMutation({
-    mutationFn: async (workout: ActiveWorkout & { segments?: ActiveGenericSegment[] }) => {
+    mutationFn: async (
+      workout: ActiveWorkout & {
+        segments?: ActiveGenericSegment[];
+        /** Récap de clôture (`lib/fitness/closureReview.ts`) : séries en suspens tranchées par
+         *  le joueur, et durée qu'il a confirmée ou corrigée. Absent = comportement historique. */
+        closure?: ClosureDecision & { durationMinutes?: number };
+      },
+    ) => {
       if (!user) throw new Error("Non authentifié");
       // CHANTIER 9 (B1/B2) — VERROU DE CLÔTURE, INTERNE À LA MUTATION.
       // « Terminer » et « Annuler » écrivent au même endroit et se
@@ -1252,6 +1290,20 @@ export function useFinishWorkout() {
       // Voir `lib/fitness/sessionClosure.ts` pour le détail des courses
       // réellement possibles avant ce chantier.
       await runExclusiveSessionClosure(workout.id, "finish", async () => {
+        // Récap de clôture — les décisions du joueur sont écrites SOUS le verrou et AVANT
+        // toute lecture du store local : la barrière de dépendances et le résumé ci-dessous
+        // voient donc l'état tranché. Les validations partent dans la file AVANT la clôture
+        // (FIFO, invariant 1.1) et sont retenues par `dependsOnRecords` : le trigger
+        // `award_xp_on_workout_complete` lit bien les séries comptées.
+        for (const id of workout.closure?.validateSetIds ?? []) {
+          const realId = await setIdResolver.resolve(id);
+          await exerciseSetsRepo.update(realId, user.id, { completed: true });
+        }
+        for (const id of workout.closure?.removeSetIds ?? []) {
+          const realId = await setIdResolver.resolve(id);
+          await exerciseSetsRepo.remove(realId, user.id);
+        }
+
         const segments = workout.segments ?? [];
         let metadataUpdate: Record<string, unknown> | undefined;
         if (segments.length > 0) {
@@ -1324,11 +1376,21 @@ export function useFinishWorkout() {
         // l'entraînement ne s'enregistre plus au plafond de 600 min — le temps sans série
         // validée n'est pas de l'entraînement. Lue dans le store LOCAL, comme la barrière
         // ci-dessus (le snapshot React peut être en retard d'une invalidation).
-        const durationMin = sessionDurationOnFinish({
-          startedAt: workout.created_at,
-          now: new Date(),
-          validatedSetTimes: validatedSetTimesForWorkout(workout.id, localExercises, localSets),
-        });
+        // Une durée confirmée dans le récap fait foi (elle a été affichée telle quelle, ou
+        // corrigée par le joueur — typiquement une séance saisie après coup).
+        const confirmedDuration = workout.closure?.durationMinutes;
+        const durationMin =
+          typeof confirmedDuration === "number" && Number.isFinite(confirmedDuration)
+            ? Math.min(FINISH_DURATION_CAP_MINUTES, Math.max(1, Math.round(confirmedDuration)))
+            : sessionDurationOnFinish({
+                startedAt: workout.created_at,
+                now: new Date(),
+                validatedSetTimes: validatedSetTimesForWorkout(
+                  workout.id,
+                  localExercises,
+                  localSets,
+                ),
+              });
 
         await workoutsRepo.update(
           workout.id,

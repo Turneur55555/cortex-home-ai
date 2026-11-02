@@ -115,9 +115,19 @@ async function cascadeDeleteWorkoutChildren(userId: string, workoutId: string): 
  */
 async function finishWorkout(
   workoutId: string,
-  options: { onBeforeWrite?: () => Promise<void> } = {},
+  options: {
+    onBeforeWrite?: () => Promise<void>;
+    /** Récap de clôture : décisions écrites SOUS le verrou, AVANT toute lecture locale. */
+    closure?: { validateSetIds: string[]; removeSetIds: string[] };
+  } = {},
 ) {
   return runExclusiveSessionClosure(workoutId, "finish", async () => {
+    for (const id of options.closure?.validateSetIds ?? []) {
+      await setsRepo.update(id, USER, { completed: true });
+    }
+    for (const id of options.closure?.removeSetIds ?? []) {
+      await setsRepo.remove(id, USER);
+    }
     const [localExercises, localSets, localSegments] = await Promise.all([
       exercisesRepo.list(USER),
       setsRepo.list(USER),
@@ -471,5 +481,49 @@ describe("A2 — résumé `exercises.sets/reps/weight` écrit à la clôture", (
     // Deuxième clôture refusée par le verrou : aucune opération de plus.
     await finishWorkout(workout.id).catch(() => undefined);
     expect(opsFor(await listAllOperations(USER), "exercises", exercise.id).length).toBe(afterFirst);
+  });
+});
+
+// ─── Récap de clôture (01/11/2026) — décisions du joueur écrites sous le verrou ────
+
+describe("Récap de clôture — séries en suspens tranchées AVANT la clôture", () => {
+  it("« les compter » : la validation part AVANT la clôture et la retient (le trigger XP la voit)", async () => {
+    const { workout, exercise, sets } = await seedSession();
+    await finishWorkout(workout.id, {
+      closure: { validateSetIds: [sets[1].id], removeSetIds: [] },
+    });
+
+    expect((await setsRepo.get(sets[1].id))?.completed).toBe(true);
+    const ops = await listAllOperations(USER);
+    const closure = ops.find(
+      (op) => op.table === "workouts" && op.recordLocalId === workout.id && op.opType === "update",
+    );
+    expect(closure).toBeDefined();
+    // La barrière attend la série comptée : la clôture ne peut pas arriver en base avant elle.
+    expect((closure?.dependsOnRecords ?? []).map((d) => d.recordLocalId)).toContain(sets[1].id);
+    // FIFO : toute opération sur la série précède la clôture dans la file.
+    const setOps = opsFor(ops, "exercise_sets", sets[1].id);
+    expect(setOps.length).toBeGreaterThan(0);
+    for (const op of setOps) expect(op.createdAt < (closure?.createdAt ?? "")).toBe(true);
+    // Le résumé d'historique compte la série validée (8 × 80, la meilleure).
+    expect((await exercisesRepo.get(exercise.id))?.weight).toBe(80);
+  });
+
+  it("« terminer sans elles » : la série retirée n'existe plus et la barrière ne l'attend pas", async () => {
+    const { workout, sets } = await seedSession();
+    await setsRepo.update(sets[0].id, USER, { completed: true });
+    await finishWorkout(workout.id, {
+      closure: { validateSetIds: [], removeSetIds: [sets[1].id] },
+    });
+
+    expect(await setsRepo.get(sets[1].id)).toBeUndefined();
+    const ops = await listAllOperations(USER);
+    const closure = ops.find(
+      (op) => op.table === "workouts" && op.recordLocalId === workout.id && op.opType === "update",
+    );
+    const awaited = (closure?.dependsOnRecords ?? []).map((d) => d.recordLocalId);
+    expect(awaited).toContain(sets[0].id);
+    expect(awaited).not.toContain(sets[1].id);
+    expect((await workoutsRepo.get(workout.id))?.status).toBe("completed");
   });
 });
