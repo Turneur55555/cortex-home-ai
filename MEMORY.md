@@ -22,6 +22,36 @@
 ## Dernière mise à jour
 2026-11-02
 
+## Séries en suspens de l'historique — comptées ET cochées (2026-11-02, production)
+Décision de Nathan sur la question ouverte de l'audit ci-dessous : « compte les séries et coche
+les cases ». Les séries saisies mais non cochées des séances passées COMPTENT (aucun chiffre passé
+ne baisse) et sont cochées en base, pour que récap, Carte du jour, rapport de la semaine, objectif
+de séance, rang affiché pendant la séance (`rankHistoryByExercise`, qui ne lit que les cochées) et
+« Je l'ai faite » lisent toutes la même chose.
+- **Écriture en production** (une transaction, `execute_sql`) : 96 séries `exercise_sets`
+  (`completed = false`, `reps > 0`, séance `completed`) du compte de Nathan
+  (`f15351f1-…`, 26 séances du 03/07 au 30/10, dont 7 au poids du corps) → `completed = true` ;
+  puis résumés `exercises.sets/reps/weight` recalculés avec la règle de
+  `summarizeExerciseSetsForHistory` (séries chargées, meilleure série) : 26 exercices sur 67, seul
+  le NOMBRE de séries change (ex. 1 → 3), la meilleure série est identique.
+- **Vérifié avant** : seul trigger sur `exercise_sets` = `updated_at` (aucune XP au changement d'une
+  série) ; `verify-exercise-rank` relit déjà TOUTES les séries sans regarder `completed` — rangs
+  officiels et XP de montée de rang inchangés, l'affichage client s'aligne enfin sur le serveur ;
+  les 26 séances sont dans les 88 plus récentes, donc dans la fenêtre d'hydratation (200) : le
+  téléphone reçoit les cases cochées au prochain rafraîchissement (`hydrateEntitiesFromServer`
+  écrase les lignes `synced`).
+- **Vérifié après** : 0 série en suspens restante pour ce compte, 0 `xp_events`, 0 séance touchée,
+  exactement 96 séries et 26 exercices modifiés. Pectoraux 30/10 : 18/18 ; Dos 19/10 : 16/16 ;
+  Dos 03/09 : 10/10.
+- **Non touché** : le second compte de la base (autre personne, inactif depuis le 15/07, 114 séries
+  en suspens) — pas de réécriture des données d'un tiers sans sa demande.
+- **Réversible** : identifiants des 96 séries et anciens résumés des 67 exercices dans
+  `docs/archive/2026-11-02-series-cochees-backup.json` (mode d'emploi dans le fichier).
+- **Pour la suite** : le récap de clôture tranche toute série en suspens d'une séance en direct
+  (compter / retirer), « Je l'ai faite » et « Enregistrer comme séance passée » écrivent des séries
+  cochées. Seul chemin restant qui peut en laisser : la clôture d'une séance HYBRIDE
+  (`useFinishGenericActiveWorkout`, sans récap) — jamais utilisée avec des séries sur ce compte.
+
 ## Audit des mises à jour du 01-02/11 — poids du corps compté, « Je l'ai faite » débloqué (2026-11-02, `main`)
 Demande de Nathan : « fais une analyse des dernières mises à jour, vérifie s'il n'y a pas eu
 d'erreur, corrige ». Périmètre : `c2c779c` → `8fc8fb1` (nutrition, séance, accueil).
