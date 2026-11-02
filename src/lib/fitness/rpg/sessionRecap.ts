@@ -38,11 +38,29 @@ interface RecapSourceExercise {
   weight?: number | null;
 }
 
+/**
+ * Une série qui COMPTE dans le nombre de séries : des répétitions exploitables, avec une
+ * charge positive OU sans charge (poids du corps). En séance, une série au poids du corps se
+ * valide la charge vide — elle est stockée `weight = NULL` (164 séries en production au
+ * 02/11/2026 : tractions, dips) — ou à 0 (« Je l'ai faite »). Le tonnage, lui, ne retient que
+ * les charges positives (`setsTonnage`) : une traction ne pèse rien, mais c'est une série.
+ *
+ * Avant ce correctif, `isValidSet` (charge > 0 exigée) servait aussi au COMPTE : la carte
+ * récap annonçait 18 séries pour une séance de 20 (Dos du 02/11), la Carte du jour, le
+ * rapport de la semaine et l'objectif de séance sous-comptaient d'autant.
+ */
+function isCountedSet(s: WorkingSet | null | undefined): boolean {
+  if (!s) return false;
+  const { reps, weight } = s;
+  if (reps == null || !Number.isFinite(reps) || reps <= 0) return false;
+  return weight == null || (Number.isFinite(weight) && weight >= 0);
+}
+
 /** Séries + tonnage d'un exercice, avec repli sur la saisie agrégée (sets × reps × poids). */
 function summarize(ex: RecapSourceExercise): { sets: number; volume: number } {
-  const detailed = (ex.exercise_sets ?? []).filter(isValidSet);
+  const detailed = (ex.exercise_sets ?? []).filter(isCountedSet);
   if (detailed.length > 0) {
-    return { sets: detailed.length, volume: setsTonnage(detailed) };
+    return { sets: detailed.length, volume: setsTonnage(detailed.filter(isValidSet)) };
   }
   const sets = ex.sets ?? 0;
   const reps = ex.reps ?? 0;

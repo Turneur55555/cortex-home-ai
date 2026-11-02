@@ -261,8 +261,10 @@ describe("resolveSessionGoal — référence sans charge (poids de corps)", () =
       templates: [],
     });
 
-  it("des séries détaillées sans charge ne font pas une référence : le récap de fin de séance ne les compte pas", () => {
-    expect(run([])).toBeNull();
+  it("des séries détaillées sans charge font une référence, comme dans le récap : objectif en séries, sans volume", () => {
+    // Avant le 02/11/2026, le récap ignorait les séries au poids du corps détaillées (charge
+    // NULL) : la même séance faisait un objectif saisie en résumé, et aucun en séries détaillées.
+    expect(run([])).toMatchObject({ setsTarget: 10, volumeTargetKg: null, setsDone: 0 });
   });
 
   it("une référence dont les séries portent une charge nulle n'a pas de volume à battre", () => {

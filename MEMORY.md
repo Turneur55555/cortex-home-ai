@@ -22,6 +22,44 @@
 ## Dernière mise à jour
 2026-11-02
 
+## Audit des mises à jour du 01-02/11 — poids du corps compté, « Je l'ai faite » débloqué (2026-11-02, `main`)
+Demande de Nathan : « fais une analyse des dernières mises à jour, vérifie s'il n'y a pas eu
+d'erreur, corrige ». Périmètre : `c2c779c` → `8fc8fb1` (nutrition, séance, accueil).
+- **Vérifié sans défaut** : tsc 0 erreur, lint 0 erreur (154 warnings = base), Vitest 3 049
+  passés, build OK (`NODE_OPTIONS=--max-old-space-size=6144`), `check:bounded-reads`,
+  `check:offline-contract`. CI `main` verte sur les 3 commits (Quality, Typecheck, project ref).
+  Production : aucune réponse HTTP ≥ 400 sur 24 h ; séance « Dos » du 02/11 clôturée via le
+  nouveau récap (3 séries en suspens comptées à 09:35, durée 37 min malgré une clôture 2 h 19
+  après le début, +100 XP) ; repas habituels ajoutés en un appui le 01/11 et le 02/11, sans doublon.
+  Lovable synchronisé sur `8fc8fb1`.
+- **Défaut 1 — séries au poids du corps jamais comptées** (connu, « laissé de côté » au chantier
+  précédent, mais mesuré en production) : en séance, une série au poids du corps se valide charge
+  vide → `weight = NULL` (164 séries cochées : « Traction prise neutre », « Dips »), et le résumé
+  `exercises.sets` de ces exercices est `NULL`. `buildSessionRecap` filtrait par `isValidSet`
+  (charge > 0) : carte récap du Dos du 02/11 à **18 séries pour 20**, et même sous-compte dans la
+  Carte du jour (« La dernière fois »), le rapport de la semaine et l'objectif de séance. Correctif :
+  `isCountedSet` (répétitions > 0, charge NULL/0/positive) pour le COMPTE ; le tonnage garde
+  `isValidSet`. Deux tests qui figeaient l'ancien comportement « comme le récap » mis à jour
+  (`todayCard.test.ts`, `sessionGoal.test.ts` : une séance de pompes en séries détaillées fait
+  désormais un objectif, comme la même saisie en résumé). Nouveau `rpg/sessionRecap.test.ts`.
+- **Défaut 2 — « Je l'ai faite » bloqué pour Dos et Pectoraux** : le pré-remplissage reprenait la
+  charge `NULL` en champ vide → `missing-weight` (« Indique la charge sur « Traction prise
+  neutre » ») à CHAQUE utilisation de ces deux séances. `setsFromHistoryExercise` pré-remplit
+  désormais « 0 » pour une série COCHÉE sans charge (l'historique dit qu'elle a été faite sans
+  charge — ce n'est pas deviner) ; une série non cochée garde son champ vide. Écrit `0` (déjà
+  utilisé pour le poids du corps : 20 séries ; le moteur de rang traite NULL et 0 pareil).
+- **Constaté, non corrigé (hors code)** : `rls-tests.yml` échoue sur chaque push avec migration
+  depuis septembre — secrets GitHub `SUPABASE_URL`, `SUPABASE_ANON_KEY`,
+  `SUPABASE_SERVICE_ROLE_KEY` absents (le job refuse volontairement un succès à 0 test). À ajouter
+  par Nathan dans Settings → Secrets and variables → Actions. Advisors Supabase : rien de nouveau
+  (8 fonctions SECURITY DEFINER exécutables, `recipe_import_cache` sans policy, protection des mots
+  de passe divulgués désactivée — tous antérieurs).
+- **Question ouverte, non tranchée** : `buildSessionRecap` compte encore les séries NON cochées
+  de l'historique (39 séances terminées en ont, jusqu'à 20 dans une séance), alors que l'objectif
+  de séance ne compte que les cochées et que le rang/« Je l'ai faite » les ignorent. Les retirer
+  réécrirait les chiffres passés (une séance du 03/09 tomberait à 0 série) : décision produit.
+- **Vérifié après correctif** : tsc, lint, prettier, Vitest **3 056 passés / 63 skipped** (+7).
+
 ## Accueil — « Je l'ai faite » (saisie après coup) + fiche de personnage (2026-11-02, `main`)
 Demande de Nathan : « J'adore la 1 et la 2, fais-le » (propositions d'amélioration de l'Accueil,
 fondées sur la production : semaine du 26/10 tenue à **5/5**, mais **6 séances sur 7 saisies après

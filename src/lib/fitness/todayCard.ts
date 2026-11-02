@@ -25,7 +25,7 @@
  * ── « La dernière fois » ──
  * Rattachée à la séance sauvegardée du jour : la dernière séance de musculation
  * TERMINÉE qui porte le même nom, avec ses séries et son tonnage tels que
- * `buildSessionRecap` les compte (séries validées, jamais une saisie non cochée). Rien
+ * `buildSessionRecap` les compte (séries avec des répétitions, poids du corps compris). Rien
  * n'est affiché si aucune séance du même nom n'existe, ou si elle n'a ni séries ni
  * tonnage : on n'invente pas de référence. Le même `lastSameNamedSession` servira
  * l'objectif de séance (C13).

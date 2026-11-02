@@ -168,14 +168,15 @@ describe("lastSameNamedSession — la référence « la dernière fois »", () =
     expect(lastSameNamedSession([done("2026-09-23", "")], "  ")).toBeNull();
   });
 
-  it("compte comme la carte récap de fin de séance : une série à poids 0 n'est pas validée", () => {
+  it("compte comme la carte récap de fin de séance : le poids du corps est une série, sans tonnage", () => {
     const sets = [
       { reps: 10, weight: 50 },
-      { reps: 10, weight: 0 }, // poids de corps : pas une « série valide » pour le récap
-      { reps: null, weight: 50 },
+      { reps: 10, weight: 0 }, // poids du corps (« Je l'ai faite ») : une série, 0 kg
+      { reps: 8, weight: null }, // poids du corps (saisie en direct, charge vide) : idem
+      { reps: null, weight: 50 }, // sans répétitions : pas une série
     ];
     const ref = lastSameNamedSession([done("2026-09-23", "Pompes", {}, sets)], "Pompes");
-    expect(ref).toMatchObject({ sets: 1, volumeKg: 500 });
+    expect(ref).toMatchObject({ sets: 3, volumeKg: 500 });
   });
 });
 

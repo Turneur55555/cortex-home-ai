@@ -101,6 +101,35 @@ describe("setsFromHistoryExercise — les séries qu'on reprend d'une séance pa
     ]);
   });
 
+  it("série cochée SANS charge (saisie en direct : NULL) = poids du corps, pré-remplie à « 0 »", () => {
+    // Production 02/11/2026 : « Traction prise neutre » et « Dips » sont stockées weight = NULL.
+    // Pré-remplies vides, elles rendaient le brouillon invalide (« Indique la charge… »).
+    const rows = setsFromHistoryExercise({
+      name: "Traction prise neutre",
+      exercise_sets: [
+        { set_number: 1, reps: 8, weight: null, completed: true },
+        { set_number: 2, reps: 7, weight: null, completed: true },
+      ],
+    });
+    expect(rows).toEqual([
+      { reps: "8", weight: "0" },
+      { reps: "7", weight: "0" },
+    ]);
+    expect(rows.map(parseDoneSet)).toEqual([
+      { kind: "set", reps: 8, weight: 0 },
+      { kind: "set", reps: 7, weight: 0 },
+    ]);
+    expect(describeDoneExercise(rows)).toBe("2 séries · poids du corps");
+  });
+
+  it("série NON cochée sans charge : le champ reste vide (à compléter, jamais deviné)", () => {
+    const rows = setsFromHistoryExercise({
+      name: "X",
+      exercise_sets: [{ set_number: 1, reps: 10, weight: null, completed: false }],
+    });
+    expect(rows).toEqual([{ reps: "10", weight: "" }]);
+  });
+
   it("sans séries détaillées : les colonnes résumé (« Enregistrer comme séance passée »)", () => {
     expect(setsFromHistoryExercise({ name: "X", sets: 3, reps: 10, weight: 50 })).toEqual([
       { reps: "10", weight: "50" },
@@ -311,6 +340,34 @@ describe("validateDoneSession", () => {
         ],
       },
     });
+  });
+
+  it("une séance avec tractions au poids du corps (charge NULL) se valide telle quelle", () => {
+    const dos = workout("2026-10-26", "Dos", [
+      { name: "Tirage poitrine", position: 0, exercise_sets: sets([10, 60], [10, 60]) },
+      {
+        name: "Traction prise neutre",
+        position: 1,
+        exercise_sets: [
+          { set_number: 1, reps: 8, weight: null, completed: true },
+          { set_number: 2, reps: 7, weight: null, completed: true },
+        ],
+      },
+    ]);
+    const d = buildDoneSessionDraft({
+      target: { date: TODAY, name: "Dos", templateId: null },
+      workouts: [dos],
+      template: null,
+    })!;
+    const result = validateDoneSession(d, "40", TODAY);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.totalSets).toBe(4);
+    expect(result.volumeKg).toBe(10 * 60 * 2);
+    expect(result.payload.exercises[1].sets).toEqual([
+      { reps: 8, weight: 0 },
+      { reps: 7, weight: 0 },
+    ]);
   });
 
   it("un exercice décoché n'est pas enregistré ; une ligne vidée non plus", () => {

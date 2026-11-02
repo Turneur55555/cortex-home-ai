@@ -144,7 +144,15 @@ export function setsFromHistoryExercise(exercise: SourceExercise): DoneSetDraft[
   const done = detailed.filter((s) => s.completed === true);
   const chosen = done.length > 0 ? done : detailed;
   if (chosen.length > 0) {
-    return chosen.map((s) => ({ reps: toField(s.reps), weight: toField(s.weight) }));
+    // Une série COCHÉE sans charge est une série au poids du corps : c'est ainsi que la saisie
+    // en direct l'enregistre (charge vide → `NULL`). Elle se pré-remplit à « 0 », sans quoi le
+    // brouillon d'une séance avec tractions ou dips serait invalide par construction
+    // (« Indique la charge… » à chaque fois). Ce n'est pas deviner la charge : l'historique dit
+    // que cette série a été faite sans charge. Une série non cochée garde son champ vide.
+    return chosen.map((s) => ({
+      reps: toField(s.reps),
+      weight: s.completed === true && s.weight == null ? "0" : toField(s.weight),
+    }));
   }
   if (exercise.weight != null) {
     const count = Math.max(1, exercise.sets ?? 1);
