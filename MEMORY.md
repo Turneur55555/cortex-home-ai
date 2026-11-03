@@ -20,7 +20,35 @@
 > regroupés sous [`docs/archive/`](docs/archive/).
 
 ## Dernière mise à jour
-2026-11-02
+2026-11-03
+
+## Dressing — proposition de refonte en images + feuille de route (2026-11-03, `main`, docs seules)
+Demande de Nathan : « refonte complète du module Mon dressing, très peu fonctionnel… un vrai chemin
+de progression, prépare-moi tout le boulot ». **Rien de construit** : proposition en images, choix
+de l'entrée en attente. Plan complet : `docs/architecture/dressing-refonte.md` ; page illustrée :
+https://claude.ai/artifact/E8jrDhbKmQKfdqroo31NGJ.
+- **Mesuré en production (lecture seule)** : 33 pièces (22 hauts, 11 bas dont **8 shorts**), 0
+  chaussure / veste / accessoire, saisies du 4 au 11/08 (44 analyses IA, rien depuis) ; portable cet
+  automne 18 (15 hauts, **3 bas**), en hiver 7 (**1 bas**, jogging noir) ; 13/33 détourées ; **1 tenue
+  notée** en 3 mois (02/11, Sweat beige + Pantalon beige), 0 avis.
+- **Moteur réel rejoué** (`planWeek`, `generateOutfits` via `jiti`, hors dépôt) : semaine du 02/11 =
+  jogging noir ×3, vert ×2, pantalon beige ×1 ; t-shirt manches courtes proposé en novembre
+  (`sleeve_length` ignoré) ; « chemise + jogging » à 96 % (aucune règle d'association) ; toutes
+  « sans chaussures ». Conclusion : le moteur tient, le dressing (août) et l'écran (un menu) non.
+- **Données à corriger (étape 0)** : noms sans accord (« Chemise blanc/vert/noir », cause
+  `buildWardrobePrefill` dans `useWardrobe.ts`), « Polo noir » Fred Perry enregistré `blanc`,
+  « Jogging vert » en `pantalon`, 2 t-shirts sans saison, noms en double.
+- **Trois entrées en images** (captures 402×874, silhouettes à la couleur enregistrée — photos du
+  bucket privé inaccessibles) : **A Le Miroir** (tenue du jour à plat, recommandée), **B Le Shuffle**
+  (lignes à faire glisser, cadenas), **C Le Vestiaire** (portable par saison, ce qui manque). Plus :
+  Ma semaine calée sur « Mon rythme » (Dos · Épaule · Pecs, sac de salle), Remise à niveau, Style &
+  Chroniques. Références : Whering (W Pick, Dress Me), Acloset (Style Stats), Indyx, Cladwell, Fits.
+- **Feuille de route** : 0 remise à niveau (détourage en lot, `dataQuality.ts`, `naming.ts`, manches ×
+  saison, associations, lecture bornée) → 1 entrée choisie (`OutfitLook` remplace `OutfitThumbnails`)
+  → 2 Composer (`outfits.is_favorite` existante) → 3 rythme + météo Open-Meteo → 4 Vestiaire vivant
+  (rangement de saison dérivé, ajout unique) → 5 Style & Chroniques (seule migration, optionnelle :
+  prix). **Aucun XP dans le Dressing.**
+- Maquettes HTML jetables (scratchpad), non commitées.
 
 ## Halos de rang : `rankGlowShadow` produisait une ombre invalide (2026-11-02)
 `rankGlowShadow(glow, y, blur, spread)` renvoyait `${y}px ${blur}px ${spread}px ${glow}` : **trois**
