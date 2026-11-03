@@ -64,6 +64,8 @@ export interface OutfitScoringItem {
   formality: string | null;
   seasons: string[];
   usage: string[];
+  /** Longueur de manches (hauts) — optionnelle : absente, aucune règle de manches ne s'applique. */
+  sleeve_length?: string | null;
 }
 
 export interface OutfitScoreBreakdown {
@@ -324,6 +326,8 @@ export function itemPairKey(a: string, b: string): string {
 
 interface Personalization {
   currentSeason: WardrobeSeason | null;
+  /** Contexte de la génération en cours (règle des manches). */
+  context?: OutfitContext;
   daysSinceWorn: ReadonlyMap<string, number>;
   likedPairs: ReadonlySet<string>;
   forgotten: ReadonlySet<string>;
@@ -387,6 +391,62 @@ function preferInSeason(list: OutfitScoringItem[], p: Personalization): OutfitSc
   return inSeason.length > 0 ? inSeason : list;
 }
 
+// ─── Manches × saison, associations par type (Refonte Dressing, étape 0) ───
+
+/** Saisons froides : un haut à manches courtes n'y est porté seul que sous une couche. */
+const COLD_SEASONS = new Set<WardrobeSeason>(["automne", "hiver"]);
+/** Contextes où les manches courtes restent normales quelle que soit la saison (salle, voyage). */
+const SLEEVE_FREE_CONTEXTS = new Set<OutfitContext>(["sport", "vacances", "baignade"]);
+const SHORT_SLEEVES = new Set(["courtes", "sans_manches"]);
+
+function isLayer(item: OutfitScoringItem): boolean {
+  return item.category === "outerwear";
+}
+
+/**
+ * 1 = manches adaptées ; 0 = haut à manches courtes, saison froide, aucune
+ * couche dans la tenue. Sans `sleeve_length` renseignée : 1 (jamais pénalisé à tort).
+ */
+export function sleeveFit(
+  pieces: OutfitScoringItem[],
+  context: OutfitContext,
+  season: WardrobeSeason | null,
+): number {
+  if (!season || !COLD_SEASONS.has(season) || SLEEVE_FREE_CONTEXTS.has(context)) return 1;
+  if (pieces.some(isLayer)) return 1;
+  const tops = pieces.filter((i) => i.category === "top");
+  if (tops.length === 0) return 1;
+  return tops.some((t) => SHORT_SLEEVES.has(t.sleeve_length ?? "")) ? 0 : 1;
+}
+
+/**
+ * Associations haut × bas qui détonnent, notées de 0 à 1 (1 = aucune réserve).
+ * Une chemise en maille se porte comme une surchemise : pas de réserve avec un jogging.
+ */
+const PAIRING_RULES: Array<{ top: string; bottom: string; fit: number }> = [
+  { top: "chemise", bottom: "jogging", fit: 0.3 },
+  { top: "polo", bottom: "jogging", fit: 0.6 },
+  { top: "chemise", bottom: "legging", fit: 0.4 },
+];
+
+export function pairingFit(pieces: OutfitScoringItem[]): number {
+  let fit = 1;
+  for (const top of pieces.filter((i) => i.category === "top")) {
+    if (top.subcategory === "chemise" && normalizeText(top.material ?? "") === "maille") continue;
+    for (const bottom of pieces.filter((i) => i.category === "bottom")) {
+      const rule = PAIRING_RULES.find(
+        (r) => r.top === top.subcategory && r.bottom === bottom.subcategory,
+      );
+      if (rule) fit = Math.min(fit, rule.fit);
+    }
+  }
+  return fit;
+}
+
+/** Points retirés au total d'une tenue aux manches inadaptées / à l'association qui détonne. */
+const SLEEVE_PENALTY = 12;
+const PAIRING_PENALTY = 12;
+
 function singleItemScore(item: OutfitScoringItem, rule: ContextRule, p: Personalization): number {
   let s = 0;
   if (item.usage.length === 0) s += 0.5;
@@ -401,6 +461,11 @@ function singleItemScore(item: OutfitScoringItem, rule: ContextRule, p: Personal
   s += itemSeasonFit(item, p.currentSeason) * 0.6;
   s += itemFreshness(item, p) * 0.8;
   if (p.forgotten.has(item.id)) s += 0.3;
+  // Un haut à manches courtes recule derrière les manches longues en saison
+  // froide (le classement plafonne à CANDIDATE_CAP pièces par catégorie).
+  if (item.category === "top" && p.context && sleeveFit([item], p.context, p.currentSeason) === 0) {
+    s -= 1;
+  }
 
   return s;
 }
@@ -487,6 +552,8 @@ function scoreCombo(
   const freshness = freshnessScore(pieces, p);
   const affinity = affinityScore(pieces, p);
   const category = missing.length > 0 ? CATEGORY_SCORE_WITHOUT_SHOES : 1;
+  const sleeves = sleeveFit(pieces, context, p.currentSeason);
+  const pairing = pairingFit(pieces);
 
   const breakdown: OutfitScoreBreakdown = {
     category,
@@ -508,7 +575,9 @@ function scoreCombo(
     season * 4 +
     inSeason * 10 +
     freshness * 8 +
-    affinity * AFFINITY_BONUS;
+    affinity * AFFINITY_BONUS -
+    (1 - sleeves) * SLEEVE_PENALTY -
+    (1 - pairing) * PAIRING_PENALTY;
   const score = Math.round(Math.max(0, Math.min(100, total)));
   const forgottenItemIds = pieces.filter((i) => p.forgotten.has(i.id)).map((i) => i.id);
 
@@ -516,12 +585,9 @@ function scoreCombo(
     items: pieces,
     score,
     breakdown,
-    explanation: buildExplanation(
-      breakdown,
-      context,
-      forgottenItemIds.length,
-      p.currentSeason !== null,
-    ),
+    explanation:
+      buildExplanation(breakdown, context, forgottenItemIds.length, p.currentSeason !== null) +
+      (sleeves === 0 ? " Manches courtes : prévois une couche par-dessus." : ""),
     missing,
     forgottenItemIds,
   };
@@ -698,6 +764,7 @@ export function generateOutfits(
     daysSinceWorn: options.daysSinceWorn ?? EMPTY_MAP,
     likedPairs: options.likedPairs ?? EMPTY_SET,
     forgotten: options.forgottenItemIds ?? EMPTY_SET,
+    context,
   };
   const exclude = options.excludeItemIds ?? EMPTY_SET;
 

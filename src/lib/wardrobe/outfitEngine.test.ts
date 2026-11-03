@@ -607,3 +607,106 @@ describe("generateOutfits — dressing réel sans chaussures (régression du 19/
     expect(ids).not.toContain("b-short-noir");
   });
 });
+
+describe("Refonte Dressing, étape 0 — manches × saison et associations", () => {
+  const casual = { formality: "casual", usage: ["quotidien"], pattern: "uni", seasons: [] };
+  const tshirtMC = makeItem({
+    id: "t-mc",
+    category: "top",
+    subcategory: "tshirt",
+    primary_color: "vert",
+    sleeve_length: "courtes",
+    ...casual,
+  });
+  const sweatML = makeItem({
+    id: "t-ml",
+    category: "top",
+    subcategory: "sweat",
+    primary_color: "beige",
+    sleeve_length: "longues",
+    ...casual,
+  });
+  const chemise = makeItem({
+    id: "t-ch",
+    category: "top",
+    subcategory: "chemise",
+    primary_color: "blanc",
+    sleeve_length: "longues",
+    material: "coton",
+    ...casual,
+  });
+  const surchemise = makeItem({
+    id: "t-sc",
+    category: "top",
+    subcategory: "chemise",
+    primary_color: "gris foncé",
+    sleeve_length: "longues",
+    material: "maille",
+    ...casual,
+  });
+  const jogging = makeItem({
+    id: "b-jg",
+    category: "bottom",
+    subcategory: "jogging",
+    primary_color: "noir",
+    ...casual,
+  });
+  const pantalon = makeItem({
+    id: "b-pt",
+    category: "bottom",
+    subcategory: "pantalon",
+    primary_color: "beige",
+    ...casual,
+  });
+  const veste = makeItem({
+    id: "o-1",
+    category: "outerwear",
+    subcategory: "veste",
+    primary_color: "noir",
+    ...casual,
+  });
+  const ids = (r: ReturnType<typeof generateOutfits>) =>
+    r.ok ? r.outfits.map((o) => o.items.map((i) => i.id).join("+")) : [];
+
+  it("en automne, une tenue à manches longues passe devant les manches courtes", () => {
+    const r = generateOutfits([tshirtMC, sweatML, jogging], "quotidien", {
+      currentSeason: "automne",
+      maxResults: 2,
+    });
+    expect(ids(r)[0]).toBe("t-ml+b-jg");
+    expect(r.ok && r.outfits[1].explanation).toContain("prévois une couche");
+  });
+
+  it("garde les manches courtes en été, à la salle, ou sous une veste", () => {
+    for (const [context, season] of [
+      ["quotidien", "ete"],
+      ["sport", "automne"],
+    ] as const) {
+      const r = generateOutfits([tshirtMC, jogging], context, { currentSeason: season });
+      expect(r.ok && r.outfits[0].explanation).not.toContain("couche");
+    }
+    const layered = generateOutfits([tshirtMC, jogging, veste], "quotidien", {
+      currentSeason: "hiver",
+    });
+    expect(layered.ok && layered.outfits[0].explanation).not.toContain("couche");
+  });
+
+  it("une chemise va avec le pantalon plutôt qu'avec le jogging, sauf la surchemise en maille", () => {
+    const r = generateOutfits([chemise, jogging, pantalon], "quotidien", { maxResults: 2 });
+    expect(ids(r)).toEqual(["t-ch+b-pt", "t-ch+b-jg"]);
+    expect(r.ok && r.outfits[0].score - r.outfits[1].score).toBeGreaterThan(5);
+    const over = generateOutfits([surchemise, jogging], "quotidien");
+    const plain = generateOutfits([{ ...surchemise, material: "coton" }, jogging], "quotidien");
+    expect(over.ok && plain.ok && over.outfits[0].score > plain.outfits[0].score).toBe(true);
+  });
+
+  it("sans longueur de manches renseignée, aucun malus (jamais pénalisé à tort)", () => {
+    const a = generateOutfits([{ ...tshirtMC, sleeve_length: undefined }, pantalon], "quotidien", {
+      currentSeason: "hiver",
+    });
+    const b = generateOutfits([{ ...tshirtMC, sleeve_length: undefined }, pantalon], "quotidien", {
+      currentSeason: "ete",
+    });
+    expect(a.ok && b.ok && a.outfits[0].explanation).not.toContain("couche");
+  });
+});

@@ -49,6 +49,7 @@ export function mapWardrobeItemToScoringItem(item: WardrobeItemView): OutfitScor
     formality: item.formality,
     seasons: item.seasons,
     usage: item.usage,
+    sleeve_length: item.sleeve_length,
   };
 }
 
@@ -187,6 +188,37 @@ export function useOutfitFeedback() {
     },
     onError: (error: Error) => {
       toast.error(error.message || "Impossible d'enregistrer ton avis.");
+    },
+  });
+}
+
+/**
+ * « Annuler » après « Je la porte » : supprime la tenue notée (ses
+ * `outfit_items` et son avis partent avec, `ON DELETE CASCADE`).
+ */
+export function useUnwearOutfit() {
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (outfitId: string) => {
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser();
+      if (!authUser) throw new Error("Non authentifié.");
+      const { error } = await supabase
+        .from("outfits")
+        .delete()
+        .eq("id", outfitId)
+        .eq("user_id", authUser.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["outfits", user?.id] });
+      void queryClient.invalidateQueries({ queryKey: ["outfit-history", user?.id] });
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Impossible d'annuler cette tenue.");
     },
   });
 }

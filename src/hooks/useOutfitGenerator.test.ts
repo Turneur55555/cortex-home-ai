@@ -207,6 +207,7 @@ describe("mapWardrobeItemToScoringItem", () => {
       formality: "casual",
       seasons: [],
       usage: ["quotidien"],
+      sleeve_length: null,
     });
   });
 

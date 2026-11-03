@@ -1,8 +1,9 @@
 import { useMemo } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ChevronLeft, Clock, History, Shirt } from "lucide-react";
-import { OutfitThumbnails } from "@/components/wardrobe/OutfitThumbnails";
+import { OutfitLook, PieceTile } from "@/components/wardrobe/OutfitLook";
 import { Skeleton } from "@/components/ui/skeleton";
+import { DressingTabs } from "@/components/wardrobe/DressingTabs";
 import { useWardrobePersonalization } from "@/hooks/useWardrobeInsights";
 import type { WardrobeItemView } from "@/hooks/useWardrobe";
 import { OUTFIT_CONTEXTS } from "@/lib/wardrobe/outfitEngine";
@@ -57,6 +58,7 @@ function StyleJournalPage() {
           Style
         </p>
         <h1 className="mt-1 text-2xl font-bold tracking-tight">Mon journal de style</h1>
+        <DressingTabs active="style" />
       </header>
 
       {isLoading ? (
@@ -72,7 +74,7 @@ function StyleJournalPage() {
           {mostWorn && summary.mostWornItem && (
             <section className="mb-5 flex items-center gap-3 rounded-2xl border border-border bg-card p-3">
               <div className="w-14 shrink-0">
-                <OutfitThumbnails pieces={[mostWorn]} size="sm" single />
+                <PieceTile piece={mostWorn} className="rounded-lg" />
               </div>
               <div className="min-w-0">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -103,7 +105,7 @@ function StyleJournalPage() {
               <div className="grid grid-cols-4 gap-1.5">
                 {forgotten.slice(0, 8).map((piece) => (
                   <Link key={piece.id} to="/dressing/$itemId" params={{ itemId: piece.id }}>
-                    <OutfitThumbnails pieces={[piece]} size="sm" single />
+                    <PieceTile piece={piece} className="rounded-lg" />
                   </Link>
                 ))}
               </div>
@@ -149,7 +151,7 @@ function StyleJournalPage() {
                             </span>
                           )}
                         </div>
-                        <OutfitThumbnails pieces={resolve(outfit.itemIds)} size="sm" />
+                        <OutfitLook pieces={resolve(outfit.itemIds)} className="rounded-xl" />
                       </article>
                     ))}
                   </div>

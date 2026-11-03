@@ -223,6 +223,8 @@ export interface WeeklyOutfits {
   personalization: WardrobePersonalization;
   setDayContext: (date: string, context: WeekDayPreference["context"]) => void;
   rerollDay: (date: string) => void;
+  /** Choisit la tenue n° `index` du réservoir du jour (glisser sur « Aujourd'hui »). */
+  setDayReroll: (date: string, index: number) => void;
 }
 
 export function useWeeklyOutfits(): WeeklyOutfits {
@@ -253,5 +255,10 @@ export function useWeeklyOutfits(): WeeklyOutfits {
     [update, prefs],
   );
 
-  return { weekStart, today, days, personalization, setDayContext, rerollDay };
+  const setDayReroll = useCallback(
+    (date: string, index: number) => update(date, { reroll: Math.max(0, Math.floor(index)) }),
+    [update],
+  );
+
+  return { weekStart, today, days, personalization, setDayContext, rerollDay, setDayReroll };
 }

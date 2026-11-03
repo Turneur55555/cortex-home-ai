@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ChevronLeft, Footprints, Heart, RefreshCw, Sparkles, TriangleAlert } from "lucide-react";
 import { MissingPiecesCard } from "@/components/wardrobe/MissingPiecesCard";
-import { OutfitThumbnails } from "@/components/wardrobe/OutfitThumbnails";
+import { OutfitLook } from "@/components/wardrobe/OutfitLook";
 import { useGenerateOutfits, useOutfitFeedback, useSaveOutfit } from "@/hooks/useOutfitGenerator";
 import { useWardrobePersonalization } from "@/hooks/useWardrobeInsights";
 import {
@@ -14,7 +14,7 @@ import type { WardrobeItemView } from "@/hooks/useWardrobe";
 
 export const Route = createFileRoute("/_authenticated/dressing/generer")({
   head: () => ({
-    meta: [{ title: "Générer une tenue — ICORTEX" }],
+    meta: [{ title: "Composer une tenue — ICORTEX" }],
   }),
   component: GenerateOutfitPage,
 });
@@ -76,7 +76,7 @@ function GenerateOutfitPage() {
           <ChevronLeft className="h-3.5 w-3.5" />
           Mon dressing
         </Link>
-        <h1 className="text-2xl font-bold tracking-tight">Générer une tenue</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Composer une tenue</h1>
       </header>
 
       {/* Choix du contexte — volontairement petit, pas un gros panneau de filtres */}
@@ -220,7 +220,12 @@ function OutfitCard({
       </div>
 
       <div className="px-4 py-4">
-        <OutfitThumbnails pieces={pieces} forgottenIds={outfit.forgottenItemIds} />
+        <OutfitLook
+          pieces={pieces}
+          forgottenIds={outfit.forgottenItemIds}
+          showMissingShoes={outfit.missing.includes("chaussures")}
+          className="rounded-2xl"
+        />
       </div>
 
       <p className="px-4 text-xs text-muted-foreground">{outfit.explanation}</p>

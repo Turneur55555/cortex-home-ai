@@ -41,7 +41,6 @@
     "src/hooks/useShoppingList.ts::recipe_ingredients": 1,
     "src/hooks/useShoppingList.ts::shopping_list": 1,
     "src/hooks/useUserExercisePhotos.ts::user_exercise_illustrations": 1,
-    "src/hooks/useWardrobe.ts::wardrobe_items": 1,
     "src/hooks/useWorkoutAnalyses.ts::workout_analyses": 1,
     "src/hooks/useWorkoutTemplates.ts::workout_template_exercises": 1,
     "src/hooks/useWorkoutTemplates.ts::workout_template_segments": 1,

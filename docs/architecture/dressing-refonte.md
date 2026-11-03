@@ -13,6 +13,17 @@
 
 ---
 
+## 0. Avancement
+
+| Étape                      | État                                                                                                                             |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| 0 · Remise à niveau        | **Livrée le 03/11/2026** (code). Détourage et corrections : à lancer par Nathan depuis Vestiaire → « Remise à niveau ».          |
+| 1 · Entrée A « Le Miroir » | **Livrée le 03/11/2026** (choix de Nathan : « fais la A »). Sac de salle et puce de séance (étape 3, partie rythme) livrés avec. |
+| 2 · Composer               | à faire (le bouton ⇄ ouvre l'actuel « Composer une tenue »)                                                                      |
+| 3 · Météo                  | à faire (la partie « Mon rythme » est livrée)                                                                                    |
+| 4 · Vestiaire vivant       | en partie : onglet Vestiaire, grille uniforme, filtre « De saison », pastilles « Portée hier »                                   |
+| 5 · Style et Chroniques    | à faire (l'onglet Style ouvre le journal existant)                                                                               |
+
 ## 1. Diagnostic — mesuré en production le 02-03/11/2026
 
 | Mesure                | Valeur                                                          | Ce que ça dit                                      |
@@ -23,7 +34,7 @@
 | Portable cet automne  | **18 / 33** (15 hauts, **3 bas**)                               | `seasonForDate` + colonne `seasons`                |
 | Portable en hiver     | **7 / 33** (6 hauts, **1 bas** : le jogging noir)               | à partir du 1er décembre                           |
 | Hauts manches courtes | 14 / 22                                                         | proposés tels quels en novembre                    |
-| Photos détourées      | **13 / 33**                                                     | la grille mélange 20 photos brutes et 13 détourées |
+| Photos détourées      | **15 / 33**                                                     | la grille mélange 18 photos brutes et 15 détourées |
 | Tenues notées         | **1** en 3 mois (02/11, 23 h 28 : Sweat beige + Pantalon beige) | 0 avis 👍                                          |
 | Visites               | 1 en 30 jours (analyse du 27/10)                                | module invisible : Profil → Mes espaces → Dressing |
 
@@ -104,7 +115,7 @@ publication Lovable vérifiée, récit dans `MEMORY.md`. Effort indicatif en ses
 But : un dressing propre et un moteur qui ne propose plus d'absurdités. Écran « Remise à niveau »
 (planche 2).
 
-1. **Détourage en lot** des pièces sans `processed_storage_path` (20 aujourd'hui). Réutiliser
+1. **Détourage en lot** des pièces sans `processed_storage_path` (18 au 03/11 ; « 13/33 » écrit d'abord dans la proposition était une erreur de comptage). Réutiliser
    `lib/wardrobe/backgroundRemoval.ts` (client, `@imgly`, aucune photo envoyée) et
    `imageProcessing.ts` ; traitement séquentiel avec reprise (une pièce échouée n'arrête pas le
    lot), écriture via `updateWardrobeItemRecord` (`processed_storage_path`). Original jamais
@@ -208,5 +219,5 @@ Tests : verrou respecté, mélange déterministe à graine donnée, aucune pièc
 | ------------------------- | ------------- | ------------------------------------------------ |
 | Tenues notées             | 1 en 3 mois   | ≥ 4 par semaine                                  |
 | Visites du Dressing       | 1 en 30 jours | quotidiennes (tuile Accueil + entrée)            |
-| Photos détourées          | 13 / 33       | 33 / 33                                          |
+| Photos détourées          | 15 / 33       | 33 / 33                                          |
 | Pièces portables en hiver | 7 (1 bas)     | dépend des ajouts — « Ce qui manque » le chiffre |

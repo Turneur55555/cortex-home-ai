@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Check, ChevronRight, Shirt } from "lucide-react";
-import { OutfitThumbnails } from "@/components/wardrobe/OutfitThumbnails";
+import { OutfitLook } from "@/components/wardrobe/OutfitLook";
 import { useSaveOutfit } from "@/hooks/useOutfitGenerator";
 import { useWeeklyOutfits } from "@/hooks/useWardrobeInsights";
 import type { WardrobeItemView } from "@/hooks/useWardrobe";
@@ -60,7 +60,11 @@ export function TodayOutfitTile() {
         </span>
         <ChevronRight className="h-4 w-4 text-muted-foreground" />
       </Link>
-      <OutfitThumbnails pieces={pieces} size="sm" />
+      <OutfitLook
+        pieces={pieces}
+        showMissingShoes={!worn && !!today.outfit?.missing.includes("chaussures")}
+        className="rounded-xl"
+      />
       {!worn && (
         <button
           type="button"

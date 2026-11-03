@@ -44,6 +44,8 @@ export interface WeekDayPlan {
   worn: WornOutfit | null;
   /** Nombre de tenues différentes disponibles pour ce jour. */
   poolSize: number;
+  /** Position de la tenue proposée dans ce réservoir (0 sans réservoir). */
+  poolIndex: number;
   /** Raison lisible quand aucune tenue n'est possible (`unavailable`). */
   reason: string | null;
 }
@@ -142,7 +144,16 @@ export function planWeek(input: PlanWeekInput): WeekDayPlan[] {
     const wornContext = isOutfitContext(worn?.occasion) ? worn.occasion : undefined;
     const context = pref.context ?? wornContext ?? input.defaultContext ?? "quotidien";
     const isToday = date === input.today;
-    const base = { date, context, isToday, outfit: null, worn: null, poolSize: 0, reason: null };
+    const base = {
+      date,
+      context,
+      isToday,
+      outfit: null,
+      worn: null,
+      poolSize: 0,
+      poolIndex: 0,
+      reason: null,
+    };
 
     if (worn) {
       markUsed(worn.itemIds, date);
@@ -183,11 +194,12 @@ export function planWeek(input: PlanWeekInput): WeekDayPlan[] {
     );
     const pool = unseen.length > 0 ? unseen : result.outfits;
     const reroll = Math.max(0, Math.floor(pref.reroll ?? 0));
-    const outfit = pool[reroll % pool.length];
+    const poolIndex = reroll % pool.length;
+    const outfit = pool[poolIndex];
     markUsed(
       outfit.items.map((i) => i.id),
       date,
     );
-    return { ...base, status: "planned", outfit, poolSize: pool.length };
+    return { ...base, status: "planned", outfit, poolSize: pool.length, poolIndex };
   });
 }

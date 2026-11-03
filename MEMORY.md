@@ -22,6 +22,54 @@
 ## Dernière mise à jour
 2026-11-03
 
+## Dressing — variante A « Le Miroir » + étape 0 « Remise à niveau » (2026-11-03, `main`)
+Choix de Nathan sur la proposition en images : « Fait la A et tu as le feu vert » (étape 0 comprise).
+Plan et avancement : `docs/architecture/dressing-refonte.md` (§0).
+- **`/dressing` = « Aujourd'hui »** : tenue du jour en grand, mise en scène à plat sur fond studio
+  (`components/wardrobe/OutfitLook.tsx`), glisser / points = tenue suivante du réservoir
+  (`setDayReroll`, `WeekDayPlan.poolIndex`), « Je la porte » 1 appui + « Annuler »
+  (`useUnwearOutfit`, suppression en cascade), ♡ (tenue sauvée + avis), ⇄ → Composer
+  (`/dressing/generer`, renommé « Composer une tenue »), puce saison, puce **« Séance Épaule »** lue
+  dans « Mon rythme » (`useDressingTrainingDay`) et **sac de salle** (meilleure tenue Sport, seulement
+  s'il existe une pièce `usage` sport — `useGymBag`), bande des 7 jours en mini-looks → semaine.
+  État d'erreur explicite (avant : une erreur de lecture s'affichait « dressing vide »).
+- **Onglets internes** `DressingTabs` : Aujourd'hui · Vestiaire (`/dressing/vestiaire`, nouvelle
+  route : l'ancienne grille, en 3 colonnes `PieceTile` sur fond studio, filtre « De saison »,
+  pastilles « Portée hier », carte « Cet automne : 18 pièces portables ») · Style (journal existant).
+  Aucune fonctionnalité retirée : Ajouter / Plusieurs pièces dans Vestiaire, Générer = ⇄, Journal = Style,
+  Semaine = bande.
+- **`OutfitLook` remplace `OutfitThumbnails`** (supprimé) partout : Générer, Semaine (mini-look +
+  noms), Journal, tuile Accueil. `PieceTile` = pièce seule. Fond studio clair `STUDIO_BACKGROUND`
+  (couleurs dans `components/`, jamais dans `lib/`). Photo détourée posée telle quelle, photo brute
+  encadrée.
+- **Étape 0** : `lib/wardrobe/naming.ts` (accord genre/nombre, composées invariables ; branché dans
+  `buildWardrobePrefill`, l'ancien `${label} ${couleur}` retiré) ; `lib/wardrobe/dataQuality.ts`
+  (`detectWardrobeFixes` : accords, « T shirt », noms génériques, nom ↔ couleur = QUESTION jamais
+  appliquée en masse, nom ↔ type, saisons vides, doublons départagés par marque → matière (hors
+  coton) → couleur secondaire → motif (hors uni) ; recalculé à la lecture, rien de stocké) ;
+  `sequentialBatch.ts` (une pièce à la fois, un échec n'arrête pas le lot, arrêt propre) ; hooks
+  `useWardrobeMaintenance.ts` (`patchWardrobeItemRecord` partiel, `useApplyWardrobeFixes`,
+  `detourWardrobeItem` = téléchargement de l'original → `processWardrobePhoto` dans le navigateur →
+  `processed.webp` upsert → colonne) ; écran `/dressing/remise-a-niveau` (lien `MaintenanceBanner`).
+  Sur le dressing réel : **16 propositions** (12 noms, 1 type, 1 question couleur, 2 saisons) —
+  « Chemise blanche » / « … en lin », « Chemise verte » / « … texturée », « Polo noir The koople »,
+  « Polo bleu marine et jaune / et blanc », « Short noir Zara », « Jogging vert » → jogging.
+- **Moteur** : `sleeve_length` transmis (`mapWardrobeItemToScoringItem`) ; `sleeveFit` (manches
+  courtes sans couche en automne/hiver : −12 points, recul dans le classement par catégorie ;
+  sport/vacances/baignade exemptés ; non renseigné = jamais pénalisé) ; `pairingFit` (chemise +
+  jogging 0,3, polo + jogging 0,6, chemise + legging 0,4 : −12 × écart ; **chemise en maille =
+  surchemise, exemptée**). Explication « Manches courtes : prévois une couche par-dessus. »
+- `useWardrobeItems` passe par `fetchAllRows` (+ `order("id")`) ; baseline `check:bounded-reads` −1.
+- **Correction du diagnostic de la veille** : 15/33 photos détourées (18 à faire), pas 13/33.
+- **Vérifié** : tsc, lint 0 erreur (154 warnings = base), Vitest **3 089 passés / 63 ignorés**,
+  `check:bounded-reads`, `check:offline-contract`, build. Banc Playwright jetable (402×874, fuseau
+  Paris, faux Supabase servant les 33 pièces réelles + planning Dos/Épaule/Pecs + tenue du 02/11,
+  silhouettes en guise de photos) : données de prod → « Chemise vert + Jogging vert 97 % » (le
+  jogging vert est encore rangé en pantalon) ; données corrigées → **« Chemise gris foncé The koople
+  + Jogging noir 96 % »**, glisser → 2/9, « Je la porte » → POST `outfits`. Aucune erreur de page.
+- **À faire par Nathan** : Vestiaire → Remise à niveau → « Détourer les 18 restantes » (écran ouvert,
+  sur iPhone) puis « Tout corriger » et la question du polo Fred Perry.
+
 ## Dressing — proposition de refonte en images + feuille de route (2026-11-03, `main`, docs seules)
 Demande de Nathan : « refonte complète du module Mon dressing, très peu fonctionnel… un vrai chemin
 de progression, prépare-moi tout le boulot ». **Rien de construit** : proposition en images, choix

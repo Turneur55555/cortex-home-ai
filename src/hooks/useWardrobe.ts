@@ -19,6 +19,8 @@ import {
   type WardrobeUsage,
 } from "@/lib/wardrobe/taxonomy";
 import { pickDisplayStoragePath } from "@/lib/wardrobe/imageProcessing";
+import { suggestWardrobeName } from "@/lib/wardrobe/naming";
+import { fetchAllRows } from "@/lib/supabase/pagedRead";
 
 /** Catégories affichées dans l'UI du Dressing (aucun impact DB). */
 export const WARDROBE_FILTERS = [
@@ -435,10 +437,6 @@ export interface WardrobePrefill {
   description: string | null;
 }
 
-function capitalize(s: string): string {
-  return s.length > 0 ? s.charAt(0).toUpperCase() + s.slice(1) : s;
-}
-
 /**
  * Applique le seuillage de confiance à une analyse Cortex Vision validée pour
  * en tirer une proposition de préremplissage du formulaire d'ajout.
@@ -498,10 +496,9 @@ export function buildWardrobePrefill(rawAnalysis: WardrobeAnalysisResult): Wardr
       ? { value: validUsage, suggested: analysis.usage_confidence < WARDROBE_CONFIDENCE_HIGH }
       : { value: null, suggested: false };
 
+  // Nom accordé (« Chemise blanche », pas « Chemise blanc ») — lib/wardrobe/naming.ts.
   const nameSuggestion = subcategoryDef
-    ? colorField.value
-      ? capitalize(`${subcategoryDef.label} ${colorField.value}`)
-      : capitalize(subcategoryDef.label)
+    ? suggestWardrobeName(subcategoryDef.value, colorField.value)
     : null;
 
   return {
@@ -595,16 +592,20 @@ export function useWardrobeItems() {
     queryFn: async (): Promise<WardrobeItemView[]> => {
       // `db` : `wardrobe_items` existe en base (bcwfvpwxzlmkxobvbtzp) mais pas
       // encore dans types.ts (généré, jamais édité à la main).
-      const { data, error } = await db
-        .from("wardrobe_items")
-        .select(
-          "id, user_id, name, brand, category, subcategory, primary_color, storage_path, processed_storage_path, created_at, size, secondary_colors, pattern, material, fit, formality, seasons, sleeve_length, usage",
-        )
-        .eq("user_id", user!.id)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-
-      const items = (data ?? []) as WardrobeItemDetail[];
+      // Lecture bornée et complète (INVARIANTS §4.1) : ordre total terminé par l'id.
+      const items = await fetchAllRows<WardrobeItemDetail>(
+        () =>
+          db
+            .from("wardrobe_items")
+            .select(
+              "id, user_id, name, brand, category, subcategory, primary_color, storage_path, processed_storage_path, created_at, size, secondary_colors, pattern, material, fit, formality, seasons, sleeve_length, usage",
+              { count: "exact" },
+            )
+            .eq("user_id", user!.id)
+            .order("created_at", { ascending: false })
+            .order("id"),
+        { label: "wardrobe_items" },
+      );
       const paths = Array.from(
         new Set(
           items

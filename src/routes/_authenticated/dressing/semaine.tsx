@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { CalendarDays, Check, ChevronLeft, Footprints, History, RefreshCw } from "lucide-react";
 import { MissingPiecesCard } from "@/components/wardrobe/MissingPiecesCard";
-import { OutfitThumbnails } from "@/components/wardrobe/OutfitThumbnails";
+import { OutfitLook } from "@/components/wardrobe/OutfitLook";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSaveOutfit } from "@/hooks/useOutfitGenerator";
 import { useWeeklyOutfits } from "@/hooks/useWardrobeInsights";
@@ -208,12 +208,24 @@ function WeekDayCard({
         <p className="px-4 pb-3.5 pt-1 text-xs text-muted-foreground">{day.reason}</p>
       ) : (
         <>
-          <div className="px-4 py-3">
-            <OutfitThumbnails
+          <div className="flex items-center gap-3 px-4 py-3">
+            <OutfitLook
               pieces={pieces}
+              size="mini"
               forgottenIds={day.status === "planned" ? forgottenIds : undefined}
-              size="sm"
+              showMissingShoes={
+                day.status === "planned" && !!day.outfit?.missing.includes("chaussures")
+              }
+              className="w-24 shrink-0 rounded-xl"
             />
+            <ul className="min-w-0 flex-1 space-y-0.5 text-xs">
+              {pieces.map((p) => (
+                <li key={p.id} className="truncate text-foreground/90">
+                  {p.name ?? "Pièce sans nom"}
+                  {p.brand && <span className="text-muted-foreground"> · {p.brand}</span>}
+                </li>
+              ))}
+            </ul>
           </div>
           {day.status === "planned" && day.outfit && (
             <>
