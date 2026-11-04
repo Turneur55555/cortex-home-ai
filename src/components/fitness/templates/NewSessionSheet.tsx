@@ -24,7 +24,7 @@
 // ============================================================
 
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, ListChecks, Loader2, Sparkles, Zap } from "lucide-react";
+import { ChevronLeft, ChevronRight, ListChecks, Loader2, Sparkles, Waves, Zap } from "lucide-react";
 import { Sheet } from "@/components/shared/FormComponents";
 import { DisciplineIcon } from "@/components/fitness/session/DisciplineIcon";
 import { listEngines, ENGINE_REGISTRY } from "@/lib/fitness/engines/registry";
@@ -69,7 +69,10 @@ export function NewSessionSheet({
   onChooseBlankMuscu,
   onChooseSavedMuscu,
   onChooseCoach,
+  onChooseLagree,
 }: {
+  /** Enregistre un cours de Lagree déjà suivi (LagreeLogSheet). */
+  onChooseLagree?: () => void;
   onClose: () => void;
   /** Musculation garde StartWorkoutSheet tel quel (inchangé depuis toujours). */
   onChooseBlankMuscu: () => void;
@@ -173,6 +176,18 @@ export function NewSessionSheet({
             description="Démarre une séance vide, ajoute tes blocs au fil de la séance."
             disabled={startBlankGeneric.isPending}
             onClick={() => handleStartBlankGeneric(discipline)}
+          />
+        )}
+
+        {isMuscu && onChooseLagree && (
+          <ModeButton
+            icon={<Waves className="h-5 w-5" />}
+            title="Cours de Lagree"
+            description="Enregistre un cours suivi : date, durée et zones travaillées."
+            onClick={() => {
+              onClose();
+              onChooseLagree();
+            }}
           />
         )}
 

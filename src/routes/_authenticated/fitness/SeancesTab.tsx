@@ -10,6 +10,7 @@ import { LastSessionRow } from "@/components/fitness/LastSessionRow";
 import { RepeatLiveConfirmDialog } from "@/components/fitness/RepeatLiveConfirmDialog";
 import { StartWorkoutSheet } from "@/components/fitness/StartWorkoutSheet";
 import { NewSessionSheet } from "@/components/fitness/templates/NewSessionSheet";
+import { LagreeLogSheet } from "@/components/fitness/session/LagreeLogSheet";
 import { SavedTemplatesSheet } from "@/components/fitness/templates/SavedTemplatesSheet";
 import { TemplateEditorSheet } from "@/components/fitness/templates/TemplateEditorSheet";
 import { ActiveWorkoutView } from "@/components/fitness/ActiveWorkoutView";
@@ -188,6 +189,7 @@ export function SeancesTab(props: SeancesTabProps = {}) {
   // disciplines (voir NewSessionSheet.tsx). NewSessionChoiceSheet.tsx
   // n'est pas supprimé (A.7), simplement plus monté depuis cet écran.
   const [newSessionSheetOpen, setNewSessionSheetOpen] = useState(false);
+  const [lagreeOpen, setLagreeOpen] = useState(false);
   // Ouverture demandée par la Carte du jour de l'Accueil : consommée une seule
   // fois, une fois la séance active CONNUE. Ouvrir la feuille d'office à l'état
   // initial la laisserait « armée » derrière la séance en cours, et elle
@@ -739,8 +741,11 @@ export function SeancesTab(props: SeancesTabProps = {}) {
           onChooseBlankMuscu={() => setStartOpen(true)}
           onChooseSavedMuscu={() => setSavedTemplatesOpen(true)}
           onChooseCoach={openCoachForDiscipline}
+          onChooseLagree={() => setLagreeOpen(true)}
         />
       )}
+
+      {lagreeOpen && <LagreeLogSheet onClose={() => setLagreeOpen(false)} />}
 
       {startOpen && <StartWorkoutSheet onClose={() => setStartOpen(false)} />}
 
