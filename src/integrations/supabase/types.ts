@@ -4405,6 +4405,7 @@ export type Database = {
       workout_templates: {
         Row: {
           color: string
+          course_key: string | null
           created_at: string
           icon: string
           id: string
@@ -4415,6 +4416,7 @@ export type Database = {
         }
         Insert: {
           color?: string
+          course_key?: string | null
           created_at?: string
           icon?: string
           id?: string
@@ -4425,6 +4427,7 @@ export type Database = {
         }
         Update: {
           color?: string
+          course_key?: string | null
           created_at?: string
           icon?: string
           id?: string
