@@ -176,6 +176,18 @@ export function NewSessionSheet({
           />
         )}
 
+        {isMuscu && onChooseLagree && (
+          <ModeButton
+            icon={<Waves className="h-5 w-5" />}
+            title="Cours de Lagree"
+            description="Enregistre un cours suivi : date, durée et zones travaillées."
+            onClick={() => {
+              onClose();
+              onChooseLagree();
+            }}
+          />
+        )}
+
         {isMuscu && (
           <ModeButton
             icon={<ListChecks className="h-5 w-5" />}
