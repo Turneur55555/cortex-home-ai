@@ -40,9 +40,6 @@ import { EditableText } from "@/components/fitness/EditableText";
 import { StatTileRow, type StatTileSpec } from "@/components/fitness/StatTileRow";
 import { GenericHistoryExerciseList } from "./GenericHistoryExerciseList";
 import { DisciplineBadge } from "./DisciplineIcon";
-import { MuscleZonesBodyMap } from "@/components/fitness/BodyMap";
-import { MUSCLE_META } from "@/lib/fitness/muscleMapping";
-import { isLagreeWorkout, readMuscleZones } from "@/lib/fitness/lagree";
 
 export function GenericHistoryCard({
   workout,
@@ -72,8 +69,6 @@ export function GenericHistoryCard({
   const dateLabel = format(parseISO(workout.date), "EEEE d MMMM • HH'h'mm", { locale: fr });
   const gymLocation = workout.gym_location || "Salle inconnue";
   const exoCount = groupByExerciseLabel(view.segments).length;
-  const lagree = isLagreeWorkout(workout);
-  const zones = readMuscleZones(workout.metadata);
 
   // Phase C, lot V1 (P1-6) : confirmation via le dialogue custom partagé
   // (RepeatLiveConfirmDialog, même composant que le chemin musculation) —
@@ -110,7 +105,7 @@ export function GenericHistoryCard({
               )}
               <DisciplineBadge
                 icon={engine.icon}
-                label={lagree ? "Lagree" : engine.label}
+                label={engine.label}
                 accentClassName={engine.accentClassName}
               />
             </p>
@@ -215,21 +210,6 @@ export function GenericHistoryCard({
             }
           />
         </div>
-
-        {zones.length > 0 && (
-          <div className="relative mt-4 rounded-2xl border border-white/5 bg-white/[0.02] p-3">
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/80">
-              Zones travaillées
-            </p>
-            <MuscleZonesBodyMap zones={zones} maxWidthPx={220} />
-            <p className="mt-2 text-center text-[11px] text-muted-foreground">
-              {zones.map((z) => MUSCLE_META[z].label).join(" · ")}
-            </p>
-            <p className="mt-1 text-center text-[10px] text-muted-foreground/60">
-              Indication des zones sollicitées, pas une mesure.
-            </p>
-          </div>
-        )}
 
         <div className="relative mt-4">
           <GenericHistoryExerciseList
