@@ -53,7 +53,9 @@ export function readMuscleZones(metadata: unknown): MuscleId[] {
   if (!metadata || typeof metadata !== "object") return [];
   const raw = (metadata as { muscleZones?: unknown }).muscleZones;
   if (!Array.isArray(raw)) return [];
-  return Array.from(new Set(raw.filter((z): z is MuscleId => typeof z === "string" && VALID.has(z))));
+  return Array.from(
+    new Set(raw.filter((z): z is MuscleId => typeof z === "string" && VALID.has(z))),
+  );
 }
 
 export function isLagreeWorkout(w: { discipline?: string | null; metadata?: unknown }): boolean {

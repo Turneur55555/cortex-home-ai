@@ -24,7 +24,9 @@ describe("lagree", () => {
     expect(readMuscleZones(null)).toEqual([]);
   });
   it("distingue une séance Lagree d'une séance de musculation", () => {
-    expect(isLagreeWorkout({ discipline: "guided", metadata: { activity: "Pilates Lagree" } })).toBe(true);
+    expect(
+      isLagreeWorkout({ discipline: "guided", metadata: { activity: "Pilates Lagree" } }),
+    ).toBe(true);
     expect(isLagreeWorkout({ discipline: "muscu", metadata: {} })).toBe(false);
   });
   it("ajoute ou retire une zone", () => {

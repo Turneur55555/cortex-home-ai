@@ -18,7 +18,8 @@ import {
 
 const inputCls =
   "w-full rounded-xl border border-border bg-surface px-3 py-2.5 text-sm outline-none focus:border-primary";
-const labelCls = "mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground";
+const labelCls =
+  "mb-1.5 block text-xs font-semibold uppercase tracking-wider text-muted-foreground";
 
 export function LagreeLogSheet({ onClose }: { onClose: () => void }) {
   const add = useAddWorkout();
