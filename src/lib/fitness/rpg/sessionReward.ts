@@ -38,6 +38,7 @@ const SOURCE_META: Record<string, SourceMeta> = {
   pr_muscu: { label: "Nouveau record", icon: "Trophy", order: 1 },
   streak: { label: "Série de régularité", icon: "Flame", order: 2 },
   workout_support: { label: "Séance de soutien", icon: "Activity", order: 3 },
+  workout_course: { label: "Cours", icon: "Sparkles", order: 3 },
   badge: { label: "Badge débloqué", icon: "Medal", order: 4 },
   goal: { label: "Quête accomplie", icon: "Target", order: 5 },
 };

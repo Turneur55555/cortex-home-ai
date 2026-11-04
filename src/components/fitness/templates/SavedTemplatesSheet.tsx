@@ -10,6 +10,8 @@ import {
 } from "@/hooks/useWorkoutTemplates";
 import { TemplateEditorSheet } from "./TemplateEditorSheet";
 import { TemplateIcon, templateColorHex } from "./templateVisuals";
+import { courseOfTemplate } from "@/lib/fitness/courses";
+import { MUSCLE_META } from "@/lib/fitness/muscleMapping";
 
 /**
  * Liste des modèles de séance sauvegardés — sélection démarre une séance
@@ -72,91 +74,114 @@ export function SavedTemplatesSheet({
           </p>
         )}
 
-        {templates?.map((template) => (
-          <div
-            key={template.id}
-            className="rounded-2xl border border-border bg-surface"
-            style={{ borderLeftWidth: 3, borderLeftColor: templateColorHex(template.color) }}
-          >
-            <button
-              type="button"
-              onClick={() => handleStart(template)}
-              disabled={start.isPending}
-              className="flex w-full items-center gap-3 p-3 text-left disabled:opacity-50"
+        {templates?.map((template) => {
+          const course = courseOfTemplate(template);
+          return (
+            <div
+              key={template.id}
+              className="rounded-2xl border border-border bg-surface"
+              style={{ borderLeftWidth: 3, borderLeftColor: templateColorHex(template.color) }}
             >
-              <span
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
-                style={{ backgroundColor: `${templateColorHex(template.color)}26` }}
+              <button
+                type="button"
+                onClick={() => handleStart(template)}
+                disabled={start.isPending}
+                className="flex w-full items-center gap-3 p-3 text-left disabled:opacity-50"
               >
-                <TemplateIcon icon={template.icon} className="h-5 w-5" />
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-sm font-semibold text-foreground">{template.name}</span>
-                <span className="block text-xs text-muted-foreground">
-                  {template.exercises.length} exercice(s)
-                  {/* Musculation hybride (2026-08-19) : indication discrète,
-                      aucune discipline "Hybride" séparée n'est introduite. */}
-                  {template.segments.length > 0 && ` · ${template.segments.length} bloc(s)`}
+                <span
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl"
+                  style={{ backgroundColor: `${templateColorHex(template.color)}26` }}
+                >
+                  <TemplateIcon icon={template.icon} className="h-5 w-5" />
                 </span>
-              </span>
-              {start.isPending && (
-                <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" />
-              )}
-            </button>
-
-            <div className="flex items-center gap-1 border-t border-border/60 px-3 py-2">
-              <button
-                type="button"
-                onClick={() => setEditing(template)}
-                className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground"
-              >
-                <Pencil className="h-3.5 w-3.5" />
-                Modifier
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-semibold text-foreground">
+                    {template.name}
+                  </span>
+                  {course ? (
+                    <>
+                      <span className="block text-xs text-muted-foreground">
+                        Cours · {course.durationMinutes} min · {course.location}
+                      </span>
+                      <span className="mt-1.5 flex flex-wrap gap-1">
+                        {course.zones.map((zone) => (
+                          <span
+                            key={zone}
+                            className="rounded-full border border-primary/30 bg-primary/15 px-2 py-0.5 text-[10.5px] text-primary-glow"
+                          >
+                            {MUSCLE_META[zone].label}
+                          </span>
+                        ))}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="block text-xs text-muted-foreground">
+                      {template.exercises.length} exercice(s)
+                      {/* Musculation hybride (2026-08-19) : indication discrète,
+                        aucune discipline "Hybride" séparée n'est introduite. */}
+                      {template.segments.length > 0 && ` · ${template.segments.length} bloc(s)`}
+                    </span>
+                  )}
+                </span>
+                {start.isPending && (
+                  <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" />
+                )}
               </button>
-              <button
-                type="button"
-                onClick={() => duplicate.mutate(template)}
-                disabled={duplicate.isPending}
-                className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground"
-              >
-                <Copy className="h-3.5 w-3.5" />
-                Dupliquer
-              </button>
 
-              {confirmDeleteId === template.id ? (
-                <div className="ml-auto flex items-center gap-2">
-                  <span className="text-[11px] text-muted-foreground">Supprimer ?</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      del.mutate(template.id);
-                      setConfirmDeleteId(null);
-                    }}
-                    className="rounded-lg bg-destructive/15 px-2 py-1 text-[11px] font-semibold text-destructive"
-                  >
-                    Oui
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setConfirmDeleteId(null)}
-                    className="rounded-lg px-2 py-1 text-[11px] font-semibold text-muted-foreground"
-                  >
-                    Annuler
-                  </button>
-                </div>
-              ) : (
+              <div className="flex items-center gap-1 border-t border-border/60 px-3 py-2">
                 <button
                   type="button"
-                  onClick={() => setConfirmDeleteId(template.id)}
-                  className="ml-auto inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold text-destructive/80 hover:text-destructive"
+                  onClick={() => setEditing(template)}
+                  className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground"
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  Supprimer
+                  <Pencil className="h-3.5 w-3.5" />
+                  Modifier
                 </button>
-              )}
+                <button
+                  type="button"
+                  onClick={() => duplicate.mutate(template)}
+                  disabled={duplicate.isPending}
+                  className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold text-muted-foreground hover:text-foreground"
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                  Dupliquer
+                </button>
+
+                {confirmDeleteId === template.id ? (
+                  <div className="ml-auto flex items-center gap-2">
+                    <span className="text-[11px] text-muted-foreground">Supprimer ?</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        del.mutate(template.id);
+                        setConfirmDeleteId(null);
+                      }}
+                      className="rounded-lg bg-destructive/15 px-2 py-1 text-[11px] font-semibold text-destructive"
+                    >
+                      Oui
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDeleteId(null)}
+                      className="rounded-lg px-2 py-1 text-[11px] font-semibold text-muted-foreground"
+                    >
+                      Annuler
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDeleteId(template.id)}
+                    className="ml-auto inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold text-destructive/80 hover:text-destructive"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Supprimer
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </Sheet>
   );

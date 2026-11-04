@@ -20,7 +20,50 @@
 > regroupés sous [`docs/archive/`](docs/archive/).
 
 ## Dernière mise à jour
-2026-11-03
+2026-11-04
+
+## Cours de Lagree — un modèle « Lagree », ses zones, 50 XP (2026-11-04, `main`)
+Demande de Nathan : intégrer ses cours (Lagree avec sa prof, HYROX chez Episod) **sans nouveau
+module**. Choisi sur maquettes en images (trois séries) : un **modèle** « Lagree » dans « Choisir
+une épreuve » → « Utiliser une séance sauvegardée », à côté de Dos / Pectoraux / Bras / Épaule ;
+**juste les zones, aucun mannequin** ; un cours dure **toujours 50 min** ; XP « option B mais avec
+50 XP » (soutien = 25 XP plafond 75, inchangé pour HYROX/cardio/course/activités).
+- **Mesuré avant** : ~11 cours Lagree de juin à août, saisis de 4 façons (séance muscu aux
+  exercices inventés par l'IA, activité accompagnée, bloc dans une séance muscu…) ; aucun ne
+  marquait de zone sur la carte de récupération ; le Lagree du 06/08 (séance muscu) avait pris
+  100 XP + 15 de série, les « activités » 25 ; rien depuis le 06/08.
+- **Version Lovable retirée de GitHub** : un commit Lovable « Ajouté séance Lagree à Fitness »
+  (39597cc, 04/11 14:11 — feuille à part avec mannequin, 45 min, 10 zones, `useAddWorkout` en
+  INSERT déjà terminé, `types.ts` réécrit à la main sur 4 335 lignes) avait été annulé dans Lovable
+  une minute après (édition « revert » 101aee3, diff vide avec 5c86793) sans que l'annulation
+  arrive sur GitHub. `git revert -m 1 39597cc` aligne `main` sur Lovable.
+- **Logique pure `lib/fitness/courses.ts`** : catalogue `COURSES` (Lagree : Megaformer, 50 min,
+  Keep Cool, zones abdos/obliques/fessiers/quadriceps/ischio, 6 kcal/min → ~300 kcal),
+  `courseOfTemplate`, `courseOfMetadata`, `buildCourseMetadata` (même forme que le moteur guidé +
+  `course` + `muscleZones`), `muscleZonesOfMetadata`, `templateSessionShape` (forme de la séance
+  démarrée), `genericFinishDurationMinutes` (un cours se clôt à sa durée). Tests `courses.test.ts`.
+- **Migration `20261104150000_course_templates_and_xp.sql`** (additive, idempotente, appliquée en
+  production via `execute_sql` — SQL identique, `migrate.yml` la rejoue au merge et régénère
+  `types.ts`, la CLI Supabase n'ayant pas de jeton ici) : `workout_templates.course_key`
+  (`CHECK IN ('lagree')`), `reward_catalog.workout_course` = **50 XP, plafond 100/semaine**,
+  `award_xp_on_workout_complete` reprise à l'identique de la production + branche `is_course`
+  (`metadata.course` connu → `workout_course` seulement : ni séance muscu, ni série, ni
+  progression). Vérifiée en transaction annulée : 72 269 → 72 319 XP, source `workout_course`,
+  puis 0 trace.
+- **Parcours** : `useStartWorkoutFromSavedTemplate` démarre une séance `discipline="guided"`,
+  salle Keep Cool, `metadata` du cours ; `ActiveGenericSessionView` affiche `CourseSessionCard`
+  (nouveau composant UI : le cours, « Cours », zones ciblées en liste, 50 min / ~300 kcal / 5 zones)
+  et « Cours · 50 min · Keep Cool » dans l'en-tête ; `useFinishGenericActiveWorkout` enregistre
+  50 min ; `SavedTemplatesSheet` montre « Cours · 50 min · Keep Cool » + les zones ; la
+  duplication garde `course_key` ; `sessionReward.ts` gagne le libellé « Cours ».
+- **Récupération** : `computeRecovery` accepte `muscleZones` (MuscleId) ; `useRecoveryMap` les lit
+  dans `metadata` — toutes les cartes du corps (Séances, Accueil, analyse d'exercice) voient les
+  zones d'un cours. Les anciens cours (sans `muscleZones`) ne changent pas.
+- **Donnée** : modèle « Lagree » créé pour Nathan (`workout_templates` eeff62cb…, Sparkles, violet,
+  `course_key='lagree'`).
+- **Laissé de côté** : HYROX Episod (même mécanique : une entrée dans `COURSES` + la liste du
+  `CHECK` et du trigger) ; « Mon rythme » ne compte pas un cours comme jour fait (il ne lit que la
+  musculation) ; l'éditeur de modèle n'affiche pas les zones d'un cours.
 
 ## Dressing — variante A « Le Miroir » + étape 0 « Remise à niveau » (2026-11-03, `main`)
 Choix de Nathan sur la proposition en images : « Fait la A et tu as le feu vert » (étape 0 comprise).

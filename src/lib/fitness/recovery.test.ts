@@ -154,3 +154,35 @@ describe("RECOVERY_LABELS", () => {
     expect(RECOVERY_LABELS.unknown).toBe("Inconnu");
   });
 });
+
+describe("computeRecovery — zones d'un cours encadré (Lagree)", () => {
+  const now = new Date("2026-11-05T12:00:00");
+  const lagree = {
+    date: "2026-11-04",
+    exercises: [],
+    muscleZones: ["abdos", "obliques", "fessiers", "quadriceps", "ischio"] as const,
+  };
+
+  it("une séance de cours sans exercice marque ses zones comme travaillées", () => {
+    const map = computeRecovery([lagree], now);
+    expect(map.get("fessiers")?.status).toBe("fatigued");
+    expect(map.get("quadriceps")?.lastTrained).not.toBeNull();
+    expect(map.get("abdos")?.status).toBe("fatigued");
+  });
+
+  it("les zones absentes du cours restent inconnues", () => {
+    const map = computeRecovery([lagree], now);
+    expect(map.get("pectoraux")?.status).toBe("unknown");
+    expect(map.get("biceps")?.status).toBe("unknown");
+  });
+
+  it("garde la date la plus récente entre un cours et une séance de musculation", () => {
+    const map = computeRecovery(
+      [{ date: "2026-10-28", exercises: [{ name: "Squat barre" }] }, lagree],
+      now,
+    );
+    expect(map.get("quadriceps")?.lastTrained?.toISOString()).toBe(
+      new Date("2026-11-04T12:00:00").toISOString(),
+    );
+  });
+});

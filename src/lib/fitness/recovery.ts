@@ -15,6 +15,10 @@ export type MuscleRecovery = {
 export type Workout = {
   date: string;
   exercises: Array<{ name: string; muscle_groups?: string[] | null }> | null;
+  /** Zones déclarées par un cours encadré (Lagree — `metadata.muscleZones`,
+   *  voir lib/fitness/courses.ts). Une séance de cours n'a pas d'exercices :
+   *  ce sont ses zones qui marquent les muscles travaillés. */
+  muscleZones?: readonly MuscleId[] | null;
 };
 
 export function computeRecovery(
@@ -25,6 +29,11 @@ export function computeRecovery(
 
   for (const w of workouts) {
     const wDate = new Date(w.date + "T12:00:00");
+    for (const m of w.muscleZones ?? []) {
+      if (!(m in MUSCLE_META)) continue;
+      const prev = lastTrainedMap.get(m);
+      if (!prev || wDate > prev) lastTrainedMap.set(m, wDate);
+    }
     for (const ex of w.exercises ?? []) {
       // Prefer regex mapping; fall back to AI-resolved muscle_groups for custom exercises
       const regexMuscles = exerciseToMuscles(ex.name);

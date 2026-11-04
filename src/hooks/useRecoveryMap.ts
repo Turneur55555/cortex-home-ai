@@ -1,9 +1,11 @@
 import { useMemo } from "react";
 import { computeRecovery, type MuscleRecovery } from "@/lib/fitness/recovery";
 import type { MuscleId } from "@/lib/fitness/muscleMapping";
+import { muscleZonesOfMetadata } from "@/lib/fitness/courses";
 
 type WorkoutInput = {
   date: string;
+  metadata?: unknown;
   exercises?: Array<{ name: string; muscle_groups?: string[] | null }> | null;
 };
 
@@ -20,6 +22,7 @@ export function useRecoveryMap(
             name: ex.name,
             muscle_groups: ex.muscle_groups ?? null,
           })) ?? null,
+        muscleZones: muscleZonesOfMetadata(w.metadata),
       })),
     );
   }, [workouts]);

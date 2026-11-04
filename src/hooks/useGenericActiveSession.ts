@@ -5,6 +5,11 @@ import { localDateYMD } from "@/lib/dates";
 import { logActivity } from "@/lib/activity";
 import { ENGINE_REGISTRY } from "@/lib/fitness/engines/registry";
 import { isReadyEngine } from "@/lib/fitness/engines/types";
+import {
+  courseOfMetadata,
+  genericFinishDurationMinutes,
+  type CourseKey,
+} from "@/lib/fitness/courses";
 import type {
   DisciplineId,
   LiveSegmentSeed,
@@ -95,10 +100,14 @@ export type ActiveGenericWorkout = {
   name: string;
   discipline: DisciplineId;
   created_at: string;
+  /** Cours encadré (Lagree) démarré depuis un modèle — `null` sinon. Lu dans
+   *  `metadata.course` (voir lib/fitness/courses.ts). Optionnel : les
+   *  snapshots construits ailleurs (tests, récap) n'ont pas à le fournir. */
+  courseKey?: CourseKey | null;
   segments: ActiveGenericSegment[];
 };
 
-const GENERIC_ACTIVE_KEY = ["fitness", "active_generic_workout"] as const;
+export const GENERIC_ACTIVE_KEY = ["fitness", "active_generic_workout"] as const;
 /** Musculation hybride (2026-08-04) — clé de cache DÉDIÉE des blocs d'une
  *  séance muscu (voir useActiveWorkoutSegments), volontairement DISTINCTE
  *  de `GENERIC_ACTIVE_KEY` : `SeancesTab.tsx` monte `useActiveGenericWorkout()`
@@ -157,6 +166,7 @@ export function useActiveGenericWorkout() {
         name: active.name,
         discipline: active.discipline as DisciplineId,
         created_at: active.created_at,
+        courseKey: courseOfMetadata(active.metadata)?.key ?? null,
         segments: segments.map(toActiveSegment),
       };
     },
@@ -522,14 +532,18 @@ export function useFinishGenericActiveWorkout() {
       // clôture (le bouton principal et l'entrée « Terminer la séance » du
       // menu), et le second n'était protégé par AUCUN état visuel.
       await runExclusiveSessionClosure(workout.id, "finish", async () => {
-        const durationMs = Date.now() - new Date(workout.created_at).getTime();
-        const durationMin = Math.min(600, Math.max(1, Math.round(durationMs / 60_000)));
-
         const entry = ENGINE_REGISTRY[workout.discipline];
         const engine = entry && isReadyEngine(entry) ? entry : null;
 
         const localWorkout = await workoutsRepo.get(workout.id);
         const existingMetadata = (localWorkout?.metadata ?? {}) as Record<string, unknown>;
+
+        // Un cours dure toujours la même durée (Lagree : 50 min) — elle est
+        // enregistrée telle quelle, jamais déduite de l'heure de clôture.
+        const durationMin = genericFinishDurationMinutes(
+          existingMetadata,
+          Date.now() - new Date(workout.created_at).getTime(),
+        );
 
         const formattedSegments =
           engine?.formatLiveSegment != null

@@ -9,7 +9,8 @@ import { localDateYMD } from "@/lib/dates";
 
 import { resolveExerciseIdsByLabel } from "@/services/exerciseResolution";
 import type { DisciplineId } from "@/lib/fitness/engines/types";
-import { HYBRID_BLOCKS_KEY } from "@/hooks/useGenericActiveSession";
+import { GENERIC_ACTIVE_KEY, HYBRID_BLOCKS_KEY } from "@/hooks/useGenericActiveSession";
+import { courseOfTemplate, templateSessionShape } from "@/lib/fitness/courses";
 import { orderedTemplateItems as orderedTemplateItemsPure } from "@/lib/fitness/workoutTemplates";
 import {
   assertNoActiveWorkout,
@@ -90,6 +91,9 @@ export interface WorkoutTemplateRow {
   color: string;
   created_at: string;
   updated_at: string;
+  /** Cours encadré démarré par ce modèle (`lagree`) ; `null` = modèle de
+   *  musculation. Voir `lib/fitness/courses.ts`. */
+  course_key: string | null;
   exercises: WorkoutTemplateExerciseRow[];
   /** Vide pour tout modèle force-only classique — comportement 100%
    *  inchangé pour les templates existants (aucune ligne en base). */
@@ -103,6 +107,8 @@ export interface TemplateRow {
   icon: string;
   color: string;
   source_document_id: string | null;
+  /** Additif (2026-11-04) — absent des lignes locales hydratées avant la migration. */
+  course_key?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -273,6 +279,7 @@ export function useWorkoutTemplates() {
           name: t.name,
           icon: t.icon,
           color: t.color,
+          course_key: t.course_key ?? null,
           created_at: t.created_at,
           updated_at: t.updated_at,
           exercises: [...(exercisesByTemplate.get(t.id) ?? [])].sort(
@@ -469,6 +476,7 @@ export function useDuplicateWorkoutTemplate() {
         icon: source.icon,
         color: source.color,
         source_document_id: null,
+        ...(source.course_key ? { course_key: source.course_key } : {}),
       });
 
       await replaceTemplateItems(copy.id, user.id, orderedTemplateItems(source));
@@ -505,15 +513,20 @@ export function useStartWorkoutFromSavedTemplate() {
       // ici, un second exemplaire qu'il fallait penser à corriger — et forme
       // avec la création une SECTION CRITIQUE (voir
       // `lib/fitness/activeWorkoutStart.ts`).
+      // Cours encadré (Lagree, 2026-11-04) : le modèle démarre une séance
+      // « activité accompagnée » déjà remplie (zones, durée, salle). La clé
+      // `metadata.course` est ce que lit le trigger serveur pour verser l'XP
+      // de cours — le montant reste décidé par le serveur (INVARIANTS §3.1).
+      const shape = templateSessionShape(template);
       const workout = await startActiveWorkoutExclusively(user.id, async () => {
         await assertNoActiveWorkout(user.id);
         return workoutsRepo.create(user.id, {
           name: template.name,
           date: today,
-          gym_location: "Salle inconnue",
+          gym_location: shape.gymLocation,
           status: "active",
-          discipline: "muscu",
-          metadata: {},
+          discipline: shape.discipline,
+          metadata: shape.metadata,
           duration_minutes: null,
           notes: null,
           level_before: null,
@@ -597,10 +610,13 @@ export function useStartWorkoutFromSavedTemplate() {
 
       return workout.id;
     },
-    onSuccess: () => {
-      toast.success("Séance démarrée depuis le modèle 💪");
+    onSuccess: (_id, template) => {
+      toast.success(
+        courseOfTemplate(template) ? "Cours démarré ✦" : "Séance démarrée depuis le modèle 💪",
+      );
       qc.invalidateQueries({ queryKey: ACTIVE_KEY });
       qc.invalidateQueries({ queryKey: HYBRID_BLOCKS_KEY });
+      qc.invalidateQueries({ queryKey: GENERIC_ACTIVE_KEY });
     },
     onError: (e: Error) => toast.error(e.message),
   });

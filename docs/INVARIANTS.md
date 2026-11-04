@@ -214,7 +214,12 @@ qui afficherait « +0 XP » avec une barre figée sur l'XP d'avant la séance.
 
 L'XP ne récompense **que** l'entraînement réellement effectué (muscu-primaire). Le montant vient
 du catalogue serveur, jamais du client — c'est l'invariant 3.1 qui le garantit.
-→ `docs/architecture/rpg-vision-et-r1-niveau-personnage.md`
+Un **cours encadré** (Lagree, `metadata.course`) vaut `workout_course` : 50 XP, plafond 100 par
+semaine — moins qu'une séance de musculation (100), plus qu'une séance de soutien (25, plafond 75).
+Il ne verse ni séance muscu, ni série, ni progression d'exercice.
+→ `docs/architecture/rpg-vision-et-r1-niveau-personnage.md`,
+`supabase/migrations/20261104150000_course_templates_and_xp.sql`
+→ vérifié par `src/lib/fitness/courses.test.ts` (« économie du cours », scan de la migration)
 
 ### 3.4 Deux systèmes abandonnés, jamais réintroduits
 

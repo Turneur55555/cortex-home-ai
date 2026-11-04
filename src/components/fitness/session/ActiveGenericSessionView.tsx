@@ -51,6 +51,8 @@ import {
   type JourneyWording,
 } from "../exerciseCard/ActiveExerciseCard";
 import { AddExerciseButton } from "../exerciseCard/ExerciseCardPrimitives";
+import { CourseSessionCard } from "./CourseSessionCard";
+import { COURSES } from "@/lib/fitness/courses";
 import { ExercisePickerSheet, type PickedExercise } from "../ExercisePickerSheet";
 import { SegmentAnalysisSheet } from "./SegmentAnalysisSheet";
 import { DisciplineIcon } from "./DisciplineIcon";
@@ -102,6 +104,9 @@ export function ActiveGenericSessionView({
   // plus d'exercices/répétitions mais d'ateliers franchis, en cours, à
   // venir (voir HyroxEpreuve en bas de fichier).
   const isEpreuve = workout.discipline === "hyrox";
+  // Cours encadré (Lagree) démarré depuis un modèle : la séance est déjà
+  // remplie (zones, durée) — on l'affiche, on ne demande rien à saisir.
+  const course = workout.courseKey ? COURSES[workout.courseKey] : null;
   const ateliersDone = groups.filter(isAtelierDone).length;
   const currentAtelier = groups.find((g) => !isAtelierDone(g)) ?? null;
   const ateliersLeft = groups.length - ateliersDone - (currentAtelier ? 1 : 0);
@@ -242,6 +247,16 @@ export function ActiveGenericSessionView({
                 </span>
               )}
             </div>
+          ) : course ? (
+            <div className="mt-3 flex gap-2 text-[11px] text-muted-foreground">
+              <span>Cours</span>
+              <span>·</span>
+              <span>
+                <strong className="text-foreground">{course.durationMinutes}</strong> min
+              </span>
+              <span>·</span>
+              <span>{course.location}</span>
+            </div>
           ) : (
             <div className="mt-3 flex gap-3 text-[11px] text-muted-foreground">
               <span>
@@ -341,12 +356,15 @@ export function ActiveGenericSessionView({
       )}
 
       {/* ── Cartes exercice (une par type de segment, répétitions groupées) ── */}
+      {course && <CourseSessionCard course={course} />}
       {groups.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border bg-card/50 p-8 text-center">
-          <p className="text-sm font-medium text-muted-foreground">
-            Aucun exercice — ajoutez-en un ci-dessous
-          </p>
-        </div>
+        course ? null : (
+          <div className="rounded-2xl border border-dashed border-border bg-card/50 p-8 text-center">
+            <p className="text-sm font-medium text-muted-foreground">
+              Aucun exercice — ajoutez-en un ci-dessous
+            </p>
+          </div>
+        )
       ) : isEpreuve ? (
         <HyroxEpreuve groups={groups} discipline={workout.discipline} onOpenStats={setStatsLabel} />
       ) : (
