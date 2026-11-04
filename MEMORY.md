@@ -22,6 +22,17 @@
 ## Dernière mise à jour
 2026-11-04
 
+## Historique — l'heure réelle des séances, date d'une activité modifiable (2026-11-04, `main`)
+Signalé par Nathan sur son premier cours (« MERCREDI 4 NOVEMBRE • 00H00 », date impossible à
+changer). `workouts.date` est une date SANS heure : `WorkoutCard` et `GenericHistoryCard` la
+formataient en « HH'h'mm » → minuit pour TOUTES les séances, muscu comprise.
+- **`lib/fitness/sessionDateLabel.ts`** (pur, testé) : l'heure vient de `created_at` (début de la
+  séance) et seulement si elle tombe le même jour que `date` ; séance saisie après coup → date
+  seule, aucune heure inventée. Utilisé par les deux cartes.
+- **`GenericHistoryCard`** : entrée « Modifier date / durée » dans le menu, même
+  `EditWorkoutScheduleModal` que la musculation. Test `GenericHistoryCard.test.tsx`.
+- Vérifié en base : le cours du 04/11 (17h29 Paris) est enregistré à 50 min, +50 XP `workout_course`.
+
 ## Cours de Lagree — un modèle « Lagree », ses zones, 50 XP (2026-11-04, `main`)
 Demande de Nathan : intégrer ses cours (Lagree avec sa prof, HYROX chez Episod) **sans nouveau
 module**. Choisi sur maquettes en images (trois séries) : un **modèle** « Lagree » dans « Choisir

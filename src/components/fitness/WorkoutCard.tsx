@@ -22,8 +22,7 @@ import {
   TrendingUp,
   AlertTriangle,
 } from "lucide-react";
-import { format, parseISO } from "date-fns";
-import { fr } from "date-fns/locale";
+import { sessionDateLabel } from "@/lib/fitness/sessionDateLabel";
 import { supabase } from "@/integrations/supabase/client";
 import {
   useDeleteExercises,
@@ -302,7 +301,7 @@ export function WorkoutCard({
     setConfirmDeleteGroup(null);
   };
 
-  const dateLabel = format(parseISO(w.date), "EEEE d MMMM • HH'h'mm", { locale: fr });
+  const dateLabel = sessionDateLabel(w.date, w.created_at);
 
   return (
     <li className="overflow-hidden rounded-3xl border border-white/5 bg-gradient-to-b from-card/95 to-card/70 shadow-[0_10px_40px_-15px_rgba(0,0,0,0.6)] backdrop-blur-xl">

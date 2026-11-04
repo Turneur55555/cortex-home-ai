@@ -19,9 +19,8 @@
 // ============================================================
 
 import { useState } from "react";
-import { Clock, Layers, MoreVertical, Repeat, Sparkles, Trash2 } from "lucide-react";
-import { format, parseISO } from "date-fns";
-import { fr } from "date-fns/locale";
+import { Clock, Layers, MoreVertical, Pencil, Repeat, Sparkles, Trash2 } from "lucide-react";
+import { sessionDateLabel } from "@/lib/fitness/sessionDateLabel";
 import { useDeleteWorkout, useUpdateWorkoutName } from "@/hooks/use-fitness";
 import { useStartGenericActiveWorkout } from "@/hooks/useGenericActiveSession";
 import { ENGINE_REGISTRY } from "@/lib/fitness/engines/registry";
@@ -37,6 +36,7 @@ import { RepeatLiveConfirmDialog } from "@/components/fitness/RepeatLiveConfirmD
 import { useWorkoutAnalysisIndex } from "@/hooks/useWorkoutAnalyses";
 import { StoredWorkoutAnalysisSheet } from "@/components/fitness/StoredWorkoutAnalysisSheet";
 import { EditableText } from "@/components/fitness/EditableText";
+import { EditWorkoutScheduleModal } from "@/components/fitness/EditWorkoutScheduleModal";
 import { StatTileRow, type StatTileSpec } from "@/components/fitness/StatTileRow";
 import { GenericHistoryExerciseList } from "./GenericHistoryExerciseList";
 import { DisciplineBadge } from "./DisciplineIcon";
@@ -44,11 +44,19 @@ import { DisciplineBadge } from "./DisciplineIcon";
 export function GenericHistoryCard({
   workout,
 }: {
-  workout: PersistedWorkoutRow & { id: string; date: string; discipline: string };
+  workout: PersistedWorkoutRow & {
+    id: string;
+    date: string;
+    discipline: string;
+    created_at?: string | null;
+  };
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmRepeat, setConfirmRepeat] = useState(false);
+  // Même correction que la musculation (WorkoutCard) : un cours ou une
+  // activité enregistrée le mauvais jour se corrige ici (04/11/2026).
+  const [editScheduleOpen, setEditScheduleOpen] = useState(false);
   // Phase C, lot V2 : "Revoir le bilan" — même mécanisme (et même index
   // partagé) que WorkoutCard côté musculation, voir useWorkoutAnalyses.ts.
   const { data: analysisIndex } = useWorkoutAnalysisIndex();
@@ -66,7 +74,7 @@ export function GenericHistoryCard({
 
   const draft = adaptWorkoutRow(workout, engine.id);
   const view = engine.toSessionView(draft);
-  const dateLabel = format(parseISO(workout.date), "EEEE d MMMM • HH'h'mm", { locale: fr });
+  const dateLabel = sessionDateLabel(workout.date, workout.created_at);
   const gymLocation = workout.gym_location || "Salle inconnue";
   const exoCount = groupByExerciseLabel(view.segments).length;
 
@@ -167,6 +175,17 @@ export function GenericHistoryCard({
                   type="button"
                   onClick={() => {
                     setMenuOpen(false);
+                    setEditScheduleOpen(true);
+                  }}
+                  className="flex w-full items-center gap-3 border-t border-border px-4 py-3 text-sm font-medium transition-colors hover:bg-white/5"
+                >
+                  <Pencil className="h-4 w-4 text-muted-foreground" />
+                  Modifier date / durée
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMenuOpen(false);
                     setConfirmDelete(true);
                   }}
                   className="flex w-full items-center gap-3 border-t border-border px-4 py-3 text-sm font-medium text-destructive transition-colors hover:bg-destructive/10"
@@ -226,6 +245,15 @@ export function GenericHistoryCard({
           workoutName={workout.name || "Séance"}
           variant="generic"
           onClose={() => setAnalysisOpen(false)}
+        />
+      )}
+
+      {editScheduleOpen && (
+        <EditWorkoutScheduleModal
+          workoutId={workout.id}
+          currentDate={workout.date}
+          currentDurationMinutes={workout.duration_minutes}
+          onClose={() => setEditScheduleOpen(false)}
         />
       )}
 
