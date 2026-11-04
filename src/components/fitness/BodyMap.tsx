@@ -286,6 +286,48 @@ export function BodyMap(props: BodyMapProps) {
   return <MeasurementBodyMap {...props} />;
 }
 
+// ─── Zones travaillées (cours Lagree…) — même silhouette, indication simple ──
+
+const ZONE_HIGHLIGHT: readonly string[] = ["#a78bfacc"];
+
+export function MuscleZonesBodyMap({
+  zones,
+  onToggle,
+  maxWidthPx = 260,
+}: {
+  zones: readonly MuscleId[];
+  onToggle?: (id: MuscleId) => void;
+  maxWidthPx?: number;
+}) {
+  const data = useMemo(() => {
+    const slugs = zones.flatMap((id) => {
+      const raw = MUSCLE_TO_LIB_SLUG[id];
+      return Array.isArray(raw) ? raw : [raw];
+    });
+    return slugs.length ? [{ name: "zones", muscles: slugs as Muscle[], frequency: 1 }] : [];
+  }, [zones]);
+
+  const handleClick = useCallback(
+    (stats: IMuscleStats) => {
+      if (!onToggle) return;
+      const id = LIB_SLUG_TO_MUSCLE[stats.muscle];
+      if (id) onToggle(id);
+    },
+    [onToggle],
+  );
+
+  return (
+    <ModelViews
+      data={data}
+      highlightedColors={ZONE_HIGHLIGHT}
+      onClick={handleClick}
+      bodyColor="#151a26"
+      maxWidthPx={maxWidthPx}
+      labelClassName="mb-0.5 text-[8.5px] font-semibold uppercase tracking-wider text-white/25"
+    />
+  );
+}
+
 // ─── Fiche exercice — muscles sollicités (principal/secondaire/stabilisateur) ─
 //
 // Réutilise le même SVG anatomique (ModelViews) que les deux modes
