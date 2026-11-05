@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { CorpsShortcutTile } from "@/components/home/CorpsShortcutTile";
+import { CourseWeekCard } from "@/components/home/CourseWeekCard";
 import { TodayCard } from "@/components/home/TodayCard";
 import { TodayOutfitTile } from "@/components/home/TodayOutfitTile";
 import { WeekReportTeaser } from "@/components/week/WeekReportTeaser";
@@ -18,6 +19,7 @@ export const Route = createFileRoute("/_authenticated/")({
 
 // Accueil : l'ACTION D'ABORD (décision de Nathan, 30/09/2026), puis le Rang.
 //   Carte du jour → (bandeau « Ta semaine est prête », lundi et mardi) → ta semaine →
+//   tes cours (créneaux de la semaine, invisible sans modèle de cours, 05/11/2026) →
 //   ta carte (de force) → Corps → Tenue du jour (Dressing, invisible si vide).
 // La carte de force (« carte obsidienne », choisie sur maquette par Nathan le 02/11/2026) porte
 // le Titre, l'XP avant le grade suivant et les records par groupe musculaire ; Nathan l'a voulue
@@ -38,6 +40,7 @@ function HomePage() {
       <div className="mb-4 empty:hidden">
         <WeekPlanCard hideInvitation />
       </div>
+      <CourseWeekCard />
       <ProfileHeroCard />
       <CorpsShortcutTile />
       <TodayOutfitTile />

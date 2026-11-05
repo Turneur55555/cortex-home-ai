@@ -7,7 +7,8 @@ import { createRoot, type Root } from "react-dom/client";
  * L'ordre de l'Accueil est une décision produit (Nathan, 30/09/2026) : l'ACTION
  * D'ABORD, puis le Rang. Depuis le 02/11/2026, la carte de force (Titre + records par groupe)
  * vient SOUS « Ton rythme », à la demande de Nathan. Ce test verrouille l'ordre, pas le contenu
- * des cartes (chacune a ses propres tests).
+ * des cartes (chacune a ses propres tests). Depuis le 05/11/2026, « Tes cours » (les créneaux de
+ * cours de la semaine) se glisse entre « Ton rythme » et la carte de force.
  */
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -22,6 +23,9 @@ vi.mock("@/components/fitness/plan/WeekPlanCard", () => ({
   WeekPlanCard: ({ hideInvitation }: { hideInvitation?: boolean }) => (
     <section data-testid="week-card" data-hide-invitation={String(hideInvitation === true)} />
   ),
+}));
+vi.mock("@/components/home/CourseWeekCard", () => ({
+  CourseWeekCard: () => <section data-testid="course-week" />,
 }));
 vi.mock("@/components/profile/ProfileHeroCard", () => ({
   ProfileHeroCard: () => <section data-testid="character-sheet" />,
@@ -60,12 +64,13 @@ const order = () =>
   );
 
 describe("Accueil — l'action d'abord, puis le Rang", () => {
-  it("Carte du jour → bandeau de la semaine → semaine → carte de force → Corps → Tenue du jour", () => {
+  it("Carte du jour → bandeau de la semaine → semaine → tes cours → carte de force → Corps → Tenue du jour", () => {
     renderHome();
     expect(order()).toEqual([
       "today-card",
       "week-teaser",
       "week-card",
+      "course-week",
       "character-sheet",
       "corps-tile",
       "outfit-tile",

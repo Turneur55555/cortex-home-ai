@@ -20,7 +20,21 @@
 > regroupés sous [`docs/archive/`](docs/archive/).
 
 ## Dernière mise à jour
-2026-11-04
+2026-11-05
+
+## Accueil — « Tes cours », les créneaux de cours de la semaine (2026-11-05, `main`)
+Choisi par Nathan sur trois maquettes (A pastille, B créneaux, C carnet) : **la B, sans les muscles,
+en version plus fine**. Sous « Ton rythme », avant « Ta carte ».
+- **`lib/fitness/courseWeek.ts`** (pur, testé) : `courseWeek(workouts, today)` — cours terminés de
+  la semaine (lundi → dimanche, `weekDates`), `COURSE_SLOTS_PER_WEEK = 2` (le plafond serveur
+  `workout_course` paie deux cours plein) ; un créneau rempli porte le jour court et l'XP
+  RÉELLEMENT déposée (`xp_after - xp_before`, `null` tant qu'elle n'est pas arrivée).
+- **`hooks/useRewardAmount.ts`** : lit le montant d'une source dans `reward_catalog` pour
+  l'annoncer (« À prendre +50 ») ; injoignable → aucun montant affiché.
+- **`components/home/CourseWeekCard.tsx`** : en-tête « Tes cours · 1 / 2 cette semaine », deux
+  créneaux fins (h-10) ; le créneau libre mène à « Choisir une épreuve » (`/seances?demarrer=nouvelle`).
+  Invisible sans modèle de cours ni cours dans la semaine. Ordre de l'Accueil verrouillé par
+  `index.test.tsx`. Rendu réel vérifié (402 px, données du 04/11 : Lagree mer. +50).
 
 ## Historique — l'heure réelle des séances, date d'une activité modifiable (2026-11-04, `main`)
 Signalé par Nathan sur son premier cours (« MERCREDI 4 NOVEMBRE • 00H00 », date impossible à
