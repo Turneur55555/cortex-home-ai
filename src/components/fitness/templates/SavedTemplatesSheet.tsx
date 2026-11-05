@@ -4,13 +4,16 @@ import { Sheet } from "@/components/shared/FormComponents";
 import {
   useWorkoutTemplates,
   useStartWorkoutFromSavedTemplate,
+  useLogCourseFromTemplate,
   useDeleteWorkoutTemplate,
   useDuplicateWorkoutTemplate,
   type WorkoutTemplateRow,
 } from "@/hooks/useWorkoutTemplates";
 import { TemplateEditorSheet } from "./TemplateEditorSheet";
 import { TemplateIcon, templateColorHex } from "./templateVisuals";
+import { toast } from "sonner";
 import { courseOfTemplate } from "@/lib/fitness/courses";
+import { useDeleteWorkout } from "@/hooks/use-fitness";
 import { MUSCLE_META } from "@/lib/fitness/muscleMapping";
 
 /**
@@ -30,6 +33,9 @@ export function SavedTemplatesSheet({
 }) {
   const { data: templates, isLoading } = useWorkoutTemplates();
   const start = useStartWorkoutFromSavedTemplate();
+  const logCourse = useLogCourseFromTemplate();
+  const deleteWorkout = useDeleteWorkout();
+  const busy = start.isPending || logCourse.isPending;
   const del = useDeleteWorkoutTemplate();
   const duplicate = useDuplicateWorkoutTemplate();
 
@@ -46,6 +52,17 @@ export function SavedTemplatesSheet({
   }
 
   const handleStart = async (template: WorkoutTemplateRow) => {
+    // Un cours (Lagree) n'ouvre pas de séance : il est enregistré tel quel
+    // (50 min, aujourd'hui), avec « Annuler » si le toucher était involontaire.
+    const course = courseOfTemplate(template);
+    if (course) {
+      const { workoutId } = await logCourse.mutateAsync(template);
+      toast.success(`${course.name} enregistré · ${course.durationMinutes} min`, {
+        action: { label: "Annuler", onClick: () => deleteWorkout.mutate(workoutId) },
+      });
+      onStarted();
+      return;
+    }
     await start.mutateAsync(template);
     onStarted();
   };
@@ -85,7 +102,7 @@ export function SavedTemplatesSheet({
               <button
                 type="button"
                 onClick={() => handleStart(template)}
-                disabled={start.isPending}
+                disabled={busy}
                 className="flex w-full items-center gap-3 p-3 text-left disabled:opacity-50"
               >
                 <span
@@ -123,8 +140,14 @@ export function SavedTemplatesSheet({
                     </span>
                   )}
                 </span>
-                {start.isPending && (
+                {busy ? (
                   <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" />
+                ) : (
+                  course && (
+                    <span className="shrink-0 rounded-full bg-violet-400/15 px-2.5 py-1 text-[11px] font-semibold text-violet-200">
+                      J'y étais
+                    </span>
+                  )
                 )}
               </button>
 

@@ -20,6 +20,9 @@ import {
   workoutSegmentsRepo,
 } from "@/hooks/use-fitness";
 import { startActiveWorkoutExclusively } from "@/lib/fitness/activeWorkoutStart";
+import { runExclusiveSessionClosure } from "@/lib/fitness/sessionClosure";
+import { requestSyncFlush } from "@/lib/offline/syncFlush";
+import { logActivity } from "@/lib/activity";
 import { OFFLINE_FIRST_QUERY_OPTIONS } from "@/lib/offline/offlineQuery";
 
 // ============================================================
@@ -617,6 +620,68 @@ export function useStartWorkoutFromSavedTemplate() {
       qc.invalidateQueries({ queryKey: ACTIVE_KEY });
       qc.invalidateQueries({ queryKey: HYBRID_BLOCKS_KEY });
       qc.invalidateQueries({ queryKey: GENERIC_ACTIVE_KEY });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+}
+
+/**
+ * Cours encadré (Lagree) — « juste une indication » (demande de Nathan,
+ * 05/11/2026) : toucher le modèle ENREGISTRE le cours déjà fait, sans séance
+ * à suivre à l'écran. Un cours dure toujours sa durée (50 min), aujourd'hui.
+ *
+ * Même chemin que « Je l'ai faite » (INVARIANTS §3.5) : la séance est créée
+ * ACTIVE sous la garde « une seule séance active » (§2.1), puis close par une
+ * opération SÉPARÉE (`neverMergeIntoPendingCreate`) — jamais un INSERT déjà
+ * terminé, sinon le trigger d'XP ne verrait jamais la transition. Le montant
+ * d'XP reste décidé par le serveur (§3.1).
+ */
+export function useLogCourseFromTemplate() {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  return useMutation({
+    mutationFn: async (template: WorkoutTemplateRow): Promise<{ workoutId: string }> => {
+      if (!user) throw new Error("Non authentifié");
+      const course = courseOfTemplate(template);
+      if (!course) throw new Error("Ce modèle n'est pas un cours.");
+      const shape = templateSessionShape(template);
+
+      const workout = await startActiveWorkoutExclusively(user.id, async () => {
+        await assertNoActiveWorkout(user.id);
+        return workoutsRepo.create(user.id, {
+          name: template.name,
+          date: localDateYMD(),
+          gym_location: shape.gymLocation,
+          status: "active",
+          discipline: shape.discipline,
+          metadata: shape.metadata,
+          duration_minutes: null,
+          notes: null,
+          level_before: null,
+          level_after: null,
+          xp_before: null,
+          xp_after: null,
+        });
+      });
+
+      await runExclusiveSessionClosure(workout.id, "finish", async () => {
+        await workoutsRepo.update(
+          workout.id,
+          user.id,
+          { duration_minutes: course.durationMinutes, status: "completed" },
+          { neverMergeIntoPendingCreate: true, dependsOnRecords: [] },
+        );
+      });
+
+      return { workoutId: workout.id };
+    },
+    onSuccess: (_result, template) => {
+      logActivity("workout", `Cours enregistré : ${template.name}`, {});
+      qc.invalidateQueries({ queryKey: ["fitness"] });
+      qc.invalidateQueries({ queryKey: ["user_activity"] });
+      qc.invalidateQueries({ queryKey: ["activity_streak"] });
+      qc.invalidateQueries({ queryKey: ["user_stats"] });
+      requestSyncFlush(user?.id);
     },
     onError: (e: Error) => toast.error(e.message),
   });

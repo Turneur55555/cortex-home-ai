@@ -246,6 +246,8 @@ ACTIVE sous la garde §2.1, écrit exercices et séries cochées, puis clôt par
 (`neverMergeIntoPendingCreate`) retenue par `dependsOnRecords` sur tous ses enfants — la même
 garantie que `useFinishWorkout`. Corollaire : quand le serveur confirme la récompense,
 `useSessionReward` invalide l'XP affichée ailleurs (`user_stats`).
+Même chemin pour un cours enregistré d'un toucher (« J'y étais », `useLogCourseFromTemplate`,
+`hooks/useWorkoutTemplates.ts`) → vérifié par `offline/logCourseOffline.test.tsx`.
 **Exception connue, à migrer** : le formulaire historique « Enregistrer comme séance passée »
 (`WorkoutSheet` → `useAddWorkout`) insère encore la séance déjà terminée.
 → `src/hooks/use-fitness.ts` (`useLogDoneWorkout`), `src/lib/fitness/doneSession.ts`,

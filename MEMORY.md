@@ -22,6 +22,21 @@
 ## Dernière mise à jour
 2026-11-05
 
+## Cours de Lagree — « J'y étais » : un toucher enregistre le cours, sans séance (2026-11-05, `main`)
+Retour de Nathan après son premier cours : le modèle ouvrait une séance avec chronomètre alors
+qu'un cours dure toujours 50 min — « juste une indication ».
+- **`useLogCourseFromTemplate`** (`hooks/useWorkoutTemplates.ts`) : crée la séance ACTIVE sous la
+  garde §2.1, puis la clôt par une opération SÉPARÉE (`neverMergeIntoPendingCreate`) à 50 min,
+  aujourd'hui — même chemin que « Je l'ai faite » (§3.5), jamais un INSERT déjà terminé. Test
+  hors ligne `lib/offline/logCourseOffline.test.tsx` (forme locale, file create→update, refus si
+  une séance est en cours, refus d'un modèle de musculation).
+- **`SavedTemplatesSheet`** : un modèle de cours porte l'étiquette « J'y étais » ; le toucher
+  enregistre, ferme la chaîne et affiche « Lagree enregistré · 50 min » avec **Annuler**
+  (`useDeleteWorkout`, le trigger de suppression reprend l'XP). La date se corrige ensuite par
+  « Modifier date / durée » sur la carte d'historique.
+- `useStartWorkoutFromSavedTemplate` garde sa branche cours (séance live) mais l'écran ne
+  l'appelle plus pour un cours ; `CourseSessionCard` reste pour une séance de cours déjà ouverte.
+
 ## Accueil — « Tes cours », les créneaux de cours de la semaine (2026-11-05, `main`)
 Choisi par Nathan sur trois maquettes (A pastille, B créneaux, C carnet) : **la B, sans les muscles,
 en version plus fine**. Sous « Ton rythme », avant « Ta carte ».
