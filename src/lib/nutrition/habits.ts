@@ -43,19 +43,37 @@ export const NUTRITION_HISTORY_COLUMNS =
   "date, meal, name, created_at, calories, proteins, carbs, fats, base_calories, base_proteins, base_carbs, base_fats, serving_count, consumed_quantity, consumed_unit, consumed_grams_per_unit";
 
 /**
- * Règles de reconnaissance d'une habitude. Calibrées sur les données réelles :
- * elles retiennent poulet + riz au déjeuner, caséine + Monster au
- * petit-déjeuner, l'œuf au dîner, le chocolat 80 % au goûter — et écartent ce
- * qui n'est apparu qu'une ou deux fois.
+ * Règles de reconnaissance d'une habitude. Calibrées sur les données réelles
+ * (révision du 06/11/2026, signalement de Nathan : « il manque l'harissa au
+ * déjeuner et des fruits au goûter », puis « fais 5 fois, pas 10 »). Sur ses
+ * 5 derniers repas de chaque sorte, elles retiennent poulet + riz + harissa au déjeuner, kiwi + banane + crispies au
+ * goûter, caséine + Monster au petit-déjeuner, lait + whey en collation — et
+ * ne proposent rien pour un dîner qui change tous les soirs.
+ *
+ * Deux défauts de la première version, corrigés :
+ *   - un même aliment saisi sous deux noms (« Harissa » / « Harissa (sauce au
+ *     piment), préemballée », « KIWI » / « Kiwi SunGold ») était compté comme
+ *     deux aliments, chacun sous le seuil → `foodIdentity` les réunit ;
+ *   - un repas a souvent DEUX formes (goûter fruits / goûter chocolat-café) :
+ *     compter chaque aliment sur tous les repas noyait les compagnons d'une
+ *     forme dans les jours de l'autre (banane 3 goûters sur 10, mais 3 sur 5
+ *     des goûters « fruits ») → le repas habituel se construit autour de son
+ *     aliment-pivot, avec ce qui l'accompagne.
+ *
+ * En clair : l'aliment qui revient le plus sur les 5 derniers repas (au moins
+ * 3 fois), et ce qui revient au moins 3 fois avec lui.
  */
 export const HABIT_RULES = {
   /** On ne regarde que les N dernières journées où ce repas a été saisi (l'habitude récente). */
-  recentMealDays: 10,
+  recentMealDays: 5,
   /** Il faut au moins ce nombre de journées pour parler d'habitude. */
   minMealDays: 3,
-  /** Un aliment est habituel s'il figure dans au moins cette part des journées regardées… */
+  /**
+   * Le pivot doit figurer dans au moins cette part des journées regardées ; un
+   * compagnon, dans au moins cette part des journées où le pivot figure.
+   */
   minShare: 0.5,
-  /** … et au moins ce nombre de fois. */
+  /** Pivot comme compagnon : au moins ce nombre de fois (jamais une habitude sur 2 repas). */
   minItemDays: 3,
   /** La quantité habituelle est la médiane des N dernières prises de l'aliment. */
   quantitySample: 5,
@@ -80,7 +98,7 @@ export interface HabitualEntry {
 }
 
 export interface HabitualItem {
-  /** Nom normalisé (minuscules, espaces réduits) — identité de l'aliment. */
+  /** Identité de l'aliment (`foodIdentity`), variantes de nom réunies. */
   key: string;
   /** Journées (parmi celles regardées) où l'aliment figurait à ce repas. */
   days: number;
@@ -99,9 +117,46 @@ export interface HabitualMeal {
 
 export type HabitualMeals = Partial<Record<MealSlug, HabitualMeal>>;
 
-/** Identité d'un aliment : son nom, sans casse ni espaces superflus. */
+/**
+ * Nom exact d'un aliment, sans casse ni espaces superflus. Sert au poids
+ * habituel : « Riz blanc, cru » et « Riz blanc (cuit) » n'ont pas le même
+ * poids, ils gardent chacun le leur.
+ */
 export function foodKey(name: string | null | undefined): string {
   return (name ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+/**
+ * Identité d'un aliment pour reconnaître une HABITUDE : le nom sans accents,
+ * sans ce qui est entre parenthèses et sans ce qui suit la première virgule
+ * (« Harissa (sauce au piment), préemballée » → « harissa », « Riz blanc, cru »
+ * → « riz blanc »). Deux saisies du même aliment sous deux libellés comptent
+ * ainsi comme un seul aliment.
+ */
+export function foodIdentity(name: string | null | undefined): string {
+  const base = foodKey(name)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/œ/g, "oe")
+    .replace(/æ/g, "ae")
+    .replace(/\([^)]*\)/g, " ")
+    .split(",")[0];
+  return base.replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Réunit, dans un ensemble d'identités, un libellé court avec l'UNIQUE libellé
+ * plus précis qui commence par lui (« kiwi » → « kiwi sungold »). Ambigu
+ * (« riz » face à « riz blanc » et « riz a sushi ») : rien n'est réuni.
+ */
+export function mergeIdentityPrefixes(identities: Iterable<string>): Map<string, string> {
+  const all = [...new Set(identities)];
+  const out = new Map<string, string>();
+  for (const id of all) {
+    const longer = all.filter((other) => other !== id && other.startsWith(`${id} `));
+    out.set(id, longer.length === 1 ? longer[0] : id);
+  }
+  return out;
 }
 
 function median(values: number[]): number {
@@ -215,6 +270,15 @@ function buildEntry(latest: NutritionHistoryRow, grams: number | null): Habitual
  * journée du calcul (la journée affichée : ce qu'on y a déjà saisi ne doit
  * pas compter comme « habitude » pour elle-même).
  *
+ * Construction :
+ *   1. chaque journée est réduite à l'ensemble de ses aliments (identités) ;
+ *   2. le PIVOT est l'aliment le plus présent (à égalité : le plus récent), à
+ *      condition d'être là au moins une fois sur deux et au moins 3 fois ;
+ *   3. le repas habituel = le pivot + les aliments présents au moins 3 fois,
+ *      et au moins une fois sur deux, dans les journées où le pivot figure.
+ * Chaque aliment est repris sous son libellé le plus récent, avec le poids
+ * habituel de CE libellé.
+ *
  * Un créneau sans habitude claire est simplement absent du résultat — on ne
  * propose jamais un repas « au hasard ».
  */
@@ -224,7 +288,7 @@ export function computeHabitualMeals(
 ): HabitualMeals {
   const result: HabitualMeals = {};
   const sorted = rows
-    .filter((r) => r.date !== options.excludeDate && foodKey(r.name) !== "")
+    .filter((r) => r.date !== options.excludeDate && foodIdentity(r.name) !== "")
     .sort(byRecency);
 
   for (const meal of MEAL_SLUGS) {
@@ -235,36 +299,68 @@ export function computeHabitualMeals(
       if (recentDates.length >= HABIT_RULES.recentMealDays) break;
     }
     if (recentDates.length < HABIT_RULES.minMealDays) continue;
-    const window = new Set(recentDates);
+    const windowRows = mealRows.filter((r) => recentDates.includes(r.date));
 
-    // Par aliment : ses journées dans la fenêtre, et ses prises (récentes d'abord).
+    const identityOf = mergeIdentityPrefixes(windowRows.map((r) => foodIdentity(r.name)));
+    const idOf = (r: NutritionHistoryRow) => {
+      const raw = foodIdentity(r.name);
+      return identityOf.get(raw) ?? raw;
+    };
+
+    // Par identité : ses journées, et ses prises (récentes d'abord).
     const days = new Map<string, Set<string>>();
     const takes = new Map<string, NutritionHistoryRow[]>();
-    for (const r of mealRows) {
-      if (!window.has(r.date)) continue;
-      const key = foodKey(r.name);
-      const foodDays = days.get(key) ?? new Set<string>();
+    for (const r of windowRows) {
+      const id = idOf(r);
+      const foodDays = days.get(id) ?? new Set<string>();
       foodDays.add(r.date);
-      days.set(key, foodDays);
-      const foodTakes = takes.get(key) ?? [];
+      days.set(id, foodDays);
+      const foodTakes = takes.get(id) ?? [];
       foodTakes.push(r);
-      takes.set(key, foodTakes);
+      takes.set(id, foodTakes);
     }
+    // Rang de la dernière apparition (0 = le repas le plus récent) : départage
+    // deux aliments aussi fréquents l'un que l'autre.
+    const lastSeen = (d: ReadonlySet<string>) => recentDates.findIndex((date) => d.has(date));
 
-    const threshold = Math.max(
-      HABIT_RULES.minItemDays,
-      Math.ceil(recentDates.length * HABIT_RULES.minShare),
-    );
-    const items: HabitualItem[] = [];
-    for (const [key, d] of days) {
-      const list = takes.get(key);
-      if (d.size < threshold || !list || list.length === 0) continue;
-      const grams = hasPer100(list[0]) ? typicalGramsOf(list) : null;
-      items.push({ key, days: d.size, grams, entry: buildEntry(list[0], grams) });
+    // 2. Le pivot.
+    let pivot: { id: string; days: Set<string> } | null = null;
+    for (const [id, d] of days) {
+      if (d.size < HABIT_RULES.minItemDays) continue;
+      if (d.size < recentDates.length * HABIT_RULES.minShare) continue;
+      const better =
+        !pivot ||
+        d.size > pivot.days.size ||
+        (d.size === pivot.days.size &&
+          (lastSeen(d) < lastSeen(pivot.days) ||
+            (lastSeen(d) === lastSeen(pivot.days) && id.localeCompare(pivot.id) < 0)));
+      if (better) pivot = { id, days: d };
     }
+    if (!pivot) continue;
+
+    // 3. Le pivot et ce qui l'accompagne.
+    const pivotDates = recentDates.filter((d) => pivot.days.has(d));
+    const items: HabitualItem[] = [];
+    for (const [id, d] of days) {
+      const together = pivotDates.filter((date) => d.has(date)).length;
+      if (together < HABIT_RULES.minItemDays) continue;
+      if (together < pivotDates.length * HABIT_RULES.minShare) continue;
+      const list = takes.get(id);
+      if (!list || list.length === 0) continue;
+      // Le libellé le plus récent, et le poids habituel de CE libellé — sur tout
+      // l'historique de ce repas, pas seulement les journées regardées (deux
+      // prises à 50 g et 25 g ne font pas une habitude à 37,5 g).
+      const latest = list[0];
+      const sameVariant = mealRows.filter((r) => foodKey(r.name) === foodKey(latest.name));
+      const grams = hasPer100(latest) ? typicalGramsOf(sameVariant) : null;
+      items.push({ key: id, days: d.size, grams, entry: buildEntry(latest, grams) });
+    }
+    // Affichage : le plus nourrissant d'abord (« Poulet · Riz · Harissa »).
+    items.sort(
+      (a, b) => (b.entry.calories ?? 0) - (a.entry.calories ?? 0) || a.key.localeCompare(b.key),
+    );
     if (items.length === 0) continue;
 
-    items.sort((a, b) => b.days - a.days || a.key.localeCompare(b.key));
     const totals = items.reduce(
       (acc, it) => ({
         calories: acc.calories + (it.entry.calories ?? 0),

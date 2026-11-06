@@ -20,7 +20,31 @@
 > regroupés sous [`docs/archive/`](docs/archive/).
 
 ## Dernière mise à jour
-2026-11-05
+2026-11-06
+
+## Nutrition — repas habituels corrigés : variantes de nom, aliment-pivot, 5 derniers repas (2026-11-06, `main`)
+Signalement de Nathan : « il manque l'harissa pour le déjeuner et des fruits pour le goûter », puis
+« fais 5 fois, pas 10 ». Mesuré sur ses saisies : la harissa est saisie sous deux libellés
+(« Harissa » / « Harissa (sauce au piment), préemballée »), comptés comme deux aliments chacun sous
+le seuil ; même chose pour « KIWI » / « Kiwi SunGold ». Et le goûter a deux formes (fruits /
+chocolat-café) : compter chaque aliment sur tous les goûters noyait la banane (3 sur 10) alors
+qu'elle est là dans 3 goûters « fruits » sur 5.
+- `lib/nutrition/habits.ts` : `foodIdentity` (sans accents, parenthèses, ni ce qui suit la virgule)
+  + `mergeIdentityPrefixes` (« kiwi » → l'unique « kiwi sungold » ; ambigu = rien réuni) pour
+  COMPTER ; `foodKey` (nom exact) reste l'identité du poids habituel (riz cru ≠ riz cuit).
+  `computeHabitualMeals` : fenêtre = **5** derniers repas du créneau (`recentMealDays: 5`) ; pivot =
+  aliment présent ≥ 3 fois et ≥ 1 fois sur 2 (égalité : le plus récent) ; repas habituel = pivot +
+  ce qui revient ≥ 3 fois les jours du pivot. Libellé le plus récent, poids = médiane des prises de
+  CE libellé sur tout l'historique du repas (harissa 50 g, pas 37,5). Affichage du plus calorique
+  au moins calorique. Une pondération par l'ancienneté a été essayée puis retirée : sur 5 repas
+  elle ne change aucun résultat.
+- Résultat sur ses données : déjeuner poulet 150 g + riz 30 g + harissa 50 g ; goûter kiwi SunGold
+  120 g + crispies 20 g + banane 70 g ; petit-déjeuner caséine + Monster ; collation lait + whey ;
+  dîner : aucune suggestion (rien ne revient 3 soirs sur 5). L'edamame (2 déjeuners) n'y est pas
+  encore.
+- Tests : `habits.test.ts` reprend ses vrais repas du 01 au 05/11 (slugs tirés de `MEAL_SLUGS` : le
+  garde-fou `meals.sync.test.ts` refuse toute liste de slugs recopiée, même dans un jeu de données
+  de test).
 
 ## Cours de Lagree — « J'y étais » : un toucher enregistre le cours, sans séance (2026-11-05, `main`)
 Retour de Nathan après son premier cours : le modèle ouvrait une séance avec chronomètre alors
